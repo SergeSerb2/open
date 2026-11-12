@@ -102,7 +102,7 @@ def checks(app, results, origin, h):
         panes = [pane['id'] for pane in app.call('split', op='state')['panes']]
         record('split_contains_both_tabs', set(panes) == set(ids))
         split = app.call('split', op='state')['id']
-        copy('split_pane_markdown', split, 'Clean Split Tracker/Copy Link as Markdown',
+        copy('split_pane_markdown', split, 'Clean Split Tracker/Copy link as Markdown',
              '[%s](%s)' % (app.tab(ids[1])['title'], clean[1]), singular)
         shown = app.call('toasts')['shown']
         app.call('split', op='menu', item='Copy Link')

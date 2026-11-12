@@ -175,21 +175,26 @@ struct SidebarMenus {
             .separator(),
             item("Archive Tab", .close(nodeID: tab.id)),
         ]
-        if let space = context.model.parent(of: tab.id).flatMap(spaceID(of:)) {
-            var keep = Set(context.selection.ids)
-            keep.insert(tab.id)
-            let today = context.model.space(id: space)?.today ?? []
-            let index = today.firstIndex(where: { $0.id == tab.id })
-            let below = index.map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
-            let above = index.map { Array(today.prefix($0).map(\.id)) } ?? []
-            // Drawn: Archive Tab · Archive Tabs Below; with ⌥: Archive Other Tabs · Archive Tabs Above
-            // (capture session 8, `i3b-menu` against `i3b-opt`). AX lists all four.
-            items.append(alternate(item("Archive Other Tabs", enabled: today.contains { !keep.contains($0.id) },
-                                        .clearTodayKeeping(space: space, keep: keep))))
-            items.append(item("Archive Tabs Below", enabled: !below.isEmpty, .archiveNodes(ids: below)))
-            items.append(alternate(item("Archive Tabs Above", enabled: !above.isEmpty, .archiveNodes(ids: above))))
-        }
+        items += archiveAlternates(tab.id)
         return menu(items)
+    }
+
+    /// After "Archive Tab" / "Archive Item" of a Today row: ⌥ Archive Other Tabs, Archive Tabs Below,
+    /// ⌥ Archive Tabs Above. Drawn: the primary and Archive Tabs Below; with ⌥ the two alternates
+    /// (capture session 8, `i3b-menu` against `i3b-opt`; split rows show the same AX pattern, item 5).
+    private func archiveAlternates(_ nodeID: ItemID) -> [NSMenuItem] {
+        guard let space = context.model.parent(of: nodeID).flatMap(spaceID(of:)) else { return [] }
+        var keep = Set(context.selection.ids)
+        keep.insert(nodeID)
+        let today = context.model.space(id: space)?.today ?? []
+        let index = today.firstIndex(where: { $0.id == nodeID })
+        let below = index.map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
+        let above = index.map { Array(today.prefix($0).map(\.id)) } ?? []
+        return [
+            alternate(item("Archive Other Tabs", enabled: today.contains { !keep.contains($0.id) }, .clearTodayKeeping(space: space, keep: keep))),
+            item("Archive Tabs Below", enabled: !below.isEmpty, .archiveNodes(ids: below)),
+            alternate(item("Archive Tabs Above", enabled: !above.isEmpty, .archiveNodes(ids: above))),
+        ]
     }
 
     /// Mute / Unmute; disabled for a silent, unmuted tab (S3D: "Mute (disabled)").
@@ -325,7 +330,13 @@ struct SidebarMenus {
             : item("Convert to Horizontal Split View", .setSplitOrientation(splitID: split.id, orientation: .horizontal))
         let header = NSMenuItem(title: "Tab Options", action: nil, keyEquivalent: "")
         header.isEnabled = false
-        var items: [NSMenuItem] = [
+        // Capture session 8 item 5 (`v6/32-d2-item-5b`): Share Split View… · — · Separate All Tabs · Add Tab… ·
+        // Convert … · — · Tab Options · panes ▸ · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — ·
+        // Archive Item · Archive Tabs Below (⌥ alternates). Change Icon… / Rename… need a split name and
+        // icon in the model and a capture of a renamed split row: follow-up (C3 item 15).
+        var items: [NSMenuItem] = []
+        if !context.isIncognito { items += [item("Share Split View…", .shareSplit(splitID: split.id)), .separator()] }
+        items += [
             item("Separate All Tabs", .separateSplit(splitID: split.id)),
             item("Add Tab…", enabled: split.panes.count < 4, .addTabToSplit(splitID: split.id)),
             convert,
@@ -336,6 +347,7 @@ struct SidebarMenus {
         items += [.separator(), item("Duplicate", .duplicate(nodeID: split.id))]
         if !context.isIncognito { items.append(moveTo(split.id)) }
         items += [.separator(), item(context.isIncognito ? "Close Split View" : "Archive Item", .close(nodeID: split.id))]
+        if !context.isIncognito { items += archiveAlternates(split.id) }
         return menu(items)
     }
 
@@ -348,9 +360,11 @@ struct SidebarMenus {
         parent.submenu = menu([
             item("Separate from Split View", .separatePane(splitID: split.id, tabID: tab.id)),
             .separator(),
-            item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id)),
+            share(tab),
+            mute(tab),
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
-            item("Copy Link as Markdown", .copyLink(nodeID: tab.id, markdown: true)),
+            // Arc's title has a lower-case "link" here (capture session 8 item 5).
+            item("Copy link as Markdown", .copyLink(nodeID: tab.id, markdown: true)),
             .separator(),
             item("Archive Item", .close(nodeID: tab.id)),
         ])

@@ -75,6 +75,8 @@ public enum SidebarIntent: Equatable, Sendable {
     case share(nodeID: ItemID)
     /// "Share ▸ ‹service›" on a row or the URL field: the system share service by title. App.
     case shareVia(nodeID: ItemID, service: String)
+    /// "Share Split View…": the system share picker with the panes' links without trackers. App.
+    case shareSplit(splitID: ItemID)
     case changeIcon(nodeID: ItemID)
     case customizePage(tabID: ItemID)
     case openInSplitView(tabID: ItemID)

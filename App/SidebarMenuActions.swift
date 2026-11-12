@@ -25,6 +25,24 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
     return true
   }
 
+  /// "Share Split View…" (capture session 8 item 5): the share picker at the split row with every
+  /// pane's link without trackers. guess: Arc shares the pane links (its account link is out of scope).
+  @discardableResult
+  func shareSidebarSplit(_ id: ItemID) -> Bool {
+    guard !isClosing, let split = model.node(id: id)?.split, let sidebar = controller?.sidebar,
+          sidebar.window != nil, let rect = sidebar.rowFrame(nodeID: id) else { return false }
+    sidebarSharePicker?.close()
+    let urls = split.panes.map { URLCleaner.clean($0.url).url }
+    let picker = NSSharingServicePicker(items: urls)
+    sidebarSharePicker = picker; picker.delegate = self
+    #if OPEN_AUTOMATION
+    sidebarShareRequest = ["url": urls.first?.absoluteString ?? "", "node": id.description,
+      "anchor": [rect.minX, rect.minY, rect.width, rect.height], "requested": true, "servicesRequested": false, "closed": false]
+    #endif
+    picker.show(relativeTo: rect, of: sidebar, preferredEdge: .maxX)
+    return true
+  }
+
   /// "Share ▸ ‹service›" (capture session 8 item 1): performs the system service with the link
   /// without trackers. Automation with `sidebar-share dismiss` records the request instead of
   /// opening a foreign app.

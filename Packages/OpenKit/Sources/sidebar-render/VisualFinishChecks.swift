@@ -45,12 +45,14 @@ enum VisualFinishChecks {
         print("split row menu (Arc builder order)")
         let titles = sidebar.menuTitles(nodeID: split.id)
         let longTitle = String(b.displayTitle.prefix(30)) + "…"
-        check(titles == ["Separate All Tabs", "Add Tab…", "Convert to Vertical Split View", "—", "Tab Options", "Pane A", longTitle, "—", "Duplicate", "Move to", "—", "Archive Item"],
-              "split menu: \(titles.joined(separator: " · "))")
+        // Capture session 8 item 5; a Today split adds Archive Tabs Below (its ⌥ alternates are not drawn).
+        let expectedMenu = ["Share Split View…", "—", "Separate All Tabs", "Add Tab…", "Convert to Vertical Split View", "—", "Tab Options", "Pane A", longTitle,
+                        "—", "Duplicate", "Move to", "—", "Archive Item"]
+        check(titles == expectedMenu || titles == expectedMenu + ["Archive Tabs Below"], "split menu: \(titles.joined(separator: " · "))")
         let menu = sidebar.contextMenu(nodeID: split.id)!
         check(menu.item(withTitle: "Tab Options")?.isEnabled == false, "\"Tab Options\" is a header")
         let paneMenu = menu.item(withTitle: "Pane A")?.submenu
-        check(paneMenu?.items.map { $0.isSeparatorItem ? "—" : $0.title } == ["Separate from Split View", "—", "Mute", "Copy Link", "Copy Link as Markdown", "—", "Archive Item"],
+        check(paneMenu?.items.map { $0.isSeparatorItem ? "—" : $0.title } == ["Separate from Split View", "—", "Share", "Mute", "Copy Link", "Copy link as Markdown", "—", "Archive Item"],
               "pane submenu items")
         menu.performActionForItem(at: menu.indexOfItem(withTitle: "Convert to Vertical Split View")); pump()
         check(split.orientation == .vertical && sidebar.menuTitles(nodeID: split.id).contains("Convert to Horizontal Split View"), "Convert runs setSplitOrientation and flips the title")

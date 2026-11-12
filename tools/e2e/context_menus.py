@@ -779,6 +779,32 @@ def context_menu_checks(factory, results, tmp, h):
             ok = titles == expected and enabled.get('New Boost') is True and enabled.get('New Split') is True
             return {'ok': ok, 'titles': titles, 'enabled': enabled, 'keys': keys}
         run('cm_plus_menu', plus_menu)
+
+        # D2c split row (capture session 8 item 5): order, pane submenu, ⌥ alternates hidden.
+        def split_menu_order():
+            focus()
+            app.call('space', space=app.call('space-create', title='Split order', profile='Default'))
+            made = [app.call('open', url=origin + '/target.html?split=%d' % i, background=True)['id'] for i in range(2)]
+            try:
+                app.call('select', tab=made[0])
+                app.call('sidebar-menu', node=made[1], item='Open in Split View')
+                split_id = next(n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+                listed = app.call('sidebar-menu-items', node=split_id)
+                panes = [t for t in listed['items'] if t.endswith(' ▸') and t not in ('Move to ▸',)]
+                pane = app.call('sidebar-menu-items', node=split_id, path=panes[0][:-2]) if panes else {'items': []}
+                head = ['Share Split View…', '—', 'Separate All Tabs', 'Add Tab…', 'Convert to Vertical Split View', '—', 'Tab Options']
+                tail = ['—', 'Duplicate', 'Move to ▸', '—', 'Archive Item']
+                items = listed['items']
+                rows = {'head': items[:7] == head, 'two_panes': len(panes) == 2,
+                        'tail': items[9:14] == tail and items[14:] in ([], ['Archive Tabs Below']),
+                        'tab_options_header': 'Tab Options' in listed['disabled'],
+                        'pane': pane['items'] == ['Separate from Split View', '—', 'Share ▸', 'Mute', 'Copy Link', 'Copy link as Markdown', '—', 'Archive Item']}
+                return {'ok': all(rows.values()), 'rows': rows, 'listed': listed, 'pane': pane}
+            finally:
+                for tab_id in made:
+                    h._try(lambda t=tab_id: app.call('close', tab=t))
+                h._try(focus)
+        run('cm_split_menu_order', split_menu_order)
         if only_case and not ran_cases:
             raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:
