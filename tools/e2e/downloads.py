@@ -184,7 +184,7 @@ def checks(factory, results, tmp, config, harness):
         # PB1-b: a download that starts on a page plays the flight to the Library button (capture values).
         flight = wait(lambda: next((f for f in state().get('flights', []) if f['id'] == known), None), 3)
         home = state()['badge']
-        check('download_flight', bool(flight) and 0.2 < flight['duration'] < 2.5 and flight['target'][0] < flight['start'][0]
+        check('download_flight', bool(flight) and 'duration' in flight and 0.2 < flight['duration'] < 2.5 and flight['target'][0] < flight['start'][0]
               and flight['target'][1] > flight['start'][1], flight=flight, badge={k: home.get(k) for k in ('running', 'progress')})
         live = wait(lambda: (lambda v: v if v.get('received', 0) > 0 and v.get('total', 0) else None)(item(known)))
         library()
