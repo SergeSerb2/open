@@ -13328,6 +13328,7 @@ def main():
                 elif opts.only == "extensions-p3":
                     import extensions_p3
                     extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
+                    extensions_p3.global_commands(app, results["extensions-p3"], tmp, ROOT, wait_until)
                 elif opts.only == "extensions-e2":
                     import extensions_e2
                     extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
