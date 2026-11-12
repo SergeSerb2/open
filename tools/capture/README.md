@@ -290,3 +290,12 @@ small comparison thumbnails. These are capture-tool limits, not product limits.
   controls and no sign-in/account/permission text).
 - Open snapshots also record `theme-get` and `sidebar-tree`. The fixture serves `/audio` (a quiet looping tone) and
   `/media` (link, image, selectable text).
+
+## Session 4 additions
+
+- `drag_ax kind: "canvas"`: a drag that stays inside the page area right of the sidebar (Easel drawing, capture area).
+- Under session-3 scope, typing may target a focused `AXTextArea` (Easel title and text boxes) with the same
+  declared-target and declared-text checks.
+- Key allowlist adds ⌘= / ⌘− / ⌘0 (canvas zoom) and the Note shortcuts ⌃⇧N / ⌃⌥N / ⌃⇧E.
+- `shot()` reuses a remembered window only while it is on screen (capture overlays close mid-block).
+- An unfocused synthetic field is a script-level stop (exit 3), so the next independent block still runs.
