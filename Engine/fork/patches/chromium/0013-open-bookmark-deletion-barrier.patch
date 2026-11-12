@@ -26,10 +26,24 @@ index 6e791d2ecfd1898a70c396f5eb8a72c5a1096eda..ae95a6e86be8e8c302801801c8aae9ea
  };
  
 diff --git a/components/bookmarks/browser/bookmark_storage.cc b/components/bookmarks/browser/bookmark_storage.cc
-index 1290d5b7b36d99212f7c719382b077ce68a76a44..cc241b655f43ff4d0f1de18e51530bfe63f3d2c1 100644
+index 1290d5b7b36d99212f7c719382b077ce68a76a44..44ccb5e843b314e4d51035a259d3fad501f6b253 100644
 --- a/components/bookmarks/browser/bookmark_storage.cc
 +++ b/components/bookmarks/browser/bookmark_storage.cc
-@@ -207,6 +207,9 @@
+@@ -179,8 +179,12 @@
+     const base::FilePath& clear_text_file_path,
+     const base::FilePath& encrypted_file_path)
+     : model_(model),
++      // Open: USER_VISIBLE, not BEST_EFFORT. Chrome fences BEST_EFFORT tasks
++      // until it sees startup complete, which Open's hosted pages reach only
++      // by the 3-minute failsafe. Fenced saves then ran late, into deleted
++      // Profile folders, and the Profile deletion barrier waited on them.
+       backend_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
++          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+            base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
+       permanent_node_selection_(permanent_node_selection),
+       encryptor_(std::move(encryptor)),
+@@ -207,6 +211,9 @@
  }
  
  void BookmarkStorage::ScheduleSave() {
@@ -39,23 +53,22 @@ index 1290d5b7b36d99212f7c719382b077ce68a76a44..cc241b655f43ff4d0f1de18e51530bfe
    // If this is the first scheduled save, create a backup before overwriting the
    // JSON file.
    if (!backup_triggered_ && ShouldSaveBackupFile(permanent_node_selection_)) {
-@@ -315,7 +318,16 @@
+@@ -318,6 +325,15 @@
+   SaveNowIfScheduled();
  }
  
- void BookmarkStorage::SaveNowIfScheduledForTesting() {
-+  SaveNowIfScheduled();
-+}
-+
 +void BookmarkStorage::SaveNowAndStop(base::OnceClosure done) {
-   SaveNowIfScheduled();
++  SaveNowIfScheduled();
 +  stopped_ = true;
 +  // The backup task and every write run on `backend_task_runner_` in order, so
 +  // the reply runs after the last of them.
 +  backend_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
 +                                         std::move(done));
- }
- 
++}
++
  void BookmarkStorage::SaveNowIfScheduled() {
+   if (writer_.HasPendingWrite()) {
+     writer_.DoScheduledWrite();
 diff --git a/components/bookmarks/browser/bookmark_model.h b/components/bookmarks/browser/bookmark_model.h
 index 0cd8a9554d8fdbfde0012afd93d8665ac4ee8410..c00bcc6ff15f07f804522d44851f2b9d64b18875 100644
 --- a/components/bookmarks/browser/bookmark_model.h
