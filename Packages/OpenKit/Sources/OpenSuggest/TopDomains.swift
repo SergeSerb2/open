@@ -2,9 +2,7 @@ import Foundation
 
 /// Popular sites with display names (Arc parity FA TD-1/TD-2: Arc ships `TopDomains.json` and
 /// `popularDomains.json`). Open's own curated list in rough popularity order, written for Open; Arc's
-/// files are not used. Typed prefixes offer the site as a row. Inline completion stays with tabs and history:
-/// Arc's "amazon" with no history shows no completion (commandbar-render Flows, CC-5); whether Arc
-/// completes a popular domain inline is not captured (C3-PB1-i).
+/// files are not used. Typed prefixes complete inline to the domain and list the site first (capture PB1-i).
 public enum TopDomains {
     public struct Site: Sendable, Hashable {
         public let domain: String
@@ -68,10 +66,13 @@ public enum TopDomains {
     ]
 }
 
-/// One row: the first popular site whose domain starts with the typed text ("you" → YouTube).
-/// Weighted below history, so the user's own pages still win. No inline completion (see above).
+/// Popular sites whose domain starts with the typed text ("netfl" → Netflix — netflix.com). Capture
+/// PB1-i (C-report-s6 §8, also on a Profile with no history): Arc completes the field inline to the
+/// domain and lists "Name — domain" first, then further matching domains. The first row may be the top
+/// hit and complete inline (`InlineCompletion.canComplete`); history and tabs still rank above it.
 public struct TopDomainsProvider: SuggestProvider {
     public let id = "topDomains"
+    public var maxRows = 4
     public init() {}
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
@@ -79,12 +80,19 @@ public struct TopDomainsProvider: SuggestProvider {
         var typed = input.rawText.lowercased()
         for lead in ["https://", "http://", "www."] where typed.hasPrefix(lead) { typed.removeFirst(lead.count) }
         guard typed.count >= 2, !typed.contains(where: { $0.isWhitespace || $0 == "/" }) else { return [] }
-        guard let site = TopDomains.sites.first(where: { $0.domain.hasPrefix(typed) && $0.domain != typed }),
-              let url = URL(string: "https://" + site.domain) else { return [] }
-        var row = Suggestion(id: "topDomain:" + site.domain, kind: .navigate, title: site.name, subtitle: site.domain,
-                             url: url, provider: id,
-                             scoreDetail: ScoreDetail(quality: MatchQuality.prefix, weight: 0.85))
-        row.canBeTopHit = true
-        return [row]
+        var rows: [Suggestion] = []
+        for site in TopDomains.sites where site.domain.hasPrefix(typed) && site.domain != typed {
+            guard let url = URL(string: "https://" + site.domain) else { continue }
+            var row = Suggestion(id: "topDomain:" + site.domain, kind: .navigate, title: site.name, subtitle: site.domain,
+                                 url: url, provider: id,
+                                 scoreDetail: ScoreDetail(quality: MatchQuality.prefix, weight: 0.85))
+            // List order: a falling boost keeps the list's popularity order through ranking.
+            row.scoreDetail.boost = Double(maxRows - rows.count) * 0.01
+            row.score = row.scoreDetail.total
+            row.canBeTopHit = rows.isEmpty
+            rows.append(row)
+            if rows.count == maxRows { break }
+        }
+        return rows
     }
 }
