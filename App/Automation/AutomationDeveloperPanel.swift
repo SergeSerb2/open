@@ -70,7 +70,8 @@ extension AutomationController {
       // Gap from the button's bottom edge to the arrow tip, and the tip's x offset from the button's center.
       let gap = host.isFlipped ? f.minY - a.maxY : a.minY - f.maxY
       state["extensionsCard"] = ["rows": card.rowTitles, "size": [f.width, f.height], "arrowGap": gap,
-                                 "arrowOffset": f.minX + card.arrowTipX - a.midX, "label": card.accessibilityLabel() ?? ""]
+                                 "arrowOffset": f.minX + card.arrowTipX - a.midX, "label": card.accessibilityLabel() ?? "",
+                                 "highlighted": card.highlightedTitle ?? ""]
     }
     state["splitPanes"] = controller.splitController.split?.panes.count ?? 1
     state["splitOrientation"] = controller.splitController.split.map { $0.orientation == .horizontal ? "horizontal" : "vertical" } ?? ""

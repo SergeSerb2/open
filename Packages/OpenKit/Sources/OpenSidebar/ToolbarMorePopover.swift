@@ -32,11 +32,14 @@ public final class ToolbarMorePopover: NSView {
     /// The sizes that differ between the cards that use this view.
     public struct Layout: Sendable {
         var width: CGFloat, rowHeight: CGFloat, rowGap: CGFloat, titleX: CGFloat, anchorGap: CGFloat, label: String
+        /// The card opens with its first row highlighted until the pointer enters a row (`m-ext.png`).
+        var highlightsFirstRow = false
         /// The compact toolbar's More options card (capture session 9).
         public static let more = Layout(width: Metrics.width, rowHeight: Metrics.rowHeight, rowGap: Metrics.rowGap,
                                         titleX: Metrics.titleX, anchorGap: Metrics.anchorGap, label: "More options")
         /// Developer Mode's Extensions Menu card (capture session 10, `m-ext.png`).
-        public static let extensions = Layout(width: 250, rowHeight: 40, rowGap: 0, titleX: 19, anchorGap: 10.5, label: "Extensions")
+        public static let extensions = Layout(width: 250, rowHeight: 40, rowGap: 0, titleX: 19, anchorGap: 10.5, label: "Extensions",
+                                              highlightsFirstRow: true)
     }
     enum Metrics {
         static let width: CGFloat = 200
@@ -61,6 +64,8 @@ public final class ToolbarMorePopover: NSView {
     /// Arrow tip x in this view's coordinates.
     var arrowX: CGFloat = Metrics.width / 2 { didSet { needsDisplay = true } }
     public var onDismiss: (@MainActor () -> Void)?
+    /// The highlighted row's title (verification).
+    public var highlightedTitle: String? { rowViews.first { $0.isShownHighlighted }?.row.title }
     /// Row titles (verification).
     public var rowTitles: [String] { rows.map(\.title) }
     /// Arrow tip x in this view's coordinates (verification).
@@ -78,8 +83,10 @@ public final class ToolbarMorePopover: NSView {
         for (index, row) in rows.enumerated() {
             let view = ToolbarMoreRowView(row: row, titleX: cardLayout.titleX)
             view.onPress = { [weak self] in self?.choose(index) }
+            view.onHover = { [weak self] in self?.rowViews.forEach { $0.forcedHover = false } }
             rowViews.append(view); addSubview(view)
         }
+        if layout.highlightsFirstRow, let first = rowViews.first, rows.first?.isEnabled == true { first.forcedHover = true }
         setAccessibilityRole(.menu)
         setAccessibilityLabel(cardLayout.label)
     }
@@ -184,6 +191,8 @@ final class ToolbarMoreRowView: NSView {
     let titleX: CGFloat
     var dark = false { didSet { needsDisplay = true } }
     var onPress: (@MainActor () -> Void)?
+    var onHover: (@MainActor () -> Void)?
+    var isShownHighlighted: Bool { isHighlighted }
     /// Render scenes set this to draw the hovered state.
     var forcedHover = false { didSet { needsDisplay = true } }
     private var hovered = false { didSet { needsDisplay = true } }
@@ -263,7 +272,7 @@ final class ToolbarMoreRowView: NSView {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseEntered(with event: NSEvent) { onHover?(); hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {

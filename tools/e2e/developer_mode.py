@@ -114,6 +114,7 @@ def run(factory, results, tmp, h):
         closed_card = h.wait_until(lambda: 'extensionsCard' not in state(), timeout=5, step=.05)
         row('extensions_card', card.get('rows') == ['Add Extension…', 'Manage Extensions…'] and card.get('size') == [250, 102]
             and abs(card.get('arrowGap', 0) - 10.5) < .5 and abs(card.get('arrowOffset', 9)) < .5 and card.get('label') == 'Extensions'
+            and card.get('highlighted') == 'Add Extension…'
             and bool(closed_card), card=card, closed=bool(closed_card))
         tabs_before = len(app.call('tabs'))
         press('extensionsMenu')
