@@ -152,7 +152,7 @@ struct SidebarMenus {
             item("Edit…", .editPinnedURL(tabID: tab.id)),
         ])
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
-        return menu(liveCalendarItems(tab) + [
+        return menu([
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             share(tab),
             .separator(),
@@ -173,7 +173,7 @@ struct SidebarMenus {
     /// Favorite tile. guess: not captured; built from the pinned-tab menu.
     func favorite(_ tab: Tab) -> NSMenu {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
-        return menu([
+        return menu(liveCalendarItems(tab) + [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             share(tab),
             .separator(),
