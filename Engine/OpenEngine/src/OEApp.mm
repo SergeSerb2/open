@@ -206,6 +206,16 @@ class OEApp : public CefApp,
       disabled += disabled.empty() ? feature : std::string(",") + feature;
     }
     command_line->AppendSwitchWithValue("disable-features", disabled);
+    // Open has no on-device AI. Without this, Chrome launches the on-device
+    // model service about 3 minutes after every launch whose stored
+    // performance class is missing or from another version, only to measure
+    // the GPU (PerformanceClassifier::ScheduleEvaluation; no feature gates
+    // it). A fixed class skips the measurement: 2 is kVeryLow, which makes
+    // no on-device model eligible.
+    if (!command_line->HasSwitch("optimization-guide-performance-class")) {
+      command_line->AppendSwitchWithValue(
+          "optimization-guide-performance-class", "2");
+    }
     // Chromium's RAM-scaled renderer limit governs, except on small Macs.
     const unsigned long long kSmallMac = 8ull * 1024 * 1024 * 1024;
     if (NSProcessInfo.processInfo.physicalMemory <= kSmallMac &&

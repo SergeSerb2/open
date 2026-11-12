@@ -772,6 +772,8 @@ extension SidebarView {
     }
     /// The compact toolbar's "More options" menu, built as a click would build it.
     public func toolbarMoreMenu() -> NSMenu { toolbar.makeMoreMenu() }
+    /// The URL field's placeholder for the current sidebar width.
+    public var urlFieldPlaceholder: String { layoutSubtreeIfNeeded(); return urlField.placeholder }
     /// The same provider used when the bottom-bar plus button opens its menu.
     public func plusMenu() -> NSMenu? { bottomBar.plus.menuProvider?() }
     /// The URL field's right-click menu, built as a click would build it.
