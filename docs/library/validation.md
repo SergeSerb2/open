@@ -1,12 +1,13 @@
 # Library validation
 
-Status: LEAD 15:30 accepts all three valid launch controls and closes the
-performance work. Judge busy time on Library overlap: launch 3 slice 45 has
-8.010792 ms ≤8.3 ms. The enclosing 8.424292 ms, including 0.413500 ms of other
-main-thread work, is INFO. All later-row slices and Library overlaps pass
-8.3 ms; first-row turns and overlaps pass 16.7 ms INFO. Product code and
-artifact are unchanged. Touched suites, main merge, scoped M1 receipts, the
-one full M5 gate and PR follow. Original receipts and STOP tables are retained.
+Status: LEAD00:50 applies the user’s speed rules. Per-PR acceptance is a
+merge of origin/main, `tools/verify-all.sh --only build`, touched real-App e2e
+suites and the review checklist on the rented Mac. Those final checks are
+pending. No more per-PR M1 tickets or busy-interval diagnosis. The historical
+8.676792 ms after-wheel slice against 8 ms is a timing follow-up (8.46% over),
+explicitly accepted for this PR. All raw timing failures below remain intact,
+including the later full-busy assertion; none is rewritten as PASS. The single
+per-DMG M1 timing lane belongs to R. Earlier status/ruling sections are history.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -1183,3 +1184,20 @@ Derived analysis: `.re/l3/continuation-stop-0015.json`. Executable SHA256
 STOP at the LEAD00:15 M1 failure boundary. No additional measurement, repair,
 gate or PR is queued. Further scope is needed to diagnose the unclassified
 interval and qualify preparation plus the missing scroller.
+
+
+### LEAD00:50 delivery scope
+
+The user’s speed rules replace LEAD00:40. No additional M1 ticket is allowed.
+The accepted near miss is recorded as “timing follow-up: after-wheel preparation
+slice 8.676792 ms / 8 ms (8.46% over)” in the shared timing follow-up ledger
+and the PR body. The latest 11.162417 ms full-busy failure is also retained;
+its cause remains unclassified and it is not a near miss. The lead directs
+this PR to proceed through the new scoped build/e2e/review gate. No measurement
+limit, assertion, receipt or gate code changes to implement this ruling.
+
+The already-running M5 same-age diagnostic finished four real wheel flows and
+normal cleanup before the stop arrived. No external sampler ran. Unfinished
+additional trace instrumentation was removed without a product change. Main
+`d091677d` is already merged. Final scoped checks run on rented Mac
+`d0km8jp744d2q` through its FIFO queue, with one screen suite per invocation.
