@@ -63,7 +63,7 @@ def run(factory, results, tmp, harness):
         results['cal_join_denied'] = {
             'ok': first.get('outcome') == 'noAccess' and first.get('access') == 'denied' and second.get('outcome') == 'noAccess'
                 and state.get('requests') == 1 and state.get('queries') == 0 and len(tabs()) == n_tabs
-                and bool(toast) and toast[0]['title'] == 'Allow Calendar access to join meetings' and toast[0]['accessory'] == 'gearshape',
+                and bool(toast) and toast[0]['title'] == 'Allow Calendar access to join meetings' and toast[0]['accessory'] == 'open privacy settings',
             'first': first, 'second': second, 'requests': state.get('requests'), 'toast': toast[:1]}
 
         # 2. Eligibility: declined, canceled, all-day, ended and link-less events are skipped; the link in notes counts.
