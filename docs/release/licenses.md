@@ -207,7 +207,7 @@ on OpenAdBlock, so its resources do ship transitively today.
 | OpenKit_OpenSleep.bundle/Contents/Resources/keep-alive-sites.json | Sources/OpenSleep/Resources/keep-alive-sites.json | Open-owned defaults |
 | OpenKit_OpenCommands.bundle/Contents/Resources/expected-menu.json | Sources/OpenCommands/Resources/expected-menu.json | Open-owned menu facts, no upstream assets |
 | Open.sdef | App/Resources/Open.sdef | Open-owned scripting definition |
-| Credits.rtf, Acknowledgements.txt, CREDITS.html | Generated at build time | This inventory and upstream texts; Chromium HTML remains incomplete in the current engine |
+| Credits.rtf (in the App; the About panel reads it). Acknowledgements.txt and CREDITS.html are release assets beside the DMG; `tools/release.sh` removes those two twins from the shipped App. | Generated at build time | This inventory and upstream texts; Chromium HTML remains incomplete in the current engine |
 | Sparkle.framework and nested helpers/XPC/localizations | Sparkle 2.10.1 binary package | Whole upstream LICENSE, including bsdiff, sais-lite, Ed25519 and SUSignatureVerifier notices |
 | Chromium Embedded Framework.framework; locale paks, resources.pak, chrome_100_percent.pak, chrome_200_percent.pak, icudtl.dat, V8 snapshots, graphics libraries/data | Recorded main CEF distribution Release/ | Chromium/CEF and their transitive licenses; exact generated Chromium credits still required |
 | OpenEngine.framework, five Open Helper apps, Open executable | Engine/OpenEngine/, Helper/, App/ | Open-owned bridge/shell; linked third-party engine covered above |
