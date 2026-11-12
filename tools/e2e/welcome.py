@@ -496,7 +496,10 @@ def contrast_matrix(factory, results, tmp, api):
                     appearance_ok = ('Dark' in state['windowState']['appAppearance']) == (appearance == 'dark')
                     activation_ok = state['windowState']['key'] == active and state['windowState']['appActive'] == active
                     theme_state = app.call('theme-get')
-                    theme_ok = theme_state['contentAppearance'] == theme
+                    # The Space mode sets the window colour scheme. Text polarity (contentAppearance)
+                    # follows the key colour since the Arc 1.172.2 sidebar rule (#344), so it is
+                    # recorded in the row (themeState), not asserted against the mode.
+                    theme_ok = theme_state['windowColorScheme'] == theme
                     displayed = state['visible'] and state['windowState']['visible'] \
                         and not state['windowState']['miniaturized'] and not state['windowState']['occluded']
                     if peer_frame:
