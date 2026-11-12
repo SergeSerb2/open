@@ -53,7 +53,7 @@
         use_mount_namespace: true,
         directory_cache: { max_entries: 2000, max_size_bytes: 20000000000 },
         experimental_readonly_input_mounts: [
-          "out/Remote_Official_arm64/sdk/xcode_links/MacOSX27.2.sdk",
+          "out/Release_Official_arm64/sdk/xcode_links/MacOSX27.2.sdk",
           "third_party/libc++/src/include",
           "third_party/llvm-build/Release+Asserts",
         ],

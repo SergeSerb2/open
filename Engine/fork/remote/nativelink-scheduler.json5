@@ -1,5 +1,5 @@
-// Open remote build: scheduler + CAS/AC + one local worker (NativeLink 1.8.3).
-// Clients (Siso on the Mac) use 127.0.0.1:50051 through a tunnel or the sandbox HTTPS relay.
+// Open remote build: scheduler + CAS/AC (NativeLink 1.8.3 with the 4 MiB batch patch).
+// Clients (Siso on the Mac) use 127.0.0.1:50051 through SSH tunnels (the HTTPS relay blocks gRPC).
 // Remote workers reach 50051 (CAS) and 50061 (worker API) through their own SSH tunnels; both bind 127.0.0.1.
 {
   stores: [
@@ -46,20 +46,8 @@
       },
     },
   ],
-  workers: [
-    {
-      local: {
-        name: "sched-local",
-        worker_api_endpoint: { uri: "grpc://127.0.0.1:50061" },
-        cas_fast_slow_store: "CAS_STORE",
-        upload_action_result: { ac_store: "AC_STORE" },
-        work_directory: "/opt/e3/work",
-        max_action_timeout_s: 1800,
-        max_inflight_tasks: "${E3_LOCAL_SLOTS:-6}",
-        platform_properties: {},
-      },
-    },
-  ],
+  // No local worker: in E3-0 the scheduler was the busiest node (CAS serving for all workers).
+  workers: [],
   servers: [
     {
       name: "public",

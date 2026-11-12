@@ -1,0 +1,26 @@
+#!/bin/bash
+# engine-remote-build <out-dir> <target>...
+# Runs Siso in Chromium src against the remote backend. The tunnels/proxy must already listen on
+# 127.0.0.1:50051, and <out-dir>/args.gn must set use_remoteexec = true.
+# Local steps (Python actions, links) run at most LOCAL_JOBS at a time, all at nice 10.
+# Links also obey GN's link pool (concurrent_links), and patch 0011 caps each ThinLTO link at 6 threads.
+# Env: E3_LOG_DIR (required), LOCAL_JOBS (4), REMOTE_JOBS (256), OPEN_ENGINE_ROOT.
+set -euo pipefail
+[[ $# -ge 2 ]] || { echo "usage: engine-remote-build <out-dir> <target>..." >&2; exit 2; }
+src=${OPEN_ENGINE_ROOT:-$HOME/Developer/open-engine}/chromium_git/chromium/src
+out=$1; shift
+log_dir=${E3_LOG_DIR:?set E3_LOG_DIR}
+mkdir -p "$log_dir"
+grep -Eq '^use_remoteexec[[:space:]]*=[[:space:]]*true' "$src/$out/args.gn" ||
+    { echo "engine-remote-build: $out/args.gn lacks use_remoteexec = true" >&2; exit 2; }
+# Same Xcode 27.2 python3 shim bypass as engine-build.
+real_python3=$(env -u SDKROOT xcrun -f python3)
+mkdir -p "$log_dir/python3-bin"
+ln -sf "$real_python3" "$log_dir/python3-bin/python3"
+export PATH="$log_dir/python3-bin:$PATH"
+cd "$src"
+exec caffeinate -dimsu nice -n 10 third_party/siso/cipd/siso ninja -C "$out" \
+    -project=open-remote -reapi_address=127.0.0.1:50051 -reapi_insecure \
+    -reapi_instance=default_instance -reapi_grpc_conn_pool=8 -reapi_grpc_data_conn_pool=8 \
+    -local_jobs="${LOCAL_JOBS:-4}" -remote_jobs="${REMOTE_JOBS:-256}" -strict_remote \
+    -log_dir="$log_dir" "$@"

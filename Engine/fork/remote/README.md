@@ -25,7 +25,7 @@ worker sandboxes: ssh -L tunnel to the scheduler (key restricted to those two po
 |---|---|
 | `rewrapper_mac.cfg` | Copied to `buildtools/reclient_cfgs/chromium-browser-clang/` (git-ignored in Chromium). `build/config/siso/clang_mac.star` reads platform, inputs and `remote_wrapper` from it. |
 | `clang_remote_wrapper` | Copied next to it. Runs on the worker; see the comments in the file. |
-| `nativelink-scheduler.json5` | Scheduler, CAS, AC and a small local worker. |
+| `nativelink-scheduler.json5` | Scheduler, CAS and AC (no local worker). |
 | `nativelink-worker.json5` | Remote worker. Bind-mounts the SDK, libc++ headers and host clang read-only per action (`experimental_readonly_input_mounts`); without this, building each action's input tree costs ~6 s and half the worker CPU. Edit the SDK path when the output dir or Xcode SDK changes. |
 | `setup-node.sh` | Installs NativeLink 1.8.3 and Chromium's pinned Linux clang (both SHA-256 checked). |
 | `build-nativelink.sh` | Builds NativeLink v1.8.3 with `MAX_BATCH_TOTAL_SIZE` = 4 MiB (upstream: 64 KiB, which makes Siso upload small files two per round trip). |
