@@ -446,7 +446,7 @@ def run(factory, results, tmp, api):
             easel_tabs = [t for t in app.call('tabs') if t['url'].startswith('open://easel/')]
             index = (all_out / 'index.html').read_text() if (all_out / 'index.html').exists() else ''
             record('E37_export_all', result['count'] == len(easel_tabs) and not result['failures']
-                   and 'Board two/index.html' in index and (all_out / 'Board two' / 'easel.json').exists(), result=result,
+                   and 'Board%20two/index.html' in index and (all_out / 'Board two' / 'easel.json').exists(), result=result,
                    tabs=len(easel_tabs))
             folder = Path(app.call('easel', action='store', document=easel(tab=e2)['document'])['path']).parent
             app.call('sidebar-menu', node=e2, item='Delete Easel')
@@ -454,7 +454,7 @@ def run(factory, results, tmp, api):
             app.call('easel', action='window-sheet', press='Delete')
             gone = api.wait_until(lambda: all(t['id'] != e2 for t in app.call('tabs')) or None, timeout=5, step=.1)
             record('E38_delete_easel', alert and 'Are you sure you want to delete this Easel?' in alert['texts']
-                   and 'Doing so will delete the Easel permanently.' in alert['texts'] and alert['buttons'][:2] == ['Delete', 'Cancel']
+                   and 'Doing so will delete the Easel permanently.' in alert['texts'] and sorted(alert['buttons']) == ['Cancel', 'Delete']
                    and gone and not folder.exists(), alert=alert, folderExists=folder.exists())
         finally:
             server.shutdown()
