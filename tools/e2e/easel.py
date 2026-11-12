@@ -65,7 +65,8 @@ def run(factory, results, tmp, api):
 
     # Per-tool colours are a user preference (Arc's rectangleColor & co.): start from the defaults.
     domain = 'io.github.sergeserb2.open'
-    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')]
+    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')] \
+        + ['open.easel.liveWebCardEduSeen', 'open.easel.useAlignmentGuides']
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved_prefs = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     for key in color_keys:
@@ -409,4 +410,7 @@ def run(factory, results, tmp, api):
             if saved_prefs.get(key) is None:
                 subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
             else:
-                subprocess.run(['defaults', 'write', domain, key, '-string', saved_prefs[key]], capture_output=True)
+                value = saved_prefs[key]
+                kind = '-bool' if isinstance(value, bool) else '-string'
+                subprocess.run(['defaults', 'write', domain, key, kind, str(value).lower() if isinstance(value, bool) else value],
+                               capture_output=True)
