@@ -158,6 +158,8 @@ extension AutomationController {
       "historyProcessed": app.importRunner.historyProcessed,
       "importUndoInProgress": app.importRunner.undoOperations > 0,
       "importUndoError": app.importRunner.undoError,
+      "importCreatedProfiles": app.importRunner.undoReceipt?.createdProfiles.map(\.directory) ?? [],
+      "importWipedProfiles": app.importRunner.undoReceipt?.wipedProfiles ?? [],
       "importAllMilliseconds": app.importRunner.importAllMilliseconds,
       "importMetrics": app.importRunner.watchdog.state.merging([
         "historyMilliseconds": app.importRunner.historyMilliseconds,

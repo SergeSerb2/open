@@ -13364,6 +13364,8 @@ def main():
                     profiles_checks(factory, results[opts.only], tmp, opts.config)
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
                     factory, results[opts.only], tmp, globals(), domain_before)
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/import_undo_profiles.py"))["run"](
+                    factory, results[opts.only], tmp, ROOT, wait_until)
             else:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_engine.py"))["run"](
                     factory, results[opts.only], tmp, opts.config, new_tab, wait_until)

@@ -26,6 +26,12 @@ final class AppImportUndo {
   private var defaults: [(previous: [String: Any?], applied: [String: Any])] = []
   /// Extra Arc data types (ArcImportProviders): their own undo and redo actions.
   private var providers: [(undo: @MainActor @Sendable () async throws -> Void, redo: (@MainActor @Sendable () async throws -> Void)?)] = []
+  /// Profiles this import created (id, data folder). Undo removes them physically through the Profile
+  /// teardown (docs/plans/profiles.md: "physical store/context cleanup after Import Undo must consume the
+  /// #222 teardown path"; AUDIT-2026-11-12 A7). Retired stores never come back in this process, so an import
+  /// that created Profiles has a final Undo (no Redo).
+  private(set) var createdProfiles: [(id: ProfileID, directory: String)] = []
+  private(set) var wipedProfiles: [String] = []
   private(set) var task: Task<Void, Never>?
   private(set) var pendingOperations = 0
   private(set) var errorText = ""
@@ -74,6 +80,22 @@ final class AppImportUndo {
     providers.append((undo, redo)); registerIfNeeded()
   }
 
+  func recordCreatedProfiles(_ profiles: [(id: ProfileID, directory: String)]) {
+    createdProfiles = profiles
+    if !profiles.isEmpty { registerIfNeeded() }
+  }
+
+  /// Wipes the Profiles this import created, after the model Undo removed them. Never a folder that a Profile
+  /// still in the model uses (first run restores the bootstrap Default in the same "Default" folder).
+  private func wipeCreatedProfiles(_ app: AppDelegate) async throws {
+    let kept = Set(app.model.profiles.map(\.dataDirectoryName))
+    for created in createdProfiles where app.model.profile(id: created.id) == nil
+      && !kept.contains(created.directory) && created.directory != "Default" && !created.directory.isEmpty {
+      try await app.profileTeardown.wipe(profileID: created.id, directory: created.directory)
+      wipedProfiles.append(created.directory)
+    }
+  }
+
   func finishImport() {
     importing = false
     let waiters = importWaiters; importWaiters.removeAll()
@@ -101,7 +123,8 @@ final class AppImportUndo {
   private func apply(undoing: Bool) {
     guard let app else { return }
     if undoing { cancelled = true }
-    register(on: app.undoManager, undoing: !undoing)
+    // After a Profile wipe nothing can redo the import: register no Redo.
+    if !(undoing && !createdProfiles.isEmpty) { register(on: app.undoManager, undoing: !undoing) }
     enqueue { [self] in
       if importing { await withCheckedContinuation { importWaiters.append($0) } }
       if undoing {
@@ -121,6 +144,7 @@ final class AppImportUndo {
         }
         for (store, records) in archives.reversed() { try await store.delete(ids: records.map(\.id)) }
         for provider in providers.reversed() { try await provider.undo() }
+        try await wipeCreatedProfiles(app)
       } else {
         applyModel(undoing: false)
         applyDefaults(undoing: false)

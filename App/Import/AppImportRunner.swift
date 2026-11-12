@@ -66,6 +66,7 @@ final class AppImportRunner: ProfileDataOwner {
     await undoTask?.value
     let undo = AppImportUndo(app: app)
     undoReceipt = undo
+    let profilesAtStart = Set(app.model.profiles.map(\.id))
     let importStarted = CACurrentMediaTime()
     historyMilliseconds = 0
     #if OPEN_AUTOMATION
@@ -86,6 +87,8 @@ final class AppImportRunner: ProfileDataOwner {
     app.importInProgress = true
     historyProcessed = 0
     defer {
+      undo.recordCreatedProfiles(app.model.profiles.filter { !profilesAtStart.contains($0.id) }
+        .map { (id: $0.id, directory: $0.dataDirectoryName) })
       undo.finishImport()
       app.importInProgress = false; historyInProgress = false; running = false
       let waiters = undoQuitWaiters; undoQuitWaiters.removeAll()
