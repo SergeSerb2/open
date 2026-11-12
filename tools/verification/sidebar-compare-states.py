@@ -27,6 +27,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # Lead gate (2026-10-26), docs/design.md §15.1. SHA is informational.
 COLOR_DRIFT = Decimal("0.15")
+# A lead-approved intentional colour change (D2, LEAD 2026-11-12 02:10) is re-recorded from
+# the branch head with --record-transition: per display key, the old limits and every moved
+# element's measured (main, branch) values. Only exactly those moves pass the drift lock.
+# Once main contains the change, main and branch agree again and the plain lock applies.
+TRANSITION = Path(__file__).with_name("sidebar-compare-transition.json")
 # Expected compared elements, worst position, worst ΔE00 against Arc.
 LIMITS = {
     "static-active": (31, "1.0", "1.59"), "static-inactive": (31, "1.0", "1.17"),
@@ -184,7 +189,7 @@ def table_metrics(table):
     return rows, (Decimal(summary[1]), Decimal(summary[2]), int(summary[3]))
 
 
-def gate_tables(name, tables, color_limits):
+def gate_tables(name, tables, color_limits, allowed=None):
     parsed = {kind: table_metrics(table) for kind, table in tables.items()}
     errors = []
     count, position_limit, original_color_limit = LIMITS[name]
@@ -208,13 +213,17 @@ def gate_tables(name, tables, color_limits):
             if len(main["colors"]) != len(branch["colors"]):
                 errors.append(main["element"] + ": color metrics differ in shape")
                 continue
-            for a, b in zip(main["colors"], branch["colors"]):
+            for index, (a, b) in enumerate(zip(main["colors"], branch["colors"])):
                 if a is None or b is None:
                     if a != b:
                         errors.append(main["element"] + ": missing color metric")
                     continue
                 drift = abs(a - b)
                 max_drift = max(max_drift, drift)
+                moves = (allowed or {}).get(main["element"])
+                if drift > COLOR_DRIFT and moves and index < len(moves) and moves[index] is not None and \
+                        abs(a - Decimal(moves[index][0])) <= COLOR_DRIFT and abs(b - Decimal(moves[index][1])) <= COLOR_DRIFT:
+                    continue
                 if drift > COLOR_DRIFT:
                     errors.append(f"{main['element']}: color-metric drift {drift} > {COLOR_DRIFT} ΔE00")
     return {"passed": not errors, "positionAndInkIdentical": geometry_same,
@@ -270,6 +279,38 @@ def record_limits(baseline, data, captures, out, attempts, receipt):
     return 0
 
 
+def record_transition(reason, key, old_limits, combined):
+    """Write this key's measured moves and raised Arc limits (lead-approved change only)."""
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    elements, limits = {}, dict(old_limits)
+    for name in LIMITS:
+        main_rows, _ = table_metrics(combined["main"][name])
+        branch_rows, worst = table_metrics(combined["branch"][name])
+        if [r["element"] for r in main_rows] != [r["element"] for r in branch_rows]:
+            raise ValueError(name + ": compared elements differ; a transition records colour moves only")
+        for m, b in zip(main_rows, branch_rows):
+            if m["position"] != b["position"] or m["ink"] != b["ink"]:
+                raise ValueError(name + ": geometry moved; a transition records colour moves only")
+            moves = [None if x is None or y is None or abs(x - y) <= COLOR_DRIFT else [str(x), str(y)]
+                     for x, y in zip(m["colors"], b["colors"])]
+            if any(moves):
+                elements.setdefault(name, {})[m["element"]] = moves
+        ceiling = worst[1].quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+        if ceiling > Decimal(limits[name]):
+            limits[name] = str(ceiling)
+    transition = json.loads(TRANSITION.read_text()) if TRANSITION.exists() else {"environments": {}}
+    transition["environments"][key] = {"reason": reason, "recordedCommit": head,
+                                       "oldColorLimits": old_limits, "elements": elements}
+    TRANSITION.write_text(json.dumps(transition, indent=2, ensure_ascii=False) + "\n")
+    baselines = Path(__file__).with_name("sidebar-color-baselines.json")
+    manifest = json.loads(baselines.read_text())
+    manifest["environments"][key]["colorLimits"] = limits
+    baselines.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+    moved = sum(len(v) for v in elements.values())
+    print(f"recorded transition for {key}: {moved} moved elements in {len(elements)} states; limits {limits}")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("capture_root", type=Path, nargs="?", help="absolute .re/design-compare directory")
@@ -282,6 +323,8 @@ def main():
                         help="bounded paired repeats for known offscreen nondeterminism (§15.1); retains every attempt")
     parser.add_argument("--record-limits", action="store_true",
                         help="propose a new display key from a clean origin/main export; never overwrite a key")
+    parser.add_argument("--record-transition", metavar="REASON",
+                        help="lead-approved colour change: record this head's moves and limits for this key")
     args = parser.parse_args()
     portability = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))
     environment = portability["display_environment"]()
@@ -293,6 +336,8 @@ def main():
     entry = (manifest["environments"].get(key) if args.record_limits else
              portability["environment_entry"](manifest, environment, "sidebar"))
     color_limits = entry["colorLimits"] if entry else {}
+    transition = json.loads(TRANSITION.read_text()) if TRANSITION.exists() else {"environments": {}}
+    moved = transition["environments"].get(key)
     if entry and (set(color_limits) != set(LIMITS) or not re.fullmatch(r"[0-9a-f]{40}", entry["trustedMainCommit"])
                   or any(not Decimal(limit).is_finite() or Decimal(limit) <= 0 for limit in color_limits.values())):
         raise ValueError("invalid recorded sidebar color limits")
@@ -344,7 +389,8 @@ def main():
         raise ValueError("unsupported unchanged-main display schema")
     if not args.record_limits:
         baseline_entry = baseline_manifest.get("environments", {}).get(recorded_key)
-        if baseline_entry is None or baseline_entry["colorLimits"] != color_limits:
+        if baseline_entry is None or (baseline_entry["colorLimits"] != color_limits and not (
+                moved and baseline_entry["colorLimits"] == moved["oldColorLimits"])):
             raise ValueError("unchanged main has no identical exact display reference: " + recorded_key)
     baseline = args.baseline_renderer.resolve() if args.baseline_renderer else build_main(out, ref_sha)
     receipt = {"gate": {"positionAndInk": "identical", "colorMetricDrift": str(COLOR_DRIFT),
@@ -372,7 +418,7 @@ def main():
                           for kind, binary in (("main", baseline), ("branch", renderer))}
                 if portability["display_environment"]() != environment:
                     raise ValueError("display changed during paired render")
-                result = gate_tables(name, tables, color_limits)
+                result = gate_tables(name, tables, color_limits, (moved or {}).get("elements", {}).get(name))
                 attempt_results.append({"attempt": attempt, **result})
                 if result["passed"] or attempt == args.attempts:
                     for kind, table in tables.items():
@@ -402,6 +448,8 @@ def main():
     if (hashlib.sha256(baseline.read_bytes()).hexdigest() != receipt["baselineBinarySHA256"] or
             hashlib.sha256(renderer.read_bytes()).hexdigest() != receipt["branchBinarySHA256"]):
         raise ValueError("renderer changed during comparison; rerun after its build completes")
+    if args.record_transition:
+        return record_transition(args.record_transition, key, color_limits, combined)
     identical = sum(state["byteIdentical"] for state in receipt["states"])
     print(f"states passed: {13 - len(failed)}/13; tables byte-identical (informational): {identical}/13; output: {out}")
     return 1 if failed else 0

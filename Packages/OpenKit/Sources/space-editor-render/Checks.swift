@@ -244,6 +244,11 @@ enum Checks {
             let file = directory.appendingPathComponent("window-\(space).png")
             OffscreenRenderer.writePNG(image, to: file)
             let name = "window-\(space).png"
+            // `tools/verification/rerecord-display-baselines.py` keeps this exact render as the
+            // new reference when the lead approves a re-record (never in a gate run).
+            if let keep = ProcessInfo.processInfo.environment["OPEN_P1_RECORD_DIR"] {
+                try? FileManager.default.copyItem(at: file, to: URL(fileURLWithPath: keep).appendingPathComponent(name))
+            }
             let reference = try Data(contentsOf: RenderCLI.fixtureURL(baseline.directory + name))
             guard reference.count <= 16_777_216 else { throw CLIError(description: "oversized P1 PNG") }
             if let hashes = baseline.digests {
