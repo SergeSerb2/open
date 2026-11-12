@@ -32,6 +32,7 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 | `arccore-engine.md` | ArcCore API surface, Chromium changes, extension UI hosting |
 | `page-platform.md` | Toasts, Copy URL as Quote, zoom and pinch, page swipe, web notifications, Capture, translation, website appearance, clear-and-refresh, Developer menu and Developer Mode, Troubleshooting, Cast |
 | `passwords-autofill.md` | Password, card, and address prompts; fill dropdown; Manage pages; Keychain key; passkeys; Arc's importer |
+| `applescript-consent.md` | External AppleScript sender consent: what macOS decides, Arc vs Open declarations (Info.plist, dictionary terms, access groups, code identity), user hand checks; terms in `applescript-dictionary-terms.json` |
 | `easels-notes.md` | Easels and Notes: entry points, Easel canvas model and look, Firebase storage, Arc 1.172 Easel web export schema, Notes editor, phase-out flags, Notes export |
 | `sidebar-completion.md` | Delete alerts copy, Space Manager, multi-select, Clear variants, pinned reset, folder archive, hover previews, tidy-title schema, unread dot, banner, first-hide hint (measured), haptics, sounds, gesture hide |
 | `capture-session-2-results.md` | Capture session 2 (2026-10-26): what each plan and open PR must change, contradictions with lead decisions, and what stays uncaptured. Measurements are in `interaction-states.md` §20 |
