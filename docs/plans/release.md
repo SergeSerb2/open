@@ -209,7 +209,7 @@ RELEASE-MANIFEST.txt      versions, hashes, identity, profile names, sizes
 ```
 
 Size budget (arm64, default locales in §2.7): app ≤ 300 MB, DMG ≤ 300 MB.
-The script warns above 285 MB and fails above 320 MB. Rationale: English-only
+The script warns above 300 MB and fails above 335 MB (lead ruling 2026-11-12, after the official engine measured 355.8 MB: the App binary is stripped with `strip -x` after its dSYM is archived in `symbols/`, the credits ship once as `Credits.rtf`, and SwiftShader stays). Earlier limit: warn 285 MB, fail 320 MB. Rationale: English-only
 measures 279 MB today (C-7); the budget leaves room for Open's own growth
 and fails long before an all-locale accident (329 MB) can ship.
 
