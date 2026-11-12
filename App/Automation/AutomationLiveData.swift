@@ -9,7 +9,7 @@ import OpenSidebar
 /// open paths. `glance-alias` lets a fixture host count as a Recents site so e2e runs without
 /// the real sites or any account; `history-record` seeds the Profile's real history store.
 extension AutomationController {
-  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record"]
+  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record", "live-fetch"]
 
   func runLiveDataCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     switch cmd {
@@ -36,6 +36,17 @@ extension AutomationController {
       let time = Date().addingTimeInterval(-(a["ago"] as? Double ?? 0))
       let id = await store.recordVisit(url: url, title: a["title"] as? String ?? "", time: time)
       return ["visit": id.map { Int($0) } ?? -1]
+    case "live-fetch":
+      guard let raw = a["url"] as? String, let url = URL(string: raw), let script = a["script"] as? String else { throw Failure(message: "live-fetch needs url and script") }
+      let profile = (try? window.focusedProfile?.id) ?? app.model.defaultProfile?.id
+      guard let profile else { throw Failure(message: "no Profile") }
+      let started = Date()
+      do {
+        let value = try await app.liveFetch.fetch(profileID: profile, url: url, script: script)
+        return ["value": value, "created": app.liveFetch.created, "closed": app.liveFetch.closed, "seconds": Date().timeIntervalSince(started)] as [String: Any]
+      } catch {
+        return ["error": String(describing: error), "created": app.liveFetch.created, "closed": app.liveFetch.closed] as [String: Any]
+      }
     case "glance-state":
       let controller = try glanceController(a)
       guard case .glance(let id)? = controller.hoverPreview.request?.kind,

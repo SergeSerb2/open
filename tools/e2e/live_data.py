@@ -57,6 +57,11 @@ def run(factory, results, tmp, harness):
         got = {u: app.call('glance-match', url=u).get('site') for u in cases}
         results['live_glance_host_match'] = {'ok': got == cases, 'got': got}
 
+        # L2 groundwork: a hidden, never-shown page in the Profile loads and runs an Open-world script.
+        before = len(app.call('tabs'))
+        fetched = app.call('live-fetch', url=url('fetch', 'live-fetch'), script='document.title + "|" + typeof window.__pageOnly')
+        results['live_fetch_host_hidden_page'] = {'ok': fetched.get('value') == 'Sleep /live-fetch|undefined'
+            and fetched.get('created') == fetched.get('closed') == 1 and len(app.call('tabs')) == before, 'fetched': fetched}
         app.call('glance-alias', aliases={'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
         now_rows = [  # (path, title, seconds ago) — newest first after sorting.
             ('issue/ENG-3', 'ENG-3 Newest issue', 60),

@@ -119,6 +119,8 @@ public struct TabDTO: Codable, Sendable {
     public var isMuted: Bool
     public var openerID: String?
     public var isUnread: Bool
+    /// Live Folder row's pull request URL (LF L2); absent for normal tabs.
+    public var liveItemURL: String? = nil
 }
 
 public struct FolderDTO: Codable, Sendable {
@@ -129,6 +131,8 @@ public struct FolderDTO: Codable, Sendable {
     public var customIcon: String?
     public var iconOverride: SpaceIconDTO?
     public var children: [NodeDTO]
+    /// Live Folder settings (LF L2); absent in older snapshots and for normal folders.
+    public var live: LiveFolderConfig? = nil
 }
 
 public struct SplitDTO: Codable, Sendable {
@@ -355,7 +359,7 @@ public enum SnapshotMapper {
     static func nodeDTO(_ node: SidebarNode) -> NodeDTO {
         switch node {
         case .tab(let t): return .tab(tabDTO(t))
-        case .folder(let f): return .folder(FolderDTO(peekedChildID: f.peekedChildID?.description, id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }))
+        case .folder(let f): return .folder(FolderDTO(peekedChildID: f.peekedChildID?.description, id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }, live: f.live))
         case .split(let s): return .split(SplitDTO(id: s.id.rawValue.uuidString, orientation: s.orientation.rawValue, fractions: s.fractions, panes: s.panes.map { tabDTO($0) }, focusedPaneID: s.focusedPaneID?.rawValue.uuidString))
         }
     }
@@ -371,7 +375,10 @@ public enum SnapshotMapper {
     static func node(from dto: NodeDTO) -> SidebarNode {
         switch dto {
         case .tab(let t): return .tab(tab(from: t))
-        case .folder(let f): return .folder(Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }, peekedChildID: f.peekedChildID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) }))
+        case .folder(let f):
+            let folder = Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }, peekedChildID: f.peekedChildID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) })
+            folder.live = f.live
+            return .folder(folder)
         case .split(let s): return .split(Split(id: ItemID(uuidString: s.id), orientation: SplitOrientation(rawValue: s.orientation) ?? .horizontal, fractions: s.fractions, panes: s.panes.map { tab(from: $0) }, focusedPaneID: s.focusedPaneID.map { ItemID(uuidString: $0) }))
         }
     }
@@ -380,14 +387,16 @@ public enum SnapshotMapper {
         TabDTO(id: t.id.rawValue.uuidString, url: t.url.absoluteString, title: t.title, customTitle: t.customTitle,
                pinnedURL: t.pinnedURL?.absoluteString, customIcon: t.customIcon, iconOverride: iconDTO(t.iconOverride),
                createdAt: t.createdAt.timeIntervalSince1970, lastActiveAt: t.lastActiveAt.timeIntervalSince1970,
-               isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread)
+               isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread, liveItemURL: t.liveItemURL?.absoluteString)
     }
 
     static func tab(from dto: TabDTO) -> Tab {
-        Tab(id: ItemID(uuidString: dto.id), url: URL(string: dto.url) ?? URL(string: "about:blank")!, title: dto.title,
+        let tab = Tab(id: ItemID(uuidString: dto.id), url: URL(string: dto.url) ?? URL(string: "about:blank")!, title: dto.title,
             customTitle: dto.customTitle, pinnedURL: dto.pinnedURL.flatMap { URL(string: $0) }, customIcon: dto.customIcon, iconOverride: icon(from: dto.iconOverride),
             createdAt: Date(timeIntervalSince1970: dto.createdAt), lastActiveAt: Date(timeIntervalSince1970: dto.lastActiveAt),
             isMuted: dto.isMuted, openerID: dto.openerID.map { ItemID(uuidString: $0) }, isUnread: dto.isUnread)
+        tab.liveItemURL = dto.liveItemURL.flatMap(URL.init(string:))
+        return tab
     }
 
     static func windowDTO(_ w: BrowserWindowState) -> WindowDTO {
