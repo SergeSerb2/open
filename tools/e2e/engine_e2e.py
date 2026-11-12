@@ -1228,6 +1228,50 @@ def feature_checks(app, style, results, tmp):
             ' opus: MediaSource.isTypeSupported(\'audio/webm; codecs="opus"\'),'
             ' mp3: document.createElement("audio").canPlayType("audio/mpeg")})')}
 
+    def protocol_handler():
+        # navigator.registerProtocolHandler (PB1 mailto): the prompt carries the kind,
+        # scheme and template; a grant stores the handler in Chromium's registry; a
+        # navigation to the scheme goes to the handler; removal ends it. Deny stores nothing.
+        kind = 1 << 12
+        template = "https://example.com/?compose=%s"
+        w = new_tab(app, "https://example.com/")
+        try:
+            before = app.call("protocol-handlers", translate="mailto:someone@example.org")
+            app.call("events")
+            app.eval(w, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+            wait_until(lambda: any(h["scheme"] == "mailto" for h in app.call("protocol-handlers")["handlers"]), timeout=5)
+            prompts = [e for e in app.call("events") if e["type"] == "permission"]
+            granted = app.call("protocol-handlers", translate="mailto:someone@example.org")
+            app.eval(w, 'location.href = "mailto:someone@example.org"')
+            routed = wait_until(lambda: (app.eval(w, "location.href") or "").startswith("https://example.com/?compose=mailto"), timeout=10)
+            landed = app.eval(w, "location.href")
+            app.call("policy", permissions="deny")
+            app.call("navigate", tab=w, url="https://example.com/")
+            app.call("wait", tab=w)
+            app.call("events")
+            app.eval(w, 'navigator.registerProtocolHandler("web+opentest", "https://example.com/?x=%s")')
+            time.sleep(1)
+            denied_prompts = [e for e in app.call("events") if e["type"] == "permission"]
+            denied = app.call("protocol-handlers", translate="web+opentest:1")
+            removed = app.call("protocol-handlers", removeScheme="mailto", removeURLTemplate=template,
+                               translate="mailto:someone@example.org")
+        finally:
+            app.call("policy", permissions="grant")
+            app.call("close", tab=w)
+        expected = "https://example.com/?compose=mailto%3Asomeone%40example.org"
+        return {"ok": before["translated"] is None and before["handlers"] == []
+                      and len(prompts) == 1 and prompts[0]["kinds"] == kind
+                      and prompts[0].get("protocolScheme") == "mailto" and prompts[0].get("protocolURLTemplate") == template
+                      and granted["translated"] == expected
+                      and granted["handlers"] == [{"scheme": "mailto", "urlTemplate": template, "default": True}]
+                      and bool(routed) and landed == expected
+                      and len(denied_prompts) == 1 and denied_prompts[0]["kinds"] == kind
+                      and denied_prompts[0].get("protocolScheme") == "web+opentest"
+                      and denied["translated"] is None and len(denied["handlers"]) == 1
+                      and removed["removed"] is True and removed["handlers"] == [] and removed["translated"] is None,
+                "before": before, "prompts": prompts, "granted": granted, "landed": landed,
+                "deniedPrompts": denied_prompts, "denied": denied, "removed": removed}
+
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
@@ -1296,7 +1340,7 @@ def feature_checks(app, style, results, tmp):
                      ("context_menu", context_menu), ("audio_state", audio), ("fullscreen", fullscreen),
                      ("picture_in_picture", pip), ("pdf_viewer", pdf), ("print_to_pdf", print_to_pdf),
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
-                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
+                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("protocol_handler", protocol_handler), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
     def sad_tab():
         return runpy.run_path(os.path.join(ROOT, "tools/e2e/sad_tab.py"))["run"](
