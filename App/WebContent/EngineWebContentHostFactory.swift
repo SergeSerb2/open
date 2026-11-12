@@ -1965,13 +1965,21 @@ final class ClosureMenuItem: NSMenuItem {
 // AppKit reaches browser Find only after the text/page responder declines it.
 // Undo/Redo use AppKit itself and the window delegate's selected UndoManager.
 extension EngineWebContentHostFactory: NSMenuItemValidation {
+  /// The selected tab's Note page, when it is a Note.
+  var selectedNoteHost: NoteContentHost? {
+    guard let id = selectedTab?.id, let host = noteHosts[id], !host.closed else { return nil }
+    return host
+  }
+
   @objc func performFindPanelAction(_ sender: Any?) {
+    if let note = selectedNoteHost { note.editor.showFind(); return }
     ensureFindController().perform(tag: (sender as? NSMenuItem)?.tag ?? 1)
   }
 
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     switch item.action {
-    case #selector(performFindPanelAction(_:)), #selector(performTextFinderAction(_:)), #selector(centerSelectionInVisibleArea(_:)): return selectedContent != nil
+    case #selector(performFindPanelAction(_:)), #selector(performTextFinderAction(_:)), #selector(centerSelectionInVisibleArea(_:)):
+      return selectedContent != nil || selectedNoteHost != nil
     default: return true
     }
   }
