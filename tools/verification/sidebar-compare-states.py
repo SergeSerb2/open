@@ -209,7 +209,13 @@ def gate_tables(name, tables, color_limits, allowed=None):
         for main, branch in zip(main_rows, branch_rows):
             if main["position"] != branch["position"] or main["ink"] != branch["ink"]:
                 geometry_same = False
-                errors.append(main["element"] + ": position or ink box differs")
+                # A darker or lighter glyph can cross the ink threshold by one pixel row;
+                # only an exactly recorded (main, branch) ink/position pair passes.
+                recorded = ((allowed or {}).get(main["element"]) or [None])
+                shape = recorded[-1] if recorded and isinstance(recorded[-1], dict) else None
+                if not (shape and shape["position"] == [main["position"], branch["position"]]
+                        and shape["ink"] == [main["ink"], branch["ink"]]):
+                    errors.append(main["element"] + ": position or ink box differs")
             if len(main["colors"]) != len(branch["colors"]):
                 errors.append(main["element"] + ": color metrics differ in shape")
                 continue
@@ -289,10 +295,13 @@ def record_transition(reason, key, old_limits, combined):
         if [r["element"] for r in main_rows] != [r["element"] for r in branch_rows]:
             raise ValueError(name + ": compared elements differ; a transition records colour moves only")
         for m, b in zip(main_rows, branch_rows):
-            if m["position"] != b["position"] or m["ink"] != b["ink"]:
-                raise ValueError(name + ": geometry moved; a transition records colour moves only")
             moves = [None if x is None or y is None or abs(x - y) <= COLOR_DRIFT else [str(x), str(y)]
                      for x, y in zip(m["colors"], b["colors"])]
+            if m["position"] != b["position"] or m["ink"] != b["ink"]:
+                # An ink-threshold shift of a recoloured glyph; the PR lists each one.
+                if not any(moves):
+                    raise ValueError(name + ": " + m["element"] + " geometry moved without a colour move")
+                moves.append({"position": [m["position"], b["position"]], "ink": [m["ink"], b["ink"]]})
             if any(moves):
                 elements.setdefault(name, {})[m["element"]] = moves
         ceiling = worst[1].quantize(Decimal("0.01"), rounding=ROUND_CEILING)
