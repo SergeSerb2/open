@@ -224,6 +224,8 @@ public enum MenuBuilder {
         let menu = NSMenu(title: "File")
         add(menu, ["new-tab", "open-command-bar", "new-window", "new-incognito-window", "new-little-open-window", "blank-window"], target: target, overrides: overrides)
         menu.addItem(.separator())
+        add(menu, ["new-easel"], target: target, overrides: overrides)
+        menu.addItem(.separator())
         add(menu, ["archive-tab", "close-window", "restore-last-closed-tab"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["print", "save-page-as", "share-page", "capture-page", "capture-full-page", "capture-portrait"], target: target, overrides: overrides)

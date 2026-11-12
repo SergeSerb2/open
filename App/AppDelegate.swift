@@ -1,5 +1,6 @@
 import OpenOnboarding
 import AppKit
+import OpenEasel
 import OpenEngine
 import OpenModel
 import OpenStore
@@ -40,6 +41,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var snapshotStore: SnapshotStore!
   private(set) var archiveSink: ProfileArchiveSink!
   private(set) var directories: ProfileDirectories!
+  /// Easel documents (`<data root>/Easels`); made on the first Easel open, never at launch.
+  private var easelStore: EaselStore?
+  var easels: EaselStore {
+    if let easelStore { return easelStore }
+    let store = EaselStore(root: directories.root); easelStore = store; return store
+  }
   /// The engine layout step's outcome (and the data root lock).
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
@@ -607,6 +614,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   /// Called after the message loop returns, before the engine shuts down.
   func saveState() {
+    // Easel edits in progress (a title or a text box) are written before quit.
+    for factory in hostFactories.values { for host in factory.easelHosts.values { host.canvas.commitPendingEdits() } }
+    easelStore?.flush()
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     for controller in windowControllers { controller.saveWindowState() }
     do {
