@@ -2,9 +2,9 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
+import OpenSettings  // Import from Arc providers and the wizard model are used in every build.
 #if OPEN_AUTOMATION
 import OpenOnboarding
-import OpenSettings
 #endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
