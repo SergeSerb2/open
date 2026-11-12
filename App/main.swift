@@ -4,6 +4,7 @@ import Security
 import QuartzCore
 #if OPEN_AUTOMATION
 import OpenOnboarding
+import OpenSettings
 #endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
@@ -45,6 +46,7 @@ app.keyEquivalentHandler = { event in
 let options = LaunchOptions(arguments: CommandLine.arguments)
 LaunchTiming.shared.phase("optionsParsed")
 appDelegate.options = options
+ImportWizardViewModel.browserLibraryOverride = options.browserImportLibrary
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()

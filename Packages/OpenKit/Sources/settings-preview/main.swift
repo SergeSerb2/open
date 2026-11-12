@@ -143,6 +143,7 @@ import CryptoKit
         let scales = rawScale == "both" ? [1,2] : [Int(rawScale)!]
         if args.contains("--first-run-only") {try await renderFirstRunScreens(output:output,scales:scales);return}
         if args.contains("--profiles-shell-only") {try await renderProfilesShell(output:output,scales:scales);return}
+        if args.contains("--import-sources-only") {try await renderImportSources(output:output,scales:scales);return}
         settings.selectedPane = .shortcuts
         env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
         for dark in [false,true] { for scale in scales {
