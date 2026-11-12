@@ -72,6 +72,8 @@ bool OEMatchesPattern(const std::string& pattern, const std::string& url);
 /// Process message names (browser <-> renderer).
 extern const char kOEMsgScriptsUpdate[];    // browser -> renderer
 extern const char kOEExtraScripts[];        // extra_info key
+extern const char kOEMsgUserStyleSheet[];   // browser -> renderer: key, css
+extern const char kOEExtraUserStyles[];     // extra_info key: {key: css}
 
 #pragma mark - Engine internals
 
@@ -310,6 +312,15 @@ class OEDevToolsClient;
                    promptCallback:(CefRefPtr<CefPermissionPromptCallback>)prompt;
 - (void)oe_setProtocolHandlerScheme:(NSString*)scheme
                         urlTemplate:(NSString*)urlTemplate;
+@end
+
+// DevTools docked in an embedder view (OEDevToolsDock.mm).
+@interface OEDevToolsDock : NSObject
+@property(nonatomic, readonly) NSView* view;
+@property(nonatomic, readonly) BOOL isHostingFrontend;
+- (BOOL)registerForBrowser:(CefRefPtr<CefBrowser>)browser;
+- (void)unregisterForBrowser:(CefRefPtr<CefBrowser>)browser;
+- (void)close;
 @end
 
 @interface OEProtocolHandler ()

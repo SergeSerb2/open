@@ -4,7 +4,7 @@
 0101-mem-visibility.patch  # Tab sleeping P-MEM-01: WasHidden of windowed Alloy browsers reaches WebContents (Chrome style: in 0302); memory-fork §5.1
 0104-mem-navigation-history.patch  # Tab sleeping P-MEM-04: CefNavigationEntry GetReferrerURL/GetFaviconURL; capture/restore itself is overlay (cef_navigation_history.h); memory-fork §5.3
 0105-mem-no-renderer-create.patch  # Tab sleeping P-MEM-05: CefBrowserSettings.no_renderer -> kNoRendererProcess + initially_hidden (Alloy; hosted tabs in the OpenTabStrip overlay); memory-fork §5.2
-0302-open-hosted-tabs.patch  # P1: hosted Chrome style tabs (delegate, per-tab client, popups, focus, BUILD.gn); also the generic open_libcef_deps hook (deps from open/open_libcef_sources.gni, inside cef/BUILD.gn's is_mac block)
+0302-open-hosted-tabs.patch  # P1: hosted Chrome style tabs (delegate, per-tab client, popups, focus, BUILD.gn); also the generic open_libcef_deps hook (deps from open/open_libcef_sources.gni, inside cef/BUILD.gn's is_mac block); DevTools of a hosted tab docked in the embedder (Views-hosted popup, dock delegate)
 0303-open-context-menu-submenu-commands.patch  # P1: context-menu commands of submenus with their own delegate (macOS text services) do not crash
 0304-open-extension-popups.patch  # P2: extension action popups get a CEF browser host (ChromeBrowserDelegate friend)
 0305-open-webstore-downloads.patch  # P3: permit only active manager-owned Web Store installer downloads without a CEF browser
@@ -13,7 +13,7 @@
 0311-open-adblock-network-hooks.patch  # Ad-block Step 4: the URLLoaderFactory proxy appended first in WillCreateURLLoaderFactory (outermost), WebSocket and WebTransport checks; the service comes from CefBrowserContext (adblock-fork §7.2, §7.5)
 0314-open-adblock-cefsimple-smoke.patch  # Ad-block, test only: cefsimple opens no window in --open-adblock-selftest mode (adblock-fork §13.1); keep last
 0505-page-website-color-scheme.patch  # Page platform EP-9b: a request context's website color scheme wins over Chrome's in OverrideWebPreferences and after navigation (CefSetWebsiteColorScheme, overlay cef_open_page.h); page-platform §6
-0601-open-script-world.patch  # P7: reserve Open world; keep queued frame actions in the main context
+0601-open-script-world.patch  # P7: reserve Open world; keep queued frame actions in the main context; user style sheets at main-frame commit
 0602-open-browser-extra-info.patch  # P7: current script snapshot reaches replacement renderers before document start
 0701-open-profile-lifecycle.patch  # Profiles: primary OTR lifetime and safe initialized-context lookup (07xx APIs live in the overlay)
 # 0704: local CRX completion is overlay-only (03xx extensions area, S10 number).

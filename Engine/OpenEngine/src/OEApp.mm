@@ -16,6 +16,8 @@
 
 const char kOEMsgScriptsUpdate[] = "oe.scripts.update";
 const char kOEExtraScripts[] = "oe.scripts";
+const char kOEMsgUserStyleSheet[] = "oe.userStyleSheet";
+const char kOEExtraUserStyles[] = "oe.userStyles";
 
 namespace {
 
@@ -239,12 +241,23 @@ class OEApp : public CefApp,
       SetScripts(browser->GetIdentifier(),
                  extra_info->GetList(kOEExtraScripts));
     }
+    // User style sheets for every main-frame document of this browser in this
+    // process (fork API cef_open_page.h, CEF patch 0601).
+    CefRefPtr<CefDictionaryValue> styles =
+        extra_info ? extra_info->GetDictionary(kOEExtraUserStyles) : nullptr;
+    CefDictionaryValue::KeyList keys;
+    if (styles && styles->GetKeys(keys)) {
+      for (const CefString& key : keys) {
+        CefSetOpenUserStyleSheet(browser, key, styles->GetString(key));
+      }
+    }
   }
 
   void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override {
     std::lock_guard<std::mutex> lock(mutex_);
     scripts_.erase(browser->GetIdentifier());
     OEOpenWorldBrowserDestroyed(browser->GetIdentifier());
+    CefForgetOpenUserStyleSheets(browser);
   }
 
   void OnContextCreated(CefRefPtr<CefBrowser> browser,
@@ -293,6 +306,11 @@ class OEApp : public CefApp,
                                 CefRefPtr<CefProcessMessage> message) override {
     if (source_process != PID_BROWSER) return false;
     if (OEOpenWorldRendererMessage(browser, frame, message)) return true;
+    if (message->GetName() == kOEMsgUserStyleSheet) {
+      CefRefPtr<CefListValue> args = message->GetArgumentList();
+      CefSetOpenUserStyleSheet(browser, args->GetString(0), args->GetString(1));
+      return true;
+    }
     if (message->GetName() == kOEMsgScriptsUpdate) {
       SetScripts(browser->GetIdentifier(),
                  message->GetArgumentList()->GetList(0));

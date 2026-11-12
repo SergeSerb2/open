@@ -34,7 +34,7 @@
 // 05xx): history swipe events and options (EP-1, 0501), the page selection and
 // its link to highlight (EP-2, EP-3; overlay only), web notification clicks
 // and test hooks (EP-6, EP-7, 0504), the website color scheme of a
-// request context (EP-9b, 0505), and web protocol handlers (0507). The contents of this file must follow a specific format in order to support the
+// request context (EP-9b, 0505), web protocol handlers (0507), docked DevTools (0302), and user style sheets (0601). The contents of this file must follow a specific format in order to support the
 // CEF translator tool. See the translator.README.txt file in the tools
 // directory for more information.
 //
@@ -48,6 +48,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_request_context.h"
 #include "include/cef_values.h"
+#include "include/views/cef_browser_view.h"
 
 #if CEF_API_ADDED(CEF_EXPERIMENTAL)
 
@@ -284,6 +285,41 @@ CefString CefTranslateProtocolHandlerURL(
 bool CefRemoveProtocolHandler(CefRefPtr<CefRequestContext> request_context,
                               const CefString& scheme,
                               const CefString& url);
+
+///
+/// Renderer process: sets (or, with an empty |css|, removes) the user-origin
+/// style sheet |key| of |browser|. It applies at once to the current
+/// main-frame document if that document is in this process, and to every later
+/// main-frame document of |browser| in this process at commit. User origin:
+/// the page sees the computed result but no <style> node and no
+/// document.styleSheets entry. Subframes are not affected. Must be called on
+/// the render process main thread.
+///
+/*--cef(added=experimental)--*/
+bool CefSetOpenUserStyleSheet(CefRefPtr<CefBrowser> browser,
+                              const CefString& key,
+                              const CefString& css);
+
+///
+/// Renderer process: forgets every user style sheet of |browser| (call from
+/// CefRenderProcessHandler::OnBrowserDestroyed).
+///
+/*--cef(added=experimental)--*/
+void CefForgetOpenUserStyleSheets(CefRefPtr<CefBrowser> browser);
+
+///
+/// Docks the next DevTools browser created for |browser| (a Chrome style page
+/// hosted by Open) in the embedder's own view: that DevTools browser is created
+/// as a Views-hosted popup, and |delegate| receives
+/// CefBrowserViewDelegate::OnPopupBrowserViewCreated(..., is_devtools=true) with
+/// its CefBrowserView (and GetDelegateForPopupBrowserView before that). The
+/// registration is used once; an empty |delegate| removes it. Without one,
+/// DevTools opens in its own window as before. Returns false for an empty
+/// |browser|. Must be called on the browser process UI thread.
+///
+/*--cef(added=experimental,optional_param=delegate)--*/
+bool CefSetOpenDevToolsDockDelegate(CefRefPtr<CefBrowser> browser,
+                                    CefRefPtr<CefBrowserViewDelegate> delegate);
 
 #endif  // CEF_API_ADDED(CEF_EXPERIMENTAL)
 

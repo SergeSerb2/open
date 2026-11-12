@@ -366,6 +366,27 @@ OE_EXPORT @interface OEWebContent : NSObject
 /// cannot run. Returns NO only for that plain fallback.
 - (BOOL)showDevToolsPanel:(OEDevToolsPanel)panel
     NS_SWIFT_NAME(showDevTools(panel:));
+/// A user-origin style sheet for this page's main frame (PB1, 2026-11-12):
+/// applied at once and to every later main-frame document, before it parses.
+/// The page sees the computed values but no <style> node and no
+/// document.styleSheets entry; subframes are not affected. A new `css`
+/// for the same `key` replaces the sheet; nil or empty removes it. Keys up to
+/// 256 characters, CSS up to 1 MiB (larger values are ignored).
+- (void)setUserStyleSheet:(nullable NSString*)css
+                   forKey:(NSString*)key
+    NS_SWIFT_NAME(setUserStyleSheet(_:forKey:));
+
+/// DevTools docked in the embedder (IMC, 2026-11-12): returns this page's
+/// DevTools view, created on first use and the same object until the page
+/// closes. The caller places it (for example at the right of the page, with
+/// its own divider) and sizes it; DevTools follows the view's frame, window
+/// and hidden state. Opens DevTools there on `panel` (selection as
+/// -showDevToolsPanel:). If DevTools is already open in its own window, that
+/// window closes first. Chrome style pages only; nil for Alloy pages (use
+/// -showDevToolsPanel:) and before the page has a browser.
+/// -closeDevTools closes it; -hasDevTools covers both modes.
+- (nullable NSView*)devToolsViewForPanel:(OEDevToolsPanel)panel
+    NS_SWIFT_NAME(devToolsView(panel:));
 - (void)closeDevTools;
 @property(nonatomic, readonly) BOOL hasDevTools;
 /// Diagnostics (automation checks): evaluates `script` in the page of this
