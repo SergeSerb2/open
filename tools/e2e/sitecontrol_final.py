@@ -203,7 +203,17 @@ def run(factory, results, tmp, h):
                 secure = wait(lambda: app.call('security-state', tab=tab)['level'] == 'secure', timeout=10)
                 s = open_panel()
                 record('T_security_trusted_https', secure and s['security']['title'] == 'Connection: Secure'
-                       and not s['security']['enabled'], panel=s, engine=app.call('security-state', tab=tab))
+                       and s['security']['enabled'], panel=s, engine=app.call('security-state', tab=tab))
+                # A10 certificate viewer (SC-16 onSecurityButtonClick -> showCertificateDialog): the pill
+                # closes the panel and shows the page's chain in the system certificate sheet.
+                chain = len(app.call('security-state', tab=tab)['certificates'])
+                app.call('site-controls', action='tap', id='security')
+                sheet = wait(lambda: (lambda x: x if 'SFCertificatePanel' in x.get('sheet', '') else None)(state()), timeout=5)
+                ended = app.call('site-controls', action='end-sheet') if sheet else None
+                record('T_security_certificate_sheet', bool(sheet) and not sheet['presented'] and chain >= 1
+                       and state().get('sheet') == '', sheet=sheet and sheet.get('sheet'), chain=chain,
+                       negative='T_security_plain_http: the pill is status only on http')
+                s = open_panel()
                 deliveries = s['sourceReads']['changeDeliveries']
                 app.eval(tab, "(()=>{let s=document.createElement('script');s.src=%s;document.body.append(s);return true})()" % json.dumps(f['http'] + '/mixed.js'))
                 mixed = wait(lambda: app.call('security-state', tab=tab)['level'] == 'mixedContent', timeout=10)
@@ -212,7 +222,7 @@ def run(factory, results, tmp, h):
                        and panel['sourceReads']['changeDeliveries'] > deliveries and app.eval(tab, 'window.mixedLoaded===true'),
                        panel=panel, engine=app.call('security-state', tab=tab), variant='mixed-content warning on an already-open panel')
                 visit(tab, f['http'] + '/plain'); s = open_panel()
-                record('T_security_plain_http', s['security']['title'] == 'Connection: Insecure', panel=s)
+                record('T_security_plain_http', s['security']['title'] == 'Connection: Insecure' and not s['security']['enabled'], panel=s)
                 # Begin on secure HTTPS so a canceled provisional navigation
                 # cannot pass just because the previous page was plain HTTP.
                 visit(tab, f['secure'] + '/before-certificate-error'); open_panel()

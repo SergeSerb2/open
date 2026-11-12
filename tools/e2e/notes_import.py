@@ -33,7 +33,8 @@ def run(factory, results, tmp, h):
     def ident(name): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/notes-import/' + name)).upper()
     with_text, without = ident('row-a'), ident('row-b')
     graph['items'] += [with_text, {'id': with_text, 'childrenIds': [], 'title': 'Groceries',
-                                   'data': {'arcDocument': {'arcDocumentID': 'DOC-A', 'isEditable': True}}},
+                                   'data': {'arcDocument': {'arcDocumentID': 'DOC-A', 'isEditable': True,
+                                                            'customInfo': {'iconType': {'emoji_v2': '\U0001F34E'}}}}},
                        without, {'id': without, 'childrenIds': [], 'title': 'Trip ideas',
                                  'data': {'arcDocument': {'arcDocumentID': 'DOC-B', 'isEditable': True}}}]
     today = graph['items'][graph['items'].index(ids['ta']) + 1]
@@ -88,6 +89,10 @@ def run(factory, results, tmp, h):
         row('import_creates_note_rows', 'Groceries' in notes and 'Trip ideas' in notes and outcome.get('Notes') == 2
             and outcome.get('Note placeholders') == 1 and outcome.get('Sidebar accounted') == outcome.get('Sidebar total'),
             notes=list(notes), outcome=outcome)
+        # `customInfo.iconType` (easels-notes.md §4.3) becomes the Note row's custom icon; no icon stays none.
+        row('custom_icon_imported', notes.get('Groceries', {}).get('iconOverride') == {'type': 'emoji', 'value': '\U0001F34E'}
+            and notes.get('Trip ideas', {}).get('iconOverride') is None,
+            icons={k: v.get('iconOverride') for k, v in notes.items()})
 
         def show(title):
             app.call('space', space=notes[title]['space'])

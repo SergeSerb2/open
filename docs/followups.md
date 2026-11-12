@@ -605,3 +605,16 @@ that a search query or a Profile filter is active (`LibraryPanelView.updateEmpty
 Why one is active at that step is not known. It may be a leftover from an
 earlier step of the suite. The row `library_corrupt_index_downloads` accepts
 both titles until this is settled. Owner: D2 (lead routes).
+
+Cause found (D2, 2026-11-12): every outside entry into the Library sets the
+Downloads Profile filter to the window owner's Profile, so the filter is
+always active. Fix: #480 (Downloads shows "No downloads yet" when no Profile
+has a download). After #480, `library_corrupt_index_downloads` can expect
+"No downloads yet" only.
+
+## Menu items deferred from the D2c menu work (LEAD 12:32, 2026-11-12)
+
+No work on these until the lead schedules them (`docs/re/sidebar-menus-parity.md`):
+- Split row: "Rename…", "Change Icon…" and "Reset Name and Icon" from Arc's code (MH). The split-row menu was not captured in 1.172.2 (C3 item 5).
+- Library › Media: "Open Source URL" and "Copy Source URL". Open's capture index stores only the source host, so it needs the full source URL first. The Media menu order and separators stay marked GUESS (session 8 item 12 was skipped).
+- Pinned tab row: "Customize Page…" is Open's own item and not in Arc's menu (S3D). Keep it or move it; this needs a decision.

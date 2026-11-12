@@ -692,8 +692,11 @@ public struct ArcImporter {
                 }
                 let title = note.title.isEmpty ? ((item["title"] as? String) ?? "") : note.title
                 note.title = title
+                // `SidebarArcDocument.customInfo.iconType` is the same custom icon as a tab's
+                // (easels-notes.md §4.3); Open's Note rows take an icon through Change Icon….
                 let tab = Tab(id: Self.itemID(forArcID: arcID), url: NoteLink.url(for: noteID),
                               title: title.isEmpty ? "Untitled" : title,
+                              iconOverride: tabCustomIcon(from: nd),
                               createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
                               lastActiveAt: Self.date(from2001: (nd["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
                               isUnread: item["isUnread"] as? Bool ?? false)

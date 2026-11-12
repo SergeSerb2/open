@@ -653,7 +653,7 @@
       case "page-selection", "swipe", "swipe-indicator":
         // Engine page API (EP-1, EP-2, EP-3); App/Automation/AutomationPageEngine.swift.
         return try await runPageEngineCommand(cmd, try content(a, try window), a)
-      case "capture", "capture-state", "capture-action", "captures":
+      case "capture", "capture-state", "capture-action", "captures", "capture-portrait":
         // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
         return try await runCaptureCommand(cmd, a)
       case "toast-undo":
@@ -937,7 +937,7 @@
         return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x })] as [String: Any]
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
-      case "handoff-state", "handoff-continue", "deep-link-state":
+      case "handoff-state", "handoff-continue", "deep-link-state", "mailto-state":
         return try await runHandoffCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)
@@ -2839,7 +2839,15 @@
           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
         else { throw Failure(message: "could not create row menu event") }
         menu = outline.menu(for: event)
+      } else if args["header"] as? Bool == true, let controls = manager.controls(spaceID: id) {
+        // A right-click on the card header (Library › Spaces), through the view's own menu(for:).
+        let point = controls.convert(NSPoint(x: controls.bounds.midX, y: 12), to: nil)
+        guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        else { throw Failure(message: "could not create header menu event") }
+        menu = controls.menu(for: event)
       } else { menu = manager.controls(spaceID: id)?.makeMenu() }
+      if title == "?" { return menu?.items.map { $0.isSeparatorItem ? "separator" : $0.title } ?? [] }
       // "Turn into Folder/<Space>" walks one submenu level per path component.
       var level = menu
       let path = title.split(separator: "/").map(String.init)

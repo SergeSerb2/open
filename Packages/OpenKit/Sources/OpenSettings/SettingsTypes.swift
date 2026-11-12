@@ -98,7 +98,7 @@ public extension AutoArchiveInterval {
         // Page and platform features (page-platform §5; settings-library §2.1 rows).
         "open.translate.enabled": true, "open.translate.neverTranslateHosts": [String](),
         "open.capture.dragToCaptureEnabled": true, "open.capture.shortcutHintLastShown": 0.0,
-        "open.capture.portraitBackground": "theme", "open.web.colorScheme": "automatic",
+        "open.capture.portraitBackground": "color", "open.web.colorScheme": "automatic",
         "open.developer.allowJavaScriptFromAppleEvents": false, "open.developer.modeHosts": [String](),
     ]
     public static func register(in defaults: UserDefaults) {
