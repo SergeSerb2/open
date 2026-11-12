@@ -51,9 +51,12 @@ final class LibraryPreparationHeartbeat {
           "endLaunchMilliseconds":(row.end-launchUptime)*1000,"milliseconds":(row.end-row.start)*1000]
       },
       "idleWorkIntervals":slices.map { row in
-        ["startLaunchMilliseconds":(row["startUptime"]!-launchUptime)*1000,
+        var value = row
+        value.removeValue(forKey:"startUptime"); value.removeValue(forKey:"endUptime")
+        value.merge(["startLaunchMilliseconds":(row["startUptime"]!-launchUptime)*1000,
           "endLaunchMilliseconds":(row["endUptime"]!-launchUptime)*1000,"milliseconds":row["milliseconds"]!,
-          "rowKind":row["rowKind"] ?? 0,"phase":row["phase"] ?? 0,"firstUse":row["firstUse"] ?? 0]
+          "rowKind":row["rowKind"] ?? 0,"phase":row["phase"] ?? 0,"firstUse":row["firstUse"] ?? 0]) { _,new in new }
+        return value
       }]
   }
 }

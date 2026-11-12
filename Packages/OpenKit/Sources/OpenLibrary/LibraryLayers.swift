@@ -17,8 +17,13 @@ enum LibraryRaster {
 final class LibraryTextLayer: CATextLayer {
     override func display() {
         let area = bounds.width*bounds.height*contentsScale*contentsScale
-        MainActor.assumeIsolated { LibraryRaster.stores += 1; LibraryRaster.pixels += area; LibraryRaster.text += 1 }
+        let start = ProcessInfo.processInfo.systemUptime
         super.display()
+        let milliseconds = (ProcessInfo.processInfo.systemUptime-start)*1000
+        MainActor.assumeIsolated {
+            LibraryRaster.stores += 1; LibraryRaster.pixels += area; LibraryRaster.text += 1
+            LibraryIdleWork.record("text.raster",milliseconds:milliseconds)
+        }
     }
 }
 
@@ -51,7 +56,7 @@ enum LibraryImages {
         guard let image else { return nil }
         if let cached = cache.object(forKey:image) { return cached }
         var rect = CGRect(x:0,y:0,width:48,height:48)
-        guard let contents = image.cgImage(forProposedRect:&rect,context:nil,hints:nil) else { return nil }
+        guard let contents = LibraryIdleWork.measure("image.decode", { image.cgImage(forProposedRect:&rect,context:nil,hints:nil) }) else { return nil }
         cache.setObject(contents,forKey:image,cost:contents.bytesPerRow*contents.height)
         return contents
     }

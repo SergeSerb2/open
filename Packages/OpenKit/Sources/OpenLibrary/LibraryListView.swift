@@ -101,13 +101,16 @@ final class LibraryListView: NSView, NSMenuDelegate {
             guard generation == overscanGeneration,!Task.isCancelled else { return }
             let completed = await LibraryIdleWork.perform {
             guard generation == overscanGeneration else { return }
-            let view = LibraryItemView(); view.identifier = .init("row"); cellsCreated += 1
+            let view = LibraryIdleWork.measure("cell.creation") { LibraryItemView() }; view.identifier = .init("row"); cellsCreated += 1
             if let first = sources.first {
                 view.frame = CGRect(x:0,y:0,width:bounds.width,height:gallery ? 118 : 56)
-                view.configure(first.resolve(),foreground:foreground,overlay:overlay,gallery:gallery,text:first.preparedText)
-                view.layoutSubtreeIfNeeded(); view.displayIfNeeded(); view.layer?.displayIfNeeded()
+                let item = LibraryIdleWork.measure("row.resolve") { first.resolve() }
+                LibraryIdleWork.row(cellsCreated-1,kind:gallery ? "boostGallery" : item.kind,operation:1)
+                LibraryIdleWork.measure("cell.configure") { view.configure(item,foreground:foreground,overlay:overlay,gallery:gallery,text:first.preparedText) }
+                LibraryIdleWork.measure("layout.pass") { view.layoutSubtreeIfNeeded() }
+                LibraryIdleWork.measure("display") { view.displayIfNeeded(); view.layer?.displayIfNeeded() }
             }
-            table.park(view)
+            LibraryIdleWork.measure("cell.park") { table.park(view) }
             }
             guard completed else { return }
         }
@@ -116,8 +119,9 @@ final class LibraryListView: NSView, NSMenuDelegate {
             guard generation == overscanGeneration,!Task.isCancelled else { return }
             let completed = await LibraryIdleWork.perform {
             guard generation == overscanGeneration else { return }
-            let view = LibraryHeadingView(); view.identifier = .init("day"); headingsCreated += 1
-            table.park(view)
+            LibraryIdleWork.row(headingsCreated,kind:"heading",operation:2)
+            let view = LibraryIdleWork.measure("cell.creation") { LibraryHeadingView() }; view.identifier = .init("day"); headingsCreated += 1
+            LibraryIdleWork.measure("cell.park") { table.park(view) }
             }
             guard completed else { return }
         }
@@ -267,13 +271,14 @@ final class LibraryListView: NSView, NSMenuDelegate {
         case .item(let index):
             let view: LibraryItemView
             if let reusable = table.makeView(withIdentifier: .init("row"), owner: self) as? LibraryItemView { view = reusable }
-            else { view = LibraryItemView(); cellsCreated += 1 }
+            else { view = LibraryIdleWork.measure("cell.creation") { LibraryItemView() }; cellsCreated += 1 }
             view.identifier = .init("row")
             cellsConfigured += 1
             view.onHover = nil
             let started = ProcessInfo.processInfo.systemUptime
-            let item = sources[index].resolve()
-            view.configure(item, foreground: foreground, overlay: overlay, gallery: gallery, text:sources[index].preparedText)
+            let item = LibraryIdleWork.measure("row.resolve") { sources[index].resolve() }
+            LibraryIdleWork.row(row,kind:gallery ? "boostGallery" : item.kind,operation:3)
+            LibraryIdleWork.measure("cell.configure") { view.configure(item, foreground: foreground, overlay: overlay, gallery: gallery, text:sources[index].preparedText) }
             let elapsed = (ProcessInfo.processInfo.systemUptime-started)*1000
             formattingMilliseconds += elapsed; configureMaximumMilliseconds = max(configureMaximumMilliseconds,elapsed)
             if configureSamples.count < 4096 { configureSamples.append(elapsed) }
@@ -417,17 +422,20 @@ private final class LibraryItemView: NSView {
     required init?(coder:NSCoder) { fatalError() }
     func configure(_ item:LibraryRowItem,foreground:NSColor,overlay:NSColor,gallery:Bool,text:LibraryPreparedText? = nil) {
         self.item = item; self.foreground = foreground; self.overlay = overlay; self.gallery = gallery
-        title.string = text?.title ?? LibraryText.value(item.title,size:15,weight:.medium,color:foreground)
-        subtitle.string = text?.subtitle ?? LibraryText.value(item.subtitle,size:13,weight:.regular,color:foreground.withAlphaComponent(0.68))
-        setIcon(item.image)
-        item.loadImage? { [weak self] image in
-            guard let self, self.item?.id == item.id, let image else { return }; self.setIcon(image)
+        LibraryIdleWork.measure("text.layout") {
+            title.string = text?.title ?? LibraryText.value(item.title,size:15,weight:.medium,color:foreground)
+            subtitle.string = text?.subtitle ?? LibraryText.value(item.subtitle,size:13,weight:.regular,color:foreground.withAlphaComponent(0.68))
         }
+        setIcon(item.image)
+        LibraryIdleWork.measure("favicon.request") { item.loadImage? { [weak self] image in
+            guard let self, self.item?.id == item.id, let image else { return }
+            LibraryIdleWork.measure("favicon.decode") { self.setIcon(image) }
+        } }
         if let url = item.fileURL {
-            setIcon(FilePreviewCache.shared.image(for:url) { [weak self] in
+            LibraryIdleWork.measure("filePreview.request") { setIcon(FilePreviewCache.shared.image(for:url) { [weak self] in
                 guard let self, self.item?.fileURL == url else { return }
                 self.setIcon(FilePreviewCache.shared.image(for:url,onReady:{}))
-            })
+            }) }
         }
         var actions = item.hoverActions
         if !item.actions.isEmpty { actions.append(.init(title:"More",glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }

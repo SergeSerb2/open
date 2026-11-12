@@ -120,6 +120,7 @@ final class LibraryTableView: NSView, NSDraggingSource {
                 guard isCurrent(),rows.indices.contains(row),
                     viewport == (enclosingScrollView?.contentView.bounds ?? bounds) else { return }
                 let started = ProcessInfo.processInfo.systemUptime
+                LibraryIdleWork.realizedRow(row)
                 reconciling = true
                 realize(row,display:true)
                 reconciling = false
@@ -171,13 +172,13 @@ final class LibraryTableView: NSView, NSDraggingSource {
             if view.frame != rect { view.frame = rect }
             if view.needsLayout {
                 let start = ProcessInfo.processInfo.systemUptime
-                view.layoutSubtreeIfNeeded(); record("cellLayout",start)
+                LibraryIdleWork.measure("layout.pass") { view.layoutSubtreeIfNeeded() }; record("cellLayout",start)
             }
             if display {
                 let start = ProcessInfo.processInfo.systemUptime
-                view.displayIfNeeded()
+                LibraryIdleWork.measure("display") { view.displayIfNeeded() }
                 func display(_ layer:CALayer) { layer.displayIfNeeded(); for child in layer.sublayers ?? [] { display(child) } }
-                if let layer = view.layer { display(layer) }
+                if let layer = view.layer { LibraryIdleWork.measure("layer.display") { display(layer) } }
                 record("overscanDisplay",start)
             }
             live[descriptor.key] = (row,descriptor.version,view)
