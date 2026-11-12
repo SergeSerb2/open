@@ -10993,45 +10993,58 @@ def library_capture_checks(app, require, root, evidence):
             server.shutdown(); server.server_close()
         archive = open_section('archive')
         archive_rows = wait_until(lambda: any(r['id'] == archived for r in app.call('settings-state')['archive']), timeout=5) if archive else False
-        require('library_corrupt_index_isolation', archive and archive['loadFailed'] and archive_rows
+        # The capture index is read only when Captures or Media opens (c9a2e305, lazy provider). So the other
+        # sections must work beside a corrupt index and must not show its error; `loadFailed` is asserted
+        # where the index is read, in the captures/media rows below.
+        no_error = lambda s: not any(error_copy[0] in text for text in s['text'])
+        require('library_corrupt_index_isolation', archive and archive_rows and no_error(archive)
                 and archive['status'] == '' and app.call('settings-state')['sharedArchives'], state=state())
         for section in ('history', 'downloads', 'spaces'):
             current = open_section(section)
             if section == 'history':
                 working = wait_until(lambda: app.call('settings-state')['historyRows'] > 0, timeout=5)
-            elif section == 'downloads': working = current and any('No downloads' in t for t in current['text'])
+            elif section == 'downloads':
+                # Empty Downloads: "No downloads yet", or "No matches" while a search or Profile filter is active
+                # (LibraryPanelView.updateEmptyCopy). Either one is the working empty list, not the capture error.
+                working = current and not current['items'] and any(t in ('No downloads yet', 'No matches') for t in current['text'])
             else: working = app.call('space-manager-state')['hostedManagers'] == 1
-            require('library_corrupt_index_' + section, current and current['loadFailed'] and working and current['status'] == '', state=state())
-        for section in ('captures', 'media'):
-            current = open_section(section)
-            path = os.path.join(evidence, section + '-index-error.png')
-            app.call('snapshot', path=path, window=current['window'])
-            require('library_corrupt_index_' + section + '_error', current and current['loadFailed'] and not current['items']
-                    and any(error_copy[0] in text for text in current['text']), state=current, png=path)
+            require('library_corrupt_index_' + section, current and working and no_error(current) and current['status'] == '', state=state())
+        # The native Library has no Captures section: captures show in Media, and the index is read when Media
+        # opens (asynchronously, so wait for the load to settle). Its error title is "Could not load media".
+        media_error = 'Could not load media'
+        def media_when(predicate):
+            opened = open_section('media')
+            return wait_until(lambda: (lambda s: s if s.get('section') == 'media' and predicate(s) else None)(state()), timeout=10, step=.05) if opened else None
+        current = media_when(lambda s: s['loadFailed'])
+        path = os.path.join(evidence, 'media-index-error.png')
+        if current: app.call('snapshot', path=path, window=current['window'])
+        require('library_corrupt_index_media_error', current and current['loadFailed'] and not current['items']
+                and any(media_error in text for text in current['text']), state=current or state(), png=path)
         # A directory at the index path is a real unreadable-file case, including
         # when the suite runs as the file owner (chmod alone would be unreliable).
         app.call('library-close'); os.unlink(index); os.mkdir(index)
-        unreadable = open_section('captures')
+        unreadable = media_when(lambda s: s['loadFailed'])
         require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
-                and any(error_copy[0] in text for text in unreadable['text']), state=unreadable)
+                and any(media_error in text for text in unreadable['text']), state=unreadable or state())
         os.rmdir(index)
         # Exercise the reader's limits through actual Library reopen, including
         # the valid boundary. Keep the large fixture out of the visible grid.
         for extra in (0, 1):
             app.call('library-close')
             with open(index, 'wb') as stream: stream.write(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
-            boundary = open_section('archive')
-            require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary['loadFailed'] == bool(extra)
-                    and boundary['captureCount'] == 0, state=boundary)
+            boundary = media_when(lambda s: s['loadFailed'] == bool(extra)) or state()
+            require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary.get('loadFailed') == bool(extra)
+                    and boundary.get('captureCount') == 0, state=boundary)
         large = [dict(id='71000000-0000-0000-0000-%012d' % i, fileName='Example.png', createdAt=1800000000,
                       kind='area', sourceHost='example.com') for i in range(50_001)]
         for count in (50_000, 50_001):
             app.call('library-close')
             with open(index, 'w') as stream: json.dump(large[:count], stream)
-            boundary = open_section('archive')
+            expected = count if count == 50_000 else 0
+            boundary = media_when(lambda s: s['loadFailed'] == (count > 50_000) and s['captureCount'] == expected) or state()
             require('library_index_row_limit_' + ('at' if count == 50_000 else 'over'),
-                    boundary['loadFailed'] == (count > 50_000) and boundary['captureCount'] == (count if count == 50_000 else 0),
-                    loadFailed=boundary['loadFailed'], captureCount=boundary['captureCount'])
+                    boundary.get('loadFailed') == (count > 50_000) and boundary.get('captureCount') == expected,
+                    loadFailed=boundary.get('loadFailed'), captureCount=boundary.get('captureCount'))
         del large
 
     os.makedirs(os.path.dirname(index), exist_ok=True)
