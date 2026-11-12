@@ -23,6 +23,8 @@ open_libcef_mac_sources = [
   "//open/browser/extensions/open_extension_window_hooks.h",
   "//open/browser/extensions/open_omnibox.cc",
   "//open/browser/extensions/open_extension_manager.mm",
+  "//open/browser/extensions/open_alloy_extension_menu.cc",
+  "//open/browser/extensions/open_alloy_extension_menu.h",
   "//open/browser/extensions/open_extension_hooks.h",
   "//open/browser/extensions/open_extension_popup.cc",
   "//open/browser/extensions/open_extension_popup.h",

@@ -18,6 +18,8 @@ paths: cef/libcef/browser/chrome/chrome_context_menu_handler.cc
 paths: cef/libcef/browser/chrome/chrome_browser_delegate.h
 # 0305-open-webstore-downloads.patch
 paths: cef/libcef/browser/download_manager_delegate_impl.cc
+# 0306-open-alloy-extension-menu.patch
+paths: cef/libcef/browser/menu_manager.cc
 # 0310-open-adblock-service-owner.patch
 paths: cef/libcef/browser/browser_context.h cef/libcef/browser/browser_context.cc
 # 0311-open-adblock-network-hooks.patch
