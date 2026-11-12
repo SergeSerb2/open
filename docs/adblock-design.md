@@ -369,6 +369,32 @@ bad-SHA and symlink-pointer controls passed without holds, and cancellation
 closed all seven browsers cleanly. Raw App/server/native logs, source and
 engine hashes, and boundary receipts are in `.re/s13/i/native-1418/`.
 
+### Scriptlets and `:style()` (PB2 row 1, 2026-11-12)
+
+The engine still applies network rules and plain CSS hiding only (lead ruling 6). Plain `:has()` is a CSS
+selector, so the engine hides with it already. The App adds the two cosmetic forms that need no engine change:
+
+- `domain##selector:style(declarations)`. The selector must not contain braces, `<`, `@`, comments, backslashes,
+  unbalanced brackets or quotes, or a procedural operator. The declarations must not contain `url(`, `image(`,
+  `image-set(`, `cross-fade(`, `element(`, `attr(`, `expression(`, backslashes, comments, braces, `@`, `<` or
+  quotes (the `docs/plans/adblock-fork.md` §8.5 sanitizer). Every declaration gets `!important`. A refused rule is
+  counted as skipped. Rules without `~domain` exceptions become one user stylesheet per domain; the others use a
+  small isolated-world script that checks the host first.
+- `domain##+js(name, args…)` and `domain#@#+js(…)` / `domain#@#+js()` exceptions. The scriptlets are Open's own
+  clean-room code (`OpenAdBlock/AdBlockScriptlets.swift`), written from the documented behavior. uBO's scriptlet
+  code is GPL-3.0 and is not bundled. Supported, with their list aliases: `set-constant`, `abort-on-property-read`,
+  `abort-on-property-write`, `abort-current-script`, `no-setTimeout-if`, `no-setInterval-if`,
+  `addEventListener-defuser`, `remove-attr`, `remove-class`, `json-prune`, `prevent-fetch`, `prevent-xhr`,
+  `noeval`. Other names are skipped. Scriptlets run in the main world at document start, in every frame.
+
+Rules need at least one plain include domain: generic scriptlets and styles, and entity domains (`name.*`), are
+skipped. Limits: 4 KiB per line, 20,000 rules, 16 arguments of 1 KiB each, 5,000 domains and 8 MiB of script
+source per Profile. `AdBlockExtrasAdapter` (App) reads the live generation's list files off the main thread when
+the store publishes a generation, changes the switch or an exclusion, and replaces only its own user scripts
+(`open.adblock.extras.*`) in the Profile's regular contexts. Excluded sites and the global switch remove them.
+Private windows keep the engine's network and hide rules only. `$removeparam` on navigations needs a request
+rewrite in the engine (E-questions, E3). Verification: `tools/e2e/adblock_extras.py` (AX rows).
+
 ### Site Control Center and Settings UI
 
 - The panel toggle shows three facts: the master state, whether this site is excluded, and the blocked count for the current page load (from `blockedResourceCount`). Toggling writes the exclusion for the registrable domain, updates the panel without closing it, and shows the reload affordance (`AdBlockReloadFollowUpAction` in Arc). The scope dialog offers “this site” (registrable domain, default) and “this page only” (exact URL, session-scoped). Do not offer “everywhere” in the per-site dialog; that is the master toggle in Settings.
