@@ -57,8 +57,9 @@ public struct InlineCompletion: Sendable, Hashable {
     }
 
     /// Row kinds that may complete: open tabs (split panes included) and history (§4.1.2 rule 1).
+    /// PB1: also popular domains (Arc TD-2); they rank below history, so the user's own pages win.
     static func canComplete(_ s: Suggestion) -> Bool {
-        s.kind == .switchToTab || s.kind == .history
+        s.kind == .switchToTab || s.kind == .history || s.providers.contains("topDomains")
     }
 
     /// The completion for `row`, when the input allows one.
