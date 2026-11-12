@@ -16,7 +16,11 @@ def run(factory, results, tmp, env):
             app = factory(urls=(origin + '/boost.html',), fresh=True)
             for key, value in {'open.advanced.enableBoosts': True,
                                'open.boosts.hasDismissedInterstitial': False,
-                               'open.library.lastSection': 'spaces'}.items():
+                               'open.library.lastSection': 'spaces',
+                               # Settings shows its one-time search-suggestions notice as a sheet on the first Profiles
+                               # pane visit of a fresh preferences domain (ProfilesPane.presentSuggestNotice). This row
+                               # waits for the delete sheet to close, so it starts with the notice already seen.
+                               'open.general.searchSuggestNoticeDismissed': True}.items():
                 saved[key] = app.call('defaults', key=key, persistent=True)
                 app.call('defaults', key=key, value=value)
             name = 'Boost Retire Work'
@@ -52,7 +56,8 @@ def run(factory, results, tmp, env):
             app.call('profiles-shell', action='show', profile=name)
             time.sleep(.15) # Let Settings install its real SwiftUI accessibility controls.
             app.press_profile_delete()
-            assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5, step=.05)
+            assert wait(lambda: app.call('profiles-shell')['sheet'] > 0 and app.call('profiles-shell')['deleteNames'] == [name], timeout=5, step=.05)
+            evidence['deleteSheetText'] = app.call('profiles-shell')['sheetText']
             app.call('profiles-shell', action='type-delete', text=name)
             assert app.call('profiles-shell')['deleteEnabled']
             # The editor closed during Change Profile. Dirty the same visible
