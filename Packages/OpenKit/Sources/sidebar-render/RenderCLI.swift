@@ -29,6 +29,7 @@ enum RenderCLI {
         case "divider-check": try DividerChecks.run(rest)
         case "url-status": try URLStatusChecks.render(rest)
         case "theme-roles": try ThemeRoleChecks.run(rest)
+        case "plus-popover": try plusPopover(rest)
         default: throw CLIError(description: usage)
         }
     }
@@ -56,6 +57,7 @@ enum RenderCLI {
       sidebar-render compare-media --state row-audible|row-muted --arc FRAME.png --arc-ax AX.json --ours FILE.png --ours-frames FILE.json --out DIR
       sidebar-render check
       sidebar-render url-status --out DIR [--scale 1|2]
+      sidebar-render plus-popover --out FILE.png [--snapshot DIR] [--appearance light|dark] [--scale S]
       sidebar-render theme-roles --ref tools/verification/sidebar-theme-roles.json [--table]
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
       sidebar-render sm6-cost [--fail-child-after-host]
@@ -380,6 +382,24 @@ enum RenderCLI {
         frame.wantsLayer = true
         frame.layer?.backgroundColor = CGColor(gray: 0.5, alpha: 0.15)
         view.frame = CGRect(x: pad, y: pad, width: view.fittingSize.width, height: view.fittingSize.height)
+        frame.addSubview(view)
+        let scale = CGFloat(Double(value(args, "--scale") ?? "2") ?? 2)
+        let image = OffscreenRenderer().render(frame, scale: scale)
+        OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
+        print("wrote \(out) \(image.width)x\(image.height)")
+    }
+
+    /// The bottom-bar "+" popover alone (capture session 8 item 7), over a neutral backdrop.
+    static func plusPopover(_ args: [String]) throws {
+        guard let out = value(args, "--out") else { throw CLIError(description: usage) }
+        let model = try value(args, "--snapshot").map(loadModel) ?? Synthetic.model()
+        let context = try makeContext(args, model: model)
+        let sidebar = SidebarView(context: context)
+        guard let view = sidebar.makePlusPopoverView() else { throw CLIError(description: "no plus popover (incognito)") }
+        let frame = NSView(frame: view.frame.insetBy(dx: -8, dy: -8).offsetBy(dx: 8, dy: 8))
+        frame.wantsLayer = true
+        frame.layer?.backgroundColor = context.systemAppearance == .dark ? CGColor(gray: 0.16, alpha: 1) : CGColor(gray: 0.9, alpha: 1)
+        view.frame.origin = CGPoint(x: 8, y: 8)
         frame.addSubview(view)
         let scale = CGFloat(Double(value(args, "--scale") ?? "2") ?? 2)
         let image = OffscreenRenderer().render(frame, scale: scale)

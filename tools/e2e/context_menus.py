@@ -780,6 +780,31 @@ def context_menu_checks(factory, results, tmp, h):
             return {'ok': ok, 'titles': titles, 'enabled': enabled, 'keys': keys}
         run('cm_plus_menu', plus_menu)
 
+        # D2c "+" popover (capture session 8 item 7): opens on New Tab, ↓ wraps, ↑ returns, Esc closes, Return runs.
+        def plus_popover():
+            focus()
+            pop = lambda **kw: app.call('plus-popover', **kw)
+            opened = pop(op='toggle')
+            down = pop(op='key', code=125); down2 = pop(op='key', code=125)
+            pop(op='key', code=126); up = pop(op='key', code=126)
+            closed = pop(op='key', code=53)
+            folders = lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder'])
+            before = folders()
+            pop(op='toggle'); pop(op='key', code=125); pop(op='key', code=125)   # New Space, New Folder
+            ran = pop(op='key', code=36)
+            made = wait(lambda: folders() == before + 1, timeout=3) is True
+            app.call('sidebar-key', key='escape')
+            app.call('key', key='z', modifiers=['command'], route='app')
+            rows = {'opens_on_new_tab': opened['shown'] and opened['highlighted'] == 'New Tab' and opened['closeGlyph'],
+                    'titles': [r['title'] for r in opened['rows']] == ['New Space', 'New Folder', 'New Easel', 'New Boost', 'New Split', 'New Tab'],
+                    'size': opened['size'] == [222, 309] and all(r['frame'][2:] == [194, 40] for r in opened['rows']),
+                    'down_wraps': down['highlighted'] == 'New Space' and down2['highlighted'] == 'New Folder',
+                    'up_returns': up['highlighted'] == 'New Tab',
+                    'esc_closes': closed['shown'] is False and closed['closeGlyph'] is False,
+                    'return_runs_new_folder': ran['shown'] is False and made}
+            return {'ok': all(rows.values()), 'rows': rows, 'opened': opened}
+        run('cm_plus_popover', plus_popover)
+
         # D2c split row (capture session 8 item 5): order, pane submenu, ⌥ alternates hidden.
         def split_menu_order():
             focus()
