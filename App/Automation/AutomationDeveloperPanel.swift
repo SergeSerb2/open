@@ -27,6 +27,13 @@ extension AutomationController {
       }
     }
     if let list = slot?.networkList { state["networkRows"] = list.rowCount; state["networkFrame"] = [list.frame.minX, list.frame.minY, list.frame.width, list.frame.height] }
+    // Sidebar rows of the focused Space: host subtitle, title baseline and the dashed outline (pane 2).
+    if let space = controller.context.focusedSpace {
+      state["rows"] = space.today.compactMap { node -> [String: Any]? in
+        guard case .tab(let tab) = node, var row = controller.sidebar.developerRowState(tabID: tab.id) else { return nil }
+        row["url"] = tab.url.absoluteString; return row
+      }
+    }
     if let page = slot?.contentHostView { state["pageFrame"] = [page.frame.minX, page.frame.minY, page.frame.width, page.frame.height] }
     return state
   }

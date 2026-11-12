@@ -169,6 +169,18 @@ public final class SidebarContext {
 
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }
 
+    /// Arc hides the Space header when the browser has a single Space with no name, unless the user chose
+    /// "Show Space Header" (strings "Show Space Header" / "Hide Space Header", key
+    /// `showSpaceHeaderOnSingleUnnamedSpaces`; AUDIT-2026-11-12 A1). GUESS — capture PB5-a pending: the default
+    /// (off, from the key's name) and the "Space N" fallback counting as unnamed. Incognito keeps its header.
+    public func hidesHeader(for space: Space) -> Bool {
+        guard incognitoTitle == nil, !SpaceHeaderPreference.shared.showOnSingleUnnamedSpace else { return false }
+        return isSingleUnnamedSpace(space)
+    }
+    func isSingleUnnamedSpace(_ space: Space) -> Bool {
+        model.spaces.count == 1 && (space.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     public var focusedSpace: Space? {
         if let managerSpaceID { return model.space(id: managerSpaceID) ?? model.spaces.first }
         guard let w = window else { return model.spaces.first }
@@ -563,4 +575,22 @@ public enum SidebarMediaHover: Equatable, Sendable {
 public struct SidebarMediaSourceItem: Equatable, Sendable {
     public var id: String, title: String, enabled: Bool
     public init(id: String, title: String, enabled: Bool) { self.id = id; self.title = title; self.enabled = enabled }
+}
+
+
+/// App-wide "Show Space Header" choice (Arc `showSpaceHeaderOnSingleUnnamedSpaces`), shared by every window.
+@MainActor
+@Observable
+public final class SpaceHeaderPreference {
+    public static let key = "open.sidebar.showSpaceHeaderOnSingleUnnamedSpace"
+    public static let shared = SpaceHeaderPreference()
+    public var showOnSingleUnnamedSpace: Bool {
+        didSet { if oldValue != showOnSingleUnnamedSpace { UserDefaults.standard.set(showOnSingleUnnamedSpace, forKey: Self.key) } }
+    }
+    private init() { showOnSingleUnnamedSpace = UserDefaults.standard.bool(forKey: Self.key) }
+    /// Re-reads the stored value (automation and settings resets).
+    public func reload() {
+        let stored = UserDefaults.standard.bool(forKey: Self.key)
+        if stored != showOnSingleUnnamedSpace { showOnSingleUnnamedSpace = stored }
+    }
 }

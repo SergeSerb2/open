@@ -38,6 +38,9 @@ extension AutomationController {
       let encoded = try JSONEncoder().encode(space.theme.style)
       return ["style": try JSONSerialization.jsonObject(with: encoded, options: .fragmentsAllowed),
         "contentAppearance": style.resolvedAppearance(system: owner.context.systemAppearance).rawValue,
+        // The Space mode (light/dark/automatic) picks the window scheme; text polarity
+        // (contentAppearance) comes from the key colour (D2, Arc 1.172.2 rule).
+        "windowColorScheme": style.windowColorScheme.rawValue,
         "palette": ["light": palette(style.lightPalette), "dark": palette(style.darkPalette)]] as [String: Any]
     case "theme-set":
       let space = try targetSpace()
