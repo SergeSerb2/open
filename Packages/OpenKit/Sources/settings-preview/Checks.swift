@@ -373,7 +373,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 print("Legacy preview false/true, missing keys, explicit choices, disk writes, and repeat startup passed")
             case "sidebar-defaults":
                 try require(!vm.bool("open.sidebar.hideHintShown") && !vm.bool("open.sidebar.autoArchiveBannerDismissed")
-                            && vm.bool("open.sidebar.autoArchiveBannerEligible") && !vm.bool("open.advanced.playSoundEffects")
+                            && vm.bool("open.sidebar.autoArchiveBannerEligible") && vm.bool("open.advanced.playSoundEffects")
                             && vm.bool("open.general.previewsFolders") && vm.bool("open.general.previewsPages"), "sidebar app defaults differ")
                 vm.set(true, for: "open.sidebar.hideHintShown")
                 vm.set(true, for: "open.sidebar.autoArchiveBannerDismissed")

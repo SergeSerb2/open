@@ -414,6 +414,27 @@ App proof; it does not change the official Release/PGO packaging gate above.
 `~/Developer/open-engine-s8-main` is left for the lead's post-merge refresh.
 See the [acceptance receipt](engine-spike/automation-notification-guard-blocked.md).
 
+## Startup complete (BEST_EFFORT tasks, 2026-11-12)
+
+Chrome holds `AfterStartupTaskUtils` (BEST_EFFORT) tasks until it declares browser startup
+complete (`chrome/browser/after_startup_task_utils.cc`). Without the feature
+`ImprovedStartupBestEffortDelay` (off by default in Chromium 156) only one signal completes it: a
+visible page that reaches loaded-idle. Open's window is native, so a launch that shows no web page
+(an empty Space, Welcome, a `chrome://` page) waited for the 3-minute failsafe
+(`Startup.BrowserStartupCompleteReason` 0 at 180,404 ms, M5, no start page, feature off).
+
+OpenEngine (`OEApp.mm`) now turns on
+`ImprovedStartupBestEffortDelay:StartupDelayStopOnLoadingTimedOut/true`. Its observer then also
+completes startup 5 s after launch if no visible tab appears (`kNoVisiblePageFound`), and when the
+visible tab's load times out. Open's chrome-style pages are tab-strip tabs (`PageType::kTab`), so a
+visible page still completes it when loaded (`kVisiblePageLoadingFinished`). The feature also makes
+Chrome hold startup for its first main-loop idle and for `FirstWebContentsProfiler` (released at
+first paint or when it gives up); both rows show neither holds startup in Open.
+
+Proof: e2e `--only features --style chrome`, rows `startup_complete_no_page` and
+`startup_complete_loaded_page` (`tools/e2e/startup_complete.py`), which read Chrome's own
+`Startup.*` histograms. Rebase: re-check the feature, param and reason names.
+
 ## Rebase watch list
 
 Things Open copies from upstream or relies on without a patch, so no patch
