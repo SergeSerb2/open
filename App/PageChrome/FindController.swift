@@ -76,7 +76,9 @@ final class FindController {
   }
   func perform(tag: Int) {
     switch tag {
-    case 1, 12: show()
+    case 1: show()
+    // 12 (Find and Replace) has no effect on a web page, as in Arc: its window handler acts on
+    // tags 1, 2, 3 and 7 only (docs/re/find-and-replace.md).
     case 2: advance(forward: true)
     case 3: advance(forward: false)
     case 7:
@@ -366,6 +368,7 @@ extension EngineWebContentHostFactory {
     if let findController { return findController }
     let controller = FindController(factory: self); findController = controller; return controller
   }
-  @objc override func performTextFinderAction(_ sender: Any?) { ensureFindController().show() }
+  /// Find and Replace on a web page: no effect, as in Arc. In a Note it shows the Note's find bar.
+  @objc override func performTextFinderAction(_ sender: Any?) { selectedNoteHost?.editor.showFind() }
   @objc override func centerSelectionInVisibleArea(_ sender: Any?) { ensureFindController().jumpToSelection() }
 }

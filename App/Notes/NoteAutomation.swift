@@ -224,7 +224,7 @@ extension AutomationController {
       "hasHost": host != nil, "noteHostCount": factory.noteHosts.count,
       "shown": host.map { !$0.editor.isHiddenOrHasHiddenAncestor && $0.editor.window != nil } ?? false,
       "frame": frame,
-      "title": host?.editor.titleView.string ?? "", "body": host?.editor.bodyView.string ?? "",
+      "title": host?.editor.titleView.string ?? "", "body": host?.editor.bodyView.string ?? "", "findBarVisible": host?.editor.showingFind ?? false,
       "focused": responder === host?.editor.titleView ? "title" : responder === host?.editor.bodyView ? "body" : "other",
       "placeholders": [NoteLook.titlePlaceholder, NoteLook.bodyPlaceholder],
       "dark": host?.editor.isDark ?? false,
