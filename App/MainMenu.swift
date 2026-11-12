@@ -211,7 +211,9 @@ extension EngineWebContentHostFactory {
     if id == "check-for-updates" { return true }
     if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
-    if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
+    if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) {
+      return selectedContent != nil || (selectedNoteHost != nil && id != "jump-to-selection")
+    }
     if ["new-boost", "edit-boost", "new-legacy-boost"].contains(id) {
       // Menu validation runs during first-window composition. No page is
       // editable yet, and it must not initialize Boost services on that path.
@@ -290,6 +292,9 @@ extension EngineWebContentHostFactory {
     if isIncognito && !isAppCommandEnabled(id, payload: payload) { return false }
     // Find owns its pane even when AppKit's field editor implements the native selector.
     if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
+      // A Note: every Find action shows the Note's own find bar (Arc's Note editor sends its text
+      // view `performTextFinderAction:` with tag 1 for any of them; docs/re/find-and-replace.md).
+      if let note = selectedNoteHost { note.editor.showFind(); return true }
       guard selectedContent != nil else { return false }
       ensureFindController().perform(tag: tag); return true
     }

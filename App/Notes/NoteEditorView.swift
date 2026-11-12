@@ -71,6 +71,20 @@ final class NoteTextView: NSTextView {
   weak var rich: NoteEditorView?
   weak var editor: NoteEditorView?
 
+  /// Find menu actions on either field show the body's find bar (never the replace interface).
+  override func performFindPanelAction(_ sender: Any?) { editor?.showFind() }
+  override func performTextFinderAction(_ sender: Any?) {
+    // Hiding the bar stays native; every other action shows the find interface, as in Arc.
+    if (sender as? NSValidatedUserInterfaceItem)?.tag == NSTextFinder.Action.hideFindInterface.rawValue {
+      super.performTextFinderAction(sender); return
+    }
+    editor?.showFind()
+  }
+  func showNativeFind() {
+    let item = NSMenuItem(); item.tag = NSTextFinder.Action.showFindInterface.rawValue
+    super.performTextFinderAction(item)
+  }
+
   override func shouldChangeText(in range: NSRange, replacementString: String?) -> Bool {
     editor?.openUndoGroup()
     return super.shouldChangeText(in: range, replacementString: replacementString)
@@ -167,6 +181,10 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
   /// Characters changed since the last text-change notification (for restyling).
   private var pendingEdit: NSRange?
   private(set) var lastImageError: String?
+  /// Whether the body's find bar is on screen.
+  var showingFind: Bool { scrollView.isFindBarVisible }
+  /// Shows the body's find bar (Arc: `performTextFinderAction:` with tag 1, show find interface).
+  func showFind() { bodyView.showNativeFind() }
 
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -195,6 +213,9 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
       view.onFocusChange = { [weak self] in self?.updateChrome() }
       document.addSubview(view)
     }
+    // Arc's Note editor answers the Find menu with the text view's own find interface.
+    bodyView.usesFindBar = true
+    bodyView.isIncrementalSearchingEnabled = true
     bodyView.rich = self
     bodyView.editor = self; titleView.editor = self
     // No automatic link detection: its deferred checking rewrites attributes over the

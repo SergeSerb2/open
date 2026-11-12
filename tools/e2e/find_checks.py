@@ -278,10 +278,14 @@ def run(h, factory, results, tmp):
         p = pane(other)
         row('F19_reload_clears', bool(reloaded) and p['visible'] and p['query'] == 'orbit' and p['countText'] == '', pane=p)
         # Use the real native menu action as well as its key binding.
-        key('escape'); app.call('menu-perform', id='find-and-replace'); p = pane(other)
-        row('F20_find_replace_opens', p['visible'] and p['focused'], pane=p)
-        key('escape'); key('f', ['cmd','option']); p=pane(other)
-        row('F20_find_replace_key', p['visible'] and p['focused'], pane=p)
+        # Find and Replace has no effect on a web page, as in Arc (capture s9; docs/re/find-and-replace.md).
+        key('escape'); app.call('menu-perform', id='find-and-replace'); time.sleep(.3); p = pane(other)
+        row('F20_find_replace_no_page_effect', not p['visible'], pane=p)
+        key('f', ['cmd','option']); time.sleep(.3); p=pane(other)
+        row('F20_find_replace_key_no_page_effect', not p['visible'], pane=p)
+        # With the Find field focused it changes nothing either: the bar stays, with its query.
+        key('f', ['cmd']); before = pane(other); key('f', ['cmd','option']); time.sleep(.2); p = pane(other)
+        row('F20_find_replace_keeps_open_bar', before['visible'] and p['visible'] and p['query'] == before['query'], pane=p)
         key('escape'); app.call('focus', tab=other)
         row('F21_jump_selection', **jump_selection(h, app, other))
         app.eval(other, 'getSelection().removeAllRanges();window.scrollTo(0,0)')
@@ -387,6 +391,21 @@ def run(h, factory, results, tmp):
         app.call('select', tab=tab); key('f', ['cmd']); key('w', ['cmd'])
         remaining=app.call('tabs')
         row('F32_close_tab', tab not in [t['id'] for t in remaining] and not any(p['tab'] == tab for p in state().get('panes', [])), tabs=len(remaining))
+        # A Note: Find and Find and Replace show the Note's own find bar (Arc's Note editor), not the page bar.
+        app.call('note', action='create'); app.call('key', text='Find title'); key('return')
+        app.call('key', text='alpha beta alpha')
+        def note_bar(): return app.call('note').get('findBarVisible')
+        enabled = {r['id']: r.get('enabled') for r in app.call('menu-state') if r['id'] in ('find', 'find-and-replace', 'jump-to-selection')}
+        hidden = note_bar()
+        key('f', ['cmd','option'])
+        replace_shows = h.wait_until(note_bar, timeout=3, step=.05)
+        row('F33_note_find_replace_shows_find_bar', hidden is False and bool(replace_shows)
+            and enabled == {'find': True, 'find-and-replace': True, 'jump-to-selection': False}
+            and not any(p['visible'] for p in state().get('panes', [])), enabled=enabled, panes=state().get('panes', []))
+        key('escape'); gone = h.wait_until(lambda: not note_bar(), timeout=3, step=.05)
+        app.call('menu-perform', id='find')
+        row('F33_note_find_shows_find_bar', bool(gone) and bool(h.wait_until(note_bar, timeout=3, step=.05)), gone=bool(gone))
+        key('escape')
     finally:
         try:
             if app is not None:
