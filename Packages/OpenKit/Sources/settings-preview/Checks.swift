@@ -33,6 +33,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         actions = PreviewActions()
         try FileManager.default.createDirectory(at: root.appendingPathComponent("State"), withIntermediateDirectories: true)
         settings = SettingsViewModel(model: SyntheticData.model(), actions: actions, defaults: defaults, root: root, snapshot: SnapshotStore(root: root))
+        actions.libraryModel = settings.model
         downloadFeed = PreviewDownloads(try SyntheticData.downloads(root: root, profiles: settings.model.profiles))
         captures = FileCapturesProvider(root: root)
         libraryActions = PreviewLibraryActions(model: settings.model, downloads: downloadFeed, captures: captures, snapshot: settings.snapshot)
@@ -1023,7 +1024,21 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try await env.prepareLibrary();let library=env.library,item=env.captures.captures[0]
                 let image=library.thumbnailImages[item.id]
                 await library.loadThumbnail(item)
-                try require(image != nil && image === library.thumbnailImages[item.id] && library.faviconImages.count > 0 && library.historyFaviconImages.count > 0,"decoded Library images were not retained")
+                try require(image != nil && image === library.thumbnailImages[item.id],"decoded Library thumbnail was not retained")
+                // Archive and History share the native on-demand image cache.
+                // Require a valid image and identical object on a second read.
+                func iconIdentity(_ url: URL) async -> ObjectIdentifier? {
+                    await withCheckedContinuation { continuation in
+                        library.loadRowIcon(url) { image in
+                            continuation.resume(returning: image.flatMap { $0.isValid ? ObjectIdentifier($0) : nil })
+                        }
+                    }
+                }
+                try require(!library.archiveRows.isEmpty && !library.historyRows.isEmpty,"Library image-cache fixture has no rows")
+                for url in Set(library.archiveRows.map(\.url) + library.historyRows.map(\.url)) {
+                    let first = await iconIdentity(url), second = await iconIdentity(url)
+                    try require(first != nil && first == second,"native Library row image was missing or not retained")
+                }
             case "app-icon":
                 vm.appIcon.select(.openColor)
                 let disk = try env.diskDefaults()

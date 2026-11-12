@@ -5,6 +5,8 @@ import OpenModel
 import OpenCommands
 import OpenStore
 import OpenImport
+import OpenLibrary
+import OpenSidebar
 import CryptoKit
 
 @MainActor final class PreviewActions: SettingsActions {
@@ -47,21 +49,26 @@ import CryptoKit
     func copyText(_ text: String) { record("copyText") }
     func openLibrary() { record("openLibrary") }
     var spaceManagerAvailable = true
+    weak var libraryModel: BrowserModel?
     private(set) var spaceManagerMakeCount = 0
     func openEssentialShortcuts() { record("openEssentialShortcuts") }
     func makeSpaceManagerView() -> NSView? {
         spaceManagerMakeCount += 1
         record("makeSpaceManagerView")
-        guard spaceManagerAvailable else { return nil }
-        let view = NSView()
-        let label = NSTextField(labelWithString: "Space Manager preview")
-        label.setAccessibilityElement(true); label.setAccessibilityRole(.staticText)
-        label.setAccessibilityLabel("Space Manager preview")
-        label.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(label)
-        NSLayoutConstraint.activate([label.centerXAnchor.constraint(equalTo: view.centerXAnchor), label.centerYAnchor.constraint(equalTo: view.centerYAnchor)])
-        return view
+        guard spaceManagerAvailable, let model = libraryModel, let window = model.windows.first else { return nil }
+        return SpaceManagerView(context:SidebarContext(model:model,windowID:window.id))
     }
+}
+
+/// Join the native provider and row preparation before inspecting a preview.
+/// SwiftUI host layout alone does not finish the Library's asynchronous work.
+@MainActor func finishLibraryPreviews(in view: NSView) async {
+    if let panel = view as? LibraryPanelView {
+        await panel.finishPendingContent()
+        panel.layoutSubtreeIfNeeded()
+        return
+    }
+    for child in view.subviews { await finishLibraryPreviews(in:child) }
 }
 
 @discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, active:Bool=true, to url: URL, validatePreviewControls: Bool = false, enhanceAccessibility: Bool = false) async throws -> [String] {
@@ -88,6 +95,7 @@ import CryptoKit
         host.layoutSubtreeIfNeeded(); window.displayIfNeeded()
         try await Task.sleep(for:.milliseconds(50))
     }
+    await finishLibraryPreviews(in:host)
     host.layoutSubtreeIfNeeded(); window.displayIfNeeded()
     guard host.bitmapImageRepForCachingDisplay(in: host.bounds) != nil else { throw CheckFailure(description: "hosting view has no bitmap surface") }
     guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width) * scale, pixelsHigh: Int(size.height) * scale, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { throw NSError(domain: "render", code: 1) }
@@ -285,6 +293,7 @@ app.run()
     if NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: enhancedAX) }
     defer { if NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: enhancedAX) } }
     for _ in 0..<3 { host.layoutSubtreeIfNeeded(); window.displayIfNeeded(); try await Task.sleep(for: .milliseconds(50)) }
+    await finishLibraryPreviews(in:host)
     try body(host)
 }
 
