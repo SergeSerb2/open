@@ -230,13 +230,14 @@ enum SessionTwoPadCompare {
                 note: "Lag-1 H/V/D1/D2 correlation: capture \(TexturePatternMetrics.text(captured.correlation)); Open \(TexturePatternMetrics.text(rendered.correlation)); tolerance ±0.15. Skew (reported) capture \(String(format: "%.3f", captured.skew)); Open \(String(format: "%.3f", rendered.skew))"))
         }
         var mode = ThemeEditorState(style: SpaceStylePresets.all[7].style)
-        // Independent decoded Brand-8 range; do not derive the expectation
-        // from the state under test (§17.4).
-        let t = (ThemeColorMath.hsl(ThemeColorMath.toP3(mode.style!.keyColor)).l - 0.4167) / 0.5
-        for (appearance, lo, span) in [(SpaceStyleAppearance.dark, 0.01, 0.415), (.light, 0.575, 0.395)] {
+        // Arc 1.172.2 keeps the key on sun / moon: the knob disc measures the same
+        // colour in Light and Dark on 6 of 6 pad cases (capture session 3, s6/10-pad;
+        // D2-report-t0). The 1.170 decode (§17.4) remapped the lightness.
+        let kept = ThemeColorMath.toP3(mode.style!.keyColor)
+        for appearance in [SpaceStyleAppearance.dark, .light] {
             mode.apply(.setAppearance(appearance))
-            let l = ThemeColorMath.hsl(ThemeColorMath.toP3(mode.style!.keyColor)).l
-            rows.append(Row(name: "Mode remap \(appearance.rawValue)", delta: delta(components(ThemeColorMath.toP3(mode.style!.keyColor)), components(ThemeColorMath.rgb(h: 200.5 / 360, s: 0.5176, l: lo + span * t))), note: String(format: "L %.6f, expected %.6f", l, lo + span * t)))
+            rows.append(Row(name: "Mode keeps key \(appearance.rawValue)", delta: delta(components(ThemeColorMath.toP3(mode.style!.keyColor)), components(kept)),
+                            note: "1.172.2: the sun and moon change the window scheme, not the key"))
         }
         let empty = ThemeEditorState()
         rows.append(Row(name: "Empty open", delta: empty.range == 0.01...0.97 && empty.saturation == 1 ? 0 : .infinity,

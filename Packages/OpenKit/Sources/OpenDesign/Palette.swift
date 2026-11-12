@@ -130,44 +130,46 @@ public enum MenuColors {
 public enum SidebarRole {
     /// Guess pending C5: use the high-contrast Space accent (design review R1).
     public static func unreadDot(style: SpaceThemeStyle, appearance: ContentAppearance) -> RGBA { style.contrastAccent(appearance) }
-    /// Space title. Light: black 0.45 → `SidebarForegroundDarker` (fitted on F0001;
-    /// 0.48 / `GrayA10` gave ΔE 1.8). Dark: white 0.55, fitted on the default dark Space (F0079).
-    public static let spaceTitle = DesignColor(light: SidebarColors.foregroundDarker.light, dark: .white(0.55))
+    /// Space title: black / white 0.45 (`SidebarRoles`; session 3, 45 cases).
+    public static let spaceTitle = SidebarRoles.token(\.spaceTitle)
     /// "New Tab" label. Light: black 0.30 → `SidebarForeground` (F0001). Dark: white 0.45 (F0079).
     public static let secondaryText = SidebarColors.foreground
-    /// URL placeholder. Light: black 0.30 (F0001). Dark: white 0.30 over the field fill (F0079); darker than "New Tab".
-    public static let placeholder = DesignColor(light: SidebarColors.foreground.light, dark: .white(0.30))
-    /// "New Tab" plus glyph. Light: peak black 0.48 → `GrayA10`. Dark: white 0.51 (F0079).
-    public static let newTabGlyph = DesignColor(light: GrayScale.a(10).light, dark: .white(0.51))
+    /// URL placeholder: 0.30 / 0.30 (`SidebarRoles`).
+    public static let placeholder = SidebarRoles.token(\.placeholder)
+    /// "New Tab" plus glyph: 0.50 / 0.50 (`SidebarRoles`).
+    public static let newTabGlyph = SidebarRoles.token(\.newTabGlyph)
     /// URL field magnifier: core pixels black ≈ 0.38 (F0001). No catalog token fits
     /// our SF glyph's stroke; 0.40 is fitted. Dark: guess, white at the same alpha.
     public static let magnifier = DesignColor(light: .black(0.40), dark: .white(0.40))
-    /// URL field host text once a page is loaded. guess: `CommandBarPlaceholderText` (black 0.60).
-    public static let urlText = CommandBarColors.placeholderText
-    /// Toolbar glyphs when the button is disabled: measured peak black 0.22 → `GrayA8`.
-    public static let toolbarGlyphDisabled = GrayScale.a(8)
+    /// URL field host text once a page is loaded: 0.60 / 0.60 (`SidebarRoles`).
+    public static let urlText = SidebarRoles.token(\.urlText)
+    /// Toolbar glyphs when the button is disabled: 0.22 / 0.25 (`SidebarRoles`).
+    public static let toolbarGlyphDisabled = SidebarRoles.token(\.toolbarGlyphDisabled)
     /// Toolbar glyphs when enabled, and the sidebar toggle always: core pixels
     /// black ≈ 0.56 on F0001 → `GrayA11` (Arc's AX reports the toggle disabled, but it draws enabled).
     public static let toolbarGlyph = GrayScale.a(11)
     /// Toolbar and bottom-bar hover plate: measured black ≈ 0.067–0.07 → `GrayA4`.
     public static let buttonHover = GrayScale.a(4)
     public static let buttonPressed = GrayScale.a(6)
-    /// URL field and favorite tile resting fill: measured black 0.045 → `SidebarItemBackground`.
-    public static let fieldFill = SidebarColors.itemBackground
-    /// URL field under the pointer: F0033 `#CF8B6F` over `#E49978` = black 0.10 → `SidebarItemHoveredBackground`.
-    public static let fieldHover = SidebarColors.itemHoveredBackground
+    /// URL field resting fill: black 0.043 / white 0.10 (`SidebarRoles`).
+    public static let fieldFill = SidebarRoles.token(\.fieldFill)
+    /// URL field under the pointer: black 0.09 / white 0.15 (`SidebarRoles`).
+    public static let fieldHover = SidebarRoles.token(\.fieldHover)
+    /// Favorite tile resting fill: black 0.045 / white 0.10 (`SidebarRoles`).
+    public static let tileFill = SidebarRoles.token(\.tileFill)
     /// guess: tiles darken like rows on hover (not captured).
     public static let tileHover = SidebarColors.itemHoveredBackground
-    /// Row and Space header hover: measured black 0.048 (light), white 0.10 (dark).
-    public static let rowHover = SidebarColors.itemBackground
+    /// Row and Space header hover on a coloured theme: 0.08 / 0.08. Themed views use
+    /// `SpaceThemeStyle.rowHoverFill`, which keeps the default theme's 0.046 / 0.10.
+    public static let rowHover = SidebarRoles.token(\.rowHover)
     /// Selected row in dark content: measured white 0.20 → `TabCellBackgroundCurrent` dark.
     /// Light content uses the theme's `light.background` (see `SpaceThemeStyle.selectedFill`).
     public static let rowSelected = SidebarColors.tabCurrent
     public static let rowMultiselected = SidebarColors.tabMultiselected
     public static let rowSelectedShadow = SidebarColors.tabShadowSelected
     public static let rowPressed = SidebarColors.tabPressed
-    /// Pinned/Today divider line: measured black 0.15 → `SidebarSeparator`.
-    public static let divider = SidebarColors.separator
+    /// Pinned/Today divider line: 0.15 / 0.15 (`SidebarRoles`).
+    public static let divider = SidebarRoles.token(\.separator)
     /// "Clear" label and arrow: measured black ≈ 0.3 → `SidebarForeground`.
     public static let dividerLabel = SidebarColors.foreground
     public static let dividerLabelHover = SidebarColors.foregroundDarker
@@ -178,16 +180,16 @@ public enum SidebarRole {
     /// Close (×) and unload (−) glyphs on a hovered or selected row: core pixels
     /// black ≈ 0.56 (F0013, F0015) → `GrayA11`.
     public static let rowAccessory = GrayScale.a(11)
-    /// Bottom-bar plus: core pixels black ≈ 0.55 (F0001) → `GrayA11`. Dark: white 0.62 (F0079).
-    public static let bottomGlyph = DesignColor(light: GrayScale.a(11).light, dark: .white(0.62))
+    /// Bottom-bar glyphs: black 0.55 / white 0.58 (`SidebarRoles`; session 3).
+    public static let bottomGlyph = SidebarRoles.token(\.bottomGlyph)
     /// Bottom-bar glyphs while the window is inactive: peak black ≈ 0.28 on the
     /// inactive capture → `SidebarForeground` (0.30). Dark: guess.
     public static let bottomGlyphInactive = DesignColor(light: SidebarColors.foreground.light, dark: .white(0.30))
     /// Home glyph while the window is inactive: fitted for our filled glyph (inactive capture). Dark: guess.
     public static let homeGlyphInactive = DesignColor(light: .black(0.26), dark: .white(0.26))
     /// Bottom-bar Home (Library): core pixels black ≈ 0.52 (F0001), fitted for our
-    /// own glyph shape. Dark: guess, white at the same alpha.
-    public static let homeGlyph = DesignColor(light: .black(0.52), dark: .white(0.52))
+    /// own glyph shape. Dark: the bottom-bar ratio (0.58 / 0.55) applied to that fit.
+    public static let homeGlyph = DesignColor(light: .black(0.52), dark: .white(0.55))
     /// Space switcher icons that are not current: grayscale (Rec. 709 luma) at
     /// opacity 0.55. A two-channel fit on an inactive emoji gives ≈ 0.48 for full
     /// coverage; 0.55 matches the darkest-pixel levels of our 12 pt rendering (F0001).

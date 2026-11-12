@@ -306,7 +306,7 @@ final class FavoriteTileView: NSView {
             fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
             SelectionShadow.apply(to: fill, appearance: appearance)
         } else {
-            fill.backgroundColor = (hovered ? SidebarRole.tileHover : SidebarRole.fieldFill).cgColor(appearance)
+            fill.backgroundColor = (hovered ? SidebarRole.tileHover : SidebarRole.tileFill).cgColor(appearance)
             fill.shadowOpacity = 0
         }
         CATransaction.commit()

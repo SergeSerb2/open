@@ -18,8 +18,9 @@ public struct PrimaryPalette: Hashable, Sendable {
 }
 
 public enum ThemeTuning {
-    public static let automaticBias: Double = 0
-    public static let forcedBias: Double = 21
+    /// The editor's 1.170 forced-mode bias (§6.5). 1.172.2 no longer forces polarity:
+    /// every mode uses `SidebarThemeRules.polarityBias`.
+    public static let automaticBias: Double = SidebarThemeRules.polarityBias
     // Decoded constants: docs/re/features-core.md §2.3 item 17c–d.
     public static let intensityAlphaFloor = 0.2
     public static let intensityAlphaSlope = 0.55

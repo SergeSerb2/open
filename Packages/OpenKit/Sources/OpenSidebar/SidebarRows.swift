@@ -160,7 +160,8 @@ final class SidebarRowView: NSTableRowView {
             fill.shadowOpacity = 0
             fill.opacity = 1
         } else if allowsHighlight && (isHovered || isDropTarget) {
-            fill.backgroundColor = (isDropTarget ? SidebarColors.itemHoveredBackground : SidebarRole.rowHover).cgColor(appearance)
+            fill.backgroundColor = isDropTarget ? SidebarColors.itemHoveredBackground.cgColor(appearance)
+                : (page?.style.rowHoverFill(appearance) ?? SidebarRole.rowHover.resolved(appearance)).cgColor
             fill.shadowOpacity = 0
             fill.opacity = 1
         } else {
