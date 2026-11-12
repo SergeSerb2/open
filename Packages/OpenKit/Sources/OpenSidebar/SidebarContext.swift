@@ -17,6 +17,14 @@ public final class SidebarContext {
     public let windowID: WindowID
     public let incognitoTitle: String?
     public var isIncognito: Bool { incognitoTitle != nil }
+    /// A Blank Window (File ▸ Blank Window, capture C10): its sidebar lists only this window's tabs
+    /// under the header "This Window", with no Favorites, no pinned section and no Space dots.
+    public let windowOnlyTitle: String?
+    public var isWindowOnly: Bool { windowOnlyTitle != nil }
+    /// The browser's Spaces, for a Blank Window row's "Move to ▸" (its own model has no Spaces to offer).
+    @ObservationIgnored public var windowOnlyMoveSpaces: (@MainActor () -> [(id: SpaceID, title: String)])?
+    /// Incognito and Blank Windows show no Favorites, pinned section, Space dots or Space header controls.
+    public var hidesSpaceChrome: Bool { isIncognito || isWindowOnly }
     public var extensionsUI: ExtensionsUIContext?
     /// App-wide store injected by the host; each sidebar observes its own stable window list.
     public var media: MediaSourceStore?
@@ -171,10 +179,11 @@ public final class SidebarContext {
     @ObservationIgnored public var favoriteIconFraction: CGFloat?
     @ObservationIgnored weak var sidebar: SidebarView?
 
-    public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard, incognitoTitle: String? = nil) {
+    public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard, incognitoTitle: String? = nil, windowOnlyTitle: String? = nil) {
         self.model = model
         self.windowID = windowID
         self.incognitoTitle = incognitoTitle
+        self.windowOnlyTitle = windowOnlyTitle
         self.previewPreferences = previewPreferences
         favoriteTileSettings = FavoriteTileSettings(defaults: previewPreferences)
         favoriteSettingsObserver = NotificationCenter.default.addObserver(forName: FavoriteTileSettings.didChange,
@@ -198,7 +207,7 @@ public final class SidebarContext {
     /// `showSpaceHeaderOnSingleUnnamedSpaces`; AUDIT-2026-11-12 A1). GUESS — capture PB5-a pending: the default
     /// (off, from the key's name) and the "Space N" fallback counting as unnamed. Incognito keeps its header.
     public func hidesHeader(for space: Space) -> Bool {
-        guard incognitoTitle == nil, !SpaceHeaderPreference.shared.showOnSingleUnnamedSpace else { return false }
+        guard incognitoTitle == nil, windowOnlyTitle == nil, !SpaceHeaderPreference.shared.showOnSingleUnnamedSpace else { return false }
         return isSingleUnnamedSpace(space)
     }
     func isSingleUnnamedSpace(_ space: Space) -> Bool {
@@ -308,12 +317,13 @@ public final class SidebarContext {
     public var showsFavoritesEmptyState = false
     /// The card shows: no Favorites in the window's Profile, and not dismissed for it.
     public var favoritesEmptyStateVisible: Bool {
-        guard showsFavoritesEmptyState, !isIncognito, let profile = favoritesProfile else { return false }
+        guard showsFavoritesEmptyState, !hidesSpaceChrome, let profile = favoritesProfile else { return false }
         return profile.favorites.isEmpty && !profile.favoritesEmptyStateDismissed
     }
     /// Height of the Favorites section for this window at `width`.
     public func favoritesSectionHeight(width: CGFloat) -> CGFloat {
-        if isIncognito { return 0 }
+        // Incognito and Blank Windows show no Favorites (capture C10).
+        if hidesSpaceChrome { return 0 }
         // The card grows when its text wraps at a narrow sidebar (section 136.5 at the minimum, measured).
         if favoritesEmptyStateVisible { return FavoritesMetrics.emptyStateSectionHeight - 95 + FavoritesEmptyStateView.cardHeight(sidebarWidth: width) }
         return FavoritesMetrics.sectionHeight(count: favoritesProfile?.favorites.count ?? 0, sidebarWidth: width)
@@ -341,7 +351,7 @@ public final class SidebarContext {
 
     /// Display title of a Space: untitled Spaces read "Space N" (1-based position).
     public func title(of space: Space) -> String {
-        incognitoTitle ?? model.displayTitle(for: space)
+        incognitoTitle ?? windowOnlyTitle ?? model.displayTitle(for: space)
     }
 
     @discardableResult

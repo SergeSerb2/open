@@ -172,7 +172,7 @@ public final class SidebarView: NSView {
         let oldFavorites = favorites.frame, oldPagerFrame = pager.frame
         if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
         let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
-        favorites.isHidden = isCreatingSpace || context.isIncognito
+        favorites.isHidden = isCreatingSpace || context.hidesSpaceChrome
         let favH = isCreatingSpace ? 0 : favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
@@ -624,6 +624,10 @@ extension SidebarView {
     public var favoritesCollection: NSCollectionView { favorites.collection }
     /// Native Home control and its real badge layers, for App automation.
     public var homeButton: NSView { bottomBar.home }
+    /// Space dots drawn in the bottom bar, and whether the Favorites grid shows (Blank Window checks).
+    public var spaceSwitcherCount: Int { bottomBar.items.values.filter { !$0.isHidden && $0.superview != nil }.count }
+    public var favoritesShown: Bool { !favorites.isHidden && favoritesHeight > 0 }
+    public var plusButton: NSView { bottomBar.plus }
     public var downloadBadgeEvidence: [String: Any] { bottomBar.home.evidence }
 
     public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }

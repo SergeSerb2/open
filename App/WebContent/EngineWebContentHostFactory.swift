@@ -226,7 +226,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   lazy var pageChrome = PageChromeCoordinator(owner: self)
   var pendingDialogs: [OEJavaScriptDialog] { pageChrome.dialogs.pendingDialogs }
 
-  init(app: AppDelegate, state: BrowserWindowState, model: BrowserModel? = nil, incognitoSession: IncognitoSession? = nil) {
+  /// A Blank Window (App/BlankWindow.swift): its own in-memory model with one Space, a real Profile's data.
+  let isBlankWindow: Bool
+  init(app: AppDelegate, state: BrowserWindowState, model: BrowserModel? = nil, incognitoSession: IncognitoSession? = nil, blankWindow: Bool = false) {
+    isBlankWindow = blankWindow
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("factory.create")
     defer { pacingRegion?.end() }
@@ -760,7 +763,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
-    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
+    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
     // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
     // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
     if focus, commandBarSession?.isPresented != true {
@@ -851,6 +854,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .deleteEasel(let id): return confirmDeleteEasel(tabID: id)
     case .exportNote(let id): return exportNote(tabID: id)
     case .deleteNote(let id): return confirmDeleteNote(tabID: id)
+    case .moveToSpace(let id, let space) where isBlankWindow: return moveBlankWindowTab(id, toSpace: space)
     case .rename(let id, let title) where model.tab(id: id).map({ NoteTab.matches($0.url) }) == true:
       return renameNote(tabID: id, title: title)
     case .copyLink(let id, _) where model.tab(id: id).map({ NoteTab.matches($0.url) }) == true:
@@ -997,6 +1001,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
     } else { controller?.refresh(); mirror.sync(); scheduleSave() }
+    // Capture C10: ⌘W on a Blank Window's last tab closes the whole window, with no prompt.
+    if isBlankWindow, orderedTabs.isEmpty { DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) } }
   }
   func closeAll() {
     guard !isClosing else { return }
