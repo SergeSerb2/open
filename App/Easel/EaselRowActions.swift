@@ -89,7 +89,7 @@ extension EngineWebContentHostFactory {
     app.easels.flush()
     let folder = app.easels.fileURL(for: documentID).deletingLastPathComponent()
     if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
-    controller?.refresh(); mirror.sync(); scheduleSave()
+    controller?.refresh(); scheduleSave()  // the tree change syncs the tab mirror
   }
 }
 
