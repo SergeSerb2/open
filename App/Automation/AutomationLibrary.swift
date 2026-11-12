@@ -60,6 +60,9 @@ extension AutomationController {
       case "chip":
         guard let id = args["id"] as? String, panel.toggleChip(id) else { throw Failure(message:"unknown filter chip") }
       case "focus-list": panel.focusList()
+      case "easels-export":
+        // "Export All Easels →" on the Easels card, as a click.
+        guard panel.pressExportAllEasels() else { throw Failure(message:"Export All Easels is not available") }
       case "row-select":
         guard let id = args["id"] as? String, panel.selectRow(id) else { throw Failure(message:"unknown row") }
       case "hover-row":
