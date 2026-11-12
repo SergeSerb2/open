@@ -91,7 +91,7 @@ TAG="v$VERSION"
 [[ "$CHANNEL" != beta ]] || TAG="v$VERSION-beta.$BUILD"
 FEED=appcast.xml
 [[ "$CHANNEL" != beta ]] || FEED=appcast-beta.xml
-FEED_URL=${OPEN_RELEASE_FEED_URL:-https://sergeserb2.github.io/open/appcast.xml}
+FEED_URL=${OPEN_RELEASE_FEED_URL:-https://sergeserb2.github.io/open-releases/appcast.xml}
 if [[ "$CHANNEL" == beta ]]; then FEED_URL=${FEED_URL%/*}/appcast-beta.xml; fi
 DOWNLOAD_PREFIX=${OPEN_RELEASE_DOWNLOAD_PREFIX:-https://github.com/SergeSerb2/open/releases/download/$TAG/}
 DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX%/}/
