@@ -325,11 +325,14 @@ def run(factory, results, tmp, env):
                     assert wait(lambda: bar()['presented'], timeout=5), {'layout': layout, 'key': 't', 'bar': bar()}
                     app.call('key', key='escape', route='app')
                     assert wait(lambda: not bar()['presented'], timeout=5)
-                    count = len(app.call('tabs'))
+                    # Cmd+W with the in-window Library open closes the Library, not the tab hidden behind it
+                    # (the #350 regression fix; commandbar row settings_cmd_w_closes_library_not_tab).
+                    tabs_before = [t['id'] for t in app.call('tabs')]
                     app.call('key', key='w', modifiers=['cmd'], route='app', window=number)
-                    assert wait(lambda: len(app.call('tabs')) == count - 1, timeout=5)
+                    assert wait(lambda: not app.call('library-state')['open'], timeout=5), {'layout': layout, 'library': app.call('library-state')}
+                    assert [t['id'] for t in app.call('tabs')] == tabs_before, {'layout': layout, 'tabs': 'changed'}
                     assert any(w['number'] == number and w['visible'] for w in app.call('windows'))
-                    observations[layout] = {'cmdL': 'edit URL', 'cmdT': 'command bar', 'escape': 'dismissed', 'cmdW': 'closed owner tab'}
+                    observations[layout] = {'cmdL': 'edit URL', 'cmdT': 'command bar', 'escape': 'dismissed', 'cmdW': 'closed Library, kept tabs'}
                 assert observations['List'] == observations['Gallery']
                 browser(); app.call('select', tab=tab_a)
                 app.call('key', key='l', modifiers=['cmd'], route='app')
