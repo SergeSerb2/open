@@ -232,6 +232,11 @@ enum Checks {
                                                               "Archive Tab", "Archive Tabs Below"],
                   "Today tab menu (S3D order): \(sidebar.menuTitles(nodeID: todayTab.id).joined(separator: " · "))")
         }
+        if let todayTab = space.today.first, let share = sidebar.contextMenu(nodeID: todayTab.id)?.item(withTitle: "Share")?.submenu {
+            let services = share.items.map(\.title)
+            check(!services.isEmpty && !services.contains("Add to Reading List") && share.items.allSatisfy { $0.image != nil },
+                  "Share ▸ lists the system share services with icons, without Safari's Reading List: \(services.joined(separator: " · "))")
+        } else { check(false, "Today tab menu has a Share submenu") }
         check(sidebar.menuTitles(nodeID: folder.id).first == "Share Folder…" && sidebar.menuTitles(nodeID: folder.id).last == "Delete", "folder menu (F0119 order)")
         check(sidebar.menuTitles(nodeID: nil).first == "Change Space Icon…" && sidebar.menuTitles(nodeID: nil).last == "Delete Space", "Space menu on empty space (F0117 order)")
         // Capture session 8 item 8: the header's hover "…" (26 × 26, 13 pt from the right edge, 5 pt down) opens the Space menu.
