@@ -10281,13 +10281,18 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == background_url), None), timeout=5)
     require('E13_commandbar_cmd_return_unread', background and background['unread'] and state()['selected'] == current
             and app.call('sidebar-row', node=background['id'])['unreadBadge'], tab=background)
-    # Cmd+Return keeps the bar open (plan D3 2.3). A click outside the card only closes it (main's behaviour; what Arc
-    # does with a sidebar click while the bar is open is not captured yet, LEAD 22:35), so Esc closes it before the click.
+    # Cmd+Return keeps the bar open (plan D3 2.3). In Arc one click on a sidebar tab row closes the bar AND selects
+    # the row, in both Cmd+T and Cmd+L modes (capture C-report-s5 section 4, LEAD 01:25).
     require('E13_commandbar_stays_open_after_cmd_return', app.call('commandbar-state').get('presented') is True)
-    app.call('key', key='escape', route='app')
-    require('E13_commandbar_escape_closes', wait_until(lambda: not app.call('commandbar-state').get('presented'), timeout=3, step=.02))
     click(background['id'])
+    require('E13_click_row_closes_bar_and_selects', not app.call('commandbar-state').get('presented')
+            and state()['selected'] == background['id'], selected=state()['selected'])
     require('E13_sidebar_select_clears_unread', not app.tab(background['id'])['unread'] and not app.call('sidebar-row', node=background['id'])['unreadBadge'])
+    app.call('key', key='l', modifiers=['cmd'], route='app')
+    opened_l = wait_until(lambda: app.call('commandbar-state').get('presented'), timeout=3, step=.02)
+    click(current)
+    require('E13_cmd_l_click_row_closes_bar_and_selects', opened_l and not app.call('commandbar-state').get('presented')
+            and state()['selected'] == current, selected=state()['selected'], mode=app.call('commandbar-state').get('mode'))
     hover_result = app.call('hover', favorite=favorite, ms=600); leave = app.call('hover', leave=True, ms=300)
     require('A3_favorite_hover_wrapper', hover_result['kind'] == 'page' and hover_result['target'] == favorite and leave['kind'] == 'none', preview=hover_result, leave=leave, expected=favorite,
             window=state(), favorite=app.tab(favorite), preferences={key: app.call('defaults', key=key) for key in ('open.general.previewsEnabled', 'open.general.previewsPages')})

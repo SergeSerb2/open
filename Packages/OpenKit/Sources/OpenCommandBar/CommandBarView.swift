@@ -35,6 +35,9 @@ public final class CommandBarView: NSView {
     var panel: PanelView { container.panel }
     /// Called for a mouse-down outside the panel.
     var onClickOutside: (() -> Void)?
+    /// True for a window point on a sidebar tab row. Arc closes the bar and selects that row with one click
+    /// (capture C-report-s5 §4, LEAD 01:25), so that mouse-down reaches the sidebar after the bar closes.
+    public var passesClickThrough: ((NSPoint) -> Bool)?
     var onMoveToWindow: (() -> Void)?
     /// False while hidden: the overlay then passes every event through.
     var isActive = false
@@ -124,7 +127,12 @@ public final class CommandBarView: NSView {
         return bounds.contains(local) ? self : nil
     }
 
-    public override func mouseDown(with event: NSEvent) { onClickOutside?() }
+    public override func mouseDown(with event: NSEvent) {
+        let passes = passesClickThrough?(event.locationInWindow) == true
+        onClickOutside?()
+        // The dismissal is synchronous (`isActive` is false now), so the window's hit test reaches the row.
+        if passes, !isActive, let window { window.sendEvent(event) }
+    }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     // MARK: Diagnostics (renders and checks)

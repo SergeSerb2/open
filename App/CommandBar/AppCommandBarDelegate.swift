@@ -85,6 +85,9 @@ final class AppCommandBarSession: CommandBarDelegate {
       bar.view.autoresizingMask = [.width, .height]
       windowController.contentView.addSubview(bar.view)
       windowController.commandBarView = bar.view
+      bar.view.passesClickThrough = { [weak windowController] point in
+        windowController?.sidebar.isTabRow(atWindowPoint: point) ?? false
+      }
     }
     guard let bar = controller else { return }
     if WelcomeTab.matches(factory.selectedTab?.url) {

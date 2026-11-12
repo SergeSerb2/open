@@ -766,6 +766,16 @@ extension SidebarView {
         return (shown(urlField.copyLink), shown(urlField.siteControls), labels)
     }
     /// The URL field's frame in `view`'s coordinates while it shows (the inline address editor anchors here, plan D3 §2.2).
+    /// True when a window point is on a tab or Split View row (the command bar's click-through, LEAD 01:25).
+    public func isTabRow(atWindowPoint point: NSPoint) -> Bool {
+        guard let superview, !isHiddenOrHasHiddenAncestor else { return false }
+        var view = hitTest(superview.convert(point, from: nil))
+        while let current = view, current !== self {
+            if current is TabCellView || current is SplitCellView { return true }
+            view = current.superview
+        }
+        return false
+    }
     public func urlFieldFrame(in view: NSView) -> CGRect? {
         guard !urlField.isHiddenOrHasHiddenAncestor, window != nil, urlField.window === view.window else { return nil }
         return view.convert(urlField.bounds, from: urlField)
