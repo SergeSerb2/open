@@ -143,6 +143,30 @@ public final class CaptureController {
 
     private func now() -> TimeInterval { Date().timeIntervalSince1970 }
 
+    /// The page block under a point (view points, top-left): the innermost element of at least
+    /// 40 × 24 CSS px that is not the page itself (<html>/<body>, or one that covers nearly the
+    /// whole viewport). The page's zoom maps view points to CSS px (innerWidth / view width).
+    /// Read-only: it creates no state and reads layout only.
+    static func elementScript(x: Double, y: Double, viewWidth: Double) -> String {
+        """
+        (() => { const s = innerWidth / \(viewWidth); let e = document.elementFromPoint(\(x) * s, \(y) * s);
+          const vw = innerWidth, vh = innerHeight;
+          while (e && e !== document.body && e !== document.documentElement) {
+            const r = e.getBoundingClientRect();
+            if (r.width >= 40 && r.height >= 24 && !(r.width >= vw * 0.98 && r.height >= vh * 0.98))
+              return [r.left / s, r.top / s, r.width / s, r.height / s];
+            e = e.parentElement;
+          }
+          return null; })()
+        """
+    }
+    static func rect(from value: Any?) -> CGRect? {
+        guard let a = value as? [Any], a.count == 4 else { return nil }
+        let n = a.compactMap { ($0 as? NSNumber)?.doubleValue }
+        guard n.count == 4, n.allSatisfy(\.isFinite), n[2] > 0, n[3] > 0 else { return nil }
+        return CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
+    }
+
     private func showOverlay(on page: NSView, pressPoint: CGPoint?) {
         guard let root else { return }
         let fill = style().toastFillTop.nsColor
@@ -153,6 +177,17 @@ public final class CaptureController {
             switch outcome {
             case .cancelled: self.cancelledCount += 1; self.phase = .idle; self.flowEnded()
             case .selected(let rect): self.capture(.area, selection: rect)
+            }
+        }
+        view.elementAt = { [weak self, weak view] point, done in
+            guard let self, let view, let content = self.pageTarget()?.content else { done(nil); return }
+            let width = Double(view.bounds.width)
+            Task { @MainActor in
+                // Open's isolated world: page scripts cannot see or change the probe.
+                let script = Self.elementScript(x: Double(point.x), y: Double(point.y), viewWidth: width)
+                var value = try? await content.evaluateJavaScript(script, in: .open)
+                if value == nil { value = try? await content.evaluateJavaScript(script) }
+                done(Self.rect(from: value))
             }
         }
         root.addSubview(view)
