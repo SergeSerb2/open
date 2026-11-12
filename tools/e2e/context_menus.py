@@ -766,6 +766,18 @@ def context_menu_checks(factory, results, tmp, h):
                     'copy_url': isinstance(copied, str) and copied.startswith(origin)}
             return {'ok': all(rows.values()), 'rows': rows, 'listed': listed, 'copied': copied}
         run('cm_url_field_menu', url_field_menu)
+
+        # D2c bottom-bar "+" (S3D items and order; the popover form is capture pending, C3 item 7).
+        def plus_menu():
+            focus()
+            rows = app.call('split', op='plus')
+            titles = ['—' if r.get('separator') else r['title'] for r in rows]
+            expected = ['New Space', 'New Folder', '—', 'New Easel', 'New Boost', '—', 'New Split', 'New Tab']
+            enabled = {r['title']: r['enabled'] for r in rows if not r.get('separator')}
+            keys = {r['title']: r.get('key') for r in rows if not r.get('separator')}
+            ok = titles == expected and enabled.get('New Boost') is True and enabled.get('New Split') is True
+            return {'ok': ok, 'titles': titles, 'enabled': enabled, 'keys': keys}
+        run('cm_plus_menu', plus_menu)
         if only_case and not ran_cases:
             raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:

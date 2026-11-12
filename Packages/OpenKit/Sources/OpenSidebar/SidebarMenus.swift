@@ -459,6 +459,11 @@ struct SidebarMenus {
         return menu(items)
     }
 
+    /// Bottom-bar "+", Arc 1.172.2 items and order (capture session 3 Part D): New Space ·
+    /// New Folder · — · New Easel ⌃⇧E · New Boost · — · New Split ⌃⇧= · New Tab ⌘T.
+    /// Arc draws it as a popover tinted with the Space title colour; its geometry and colours
+    /// are capture pending (C3 session 8 item 7), so Open keeps a native menu until then.
+    /// New Boost and New Split need a page (enabled in S3D with a page loaded).
     func plus() -> NSMenu {
         let space = context.focusedSpace
         let canSplit: Bool = {
@@ -469,18 +474,18 @@ struct SidebarMenus {
             default: return true
             }
         }()
+        func keyed(_ row: NSMenuItem, _ key: String, _ modifiers: NSEvent.ModifierFlags) -> NSMenuItem {
+            row.keyEquivalent = key; row.keyEquivalentModifierMask = modifiers; return row
+        }
         return menu([
-            item("New Tab", .newTab),
-            item("New Split View", enabled: canSplit, .newSplitView),
-            space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? .separator(),
-            {
-                // Arc's plus popover row "New Easel ⌃⇧E" (interaction-states.md S2 01).
-                let row = item("New Easel", enabled: !context.isIncognito, .newEasel)
-                row.keyEquivalent = "e"; row.keyEquivalentModifierMask = [.control, .shift]
-                return row
-            }(),
+            item("New Space", .newSpace),
+            space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? ClosureMenuItem("New Folder", enabled: false) {},
             .separator(),
-            item("New Space…", .newSpace),
+            keyed(item("New Easel", enabled: !context.isIncognito, .newEasel), "e", [.control, .shift]),
+            item("New Boost", enabled: !context.isIncognito && context.currentTab != nil, .performCommand("new-boost")),
+            .separator(),
+            keyed(item("New Split", enabled: canSplit, .newSplitView), "=", [.control, .shift]),
+            keyed(item("New Tab", .newTab), "t", .command),
         ])
     }
 }
