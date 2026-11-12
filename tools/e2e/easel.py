@@ -597,7 +597,7 @@ def run(factory, results, tmp, api):
         app.call('menu-perform', id='view-easels-notes')
         opened = api.wait_until(lambda: (lambda x: x if x.get('open') and x.get('section') == 'easels' else None)(app.call('library')), timeout=8, step=.2)
         record('L06_view_easels_and_notes', bool(opened) and menu.get('view-easels-notes', {}).get('enabled') is True
-               and menu['view-easels-notes'].get('title') == 'View Easels & Notes',
+               and menu['view-easels-notes'].get('title') == 'View Easels & Notes…',  # 1.172.2 ellipsis (#506)
                menu=menu, section=(opened or app.call('library')).get('section'))
         app.call('library-close')
         app.call('library', action='open', section='easels')

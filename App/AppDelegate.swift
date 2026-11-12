@@ -1133,6 +1133,8 @@ extension AppDelegate: CommandDispatcher {
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
+    // Arc 1.172.2 (capture, C-questions "_NS:451"): "View Library" with no browser window, else "Open Library…".
+    if id == "view-library", frontStandardWindowController == nil { return CommandMenuState(title: "View Library") }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }

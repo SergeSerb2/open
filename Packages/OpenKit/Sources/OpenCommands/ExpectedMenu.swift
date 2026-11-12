@@ -39,13 +39,13 @@ public enum ExpectedMenu {
         ("new-little-open-window", "New Little Arc Window", "New Little Open Window"),
         ("little-open-global", "Show Little Arc (Global)", "Show Little Open (Global)"),
         ("open-in-current-space", "Open Little Arc or Peek in…", "Open Little Open or Peek in…"),
-        ("export-notes", "Export Arc Notes", "Export Notes…"),
+        ("export-notes", "Export Arc Notes", "Export Notes"),
     ]
 
     /// Extra built titles the comparison allows: system and dynamic rows that
     /// have no fixed row in the nib table.
     public static let allowedExtraTitles: Set<String> = [
-        "Services", "Websites will use:",
+        "Services", "Websites, Easels, and Notes will use:",
     ]
 
     public static func isAllowedExtra(path: String, title: String) -> Bool {
@@ -89,9 +89,11 @@ public enum MenuComparator {
         }
 
         // Index built visible rows by (path, title). Dynamic rows (payload ids) skip the check.
+        // Hidden rows (Arc's hidden key carriers, e.g. Duplicate) satisfy an expected row; only
+        // visible rows can be extra.
         var builtByKey: [String: String] = [:]
         var builtRows: [(path: String, title: String, shortcut: String)] = []
-        for row in built where !row.hidden {
+        for row in built {
             if let id = row.commandID, id.hasPrefix("go-to-"), row.path == "Spaces" || row.path == "Tabs" {
                 // Dynamic Space and tab rows have no fixed expected row.
                 if row.commandID != nil, row.title != CommandRegistry.byID[row.commandID ?? ""]?.title {
@@ -99,8 +101,8 @@ public enum MenuComparator {
                 }
             }
             let key = "\(row.path)\u{1}\(row.title)"
-            if builtByKey[key] == nil {
-                builtByKey[key] = row.shortcut
+            if builtByKey[key] == nil { builtByKey[key] = row.shortcut }
+            if !row.hidden, !builtRows.contains(where: { $0.path == row.path && $0.title == row.title }) {
                 builtRows.append((row.path, row.title, row.shortcut))
             }
         }
