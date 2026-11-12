@@ -87,6 +87,11 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                 if open_after:
                     state(action='open',section='downloads');assert wait(lambda:row(value['id']))
                 return value['id']
+            # An outside entry scopes Downloads to the owner Profile; with no downloads that is "No downloads yet",
+            # not "No matches" (no search or filter of the user's; IMC 12:35).
+            state(action='open',section='downloads')
+            check('downloads_empty_copy',wait(lambda:not rows() and state()['emptyState']['title']=='No downloads yet'),empty=state().get('emptyState'),header=state().get('header'))
+            state(action='close')
             complete=start('/file');check('completed_download_row',wait(lambda:item(complete).get('state')=='completed') and wait(lambda:row(complete)['subtitle']=='Download'),row=row(complete))
             # Arc's download menu (D2c #394): "Open ‹ext›", "Copy ‹ext›", then the fixed items.
             titles=[m['title'] for m in menu(complete)]
