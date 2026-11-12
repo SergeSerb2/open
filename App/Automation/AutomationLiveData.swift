@@ -82,7 +82,7 @@ extension AutomationController {
       }
       let row = app.frontWindowController.flatMap { c in c.sidebar.rowFrame(nodeID: folder.id).map { c.contentView.convert($0, from: c.sidebar) } }
       return ["exists": true, "id": folder.id.description, "title": folder.title, "pinnedIndex": index, "pinnedCount": space.pinned.count, "rows": rows,
-        "intro": intro ?? NSNull(), "stateMessage": live.stateMessage ?? NSNull(),
+        "intro": intro ?? NSNull(), "stateMessage": live.stateMessage ?? NSNull(), "expanded": folder.isExpanded, "peeked": folder.peekedChildID?.description ?? NSNull(),
         "stateGlyph": app.frontWindowController.flatMap { $0.sidebar.liveFolderStateGlyph(nodeID: folder.id) }.map { ["tooltip": $0.tooltip] } ?? NSNull(),
         "hiddenItems": Array(live.hiddenItems).sorted(), "hiddenRepositories": Array(live.hiddenRepositories).sorted(),
         "autoCreated": app.liveFolders.autoCreated, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),

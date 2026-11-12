@@ -1813,6 +1813,8 @@ public final class BrowserModel {
             tab.liveItemURL = item.url
             if attach(.tab(tab), to: .folder(folderID), at: 0) != nil { added.append(tab.id) }
         }
+        // A new unread PR peeks out of a collapsed folder (live-data §2.2, W2).
+        if unread, let first = added.first, !folder.isExpanded { folder.applyExpansion(.peeked(first)) }
         return added
     }
 

@@ -112,6 +112,18 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         rows = {r['title']: r for r in state.get('rows', [])}
         results['live_folder_refresh_diff'] = {'ok': refreshed.get('outcome') == 'success' and set(rows) == {'Fix sidebar drag (v2)', 'New review request'}
             and rows['New review request']['unread'] and not rows['Fix sidebar drag (v2)']['unread'], 'state': state}
+        # A new PR peeks out of the collapsed folder, with the unread dot (Arc W2).
+        app.call('folder-toggle', folder=state['id'])
+        gh['prs']['approved'] = [('acme/app', 30, 'Approved and new', 'open')]
+        app.call('live-folder-refresh')
+        peek = app.call('live-folder-state')
+        new_row = next((r for r in peek.get('rows', []) if r['title'] == 'Approved and new'), None)
+        results['live_folder_new_row_peeks_out'] = {'ok': peek.get('expanded') is False and bool(new_row) and new_row['unread']
+            and peek.get('peeked') == new_row['id'] and app.call('sidebar-row', node=peek['id']).get('unreadBadge') is True, 'state': peek}
+        gh['prs']['approved'] = []
+        app.call('folder-toggle', folder=state['id'])
+        app.call('live-folder-refresh')
+        state = app.call('live-folder-state')
         throttled = app.call('live-folder-refresh', manual=False)
         results['live_folder_throttle_10s'] = {'ok': throttled.get('outcome') is None and throttled.get('throttled', 0) >= 1, 'refresh': throttled}
         # L3: the Live Folder's own menu (live-data §2.2).
