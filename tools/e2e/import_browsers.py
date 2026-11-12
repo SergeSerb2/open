@@ -341,7 +341,7 @@ def run(factory, results, tmp, h):
     assert h.wait_until(lambda: app.call('onboarding').get('screen') == 'import' and app.call('first-run').get('step') == 'importChoices'
                         and app.call('first-run').get('browserSource') == 'chrome', timeout=30, step=.1), app.call('onboarding')
     offered = app.call('first-run')
-    frames = Path(h.OUT)/'import-browsers-frames'; frames.mkdir(exist_ok=True)
+    frames = Path(h.ROOT)/'.re'/'imc-frames'; frames.mkdir(parents=True, exist_ok=True)  # git-ignored
     def capture(name):
         # Look frames for the lead (not asserted): the real onboarding window, light and dark.
         for mode in ('light', 'dark'):
