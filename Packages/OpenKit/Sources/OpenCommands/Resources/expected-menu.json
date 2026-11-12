@@ -921,7 +921,7 @@
   "path": "File",
   "title": "New Easel",
   "shortcut": "Ctrl+Shift+E",
-  "inScope": false
+  "inScope": true
  },
  {
   "path": "File",

@@ -189,6 +189,8 @@ targets:
         product: OpenDesign
       - package: OpenKit
         product: OpenTranslate
+      - package: OpenKit
+        product: OpenEasel
       - target: OpenHelper
         embed: false
         link: false

@@ -38,6 +38,8 @@ let package = Package(
         .executable(name: "sidebar-render", targets: ["sidebar-render"]),
         .executable(name: "space-editor-render", targets: ["space-editor-render"]),
         .library(name: "OpenCommandBar", targets: ["OpenCommandBar"]),
+        .library(name: "OpenEasel", targets: ["OpenEasel"]),
+        .executable(name: "easel-render", targets: ["easel-render"]),
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
@@ -74,6 +76,8 @@ let package = Package(
         .executableTarget(name: "sidebar-render", dependencies: ["OpenLiveData", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"], resources: [.copy("Resources/sm6-cost-baselines.json")]),
         .executableTarget(name: "space-editor-render", dependencies: ["OpenFeatures", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
+        .target(name: "OpenEasel"),
+        .executableTarget(name: "easel-render", dependencies: ["OpenEasel"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),
     ]
 )
