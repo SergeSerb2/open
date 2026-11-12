@@ -446,6 +446,7 @@ def real_engine(factory, results, wait):
         pinned[name] = body
     assert b'##.ad-slot' in pinned['easylist.txt'].splitlines(), 'cosmetic control must use a pinned EasyList rule'
     synthetic_lists = threading.Event()
+    removeparam_lists = threading.Event()
     hold_lists, list_started, release_lists = (threading.Event() for _ in range(3))
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -457,12 +458,13 @@ def real_engine(factory, results, wait):
                 name = Path(urllib.parse.urlsplit(self.path).path).name
                 body = (b'[Adblock Plus 2.0]\n||demand.supply/ad.js$script\n'
                         b'||demand.supply/resource.js$script,redirect=noopjs\n'
-                        b'||open-adblock.test^$removeparam=utm_source\n'
                         # A byte-identical 200 response correctly skips reload.
                         # Change only a comment so the refresh assertion observes
                         # a new generation with the same official blocking rules.
                         if synthetic_lists.is_set() else
                         pinned[name] + b'\n! Open local refresh fixture\n')
+                if synthetic_lists.is_set() and removeparam_lists.is_set():
+                    body += b'||open-adblock.test^$removeparam=utm_source\n'
                 mime = 'text/plain'
             elif self.path.startswith('/resource.js'):
                 body, mime = b'window.__resourceNetwork=true;', 'application/javascript'
@@ -646,11 +648,66 @@ def real_engine(factory, results, wait):
                     and value['resourceReachedServer'] == (not stub)
                     and (value['after'] > value['before'] if stub else value['after'] == value['before']))
         row(name, verdict(evidence, redirected) and not verdict(evidence, not redirected), **evidence)
+    def removeparam_rows():
+        # $removeparam (plan 7.4 rule 4): main-frame and subframe navigations and
+        # fetches lose the listed parameter through one internal redirect; the
+        # server never sees it. An excluded site keeps its URL. Own launch and
+        # own list, so the rows above keep their exact lists.
+        nonlocal app
+        if app is not None and not app.closed: app.quit()
+        hold_lists.clear(); synthetic_lists.set(); removeparam_lists.set()
+        app = factory(urls=('about:blank',), fresh=True, load_extensions=False, extra_args=args,
+                      extra_env={'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % server.server_port,
+                                 'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.1'})
+        for key, value in keys.items():
+            app.call('defaults', key=key, value=None)
+            app.call('defaults', key=key, value=value)
+        app.call('settings-pane', pane='advanced')
+        app.call('settings-adblock', enabled=True)
+        profile = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Default')
+        assert wait(lambda: status(profile['id'])['load_generation'] > 1, timeout=40), status(profile['id'])
+        resource_tab = app.call('open', url='about:blank')['id']
+        app.call('wait', tab=resource_tab)
+        def removeparam(name, stripped):
+            requests.clear()
+            app.call('navigate', tab=resource_tab, url=origin + '/rp-' + name + '?utm_source=mail&keep=1')
+            app.call('wait', tab=resource_tab)
+            assert wait(lambda: app.call('eval', tab=resource_tab, js='window.__done===2'), timeout=20)
+            observed = app.call('eval', tab=resource_tab, js='''(async () => {
+                const frame = document.createElement('iframe');
+                const loaded = new Promise(resolve => frame.onload = resolve);
+                frame.src = '/rpframe-%s?a=1&utm_source=frame';
+                document.body.append(frame);
+                await loaded;
+                const fetched = await fetch('/rpfetch-%s?utm_source=fetch&b=2');
+                return {main: location.pathname + location.search,
+                        frame: frame.contentWindow.location.pathname + frame.contentWindow.location.search,
+                        fetch: new URL(fetched.url).pathname + new URL(fetched.url).search,
+                        redirected: fetched.redirected};
+            })()''' % (name, name))
+            seen = sorted(p for p in requests if p.startswith('/rp'))
+            expected = (dict(main='/rp-%s?keep=1' % name, frame='/rpframe-%s?a=1' % name,
+                             fetch='/rpfetch-%s?b=2' % name, redirected=True) if stripped else
+                        dict(main='/rp-%s?utm_source=mail&keep=1' % name, frame='/rpframe-%s?a=1&utm_source=frame' % name,
+                             fetch='/rpfetch-%s?utm_source=fetch&b=2' % name, redirected=False))
+            row('removeparam_' + name, observed == expected
+                and seen == sorted(expected[k] for k in ('main', 'frame', 'fetch')),
+                observed=observed, expected=expected, serverSaw=seen)
+        removeparam('navigation_strips', True)
+        app.call('settings-adblock', host='open-adblock.test', excluded=True)
+        removeparam('excluded_site_keeps', False)
+        app.call('settings-adblock', host='open-adblock.test', excluded=False)
+        removeparam('restored_strips', True)
+
     resource_digest = next(line.split()[2] for line in
         (repo / 'Engine/fork/adblock/resources-pins.txt').read_text().splitlines()
         if line.startswith('resources.json '))
     resource_count = len(json.loads((repo / 'Vendor/adblock/resources.json').read_bytes()))
     try:
+        if os.environ.get('OPEN_E2E_ADBLOCK_REMOVEPARAM_ONLY') == '1':
+            # Touched-row run for an engine change to rule 4; the full suite also ends with these rows.
+            removeparam_rows()
+            return
         app = factory(urls=('about:blank',), fresh=True, load_extensions=False, extra_args=args,
                       extra_env={'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.1',
                                  'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % server.server_port})
@@ -947,39 +1004,6 @@ def real_engine(factory, results, wait):
         visit(resource_tab, 'resources_text_blocks', True)
         resource_probe(resource_tab, 'resources_text_stub', True)
 
-        # $removeparam (plan 7.4 rule 4): main-frame and subframe navigations
-        # and fetches lose the listed parameter through one internal redirect;
-        # the server never sees it. An excluded site keeps its URL.
-        def removeparam(name, stripped):
-            requests.clear()
-            app.call('navigate', tab=resource_tab, url=origin + '/rp-' + name + '?utm_source=mail&keep=1')
-            app.call('wait', tab=resource_tab)
-            assert wait(lambda: app.call('eval', tab=resource_tab, js='window.__done===2'), timeout=20)
-            observed = app.call('eval', tab=resource_tab, js='''(async () => {
-                const frame = document.createElement('iframe');
-                const loaded = new Promise(resolve => frame.onload = resolve);
-                frame.src = '/rpframe-%s?a=1&utm_source=frame';
-                document.body.append(frame);
-                await loaded;
-                const fetched = await fetch('/rpfetch-%s?utm_source=fetch&b=2');
-                return {main: location.pathname + location.search,
-                        frame: frame.contentWindow.location.pathname + frame.contentWindow.location.search,
-                        fetch: new URL(fetched.url).pathname + new URL(fetched.url).search,
-                        redirected: fetched.redirected};
-            })()''' % (name, name))
-            seen = sorted(p for p in requests if p.startswith('/rp'))
-            expected = (dict(main='/rp-%s?keep=1' % name, frame='/rpframe-%s?a=1' % name,
-                             fetch='/rpfetch-%s?b=2' % name, redirected=True) if stripped else
-                        dict(main='/rp-%s?utm_source=mail&keep=1' % name, frame='/rpframe-%s?a=1&utm_source=frame' % name,
-                             fetch='/rpfetch-%s?utm_source=fetch&b=2' % name, redirected=False))
-            row('removeparam_' + name, observed == expected
-                and seen == sorted(expected[k] for k in ('main', 'frame', 'fetch')),
-                observed=observed, expected=expected, serverSaw=seen)
-        removeparam('navigation_strips', True)
-        app.call('settings-adblock', host='open-adblock.test', excluded=True)
-        removeparam('excluded_site_keeps', False)
-        app.call('settings-adblock', host='open-adblock.test', excluded=False)
-        removeparam('restored_strips', True)
         app.call('save')
         app.quit()
         app = factory(urls=('about:blank',), load_extensions=False, extra_args=args, extra_env=source_env)
@@ -1068,6 +1092,7 @@ def real_engine(factory, results, wait):
             and not folder.exists() and victim['directory'] not in app.call('engine-contexts'),
             nativeEngineLoaded=native_before['engine_loaded'], realHTTPInFlight=bool(active),
             retired=retired['adblockProfileRetired'], folderAbsentAfterRelaunch=not folder.exists())
+        removeparam_rows()
     finally:
         release_lists.set()
         try:
