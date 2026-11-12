@@ -84,10 +84,50 @@ index 8b077f071..cede5d3fa 100644
          CefBrowserPlatformDelegate::Create(create_params);
      CHECK(pending_popup->platform_delegate.get());
 diff --git a/cef/libcef/browser/browser_platform_delegate.cc b/cef/libcef/browser/browser_platform_delegate.cc
-index 167b2af62..127834e71 100644
+index 167b2af62..97e74b08c 100644
 --- a/cef/libcef/browser/browser_platform_delegate.cc
 +++ b/cef/libcef/browser/browser_platform_delegate.cc
-@@ -282,7 +282,8 @@ void CefBrowserPlatformDelegate::PopupBrowserCreated(
+@@ -205,11 +205,14 @@ void CefBrowserPlatformDelegate::PopupWebContentsCreated(
+   }
+ 
+   CefRefPtr<CefBrowserViewDelegate> new_delegate;
+-  CefRefPtr<CefBrowserViewDelegate> opener_delegate;
++  // Open (0302): a docked DevTools popup goes to the embedder's dock delegate,
++  // not to the delegate of the window that hosts the opener tab.
++  CefRefPtr<CefBrowserViewDelegate> opener_delegate =
++      new_platform_delegate->open_popup_opener_delegate_;
+   cef_runtime_style_t opener_runtime_style = CEF_RUNTIME_STYLE_DEFAULT;
+ 
+   auto browser_view = GetBrowserView();
+-  if (browser_view) {
++  if (browser_view && !opener_delegate) {
+     // When |this| (the popup opener) is Views-hosted use the current delegate.
+     opener_delegate =
+         static_cast<CefBrowserViewImpl*>(browser_view.get())->delegate();
+@@ -223,7 +226,7 @@ void CefBrowserPlatformDelegate::PopupWebContentsCreated(
+         browser_view, settings, client, is_devtools);
+   }
+ 
+-  if (browser_view) {
++  if (browser_view && !new_platform_delegate->open_popup_opener_delegate_) {
+     opener_runtime_style = browser_view->GetRuntimeStyle();
+   } else if (opener_delegate) {
+     opener_runtime_style = opener_delegate->GetBrowserRuntimeStyle();
+@@ -255,9 +258,11 @@ void CefBrowserPlatformDelegate::PopupBrowserCreated(
+ 
+   bool popup_handled = false;
+ 
+-  CefRefPtr<CefBrowserViewDelegate> opener_delegate;
++  // Open (0302): see PopupWebContentsCreated.
++  CefRefPtr<CefBrowserViewDelegate> opener_delegate =
++      new_platform_delegate->open_popup_opener_delegate_;
+   auto browser_view = GetBrowserView();
+-  if (browser_view) {
++  if (browser_view && !opener_delegate) {
+     // When |this| (the popup opener) is Views-hosted use the current delegate.
+     opener_delegate =
+         static_cast<CefBrowserViewImpl*>(browser_view.get())->delegate();
+@@ -282,7 +287,8 @@ void CefBrowserPlatformDelegate::PopupBrowserCreated(
  
  CefRefPtr<CefBrowserViewDelegate>
  CefBrowserPlatformDelegate::GetDefaultBrowserViewDelegateForPopupOpener() {
