@@ -7,10 +7,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          51119,
-          51227,
-          51228,
-          51229
+          48401,
+          48636,
+          48637,
+          48639
         ],
         "remaining_processes": [],
         "reply": true,
@@ -25,10 +25,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          51764,
-          51851,
-          51852,
-          51853
+          49061,
+          49128,
+          49129,
+          49131
         ],
         "remaining_processes": [],
         "reply": true,
@@ -43,10 +43,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          51907,
-          51951,
-          51952,
-          51963
+          49225,
+          49243,
+          49244,
+          49245
         ],
         "remaining_processes": [],
         "reply": true,
@@ -55,6 +55,24 @@
           "windows": []
         },
         "windows_before_quit": 3
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          49483,
+          49505,
+          49506,
+          49507
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
       }
     ]
   },
@@ -71,6 +89,35 @@
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794480495"
   },
   "import-browsers": {
+    "arc_provider_import": {
+      "chosen": {
+        "count": 3,
+        "id": "fixture",
+        "label": "Found: 3 \u00b7 ProviderPick",
+        "report": "0",
+        "selected": true,
+        "title": "Example items"
+      },
+      "files": [
+        "a",
+        "b",
+        "c"
+      ],
+      "load": [
+        21.443359375,
+        17.93017578125,
+        14.576171875
+      ],
+      "ok": true,
+      "redone": [
+        "a",
+        "b",
+        "c"
+      ],
+      "repeat": 0,
+      "report": "3",
+      "undone": []
+    },
     "bookmarks_folder_tree": {
       "error": "",
       "folders": [
@@ -80,9 +127,9 @@
         "Imported from Chrome/Other bookmarks"
       ],
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true,
       "outcome": {
@@ -103,9 +150,9 @@
     "bookmarks_size_limit": {
       "atLimit": "Found: 1",
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.09326171875,
+        16.84619140625,
+        14.16259765625
       ],
       "ok": true,
       "overLimit": "Could not be read"
@@ -121,9 +168,9 @@
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true,
       "title": "Import from Chrome"
@@ -133,18 +180,18 @@
         "aaaabbbbccccddddeeeeffffgggghhhh"
       ],
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true
     },
     "history_imported": {
       "history": 5,
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true,
       "visits": 5
@@ -152,9 +199,9 @@
     "onboarding_browser_import": {
       "folder": 1,
       "load": [
-        14.6044921875,
-        14.3447265625,
-        12.67822265625
+        16.08544921875,
+        16.83203125,
+        14.17333984375
       ],
       "ok": true,
       "outcome": {
@@ -174,9 +221,9 @@
         6
       ],
       "load": [
-        14.6044921875,
-        14.3447265625,
-        12.67822265625
+        16.08544921875,
+        16.83203125,
+        14.17333984375
       ],
       "ok": true,
       "suggested": [
@@ -188,9 +235,9 @@
       "imported": 2,
       "label": "Found: 2",
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true,
       "pinned": [
@@ -202,9 +249,9 @@
     },
     "reimport_idempotent": {
       "load": [
-        14.5703125,
-        14.333984375,
-        12.66455078125
+        16.09326171875,
+        16.84619140625,
+        14.16259765625
       ],
       "nodes": 9,
       "ok": true,
@@ -226,9 +273,9 @@
         "duckduckgo"
       ],
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true
     },
@@ -240,9 +287,9 @@
         "imported-ex"
       ],
       "load": [
-        14.5703125,
-        14.333984375,
-        12.66455078125
+        16.09326171875,
+        16.84619140625,
+        14.16259765625
       ],
       "ok": true,
       "outcome": {
@@ -272,9 +319,9 @@
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true
     },
@@ -287,9 +334,9 @@
         "unmapped": 1
       },
       "load": [
-        14.5703125,
-        14.333984375,
-        12.66455078125
+        16.09326171875,
+        16.84619140625,
+        14.16259765625
       ],
       "ok": true,
       "restricted": {
@@ -310,9 +357,9 @@
     "session_size_limit": {
       "atLimit": "Found: 1",
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.09326171875,
+        16.84619140625,
+        14.16259765625
       ],
       "ok": true,
       "overLimit": "Could not be read"
@@ -320,9 +367,9 @@
     "sources_detected": {
       "canContinue": false,
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true,
       "selected": "",
@@ -337,9 +384,9 @@
     "sources_hidden_without_profile": {
       "firefox": "No data",
       "load": [
-        15.0556640625,
-        14.42431640625,
-        12.6865234375
+        16.1015625,
+        16.86083984375,
+        14.15185546875
       ],
       "ok": true,
       "sources": [
@@ -359,9 +406,9 @@
     },
     "undo": {
       "load": [
-        14.5703125,
-        14.333984375,
-        12.66455078125
+        16.09326171875,
+        16.84619140625,
+        14.16259765625
       ],
       "nodes": 0,
       "ok": true,
@@ -372,15 +419,15 @@
   "interrupted_attempts": [],
   "lane": "all",
   "load": [
-    15.49609375,
-    14.4990234375,
-    12.70263671875
+    16.37158203125,
+    16.92626953125,
+    14.15869140625
   ],
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "1b110d89d39600fd3afc811a1b8030f08ab576a1"
+    "head": "4bb6ad858d2ee0c091bae004643afa8d04e6453e"
   },
-  "started": "2026-11-12 03:51:27",
+  "started": "2026-11-12 04:29:23",
   "style": "chrome"
 }
