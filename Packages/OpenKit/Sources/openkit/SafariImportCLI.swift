@@ -64,7 +64,7 @@ func runImportSafari(args: [String]) async throws {
         print("  expect roots=\(want) actual=\(actual) \(actual == want ? "OK" : "MISMATCH")")
     }
     func printBookmarks(_ result: (roots: [ImportedBookmark], report: ImportedBookmarksReport), sourceKey: String) -> Folder {
-        let folder = ImportedBookmarksFolder.make(browserName: "Safari", sourceKey: sourceKey, roots: result.roots)
+        let folder = importedBookmarksFolder(result.roots, browserName: "Safari", sourceKey: sourceKey)
         let r = result.report
         print("bookmarks: rows=\(r.sourceRows) urls=\(r.urls) folders=\(r.folders) separators=\(r.skippedSeparators) unsupported=\(r.skippedUnsupportedURL) emptyFolders=\(r.skippedEmptyFolders) other=\(r.skippedOther)")
         print("  folder \"\(folder.title)\" id=\(folder.id.rawValue.uuidString.prefix(8)) children=\(folder.children.count)")
@@ -85,9 +85,9 @@ func runImportSafari(args: [String]) async throws {
             check("passwordsEmpty", r.skippedEmptyPassword, expected?.passwordsEmpty)
             if expected != nil {
                 let quoted = result.logins.first { $0.username == "synthetic-user-2" }
-                let shape = quoted?.passwordBytes == Array("synthetic-pass-\"2\"".utf8) && quoted?.signonRealm == "https://login2.example.test:8443/"
+                let shape = quoted?.passwordBytes == Array("synthetic-pass-\"2\"".utf8) && quoted?.signonRealm == "https://login2.example.com:8443/"
                     && quoted?.noteBytes == Array("multi\r\nline note".utf8)
-                    && result.logins.contains { $0.signonRealm == "https://login3.example.test/" }
+                    && result.logins.contains { $0.signonRealm == "https://login3.example.com/" }
                 ok = ok && shape
                 print("  expect quoted/multiline/no-scheme rows parsed \(shape ? "OK" : "MISMATCH")")
             }

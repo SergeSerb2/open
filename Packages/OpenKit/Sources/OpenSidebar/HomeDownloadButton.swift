@@ -3,19 +3,32 @@ import QuartzCore
 import OpenDesign
 
 /// App supplies session state only; the sidebar owns the badge's drawing and
-/// finite animations. Geometry is the S11 design's labelled guess.
+/// finite animations. Completion previews follow the approved Library design.
+public struct DownloadBadgeFile: Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let path: String
+    public let completedAt: Date
+    public init(id:String,name:String,path:String,completedAt:Date) { self.id=id;self.name=name;self.path=path;self.completedAt=completedAt }
+}
+
 public struct DownloadBadgeState: Equatable, Sendable {
     public var running: Int
     public var progress: Double
     public var indeterminate: Bool
     public var completedAt: Date?
-    public init(running: Int, progress: Double, indeterminate: Bool, completedAt: Date?) {
-        self.running = running; self.progress = progress; self.indeterminate = indeterminate; self.completedAt = completedAt
+    public var files: [DownloadBadgeFile]
+    public init(running: Int, progress: Double, indeterminate: Bool, completedAt: Date?, files: [DownloadBadgeFile] = []) {
+        self.running = running; self.progress = progress; self.indeterminate = indeterminate; self.completedAt = completedAt; self.files = Array(files.prefix(3))
     }
 }
 
 @MainActor
-final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
+final class HomeDownloadButton: PlateButton, CAAnimationDelegate, NSDraggingSource {
+    private var badgeLayers: [CALayer] = []
+    private var dragStarted = false
+    private var mouseStart: CGPoint?
+    var latestName: String? { previous?.files.first?.name }
     private let track = CAShapeLayer()
     private let ring = CAShapeLayer()
     private let check = NSImageView()
@@ -44,6 +57,12 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
             shape.transform = CATransform3DMakeRotation(-.pi / 2, 0, 0, 1)
         }
         check.frame = CGRect(x: bounds.midX - 4.5, y: bounds.midY - 4.5, width: 9, height: 9)
+        for (index,badge) in badgeLayers.enumerated() {
+            let offset = CGFloat(index)*3
+            badge.frame = CGRect(x:(bounds.width-39)/2+offset,y:(bounds.height-39)/2-offset,width:39,height:39)
+            badge.sublayers?.first?.frame = badge.bounds
+            badge.shadowPath = CGPath(roundedRect:badge.bounds,cornerWidth:7,cornerHeight:7,transform:nil)
+        }
         CATransaction.commit()
     }
     override func updateLayer() {
@@ -57,6 +76,7 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
         CATransaction.commit()
         guard state != previous else { return }
         let old = previous; previous = state
+        updateFiles(state?.files ?? [], animated:old?.files.first?.id != state?.files.first?.id)
         if let state, state.running > 0 {
             if completing { interruptCompletion() }
             CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -71,6 +91,42 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
         } else if let date = state?.completedAt, date != old?.completedAt, Date().timeIntervalSince(date) < 2 {
             complete()
         } else if !completing { clearAnimations() }
+    }
+    private func updateFiles(_ files:[DownloadBadgeFile],animated:Bool) {
+        badgeLayers.forEach { $0.removeFromSuperlayer() }; badgeLayers = []
+        for file in files.prefix(3) {
+            let badge = CALayer(), image = CALayer()
+            badge.shadowColor = NSColor.black.cgColor; badge.shadowOpacity = 0.22; badge.shadowRadius = 4; badge.shadowOffset = CGSize(width:0,height:-2)
+            image.cornerRadius = 7; image.cornerCurve = .continuous; image.masksToBounds = true; image.contentsGravity = .resizeAspectFill
+            let preview = FilePreviewCache.shared.image(for:URL(fileURLWithPath:file.path)) { [weak self] in
+                guard let self else { return }; self.updateFiles(self.previous?.files ?? [],animated:false)
+            }
+            image.contents = preview.cgImage(forProposedRect:nil,context:nil,hints:nil); badge.addSublayer(image)
+            layer?.insertSublayer(badge,at:UInt32(max(0,layer?.sublayers?.count ?? 0)-badgeLayers.count)); badgeLayers.append(badge)
+        }
+        needsLayout = true; superview?.needsLayout = true
+        if animated, !files.isEmpty, !Motion.reducesMotion {
+            let drop = CABasicAnimation(keyPath:"transform.translation.y"); drop.fromValue = -20; drop.toValue = 0; drop.duration = 0.20
+            drop.timingFunction = CAMediaTimingFunction(name:.easeOut); badgeLayers.first?.add(drop,forKey:"library-download-drop")
+        }
+        setAccessibilityLabel(files.first?.name ?? "Library")
+    }
+    override func mouseDown(with event:NSEvent) { mouseStart = convert(event.locationInWindow,from:nil); dragStarted = false; super.mouseDown(with:event) }
+    override func mouseDragged(with event:NSEvent) {
+        guard !dragStarted, let start=mouseStart, let file=previous?.files.first else { return }
+        let point=convert(event.locationInWindow,from:nil)
+        guard hypot(point.x-start.x,point.y-start.y)>=4 else { return }
+        dragStarted = true
+        let url=URL(fileURLWithPath:file.path), item=NSDraggingItem(pasteboardWriter:URL(fileURLWithPath:file.path) as NSURL)
+        item.setDraggingFrame(bounds,contents:NSWorkspace.shared.icon(forFile:url.path))
+        beginDraggingSession(with:[item],event:event,source:self)
+    }
+    override func mouseUp(with event:NSEvent) { defer { mouseStart = nil; dragStarted = false }; if !dragStarted { super.mouseUp(with:event) } }
+    func draggingSession(_ session:NSDraggingSession,sourceOperationMaskFor context:NSDraggingContext)->NSDragOperation { .copy }
+    var fileDragEvidence:[String:Any] {
+        guard let file=previous?.files.first else { return [:] }
+        let board=NSPasteboard.withUniqueName(); defer { board.releaseGlobally() }; board.writeObjects([URL(fileURLWithPath:file.path) as NSURL])
+        return ["types":board.types?.map(\.rawValue) ?? [],"url":board.string(forType:.fileURL) ?? ""]
     }
     private func clearAnimations() {
         completing = false
@@ -133,10 +189,12 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
         super.viewWillMove(toWindow: newWindow)
     }
     var evidence: [String: Any] {
+        let box=window?.contentView?.convert(bounds,from:self) ?? .zero
+        let rootFrame:[CGFloat]=[box.minX,box.minY,box.width,box.height]
         let spring = check.layer?.animation(forKey: "download-complete-spring") as? CASpringAnimation
         let fade = ring.animation(forKey: "download-complete-ring")
         let home = glyphView.layer?.animation(forKey: "download-complete-home")
-        return ["reduceMotion": Motion.reducesMotion, "spring": spring.map { ["duration": $0.duration, "mass": $0.mass, "stiffness": $0.stiffness, "damping": $0.damping] } ?? [:],
+        return ["files":previous?.files.map { ["id":$0.id,"name":$0.name,"path":$0.path] } ?? [],"thumbnailSize":39,"frame":rootFrame,"tooltipTitle":latestName ?? "Library","stackCount":badgeLayers.count,"drag":fileDragEvidence,"reduceMotion": Motion.reducesMotion, "spring": spring.map { ["duration": $0.duration, "mass": $0.mass, "stiffness": $0.stiffness, "damping": $0.damping] } ?? [:],
          "ringFadeDuration": fade?.duration ?? 0, "homeDuration": home?.duration ?? 0,
          "ringBounds": [ring.path?.boundingBox.minX ?? 0, ring.path?.boundingBox.minY ?? 0, ring.path?.boundingBox.width ?? 0, ring.path?.boundingBox.height ?? 0], "lineWidth": ring.lineWidth,
 "running": previous?.running ?? 0, "progress": previous?.progress ?? 0,

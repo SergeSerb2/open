@@ -95,12 +95,15 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         return DefaultThemeText.splitTitle.resolved(appearance)
     }
 
-    /// Selected row and selected favorite tile fill. Light content: the theme's
-    /// `light.background`, opaque (measured #F6EBE7 / #F7E8E2 against #F6EAE4; a
-    /// white overlay does not fit, F0014, F0016). Dark content: white 0.20 (F0084, F0161).
+    /// Selected row and selected favorite tile fill, a layer over the background:
+    /// light content gray #F3F3F3 at 0.916, dark content white 0.20 (`SidebarRoles`).
     public func selectedFill(_ appearance: ContentAppearance) -> RGBA {
-        if appearance == .light, let p = lightPalette { return p.background.withAlpha(1) }
-        return SidebarRole.rowSelected.resolved(appearance)
+        roles(appearance).activePlate
+    }
+
+    /// Row and Space header hover plate (`SidebarRoles.rowHover`).
+    public func rowHoverFill(_ appearance: ContentAppearance) -> RGBA {
+        roles(appearance).rowHover
     }
 
     /// Folder glyph and other accent marks. Default theme: measured #1E29FF on
@@ -163,13 +166,15 @@ public struct SpaceThemeStyle: Sendable, Hashable {
 
     // MARK: Default theme
 
-    /// The look of a Space without a stored theme. Measured in dark mode
-    /// (active window corners, sRGB): TL #252538, TR #322438, BL #2C2437, BR #342237.
-    /// The light variant is a guess (no light-mode capture yet).
+    /// The look of a Space without a stored theme. Dark: measured active window corners
+    /// (sRGB) TL #252538, TR #322438, BL #2C2437, BR #342237. Light: a diagonal gradient,
+    /// sidebar top-left #D9DAF4 → bottom-right #ECE3EC (capture session 3, c1-light);
+    /// window corners from a bilinear least-squares fit of its 9 sidebar points (max
+    /// error 0.9 level). TR and BR are extrapolated beyond the sidebar.
     public static func defaultTheme(system: ContentAppearance) -> SpaceThemeStyle {
         let corners: [RGBA] = system == .dark
             ? [RGBA(hex: 0x252538), RGBA(hex: 0x322438), RGBA(hex: 0x2C2437), RGBA(hex: 0x342237)]
-            : [RGBA(hex: 0xEDEDF1), RGBA(hex: 0xEDEBF1), RGBA(hex: 0xEAE9EF), RGBA(hex: 0xEAE8EF)]
+            : [RGBA(hex: 0xD9DAF4), RGBA(hex: 0xEFE5EB), RGBA(hex: 0xE7E0EE), RGBA(hex: 0xFDECE3)]
         return SpaceThemeStyle(fill: .corners(corners), noiseFactor: 0, translucency: system == .dark ? .dark : .light,
                                contentAppearance: nil, isVibrant: true, windowColorScheme: system)
     }
@@ -202,13 +207,24 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         let key = ThemeColorMath.toP3(style.keyColor)
         let primary = ThemeColorMath.primaryPalette(key: key)
         let palettes = ThemeColorMath.semanticPalettes(primary)
-        let colors = ThemeColorMath.harmony(key: key, count: style.colorCount, wheel: style.wheel)
+        // The fill clamps the key's lightness; palettes and polarity use the key as is.
+        let hsl = ThemeColorMath.hsl(key)
+        let range = SidebarThemeRules.fillLightness
+        // Near 0 or 1 lightness, sub-level channel noise makes HSL saturation explode:
+        // a key within one level of gray is gray.
+        let isGray = max(key.r, key.g, key.b) - min(key.r, key.g, key.b) < 1.0 / 255
+        let fillKey = range.contains(hsl.l) ? key
+            : ThemeColorMath.rgb(h: hsl.h, s: isGray ? 0 : hsl.s, l: min(range.upperBound, max(range.lowerBound, hsl.l)))
+        let colors = ThemeColorMath.harmony(key: fillKey, count: style.colorCount, wheel: style.wheel)
             .map { RGBA(rgba: ThemeColorMath.toExtendedSRGB($0)) }
-        let bias: Double
+        // Arc 1.172.2: the Space mode picks the window scheme (drawn lightness, popovers,
+        // web content), never the text polarity (C-report-s3 Part A §3).
+        let bias = SidebarThemeRules.polarityBias
+        let scheme: ContentAppearance
         switch style.appearance {
-        case .automatic: bias = ThemeTuning.automaticBias
-        case .light: bias = -ThemeTuning.forcedBias
-        case .dark: bias = ThemeTuning.forcedBias
+        case .automatic: scheme = system
+        case .light: scheme = .light
+        case .dark: scheme = .dark
         }
         self.init(fill: .blended(base: Array(colors.prefix(2)), overlay: colors.count == 3 ? [.clear, colors[2]] : []),
                   noiseFactor: style.noiseFactor, intensityFactor: style.intensityFactor,
@@ -216,7 +232,7 @@ public struct SpaceThemeStyle: Sendable, Hashable {
                   lightPalette: palettes.light, darkPalette: palettes.dark, accent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shaded)),
                   shadedDarkAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shadedDark)),
                   tintedLightAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.tintedLight)),
-                  texture: style.texture, usesLegacyIntensity: false, windowColorScheme: system)
+                  texture: style.texture, usesLegacyIntensity: false, windowColorScheme: scheme)
     }
 
     /// Parses Arc's `customInfo.windowTheme` object (schema in
@@ -291,9 +307,9 @@ extension RGBA {
 
 /// Text colors for Spaces without a stored theme (they follow the macOS appearance).
 public enum DefaultThemeText {
-    /// Tab title. Dark: lavender #DDDEFF, from core pixels #D9DAFA on F0079 corrected
-    /// for anti-aliasing. Light: guess (no light-mode capture).
-    public static let title = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9, .displayP3), dark: RGBA(hex: 0xDDDEFF))
+    /// Tab title, measured in capture session 3 (c1-light, c1-dark): #090D4E 13.4 : 1 and
+    /// #DEDFFF 11.4 : 1 (session 1 F0079 gave #DDDEFF).
+    public static let title = DesignColor(light: RGBA(hex: 0x090D4E), dark: RGBA(hex: 0xDEDFFF))
     /// Split-row titles: dimmer and neutral. Dark: white 0.80 (`ForegroundPrimary`), F0079.
     public static let splitTitle = Core.foregroundPrimary
 }

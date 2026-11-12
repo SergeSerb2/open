@@ -15,6 +15,11 @@ public final class EaselCanvasView: NSView {
     public var onLink: ((URL, CGPoint) -> Void)?
     /// Image file name → URL in this Easel's `images/` folder.
     public var imageURL: ((String) -> URL?)? { didSet { objectViews.values.forEach { $0.imageURL = imageURL } } }
+    /// A live web card's page view (the App's pooled engine page), and its release.
+    public var liveViewProvider: ((UUID, URL) -> NSView?)?
+    public var liveViewRelease: ((UUID) -> Void)?
+    /// "Open Page in New Tab" on a web or link card.
+    public var onOpenURL: ((URL) -> Void)?
     /// Stores picture bytes (validated) and returns the object content, or nil.
     public var storeImage: ((Data) -> EaselImage?)?
     /// The canvas keeps its own undo stack, so ⌘Z on the canvas never undoes sidebar edits.
@@ -58,6 +63,9 @@ public final class EaselCanvasView: NSView {
         scrollView.documentView = docView
         docView.canvas = self
         docView.registerDrops()
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsChanged(_:)),
+                                               name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         addSubview(scrollView)
         docView.addSubview(titleField)
         docView.addSubview(selectionView)
@@ -133,7 +141,13 @@ public final class EaselCanvasView: NSView {
         if let draftView { draftView.scale = scale; draftView.frame = viewRect(draftView.object.frame) }
         textEditor?.layoutIn(canvas: self)
         updateSelectionChrome()
+        updateLiveViews()
     }
+
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateLiveViews() }
+    public override func viewDidHide() { super.viewDidHide(); releaseAllLiveViews() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); updateLiveViews() }
+    @objc func clipBoundsChanged(_ note: Notification) { updateLiveViews() }
 
     // MARK: Document sync
 
@@ -553,6 +567,7 @@ public final class EaselCanvasView: NSView {
                 if let points { item["pointCount"] = points.count }
             case .image(let i): item["file"] = i.file; item["pixelSize"] = [i.width, i.height]
             case .webCard(let w): item["url"] = w.url; item["title"] = w.title as Any? ?? NSNull(); item["file"] = w.imageFile as Any? ?? NSNull()
+                item["live"] = w.isLive; item["liveAttached"] = objectViews[o.id]?.liveView != nil
             case .link(let l): item["url"] = l.source; item["title"] = l.title as Any? ?? NSNull()
                 item["summary"] = l.summary as Any? ?? NSNull(); item["file"] = l.imageFile as Any? ?? NSNull()
             }
@@ -575,7 +590,7 @@ public final class EaselCanvasView: NSView {
                 "undoName": canvasUndoManager.undoActionName, "commitCount": commitCount,
                 "documentViewSize": [docView.frame.width, docView.frame.height],
                 "scrollOffset": scrollView.contentView.bounds.minY,
-                "appearance": effectiveAppearance.name.rawValue]
+                "appearance": effectiveAppearance.name.rawValue, "liveCount": liveObjectIDs.count]
     }
 
     /// Converts a document point to window coordinates (automation drives real mouse events).

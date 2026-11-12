@@ -18,9 +18,6 @@ final class MediaCoordinator {
   let rules: PiPSiteRules
   /// The tabs each window shows (selected tab or split panes of its focused Space).
   private(set) var displayed: [WindowID: Set<ItemID>] = [:]
-  /// Whether each window was last seen on screen (visible, not minimized, not occluded
-  /// while Open is inactive). Absent until the first observation, so launch never acts.
-  private(set) var windowShown: [WindowID: Bool] = [:]
   /// Automation evidence: the last auto-PiP decision per tab and when it ran.
   private(set) var decisions: [ItemID: (decision: AutoPiPPolicy.Decision, at: TimeInterval)] = [:]
   /// Automation evidence: when each tab's PiP request started and entered (system uptime).
@@ -122,7 +119,6 @@ final class MediaCoordinator {
   /// produce one (D-4): they do not change it.
   func windowChanged(_ factory: EngineWebContentHostFactory) {
     let windowID = factory.windowState.id
-    windowVisibilityChanged(factory)
     let now = Set(factory.visibleTabs.map(\.id))
     let old = displayed[windowID] ?? []
     guard now != old || displayed[windowID] == nil else { return }
@@ -143,36 +139,7 @@ final class MediaCoordinator {
     feedSleep()
   }
 
-  /// D-4 revised: a window that leaves the screen is a leave for the tabs it shows; one that
-  /// comes back is a return (an automatic PiP of a shown tab closes, like a tab return).
-  /// Guess — capture pending: Arc counts occlusion only after it resigns active
-  /// (`WindowResignActiveOcclusionStateCancellable`); an Open window covered by another
-  /// Open window while Open is active is not a leave.
-  private func windowVisibilityChanged(_ factory: EngineWebContentHostFactory) {
-    guard let window = factory.controller?.window else { return }
-    let windowID = factory.windowState.id
-    let event: AutoPiPPolicy.LeaveEvent?
-    if window.isMiniaturized { event = .minimize }
-    else if NSApp.isHidden { event = .appHide }
-    else if !window.occlusionState.contains(.visible) && !NSApp.isActive { event = .occlusion }
-    else if !window.isVisible { event = .close }
-    else { event = nil }
-    let shown = event == nil
-    let previous = windowShown[windowID]
-    windowShown[windowID] = shown
-    guard let previous, previous != shown else { return }
-    let tabs = displayed[windowID] ?? []
-    if shown {
-      for id in tabs { if let effect = session.displayed(tabID: id) { apply(effect) } }
-    } else if let event, event != .close {
-      for id in tabs where app.model.tab(id: id) != nil {
-        if let host = factory.hosts[id], !host.closed { leave(host, factory: factory, event: event) }
-      }
-    }
-  }
-
   func windowClosed(_ windowID: WindowID) {
-    windowShown[windowID] = nil
     displayed[windowID] = nil
     store.removeWindow(windowID: windowID)
     feedSleep()
@@ -270,13 +237,13 @@ final class MediaCoordinator {
 
   // MARK: Auto-PiP
 
-  private func leave(_ host: EngineWebContentHost, factory: EngineWebContentHostFactory, event: AutoPiPPolicy.LeaveEvent = .selection) {
+  private func leave(_ host: EngineWebContentHost, factory: EngineWebContentHostFactory) {
     let leftAt = ProcessInfo.processInfo.systemUptime
     let content = host.content, id = host.tabID
     guard let url = content.url else { return }
     let media = content.mediaSession
     let decision = AutoPiPPolicy.decide(
-      tabID: id, url: url, state: Self.state(media), audible: content.isAudible, event: event,
+      tabID: id, url: url, state: Self.state(media), audible: content.isAudible, event: .selection,
       settings: settings, rules: rules, session: session,
       disablePictureInPicture: media?.isPictureInPictureDisabled ?? false)
     decisions[id] = (decision, leftAt)

@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "environments": {
     "scale-2-icc-header-v1-ced527b7482d75a039b583d3a6b856fb4e3f0c26010e4258ba770e17b142e844-mode-1512x982-pixels-3024x1964-mhz-120000": {
-      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "trustedMainCommit": "31e01b57acade8d29a925288a1dd78259f4072ba",
       "environment": {
         "backingScale": 2,
         "iccSHA256": "ced527b7482d75a039b583d3a6b856fb4e3f0c26010e4258ba770e17b142e844",
@@ -24,14 +24,14 @@
       },
       "pngSHA256": {
         "legacy": {
-          "window-0.png": "169ab5897b3fe43dfd33d558f5270e48c8778d11808df13a749e5deabcaf21af",
-          "window-1.png": "4836241ab5a25917a3bebae86cc378a97346c7994792bc5d140e5ede01eaf242",
-          "window-2.png": "bfa12bf9e1eb5d71afdd7aced9db3565ec782b6baaf3918f060dbbbd71d23817"
+          "window-0.png": "876d001d7710b495b496dd99a9e72205d3887fb2e4d03445ff8f48439526d42e",
+          "window-1.png": "d2b696a41d3092884509f640be748798a0968c3142a1d18b370d3120722866e5",
+          "window-2.png": "3fba3a440da06d579d0cea8404cd8b8d26a595193c12b19350aa5ba96f2c4294"
         },
         "editor": {
-          "window-0.png": "15b64a5ba0ec84cbabfead2195acd1902dcc8542cecfffa79daa7e9ade4bc204",
-          "window-1.png": "428120f86a323764ccb6a297700ce254012f8f99ac1555295dae9ceb46892322",
-          "window-2.png": "766d09ab15bdf766daf11aec477f7801a185fe4d36b67a9913f5dbc1516b7ad7"
+          "window-0.png": "ff3e0fc088000d40a93310762c9af67cbb5e8560c50bf982413705ba6ad7775a",
+          "window-1.png": "654258308c0207bfe5ff2d8a1b0e4c10c0f7232209b20de7a504d3fa7be82512",
+          "window-2.png": "3dbedd0806b9f433eb7c78ea0b10866e6cd02b52ebc01b87b7da28656b34192d"
         }
       },
       "reason": "Same-scale 2x render from unchanged trusted main. AppKit text and symbol rasterization follows the main backing scale and ICC profile. Existing 1x references stay byte-for-byte unchanged.",
@@ -47,23 +47,32 @@
         "previousKey": "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856-mode-1512x982-pixels-3024x1964-mhz-120000",
         "rawSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
         "normalizedSHA256": "ced527b7482d75a039b583d3a6b856fb4e3f0c26010e4258ba770e17b142e844"
+      },
+      "rerecord": {
+        "commit": "31e01b57acade8d29a925288a1dd78259f4072ba",
+        "reason": "D2 sidebar colour roles follow Arc 1.172.2 (capture session 3); LEAD 2026-11-12 01:25 Q1 (a) and 02:10 drift ruling (a)",
+        "binarySHA256": {
+          "openkit": "6ebd20c1767de84768ee5ae89925d85fe24f9e0ee4d7577b84014e82fedcf4ca",
+          "sidebar-render": "8f490f8b768be665f2ef0627c768c89047aad8bc05b359c096b53eab4673e517",
+          "space-editor-render": "f33dbcf83b80f0f2118269d1907cdaf2497a6019f140aad359560908c7456ea1"
+        }
       }
     },
     "scale-1-icc-header-v1-f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56-mode-2560x1440-pixels-2560x1440-mhz-240000": {
       "original": true,
       "renderScale": 1,
-      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "trustedMainCommit": "d926d500c09f046faece1827252bafccec769b3d",
       "reason": "Original references on trusted main. No PNG is regenerated. Exact original byte comparisons and render scale 1 remain in force.",
       "pngSHA256": {
         "legacy": {
-          "window-0.png": "2631803ef7ccacd9992a211dd3ebf60a0ea807486f65340e8d7ffcb21253819c",
-          "window-1.png": "c75aa5197edcc3f463d104b1778cf8f922635858b4bf72469fbf60716c172dfa",
-          "window-2.png": "288e647edeeb792c28534a92492282401d0858209837abe28d2c568c0084a94b"
+          "window-0.png": "d01d2a666b551e970aa2930db1b095af2805736d550b2f577c3deebc081aa9dc",
+          "window-1.png": "8788b7a4ba89ce4dd082815a1fc14f4cc56cf7415cd5a72ada99c55727f00a82",
+          "window-2.png": "cf3458610d9915d731763d8c9468ee5483bf2e331bc5e444d5c2741590d31099"
         },
         "editor": {
-          "window-0.png": "4a275632fc96d590060566c3cf47aadd5dacf31ec81b111d4f43ac192808d7a9",
-          "window-1.png": "e5756cd9be3da70fc31561f7a4e2dfb2891ce43a054f30b96a3b7f85999c6754",
-          "window-2.png": "bea8d9f21317991961b89de98ef4af4356999fa42d3101f3dbb175d1f295e7d9"
+          "window-0.png": "4b367f903df1a577d35b2e22c8f254cd586295d04be503f373228123b2e83191",
+          "window-1.png": "219384a3cfc3fabddc0b56f9bbc5dc5f17c78dda792c8d719843824fd711491a",
+          "window-2.png": "31701b592a279bdd899349c2608d7e4f79cb09e39c25b3876d279ec985cdbd9e"
         }
       },
       "mode": {
@@ -77,6 +86,15 @@
         "previousKey": "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43-mode-2560x1440-pixels-2560x1440-mhz-240000",
         "rawSHA256": "b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43",
         "normalizedSHA256": "f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56"
+      },
+      "rerecord": {
+        "commit": "d926d500c09f046faece1827252bafccec769b3d",
+        "reason": "D2 sidebar colour roles follow Arc 1.172.2 (capture session 3); LEAD 2026-11-12 01:25 Q1 (a) and 02:10 drift ruling (a)",
+        "binarySHA256": {
+          "openkit": "5b9a2ad479dc7795185c9f94536a305c8507d4ae1809ec732190f64e26269dd0",
+          "sidebar-render": "c2234d37be9370b26ccf1139dfd2a0c918a95616e084d23cf3c0a4d60c3bfa03",
+          "space-editor-render": "4308889b388c1c52c13c97ea1958dd00440ad5501d5fa46b94ed37c800d2910f"
+        }
       }
     }
   }

@@ -130,6 +130,9 @@ public enum SidebarIntent: Equatable, Sendable {
     case newSplitView
     /// New Easel (plus menu, ⌃⇧E): handled by the App.
     case newEasel
+    /// Easel row menu: save as a web page, delete permanently (App).
+    case exportEasel(tabID: ItemID)
+    case deleteEasel(tabID: ItemID)
 }
 
 

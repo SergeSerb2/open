@@ -9,6 +9,7 @@ import OpenFeatures
 import QuartzCore
 import OpenCommands
 import OpenSettings
+import OpenLibrary
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -94,7 +95,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var deepLinks = DeepLinkRouter(app: self)
-  lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+  lazy var linkIntake: ExternalLinkIntake = {
+    let intake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+    let meet = MeetRoute(app: self)
+    intake.willRoute = { meet.prepare($0) }
+    intake.didRoute = { meet.announce($0) }
+    return intake
+  }()
   var lastLittleOpenRequest: LittleOpenRequest?
   var executedExternalLink = false
   /// Only a fresh launch fallback is eligible for removal by its first Little Open link.
@@ -392,6 +399,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("windowShown")
   }
 
+  var libraryPrebuildTask: Task<Void,Never>?
+  var libraryPrebuildGeneration = 0
+  var libraryFirstSidebarDraw: Double?
+  var libraryFirstSidebarDraws: [WindowID:Double] = [:]
+  var libraryLastInput = 0.0
+  var libraryPrebuiltAt: Double?
+  func scheduleLibraryPrebuildAfterFirstDraw() {
+    guard libraryFirstSidebarDraw == nil else { return }
+    libraryFirstSidebarDraw = ProcessInfo.processInfo.systemUptime
+    for controller in windowControllers { libraryFirstSidebarDraws[controller.windowID] = libraryFirstSidebarDraw }
+    scheduleLibraryPrebuild()
+  }
+  func noteLibraryInput() {
+    LibraryPanelView.noteUserInput()
+    libraryLastInput = ProcessInfo.processInfo.systemUptime
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
+    settingsPresenter.cancelLibraryIdleWork()
+    if libraryFirstSidebarDraw != nil { scheduleLibraryPrebuild() }
+  }
+  func scheduleLibraryPrebuild() {
+    #if OPEN_AUTOMATION
+    if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREBUILD_DISABLED"] == "1" { return }
+    #endif
+    guard let controller = frontStandardWindowController,let first = libraryFirstSidebarDraws[controller.windowID],!shutdownPrepared,!terminationRequested else { return }
+    libraryPrebuildTask?.cancel()
+    libraryPrebuildGeneration += 1
+    let generation = libraryPrebuildGeneration
+    let deadline = max(first+3,libraryLastInput+3)
+    libraryPrebuildTask = Task { @MainActor [weak self,weak controller] in
+      try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
+      guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
+      defer { if self.libraryPrebuildGeneration == generation { self.libraryPrebuildTask = nil } }
+      guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller,self.frontStandardWindowController === controller,
+        controller.window?.isVisible == true else { return }
+      self.libraryPrebuiltAt = ProcessInfo.processInfo.systemUptime
+      controller.onLibraryIdleRefresh = { [weak self] in self?.scheduleLibraryPrebuild() }
+      await self.settingsPresenter.makeLibrarySession(controller).prebuild()
+    }
+  }
+
   func drawWindowsBeforeEngine() {
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("browser.drawWindowsBeforeEngine")
@@ -492,6 +539,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       let window = controller.window { onboarding.hidePreparedBrowser(window) }
     if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }
+    if session == nil, libraryFirstSidebarDraw != nil {
+      DispatchQueue.main.async { [weak self,weak controller] in
+        guard let self,let controller,controller.window?.isVisible == true else { return }
+        controller.window?.displayIfNeeded()
+        self.libraryFirstSidebarDraws[controller.windowID] = ProcessInfo.processInfo.systemUptime
+        self.scheduleLibraryPrebuild()
+      }
+    }
     return controller
   }
 
@@ -584,6 +639,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    libraryFirstSidebarDraws.removeValue(forKey:id)
+    settingsPresenter.libraryWindowClosed(id)
     guard let factory = hostFactories[id] else { return }
     if let session = factory.incognitoSession {
       windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
@@ -797,6 +854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     stores.boosts.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     littleOpenCoordinator?.closeAll()
@@ -1097,7 +1155,8 @@ extension AppDelegate: CommandDispatcher {
     // Media grid (Captures + Screenshots), not playback.
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
-    case "view-history": settingsPresenter.showLibrary(section: .history)
+    case "view-history":
+      settingsPresenter.showLibrary(section: .history)
     case "view-boosts": settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .list, boostsProfileID: boostLibraryInvokingProfileID)
     case "boost-gallery": if boostGalleryEnabled { settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .gallery, boostsProfileID: boostLibraryInvokingProfileID) }
     case "keyboard-shortcuts-edu":

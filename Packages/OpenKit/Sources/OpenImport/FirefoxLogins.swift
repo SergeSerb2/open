@@ -18,9 +18,12 @@ public struct FirefoxLoginsReader: Sendable {
     public let profileDirectory: URL
     public init(profileDirectory: URL) { self.profileDirectory = profileDirectory }
 
-    /// Counts `logins.json` rows without touching `key4.db`.
+    /// Counts importable `logins.json` rows (http and https sites) without touching `key4.db`.
     public func countOnly() throws -> Int {
-        try loadJSON().count
+        try loadJSON().filter { entry in
+            guard let host = entry["hostname"] as? String, let scheme = URL(string: host)?.scheme?.lowercased() else { return false }
+            return scheme == "http" || scheme == "https"
+        }.count
     }
 
     /// True when `key4.db` cannot be opened with an empty password.
