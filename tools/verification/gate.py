@@ -606,6 +606,22 @@ def native_command(name, directory):
 CANCELLED = None
 
 
+def system_dialog_preflight():
+    """System dialogs (UserNotificationCenter permission prompts, crash reports, authorization) on screen.
+
+    The screen worker refuses them too, but only after the builds. This read-only CoreGraphics check runs
+    before any build, so a blocked Mac fails in seconds. It never sends Apple events or answers a dialog.
+    """
+    source = ROOT / 'tools/verification/system-windows.swift'
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:16]
+    helper = ROOT / 'build/verification' / ('system-windows-' + digest)
+    if not helper.is_file():
+        helper.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['xcrun', 'swiftc', '-O', str(source), '-o', str(helper)], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    return json.loads(subprocess.check_output([str(helper)], text=True, timeout=10))
+
+
 def main():
     global CANCELLED
     if '--heavy-worker' in sys.argv:
@@ -740,6 +756,14 @@ def main():
                 or (machine() == 'M1' and name in M5_E2E)
                 or (machine() == 'rented' and name in M5_E2E))
     local_e2e = [n for n in e2e if not required_elsewhere(n)]
+    if local_e2e or any(n in NATIVE for n in selected):
+        dialogs = system_dialog_preflight()
+        if dialogs:
+            owners = ', '.join(sorted({d.get('owner', '?') for d in dialogs}))
+            print('FAIL: a system dialog is on screen (%s). On-screen suites cannot run until it is answered or '
+                  'closed by a person; the gate leaves it untouched. On a rented Mac: '
+                  "ns.sh 'killall UserNotificationCenter'. Nothing was built." % owners, flush=True)
+            return 2
     heavy = Path.home() / 'Library/Caches/OpenRE/scripts/heavy.sh'
     command = [str(heavy), sys.executable, str(Path(__file__).resolve()), '--heavy-worker',
                '--selection', ','.join(n for n in selected if n in CLI) or 'build', '--log', str(directory)]
