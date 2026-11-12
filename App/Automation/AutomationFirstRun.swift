@@ -56,6 +56,14 @@ extension AutomationController {
           guard !wizard.busy else { throw Failure(message: "wizard is busy") }
           wizard.finish()
         case "settings-inspect": break
+        case "settings-provider":
+          guard wizard.step == .choose, wizard.plan.isArc, let id = args["id"] as? String, ArcImportProviders.provider(id: id) != nil
+          else { throw Failure(message: "wizard is not on the Arc Choose step or unknown provider") }
+          if let path = args["file"] as? String {
+            guard !path.isEmpty, path.utf8.count <= 4096, !path.contains("\0") else { throw Failure(message: "invalid provider file") }
+            await wizard.chooseProviderFile(id, url: URL(fileURLWithPath: path))
+          }
+          if let on = args["on"] as? Bool { wizard.setProvider(id, selected: on) }
         case "settings-open-sources":
           // The real sheet's own task loads the catalog; await the same call.
           await wizard.loadSources()
@@ -212,6 +220,11 @@ extension AutomationController {
         state["secretsUnfinishedMessage"] = wizard.unfinishedSecretsImportMessage ?? ""
         state["settingsFailures"] = wizard.outcome?.failures ?? [:]
         state["settingsReportValues"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.reportCategories.map { ($0, wizard.reportValue($0)) })
+        state["settingsProviders"] = wizard.providers.map { provider -> [String: Any] in
+          ["id": provider.id, "title": provider.title, "selected": wizard.plan.providers.contains(provider.id),
+           "count": wizard.providerCounts[provider.id] ?? NSNull(), "label": wizard.providerLabel(provider),
+           "report": wizard.displayedReportCategories.contains(provider.title) ? wizard.reportValue(provider.title) : ""]
+        }
         state["settingsTitle"] = wizard.title
         state["settingsSource"] = wizard.plan.source.importKey
         state["settingsSelectedSource"] = wizard.selectedSourceID
