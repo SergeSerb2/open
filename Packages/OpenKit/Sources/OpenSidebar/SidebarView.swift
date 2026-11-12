@@ -696,6 +696,14 @@ extension SidebarView {
         return convert(row.title.bounds, from: row.title)
     }
 
+    /// Developer Mode row state (PB3 row 5): the host subtitle, the title baseline, and the dashed outline.
+    public func developerRowState(tabID: ItemID) -> [String: Any]? {
+        guard let cell = cell(nodeID: tabID) as? TabCellView else { return nil }
+        let row = cell.superview as? SidebarRowView
+        let subtitle = cell.hostSubtitle.flatMap { $0.isHidden ? nil : $0.text() } ?? ""
+        return ["subtitle": subtitle, "titleBaseline": cell.title.baseline, "outline": row?.showsDeveloperOutline ?? false]
+    }
+
     public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
 
     public func resetAction(tabID: ItemID) -> NSView? {
