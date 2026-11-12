@@ -2,6 +2,7 @@ import AppKit
 import QuartzCore
 import OpenImport
 import OpenDocuments
+import OpenLiveData
 import OpenModel
 import OpenSettings
 import OpenSidebar
@@ -541,9 +542,15 @@ final class AppImportRunner: ProfileDataOwner {
       writes["open.calendar.reminder.\(targetID.description)"] = value; reminders += 1
     }
     let defaults = UserDefaults.standard
+    // Favorite tile hosts Arc had off stay off, merged with Open's own lists (audit A2).
+    for (arcKey, openKey) in ArcPreferenceMapping.favoriteHostLists {
+      guard let hosts = prefs.hostLists[arcKey], !hosts.isEmpty else { continue }
+      writes[openKey] = Set(defaults.stringArray(forKey: openKey) ?? []).union(hosts).sorted()
+    }
     let previous = Dictionary(uniqueKeysWithValues: writes.keys.map { ($0, defaults.object(forKey: $0)) })
     for (key, value) in writes { defaults.set(value, forKey: key) }
     SpaceHeaderPreference.shared.reload()
+    NotificationCenter.default.post(name: FavoriteTileSettings.didChange, object: defaults)
     undo.append(defaults: previous, applied: writes)
     counts["Arc settings"] = writes.count
     counts["Live Calendar reminders"] = reminders
