@@ -632,9 +632,10 @@ def run(factory, results, tmp, api):
                and len(a_objects) == 7 and len(imported_tabs) == 3, beforePick=before_pick, chosen=chosen,
                outcome=report.get('settingsOutcome'), tabs=[t['title'] for t in imported_tabs])
         # W01b: `SidebarEasel.customInfo.iconType` (easels-notes.md §3.2) becomes the Easel row's custom icon.
-        a_icon = next((t.get('iconOverride') for t in app.call('tabs') if a_tab and t['id'] == a_tab['tab']), None)
-        others = [t.get('iconOverride') for t in app.call('tabs') if t['url'].startswith('open://easel/') and (not a_tab or t['id'] != a_tab['tab'])]
-        record('W01b_easel_custom_icon', a_icon == {'type': 'emoji', 'value': '\U0001F3A8'} and others and all(i is None for i in others),
+        # `easel rows` covers every Space (the imported row sits in an imported Space).
+        a_icon = (a_tab or {}).get('iconEmoji')
+        others = [t.get('iconEmoji') for t in imported_tabs if not a_tab or t['tab'] != a_tab['tab']]
+        record('W01b_easel_custom_icon', a_icon == '\U0001F3A8' and others and all(i == '' for i in others),
                icon=a_icon, others=others)
         a_doc = Path(app.call('easel', action='store', document=a_url.rsplit('/', 1)[1])['path'])
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
