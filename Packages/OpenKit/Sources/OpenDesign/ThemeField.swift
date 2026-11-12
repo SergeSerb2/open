@@ -92,6 +92,9 @@ public enum ThemeField {
         /// behind the theme's alpha): it fits Arc's inactive light frame better than a constant
         /// backdrop shift (sidebar-compare `static-inactive`, worst ΔE00 1.17 against 1.85).
         let usesInactiveUnderlayFit: Bool
+        /// Editor themes in a light window scheme mix the fill and the underlay in
+        /// encoded sRGB (capture session 3 fit; `SidebarThemeRules.lightUnderlay`).
+        let mixesInSRGB: Bool
         /// True when the fill's coverage is the same everywhere (no overlay stops).
         var hasConstantCoverage: Bool { overlay.count != 2 }
 
@@ -122,22 +125,33 @@ public enum ThemeField {
             alpha = style.usesLegacyIntensity ? 0.64 : ThemeField.layerAlpha(intensity: style.intensityFactor)
             var isCorners = false
             if case .corners = style.fill { isCorners = true }
-            usesInactiveUnderlayFit = !isActive && !cardTint && translucency == .light && !isCorners
+            // Imports keep their fitted inactive underlay; editor themes use the
+            // backdrop shift (guess: Arc 1.172.2's inactive window was not re-measured).
+            usesInactiveUnderlayFit = legacy && !isActive && !cardTint && translucency == .light && !isCorners
+            mixesInSRGB = !legacy && !isCorners && style.windowColorScheme == .light
             let fitted: Double
             switch style.translucency {
             case .light: fitted = usesInactiveUnderlayFit ? ThemeField.lightUnderlayInactive : ThemeField.lightUnderlayActive
             case .dark: fitted = ThemeField.darkUnderlayActive
             }
-            // §17.2: preserve U0 at and above the wash cap. Light's uncaptured
-            // white-wash branch remains today's fitted underlay (documented guess).
-            underlay = !legacy && style.windowColorScheme == .dark
-                ? fitted * (1 - ThemeTuning.darkWashAlpha * min(alpha, ThemeTuning.washOpacityCap))
+            if legacy || isCorners {
+                underlay = fitted
+            } else if style.windowColorScheme == .dark {
+                // §17.2 wash law, preserving U0 at and above the wash cap.
+                underlay = SidebarThemeRules.darkUnderlay * (1 - ThemeTuning.darkWashAlpha * min(alpha, ThemeTuning.washOpacityCap))
                     / (1 - ThemeTuning.darkWashAlpha * ThemeTuning.washOpacityCap)
-                : fitted
+            } else {
+                underlay = SidebarThemeRules.lightUnderlay - SidebarThemeRules.lightUnderlaySlope * max(0, ThemeTuning.washOpacityCap - alpha)
+            }
             self.solidKey = solidKey
             if let key = solidKey {
                 let u0 = underlay * (1 - alpha)
-                solidColor = P3Transfer.toSRGB(P3(key.r * alpha + u0, key.g * alpha + u0, key.b * alpha + u0))
+                if mixesInSRGB {
+                    let (r, g, b) = P3Transfer.toSRGB(key)
+                    solidColor = (r * alpha + u0, g * alpha + u0, b * alpha + u0)
+                } else {
+                    solidColor = P3Transfer.toSRGB(P3(key.r * alpha + u0, key.g * alpha + u0, key.b * alpha + u0))
+                }
             } else { solidColor = nil }
         }
 
@@ -156,6 +170,10 @@ public enum ThemeField {
             if !legacy, corners.isEmpty {
                 let (color, a) = fill(u: u, v: v)
                 let u0 = underlay * (1 - a)
+                if mixesInSRGB {
+                    let (r, g, b) = P3Transfer.toSRGB(color)
+                    return (r * a + u0, g * a + u0, b * a + u0)
+                }
                 return P3Transfer.toSRGB(P3(color.r * a + u0, color.g * a + u0, color.b * a + u0))
             }
             if !corners.isEmpty {
@@ -226,6 +244,9 @@ public enum ThemeField {
         guard !style.usesLegacyIntensity, case .blended = style.fill,
               let p3 = CGColorSpace(name: CGColorSpace.displayP3), let srgb = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
         let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive)
+        // CoreAnimation blends in the display's encoded space. The light scheme's sRGB
+        // mix is drawn from the baked field instead (`makeImage`).
+        guard !e.mixesInSRGB else { return nil }
         var underlayGray = e.underlay
         if !isActive, !e.usesInactiveUnderlayFit {
             // The inactive shift moves only the underlay: exact while the fill's coverage is

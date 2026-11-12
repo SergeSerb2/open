@@ -10,6 +10,7 @@ import OpenSidebar
 import OpenFeatures
 import OpenTranslate
 import OpenSpaceEditor
+import OpenLibrary
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -74,9 +75,52 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
-  @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
-  @ObservationIgnored private(set) var library: LibraryViewModel?
-  @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
+  @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root, loadImmediately: false)
+  /// Library folder sources (PB1). Nothing reads the folders before "Choose Folders…".
+  @ObservationIgnored lazy var mediaFolders: LibraryMediaFoldersProvider = {
+    var folders = LibraryMediaFolders.user()
+    #if OPEN_AUTOMATION
+    // Fixture folders only: automation never reads the user's folders or meets a consent prompt.
+    if let root = ProcessInfo.processInfo.environment["OPEN_LIBRARY_MEDIA_FIXTURE"], root.hasPrefix("/") {
+      folders = .fixture(root: URL(fileURLWithPath: root, isDirectory: true))
+    }
+    #endif
+    let provider = LibraryMediaFoldersProvider(stateURL: app.directories.root.appendingPathComponent("State/library-media.json"), folders: folders)
+    provider.onChange = { [weak self] in self?.syncLibraryMediaSources(refresh: true) }
+    return provider
+  }()
+  /// The Library button's "Show media from:" menu state, for every window; refreshes open Media lists.
+  func syncLibraryMediaSources(refresh: Bool = false) {
+    let items = LibraryMediaSource.menuOrder.map { SidebarMediaSourceItem(id: $0.rawValue, title: $0.title, enabled: mediaFolders.isEnabled($0)) }
+    for controller in app.windowControllers where controller.context.libraryMediaSources != items { controller.context.libraryMediaSources = items }
+    guard refresh else { return }
+    for session in librarySessions.values { Task { @MainActor in await session.model.refreshExternalState(for: .media) } }
+  }
+  func toggleLibraryMediaSource(_ id: String) -> Bool {
+    guard let source = LibraryMediaSource(rawValue: id) else { return false }
+    mediaFolders.setEnabled(source, !mediaFolders.isEnabled(source)); return true
+  }
+  @ObservationIgnored var librarySessions: [WindowID: AppLibrarySession] = [:]
+  #if OPEN_AUTOMATION
+  @ObservationIgnored weak var lastClosedLibraryPanel: LibraryPanelView?
+  #endif
+  func libraryWindowClosed(_ id: WindowID) {
+    guard let session = librarySessions.removeValue(forKey: id) else { return }
+    #if OPEN_AUTOMATION
+    lastClosedLibraryPanel = session.panel
+    #endif
+    // Keep the session alive through windowDidClose. It owns native delegates
+    // and observation callbacks which must stop outside that callback stack.
+    DispatchQueue.main.async { session.dispose() }
+  }
+  var activeLibrarySession: AppLibrarySession? {
+    app.frontStandardWindowController.flatMap { librarySessions[$0.windowID] }
+  }
+  var library: LibraryViewModel? { activeLibrarySession?.model }
+  var libraryWindow: NSWindow? {
+    guard let session=activeLibrarySession, session.controller?.isLibraryOpen == true else { return nil }
+    return session.controller?.window
+  }
   func show(pane: PaneID? = nil) {
     #if OPEN_AUTOMATION
     let started = ProcessInfo.processInfo.systemUptime
@@ -107,35 +151,48 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     show(pane: .profiles)
   }
   func showLibrary(section: LibrarySection? = nil, boostsPresentation: BoostsPresentation? = nil, boostsProfileID: ProfileID? = nil) {
-    // Only the key Library owns its picker. Browser/editor requests use their
-    // explicit Profile even when the Library is already visible on Boosts.
-    // A general Library open changes neither layout nor Profile.
-    let preservesBoostsProfile = libraryPresenter?.window?.isKeyWindow == true
-    app.downloadsCenter.refreshFiles()
+    guard let controller = app.frontStandardWindowController ?? app.makeWindow(), let window = controller.window else { return }
+    librarySessions = librarySessions.filter { $0.value.controller != nil }
+    app.downloadsCenter.refreshFiles(); app.downloadsCenter.acknowledgeLibrary()
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
-    if library == nil {
-      let vm = LibraryViewModel(model: app.model, defaults: .standard, actions: self,
-        downloads: self, captures: captures, archives: archives, histories: histories,
-        snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self,
-        historyResolver: { [weak app] in app?.stores.history(for: $0) })
-      vm.boostsProvider = app.stores.boosts
-      library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
+    let session = makeLibrarySession(controller)
+    session.model.registerStores(archives: archives, histories: histories)
+    let target = section ?? session.model.section
+    if target == .boosts, let boostsPresentation, session.model.boostsPresentation != boostsPresentation {
+      if let panel = session.panel { panel.setBoostLayout(boostsPresentation == .gallery ? "Gallery" : "List") }
+      else { session.model.boostsPresentation = boostsPresentation }
     }
-    library?.registerStores(archives: archives, histories: histories)
-    if let library, section == .boosts {
-      if let boostsPresentation { library.boostsPresentation = boostsPresentation }
-      if !preservesBoostsProfile, let profileID = boostsProfileID ?? app.model.defaultProfile?.id,
-        app.model.profile(id: profileID) != nil {
-        library.historyProfileID = profileID
-      }
+    // Outside entry points use the browser owner. Internal panel navigation
+    // never calls this method and keeps the user's filter selection.
+    if let profileID = (target == .boosts ? boostsProfileID : nil) ?? controller.context.focusedSpace?.profileID {
+      if target == .downloads, session.model.downloadProfileFilter != profileID { session.model.downloadProfileFilter = profileID }
+      if (target == .history || target == .boosts), session.model.historyProfileID != profileID { session.model.historyProfileID = profileID }
     }
-    if let library, section == .history,
-      libraryPresenter?.window?.isVisible != true {
-      library.historyProfileID = app.frontStandardWindowController?.context.focusedSpace?.profileID
-        ?? app.model.defaultProfile?.id ?? library.historyProfileID
-    }
-    libraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
+    session.show(section: section)
+    window.makeKeyAndOrderFront(nil); NSApp.activate(); app.scheduleMenuRebuild()
+  }
+  func makeLibrarySession(_ controller:BrowserWindowController) -> AppLibrarySession {
+    if let session = librarySessions[controller.windowID] { return session }
+    let archives = Dictionary(uniqueKeysWithValues:app.model.profiles.map { ($0.id,app.archiveSink.store(for:$0.id)) })
+    let histories = Dictionary(uniqueKeysWithValues:app.model.profiles.compactMap { profile in app.stores.history(for:profile.id).map { (profile.id,$0) } })
+    let model = LibraryViewModel(model:app.model,defaults:.standard,actions:self,downloads:self,captures:captures,
+      archives:archives,histories:histories,snapshot:app.snapshotStore,faviconStore:app.stores.favicons,settingsActions:self,
+      historyResolver:{ [weak app] in app?.stores.history(for:$0) })
+    model.boostsProvider = app.stores.boosts
+    model.mediaFolders = mediaFolders
+    controller.onLibraryIdleRefresh = { [weak app] in app?.scheduleLibraryPrebuild() }
+    let session = AppLibrarySession(model:model,controller:controller); librarySessions[controller.windowID] = session
+    return session
+  }
+  func cancelLibraryIdleWork() { for session in librarySessions.values { session.cancelIdleWork() } }
+  func toggleLibrary(section: LibrarySection? = nil) {
+    if let session = activeLibrarySession, session.controller?.isLibraryOpen == true { session.close() }
+    else { showLibrary(section: section) }
+  }
+  func closeLibrary() {
+    activeLibrarySession?.close()
+    app.scheduleMenuRebuild()
   }
   /// Use the Library button's view model and confirmation dialog unchanged.
   func requestClearArchive() {
@@ -143,7 +200,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     library?.requestClearArchive()
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
-  @ObservationIgnored private var spaceManager: SpaceManagerView?
+  @ObservationIgnored private weak var spaceManager: SpaceManagerView?
   @ObservationIgnored private var pendingManagerProfileAlert: NSAlert?
   /// No persistent preference writes: this context never arms hover previews.
   @ObservationIgnored private let managerPreferences: UserDefaults = SpaceManagerPreferences()
@@ -187,7 +244,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         return self.confirmManagerDelete(intent, context: context, factory: factory)
       default: break
       }
-      if let factory, let handled = factory.performSidebar(intent) { return handled }
+      if let factory, let handled = factory.performSidebar(intent) {
+        if handled, case .select = intent { self.closeLibrary() }
+        return handled
+      }
       // No live browser (or a model-only intent): closing a pin must never archive it.
       switch intent {
       case .unloadTab: return false
@@ -217,7 +277,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   private func confirmManagerProfileChange(spaceID: SpaceID, profileID: ProfileID) -> Bool {
     guard let model = app.model,
       let request = ChangeProfileRequest(spaceID: spaceID, toProfile: profileID, in: model),
-      pendingManagerProfileAlert == nil, let window = libraryPresenter?.window,
+      pendingManagerProfileAlert == nil, let window = libraryWindow,
       window.attachedSheet == nil else { return false }
     let apply: @MainActor () -> Void = { [weak self] in
       guard let self, !self.app.terminationRequested, self.app.model === model,
@@ -244,7 +304,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return true
   }
   private func confirmManagerDelete(_ intent: SidebarIntent, context: SidebarContext, factory: EngineWebContentHostFactory?) -> Bool {
-    guard let model = app.model, let window = libraryPresenter?.window else { return false }
+    guard let model = app.model, let window = libraryWindow else { return false }
     let alert: NSAlert?, ids: [ItemID]
     switch intent {
     case .deleteSpace(let id): alert = SidebarConfirmations.deleteSpaceAlert(model: model, spaceID: id); ids = []
@@ -267,6 +327,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       }
       guard accepted else { return }
       restoreKeyboardFocus()
+      if case .deleteSpace = intent, let panel = self.activeLibrarySession?.panel, panel.isPresented { panel.focusRail() }
       self.app.scheduleSave(); self.app.scheduleMenuRebuild()
       if folders > 0 {
         self.app.hostFactories[context.windowID]?.controller?.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
@@ -305,7 +366,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return true
   }
   func refreshSpaceManagerContext() {
-    guard libraryPresenter?.window?.isVisible == true else { return }
+    guard libraryWindow?.isVisible == true else { return }
     library?.refreshSpaceManagerView()
   }
   var downloads: [DownloadItemSnapshot] { app.downloadsCenter.downloads }
@@ -323,6 +384,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     AppDelegate.commandLog(message)
   }
   var canImportPasswordsAndCookies: Bool { app.importRunner.canImportPasswordsAndCookies }
+  var canImportBrowserPasswords: Bool { app.importRunner.canImportBrowserPasswords }
   var hasUnfinishedSecretsImport: Bool { app.importRunner.hasUnfinishedSecretsImport }
   func isDefaultBrowser() -> Bool { app.defaultBrowserService.isDefaultBrowser }
   @ObservationIgnored private(set) var defaultBrowserRequest: Task<Void, Never>?

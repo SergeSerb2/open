@@ -41,6 +41,8 @@ public enum SidebarIntent: Equatable, Sendable {
     case selectFavorite(tabID: ItemID)
     case switchSpace(SpaceID)
     case showLibrary
+    /// "Show media from:" on the Library button (PB1): toggles one Library media source.
+    case toggleLibraryMediaSource(String)
     case newSpace
     case newFolder(in: NodeParent)
     case manageSpaces
@@ -136,6 +138,9 @@ public enum SidebarIntent: Equatable, Sendable {
     case newSplitView
     /// New Easel (plus menu, ⌃⇧E): handled by the App.
     case newEasel
+    /// Easel row menu: save as a web page, delete permanently (App).
+    case exportEasel(tabID: ItemID)
+    case deleteEasel(tabID: ItemID)
 }
 
 

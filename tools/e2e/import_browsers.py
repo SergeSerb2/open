@@ -8,6 +8,7 @@ unselectable sources (no data / not yet supported).
 """
 import json
 import os
+import shutil
 from pathlib import Path
 import sqlite3
 import time
@@ -38,6 +39,48 @@ def write_history(path, rows):
                            (i + 1, int(chromium_time(now - 60 * (i * 10 + v))), 1 if v == 0 else 0))
 
 
+def snss(commands, version=3):
+    """A synthetic Chromium session file: 'SNSS', int32 version, then uint16 size + uint8 id + payload."""
+    import struct
+    out = b'SNSS' + struct.pack('<i', version)
+    for cid, payload in commands:
+        out += struct.pack('<H', len(payload) + 1) + bytes([cid]) + payload
+    return out
+
+
+def navigation(tab, index, url, title):
+    import struct
+    def align(b): return b + b'\0' * (-len(b) % 4)
+    body = struct.pack('<ii', tab, index)
+    body += align(struct.pack('<i', len(url)) + url.encode())
+    t = title.encode('utf-16-le')
+    body += align(struct.pack('<i', len(title)) + t)
+    body += align(struct.pack('<i', 0)) + struct.pack('<ii', 0, 0)  # page state, transition, type mask
+    return (6, struct.pack('<I', len(body)) + body)
+
+
+def session_fixture(sessions):
+    """Window 1 (normal): tab 10 (two navigations, the second selected), pinned tab 11, chrome:// tab 12,
+    closed tab 13. Window 2 is closed (tab 20). Window 3 is a popup (tab 30). An older file and an encrypted
+    (version 5) file must be ignored."""
+    import struct
+    ii = lambda a, b: struct.pack('<ii', a, b)
+    cmds = [(9, ii(1, 0)), (9, ii(2, 0)), (9, ii(3, 1))]
+    for tab, window, index in ((10, 1, 0), (11, 1, 1), (12, 1, 2), (13, 1, 3), (20, 2, 0), (30, 3, 0)):
+        cmds += [(0, ii(window, tab)), (2, ii(tab, index))]
+    cmds += [navigation(10, 0, 'https://old.example.com/', 'Example Old'), navigation(10, 1, 'https://tab.example.com/', 'Example Tab'),
+             (7, ii(10, 1)), navigation(11, 0, 'https://pinned.example.com/', 'Example Pinned'), (12, struct.pack('<i?xxx', 11, True)),
+             navigation(12, 0, 'chrome://settings/', 'Settings'), navigation(13, 0, 'https://closed.example.com/', 'Example Closed'),
+             (16, struct.pack('<iiq', 13, 0, 0)), navigation(20, 0, 'https://window.example.com/', 'Example Window'),
+             (17, struct.pack('<iiq', 2, 0, 0)), navigation(30, 0, 'https://popup.example.com/', 'Example Popup'), (255, b'')]
+    sessions.mkdir(parents=True)
+    (sessions/'Session_13400000000000000').write_bytes(snss(cmds))
+    (sessions/'Session_13300000000000000').write_bytes(snss([(9, ii(1, 0)), (0, ii(1, 50)), navigation(50, 0, 'https://older.example.com/', 'Example Older')]))
+    (sessions/'Tabs_13400000000000000').write_bytes(snss([]))
+    encrypted = sessions.parent/'Sessions_Encrypted'; encrypted.mkdir()
+    (encrypted/'Session_13500000000000000').write_bytes(snss([], version=5))
+
+
 def fixture(library):
     """Synthetic Chrome (two profiles), an empty Brave folder, and a Firefox folder."""
     chrome = library/'Application Support/Google/Chrome'
@@ -65,6 +108,7 @@ def fixture(library):
                                              ('chrome://settings/', 'Settings', 1)])
     (chrome/'Default/Preferences').write_text(json.dumps({'default_search_provider_data': {'template_url_data': {
         'short_name': 'DuckDuckGo', 'keyword': 'duckduckgo.com', 'url': 'https://duckduckgo.com/?q={searchTerms}'}}}))
+    session_fixture(chrome/'Default/Sessions')
     # I-2: secret stores with rows only (no real ciphertext; counts are read without a key).
     with sqlite3.connect(chrome/'Default/Login Data') as db:
         db.executescript("""CREATE TABLE logins(origin_url VARCHAR NOT NULL, username_value VARCHAR, password_value BLOB,
@@ -94,7 +138,13 @@ def fixture(library):
     edge = library/'Application Support/Microsoft Edge/Default'; edge.mkdir(parents=True)
     body = json.dumps({'roots': {'bookmark_bar': {'type': 'folder', 'children': [url('30000000-0000-4000-a000-000000000001', 'Example Edge', 'https://edge.example.com/')]}}})
     (edge/'Bookmarks').write_text(body + ' ' * (limit - len(body)))
+    import struct
+    one_tab = snss([(9, struct.pack('<ii', 1, 0)), (0, struct.pack('<ii', 1, 5)), navigation(5, 0, 'https://edge-tab.example.com/', 'Example')])
+    (edge/'Sessions').mkdir()
+    (edge/'Sessions/Session_1').write_bytes(one_tab + b'\0' * ((32 << 20) - len(one_tab)))
     vivaldi = library/'Application Support/Vivaldi/Default'; vivaldi.mkdir(parents=True)
+    (vivaldi/'Sessions').mkdir()
+    (vivaldi/'Sessions/Session_1').write_bytes(one_tab + b'\0' * ((32 << 20) + 1 - len(one_tab)))
     (vivaldi/'Bookmarks').write_text(body + ' ' * (limit + 1 - len(body)))
     (library/'Application Support/BraveSoftware/Brave-Browser').mkdir(parents=True)
     (library/'Application Support/Arc').mkdir(parents=True)
@@ -130,7 +180,7 @@ def visit_count(app):
 def run(factory, results, tmp, h):
     library = Path(tmp)/'import-browsers'/'Library'
     if library.exists():
-        import shutil; shutil.rmtree(library)
+        shutil.rmtree(library)
     fixture(library)
     def row(name, ok, **detail):
         results[name] = dict(ok=bool(ok), **detail)
@@ -159,15 +209,16 @@ def run(factory, results, tmp, h):
     sources = {item['id']: item for item in s.get('settingsSources', [])}
     visible = [item['id'] for item in s.get('settingsSources', []) if item.get('visible')]
     # Capture s5: Arc lists detected browsers only, preselects nothing, and keeps Next disabled until a pick.
-    row('sources_detected', s.get('settingsStep') == 'Source' and visible == ['arc', 'chrome', 'firefox', 'edge', 'vivaldi']
+    row('sources_detected', s.get('settingsStep') == 'Source' and visible == ['arc', 'chrome', 'edge', 'vivaldi']
         and sources['chrome']['selectable'] and sources['arc']['selectable']
         and [p['name'] for p in sources['chrome']['profiles']] == ['Example Person', 'Example Work']
         and s.get('settingsSelectedSource') == '' and s.get('settingsCanContinueFromSource') is False,
         step=s.get('settingsStep'), visible=visible, selected=s.get('settingsSelectedSource'),
         canContinue=s.get('settingsCanContinueFromSource'))
-    # Capture s5 hides a detected browser without an importable profile; lead 01:55 keeps Firefox as "Coming soon".
+    # Capture s5 hides a detected browser without an importable profile. Firefox is supported since IMF (#338);
+    # this fixture's Firefox folder has no profiles.ini, so it is hidden like Brave.
     row('sources_hidden_without_profile', 'brave' in sources and 'brave' not in visible and 'opera' not in sources
-        and sources.get('firefox', {}).get('selectable') is False and sources['firefox']['status'] == 'Coming soon',
+        and 'firefox' not in visible and sources.get('firefox', {}).get('selectable') is False and sources['firefox']['status'] == 'No data',
         sources=sorted(sources), visible=visible, firefox=sources.get('firefox', {}).get('status'))
     app.call('first-run', action='settings-cancel-passwords')
 
@@ -191,13 +242,20 @@ def run(factory, results, tmp, h):
     data, nodes = sidebar(app)
     imported = [n for n in nodes if n not in before_nodes]
     folders = sorted('/'.join(n[1][1:]) for n in imported if n[0] == 'folder')
-    tabs = sorted(n[2] for n in imported if n[0] == 'tab')
+    tabs = sorted(n[2] for n in imported if n[0] == 'tab' and len(n[1]) > 1 and n[1][1] == 'Imported from Chrome')
     row('bookmarks_folder_tree', outcome.get('Bookmarks') == 4 and folders == [
             'Imported from Chrome', 'Imported from Chrome/Bookmarks bar', 'Imported from Chrome/Bookmarks bar/Example Folder',
             'Imported from Chrome/Other bookmarks'] and tabs == ['https://nested.example.com/a', 'https://one.example.com/',
             'https://other.example.com/', 'https://two.example.com/'] and outcome.get('Skipped bookmarks') == 1
         and report.get('settingsReportSummary') == 'Imported 4 bookmarks.' and not report.get('settingsError'),
         outcome=outcome, folders=folders, tabs=len(tabs), summary=report.get('settingsReportSummary'), error=report.get('settingsError'))
+    data_tabs = [dict(t) for space in data['spaces'] for t in
+                 [x['tab']['_0'] for x in space.get('today', []) if 'tab' in x]]
+    pinned_top = [n[2] for n in imported if n[0] == 'tab' and len(n[1]) == 1]
+    row('open_tabs', labels.get('Open tabs') == 'Found: 2' and outcome.get('Open tabs') == 2
+        and sorted(t['url'] for t in data_tabs if 'example.com' in t['url']) == ['https://tab.example.com/']
+        and pinned_top == ['https://pinned.example.com/'],
+        label=labels.get('Open tabs'), imported=outcome.get('Open tabs'), today=[t['url'] for t in data_tabs], pinned=pinned_top)
     after_visits = visit_count(app)
     row('history_imported', outcome.get('History') == 5 and after_visits - before_visits == 5,
         history=outcome.get('History'), visits=after_visits - before_visits)
@@ -213,11 +271,13 @@ def run(factory, results, tmp, h):
     at_limit, over_limit = labels_for('edge'), labels_for('vivaldi')
     row('bookmarks_size_limit', at_limit.get('Bookmarks') == 'Found: 1' and over_limit.get('Bookmarks') == 'Could not be read',
         atLimit=at_limit.get('Bookmarks'), overLimit=over_limit.get('Bookmarks'))
+    row('session_size_limit', at_limit.get('Open tabs') == 'Found: 1' and over_limit.get('Open tabs') == 'Could not be read',
+        atLimit=at_limit.get('Open tabs'), overLimit=over_limit.get('Open tabs'))
 
     _, again = run_import()
     repeat = again.get('settingsOutcome', {})
     data2, nodes2 = sidebar(app)
-    row('reimport_idempotent', repeat.get('Bookmarks') == 0 and repeat.get('History') == 0 and repeat.get('Duplicates', 0) >= 9
+    row('reimport_idempotent', repeat.get('Bookmarks') == 0 and repeat.get('Open tabs') == 0 and repeat.get('History') == 0 and repeat.get('Duplicates', 0) >= 9
         and sorted(map(str, nodes2)) == sorted(map(str, nodes)) and visit_count(app) == after_visits,
         repeat=repeat, nodes=len(nodes2))
 
@@ -261,3 +321,45 @@ def run(factory, results, tmp, h):
         and cr.get('unmappedProfiles') == 1 and cr['total']['logins']['added'] == 0,
         restricted=dict(profiles=sorted(rr.get('profiles', {})), unmapped=rr.get('unmappedProfiles'), logins=rr.get('total', {}).get('logins')),
         control=dict(profiles=sorted(cr.get('profiles', {})), unmapped=cr.get('unmappedProfiles')))
+
+    # Extra Arc data types (ArcImportProviders, for EZ's Easels): the automation-only fixture provider runs through
+    # the real Import from Arc wizard, runner, report and the single Undo/Redo.
+    app.quit()
+    import runpy as _runpy
+    arc = Path(tmp)/'import-browsers'/'ArcSource'
+    if arc.exists(): shutil.rmtree(arc)
+    _runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['fixture'](arc, h)
+    picked = Path(tmp)/'import-browsers'/'ProviderPick'
+    if picked.exists(): shutil.rmtree(picked)
+    picked.mkdir()
+    for name in ('a', 'b', 'c'): (picked/name).write_text('x')
+    app = factory(urls=(), fresh=True, extra_args=['--host-resolver-rules=MAP * ~NOTFOUND'],
+                  extra_env={'OPEN_AUTOMATION_FIXTURE_IMPORT_PROVIDER': '1'})
+    marker = Path(app.user_data)/'ImportProviderFixture'
+    def provider_import():
+        app.call('first-run', action='settings-import', directory=str(arc))
+        app.call('first-run', action='settings-provider', id='fixture', file=str(picked))
+        chosen = app.call('first-run', action='settings-inspect')
+        app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+        assert h.wait_until(lambda: state().get('settingsStep') == 'Report' and not state().get('settingsBusy'), timeout=120, step=.05), state()
+        report = state(); app.call('first-run', action='settings-done')
+        return chosen, report
+    chosen, first = provider_import()
+    first_files = sorted(p.name for p in marker.glob('*')) if marker.exists() else []
+    provider = (chosen.get('settingsProviders') or [{}])[0]
+    reported = (first.get('settingsProviders') or [{}])[0]
+    _, again = provider_import()
+    repeat = again.get('settingsOutcome', {})
+    app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+    for _ in range(2):
+        app.call('sidebar-key', key='z', modifiers=['command'])
+        assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    undone = sorted(p.name for p in marker.glob('*')) if marker.exists() else []
+    app.call('sidebar-key', key='z', modifiers=['command', 'shift'])
+    assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    redone = sorted(p.name for p in marker.glob('*')) if marker.exists() else []
+    row('arc_provider_import', provider.get('count') == 3 and provider.get('selected') is True
+        and first.get('settingsOutcome', {}).get('Example items') == 3 and reported.get('report') == '3'
+        and first_files == ['a', 'b', 'c'] and repeat.get('Example items') == 0 and undone == [] and redone == ['a', 'b', 'c'],
+        chosen=provider, report=reported.get('report'), files=first_files, repeat=repeat.get('Example items'),
+        undone=undone, redone=redone)

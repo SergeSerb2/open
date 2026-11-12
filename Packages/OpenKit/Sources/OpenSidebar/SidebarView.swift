@@ -704,6 +704,9 @@ extension SidebarView {
     }
 
     /// The context menu a row (or empty space, for nil) opens, for checks that run its items.
+    /// The Library button's right-click menu ("Show media from:"), as a right click builds it.
+    public func libraryButtonContextMenu() -> NSMenu? { bottomBar.home.contextMenuProvider?() }
+
     public func contextMenu(nodeID: ItemID?) -> NSMenu? {
         // A Favorite tile's menu, as the grid builds it on right-click (Favorites are not outline rows).
         if let nodeID, case .favorites? = context.model.parent(of: nodeID), let tab = context.model.tab(id: nodeID),
@@ -772,6 +775,33 @@ extension SidebarView {
     @discardableResult public func pressSiteControls() -> Bool { urlField.siteControls.accessibilityPerformPress() }
     public func refreshExtensionsLayout() { urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded() }
     public var urlFieldVisible: Bool { !urlField.isHidden }
+    /// Diagnostics: the URL field's host label (field points), long-host fade, alignment, first shown control x.
+    public var urlFieldHost: (frame: CGRect, faded: Bool, rightAligned: Bool, firstControlX: CGFloat?) {
+        urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded(); return urlField.hostState
+    }
+    /// Diagnostics: the shown URL-field controls (frame in sidebar points) and the accessibility labels the field exposes.
+    public var urlFieldControls: (copy: CGRect?, site: CGRect?, accessibilityLabels: [String]) {
+        urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded()
+        let shown = { (b: NSView) in b.isHiddenOrHasHiddenAncestor ? nil : self.convert(b.bounds, from: b) }
+        let children = NSAccessibility.unignoredChildren(from: urlField.accessibilityChildren() ?? [])
+        let labels = children.compactMap { ($0 as? NSView)?.accessibilityLabel() }
+        return (shown(urlField.copyLink), shown(urlField.siteControls), labels)
+    }
+    /// The URL field's frame in `view`'s coordinates while it shows (the inline address editor anchors here, plan D3 §2.2).
+    /// True when a window point is on a tab or Split View row (the command bar's click-through, LEAD 01:25).
+    public func isTabRow(atWindowPoint point: NSPoint) -> Bool {
+        guard let superview, !isHiddenOrHasHiddenAncestor else { return false }
+        var view = hitTest(superview.convert(point, from: nil))
+        while let current = view, current !== self {
+            if current is TabCellView || current is SplitCellView { return true }
+            view = current.superview
+        }
+        return false
+    }
+    public func urlFieldFrame(in view: NSView) -> CGRect? {
+        guard !urlField.isHiddenOrHasHiddenAncestor, window != nil, urlField.window === view.window else { return nil }
+        return view.convert(urlField.bounds, from: urlField)
+    }
     /// The URL field's text right now (the host, or the full URL for a Developer Mode site).
     public var urlFieldText: String { context.pageHost ?? "" }
     /// The status button under the URL field: frame in sidebar coordinates, shown, drawn title.

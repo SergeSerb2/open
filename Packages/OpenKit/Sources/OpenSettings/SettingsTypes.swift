@@ -61,8 +61,9 @@ public struct CaptureItemSnapshot: Identifiable, Codable, Sendable {
     public var createdAt: Date
     public var kind: CaptureKind
     public var sourceHost: String
-    public init(id: UUID, fileName: String, createdAt: Date, kind: CaptureKind, sourceHost: String) {
-        self.id = id; self.fileName = fileName; self.createdAt = createdAt; self.kind = kind; self.sourceHost = sourceHost
+    public var title: String?
+    public init(id: UUID, fileName: String, createdAt: Date, kind: CaptureKind, sourceHost: String, title: String? = nil) {
+        self.id = id; self.fileName = fileName; self.createdAt = createdAt; self.kind = kind; self.sourceHost = sourceHost; self.title = title
     }
 }
 public extension AutoArchiveInterval {

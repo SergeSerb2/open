@@ -3,7 +3,8 @@ import SQLite3
 import Security
 
 /// Writes a synthetic Gecko data root (profiles.ini + two profiles) for the e2e import check.
-/// Every value is generated here; no real browser data is read or copied.
+/// Every value is generated here; no real browser data is read or copied. Login hosts are under
+/// example.com: the mock-key engine accepts only those (open_profile_data_impl.cc FixtureHost).
 /// Profile "Synthetic Default": PBES2/AES-256 key store, no Primary Password, 3DES and AES logins.
 /// Profile "Synthetic Work": legacy SHA1+3DES key store protected by `primaryPassword`.
 public struct SyntheticFirefoxFixture: Sendable {
@@ -238,9 +239,9 @@ public struct SyntheticFirefoxFixture: Sendable {
             if realm == nil { entry["httpRealm"] = NSNull() }
             logins.append(entry)
         }
-        try login("https://login1.example.test", user: "synthetic-user-\(seed)-1", pass: "synthetic-pass-\(seed)-1", aes: false)
-        try login("https://login2.example.test:8443", user: "synthetic-user-\(seed)-2", pass: "synthetic-pass-\(seed)-2", aes: true)
-        try login("https://auth.example.test", user: "synthetic-user-\(seed)-3", pass: "synthetic-pass-\(seed)-3", aes: false, realm: "Synthetic Realm")
+        try login("https://login1.example.com", user: "synthetic-user-\(seed)-1", pass: "synthetic-pass-\(seed)-1", aes: false)
+        try login("https://login2.example.com:8443", user: "synthetic-user-\(seed)-2", pass: "synthetic-pass-\(seed)-2", aes: true)
+        try login("https://auth.example.com", user: "synthetic-user-\(seed)-3", pass: "synthetic-pass-\(seed)-3", aes: false, realm: "Synthetic Realm")
         try login("chrome://FirefoxAccounts", user: "synthetic-sync-\(seed)", pass: "synthetic-sync", aes: false)
         e.loginRows = 4; e.loginsKept = 3; e.loginsUnsupported = 1
         let json: [String: Any] = ["nextId": logins.count + 1, "logins": logins, "potentiallyVulnerablePasswords": [],

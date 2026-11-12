@@ -19,7 +19,7 @@ extension AppImportRunner {
                      wizard: ImportWizardViewModel, progress: (String, Double?, Bool) -> Void) async -> BrowserImportResult {
     var result = BrowserImportResult()
     guard source.family == .chromium else {
-      result.errorText = "Open cannot import from \(source.name) yet."; return result
+      return await importOtherBrowser(source: source, profile: sourceProfile, plan: plan, undo: undo, wizard: wizard, progress: progress)
     }
     let key = plan.source.importKey
     // Destination: the focused Space of the front window, else the first Space.
@@ -31,18 +31,25 @@ extension AppImportRunner {
     }
     undo.actionName = "Import from " + source.name
     let reader = ChromiumProfileReader(directory: sourceProfile.directory)
-    if plan.bookmarks || plan.searchSettings {
+    if plan.bookmarks || plan.searchSettings || plan.openTabs {
       progress("Importing your bookmarks…", nil, false)
-      let read = await Task.detached(priority: .utility) { () -> (roots: [ImportedBookmark], skipped: Int, failure: String?, search: ChromiumSearchEngine?) in
-        var roots: [ImportedBookmark] = [], skipped = 0, failure: String?
+      let session = ChromiumSessionReader(profileDirectory: sourceProfile.directory)
+      let read = await Task.detached(priority: .utility) { () -> (roots: [ImportedBookmark], skipped: Int, failure: String?, search: ChromiumSearchEngine?, tabs: [ChromiumOpenTab], tabsFailure: String?) in
+        var roots: [ImportedBookmark] = [], skipped = 0, failure: String?, tabs: [ChromiumOpenTab] = [], tabsFailure: String?
         if plan.bookmarks {
           do { (roots, skipped) = try reader.bookmarks() }
           catch ChromiumProfileReader.ReadError.missing { failure = "Not found" }
           catch { failure = "Could not be read" }
         }
-        return (roots, skipped, failure, plan.searchSettings ? reader.defaultSearchEngine() : nil)
+        if plan.openTabs {
+          do { tabs = try session.openTabs() }
+          catch ChromiumSessionReader.ReadError.missing {} // No session file: nothing to import, not a failure.
+          catch { tabsFailure = "Could not be read" }
+        }
+        return (roots, skipped, failure, plan.searchSettings ? reader.defaultSearchEngine() : nil, tabs, tabsFailure)
       }.value
       if let failure = read.failure { result.failures["Bookmarks"] = failure }
+      if let failure = read.tabsFailure { result.failures["Open tabs"] = failure }
       result.counts["Skipped bookmarks"] = read.skipped
       var settings = target.settings
       if let engine = read.search {
@@ -53,15 +60,19 @@ extension AppImportRunner {
         }
       }
       let model = BrowserBookmarksImport.sourceModel(roots: plan.bookmarks ? read.roots : [], browserName: source.name, sourceKey: key,
-                                                     profileID: target.id, settings: settings, spaceID: space.id)
+                                                     profileID: target.id, settings: settings, spaceID: space.id, openTabs: read.tabs)
+      let openIDs = Set(read.tabs.map { BrowserBookmarksImport.openTabID(sourceKey: key, url: $0.url) })
+      let openBefore = Set(openIDs.filter { self.app.model.node(id: $0) != nil })
       do {
         let merged = try undo.captureModel(app.model) {
-          try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: plan.bookmarks, favorites: false,
+          try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: plan.bookmarks || plan.openTabs, favorites: false,
             folders: plan.bookmarks, searchSettings: plan.searchSettings && read.search != nil, importedAt: Date(), saving: {
               try app.snapshotStore.saveNow(model: app.model)
             })
         }
-        result.counts["Bookmarks"] = merged.tabs
+        let openAdded = openIDs.subtracting(openBefore).filter { self.app.model.node(id: $0) != nil }.count
+        result.counts["Open tabs"] = openAdded
+        result.counts["Bookmarks"] = merged.tabs - openAdded
         result.counts["Bookmark folders"] = merged.folders
         result.counts["Search settings"] = merged.searchSettings
         result.counts["Duplicates", default: 0] += merged.duplicates

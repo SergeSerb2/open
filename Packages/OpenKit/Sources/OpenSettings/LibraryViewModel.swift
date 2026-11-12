@@ -11,7 +11,7 @@ import OpenStore
     public var section: LibrarySection { didSet {
         defaults.set(section.rawValue, forKey: "open.library.lastSection")
         if oldValue != section { statusText = ""; restoredSpaceID = nil; selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
-        if section == .spaces, cachedSpaceManagerView == nil { refreshSpaceManagerView() }
+        if usesLegacySpaceManager, section == .spaces, cachedSpaceManagerView == nil { refreshSpaceManagerView() }
     } }
     private var selections: [LibrarySection: Set<String>] = [:]
     private var queries: [LibrarySection: String] = [:]
@@ -37,8 +37,11 @@ import OpenStore
         if oldValue != historyProfileID { pendingHistoryDeletes = []; confirmsClearHistory = false; selectedIDs = [] }
     } }
     private var historyLoadRevision = 0
+    private var historyLoadedIdentity = ""
     public var confirmsClearHistory = false
     public var pendingHistoryDeletes: [URL] = []
+    public private(set) var historyHasMore = true
+    public private(set) var historyLoading = false
     public private(set) var historyRows: [HistoryMatch] = []
     public private(set) var historyFavicons: [URL: Data] = [:]
     public private(set) var thumbnailImages: [UUID: NSImage] = [:]
@@ -52,6 +55,8 @@ import OpenStore
     @ObservationIgnored private let settingsActions: (any SettingsActions)?
     @ObservationIgnored private let historyResolver: (@MainActor (ProfileID) -> HistoryStore?)?
     private var cachedSpaceManagerView: NSView?
+    /// The AppKit overlay owns its cards; do not build the legacy hosted grid.
+    @ObservationIgnored public var usesLegacySpaceManager = true
     /// Rendering reads the cache; section and presenter changes refresh it.
     public var spaceManagerView: NSView? { cachedSpaceManagerView }
     /// The presenter refreshes this when its browser context changes. The
@@ -61,10 +66,17 @@ import OpenStore
         let view = settingsActions?.makeSpaceManagerView()
         if cachedSpaceManagerView !== view { cachedSpaceManagerView = view }
     }
+    public func releaseContentViews() {
+        cachedSpaceManagerView = nil; rowIcons.removeAll(); iconRequests.removeAll()
+        thumbnails = [:]; thumbnailImages = [:]; faviconImages = [:]; historyFaviconImages = [:]
+    }
     public var boostsProvider: (any BoostsProvider)?
     public var boostsPresentation: BoostsPresentation = .list
+    public private(set) var libraryBoostRows: [BoostItemSnapshot] = []
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
+    /// Folder sources for Media (PB1). Nil in render fixtures that have no folders.
+    public var mediaFolders: LibraryMediaFoldersProvider?
     public private(set) var archives: [ProfileID: ArchiveStore]
     public private(set) var histories: [ProfileID: HistoryStore]
     public let faviconStore: FaviconStore?
@@ -72,6 +84,24 @@ import OpenStore
     private var archiveOwners: [ItemID: ProfileID] = [:]
     @ObservationIgnored private var archivedDisplayTitles: [ItemID: String] = [:]
     @ObservationIgnored private var archivedChildCounts: [ItemID: Int] = [:]
+    @ObservationIgnored private var rowIcons: [URL:NSImage] = [:]
+    @ObservationIgnored private var captureLocations: [UUID:URL] = [:]
+    @ObservationIgnored private var iconRequests: [URL:[@MainActor (NSImage?) -> Void]] = [:]
+    public func loadRowIcon(_ url:URL, completion:@escaping @MainActor (NSImage?) -> Void) {
+        if let cached = rowIcons[url] { completion(cached); return }
+        if iconRequests[url] != nil { if iconRequests[url]!.count < 32 { iconRequests[url]!.append(completion) }; return }
+        guard iconRequests.count < 16, let faviconStore else { return }
+        iconRequests[url] = [completion]
+        Task { @MainActor [weak self] in
+            let data = await faviconStore.icon(for:url)?.png32
+            guard let self else { return }
+            let image = data.flatMap { NSImage(data:$0) }
+            if rowIcons.count >= 512 { rowIcons.removeAll(keepingCapacity:true) }
+            if let image { rowIcons[url] = image }
+            let callbacks = iconRequests.removeValue(forKey:url) ?? []
+            for callback in callbacks { callback(image) }
+        }
+    }
     private var activeArchiveLoad = UUID()
     private var cursors: [ProfileID: Int] = [:]
     private var generation = UUID()
@@ -87,7 +117,8 @@ import OpenStore
     }
     /// The app supplies its shared stores when new profiles enter the model.
     public func registerStores(archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore]) {
-        self.archives.merge(archives) { _, shared in shared }; self.histories.merge(histories) { _, shared in shared }
+        for (id,store) in archives where self.archives[id] !== store { self.archives[id] = store }
+        for (id,store) in histories where self.histories[id] !== store { self.histories[id] = store }
     }
     public func refreshProfiles() {
         let ids = Set(model.profiles.map(\.id)); histories = histories.filter { ids.contains($0.key) } // Keep injected retired-profile archives searchable.
@@ -100,33 +131,69 @@ import OpenStore
         if let downloadProfileFilter, !ids.contains(downloadProfileFilter) { self.downloadProfileFilter = nil }
     }
     public var filterIdentity: String { "\(section.rawValue)|\(query)|\(archiveSpaceFilter?.description ?? "")|\(archiveReasonFilter?.rawValue ?? "")|\(archiveOriginFilter.rawValue)|\(historyProfileID)" }
-    public func refreshExternalState() async {
-        // Capture read failures belong to the capture sections, not the shared status bar.
-        try? (captures as? FileCapturesProvider)?.reload()
-        await reload()
+    public func query(for target:LibrarySection) -> String { target == section ? query : queries[target] ?? "" }
+    public func refreshExternalState(for target:LibrarySection? = nil) async {
+        let target = target ?? section
+        refreshProfiles()
+        switch target {
+        case .archive: await reloadArchive(text:query(for:.archive))
+        case .history: await reloadHistory(text:query(for:.history))
+        case .downloads: await downloads.refreshDownloads()
+        case .media,.captures:
+            await (captures as? FileCapturesProvider)?.refresh()
+            await mediaFolders?.refresh()
+            let rows = captures.captures,directory = captures.directory
+            let locations = await Task.detached(priority:.utility) {
+                Dictionary(uniqueKeysWithValues:rows.compactMap { item -> (UUID,URL)? in
+                    guard FileCapturesProvider.safeName(item.fileName) else { return nil }
+                    let url = directory.appendingPathComponent(item.fileName)
+                    guard (try? url.resourceValues(forKeys:[.isSymbolicLinkKey]).isSymbolicLink) == false else { return nil }
+                    return (item.id,url)
+                })
+            }.value
+            if !Task.isCancelled { captureLocations = locations }
+        case .boosts:
+            let profile = historyProfileID
+            let rows = await boostsProvider?.libraryBoosts(profileID:profile) ?? []
+            if !Task.isCancelled,profile == historyProfileID { libraryBoostRows = rows }
+        default: break
+        }
     }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() }; if section == .downloads { await downloads.refreshDownloads() } }
-    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archivedDisplayTitles = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
+    private var archiveQuery = ""
+    public func reloadArchive(text:String? = nil) async {
+        generation = UUID(); let request = generation
+        archiveQuery = text ?? query
+        var total = 0
+        for store in archives.values { total += await store.count() }
+        guard !Task.isCancelled,request == generation else { return }
+        archiveTotalCount = total; cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archivedDisplayTitles = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false
+        await loadNextArchivePage()
+    }
     public func loadNextArchivePage() async {
         guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation, load = UUID();activeArchiveLoad=load
         defer { if request == generation && load == activeArchiveLoad { archiveLoading = false } }
         var candidates: [(ProfileID, ArchivedTabRecord)] = []
         for (profile, store) in archives {
-            let page = await store.page(offset: cursors[profile, default: 0], query: query, spaceID: archiveSpaceFilter, reason: archiveReasonFilter, origin: archiveOriginFilter.rawValue)
+            let page = await store.page(offset: cursors[profile, default: 0], query: archiveQuery, spaceID: archiveSpaceFilter, reason: archiveReasonFilter, origin: archiveOriginFilter.rawValue)
             guard request == generation, !Task.isCancelled else { return }
             candidates += page.map { (profile, $0) }
         }
-        let page = Array(candidates.sorted { a, b in a.1.archivedAt == b.1.archivedAt ? a.1.id.description < b.1.id.description : a.1.archivedAt > b.1.archivedAt }.prefix(100))
-        for (profile, row) in page {
+        let input = candidates
+        let prepared = await Task.detached(priority:.userInitiated) {
+            let page = Array(input.sorted { a,b in a.1.archivedAt == b.1.archivedAt ? a.1.id.description < b.1.id.description : a.1.archivedAt > b.1.archivedAt }.prefix(100))
+            return page.map { profile,row in
+                let custom = (try? JSONDecoder().decode(ArchivedTitle.self,from:Data(row.payloadJSON.utf8)))?.customTitle
+                let title = row.kind == .folder ? row.title : custom ?? TidyTitles.tidyUncached(title:row.title,url:row.url)
+                return (profile,row,title,Self.countArchivedChildren(row))
+            }
+        }.value
+        guard !Task.isCancelled, request == generation else { return }
+        for (profile, row, title, children) in prepared {
             cursors[profile, default: 0] += 1; archiveOwners[row.id] = profile
-            let custom = (try? JSONDecoder().decode(ArchivedTitle.self, from: Data(row.payloadJSON.utf8)))?.customTitle
-            archivedDisplayTitles[row.id] = row.kind == .folder ? row.title : (custom ?? TidyTitles.tidy(title: row.title, url: row.url))
-            if row.kind == .folder { archivedChildCounts[row.id] = Self.countArchivedChildren(row) }
+            archivedDisplayTitles[row.id] = title; archivedChildCounts[row.id] = children
         }
-        archiveRows += page.map(\.1); archiveHasMore = page.count == 100; archiveLoading=false
-        if let faviconStore { for (_, row) in page { let icon = await faviconStore.icon(for: row.url)?.png32; guard generation == request, !Task.isCancelled else { return }
-            if favicons[row.id] != icon { faviconImages[row.id]=icon.flatMap{NSImage(data:$0)} }
-            favicons[row.id] = icon } }
+        archiveRows += prepared.map(\.1); archiveHasMore = prepared.count == 100; archiveLoading=false
     }
     private struct ArchivedTitle: Decodable { let customTitle: String? }
     public func archivedDisplayTitle(_ row: ArchivedTabRecord) -> String { archivedDisplayTitles[row.id] ?? row.title }
@@ -170,7 +237,7 @@ import OpenStore
     }
     public func archivedChildCount(_ row: ArchivedTabRecord) -> Int { archivedChildCounts[row.id] ?? 0 }
 
-    private static func countArchivedChildren(_ row: ArchivedTabRecord) -> Int {
+    nonisolated private static func countArchivedChildren(_ row: ArchivedTabRecord) -> Int {
         guard row.kind == .folder, let data = row.payloadJSON.data(using: .utf8),
               let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return 0 }
         func count(_ node: [String: Any]) -> Int {
@@ -240,6 +307,7 @@ import OpenStore
         return filtered.sorted { a, b in if captureSort == "Name" { return a.fileName.localizedStandardCompare(b.fileName) == .orderedAscending }; return captureSort == "Oldest" ? a.createdAt < b.createdAt : a.createdAt > b.createdAt }
     }
     public func captureURL(_ item: CaptureItemSnapshot) -> URL? {
+        if !usesLegacySpaceManager { return captureLocations[item.id] }
         guard FileCapturesProvider.safeName(item.fileName) else { return nil }
         let url = captures.directory.appendingPathComponent(item.fileName)
         guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == false else { return nil }; return url
@@ -260,5 +328,26 @@ import OpenStore
         catch { statusText = "Could not delete the capture. \(error.localizedDescription)" }
     }
     public func saveCapture(_ item: CaptureItemSnapshot, to url: URL) { statusText = actions.saveCapture(id: item.id, to: url) ?? "Saved." }
-    public func reloadHistory() async { historyLoadRevision += 1; let revision = historyLoadRevision, profile = historyProfileID, text = query; let rows: [HistoryMatch]; if text.isEmpty { rows = await histories[profile]?.recent() ?? [] } else { rows = await histories[profile]?.search(text, limit: 100) ?? [] }; guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows; if historyFaviconImages.count > 512 {historyFavicons=[:];historyFaviconImages=[:]}; if let faviconStore { for row in rows { let data = await faviconStore.icon(for: row.url)?.png32; guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else {return}; if historyFavicons[row.url] != data {historyFaviconImages[row.url]=data.flatMap{NSImage(data:$0)}};historyFavicons[row.url] = data } } }
+    public func reloadHistory(text:String? = nil) async {
+        historyLoadRevision += 1; historyLoading = false; historyHasMore = true
+        historyQuery = text ?? query
+        let identity = historyProfileID.description+"|"+historyQuery
+        if identity != historyLoadedIdentity { historyRows = [] }
+        historyLoadedIdentity = identity
+        await loadNextHistoryPage(reset:true)
+    }
+    private var historyQuery = ""
+    public func loadNextHistoryPage(reset:Bool = false) async {
+        guard historyHasMore, !historyLoading else { return }
+        historyLoading = true
+        let revision = historyLoadRevision, profile = historyProfileID, text = historyQuery, offset = reset ? 0 : historyRows.count
+        defer { if revision == historyLoadRevision { historyLoading = false } }
+        let rows: [HistoryMatch]
+        if text.isEmpty { rows = await histories[profile]?.recent(limit:100,offset:offset) ?? [] }
+        else { rows = Array((await histories[profile]?.search(text,limit:offset+100) ?? []).dropFirst(offset)) }
+        guard revision == historyLoadRevision, profile == historyProfileID, text == historyQuery, !Task.isCancelled else { return }
+        if reset { historyRows = rows } else { historyRows += rows }
+        historyHasMore = rows.count == 100
+        if historyFaviconImages.count > 512 { historyFavicons = [:]; historyFaviconImages = [:] }
+    }
 }

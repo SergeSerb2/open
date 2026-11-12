@@ -13,7 +13,7 @@ QUICK=0
 ONLY=
 ARC=0
 KEEP=0
-NAMES='commands-demo roundtrip space-legacy space-pad-compare suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles sidebar-render sidebar-compare commandbar-render extensions-render onboarding-render boosts import-arc verify-secrets-fixture'
+NAMES='commands-demo roundtrip space-legacy space-pad-compare suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles sidebar-render sidebar-theme-roles sidebar-compare commandbar-render extensions-render onboarding-render boosts import-arc verify-secrets-fixture'
 
 usage() {
     cat <<EOF
@@ -142,6 +142,9 @@ available() {
             # These are scripts, not openkit usage tokens. Missing capture
             # inputs are a failed check; only an absent target permits SKIP.
             return 0
+            ;;
+        sidebar-theme-roles)
+            [ -f "$BIN/sidebar-render" ] || { missing_target sidebar-render; return $?; }
             ;;
         space-legacy)
             [ -f "$BIN/openkit" ] || { missing_target openkit; return $?; }

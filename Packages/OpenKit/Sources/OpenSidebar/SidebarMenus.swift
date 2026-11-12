@@ -117,6 +117,7 @@ struct SidebarMenus {
     /// Today (unpinned) tab: capture session 2, 08-folder-preview frame 0050.
     /// Archive Other Tabs remains a guessed Option alternate.
     func todayTab(_ tab: Tab) -> NSMenu {
+        if Self.isEasel(tab) { return easel(tab) }
         if context.isIncognito {
             return menu([item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
                 item("Open in Split View", .openInSplitView(tabID: tab.id)),
@@ -146,6 +147,7 @@ struct SidebarMenus {
 
     /// Pinned tab, at the top level or in a folder (F0116).
     func pinnedTab(_ tab: Tab) -> NSMenu {
+        if Self.isEasel(tab) { return easel(tab) }
         let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
         edit.submenu = menu([
             item("Replace Pinned URL with Current", enabled: tab.hasLeftPinnedURL, .replacePinnedURL(tabID: tab.id)),
@@ -167,6 +169,29 @@ struct SidebarMenus {
             moveTo(tab.id),
             .separator(),
             item("Remove Pin", .unpin(tabID: tab.id)),
+        ])
+    }
+
+    static func isEasel(_ tab: Tab) -> Bool { tab.url.scheme?.lowercased() == "open" && tab.url.host()?.lowercased() == "easel" }
+
+    /// Easel row in Arc's order (C-measurements-s4 `e7-row-menu-ax`, LEAD 04:05): Copy Link · — ·
+    /// Change Icon… · Rename… · — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar ·
+    /// Delete Easel. Copy Link copies the Easel's own address (`open://easel/…`, opens it from
+    /// the command bar); Arc's per-Easel "save as a web page" row sits with it.
+    func easel(_ tab: Tab) -> NSMenu {
+        let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
+        return menu([
+            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+            item("Save as Web Page…", .exportEasel(tabID: tab.id)),
+            .separator(),
+            item("Change Icon…", .changeIcon(nodeID: tab.id)),
+            rename,
+            .separator(),
+            item("Add Split View", .addSplitView(tabID: tab.id)),
+            moveTo(tab.id),
+            .separator(),
+            item("Remove Easel from Sidebar", .close(nodeID: tab.id)),
+            item("Delete Easel", .deleteEasel(tabID: tab.id)),
         ])
     }
 
@@ -362,6 +387,21 @@ struct SidebarMenus {
     /// Right-click on the URL field (CC-36; order guess).
     func urlField() -> NSMenu {
         menu([item("Show as Toolbar", .setToolbarShown(true)), .separator(), item("Manage Extensions", .manageExtensions)])
+    }
+
+    /// Right click on the Library button (capture C-report-s3 Part D): a disabled
+    /// "Show media from:" header, then Documents · Desktop · Screenshots · Captures · Downloads.
+    func libraryMediaSources() -> NSMenu? {
+        let sources = context.libraryMediaSources
+        guard !sources.isEmpty else { return nil }
+        var items: [NSMenuItem] = [ClosureMenuItem("Show media from:", enabled: false) {}]
+        for source in sources {
+            let entry = item(source.title, .toggleLibraryMediaSource(source.id))
+            entry.state = source.enabled ? .on : .off
+            entry.identifier = NSUserInterfaceItemIdentifier("library-media-source-" + source.id)
+            items.append(entry)
+        }
+        return menu(items)
     }
 
     func plus() -> NSMenu {

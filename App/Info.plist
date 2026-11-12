@@ -49,6 +49,12 @@
 	<string>Open shows your upcoming meetings and joins their video calls.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Websites you visit can ask to use your camera.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>The Library can show images and videos from your Desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>The Library can show images and videos from your Documents folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>The Library can show images and videos from your Downloads folder.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Websites you visit can ask to use your microphone.</string>
 	<key>NSLocationUsageDescription</key>

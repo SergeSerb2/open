@@ -6525,23 +6525,19 @@ def media_checks(factory, results, tmp):
         still = app.eval(video, "document.getElementById('main').paused") is False
         results["media_auto_pip_return"] = {"ok": bool(closed) and still and closed.get("reason") == "sourceShown", "pip": pip(), "playing": still}
 
-        # PB1 / D-4 revised: a minimized window is a leave for the tab it shows (Arc:
-        # `presentPipForOccludedWindow`); restoring it closes the automatic PiP like a tab return.
+        # D-4, confirmed by capture (C-report-s6 §5, Arc 1.172.2): minimizing a window that shows
+        # audible video opens no PiP. Only a tab leave does.
         app.call("window-miniaturize")
-        mini_pip = wait_until(lambda: (lambda p: p if p["state"] == "active" and p.get("tab") == video else None)(pip()), timeout=3, step=.02)
-        mini_decision = m(video)["decision"]
+        mini_state = state_when(app, lambda st: st["miniaturized"], timeout=5, step=.05)
+        time.sleep(1.0)
+        mini_pip = pip()
         app.call("window-deminiaturize")
-        # A Dock click also activates Open. Without that, the restored window is an inactive,
-        # covered window: by the same rule an occlusion (leave), so PiP would stay open.
         app.call("window-focus", id=app.call("window-state")["id"], activate=True)
-        restored = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
+        restored_state = state_when(app, lambda st: not st["miniaturized"], timeout=5, step=.05)
         restored_playing = app.eval(video, "document.getElementById('main').paused") is False
-        results["media_auto_pip_window_hidden"] = {"ok": bool(mini_pip) and bool(mini_pip and mini_pip.get("automatic"))
-            and bool(restored) and restored.get("reason") == "sourceShown" and restored_playing,
-            "minimized": mini_pip, "decision": mini_decision, "restored": restored, "playing": restored_playing}
-        # Like the tab-return row: the page itself leaves PiP when the close animation ends.
-        settled = wait_until(lambda: pip()["state"] == "closed" and not m(video)["pictureInPicture"], timeout=3, step=.05)
-        results["media_auto_pip_window_hidden"]["settledClosed"] = bool(settled)
+        results["media_no_auto_pip_on_minimize"] = {"ok": bool(mini_state) and mini_pip["state"] != "active"
+            and not m(video)["pictureInPicture"] and bool(restored_state) and restored_playing,
+            "pipWhileMinimized": mini_pip, "playing": restored_playing}
 
         # E-M7: Close pauses and snoozes until the tab shows again.
         select(home); wait_pip("active")
@@ -8974,9 +8970,18 @@ def routing_checks(factory, results, tmp):
                 forced.append(pid)
                 try: os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError: pass
-        # This App was closed by the row itself; its cleanup receipt is the row's own process proof.
-        app.quit_report = {'ok': not forced and not any(pid_alive(p) for p in (old_pid, relaunched) if p),
-                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced}
+        # This App was closed by the row itself; its cleanup receipt is the row's own process and
+        # window proof, in the same shape as Open.quit() (gate_evidence checks windows_after_quit).
+        pids = [p for p in (old_pid, relaunched) if p]
+        remaining = [p for p in pids if pid_alive(p)]
+        try:
+            windows_after = json.loads(subprocess.run([app.window_counter] + [str(p) for p in pids],
+                                                      capture_output=True, text=True, timeout=10, check=True).stdout)
+        except Exception as error:
+            windows_after = {'count': None, 'error': str(error)}
+        app.quit_report = {'ok': not forced and not remaining and windows_after.get('count') == 0,
+                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced,
+                           'remaining_processes': remaining, 'windows_after_quit': windows_after, 'owned_pids': pids}
         record('routing_deep_link_restart_quit', sent.returncode == 0 and bool(gone) and bool(relaunched)
                and sent_quit is not None and sent_quit.returncode == 0 and bool(quit_done),
                oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done),
@@ -9097,11 +9102,66 @@ def commandbar_checks(factory, results, tmp, config):
         results['native_field_undo_preserves_model'] = {'ok': bool(native_undone) and state()['presented'] and len(app.call('tabs')) == before_text_undo, 'before':native_before, 'after':state(), 'route':native_route}
         press('escape'); time.sleep(.25)
         counts = app.call('host-counts')['created']; selected_before = app.call('window-state')['selected']
-        bar('t'); type_query(origin + '/background'); press('return', modifiers=['cmd'])
+        bar('t'); type_query(origin + '/background'); before_return = dict(state(), focus=app.call('focus-state')); press('return', modifiers=['cmd'])
         background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/background'), None), step=.1)
         assert background, app.call('tabs')
+        # Cmd+Return keeps the bar open with the text selected (Arc 11-returns; plan D3 §2.3). Read the bar
+        # before any page call: automation waits and evaluations on the new page are not user input.
+        kept = wait_until(lambda: (lambda st: st if st['presented'] and st['range'] == [0, len(st['fieldText'])] and st['fieldText'] else None)(state()), timeout=3, step=.05)
+        kept_state = dict(state(), focus=app.call('focus-state'))
+        # A second Cmd+Return on the next entry adds a second background tab; the bar still stays.
+        type_query(origin + '/background2'); press('return', modifiers=['cmd'])
+        second = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/background2'), None), step=.1)
+        twice_state = state()
+        press('escape'); wait_until(lambda: not state()['presented'], timeout=3, step=.05)
         app.call('wait', tab=background['id'])
-        results['command_return_background'] = {'ok': app.call('window-state')['selected'] == selected_before and app.call('host-counts')['created'] == counts + 1 and app.eval(background['id'], 'document.title') == 'Shell C /background'}
+        results['command_return_background'] = {'ok': app.call('window-state')['selected'] == selected_before and app.call('host-counts')['created'] >= counts + 1
+            and app.eval(background['id'], 'document.title') == 'Shell C /background' and bool(kept), 'bar': kept_state, 'beforeReturn': before_return}
+        results['command_return_twice'] = {'ok': bool(second) and twice_state['presented'] and app.call('window-state')['selected'] == selected_before
+            and app.call('host-counts')['created'] == counts + 2, 'bar': twice_state}
+        # A second Cmd+T closes the New Tab bar; a second Cmd+L closes the address editor (Arc 06-keys, 12c).
+        bar('t', 'window'); press('t', modifiers=['cmd'], route='window')
+        closed_t = wait_until(lambda: not state()['presented'], timeout=3, step=.05)
+        results['cmd_t_twice_closes'] = {'ok': bool(closed_t), 'bar': state()}
+        edit = bar('l', 'window')
+        field = app.call('window-state').get('sidebarFrame')
+        frame = edit['panelFrame']
+        # Anchored to the URL field [8, 46, W − 16, 36], 1 pt above it, never narrower than 340 (plan D3 §2.2; LEAD 12:12).
+        results['cmd_l_inline_anchor'] = {'ok': edit['presentation'] == 'anchored' and frame[0] == 8 and frame[1] == 45
+            and frame[2] == max(340, app.call('window-state')['sidebarWidth'] - 16), 'panelFrame': frame, 'sidebar': field}
+        press('l', modifiers=['cmd'], route='window')
+        closed_l = wait_until(lambda: not state()['presented'], timeout=3, step=.05)
+        results['cmd_l_twice_closes'] = {'ok': bool(closed_l), 'bar': state()}
+        # A hidden sidebar keeps the centred card for Cmd+L (plan D3 §2.2, lead decision).
+        mode_before = app.call('window-state')['sidebarMode']
+        press('s', modifiers=['cmd'], route='window')
+        wait_until(lambda: app.call('window-state')['sidebarMode'] == 'hidden', timeout=3, step=.05)
+        hidden_bar = bar('l', 'window')
+        results['cmd_l_hidden_sidebar_centred'] = {'ok': hidden_bar['presentation'] == 'overlay' and hidden_bar['mode'] == 'editCurrentURL',
+            'bar': {k: hidden_bar[k] for k in ('presentation', 'panelFrame', 'mode')}, 'sidebarModeBefore': mode_before}
+        press('escape'); wait_until(lambda: not state()['presented'], timeout=3, step=.05)
+        press('s', modifiers=['cmd'], route='window')
+        wait_until(lambda: app.call('window-state')['sidebarMode'] == mode_before, timeout=3, step=.05)
+        # Option+Return opens the page beside the current page in Split View (Arc 11-returns).
+        tabs_before = len(app.call('tabs'))
+        bar('l', 'window'); type_query(origin + '/beside'); press('return', modifiers=['option'])
+        split_shown = wait_until(lambda: (lambda w: w if len(w['shownPages']) == 2 else None)(app.call('window-state')), timeout=5, step=.1)
+        beside = next((t for t in app.call('tabs') if t['url'] == origin + '/beside'), None)
+        results['option_return_split'] = {'ok': bool(split_shown) and bool(beside) and len(app.call('tabs')) == tabs_before + 1 and not state()['presented'],
+            'window': app.call('window-state')}
+        # Failure case: a split at its maximum (4 panes) cannot grow; Option+Return loads in the focused pane.
+        for i in range(2):
+            bar('l', 'window'); type_query(origin + '/pane%d' % i); press('return', modifiers=['option'])
+            wait_until(lambda: len(app.call('window-state')['shownPages']) == 3 + i, timeout=5, step=.1)
+        full = app.call('window-state'); tabs_full = len(app.call('tabs'))
+        bar('l', 'window'); type_query(origin + '/focused'); press('return', modifiers=['option'])
+        loaded = wait_until(lambda: any(t['url'] == origin + '/focused' for t in app.call('tabs')), timeout=5, step=.1)
+        results['option_return_full_split_loads_focused'] = {'ok': len(full['shownPages']) == 4 and bool(loaded) and len(app.call('tabs')) == tabs_full
+            and len(app.call('window-state')['shownPages']) == 4, 'window': app.call('window-state')}
+        for t in app.call('tabs'):
+            if t['id'] != new['id'] and (t['url'].startswith(origin + '/pane') or t['url'] in (origin + '/beside', origin + '/focused')):
+                app.call('close', tab=t['id'])
+        app.call('select', tab=new['id']); app.call('focus', tab=new['id'])
         for action, query, expected in [('pin-tab','Pin Tab','pinned'),('unpin-tab','Unpin Tab','today')]:
             bar('t'); actions = type_query(query); assert actions, state()
             index = next(i for i,r in enumerate(actions['rows']) if r['action'] == action)
@@ -10338,8 +10398,18 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == background_url), None), timeout=5)
     require('E13_commandbar_cmd_return_unread', background and background['unread'] and state()['selected'] == current
             and app.call('sidebar-row', node=background['id'])['unreadBadge'], tab=background)
+    # Cmd+Return keeps the bar open (plan D3 2.3). In Arc one click on a sidebar tab row closes the bar AND selects
+    # the row, in both Cmd+T and Cmd+L modes (capture C-report-s5 section 4, LEAD 01:25).
+    require('E13_commandbar_stays_open_after_cmd_return', app.call('commandbar-state').get('presented') is True)
     click(background['id'])
+    require('E13_click_row_closes_bar_and_selects', not app.call('commandbar-state').get('presented')
+            and state()['selected'] == background['id'], selected=state()['selected'])
     require('E13_sidebar_select_clears_unread', not app.tab(background['id'])['unread'] and not app.call('sidebar-row', node=background['id'])['unreadBadge'])
+    app.call('key', key='l', modifiers=['cmd'], route='app')
+    opened_l = wait_until(lambda: app.call('commandbar-state').get('presented'), timeout=3, step=.02)
+    click(current)
+    require('E13_cmd_l_click_row_closes_bar_and_selects', opened_l and not app.call('commandbar-state').get('presented')
+            and state()['selected'] == current, selected=state()['selected'], mode=app.call('commandbar-state').get('mode'))
     hover_result = app.call('hover', favorite=favorite, ms=600); leave = app.call('hover', leave=True, ms=300)
     require('A3_favorite_hover_wrapper', hover_result['kind'] == 'page' and hover_result['target'] == favorite and leave['kind'] == 'none', preview=hover_result, leave=leave, expected=favorite,
             window=state(), favorite=app.tab(favorite), preferences={key: app.call('defaults', key=key) for key in ('open.general.previewsEnabled', 'open.general.previewsPages')})
@@ -12725,9 +12795,9 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -13063,6 +13133,10 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/import_browsers.py'))['run'](
                 factory, results[opts.only], tmp, sys.modules[__name__])
+        elif opts.only == "import-other-browsers":
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/import_other_browsers.py'))['run'](
+                factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "secrets-import":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/secrets_import.py'))['run'](
@@ -13071,6 +13145,14 @@ def main():
             results["onboarding"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
                 factory, results["onboarding"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-export":
+            results["notes-export"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_export.py"))["run"](
+                factory, results["notes-export"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-format":
+            results["notes-format"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_format.py"))["run"](
+                factory, results["notes-format"], tmp, sys.modules[__name__])
         elif opts.only == "easel":
             results["easel"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/easel.py"))["run"](
@@ -13342,14 +13424,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

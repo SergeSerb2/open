@@ -28,6 +28,7 @@ enum RenderCLI {
         case "sm6-cost": try SM6CostGate.run(rest)
         case "divider-check": try DividerChecks.run(rest)
         case "url-status": try URLStatusChecks.render(rest)
+        case "theme-roles": try ThemeRoleChecks.run(rest)
         default: throw CLIError(description: usage)
         }
     }
@@ -55,6 +56,7 @@ enum RenderCLI {
       sidebar-render compare-media --state row-audible|row-muted --arc FRAME.png --arc-ax AX.json --ours FILE.png --ours-frames FILE.json --out DIR
       sidebar-render check
       sidebar-render url-status --out DIR [--scale 1|2]
+      sidebar-render theme-roles --ref tools/verification/sidebar-theme-roles.json [--table]
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
       sidebar-render sm6-cost [--fail-child-after-host]
     """
