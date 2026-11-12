@@ -971,3 +971,30 @@ automation reports each provider generation, so the History flow checks that
 repeated owner entry causes no provider reload. Internal section navigation
 has its own assertion that the selected Profile stays unchanged. These entry
 changes share the single LEAD20:45 open/list-scroll qualification.
+
+
+## LEAD 20:45 / 21:40 functional follow-through
+
+The real NS1 before case stored Profile2 visits but did not publish them into
+the open Library. After the Profile subscription repair, the complete History
+suite passes on `df114110`, including separate SQLite, model and native live-row
+evidence, isolation, internal navigation, owner reset and equal-owner provider
+generation. Complete rented functional results for the resulting Library module:
+
+| Real-App suite | Host and head | Result |
+|---|---|---|
+| History | NS1, `df114110` | PASS; Profile2 and owner/filter cases |
+| Library content | NS1, `6b9d9def` | 96/96 PASS |
+| Library overlay | NS1, `6b9d9def` | 40/40 PASS |
+| Application-route rail/search/filter/list keys | NS1, `6b9d9def` | 17/17 PASS |
+| Downloads observers | NS2, `2c2ae8f7` | 7/7 PASS |
+
+The content fixture retains its exact 1280×800 viewport, with its right edge
+inside the rented display so the native Boost editor can select its screen.
+Downloads chip checks clear the owner-selected filter before selecting it.
+The overlay requires the actual LibrarySearchEditor subclass and verifies
+real typing. Native Gallery automation uses rendered NSButton target/action,
+the unique `library.search` field, and bounded provider waits. It preserves
+all card, live-page, Profile isolation, edit, delete and owner assertions.
+The full Gallery rerun and single M1 open/list-scroll qualification are pending.
+Other accepted receipts carry only under the lead's unchanged-path ruling.

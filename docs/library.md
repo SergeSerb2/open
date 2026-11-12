@@ -6,6 +6,13 @@ on the right. The sidebar Library button toggles the panel; ⌘Y opens History.
 Downloads and the existing menu, command-bar, capture and Boost entry points use
 the same panel. Little Open routes Library to a standard browser window.
 
+Outside menu, hotkey and command-bar entry points for History, Downloads and
+Boost Gallery select the browser window's owner Profile, even when Library is
+already open. If that Profile is already selected, entry does not reload the
+provider. Navigation within Library, including section changes and filters,
+keeps the user's chosen filter. A History Profile change cancels the old store
+subscription and stale provider, then subscribes to the new Profile's store.
+
 The rail is 112pt wide. Ordinary sections end at x417; Spaces leaves 56pt of the
 page visible. The selected tile has a fill. A focus ring appears during keyboard
 navigation and clears with pointer input. Foreground and background come from
