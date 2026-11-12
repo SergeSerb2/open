@@ -7,6 +7,25 @@ final class LibraryControl: NSButton {
     private let iconLayer = CALayer()
     private let textLayer = LibraryText.layer()
     private let dotLayer = CALayer()
+    /// The label Open draws in `textLayer`. NSButton's own title stays empty: when both were set,
+    /// the button cell drew a second, unstyled label (rail items showed "Media" over the glyph and
+    /// again below it; PB1 rail fix). VoiceOver reads the accessibility label set here.
+    private var label = ""
+    override var title: String {
+        get { label }
+        set {
+            label = newValue
+            if !super.title.isEmpty { super.title = "" }
+            setAccessibilityLabel(newValue.isEmpty ? nil : newValue)
+            needsDisplay = true
+        }
+    }
+    override var attributedTitle: NSAttributedString {
+        get { NSAttributedString(string: label) }
+        set { title = newValue.string }
+    }
+    /// Labels this control draws: its own text layer, plus NSButton's cell title if one is set.
+    var drawnLabelCount: Int { (textLayer.isHidden || label.isEmpty ? 0 : 1) + (super.title.isEmpty ? 0 : 1) }
     var glyph: LibraryGlyph?
     var isTile = false
     var glyphSize: CGFloat?
@@ -39,7 +58,6 @@ final class LibraryControl: NSButton {
         dotLayer.cornerRadius = 2
         iconLayer.contentsGravity = .resizeAspect
         target = self; action = #selector(press)
-        setAccessibilityLabel(title)
         if tile { setAccessibilityRole(.radioButton) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

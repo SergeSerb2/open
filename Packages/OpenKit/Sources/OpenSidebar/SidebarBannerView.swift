@@ -31,7 +31,7 @@ public final class SidebarBannerView: NSView, NSTextViewDelegate {
         for view in [title, messageView, dismissButton] { addSubview(view) }
         loop = ObservationLoop(read: { [weak self] in
             guard let self else { return }
-            _ = self.context.focusedSpace?.profileID; _ = self.context.focusedSpace?.theme; _ = self.context.systemAppearance
+            _ = self.context.focusedSpace?.profileID; _ = self.context.focusedSpace?.theme; _ = self.context.systemAppearance; _ = self.context.increaseContrast
             _ = self.profile?.settings.autoArchiveAfter
         }) { [weak self] in self?.refresh() }
         refresh()

@@ -63,6 +63,10 @@ extension AppImportRunner {
         return finishOther(result)
       }
     }
+    if plan.openTabs, !undo.cancelled {
+      progress("Importing your open tabs…", nil, false)
+      importOpenTabs(reader: reader, key: key, space: space, target: target, undo: undo, result: &result)
+    }
     app.importInProgress = false
     if plan.history, !undo.cancelled {
       progress("Importing your history…", 0, true)
@@ -103,6 +107,39 @@ extension AppImportRunner {
       await importBrowserPasswords(reader: reader, primaryPassword: plan.primaryPassword, target: target, result: &result)
     }
     return finishOther(result)
+  }
+
+  /// I-6: Firefox's last session. Pinned tabs stay pinned; the rest become Today tabs in the target Space.
+  /// GUESS — capture pending: Arc's names `onboarding_imported_pinned_tabs` / `num_pinned_tabs_imported`
+  /// suggest pinned tabs stay pinned (browser-import.md §2). IDs are deterministic, so a re-import adds nothing.
+  private func importOpenTabs(reader: BrowserImportReader, key: String, space: Space, target: Profile,
+                              undo: AppImportUndo, result: inout BrowserImportResult) {
+    let read: (tabs: [ImportedOpenTab], report: ImportedOpenTabsReport)
+    do { read = try reader.openTabs() }
+    catch FirefoxImportError.missingFile { result.failures["Open tabs"] = "Not found"; return }
+    catch { result.failures["Open tabs"] = "Could not be read"; return }
+    var pinned: [SidebarNode] = [], today: [SidebarNode] = []
+    let now = Date()
+    for (index, tab) in read.tabs.enumerated() {
+      let id = ImportedBookmarksFolder.itemID(sourceKey: key, sourceID: "open-tab:\(tab.window):\(index):" + tab.url.absoluteString)
+      let date = tab.lastAccessed ?? now
+      let node = SidebarNode.tab(Tab(id: id, url: tab.url, title: tab.title, pinnedURL: tab.isPinned ? tab.url : nil,
+                                     createdAt: date, lastActiveAt: date))
+      if tab.isPinned { pinned.append(node) } else { today.append(node) }
+    }
+    let model = BrowserModel(profiles: [Profile(id: target.id, settings: target.settings)],
+                             spaces: [Space(id: space.id, profileID: target.id, pinned: pinned, today: today)])
+    do {
+      let merged = try undo.captureModel(app.model) {
+        try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: true, favorites: false,
+          folders: false, searchSettings: false, importedAt: Date(), saving: { try app.snapshotStore.saveNow(model: app.model) })
+      }
+      result.counts["Open tabs"] = merged.tabs
+      result.counts["Open tab duplicates"] = merged.duplicates
+      result.counts["Duplicates", default: 0] += merged.duplicates
+    } catch {
+      result.failures["Open tabs"] = "Could not be saved"
+    }
   }
 
   private func importBrowserPasswords(reader: BrowserImportReader, primaryPassword: String, target: Profile, result: inout BrowserImportResult) async {

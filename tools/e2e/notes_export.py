@@ -22,7 +22,8 @@ def run(factory, results, tmp, h):
     png = runpy.run_path(os.path.join(h.ROOT, 'tools/e2e/notes_format.py'))['png']
     image = os.path.join(tmp, 'export-image.png'); png(image, 60, 40)
     server, origin = h._fixture_server('NotesExport')
-    app = factory(urls=(origin + '/page',), fresh=True)
+    # No real network: word.new must not resolve; the loopback fixture stays reachable.
+    app = factory(urls=(origin + '/page',), fresh=True, extra_args=['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'])
     try:
         app.call('wait', tab=app.call('tabs')[0]['id'])
 
@@ -84,7 +85,7 @@ def run(factory, results, tmp, h):
         key('n', 'control', 'shift')
         added = h.wait_until(lambda: [t for t in app.call('tabs') if t['id'] not in before] or None, timeout=5, step=.05) or []
         word = [t['url'] for t in added]
-        for t in added: app.call('close', tab=t['id'])  # do not keep a third-party page open
+        for t in added: app.call('close', tab=t['id'])
         app.call('settings-ui', action='choice', label='New documents', title='Note')
         before = {t['id'] for t in app.call('tabs')}
         key('n', 'control', 'shift')

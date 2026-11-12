@@ -73,7 +73,8 @@ public struct ArcProbe:Sendable {
                     if kind(item) == "welcomeToArc" {counts["Welcome items",default:0] += 1}
                 case "list":counts["Folders",default:0] += 1
                 case "easel":counts["Skipped easels",default:0] += 1
-                case "note":counts["Skipped notes",default:0] += 1
+                // Only present when the source has Notes, so existing fixture counts stay exact.
+                case "note","arcDocument":counts["Notes",default:0] += 1
                 case "splitView":break
                 default:counts["Skipped unknown",default:0] += 1
                 }

@@ -24,6 +24,7 @@ public struct BrowserImportReader: Sendable {
         public var bookmarks: Int?
         public var historyVisits: Int?
         public var passwords: Int?
+        public var openTabs: Int?
         /// Firefox: logins exist but a Primary Password protects them.
         public var needsPrimaryPassword = false
         public var unreadable: Set<String> = []
@@ -42,6 +43,9 @@ public struct BrowserImportReader: Sendable {
             if let count = try? logins.countOnly(), count > 0 {
                 c.passwords = count
                 c.needsPrimaryPassword = (try? logins.needsPrimaryPassword()) ?? false
+            }
+            if let session = try? FirefoxSessionReader(profileDirectory: profile.directory).read(), session.report.kept > 0 {
+                c.openTabs = session.report.kept
             }
         case .safari:
             if let archive = safari.exportArchive {
@@ -95,6 +99,12 @@ public struct BrowserImportReader: Sendable {
             return try await SafariLiveReader(directory: profile.directory).readHistory(consume: consume).kept
         case .arc, .chromium: return 0
         }
+    }
+
+    /// I-6: the current entry of each tab in the last session. Firefox family only.
+    public func openTabs() throws -> (tabs: [ImportedOpenTab], report: ImportedOpenTabsReport) {
+        guard family == .firefox else { return ([], ImportedOpenTabsReport()) }
+        return try FirefoxSessionReader(profileDirectory: profile.directory).read()
     }
 
     /// Callers zero every record after the write. Firefox needs the Primary Password when one is set.
