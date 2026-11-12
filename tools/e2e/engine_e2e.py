@@ -1090,15 +1090,17 @@ def feature_checks(app, style, results, tmp):
     def audio():
         app.eval(t, 'window.__oeAudio = new Audio(%s); __oeAudio.loop = true; __oeAudio.play().then(() => "playing")'
                  % json.dumps(wav_data_uri()))
-        time.sleep(1)
-        st = app.tab(t)
+        # The audible state follows Chromium's audio stream monitor, about 1 s after play() resolves on a
+        # rented Mac (0.5 s: not yet; 1 s: audible). Wait for the state with a deadline, not a fixed sleep.
+        started = time.monotonic()
+        st = wait_until(lambda: (lambda s: s if s["audible"] else None)(app.tab(t)), timeout=5, step=.1) or app.tab(t)
+        audible_after = round(time.monotonic() - started, 2)
         m = app.call("mute", tab=t, muted=True)
         app.call("mute", tab=t, muted=False)
         app.eval(t, '__oeAudio.pause()')
-        time.sleep(0.5)
-        after = app.tab(t)
+        after = wait_until(lambda: (lambda s: s if not s["audible"] else None)(app.tab(t)), timeout=5, step=.1) or app.tab(t)
         return {"ok": st["audible"] and m["muted"] and not after["audible"], "audible_while_playing": st["audible"],
-                "muted": m, "audible_after_pause": after["audible"]}
+                "audible_after_seconds": audible_after, "muted": m, "audible_after_pause": after["audible"]}
 
     def fullscreen():
         app.call("events")
@@ -1111,16 +1113,19 @@ def feature_checks(app, style, results, tmp):
         return {"ok": bool(ev) and ev[0]["on"], "events": [e["on"] for e in ev], "document_fullscreen": state}
 
     def pip():
-        v = new_tab(app, "https://example.com/")
-        r = app.eval(v, '(async () => { const v = document.createElement("video"); v.muted = true; v.width = 320;'
-                        ' v.src = "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm";'
-                        ' document.body.appendChild(v); await v.play(); await v.requestPictureInPicture();'
+        # A local video (canvas stream), not a remote file: the row tests Picture in Picture, not the network
+        # (the MDN video timed out on a rented Mac, 2026-11-12).
+        media_server, media_port = _media_server()
+        v = new_tab(app, "http://127.0.0.1:%d/video-muted.html" % media_port)
+        r = app.eval(v, '(async () => { await start(); const v = document.getElementById("main");'
+                        ' await v.requestPictureInPicture();'
                         ' return !!document.pictureInPictureElement; })().catch(e => "error: " + e.message)')
         time.sleep(1.5)
         wins = [w for w in app.call("windows") if w["visible"]]
         app.eval(v, 'document.exitPictureInPicture().then(() => "exited", e => e.message)')
         app.call("close", tab=v)
         app.call("select", tab=t)
+        media_server.shutdown()
         return {"ok": r is True, "result": r, "visible_windows": [(w["class"], w["frame"]) for w in wins]}
 
     def pdf():
