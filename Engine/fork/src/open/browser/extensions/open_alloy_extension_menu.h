@@ -29,7 +29,7 @@ void AppendAlloyExtensionMenuItems(content::WebContents* web_contents,
 
 // Runs |command_id| if it is one of the items appended for |web_contents|'
 // current menu: contextMenus.onClicked fires with the click's page, frame,
-// link and selection data (no tab: the page is outside chrome.tabs). Returns
+// link and selection data. Returns
 // false for any other command. Called by CefMenuManager::ExecuteCommand.
 bool ExecuteAlloyExtensionMenuCommand(content::WebContents* web_contents,
                                       int command_id);

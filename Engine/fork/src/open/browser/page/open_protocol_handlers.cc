@@ -117,10 +117,11 @@ CefString CefTranslateProtocolHandlerURL(
   CEF_REQUIRE_UIT_RETURN(CefString());
   auto* registry = open_engine::RegistryFor(request_context);
   const GURL source(url.ToString());
-  if (!registry || !source.is_valid()) {
+  // Translate() CHECKs that the scheme has a handler.
+  if (!registry || !source.is_valid() ||
+      !registry->IsHandledProtocol(source.scheme())) {
     return CefString();
   }
-  // Empty when the scheme has no default handler.
   const GURL translated = registry->Translate(source);
   return translated.is_valid() ? CefString(translated.spec()) : CefString();
 }
