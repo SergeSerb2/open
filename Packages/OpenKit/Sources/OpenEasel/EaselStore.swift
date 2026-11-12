@@ -1,4 +1,7 @@
 import Foundation
+import CryptoKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Local Easel storage: `<root>/Easels/<uuid>/document.json` (a directory per Easel so E2
 /// images and E4 thumbnails sit beside it). Nothing loads until an Easel opens. Saves are
@@ -29,6 +32,53 @@ public final class EaselStore {
               let doc = try? Self.decoder.decode(EaselDocument.self, from: data),
               doc.id == id, doc.isValid else { return nil }
         return doc
+    }
+
+    // MARK: Images
+
+    /// Limits for an added picture: 50 MiB of encoded bytes and 16,384 px per side (a decoded
+    /// thumbnail is bounded separately by `EaselImageCache`).
+    public nonisolated static let maxImageBytes = 50 << 20
+    public nonisolated static let maxImagePixels = 16_384
+
+    public func imagesDirectory(for id: UUID) -> URL { fileURL(for: id).deletingLastPathComponent().appendingPathComponent("images", isDirectory: true) }
+    public func imageURL(document id: UUID, file: String) -> URL? {
+        EaselDocument.isImageFileName(file) ? imagesDirectory(for: id).appendingPathComponent(file) : nil
+    }
+
+    /// Validates and stores image bytes as `images/<sha256>.<ext>` (deduplicated). Returns the
+    /// file name and the pixel size, or nil for data that is not a supported picture.
+    public func addImage(_ data: Data, document id: UUID) -> EaselImage? {
+        guard data.count <= Self.maxImageBytes, let info = Self.imageInfo(data) else { return nil }
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let file = "\(hash).\(info.ext)"
+        let url = imagesDirectory(for: id).appendingPathComponent(file)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            do {
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: url, options: .atomic)
+            } catch { return nil }
+        }
+        return EaselImage(file: file, width: info.width, height: info.height)
+    }
+
+    nonisolated static func imageInfo(_ data: Data) -> (ext: String, width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              CGImageSourceGetCount(source) >= 1, let type = CGImageSourceGetType(source) as String?,
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int,
+              w > 0, h > 0, w <= maxImagePixels, h <= maxImagePixels else { return nil }
+        let ext: String
+        switch type {
+        case UTType.png.identifier: ext = "png"
+        case UTType.jpeg.identifier: ext = "jpg"
+        case UTType.gif.identifier: ext = "gif"
+        case UTType.webP.identifier: ext = "webp"
+        case UTType.heic.identifier: ext = "heic"
+        case UTType.tiff.identifier: ext = "tiff"
+        default: return nil
+        }
+        return (ext, w, h)
     }
 
     /// A file `load` refused is renamed `document.refused-<unix time>.json` beside it, so a new

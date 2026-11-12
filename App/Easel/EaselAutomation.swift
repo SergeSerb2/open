@@ -14,6 +14,28 @@ extension AutomationController {
       guard let id = EaselTab.create(in: factory) else { throw Failure(message: "New Easel refused") }
       return ["tab": id.description]
     }
+    if action == "pasteboard" {
+      // Puts test data on the general pasteboard, as another app's copy would.
+      let pb = NSPasteboard.general
+      pb.clearContents()
+      if let path = args["file"] as? String { pb.writeObjects([URL(fileURLWithPath: path) as NSURL]) }
+      else if let path = args["imageData"] as? String, let data = FileManager.default.contents(atPath: path) { pb.setData(data, forType: .png) }
+      else if let raw = args["url"] as? String, let url = URL(string: raw) { pb.writeObjects([url as NSURL]); pb.setString(raw, forType: .string) }
+      else if let text = args["text"] as? String { pb.setString(text, forType: .string) }
+      else { throw Failure(message: "pasteboard needs file, imageData, url or text") }
+      return true
+    }
+    if action == "capture-menu" {
+      // The Capture card's Add to Easel menu: its rows, or a row run as a click would.
+      guard let result = factory.controller?.capture.lastResult, factory.controller?.capture.card != nil else {
+        throw Failure(message: "no capture card")
+      }
+      let menu = factory.addToEaselMenu(result)
+      guard let title = args["item"] as? String else { return menu.items.map { $0.isSeparatorItem ? "—" : $0.title } }
+      guard let index = menu.items.firstIndex(where: { $0.title == title }) else { throw Failure(message: "no such row") }
+      menu.performActionForItem(at: index)
+      return ["selected": factory.selectedTab?.id.description ?? ""]
+    }
     if action == "store" {
       // Disk state of one document (after an explicit flush), without a canvas.
       guard let raw = args["document"] as? String, let id = UUID(uuidString: raw) else { throw Failure(message: "document id needed") }
@@ -51,6 +73,12 @@ extension AutomationController {
             let button = canvas.toolbarButton(tool) else { throw Failure(message: "unknown tool") }
       _ = button.accessibilityPerformPress()
     case "add-button": _ = canvas.addButton.accessibilityPerformPress()
+    case "image-panel":
+      // The Image tool's open panel: report it, then cancel it (never chooses a file).
+      guard let panel = host.openPanel else { return ["shown": false] }
+      let message = panel.message ?? ""
+      if args["cancel"] as? Bool ?? true { canvas.window?.endSheet(panel, returnCode: .cancel) }
+      return ["shown": true, "message": message, "sheet": canvas.window?.attachedSheet === panel || !(args["cancel"] as? Bool ?? true)]
     case "drag":
       let from = try point("from"), to = try point("to")
       let steps = max(1, args["steps"] as? Int ?? 8)
@@ -147,7 +175,8 @@ extension AutomationController {
       "favicon": tab.live.faviconPNG != nil, "hostCount": factory.easelHosts.count,
       "engineContentCreationCount": factory.contentCreationCount,
       "fileExists": FileManager.default.fileExists(atPath: app.easels.fileURL(for: documentID).path),
-      "storeWrites": app.easels.writeCount]
+      "storeWrites": app.easels.writeCount, "pendingLinks": factory.easelHosts[tab.id]?.pendingLinks ?? 0,
+      "imageFiles": (try? FileManager.default.contentsOfDirectory(atPath: app.easels.imagesDirectory(for: documentID).path))?.sorted() ?? []]
     if let host = factory.easelHosts[tab.id], !host.closed {
       state["shown"] = host.canvas.window != nil && !host.canvas.isHiddenOrHasHiddenAncestor
       state["canvas"] = host.canvas.state()

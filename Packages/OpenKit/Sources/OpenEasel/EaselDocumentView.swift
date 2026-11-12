@@ -16,6 +16,16 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+
+    // MARK: Drop (image files, pictures, web addresses, text)
+
+    func registerDrops() { registerForDraggedTypes([.fileURL, .URL, .png, .tiff, .string, EaselCanvasView.pasteboardType]) }
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { .copy }
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { .copy }
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let p = canvas.docPoint(convert(sender.draggingLocation, from: nil))
+        return canvas.ingest(sender.draggingPasteboard, at: p, name: "Drop")
+    }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var undoManager: UndoManager? { canvas.canvasUndoManager }
     override func accessibilityRole() -> NSAccessibility.Role? { .layoutArea }
@@ -301,7 +311,7 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
              #selector(bringToFront(_:)), #selector(sendToBack(_:)): return !canvas.selection.isEmpty
         case #selector(paste(_:)):
             let pb = NSPasteboard.general
-            return pb.availableType(from: [EaselCanvasView.pasteboardType, .string]) != nil
+            return pb.availableType(from: [EaselCanvasView.pasteboardType, .fileURL, .URL, .png, .tiff, .string]) != nil
         case #selector(selectAll(_:)): return !canvas.document.objects.isEmpty
         case #selector(toggleAlignmentGuides(_:)):
             item.state = EaselSnapping.enabled ? .on : .off

@@ -12,6 +12,31 @@ import time
 from pathlib import Path
 
 
+def make_png(path, width, height, rgb):
+    """A synthetic solid-colour PNG (no image library needed)."""
+    import struct, zlib
+    raw = b''.join(b'\x00' + bytes(rgb) * width for _ in range(height))
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) \
+        + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+    Path(path).write_bytes(png)
+    return path
+
+
+def fixture_server(root):
+    """Serves a synthetic page with Open Graph tags and its picture."""
+    import http.server, threading
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=str(root), **kw)
+        def log_message(self, *a):
+            pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
 def run(factory, results, tmp, api):
     root = Path(api.ROOT)
     frames_dir = Path(os.environ.get('OPEN_E2E_EASEL_FRAMES', str(root / '.re/ez/frames')))
@@ -228,6 +253,102 @@ def run(factory, results, tmp, api):
         record('E20_corrupt_file_set_aside', s and s['recreated'] and objects(s) == [] and len(aside) == 1
                and (path.parent / aside[0]).read_text().startswith('{"formatVersion": 1'), aside=aside,
                state={k: v for k, v in (s or {}).items() if k != 'canvas'})
+
+        # ---- E2: pictures, link cards, alignment guides, Capture → Easel ----
+        site = Path(tmp) / 'easel-site'
+        site.mkdir(exist_ok=True)
+        make_png(site / 'og.png', 600, 315, (40, 120, 200))
+        (site / 'page.html').write_text(
+            '<!doctype html><html><head><title>Fallback title</title>'
+            '<meta property="og:title" content="Easel Fixture &amp; Friends">'
+            '<meta content="A synthetic page for link cards." property="og:description">'
+            '<meta property="og:image" content="/og.png"></head>'
+            '<body style="margin:0;background:#3a7"><h1>Easel fixture</h1></body></html>')
+        server = fixture_server(site)
+        origin = 'http://127.0.0.1:%d' % server.server_address[1]
+        try:
+            e2 = created['tab']
+
+            # E21: the Image tool opens a picture panel; Cancel adds nothing.
+            easel(action='tool', tool='image')
+            panel = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(action='image-panel', cancel=False, tab=e2)), timeout=5, step=.1)
+            easel(action='image-panel', tab=e2)
+            s = easel(tab=e2)
+            record('E21_image_panel', panel and panel['message'] == 'Choose pictures to add to this Easel.'
+                   and objects(s) == [] and canvas(s)['tool'] == 'pointer', panel=panel)
+
+            # E22: a pasted picture file lands at most 400 pt wide, stored once by its hash.
+            picture = make_png(Path(tmp) / 'picture.png', 800, 400, (220, 90, 60))
+            app.call('easel', action='pasteboard', file=str(picture))
+            s = easel(action='edit', op='paste', tab=e2)
+            imgs = [x for x in objects(s) if x['kind'] == 'image']
+            record('E22_paste_image_file', len(imgs) == 1 and imgs[0]['pixelSize'] == [800, 400]
+                   and abs(imgs[0]['frame'][2] - 400) < .01 and abs(imgs[0]['frame'][3] - 200) < .01
+                   and s['imageFiles'] == [imgs[0]['file']] and canvas(s)['selection'] == [imgs[0]['id']], state=canvas(s), files=s['imageFiles'])
+            # E23: the same bytes as picture data reuse the stored file.
+            app.call('easel', action='pasteboard', imageData=str(picture))
+            s = easel(action='edit', op='paste', tab=e2)
+            record('E23_image_dedup', len([x for x in objects(s) if x['kind'] == 'image']) == 2 and len(s['imageFiles']) == 1,
+                   files=s['imageFiles'])
+
+            # E24: a pasted address makes a link card at once; its metadata and picture follow.
+            app.call('easel', action='pasteboard', url=origin + '/page.html')
+            s = easel(action='edit', op='paste', tab=e2)
+            first_link = [x for x in objects(s) if x['kind'] == 'link']
+            done = api.wait_until(lambda: (lambda x: x if x['pendingLinks'] == 0 else None)(easel(tab=e2)), timeout=15, step=.2)
+            link = [x for x in objects(done) if x['kind'] == 'link'] if done else []
+            record('E24_link_card', len(first_link) == 1 and first_link[0]['url'] == origin + '/page.html'
+                   and link and link[0]['title'] == 'Easel Fixture & Friends' and link[0]['summary'] == 'A synthetic page for link cards.'
+                   and link[0]['file'] and link[0]['file'] in done['imageFiles'] and abs(link[0]['frame'][3] - 250) < .01,
+                   link=link, first=first_link)
+
+            # E25: alignment guides snap a moved shape to another's edge; the canvas menu turns them off.
+            menu = easel(action='menu', at=[960, 150], tab=e2)
+            easel(action='edit', op='selectAll', tab=e2); easel(action='key', key='delete', tab=e2)
+            easel(action='tool', tool='rectangle'); a = easel(action='drag', **{'from': [100, 250], 'to': [300, 350]})
+            easel(action='tool', tool='rectangle'); b = easel(action='drag', **{'from': [500, 420], 'to': [650, 500]})
+            b_id = objects(b)[-1]['id']
+            # Move B up by 167: its top lands 3 pt below A's top (250) and snaps to 250.
+            s = easel(action='drag', **{'from': [575, 460], 'to': [575, 293]}, tab=e2)
+            snapped = next(x for x in objects(s) if x['id'] == b_id)['frame']
+            easel(action='menu', at=[960, 150], item='Use Alignment Guides', tab=e2)
+            off_menu = easel(action='menu', at=[960, 150], tab=e2)
+            s = easel(action='drag', **{'from': [575, 300], 'to': [575, 305]}, tab=e2)
+            unsnapped = next(x for x in objects(s) if x['id'] == b_id)['frame']
+            easel(action='menu', at=[960, 150], item='Use Alignment Guides', tab=e2)
+            record('E25_alignment_guides', 'Use Alignment Guides' in menu and abs(snapped[1] - 250) < .01
+                   and abs(unsnapped[1] - 255) < .01, menu=menu, snapped=snapped, unsnapped=unsnapped, offMenu=off_menu)
+
+            # E26: Capture → Easel. The card offers Add to Easel; its menu lists New Easel and
+            # each Easel; a row adds the capture as a web card and selects that Easel.
+            page = api.new_tab(app, origin + '/page.html')
+            r = app.call('capture', mode='area', rect=[40, 40, 200, 120])
+            actions = r['state'].get('card', {}).get('actions', [])
+            rows = app.call('easel', action='capture-menu')
+            target_title = easel(tab=e2)['tabTitle']
+            app.call('easel', action='capture-menu', item=target_title)
+            s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=e2)), timeout=8, step=.1)
+            cards = [x for x in objects(s) if x['kind'] == 'webCard'] if s else []
+            card_state = app.call('capture-state')
+            record('E26_capture_to_easel', 'easel' in actions and rows[0] == 'New Easel' and rows[1] == '—'
+                   and target_title in rows and s and s['selected'] and len(cards) == 1
+                   and cards[0]['url'] == origin + '/page.html' and cards[0]['title'] == 'Fallback title'
+                   and cards[0]['file'] in s['imageFiles'] and 'card' not in card_state,
+                   actions=actions, rows=rows, cards=cards)
+            snapshot('e26-cards-light')
+            app.call('appearance', name='dark'); time.sleep(.5)
+            snapshot('e26-cards-dark')
+            app.call('appearance', name='light')
+            # E27: New Easel from the capture menu.
+            app.call('select', tab=page)
+            app.call('capture', mode='area', rect=[40, 40, 120, 80])
+            count = len(app.call('tabs'))
+            app.call('easel', action='capture-menu', item='New Easel')
+            fresh = easel()
+            record('E27_capture_new_easel', len(app.call('tabs')) == count + 1 and fresh['tabTitle'] == 'Untitled Easel'
+                   and [x['kind'] for x in objects(fresh)] == ['webCard'], state={k: v for k, v in fresh.items() if k != 'canvas'})
+        finally:
+            server.shutdown()
     finally:
         if app:
             app.quit()

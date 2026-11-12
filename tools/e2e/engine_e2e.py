@@ -7728,7 +7728,7 @@ def capture_checks(factory, results, tmp):
             and overlay.get('frame') == overlay.get('pageFrame') and overlay.get('firstResponder') is True
             and overlay.get('hint') == 'Drag to capture. Press Esc to cancel.' and not overlay.get('hintHidden')
             and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
-            and card.get('actions') == ['copy', 'save', 'share', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
+            and card.get('actions') == ['copy', 'save', 'share', 'easel', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
             'scale': scale, 'row': new, 'steps': steps, 'state': st}
         # Real-window look of the card (no Arc capture exists yet, C-C1): kept for review in .re/.
         os.makedirs(os.path.join(ROOT, '.re', 'page-capture'), exist_ok=True)
@@ -7785,7 +7785,7 @@ def capture_checks(factory, results, tmp):
         scroll_after = app.eval(tab, 'scrollY')
         results['capture_c2_full_page'] = {'ok': row['kind'] == 'fullPage' and row['height'] == round(12000 * scale)
             and bands == list(range(12)) and r['state']['result']['truncated'] is False
-            and r['state'].get('card', {}).get('actions') == ['copy', 'save', 'share', 'library', 'delete'],
+            and r['state'].get('card', {}).get('actions') == ['copy', 'save', 'share', 'easel', 'library', 'delete'],
             'row': row, 'bands': bands, 'probe': probe, 'scrollAfter': scroll_after, 'state': r['state']}
         # Delete on the card removes the file and the row in one step.
         app.call('capture-action', action='delete')
