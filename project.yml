@@ -152,6 +152,8 @@ targets:
       - package: OpenKit
         product: OpenStore
       - package: OpenKit
+        product: OpenDocuments
+      - package: OpenKit
         product: OpenWeb
       - package: OpenKit
         product: OpenExtensionsUI

@@ -73,14 +73,15 @@ public enum ImportSource: Sendable, Hashable {
 /// `Local State` only; it never opens a browser database. Cheap enough to run
 /// when the import sheet opens, and never earlier.
 public struct BrowserSourceCatalog: Sendable {
-    /// Arc's catalog plus Chromium (F3 §8 Q3). Order is the picker order.
-    /// GUESS — capture pending: Arc's tile order (F3 §3 item 1).
+    /// Arc's catalog plus Chromium (F3 §8 Q3), with Arc first (Import from Arc). Order is the picker order.
+    /// GUESS — capture pending: Arc's order with several browsers (capture s5 saw only Safari).
     public static let descriptors: [BrowserSourceDescriptor] = [
+        .init(id: "arc", name: "Arc", bundleID: "company.thebrowser.Browser", family: .arc, dataRoot: "Application Support/Arc"),
         .init(id: "chrome", name: "Chrome", bundleID: "com.google.Chrome", family: .chromium, dataRoot: "Application Support/Google/Chrome"),
         .init(id: "safari", name: "Safari", bundleID: "com.apple.Safari", family: .safari, dataRoot: "Safari"),
         .init(id: "firefox", name: "Firefox", bundleID: "org.mozilla.firefox", family: .firefox, dataRoot: "Application Support/Firefox"),
         .init(id: "brave", name: "Brave", bundleID: "com.brave.Browser", family: .chromium, dataRoot: "Application Support/BraveSoftware/Brave-Browser"),
-        .init(id: "edge", name: "Microsoft Edge", bundleID: "com.microsoft.edgemac", family: .chromium, dataRoot: "Application Support/Microsoft Edge"),
+        .init(id: "edge", name: "Edge", bundleID: "com.microsoft.edgemac", family: .chromium, dataRoot: "Application Support/Microsoft Edge"),
         .init(id: "vivaldi", name: "Vivaldi", bundleID: "com.vivaldi.Vivaldi", family: .chromium, dataRoot: "Application Support/Vivaldi"),
         .init(id: "opera", name: "Opera", bundleID: "com.operasoftware.Opera", family: .chromium, dataRoot: "Application Support/com.operasoftware.Opera", profileAtRoot: true),
         .init(id: "opera-gx", name: "Opera GX", bundleID: "com.operasoftware.OperaGX", family: .chromium, dataRoot: "Application Support/com.operasoftware.OperaGX", profileAtRoot: true),
