@@ -149,8 +149,21 @@ enum ThemeRoleChecks {
         let (_, pad, padContrast) = raisedContrast("#852F32", .dark)
         check(padContrast >= 4.45 && pad.subtitle.alpha == 0.75 && pad.spaceTitle.alpha == 0.75 && pad.newTabLabel.alpha == 0.60
               && pad.separator.alpha == 0.30, "Increase Contrast on, pad 0° Dark: title \(f(padContrast)) : 1 ≥ 4.5, secondary 0.75 / 0.60 / 0.30")
-        let (_, slate, slateContrast) = raisedContrast("#666786", .automatic)
-        check(components(slate.title).allSatisfy { $0 > 254 }, "Increase Contrast on, slate: title stops at white (\(f(slateContrast)) : 1, 4.5 is out of reach)")
+        // Lead Q2 (b): slate (#9495AB) cannot reach 4.5 with light text (white = 2.92 : 1), so with
+        // Increase Contrast the Space takes dark text for every role; pad 0° Dark keeps light text.
+        let slateStyle = SpaceThemeStyle(style: SpaceStyle(keyColor: color("#666786", "p3")), system: .light)
+        let flipped = slateStyle.increasedContrastAppearance(system: .light)
+        let slateRoles = slateStyle.roles(flipped, increaseContrast: true)
+        let slateField = ThemeField.Evaluator(style: slateStyle, windowSize: size, isActive: true)
+        let slateContrast = [0.0, 0.5, 1.0].map { v -> Double in
+            let (r, g, b) = slateField.color(u: 0.1, v: v)
+            return contrast([r, g, b].map { $0 * 255 }, components(slateRoles.title))
+        }.min() ?? 0
+        let padStyle = SpaceThemeStyle(style: SpaceStyle(keyColor: color("#852F32", "srgb"), appearance: .dark), system: .light)
+        check(slateStyle.resolvedAppearance(system: .light) == .dark && flipped == .light && slateContrast >= 4.45
+              && slateRoles.subtitle == .black(0.75) && slateRoles.separator == .black(0.30) && slateRoles.activePlate == SidebarThemeRules.activePlateLight,
+              "Increase Contrast on, slate: light text cannot reach 4.5, the Space takes dark text for all roles (title \(f(slateContrast)) : 1)")
+        check(padStyle.increasedContrastAppearance(system: .light) == .dark, "Increase Contrast on, pad 0° Dark: 4.5 is reachable, light text stays")
         print("sidebar-render theme-roles: \(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
     }

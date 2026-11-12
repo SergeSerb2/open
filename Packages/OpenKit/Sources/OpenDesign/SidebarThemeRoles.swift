@@ -108,6 +108,17 @@ extension SpaceThemeStyle {
         return SidebarRoles(content: appearance, title: title, isDefaultTheme: isDefaultTheme, increaseContrast: increaseContrast)
     }
 
+    /// Content appearance with macOS Increase Contrast (lead decision Q2, 2026-11-12): keep the
+    /// theme's polarity when the raised primary title reaches `increasedTitleContrast`;
+    /// otherwise the Space takes the other polarity for every role. Callers cache it.
+    public func increasedContrastAppearance(system: ContentAppearance) -> ContentAppearance {
+        let base = resolvedAppearance(system: system)
+        let samples = fieldSamples()
+        let raised = Self.raised(titleColor(base).withAlpha(1), against: samples, dark: base == .dark)
+        guard Self.worstContrast(raised, samples) < SidebarThemeRules.increasedTitleContrast else { return base }
+        return base == .dark ? .light : .dark
+    }
+
     /// No stored colour: the default theme (fixed corners, follows macOS).
     public var isDefaultTheme: Bool { lightPalette == nil && contentAppearance == nil }
 
@@ -124,21 +135,27 @@ extension SpaceThemeStyle {
 
     /// Moves `color`'s HSL lightness (light text up, dark text down) until its WCAG
     /// contrast against every background reaches `increasedTitleContrast`.
+    static func luminance(_ c: RGBA) -> Double {
+        func linear(_ value: Double) -> Double {
+            let x = min(1, max(0, value))
+            return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(c.red) + 0.7152 * linear(c.green) + 0.0722 * linear(c.blue)
+    }
+
+    /// The lowest WCAG contrast of `color` against the backgrounds.
+    static func worstContrast(_ color: RGBA, _ backgrounds: [RGBA]) -> Double {
+        let ink = luminance(color)
+        return backgrounds.map { b in
+            let l = luminance(b)
+            return (max(ink, l) + 0.05) / (min(ink, l) + 0.05)
+        }.min() ?? 21
+    }
+
+    /// Moves `color`'s HSL lightness (light text up, dark text down) until its WCAG
+    /// contrast against every background reaches `increasedTitleContrast`, or the end.
     static func raised(_ color: RGBA, against backgrounds: [RGBA], dark: Bool) -> RGBA {
-        func luminance(_ c: RGBA) -> Double {
-            func linear(_ value: Double) -> Double {
-                let x = min(1, max(0, value))
-                return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)
-            }
-            return 0.2126 * linear(c.red) + 0.7152 * linear(c.green) + 0.0722 * linear(c.blue)
-        }
-        func worst(_ c: RGBA) -> Double {
-            let ink = luminance(c)
-            return backgrounds.map { b in
-                let l = luminance(b)
-                return (max(ink, l) + 0.05) / (min(ink, l) + 0.05)
-            }.min() ?? 21
-        }
+        func worst(_ c: RGBA) -> Double { worstContrast(c, backgrounds) }
         let target = SidebarThemeRules.increasedTitleContrast
         guard worst(color) < target else { return color }
         let p3 = ThemeColorMath.toP3(color.modelColor)
