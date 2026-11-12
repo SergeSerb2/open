@@ -481,7 +481,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       controller.allowsWindowActivation = false
       controller.window?.alphaValue = 0
     }
-    if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
+    if session == nil {
+      controller.context.storedFavicons = stores.sidebarFavicons
+      // Recents hover card (live-data §3.4): read on first hover only, never at launch.
+      controller.context.recentPagesSource = { [weak self] profileID, phrases in
+        guard let store = self?.stores.history(for: profileID) else { return [] }
+        var rows: [(url: URL, title: String, lastVisit: Date)] = []
+        for phrase in phrases { rows += await store.recentURLs(matchingURLPhrase: phrase).map { ($0.url, $0.title, $0.lastVisit) } }
+        return rows
+      }
+    }
     factory.attach(controller)
     windowControllers.append(controller)
     updater?.userDriver.attach(controller)
