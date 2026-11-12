@@ -951,7 +951,7 @@
   "path": "Help",
   "title": "Export Arc Notes",
   "shortcut": "",
-  "inScope": false
+  "inScope": true
  },
  {
   "path": "Help",
