@@ -14,8 +14,9 @@ TEAMS = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_e2e%40thread.v2/
 
 
 def run(factory, results, tmp, harness):
-    wait_until = harness['wait_until']
-    app = factory(urls=('about:blank',), fresh=True, extra_args=ENGINE_SWITCHES)
+    wait_until, new_tab = harness['wait_until'], harness['new_tab']
+    # The denied card's button must not open System Settings on the test machine.
+    app = factory(urls=('about:blank',), fresh=True, extra_args=ENGINE_SWITCHES, extra_env={'OPEN_E2E_NO_SYSTEM_SETTINGS': '1'})
 
     def cal(**kw): return app.call('calendar', **kw)
     def tabs(): return app.call('tabs')
@@ -116,5 +117,86 @@ def run(factory, results, tmp, harness):
             'ok': joined.get('outcome') == 'noMeeting' and len(tabs()) == n_tabs and bool(toast)
                 and toast[0]['title'] == 'No upcoming meetings',
             'joined': joined, 'toast': toast[:1]}
+
+        # 5. Calendar card (L4): a Pinned Google Calendar tab shows the native card on hover.
+        card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq=lambda: cal(action='join-result').get('seq', 0))
     finally:
-        app.quit()
+        try:
+            app.call('defaults', key='open.general.previewsCalendar', value=None)
+        finally:
+            app.quit()
+
+
+def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
+    def hover(node, ms=800):
+        app.call('hover', leave=True, ms=300)
+        return app.call('hover', node=node, ms=ms)
+    def glance(): return app.call('glance-state')
+    calendar = new_tab(app, 'https://calendar.google.com/calendar/u/0/r')
+    app.call('pin', tab=calendar)
+    today = new_tab(app, 'about:blank')
+    app.call('select', tab=today)
+    results['cal_card_match'] = {'ok': app.call('glance-match', url='https://calendar.google.com/calendar/u/0/r').get('kind') == 'calendar'
+        and app.call('glance-match', url='https://outlook.office.com/calendar/view/day').get('provider') == 'outlook'
+        and app.call('glance-match', url='https://outlook.office.com/mail/').get('kind') == 'none'
+        and app.call('glance-match', url='https://calendar.notion.so/').get('provider') == 'notion'}
+
+    cal(action='fixture', access='granted', events=[
+        {'id': 'standup', 'title': 'Standup', 'start': -60, 'end': -45, 'url': MEET},
+        {'id': 'soon', 'title': 'Design review', 'start': 4, 'end': 34, 'notes': 'Zoom: ' + ZOOM},
+        {'id': 'later', 'title': '', 'start': 90, 'end': 120},
+    ])
+    shown = hover(calendar)
+    state = glance()
+    join = state.get('join') or {}
+    results['cal_card_timeline'] = {
+        'ok': shown.get('kind') == 'glance' and state.get('kind') == 'calendar' and state.get('phase') == 'timeline'
+            and state.get('header') == 'Upcoming' and state.get('newLabel') == 'New Event'
+            and state.get('newURL') == 'https://calendar.google.com/calendar/u/0/r/eventedit'
+            and join.get('event') == 'soon' and join.get('url') == ZOOM and join.get('tooltip') == 'Join Zoom'
+            and join.get('subtitle') in ('Event in 4m', 'Event in 3m')
+            and [e['title'] for e in state.get('events', [])] == ['Standup', 'Design review', 'Event']
+            and len(state.get('card', [])) == 4 and state['card'][2] == 240,
+        'hover': shown, 'state': state}
+
+    seq, n_tabs = join_seq(), len(tabs())
+    app.call('glance-open', control='join')
+    joined = wait_until(lambda: (lambda r: r if r.get('seq', 0) > seq else None)(cal(action='join-result')), timeout=5, step=.05) or {}
+    results['cal_card_join'] = {'ok': joined.get('origin') == 'card' and joined.get('url') == ZOOM and len(tabs()) == n_tabs + 1
+        and app.call('window-state').get('selected') == joined.get('tab') and glance().get('shown') is False, 'joined': joined}
+
+    app.call('select', tab=today)
+    hover(calendar)
+    app.call('glance-open', control='new')
+    peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] else None)(app.call('peek-state')), timeout=5, step=.05)
+    results['cal_card_new_event_peek'] = {'ok': bool(peek) and peek['stack'][-1].get('source') == calendar, 'peek': peek}
+    app.call('peek-close')
+    wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+
+    # Hover never asks macOS; the button does, and a yes fills the card.
+    app.call('select', tab=today)
+    cal(action='fixture', access='notDetermined', answer='granted', events=[{'id': 'soon', 'title': 'Sync', 'start': 2, 'url': MEET}])
+    hover(calendar)
+    before = glance()
+    asked_on_hover = cal().get('requests')
+    app.call('glance-open', control='access')
+    after = wait_until(lambda: (lambda s: s if s.get('phase') == 'timeline' else None)(glance()), timeout=5, step=.05) or glance()
+    results['cal_card_access_prompt_on_click_only'] = {
+        'ok': before.get('phase') == 'needsAccess' and before.get('access') == 'Allow Calendar Access' and asked_on_hover == 0
+            and cal().get('requests') == 1 and after.get('phase') == 'timeline' and (after.get('join') or {}).get('event') == 'soon',
+        'before': before, 'after': after}
+
+    cal(action='fixture', access='denied', events=[])
+    hover(calendar)
+    denied = glance()
+    opened = denied.get('privacyOpened', 0)
+    app.call('glance-open', control='access')
+    again = wait_until(lambda: (lambda s: s if s.get('privacyOpened', 0) > opened else None)(glance()), timeout=5, step=.05) or glance()
+    results['cal_card_denied'] = {'ok': denied.get('phase') == 'denied' and denied.get('access') == 'Open Privacy Settings'
+        and again.get('privacyOpened') == opened + 1 and again.get('phase') == 'denied' and cal().get('queries') == 0,
+        'denied': denied, 'again': again}
+
+    app.call('defaults', key='open.general.previewsCalendar', value=False)
+    off = hover(calendar)
+    results['cal_card_switch_off'] = {'ok': off.get('kind') != 'glance' and glance().get('shown') is False, 'hover': off}
+    app.call('hover', leave=True, ms=300)
