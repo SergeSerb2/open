@@ -285,8 +285,8 @@ Engine: Chromium patch 0507 (accessor on the pending request) and overlay
 Alloy-style pages (Peek, Alloy popups) now get extension `chrome.contextMenus` items in the same
 `OEContextMenu.items` list, after a separator, with Chrome's grouping (one item, or a submenu named
 after the extension) and Chrome's command ids. Running the command id through the normal
-completion fires `contextMenus.onClicked` (page, frame, link and selection data; no `tab`, because
-the page is outside `chrome.tabs`). No OpenEngine API change. Engine: CEF patch 0306 and overlay
+completion fires `contextMenus.onClicked` (page, frame, link and selection data; Chromium also passes a
+`tab` object for the page). No OpenEngine API change. Engine: CEF patch 0306 and overlay
 `open/browser/extensions/open_alloy_extension_menu.cc`. e2e: `context-menus/cm_peek_extension_items`.
 
 ### Context menu items

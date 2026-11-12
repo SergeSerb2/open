@@ -431,7 +431,9 @@ def context_menu_checks(factory, results, tmp, h):
                 h._try(lambda: app.call('select', tab=tab))
             target_url = origin + '/target.html'
             return {'ok': [c['title'] for c in leaves] == ['Probe leaf 0', 'Probe leaf 1'] and all(c['enabled'] for c in leaves)
-                          and page_click == [dict(menuItemId='leaf-0', pageUrl=target_url, linkUrl=None, frameId=0, hasTab=False)]
+                          and state['stack'][-1].get('style') == 'alloy'
+                          and len(page_click) == 1 and page_click[0]['menuItemId'] == 'leaf-0'
+                          and page_click[0]['pageUrl'] == target_url and page_click[0]['linkUrl'] is None and page_click[0]['frameId'] == 0
                           and len(link_click) == 1 and link_click[0]['menuItemId'] == 'leaf-1'
                           and link_click[0]['linkUrl'] == target_url + '?x=1' and link_click[0]['pageUrl'] == target_url
                           and not [c for c in none.get('commands', []) if c['submenu'] == name],
