@@ -60,8 +60,10 @@ macOS 27) records `machine: rented` and its `machineInfo`. Its merge-lane and
 observers-lane receipts can replace the M1's functional receipts: put them in the
 same `--m1-receipts` directory as the M1 timing receipts. The importer applies the
 same exact-head, clean-fingerprint, engine, config, style, lane and cleanup checks.
-It accepts rented stages only for suites on `RENTED_ALLOWED_E2E` in `gate.py`
-(today `owner-watch` and `shell`); add a suite only with a passing rented receipt.
+It accepts rented stages only for suites on the per-lane `RENTED_ALLOWED_E2E` in
+`gate.py`; add a suite only with a complete passing rented receipt. Run suites on a
+rented Mac with `/usr/bin` first in `PATH` (Xcode's `python3`): with its Homebrew
+Python, macOS showed a Local Network prompt for "Python" during App runs.
 It refuses, with a reason in the summary's "Refused receipt" table: a rented
 timing-lane receipt, a suite that is not on the allowlist (display-keyed incognito
 stays M1-only), and a receipt without the rented host metadata. Timing rows inside
@@ -71,6 +73,36 @@ An idle rented desktop sleeps its display, and macOS then refuses
 `NSRunningApplication` activation of the App child ("direct App child activation
 refused"). On a rented Mac each screen stage therefore runs `caffeinate -u -t 5`
 and keeps `caffeinate -d` until its screen worker exits.
+
+Rented survey (2026-11-11, main `3ef4c11c`, one gate invocation per suite, Release,
+Namespace Macs 1 and 2). Allowed: every suite listed in `RENTED_ALLOWED_E2E`
+(Gate PASS, clean cleanup, no system window). Not allowed, with the reason seen:
+
+| Suite (lane) | Reason on the rented Mac |
+|---|---|
+| actions | the suite refuses: "intentional renderer faults require the M1" |
+| incognito | passed (34 rows), but its native captures are display-keyed: M1-only |
+| firstrun | `first-run` command fails: `Foundation._GenericObjCError error 0` (2 of 2 runs) |
+| onboarding | `phases_reached_in_order` fails (2 of 2) |
+| welcome | `W02_insert_native_today` fails, state null (2 of 2) |
+| import-robust | first-run launch killed (launcher exit -9), automation not ready in 60 s |
+| window | emits `chrome_dark_rings`, which has no acceptance predicate |
+| sidebar | `space_switch_click_spring`: spring travel 0 pt |
+| split (merge) | `snapshot_two_panes` visual row |
+| commandbar, app-actions | `settings_app_icon_live` (bundleReset, cacheReused) |
+| extensions-ui | `P10_same_profile_space_switch` motion gate |
+| sitecontrol (merge) | `S12_elements` SKIP "no captures" (display-keyed); `P1_first_draw` timing is INFO on rented Macs |
+| sidebar-completion | `library_media_selection_pixels` visual row |
+| relaunch | `restore_off_one_default_centered` (1280×800 screen) |
+| page | all rows pass, but `N6_click_opens_tab` passes, so its DEFERRED exception reads STALE |
+| page-chrome | `dialog_alert_native_escape` |
+| downloads (merge) | `unknown_total`: badge null |
+| boosteditor | `B27_deleted_profile_not_recreated` |
+| space-editor | `owner_move_anchor` |
+| applescript | M5-only (no external AppleScript over SSH) |
+
+Observers lane: sitecontrol, find, split, littleopen, downloads and the native
+features-idle stage all passed.
 
 Actions declares its intentional `Page.crash` before sending it on the M1.
 The shared `/tmp/open-intentional-crash-11.json` marker and private stage ledger

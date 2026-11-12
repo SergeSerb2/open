@@ -32,9 +32,18 @@ E2E_DEPENDENCIES = {'sidebar': ('profiles',)}
 OBSERVER_SUITES = {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'}
 M5_E2E = {'applescript'}  # No external AppleScript/osascript over SSH on the M1.
 # Rented Macs (NS-MACS.md) qualify functional merge/observers stages only for
-# suites proven to run there (LEAD 16:50). Add a suite only with a passing rented
-# receipt. Display-keyed visual stages (incognito) and timing rows stay M1-only.
-RENTED_ALLOWED_E2E = {'owner-watch', 'shell'}
+# suites that passed completely there, with clean cleanup, in one gate invocation
+# per suite at main 3ef4c11c (2026-11-11; table in docs/verification.md). Add a
+# suite only with such a rented receipt. Display-keyed visual stages (incognito),
+# intentional-crash stages (actions) and timing rows stay M1-only.
+RENTED_ALLOWED_E2E = {
+    'merge': {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwords',
+              'secrets-import', 'shell', 'owner-watch', 'toolbar', 'numbering', 'history',
+              'tabstrip', 'extensions', 'extensions-p3', 'extensions-e2', 'find', 'measure',
+              'peek', 'media', 'sleep', 'context-menus', 'routing', 'littleopen',
+              'boost-gallery', 'sitedata'},
+    'observers': {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'},
+}
 RENTED_LANES = ('merge', 'observers')
 REFUSED = []  # Receipts found under --m1-receipts that were refused, with the reason.
 SAFE_M5 = set('ntp onboarding welcome import-robust firstrun shell extensions tabstrip window sidebar peek commandbar app-actions actions extensions-p3 extensions-ui sitecontrol extensions-e2 sidebar-completion toolbar numbering media relaunch page page-chrome sleep context-menus routing history applescript boosteditor boost-gallery space-editor incognito sitedata find split littleopen downloads measure'.split())
@@ -331,8 +340,9 @@ def use_m1_receipt(directory, row_name, identity, config, style, lane):
             if receipt.get('lane') not in RENTED_LANES:
                 refuse(path, row_name, 'rented receipts qualify only the merge and observers lanes')
                 continue
-            if row_name[4:] not in RENTED_ALLOWED_E2E:
-                refuse(path, row_name, 'suite is not on the rented allowlist (owner-watch, shell); add it only with rented proof')
+            if row_name[4:] not in RENTED_ALLOWED_E2E.get(receipt.get('lane'), ()):
+                refuse(path, row_name, 'suite is not on the rented ' + str(receipt.get('lane'))
+                       + '-lane allowlist (RENTED_ALLOWED_E2E); add it only with rented proof')
                 continue
         elif host != 'M1':
             continue
@@ -822,10 +832,15 @@ def main():
                         check['timingSample'] = str(sample_path)
                         check['sampleValid'] = bool(sample and sample.get('validBefore') is True
                                                     and check.get('sampleValid', True) is True)
-                        if not check['sampleValid']:
+                        if machine() == 'rented' and check.get('functionalOK') is True:
+                            # A rented Mac never judges timing (NS-MACS.md); keep the raw result.
+                            check['observedStatus'] = check['status']
+                            check['status'] = 'INFO'
+                            check['reason'] = 'Rented Mac timing observation; quiet M1 timing row required'
+                        elif not check['sampleValid']:
                             check['observedStatus'] = check['status']
                             if check.get('functionalOK') is True:
-                                check['status'] = 'INFO' if machine() in ('M5', 'rented') else 'INVALID_SAMPLE'
+                                check['status'] = 'INFO' if machine() == 'M5' else 'INVALID_SAMPLE'
                                 check['reason'] = 'Timing sample did not meet LEAD 06:30 quiet rule; raw assertion retained'
                     if name=='ntp-alloy':
                         for check in checks: check['row']=check['row'].replace('ntp/','ntp-alloy/',1)
