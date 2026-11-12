@@ -120,6 +120,8 @@ def run(factory, results, tmp, harness):
 
         # 5. Calendar card (L4): a Pinned Google Calendar tab shows the native card on hover.
         card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq=lambda: cal(action='join-result').get('seq', 0))
+        # 6. Live Calendar (L5): a calendar Favorite counts down and reminds.
+        live_checks(app, results, wait_until, new_tab, cal)
     finally:
         try:
             app.call('defaults', key='open.general.previewsCalendar', value=None)
@@ -166,10 +168,13 @@ def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
         and app.call('window-state').get('selected') == joined.get('tab') and glance().get('shown') is False, 'joined': joined}
 
     app.call('select', tab=today)
-    hover(calendar)
+    shown = hover(calendar)
+    card = glance()
     app.call('glance-open', control='new')
     peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] else None)(app.call('peek-state')), timeout=5, step=.05)
-    results['cal_card_new_event_peek'] = {'ok': bool(peek) and peek['stack'][-1].get('source') == calendar, 'peek': peek}
+    results['cal_card_new_event_peek'] = {'ok': bool(peek) and peek['stack'][-1].get('source') == calendar, 'peek': peek,
+        'hover': shown, 'card': {k: card.get(k) for k in ('shown', 'phase', 'newURL')}, 'final': app.call('peek-state'),
+        'window': {k: app.call('window-state').get(k) for k in ('selected', 'space', 'peekCreated')}}
     app.call('peek-close')
     wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
 
@@ -200,3 +205,62 @@ def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
     off = hover(calendar)
     results['cal_card_switch_off'] = {'ok': off.get('kind') != 'glance' and glance().get('shown') is False, 'hover': off}
     app.call('hover', leave=True, ms=300)
+
+
+def live_checks(app, results, wait_until, new_tab, cal):
+    def live(): return cal(action='live')
+    def tile(): return (live().get('tiles') or [{}])[0] if live().get('tiles') else {}
+    def at(minutes): cal(action='clock', minutes=minutes); return live()
+    def toasts(): return [t for t in app.call('toasts')['toasts'] if t['coalescingKey'] == 'live-calendar' and not t['exiting']]
+    app.call('defaults', key='open.general.previewsCalendar', value=None)
+    cal(action='fixture', access='granted', events=[{'id': 'm', 'title': 'Weekly sync', 'start': 10, 'end': 40, 'url': MEET}])
+    fav = new_tab(app, 'https://calendar.google.com/calendar/u/0/r/day')
+    app.call('favorite', tab=fav)
+    state = wait_until(lambda: (lambda s: s if s.get('active') and s.get('tiles') else None)(live()), timeout=5, step=.05) or live()
+    first = (state.get('tiles') or [{}])[0]
+    results['cal_live_tile_countdown'] = {
+        'ok': first.get('tab') == fav and first.get('subtitle') == 'in 10m' and first.get('phase') == 'before'
+            and first.get('remind') is False and state.get('interval') == 'twoMinutes'
+            and isinstance(state.get('nextFireIn'), (int, float)) and 0 < state['nextFireIn'] <= 61,
+        'state': state}
+
+    seen = {}
+    for minutes in (9, 10, 13):
+        s = at(minutes)
+        seen[minutes] = ((s.get('tiles') or [{}])[0].get('subtitle'), len(s.get('reminders', [])))
+    toast = toasts()
+    gone = at(21)
+    results['cal_live_tile_times'] = {
+        'ok': seen[9] == ('in 1m', 1) and seen[10] == ('Now', 1) and seen[13] == ('3m ago', 1) and not gone.get('tiles')
+            and bool(toast) and toast[0]['title'] == 'Weekly sync' and toast[0]['accessory'] == 'join',
+        'seen': seen, 'toast': toast[:1], 'after': gone.get('tiles')}
+
+    # Tile menu: Show Meeting Link ▸ Copy Link / Dismiss; Meeting Reminder ▸ interval.
+    at(0)
+    app.call('pasteboard-write', text='before')
+    app.call('sidebar-menu', node=fav, item='Show Meeting Link/Copy Link')
+    copied = app.call('pasteboard')
+    app.call('sidebar-menu', node=fav, item='Show Meeting Link/Dismiss')
+    dismissed = live()
+    results['cal_live_menu_copy_dismiss'] = {'ok': copied == MEET and 'm' in dismissed.get('dismissed', []) and not dismissed.get('tiles'),
+        'copied': copied, 'state': dismissed}
+
+    app.call('sidebar-menu', node=fav, item='Meeting Reminder/Never')
+    cal(action='fixture', access='granted', events=[{'id': 'n', 'title': 'Never reminded', 'start': 5, 'end': 35, 'url': ZOOM}])
+    never = at(4.5)
+    app.call('sidebar-menu', node=fav, item='Meeting Reminder/Five Minutes Before')
+    cal(action='fixture', access='granted', events=[{'id': 'f', 'title': 'Five before', 'start': 8, 'end': 38, 'url': ZOOM}])
+    early = at(2)
+    five = at(3.5)
+    reminded = [r['event'] for r in five.get('reminders', [])]
+    results['cal_live_reminder_interval'] = {
+        'ok': never.get('interval') == 'never' and 'n' not in [r['event'] for r in never.get('reminders', [])]
+            and five.get('interval') == 'fiveMinutes' and 'f' not in [r['event'] for r in early.get('reminders', [])] and 'f' in reminded,
+        'never': never.get('reminders'), 'five': five.get('reminders')}
+    app.call('sidebar-menu', node=fav, item='Meeting Reminder/Two Minutes Before')
+
+    # Without a calendar Favorite the coordinator stops: no tiles, no timer.
+    app.call('sidebar-menu', node=fav, item='Remove from Favorites')
+    stopped = at(0)
+    results['cal_live_stops_without_favorite'] = {'ok': stopped.get('active') is False and stopped.get('nextFireIn') is None
+        and not stopped.get('tiles'), 'state': stopped}

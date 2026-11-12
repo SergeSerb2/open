@@ -93,6 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   /// Calendar data for Join Meeting, the calendar card and Live Calendar; first use only (plan NS §2 CAL).
   lazy var calendar = CalendarService()
+  /// Live Calendar Favorite tiles (LD §4); idle until a calendar Favorite tile appears.
+  lazy var liveCalendar = LiveCalendarCoordinator(app: self)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false
@@ -453,6 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       }
       // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
       controller.context.calendarGlance = makeCalendarGlance(factory)
+      controller.context.liveCalendar = liveCalendar.actions()
     }
     factory.attach(controller)
     windowControllers.append(controller)
