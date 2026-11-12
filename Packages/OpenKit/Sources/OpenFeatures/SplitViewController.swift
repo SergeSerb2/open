@@ -86,6 +86,14 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         }
         maximizedPaneID = nil; refresh(); onChange?()
     }
+    /// Adds an empty pane on one side of the focused page (Developer Mode's Split View Menu: Add Right / Left / Top /
+    /// Bottom Split, C-report-s10 PB3-a2), as dropping a tab on that edge would.
+    public func addEmptyPane(edge zone: SplitDropOverlayView.Zone) {
+        guard canAddPane, let space, focusedTab != nil else { NSSound.beep(); return }
+        let tab = model.newTab(in: space.id, url: URL(string: "about:blank")!, at: 0); tab.live.sleepPhase = .live
+        maximizedPaneID = nil
+        if !drop(tab.id, zone: zone, paneIndex: nil) { model.closeTab(id: tab.id); NSSound.beep() }
+    }
     private func select(_ id: ItemID) { if let space { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) } }
     public func performCommand(_ id: String) {
         if id == "add-split-view" { addEmptyPane(); return }

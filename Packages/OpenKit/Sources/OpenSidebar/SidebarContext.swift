@@ -291,6 +291,11 @@ public final class SidebarContext {
     }
     /// Sites in Developer Mode (page-platform §4.10.3): their URL field shows the full URL.
     public var developerModeHosts: Set<String> = []
+    /// The page the toolbar describes is a Developer Mode site: the toolbar shows the reload options chevron.
+    var pageIsDeveloperMode: Bool {
+        guard let url = shownPeek?.url ?? currentTab?.url, let key = SidebarDeveloperMode.key(url) else { return false }
+        return developerModeHosts.contains(key)
+    }
     /// The URL field text: the host, or for a Developer Mode site the full URL without the scheme
     /// (host, port, path, query).
     static func fieldText(_ url: URL, _ developerHosts: Set<String>) -> String {
@@ -560,7 +565,7 @@ public enum SidebarHoverTarget: Hashable, Sendable {
     case urlStatus
 }
 
-public enum ToolbarButtonKind: Hashable, Sendable { case sidebarToggle, back, forward, reload, more }
+public enum ToolbarButtonKind: Hashable, Sendable { case sidebarToggle, back, forward, reload, reloadMenu, more }
 
 /// Parsing a theme costs a JSON decode; cache by value.
 @MainActor
