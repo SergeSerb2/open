@@ -814,6 +814,10 @@ def context_menu_checks(factory, results, tmp, h):
                 app.call('select', tab=made[0])
                 app.call('sidebar-menu', node=made[1], item='Open in Split View')
                 split_id = next(n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+                # A pane's menu title is its page title: wait until both pages have one.
+                for tab_id in made:
+                    app.call('wait', tab=tab_id)
+                wait(lambda: all(app.tab(t).get('title') for t in made), timeout=10)
                 listed = app.call('sidebar-menu-items', node=split_id)
                 panes = [t for t in listed['items'] if t.endswith(' ▸') and t not in ('Move to ▸',)]
                 pane = app.call('sidebar-menu-items', node=split_id, path=panes[0][:-2]) if panes else {'items': []}
