@@ -131,11 +131,14 @@ struct SidebarMenus {
         if !tabs.isEmpty {
             // With a folder Arc draws only "Delete" (nothing was executed in the capture); Open keeps the
             // tabs' archive item beside it until a capture shows what Delete does to the tabs.
-            // Arc STR has the plural "Remove Notes from Sidebar" beside the row's "Remove Note from Sidebar"
-            // (easels-notes.md §4.3); used when every selected row is a Note. GUESS: its place in this menu
-            // (Arc 1.172 cannot show a Note row, so no capture can settle it).
-            let onlyNotes = folders.isEmpty && !tabObjects.isEmpty && tabObjects.count == ids.count && tabObjects.allSatisfy(Self.isNote)
-            items.append(item(onlyNotes ? "Remove Notes from Sidebar" : "Archive Tabs", .archiveNodes(ids: tabs)))
+            // Arc STR has the plurals "Remove Notes from Sidebar" / "Remove Easels from Sidebar" beside the rows'
+            // singulars (easels-notes.md §3.2, §4.3); used when every selected row is a Note, or every one an Easel.
+            // GUESS: their place in this menu. A Note row cannot be captured (Arc 1.172); the Easel selection
+            // menu can (capture item C-EZ1 in PB4-questions.md).
+            let only = folders.isEmpty && !tabObjects.isEmpty && tabObjects.count == ids.count
+            let title = only && tabObjects.allSatisfy(Self.isNote) ? "Remove Notes from Sidebar"
+                : only && tabObjects.allSatisfy(Self.isEasel) ? "Remove Easels from Sidebar" : "Archive Tabs"
+            items.append(item(title, .archiveNodes(ids: tabs)))
             let spaces = Set(ids.map { context.model.parent(of: $0) }.map { parent -> SpaceID? in
                 if case .spaceToday(let id)? = parent { id } else { nil }
             })

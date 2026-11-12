@@ -666,8 +666,10 @@ public struct ArcImporter {
                 }
                 let documentID = EaselImporter.documentID(forArcEaselID: easelID).uuidString.lowercased()
                 let rawTitle = (ed["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                // `SidebarEasel.customInfo.iconType` is the same custom icon as a tab's (easels-notes.md §3.2).
                 let tab = Tab(id: Self.itemID(forArcID: arcID), url: URL(string: "open://easel/\(documentID)")!,
                               title: rawTitle.isEmpty ? "Untitled Easel" : String(rawTitle.prefix(1_000)),
+                              iconOverride: tabCustomIcon(from: ed),
                               createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
                               lastActiveAt: Self.date(from2001: (ed["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
                               isUnread: item["isUnread"] as? Bool ?? false)
