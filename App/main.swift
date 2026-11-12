@@ -29,6 +29,7 @@ let appDelegate = AppDelegate()
 LaunchTiming.shared.phase("delegateCreated")
 #if OPEN_AUTOMATION
 StartupMainThreadTrace.startIfRequested()
+RunLoopTurnTrace.startIfRequested()
 #endif
 app.delegate = appDelegate
 #if OPEN_AUTOMATION
