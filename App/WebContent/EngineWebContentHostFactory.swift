@@ -175,6 +175,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }()
   #if OPEN_AUTOMATION
   var siteControlDrawSamples: [Double] = []
+  var siteControlDrawPhaseSamples: [[String: Double]] = []
   var siteControlDrawNativeProbeSamples: [[UInt64]] = []
   var popupCallbackClose: (phase: String, toggle: Bool)?
   func releaseBrowsersForAutomation() -> [String: Any] {
@@ -313,6 +314,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if self.siteControlDrawSamples.count > 128 {
         self.siteControlDrawSamples.removeFirst(); self.siteControlDrawNativeProbeSamples.removeFirst()
       }
+    }
+    controller.siteControl?.onFirstDrawPhases = { [weak self] phases in
+      guard let self else { return }
+      self.siteControlDrawPhaseSamples.append(phases)
+      if self.siteControlDrawPhaseSamples.count > 128 { self.siteControlDrawPhaseSamples.removeFirst() }
     }
     #endif
     pageChrome.permissionAnchorProvider = { [weak self] page in

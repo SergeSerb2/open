@@ -177,6 +177,7 @@ extension AutomationController {
       "focusedControl": (owner.window?.firstResponder as? SiteControlButton)?.controlID ?? "",
       "firstDrawMilliseconds": (try? window.siteControlDrawSamples) ?? [],
       "firstDrawNativeProbe": (try? window.siteControlDrawNativeProbeSamples) ?? [],
+      "firstDrawPhases": (try? window.siteControlDrawPhaseSamples) ?? [],
       "drawNativeProbe": siteControlNativeDrawProbe(),
       "sourceReads": ["snapshots": (try? window.siteControlSource.snapshotReadCount) ?? 0,
         "buttons": (try? window.siteControlSource.buttonReadCount) ?? 0,
