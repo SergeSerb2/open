@@ -26,6 +26,9 @@ LaunchTiming.shared.mark("main")
 UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
 let appDelegate = AppDelegate()
 LaunchTiming.shared.phase("delegateCreated")
+#if OPEN_AUTOMATION
+StartupMainThreadTrace.startIfRequested()
+#endif
 app.delegate = appDelegate
 #if OPEN_AUTOMATION
 AutomationOwnerWatch.install()

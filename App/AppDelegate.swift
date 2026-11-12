@@ -861,27 +861,60 @@ extension AppDelegate: CommandDispatcher {
               !self.terminationRequested, !Task.isCancelled else { return }
         let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
         if painted == true {
+          // Each service body gets its own main run-loop turn, so input is
+          // handled between them and no turn carries several bodies.
           if !self.commandServicesPrepared {
-            self.prepareCommandServices()
-            if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+            self.startupRegion("afterPaint.commandServices") { self.prepareCommandServices() }
+            guard await self.nextStartupTurn() else { return }
+            // Suggest engine creation and its tab-index build take one turn each.
+            if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile {
+              self.startupRegion("afterPaint.suggestEngine") { _ = self.stores.suggest(for: profile.id) }
+              guard await self.nextStartupTurn() else { return }
+              // The engine is cached for this Profile; this builds its tab index.
+              self.startupRegion("afterPaint.suggestIndex") { self.stores.prewarm(profileID: profile.id) }
+              guard await self.nextStartupTurn() else { return }
+            }
           }
           // Startup T5: the sleep controller starts after first paint, never before.
-          self.tabSleep.start()
-          self.adBlockEngineAdapter.startAfterPaint()
-          FindBarPrewarm.schedule(afterPaintIn: self)
-          self.applicationIcon.restoreAfterContent()
-          self.prepareUpdaterAfterPaint()
+          self.startupRegion("afterPaint.sleep") { self.tabSleep.start() }
+          guard await self.nextStartupTurn() else { return }
+          self.startupRegion("afterPaint.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
+          guard await self.nextStartupTurn() else { return }
+          self.startupRegion("afterPaint.findPrewarm") { FindBarPrewarm.schedule(afterPaintIn: self) }
+          guard await self.nextStartupTurn() else { return }
+          self.startupRegion("afterPaint.icon") { self.applicationIcon.restoreAfterContent() }
+          guard await self.nextStartupTurn() else { return }
+          self.startupRegion("afterPaint.updater") { self.prepareUpdaterAfterPaint() }
           return
         }
         try? await Task.sleep(for: .milliseconds(50))
       }
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
-      self.tabSleep.start()
-      self.adBlockEngineAdapter.startAfterPaint()
-      self.applicationIcon.restoreAfterContent()
-      self.prepareUpdaterAfterPaint()
+      self.startupRegion("fallback.sleep") { self.tabSleep.start() }
+      guard await self.nextStartupTurn() else { return }
+      self.startupRegion("fallback.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
+      guard await self.nextStartupTurn() else { return }
+      self.startupRegion("fallback.icon") { self.applicationIcon.restoreAfterContent() }
+      guard await self.nextStartupTurn() else { return }
+      self.startupRegion("fallback.updater") { self.prepareUpdaterAfterPaint() }
     }
+  }
+  /// Ends this run-loop turn (a 1 ms timer wake, not a queue hop that can run
+  /// in the same drain) and reports whether start-up may continue.
+  private func nextStartupTurn() async -> Bool {
+    try? await Task.sleep(for: .milliseconds(1))
+    return engineReady && !shutdownPrepared && !terminationRequested && !Task.isCancelled
+  }
+  /// Automation builds record a named start-up region; product builds only run the body.
+  func startupRegion(_ name: String, _ body: () -> Void) {
+    #if OPEN_AUTOMATION
+    let region = StartupMainThreadTrace.begin(name)
+    body()
+    StartupMainThreadTrace.end(region)
+    #else
+    body()
+    #endif
   }
   private func prepareUpdaterAfterPaint() {
     guard updater == nil else { return }
@@ -891,7 +924,8 @@ extension AppDelegate: CommandDispatcher {
   func prepareCommandServices() {
     guard !commandServicesPrepared else { return }
     commandServicesPrepared = true
-    _ = settingsPresenter.settings
+    // The Settings model stays lazy until Settings or a Settings action needs it
+    // (its first open is budgeted from a lazy model; launch does not read it).
     numberedShortcutOptions = currentNumberedShortcutOptions
     commandDefaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated {
