@@ -157,7 +157,7 @@ struct SidebarMenus {
     private func share(_ tab: Tab) -> NSMenuItem {
         let parent = NSMenuItem(title: "Share", action: nil, keyEquivalent: "")
         let clean = URLCleaner.clean(tab.url).url
-        parent.submenu = menu(NSSharingService.sharingServices(forItems: [clean]).map { service in
+        parent.submenu = menu(ShareServices.list(for: [clean]).map { service in
             let row = item(service.title, .shareVia(nodeID: tab.id, service: service.title))
             row.image = service.image
             return row
