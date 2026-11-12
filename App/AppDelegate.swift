@@ -464,6 +464,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         for phrase in phrases { rows += await store.recentURLs(matchingURLPhrase: phrase).map { ($0.url, $0.title, $0.lastVisit) } }
         return rows
       }
+      // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
+      controller.context.calendarGlance = makeCalendarGlance(factory)
     }
     // Native Note and Easel rows have no page or stored icon: draw their marks even before they show.
     controller.context.faviconProvider = { tab in
