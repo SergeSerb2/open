@@ -34,6 +34,8 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
     /// Automation opt-in: forces native display/submission for the receipt.
     /// Nil in the shipping App, which keeps AppKit's normal draw scheduling.
     public var onFirstDraw: ((Double) -> Void)?
+    /// Automation only: the first draw's phase split, in ms from the request (LEAD 17:40 P1 investigation).
+    public var onFirstDrawPhases: (([String: Double]) -> Void)?
     private static let performanceLog = OSLog(subsystem: "io.github.sergeserb2.open", category: "SiteControl")
     public var onMenu: ((NSMenu,String?) -> Void)?
     public private(set) var preferredMenuItemTitle: String?
@@ -124,9 +126,12 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         let requestedAt = CACurrentMediaTime()
         let signpost = OSSignpostID(log: Self.performanceLog)
         let measureFirstDraw = onFirstDraw
+        var phases: [String: Double] = [:]
+        func mark(_ name: String) { if measureFirstDraw != nil { phases[name] = (CACurrentMediaTime() - requestedAt) * 1000 } }
         os_signpost(.begin, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost)
         defer { os_signpost(.end, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost) }
         guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
+        mark("snapshot")
         if isPresented && self.anchor != anchor { dismiss(reason: .anchor,animated: false) }
         if !isPresented { previousResponder = view.window?.firstResponder }
         self.anchor = anchor; self.tabID = tabID
@@ -137,18 +142,25 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         view.panel.showsReload = false
         view.panel.apply(snapshot)
         if extensionsUIContext != nil { view.panel.reloadExtensions() }
+        mark("apply")
         configureKeys(); layout()
+        mark("layout")
         guard isPresented else { return }
         unavailableTabs.remove(tabID)
         view.window?.makeFirstResponder(view)
         if self.mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
         animateOpen(animated)
+        mark("focusAndAnimation")
         if let measureFirstDraw {
             // The automation callback is installed only by OPEN_AUTOMATION.
             view.layoutSubtreeIfNeeded()
+            mark("subtreeLayout")
             view.displayIfNeeded()
+            mark("display")
             CATransaction.flush()
+            mark("flush")
             measureFirstDraw((CACurrentMediaTime() - requestedAt) * 1000)
+            onFirstDrawPhases?(phases)
         }
     }
     public func layout() { layout(preservingStructureMotion: false) }

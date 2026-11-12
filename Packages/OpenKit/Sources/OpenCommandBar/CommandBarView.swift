@@ -4,7 +4,12 @@ import OpenDesign
 public enum CommandBarPresentation: Sendable, Equatable {
     case overlay
     case embedded(width: CGFloat)
+    /// The inline address editor (plan D3 §2.2): the card's top-left and width in overlay points
+    /// (top-left origin), anchored to the sidebar URL field. No scrim.
+    case anchored(CGRect)
     var isEmbedded: Bool { if case .embedded = self { true } else { false } }
+    var isAnchored: Bool { if case .anchored = self { true } else { false } }
+    var layout: CommandCardLayout { isAnchored ? .inline : .newTab }
 }
 
 /// The overlay. The App adds it above the web content and the sidebar, filling the
@@ -16,15 +21,23 @@ public final class CommandBarView: NSView {
         didSet {
             container.drawsShadow = !presentation.isEmbedded
             panel.input.embedded = presentation.isEmbedded
+            panel.layoutSpec = presentation.layout
+            updateScrim()
             needsLayout = true
         }
     }
+    /// The sidebar's right edge in overlay points while a sidebar lies behind the card; nil when it is hidden.
+    /// The New Tab card's tint covers the card over the sidebar (plan D3, LEAD 12:05).
+    public var sidebarMaxX: CGFloat? { didSet { if sidebarMaxX != oldValue { needsLayout = true } } }
     /// Little Open's page overlay keeps 20 pt margins (§9.3); all other callers use the existing layout.
     public var overlayPanelWidth: CGFloat? { didSet { needsLayout = true } }
     let container = PanelContainerView(frame: .zero)
     var panel: PanelView { container.panel }
     /// Called for a mouse-down outside the panel.
     var onClickOutside: (() -> Void)?
+    /// True for a window point on a sidebar tab row. Arc closes the bar and selects that row with one click
+    /// (capture C-report-s5 §4, LEAD 01:25), so that mouse-down reaches the sidebar after the bar closes.
+    public var passesClickThrough: ((NSPoint) -> Bool)?
     var onMoveToWindow: (() -> Void)?
     /// False while hidden: the overlay then passes every event through.
     var isActive = false
@@ -32,8 +45,25 @@ public final class CommandBarView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        layer?.actions = ["backgroundColor": NSNull()]
         addSubview(container)
+        updateScrim()
     }
+
+    /// Black 10 % over the window content behind the New Tab card; none for the inline editor
+    /// or the embedded Little Open bar (plan D3 §2.1).
+    private func updateScrim() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.backgroundColor = presentation == .overlay ? CommandCard.scrim.cgColor : nil
+        CATransaction.commit()
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChange?()
+    }
+    var onAppearanceChange: (() -> Void)?
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
@@ -56,6 +86,9 @@ public final class CommandBarView: NSView {
 
     public var panelFrame: CGRect {
         if case .embedded(let width) = presentation { return CGRect(x: 0, y: 0, width: width, height: bounds.height) }
+        if case .anchored(let anchor) = presentation {
+            return CGRect(x: anchor.minX, y: anchor.minY, width: anchor.width, height: CommandCardLayout.inline.panelHeight(rows: visibleRowCount))
+        }
         var frame = CommandBarMetrics.panelFrame(windowSize: bounds.size, rows: visibleRowCount, footer: showsFooter)
         if let width = overlayPanelWidth { frame.size.width = width; frame.origin.x = (bounds.width - width) / 2 }
         return frame
@@ -73,6 +106,13 @@ public final class CommandBarView: NSView {
     public override func layout() {
         super.layout()
         let f = panelFrame
+        let extent: MaterialView.TintExtent
+        switch presentation {
+        case .embedded: extent = .none
+        case .anchored: extent = .uniform
+        case .overlay: extent = sidebarMaxX.map { .overSidebar($0 - f.minX) } ?? .none
+        }
+        panel.material.tintExtent = extent
         guard container.frame != f else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -87,10 +127,20 @@ public final class CommandBarView: NSView {
         return bounds.contains(local) ? self : nil
     }
 
-    public override func mouseDown(with event: NSEvent) { onClickOutside?() }
+    public override func mouseDown(with event: NSEvent) {
+        let passes = passesClickThrough?(event.locationInWindow) == true
+        onClickOutside?()
+        // The dismissal is synchronous (`isActive` is false now), so the window's hit test reaches the row.
+        if passes, !isActive, let window { window.sendEvent(event) }
+    }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     // MARK: Diagnostics (renders and checks)
+
+    /// "overlay" (New Tab card), "anchored" (inline address editor), or "embedded" (Little Open).
+    public var presentationKind: String {
+        switch presentation { case .overlay: "overlay"; case .anchored: "anchored"; case .embedded: "embedded" }
+    }
 
     /// The trailing item: "info", "hint <Site>", "hint+space <Site>", or "none".
     public var debugTrailing: String {
@@ -176,8 +226,8 @@ final class PanelContainerView: NSView {
         wantsLayer = true
         layer?.masksToBounds = false
         shadowLayer.shadowColor = CGColor(gray: 0, alpha: 1)
-        shadowLayer.shadowOpacity = CommandBarShadow.opacity
-        shadowLayer.shadowRadius = CommandBarShadow.radius
+        shadowLayer.shadowOpacity = CommandCard.shadowOpacity
+        shadowLayer.shadowRadius = CommandCard.shadowRadius
         shadowLayer.actions = ["position": NSNull(), "bounds": NSNull(), "shadowPath": NSNull()]
         shadowMask.fillRule = .evenOdd
         shadowMask.actions = ["position": NSNull(), "bounds": NSNull(), "path": NSNull()]
@@ -194,15 +244,14 @@ final class PanelContainerView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         panel.frame = bounds
-        // The shadow never darkens what shows through the translucent panel: the mask cuts the panel out
-        // (Arc's fill over a white page is uniform up to the edge, A0120).
-        let r = CommandBarMetrics.cornerRadius
+        // The mask cuts the panel out of the shadow (the body is opaque; this keeps the shadow off the hairline).
+        let r = CommandCard.cornerRadius
         let path = CGPath(roundedRect: bounds, cornerWidth: r, cornerHeight: r, transform: nil)
         shadowLayer.frame = bounds
         shadowLayer.shadowPath = path
         // Downward in the flipped view (checked: the comparison measures the bottom and top shadow, ΔE ≤ 0.5).
-        shadowLayer.shadowOffset = CGSize(width: 0, height: (shadowLayer.isGeometryFlipped || layer?.isGeometryFlipped == true) ? -CommandBarShadow.offsetY : CommandBarShadow.offsetY)
-        let margin = CommandBarShadow.radius * 4 + CommandBarShadow.offsetY
+        shadowLayer.shadowOffset = CGSize(width: 0, height: (shadowLayer.isGeometryFlipped || layer?.isGeometryFlipped == true) ? -CommandCard.shadowOffsetY : CommandCard.shadowOffsetY)
+        let margin = CommandCard.shadowRadius * 4 + CommandCard.shadowOffsetY
         let maskPath = CGMutablePath()
         maskPath.addRect(bounds.insetBy(dx: -margin, dy: -margin))
         maskPath.addPath(path)

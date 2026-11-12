@@ -67,7 +67,8 @@ public final class SidebarContext {
     /// Forced hover for offscreen rendering and checks. Nil follows the pointer.
     public var forcedHover: SidebarHoverTarget?
     /// The pointer is over the sidebar (or a hover is forced).
-    var pointerInSidebar = false
+    /// The pointer is inside the sidebar (tracking area). Public so renders can set the state they show.
+    public var pointerInSidebar = false
     /// Open Peeks by source tab. The source row shows the Peek page's favicon in a
     /// plate at its right end, also while another tab is selected (F0090, F0101).
     /// Transient: the window controller sets it; the model never stores it.
