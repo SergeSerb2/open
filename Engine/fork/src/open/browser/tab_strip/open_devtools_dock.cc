@@ -8,6 +8,7 @@
 
 #include "base/no_destructor.h"
 #include "cef/include/cef_open_page.h"
+#include "base/logging.h"
 #include "cef/libcef/browser/thread_util.h"
 
 namespace open_engine {
@@ -25,6 +26,9 @@ std::map<int, CefRefPtr<CefBrowserViewDelegate>>& Delegates() {
 CefRefPtr<CefBrowserViewDelegate> TakeDevToolsDockDelegate(int browser_id) {
   auto& delegates = Delegates();
   auto it = delegates.find(browser_id);
+  LOG(WARNING) << "E3DBG dock take browser=" << browser_id
+               << " registered=" << delegates.size()
+               << " found=" << (it != delegates.end());
   if (it == delegates.end()) {
     return nullptr;
   }
@@ -42,6 +46,8 @@ bool CefSetOpenDevToolsDockDelegate(CefRefPtr<CefBrowser> browser,
     return false;
   }
   auto& delegates = open_engine::Delegates();
+  LOG(WARNING) << "E3DBG dock set browser=" << browser->GetIdentifier()
+               << " delegate=" << !!delegate;
   if (delegate) {
     delegates[browser->GetIdentifier()] = delegate;
   } else {

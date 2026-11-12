@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "cef/include/cef_open_page.h"
 #include "cef/libcef/renderer/browser_impl.h"
@@ -95,6 +96,9 @@ bool CefSetOpenUserStyleSheet(CefRefPtr<CefBrowser> browser,
               impl->GetWebView()->MainFrame()->IsWebLocalFrame()
           ? impl->GetWebView()->MainFrame()->ToWebLocalFrame()
           : nullptr;
+  LOG(WARNING) << "E3DBG uss set browser=" << browser->GetIdentifier()
+               << " key=" << sheet << " bytes=" << source.size()
+               << " had=" << had << " frame=" << !!frame;
   if (!frame || frame->GetDocument().IsNull()) {
     return true;
   }
