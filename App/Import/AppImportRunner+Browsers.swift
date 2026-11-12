@@ -2,6 +2,7 @@ import Foundation
 import OpenImport
 import OpenModel
 import OpenSettings
+import OpenStore
 
 /// Import from other browsers (IMC I-1: Chromium family). Settings only; first run stays Arc-only until I-5.
 /// Bookmarks land as one pinned folder in the current Space; history goes to that Space's Profile.
@@ -20,8 +21,10 @@ extension AppImportRunner {
     }
     let key = plan.source.importKey
     // Destination: the focused Space of the front window, else the first Space.
-    guard let space = app.frontWindowController.flatMap({ app.model.space(id: $0.windowState.focusedSpaceID) }) ?? app.model.spaces.first,
-          let target = app.model.profile(id: space.profileID) else {
+    let model: BrowserModel = self.app.model
+    let front = self.app.frontWindowController
+    guard let space = front?.context.focusedSpace ?? model.spaces.first,
+          let target = model.profile(id: space.profileID) else {
       result.errorText = "Open has no Space to import into."; return result
     }
     undo.actionName = "Import from " + source.name
