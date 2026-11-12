@@ -90,6 +90,27 @@ def run(factory, results, tmp, h):
         row('delete_note_cancel_then_delete', 'Are you sure you want to delete this Note?' in alert.get('texts', [])
             and 'Doing so will delete the Note permanently.' in alert.get('texts', []) and sorted(alert.get('buttons', [])) == ['Cancel', 'Delete']
             and still and deleted and not os.path.exists(file_before), alert=alert, still=still, fileExists=os.path.exists(file_before))
+
+        # A selection of only Notes: the last item is Arc's plural "Remove Notes from Sidebar" and Copy Links /
+        # Share are disabled (a Note has no address). With a web tab in the selection it stays "Archive Tabs".
+        app.call('note', action='create'); app.call('key', text='Gamma')
+        c = app.call('note')['tab']
+        app.call('note', action='flush')
+        files = [app.call('note', tab=t)['file'] for t in (b, c)]
+        app.call('sidebar-click', node=b); app.call('sidebar-click', node=c, modifiers=['cmd'])
+        notes_only = app.call('sidebar-menu-items', node=b)
+        app.call('sidebar-key', key='escape')
+        app.call('sidebar-click', node=b); app.call('sidebar-click', node=web, modifiers=['cmd'])
+        mixed = app.call('sidebar-menu-items', node=b)
+        app.call('sidebar-key', key='escape')
+        app.call('sidebar-click', node=b); app.call('sidebar-click', node=c, modifiers=['cmd'])
+        app.call('sidebar-menu', node=b, item='Remove Notes from Sidebar')
+        removed = h.wait_until(lambda: all(t['id'] not in (b, c) for t in app.call('tabs')) or None, timeout=5, step=.05)
+        row('selection_of_notes_menu', 'Remove Notes from Sidebar' in notes_only['items'] and 'Archive Tabs' not in notes_only['items']
+            and {'Copy Links', 'Share 2 Items…'} <= set(notes_only['disabled'])
+            and 'Archive Tabs' in mixed['items'] and 'Remove Notes from Sidebar' not in mixed['items'] and 'Copy Links' not in mixed['disabled']
+            and bool(removed) and all(os.path.exists(f) for f in files),
+            notesOnly=notes_only, mixed=mixed['items'], removed=bool(removed))
     finally:
         app.quit()
         server.shutdown()
