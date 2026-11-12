@@ -532,6 +532,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
       controller.context.calendarGlance = makeCalendarGlance(factory)
       controller.context.liveCalendar = liveCalendar.actions()
+      // Favorite unread badges from page titles (audit A2); normal windows only.
+      controller.context.favoriteBadgesEnabled = true
     }
     // Native Note and Easel rows have no page or stored icon: draw their marks even before they show.
     controller.context.faviconProvider = { tab in
