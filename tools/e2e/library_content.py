@@ -88,12 +88,13 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                     state(action='open',section='downloads');assert wait(lambda:row(value['id']))
                 return value['id']
             complete=start('/file');check('completed_download_row',wait(lambda:item(complete).get('state')=='completed') and wait(lambda:row(complete)['subtitle']=='Download'),row=row(complete))
-            expected=['Open','Copy','Show in Finder','separator','Hide from Open','Move to Trash']
-            check('completed_native_menu', [m['title'] for m in menu(complete)]==expected,items=menu(complete))
+            # Arc's download menu (D2c #394): "Open ‹ext›", "Copy ‹ext›", then the fixed items.
+            titles=[m['title'] for m in menu(complete)]
+            check('completed_native_menu', len(titles)==6 and titles[0].startswith('Open') and titles[1].startswith('Copy') and titles[2:]==['Show in Finder','separator','Hide from Open','Move to Trash'],items=menu(complete))
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
-            menu(complete,'Copy');check('download_copy_file',wait(lambda:app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt')))
+            menu(complete,titles[1]);check('download_copy_file',wait(lambda:app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt')))
             payload=state(action='row-drag',id=complete);check('download_drag_file', 'public.file-url' in payload['types'] and payload['url'].endswith('/sample.txt'),payload=payload)
-            menu(complete,'Open');check('download_open_action',bool(app.call('downloads-state')['fileActions']))
+            menu(complete,titles[0]);check('download_open_action',bool(app.call('downloads-state')['fileActions']))
             # Complete several real engine transfers while the Library is closed.
             for _ in range(3):
                 newest=start('/file',open_after=False);assert wait(lambda:item(newest).get('state')=='completed')
@@ -130,12 +131,12 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='chip',id='profile:'+profile);check('profile_chip_selected',state()['filterActive'] and state()['profiles']['downloads']==profile);capture('downloads-profile-filter')
             key('escape');check('escape_closes_filter',not state()['header']['filterOpen'] and state()['open'])
             state(action='filter',open=True);state(action='chip',id='profile:'+profile);state(action='filter',open=False)
-            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)]==['Pause','Cancel','Show in Finder']);capture('downloads-running')
-            menu(slow,'Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused') and wait(lambda:any(m['title']=='Resume' for m in menu(slow))));capture('downloads-paused')
-            menu(slow,'Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
-            menu(slow,'Cancel');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
+            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)][2:]==['Show in Finder','separator','Cancel Download','separator','Hide from Open'],items=menu(slow));capture('downloads-running')
+            state(action='row-action',id=slow,name='Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused') and wait(lambda:'Resume' in row(slow).get('actions',[])));capture('downloads-paused')
+            state(action='row-action',id=slow,name='Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
+            menu(slow,'Cancel Download');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
             failed=start('/fail');check('failed_real_transfer',wait(lambda:item(failed).get('state')=='failed'))
-            check('failed_menu',[m['title'] for m in menu(failed)]==['Retry','Hide from Open']);capture('downloads-failed')
+            check('failed_menu',[m['title'] for m in menu(failed)]==['Retry','separator','Hide from Open']);capture('downloads-failed')
             # History is populated by real engine navigation.
             state(action='close');app.call('navigate',tab=tab,url=base+'/arm');app.call('wait',tab=tab);app.call('history-state')
             key('y',['cmd']);check('cmd_y_history',state()['open'] and state()['section']=='history')
@@ -189,12 +190,12 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('capture-action',action='cancel')
             state(action='open',section='media');check('media_capture_rows',wait(lambda:bool(rows())),rows=rows());check('capture_page_title',rows()[0]['title']=='Downloads fixture' and '127.0.0.1' in rows()[0]['subtitle'])
             app.call('library-captures-state',recordFileActions=True)
-            capture_row=rows()[0];state(action='hover-row',id=capture_row['id']);check('capture_native_menu',[m['title'] for m in menu(capture_row['id'])]==['Open','Copy','Show in Finder','Save As…','separator','Delete']);capture('media-captures')
+            capture_row=rows()[0];state(action='hover-row',id=capture_row['id']);check('capture_native_menu',[m['title'] for m in menu(capture_row['id'])]==['Open in Preview','Send via iMessage','AirDrop','Copy Image','Show in Finder','Save As…','separator','Delete']);capture('media-captures')
             payload=state(action='row-drag',id=capture_row['id']);check('capture_drag_file','public.file-url' in payload['types'],payload=payload)
-            menu(capture_row['id'],'Copy');check('capture_copy_image',app.call('library-captures-state')['pasteboardHasImage'])
+            menu(capture_row['id'],'Copy Image');check('capture_copy_image',app.call('library-captures-state')['pasteboardHasImage'])
             menu(capture_row['id'],'Save As…');save_path=Path(data)/'saved-capture.png';state(action='save-panel',path=str(save_path))
             check('capture_save_as_file',wait(lambda:save_path.exists()) and save_path.read_bytes().startswith(b'\x89PNG'))
-            menu(capture_row['id'],'Open');check('capture_open_recorded',bool(app.call('library-captures-state')['opened']))
+            menu(capture_row['id'],'Open in Preview');check('capture_open_recorded',bool(app.call('library-captures-state')['opened']))
             state(action='row-select',id=capture_row['id']);key('delete',['cmd'])
             app.call('alert',window='library',button='Cancel');check('capture_delete_cancel',bool(row(capture_row['id'])))
             state(action='row-select',id=capture_row['id']);key('delete',['cmd']);app.call('alert',window='library',button='Delete')
