@@ -10987,7 +10987,10 @@ def library_capture_checks(app, require, root, evidence):
             current = open_section(section)
             if section == 'history':
                 working = wait_until(lambda: app.call('settings-state')['historyRows'] > 0, timeout=5)
-            elif section == 'downloads': working = current and any('No downloads' in t for t in current['text'])
+            elif section == 'downloads':
+                # Empty Downloads: "No downloads yet", or "No matches" while a search or Profile filter is active
+                # (LibraryPanelView.updateEmptyCopy). Either one is the working empty list, not the capture error.
+                working = current and not current['items'] and any(t in ('No downloads yet', 'No matches') for t in current['text'])
             else: working = app.call('space-manager-state')['hostedManagers'] == 1
             require('library_corrupt_index_' + section, current and working and no_error(current) and current['status'] == '', state=state())
         for section in ('captures', 'media'):
