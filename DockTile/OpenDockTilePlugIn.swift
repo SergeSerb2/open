@@ -32,7 +32,13 @@ final class OpenDockTilePlugIn: NSObject, NSDockTilePlugIn {
 
   /// The icon to draw, or nil for the bundle icon. Exposed to Objective-C for the verification harness.
   @objc static func selectedIcon() -> NSImage? {
-    guard let domain = hostBundleIdentifier as CFString? else { return nil }
+    hostBundleIdentifier.flatMap { selectedIcon(inDomain: $0) }
+  }
+
+  /// The same read from a named preferences domain. The Dock always uses the host's domain (above); the e2e
+  /// probe passes its run's private domain, because tests never write Open's real preferences.
+  @objc static func selectedIcon(inDomain name: String) -> NSImage? {
+    let domain = name as CFString
     CFPreferencesAppSynchronize(domain)
     guard let path = CFPreferencesCopyAppValue(fileKey as CFString, domain) as? String, path.hasSuffix(".png"),
           let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int), size > 0, size <= maxBytes
