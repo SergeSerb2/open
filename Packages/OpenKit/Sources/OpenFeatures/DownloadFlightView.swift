@@ -55,15 +55,16 @@ public final class DownloadFlightView: NSView {
         CATransaction.commit()
         let visible = CAKeyframeAnimation(keyPath: "opacity")
         visible.values = [1, 1]; visible.keyTimes = [0, 1]; visible.duration = duration; visible.beginTime = begin
-        CATransaction.begin()
-        CATransaction.setCompletionBlock { [weak self] in self?.finish() }
         iconLayer.add(keyframes("position", positions), forKey: "downloads.flight.position")
         iconLayer.add(keyframes("bounds", sizes), forKey: "downloads.flight.bounds")
         iconLayer.add(visible, forKey: "downloads.flight.opacity")
-        CATransaction.commit()
+        // One finite timer removes the overlay. A Core Animation completion block does not fire for a
+        // window that is never composited (occluded, offscreen), which would leave the view behind.
+        DispatchQueue.main.asyncAfter(deadline: .now() + DownloadFlight.startDelay + duration + 0.05) { [weak self] in self?.finish() }
     }
 
     private func finish() {
+        iconLayer.removeAllAnimations()
         removeFromSuperview()
         let done = onFinish; onFinish = nil; done?()
     }
