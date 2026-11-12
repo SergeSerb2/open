@@ -108,6 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var liveFolders = LiveFolderService(app: self)
   /// Calendar data for Join Meeting, the calendar card and Live Calendar; first use only (plan NS §2 CAL).
   lazy var calendar = CalendarService()
+  /// Live Calendar Favorite tiles (LD §4); idle until a calendar Favorite tile appears.
+  lazy var liveCalendar = LiveCalendarCoordinator(app: self)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false
@@ -467,6 +469,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         for phrase in phrases { rows += await store.recentURLs(matchingURLPhrase: phrase).map { ($0.url, $0.title, $0.lastVisit) } }
         return rows
       }
+      // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
+      controller.context.calendarGlance = makeCalendarGlance(factory)
+      controller.context.liveCalendar = liveCalendar.actions()
     }
     // Native Note and Easel rows have no page or stored icon: draw their marks even before they show.
     controller.context.faviconProvider = { tab in

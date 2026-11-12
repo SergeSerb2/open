@@ -25,6 +25,7 @@ extension AutomationController {
       guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "glance-match needs url") }
       switch GlanceKind.match(url: url) {
       case .recents(let site)?: return ["kind": "recents", "site": site.rawValue]
+      case .calendar(let provider)?: return ["kind": "calendar", "provider": provider.rawValue]
       case nil: return ["kind": "none"]
       }
     case "history-record":
@@ -76,8 +77,11 @@ extension AutomationController {
         "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":
       let controller = try glanceController(a)
-      guard case .glance(let id)? = controller.hoverPreview.request?.kind,
-        let view = controller.hoverPreview.card?.content as? RecentsPreviewView else { return ["shown": false] }
+      guard case .glance(let id)? = controller.hoverPreview.request?.kind else { return ["shown": false] }
+      if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
+        return try await calendarGlanceState(calendar, controller: controller, tab: id, wait: a["wait"] as? Bool != false)
+      }
+      guard let view = controller.hoverPreview.card?.content as? RecentsPreviewView else { return ["shown": false] }
       if a["wait"] as? Bool != false {
         let deadline = Date().addingTimeInterval(5)
         while !view.isLoaded, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
@@ -92,6 +96,21 @@ extension AutomationController {
         "card": [card.minX, card.minY, card.width, card.height]] as [String: Any]
     case "glance-open":
       let controller = try glanceController(a)
+      if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
+        switch a["control"] as? String ?? "new" {
+        case "new": calendar.openNew()
+        case "join": guard calendar.joinable != nil, !calendar.joinButton.isHidden else { throw Failure(message: "no join strip") }
+          calendar.join()
+        case "access": guard !calendar.accessButton.isHidden else { throw Failure(message: "no access button") }
+          calendar.askAccess()
+        case "event":
+          let index = a["row"] as? Int ?? 0
+          guard calendar.timeline.blocks.indices.contains(index) else { throw Failure(message: "no event block \(index)") }
+          calendar.timeline.select(calendar.timeline.blocks[index].event)
+        default: throw Failure(message: "unknown calendar control")
+        }
+        return ["opened": true]
+      }
       guard let view = controller.hoverPreview.card?.content as? RecentsPreviewView else { throw Failure(message: "no Recents card") }
       if a["new"] as? Bool == true { view.openNew() } else { view.open(row: a["row"] as? Int ?? 0) }
       return ["opened": true]
@@ -103,6 +122,25 @@ extension AutomationController {
     if let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }) { return space }
     guard let space = app.frontWindowController?.context.focusedSpace else { throw Failure(message: "no Space") }
     return space
+  }
+
+  private func calendarGlanceState(_ view: CalendarPreviewView, controller: BrowserWindowController, tab: ItemID, wait: Bool) async throws -> [String: Any] {
+    if wait {
+      let deadline = Date().addingTimeInterval(5)
+      while !view.isLoaded, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+    }
+    controller.contentView.layoutSubtreeIfNeeded()
+    let root = controller.contentView
+    func rect(_ v: NSView) -> [Double] { let f = root.convert(v.bounds, from: v); return [f.minX, f.minY, f.width, f.height] }
+    return ["shown": true, "kind": "calendar", "provider": view.provider.rawValue, "tab": tab.description, "loaded": view.isLoaded,
+      "phase": view.phase.rawValue, "header": CalendarProvider.header, "newLabel": view.newButton.toolTip ?? "",
+      "newURL": view.provider.newEventURL(for: view.tab.url).absoluteString,
+      "join": view.joinButton.isHidden ? NSNull() : ["event": view.joinable?.event.id ?? "", "url": view.joinable?.link.url.absoluteString ?? "",
+        "title": view.joinable?.event.displayTitle ?? "", "button": view.joinButton.title, "tooltip": view.joinButton.toolTip ?? "",
+        "subtitle": view.joinable.map { CalendarPreviewView.subtitle(for: $0.event, now: Date()) } ?? ""] as [String: Any],
+      "access": view.accessButton.isHidden ? NSNull() : view.accessButton.title,
+      "events": view.timeline.blocks.map { ["id": $0.event.id, "title": $0.event.displayTitle, "frame": [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height]] },
+      "card": controller.hoverPreview.card.map(rect) ?? [], "privacyOpened": CalendarPrivacySettings.openedForAutomation] as [String: Any]
   }
 
   private func glanceController(_ a: [String: Any]) throws -> BrowserWindowController {
