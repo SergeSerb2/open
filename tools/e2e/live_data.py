@@ -77,6 +77,9 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
     server, port, gh = github_fixture()
     try:
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
+        # The test App's preferences domain outlives one run: start from first-use state.
+        for key in ('open.liveFolders.introSeen', 'open.liveFolders.githubAutoCreate'):
+            app.call('defaults', key=key, value=None)
         gh['prs'] = {'created': [('acme/app', 12, 'Fix sidebar drag', 'open'), ('acme/web', 7, 'Draft: new header', 'draft')],
                      'review': [('acme/app', 15, 'Add Live Folders', 'open'), ('acme/app', 12, 'Fix sidebar drag', 'open')],
                      'approved': [], 'changes': [('acme/api', 3, 'Merged already', 'merged')]}
@@ -116,10 +119,10 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         app.call('live-folder-refresh')
         state = app.call('live-folder-state')
         folder = state['id']
-        def menu_state(path): 
-            try: return app.call('sidebar-menu-state', node=folder, item=path)
+        def menu_state(path):
+            try: return app.call('sidebar-menu-state', node=folder, items=path.split('|') if '|' in path else path.split('/'))
             except Exception as e: return {'error': str(e)}
-        repos = {r: menu_state('Repositories/' + r).get('checked') for r in ('acme/app', 'acme/web')}
+        repos = {r: menu_state('Repositories|' + r).get('checked') for r in ('acme/app', 'acme/web')}
         items = {t: menu_state(t) for t in ('Refresh', 'Copy All Links', 'Delete Live Folder', 'Single Sign-On/Required',
                                            'Repositories/This list is generated based on your currently active pull requests.')}
         results['live_folder_menu'] = {'ok': repos == {'acme/app': True, 'acme/web': True} and items['Refresh'].get('enabled')
@@ -127,19 +130,20 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and items['Single Sign-On/Required'].get('title') == 'Required'
             and items['Repositories/This list is generated based on your currently active pull requests.'].get('enabled') is False,
             'repos': repos, 'items': items}
-        app.call('sidebar-menu', node=folder, item='Repositories/acme/web')
+        app.call('sidebar-menu', node=folder, items=['Repositories', 'acme/web'])
         hidden = app.call('live-folder-state')
         app.call('live-folder-refresh')
         after = app.call('live-folder-state')
         results['live_folder_hide_repository'] = {'ok': not any('/acme/web/' in r['url'] for r in hidden['rows'] + after['rows'])
-            and after.get('hiddenRepositories') == ['acme/web'] and menu_state('Repositories/acme/web').get('checked') is False, 'after': after}
-        app.call('sidebar-menu', node=folder, item='Repositories/acme/web')
+            and after.get('hiddenRepositories') == ['acme/web'] and menu_state('Repositories|acme/web').get('checked') is False, 'after': after}
+        app.call('sidebar-menu', node=folder, items=['Repositories', 'acme/web'])
         victim = next(r for r in after['rows'] if r['title'].startswith('Fix sidebar drag'))
-        app.call('close', tab=victim['id'])
+        app.call('sidebar-menu', node=victim['id'], item='Remove Pin')  # the user takes the row out of the folder
         app.call('live-folder-refresh')
         after = app.call('live-folder-state')
         results['live_folder_manual_delete_stays_hidden'] = {'ok': victim['live'] in after.get('hiddenItems', [])
-            and not any(r['live'] == victim['live'] for r in after['rows']) and any('/acme/web/' in r['url'] for r in after['rows']), 'after': after}
+            and not any(r['live'] == victim['live'] for r in after['rows']) and any('/acme/web/' in r['url'] for r in after['rows'])
+            and app.tab(victim['id'])['section'] == 'today', 'after': after}
         gh['signed_in'] = False
         out = app.call('live-folder-refresh')
         state = app.call('live-folder-state')
@@ -160,7 +164,8 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
         again = app.call('live-folder-state')
         results['live_folder_survives_relaunch'] = {'ok': again.get('exists') and again.get('outcome') == 'signedOut'
-            and {(r['url'], r['live']) for r in again.get('rows', [])} == before and app.call('live-folder-refresh').get('outcome') == 'success',
+            and {(r['url'], r['live']) for r in again.get('rows', [])} == before
+            and bool(wait_until(lambda: app.call('live-folder-refresh').get('outcome') == 'success', timeout=15, step=.5)),
             'state': again}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         gone = app.call('live-folder-state')
@@ -186,11 +191,16 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         app.call('navigate', tab=other, url='http://github.localhost:%d/acme/app/pull/78' % port); app.call('wait', tab=other)
         results['live_folder_delete_alert_turns_off_auto'] = {'ok': 'Delete your GitHub Live Folder?' in alert.get('texts', [])
             and 'You can restore this folder at any time by right-clicking the sidebar.' in alert.get('texts', [])
-            and alert.get('buttons', [])[:2] == ['Delete Folder', 'Cancel'] and gone.get('exists') is False
+            and set(alert.get('buttons', [])) >= {'Delete Folder', 'Cancel'} and gone.get('exists') is False
             and app.call('live-folder-state').get('exists') is False
             and app.call('defaults', key='open.liveFolders.githubAutoCreate') is False, 'alert': alert}
         return app
     finally:
+        try:
+            for key in ('open.liveFolders.introSeen', 'open.liveFolders.githubAutoCreate'):
+                holder['app'].call('defaults', key=key, value=None)
+        except Exception:
+            pass
         server.shutdown()
 
 

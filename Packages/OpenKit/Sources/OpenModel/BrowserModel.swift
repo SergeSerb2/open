@@ -1294,6 +1294,7 @@ public final class BrowserModel {
     /// Returns false, with no change and no event, when the move breaks a placement rule.
     @discardableResult
     public func moveNode(id: ItemID, to destination: NodeParent, at position: Int?) -> Bool {
+        noteLiveRowLeaving(id, to: destination)
         guard let revert = move(id, to: destination, at: position) else { return false }
         registerUndo(revert, reapply: { $0.move(id, to: destination, at: position) ?? Self.noRevert })
         return true
@@ -1460,6 +1461,7 @@ public final class BrowserModel {
 
     @discardableResult
     public func archiveNodes(ids: [ItemID]) -> Int {
+        for id in ids { noteLiveRowLeaving(id) }
         let result = archiveMany(ids)
         if let revert = result.revert { registerUndo(revert, reapply: { $0.archiveMany(ids).revert ?? Self.noRevert }) }
         return result.count
@@ -1772,6 +1774,15 @@ public final class BrowserModel {
             if let spaceID { _ = relocate(node.id, to: .spaceToday(spaceID), at: 0) }
         }
         _ = detach(id)
+    }
+
+    /// A fetched row leaves its Live Folder by the user's action (archive, Remove Pin, drag out):
+    /// remember it as hidden so later refreshes do not bring it back, and make it a normal tab.
+    func noteLiveRowLeaving(_ id: ItemID, to destination: NodeParent? = nil) {
+        guard let tab = tab(id: id), let url = tab.liveItemURL, case .folder(let folderID)? = parentByID[id],
+              destination != .folder(folderID), let folder = index[folderID]?.folder, folder.live != nil else { return }
+        folder.live?.hiddenItems.insert(url.absoluteString)
+        if destination != nil { tab.liveItemURL = nil }
     }
 
     /// Every Live Folder in the model (any Space).
