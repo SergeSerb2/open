@@ -16,6 +16,10 @@ public struct ArcPreferences: Sendable {
     /// `BaseModels/LiveCalendar.swift` in the Arc 1.172.2 binary). The container format is not known (no Arc data on
     /// this Mac has the key); the reader accepts a dictionary or JSON data of one. GUESS — capture pending.
     public private(set) var reminderIntervals: [String: String] = [:]
+    /// Arc's Favorite tile host lists (`topAppsBadgingDisabledHosts`, `topAppsSubtitleDisabledHosts`; audit A2).
+    /// The stored type is not known (no Arc data on this Mac has the keys): the reader accepts a list of host
+    /// strings. GUESS — capture pending.
+    public private(set) var hostLists: [String: [String]] = [:]
     /// The file was found and read.
     public private(set) var found = false
 
@@ -44,6 +48,10 @@ public struct ArcPreferences: Sendable {
         for key in ArcPreferenceMapping.boolKeys {
             if let value = root[key] as? Bool { prefs.bools[key] = value }
             else if let value = root[key] as? NSNumber { prefs.bools[key] = value.boolValue }
+        }
+        for key in ArcPreferenceMapping.favoriteHostLists.map(\.arc) {
+            guard let list = root[key] as? [String] else { continue }
+            prefs.hostLists[key] = Array(Set(list.prefix(1_000).map { $0.lowercased() }.filter { !$0.isEmpty && $0.utf8.count <= 253 })).sorted()
         }
         if let value = root[ArcPreferenceMapping.reminderKey] { prefs.reminderIntervals = Self.intervals(from: value) }
         return prefs
@@ -99,7 +107,18 @@ public enum ArcPreferenceMapping {
     public static let liveFolderIntroKey = "hasSeenGithubLiveFolderEducation"
     public static let openLiveFolderAutoCreateKey = "open.liveFolders.githubAutoCreate"
     public static let openLiveFolderIntroKey = "open.liveFolders.introSeen"
-    static var boolKeys: [String] { previews.map(\.arc) + Array(unmapped.keys) + [meetRouteKey, liveFolderOffKey, liveFolderIntroKey] }
+    /// Favorite tile switches (audit A2, docs/re/favorite-badges.md): Arc key → Open key (`FavoriteTileSettings`).
+    public static let favoriteBadgeSwitches: [(arc: String, open: String)] = [
+        ("twitterBadgeEnabled", "open.favorites.twitterBadgeEnabled"),
+        ("whatsAppBadgeEnabled", "open.favorites.whatsAppBadgeEnabled"),
+    ]
+    public static let favoriteHostLists: [(arc: String, open: String)] = [
+        ("topAppsBadgingDisabledHosts", "open.favorites.badgingDisabledHosts"),
+        ("topAppsSubtitleDisabledHosts", "open.favorites.subtitleDisabledHosts"),
+    ]
+    static var boolKeys: [String] {
+        previews.map(\.arc) + Array(unmapped.keys) + favoriteBadgeSwitches.map(\.arc) + [meetRouteKey, liveFolderOffKey, liveFolderIntroKey]
+    }
 
     /// Open's raw value for an Arc reminder raw value (`LiveCalendar.ReminderInterval`).
     public static func openInterval(_ arc: String) -> String? {
@@ -118,6 +137,7 @@ public enum ArcPreferenceMapping {
         if prefs.bools[meetRouteKey] == true { out[openMeetRouteKey] = true }
         if let off = prefs.bools[liveFolderOffKey] { out[openLiveFolderAutoCreateKey] = !off }
         if prefs.bools[liveFolderIntroKey] == true { out[openLiveFolderIntroKey] = true }
+        for (arc, open) in favoriteBadgeSwitches { if let value = prefs.bools[arc] { out[open] = value } }
         return out
     }
 }
