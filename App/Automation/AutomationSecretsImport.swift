@@ -19,7 +19,15 @@ extension AutomationController {
     guard secretsFixtureStage != "running", !secretsFixtureStage.hasPrefix("paused-"),
       !app.importInProgress, !app.importRunner.historyInProgress, !app.importRunner.installingExtension,
       !app.importRunner.secretsFixtureInProgress else { throw Failure(message: "an import is already running") }
-    guard Set(args.keys).isSubset(of: ["map", "pause", "pauseProfile"]) else { throw Failure(message: "unsupported synthetic import argument") }
+    guard Set(args.keys).isSubset(of: ["map", "pause", "pauseProfile", "only"]) else { throw Failure(message: "unsupported synthetic import argument") }
+    // IMC I-2: other Chromium browsers import one chosen profile.
+    var only: Set<String>?
+    if let value = args["only"] {
+      guard let names = value as? [String], !names.isEmpty, Set(names).isSubset(of: ["Default", "Profile 1"]) else {
+        throw Failure(message: "invalid synthetic profile restriction")
+      }
+      only = Set(names)
+    }
     let mapping: [String: String]
     if let value = args["map"] {
       guard let value = value as? [String: String], !value.isEmpty, value.count <= 2,
@@ -64,7 +72,7 @@ extension AutomationController {
         defer { secretsFixtureTask = nil; app.importRunner.secretsFixtureInProgress = false }
         do {
           let report = try await app.importRunner.runSecretsBatch(sinks: sinks) {
-            try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil)
+            try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil, onlyProfiles: only)
           }
           secretsFixtureReport = Self.secretsCounts(report); secretsFixtureStage = "finished"
         } catch { secretsFixtureError = Self.secretsError(error); secretsFixtureStage = "failed" }
@@ -74,7 +82,7 @@ extension AutomationController {
     defer { app.importRunner.secretsFixtureInProgress = false }
     do {
       let report = try await app.importRunner.runSecretsBatch(sinks: sinks) {
-        try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil)
+        try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil, onlyProfiles: only)
       }
       secretsFixtureReport = Self.secretsCounts(report); secretsFixtureStage = "finished"
       return secretsImportState()

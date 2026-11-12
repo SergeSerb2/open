@@ -323,6 +323,7 @@
       case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
         return try await mouse(a, nil)
       case "welcome": return try welcome(a)
+      case "easel": return try easel(a)
       case "note": return try note(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
@@ -848,6 +849,8 @@
         return try runPeekAppCommand(cmd, a)
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
+      case "handoff-state", "handoff-continue", "deep-link-state":
+        return try await runHandoffCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)
         guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
@@ -2467,7 +2470,11 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "g": ("g", 5), "s": ("s", 1), "a": ("a", 0),
-        "e": ("e", 14), "r": ("r", 15), "k": ("k", 40), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
+        "e": ("e", 14), "r": ("r", 15), "k": ("k", 40), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32),
+        "b": ("b", 11), "h": ("h", 4), "m": ("m", 46), "p": ("p", 35), "q": ("q", 12),
+        // Every digit, so Ctrl+1…9 (Go to Space) and Cmd+1…9 (Go to Tab) reach the router.
+        "0": ("0", 29), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "5": ("5", 23),
+        "6": ("6", 22), "7": ("7", 26), "8": ("8", 28), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),

@@ -57,6 +57,10 @@
 	<string>Websites you visit can ask for your location.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Websites you visit can ask to connect to Bluetooth devices.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>NSUserActivityTypeBrowsingWeb</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -71,6 +75,16 @@
 			</array>
 			<key>LSHandlerRank</key>
 			<string>Default</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Open Browser</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>open-browser</string>
+			</array>
 		</dict>
 	</array>
 	<key>SUFeedURL</key>

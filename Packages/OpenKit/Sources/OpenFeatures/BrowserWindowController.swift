@@ -151,6 +151,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         captureStorage = capture
         capture.onOverlayChange = { [weak self] up in self?.onCaptureOverlayChange?(up) }
         capture.library = captureLibrary
+        capture.addToEasel = captureAddToEasel
         capture.pageTarget = { [weak self] in self?.capturePageTarget() }
         capture.anchor = { [weak self] in
             guard let self else { return .zero }
@@ -178,6 +179,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     /// Where captures are saved (the App's Library writer); nil saves nothing.
     public weak var captureLibrary: (any CaptureLibrary)? { didSet { captureStorage?.library = captureLibrary } }
+    /// Capture → Easel (the App's Easel menu); nil hides the card's Add to Easel button.
+    public var captureAddToEasel: ((CaptureController.Result, NSView) -> Void)? { didSet { captureStorage?.addToEasel = captureAddToEasel } }
     /// The capture overlay shows: history swipes must not navigate (EP-1 reads this, §4.4).
     public var captureOverlayActive: Bool { captureStorage?.isOverlayActive == true }
     /// The page a capture takes: the top Peek page while Peek shows, else the focused pane.
