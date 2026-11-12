@@ -117,6 +117,8 @@ public enum SidebarIntent: Equatable, Sendable {
     case hoverPreview(SidebarHoverPreviewRequest?)
     case openProfileSettings(ProfileID)
     case dismissAutoArchiveBanner
+    /// The "x" of the Favorites empty-state card (A3): hides it for that Profile.
+    case dismissFavoritesEmptyState(ProfileID)
 
     // Structure (drag and drop, "Move to")
     case move(nodeID: ItemID, to: NodeParent, index: Int?)
