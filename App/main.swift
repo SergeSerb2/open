@@ -2,9 +2,9 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
+import OpenSettings
 #if OPEN_AUTOMATION
 import OpenOnboarding
-import OpenSettings
 #endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
@@ -29,6 +29,7 @@ let appDelegate = AppDelegate()
 LaunchTiming.shared.phase("delegateCreated")
 #if OPEN_AUTOMATION
 StartupMainThreadTrace.startIfRequested()
+RunLoopTurnTrace.startIfRequested()
 #endif
 app.delegate = appDelegate
 #if OPEN_AUTOMATION
