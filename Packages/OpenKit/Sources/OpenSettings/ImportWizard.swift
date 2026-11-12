@@ -2,11 +2,12 @@ import Foundation
 import Observation
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import OpenModel
 import OpenImport
 
 @MainActor @Observable public final class ImportWizardViewModel {
-    public enum Step: String, CaseIterable { case source = "Source", choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
+    public enum Step: String, CaseIterable { case source = "Source", access = "Access", choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
     unowned let root: SettingsViewModel
     private let importActions: any ImportActions
     public let extensions = ImportExtensionsViewModel()
@@ -35,6 +36,14 @@ import OpenImport
     /// "arc" or a `BrowserSourceDescriptor.id`.
     public var selectedSourceID: String = "arc"
     public private(set) var browserCounts: ChromiumProfileCounts?
+    /// Firefox and Safari counts (IMF).
+    public private(set) var familyCounts: BrowserImportReader.Counts?
+    /// What blocks a Firefox or Safari import before the Choose step.
+    public enum AccessBlocker: String, Sendable { case fullDiskAccess, quitBrowser }
+    public private(set) var accessBlocker: AccessBlocker?
+    /// How often the wizard opened System Settings ▸ Full Disk Access (automation reads it; never opened for a synthetic library).
+    public private(set) var fullDiskAccessRequests = 0
+    private var accessPoll: Task<Void, Never>?
     /// Automation and fixtures point detection at a synthetic `~/Library`.
     nonisolated(unsafe) public static var browserLibraryOverride: URL?
     public init(root: SettingsViewModel, directory: URL? = nil, actions: (any ImportActions)? = nil, startsWithSource: Bool = false) {
@@ -51,7 +60,7 @@ import OpenImport
         return (path as NSString).abbreviatingWithTildeInPath
     }
     public var canContinue: Bool {
-        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings) }
+        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings || plan.passwords) && passwordsReady }
         return readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public var title: String { step == .source ? "Import from another browser" : "Import from " + plan.source.displayName }
     public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.source = .arc; selectedSourceID = "arc"; if step == .source { step = .choose }; plan.directory = directory; await refreshCounts() }
@@ -67,9 +76,11 @@ import OpenImport
     }
     public var selectedSource: BrowserSource? { sources.first { $0.id == selectedSourceID } }
     public var selectedProfileID: String? { if case .browser(_, let profile) = plan.source { return profile.id }; return nil }
-    public func canSelect(_ source: BrowserSource) -> Bool { source.isSupported && !source.accessDenied && !source.profiles.isEmpty }
+    /// Safari stays selectable without Full Disk Access: Arc lists it and asks for access after Next (C-report-s5 §1).
+    public func canSelect(_ source: BrowserSource) -> Bool { source.isSupported && (!source.accessDenied || source.family == .safari) && !source.profiles.isEmpty }
     public func sourceStatus(_ source: BrowserSource) -> String? {
         if !source.isSupported { return "Coming soon" }
+        if source.family == .safari { return nil }
         if source.accessDenied { return "No access" }
         if source.profiles.isEmpty { return "No data" }
         return nil
@@ -81,21 +92,136 @@ import OpenImport
         if selectedSourceID == "arc" { plan.source = .arc; step = .choose; await refreshCounts(); return }
         guard let source = selectedSource, let profile = source.profiles.first else { return }
         plan.source = .browser(source, profile: profile)
-        plan.bookmarks = true; plan.history = true; plan.searchSettings = true
-        step = .choose
+        plan.bookmarks = true; plan.history = true; plan.searchSettings = source.family == .chromium
+        plan.passwords = false; plan.safariFiles = SafariImportFiles(); plan.primaryPassword = ""
+        familyCounts = nil
+        await enterChooseOrAccess()
+    }
+
+    // MARK: Access (IMF): Safari Full Disk Access, a running Firefox
+
+    private func currentBlocker() -> AccessBlocker? {
+        guard case .browser(let source, let profile) = plan.source else { return nil }
+        switch source.family {
+        case .safari:
+            if plan.safariFiles.exportArchive == nil, SafariAccess.check(safariDirectory: profile.directory) == .denied { return .fullDiskAccess }
+        case .firefox:
+            // Arc: "Quit Firefox to continue importing" (browser-import.md §2 item 6).
+            let ids = BrowserSourceCatalog.runningBundleIDs(for: source.descriptor)
+            if FirefoxProfileCatalog.isLocked(profile.directory) || NSWorkspace.shared.runningApplications.contains(where: { ids.contains($0.bundleIdentifier ?? "") }) {
+                return .quitBrowser
+            }
+        case .arc, .chromium: break
+        }
+        return nil
+    }
+
+    private func enterChooseOrAccess() async {
+        accessPoll?.cancel(); accessPoll = nil
+        guard let blocker = currentBlocker() else { accessBlocker = nil; step = .choose; await refreshCounts(); return }
+        accessBlocker = blocker; step = .access
+        // Arc opens the Full Disk Access pane at once on Next (C-report-s5 §1, u3 00:55:08).
+        if blocker == .fullDiskAccess { openFullDiskAccessSettings() }
+        // Arc polls for the grant (`FullDiskAccessTimerID`); the same poll notices a quit browser.
+        accessPoll = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled, self.step == .access else { return }
+                if self.currentBlocker() == nil { await self.checkAccessAgain(); return }
+            }
+        }
+    }
+
+    public func checkAccessAgain() async {
+        guard step == .access else { return }
+        await enterChooseOrAccess()
+    }
+
+    public func openFullDiskAccessSettings() {
+        fullDiskAccessRequests += 1
+        // A synthetic library (e2e) never opens System Settings.
+        if Self.browserLibraryOverride == nil { NSWorkspace.shared.open(SafariAccess.settingsURL) }
+    }
+
+    public var accessTitle: String {
+        switch accessBlocker {
+        case .fullDiskAccess: "Open needs Full Disk Access to import from Safari."
+        case .quitBrowser: "Quit \(plan.source.displayName) to continue importing."
+        case nil: ""
+        }
+    }
+
+    public var accessBody: String {
+        switch accessBlocker {
+        case .fullDiskAccess: "In System Settings, turn on Open under Privacy & Security ▸ Full Disk Access. You can turn it off again when the import is finished. Open continues by itself when access is on. You can also import a file that you exported in Safari (File ▸ Export Browsing Data)."
+        case .quitBrowser: "\(plan.source.displayName) keeps its files locked while it runs. Open continues by itself when \(plan.source.displayName) has quit."
+        case nil: ""
+        }
+    }
+
+    /// Safari ▸ File ▸ Export Browsing Data: a ZIP with bookmarks, history and passwords. No Full Disk Access needed.
+    public func useSafariExport(_ url: URL) async {
+        guard !busy, case .browser(let source, _) = plan.source, source.family == .safari else { return }
+        guard (try? SafariExportReader(url: url)) != nil else { errorText = "The file you chose is not a Safari export. In Safari, choose File ▸ Export Browsing Data."; return }
+        errorText = ""
+        plan.safariFiles.exportArchive = url
+        await enterChooseOrAccess()
+    }
+
+    /// A Passwords.csv exported from Safari or the Passwords app.
+    public func usePasswordsFile(_ url: URL) async {
+        guard !busy, case .browser(let source, _) = plan.source, source.family == .safari else { return }
+        guard let data = try? Data(contentsOf: url), var read = try? PasswordsCSVReader.read(data) else {
+            errorText = "The file you chose doesn't look like a passwords file. Export it from Safari or the Passwords app (File ▸ Export All Passwords)."
+            return
+        }
+        for i in read.logins.indices { read.logins[i].zeroSecrets() }
+        errorText = ""
+        plan.safariFiles.passwordsCSV = url
+        plan.passwords = canImportBrowserPasswords
         await refreshCounts()
+    }
+
+    public var canImportBrowserPasswords: Bool { importActions.canImportBrowserPasswords }
+    public var browserFamily: BrowserFamily? { if case .browser(let source, _) = plan.source { return source.family }; return nil }
+    public var needsPrimaryPassword: Bool { browserFamily == .firefox && familyCounts?.needsPrimaryPassword == true }
+    /// Passwords need a source: Firefox logins (and the Primary Password when set) or a Safari file with passwords.
+    public var passwordsReady: Bool {
+        guard plan.passwords else { return true }
+        guard canImportBrowserPasswords, (familyCounts?.passwords ?? 0) > 0 else { return false }
+        return !needsPrimaryPassword || !plan.primaryPassword.isEmpty
     }
     public func selectProfile(_ id: String) async {
         guard !busy, case .browser(let source, let current) = plan.source, current.id != id,
               let profile = source.profiles.first(where: { $0.id == id }) else { return }
         plan.source = .browser(source, profile: profile)
-        await refreshCounts()
+        plan.primaryPassword = ""
+        await enterChooseOrAccess()
     }
-    public func backToSource() { guard startedWithSource, !busy else { return }; errorText = ""; step = .source }
+    public func backToSource() { guard startedWithSource, !busy else { return }; accessPoll?.cancel(); accessPoll = nil; accessBlocker = nil; errorText = ""; step = .source }
     /// GUESS — capture pending (F3 §3 item 3): the destination copy.
     public var destinationText: String { "Bookmarks go to a pinned folder, “\(BrowserBookmarksImport.folderTitle(browserName: plan.source.displayName))”, in your current Space." }
+    private func refreshFamilyCounts(_ family: BrowserFamily, _ profile: BrowserSourceProfile) async {
+        let request = UUID(); countRequest = request
+        readable = false; counting = true; errorText = ""; probe = nil; browserCounts = nil; familyCounts = nil; counts = [:]; spaceMapping = []
+        let source = plan.source, reader = BrowserImportReader(family: family, profile: profile, safari: plan.safariFiles)
+        let result = await Task.detached(priority: .utility) { reader.counts() }.value
+        guard request == countRequest, source == plan.source, reader.safari == plan.safariFiles else { return }
+        familyCounts = result
+        var values: [String: Int] = [:]
+        if let count = result.bookmarks { values["Bookmarks"] = count }
+        if let count = result.historyVisits { values["History"] = count }
+        if let count = result.passwords { values["Passwords"] = count }
+        counts = values
+        if (result.passwords ?? 0) == 0 || !canImportBrowserPasswords { plan.passwords = false }
+        else if family == .firefox && !plan.passwords && plan.primaryPassword.isEmpty && !result.needsPrimaryPassword { plan.passwords = true }
+        readable = !values.isEmpty
+        counting = false
+        if !readable { errorText = "No readable import data found in this \(plan.source.displayName) profile." }
+    }
     private func refreshBrowserCounts() async {
-        guard case .browser(_, let profile) = plan.source else { return }
+        guard case .browser(let browser, let profile) = plan.source else { return }
+        if browser.family != .chromium { await refreshFamilyCounts(browser.family, profile); return }
         let request = UUID(); countRequest = request
         readable = false; counting = true; errorText = ""; probe = nil; browserCounts = nil; counts = [:]; spaceMapping = []
         let source = plan.source
@@ -125,6 +251,12 @@ import OpenImport
         if !readable {errorText="No readable import data found at \(directoryDisplayPath)."}
     }
     public func countLabel(_ category:String)->String {
+        if let family = browserFamily, family != .chromium {
+            guard let familyCounts else { return counting ? "Counting…" : "Not found" }
+            if category == "Passwords", family == .safari, familyCounts.passwords == nil, !familyCounts.unreadable.contains("Passwords") { return "Choose a passwords file" }
+            if category == "Passwords", !canImportBrowserPasswords { return "Not available" }
+            return counts[category].map { "Found: \($0.formatted())" } ?? (familyCounts.unreadable.contains(category) ? "Could not be read" : "Not found")
+        }
         if !plan.isArc {
             guard let browserCounts else { return counting ? "Counting…" : "Not found" }
             if category == "Search settings" { return browserCounts.searchEngine ?? "Browser default" }
@@ -137,7 +269,9 @@ import OpenImport
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public static let browserReportCategories=["Bookmarks","History","Search settings"]
-    public var displayedReportCategories: [String] { if !plan.isArc { return Self.browserReportCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
+    public static let otherBrowserReportCategories=["Bookmarks","History","Passwords"]
+    public var browserCategories: [String] { browserFamily == .firefox || browserFamily == .safari ? Self.otherBrowserReportCategories : Self.browserReportCategories }
+    public var displayedReportCategories: [String] { if !plan.isArc { return browserCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
     public var unfinishedSecretsImportMessage: String? {
         unfinishedSecretsImport && !secretsReportLines.contains(ArcSecretsImportReport.unfinishedMessage) ? ArcSecretsImportReport.unfinishedMessage : nil
@@ -190,6 +324,7 @@ import OpenImport
     private func execute() async {
         isImporting = true; step = .progress
         let result = await importActions.runImport(plan: plan)
+        plan.primaryPassword = ""
         outcome = result; errorText = result.errorText ?? ""; isImporting = false; step = .report
         extensions.reset(candidates: result.extensions, profileCount: result.extensionProfileCount)
         unfinishedSecretsImport = importActions.hasUnfinishedSecretsImport
@@ -201,7 +336,7 @@ import OpenImport
         consentWasDecided = false
     }
     public func retry() { guard !busy else { return }; clearConsent(); outcome = nil; step = .choose }
-    public func finish(openLibrary: Bool = false) { guard !busy else { return }; if plan.isArc && outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
+    public func finish(openLibrary: Bool = false) { guard !busy else { return }; accessPoll?.cancel(); accessPoll = nil; plan.primaryPassword = ""; if plan.isArc && outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
     public func installExtensions() async { guard step == .report else { return }; await extensions.install(using: importActions) }
 }
 public struct ImportWizard: View {
@@ -211,24 +346,42 @@ public struct ImportWizard: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(model.title).font(.title2)
-            HStack { ForEach(ImportWizardViewModel.Step.allCases.filter { $0 != .progress && ($0 != .source || model.startedWithSource) && ($0 != .consent || model.plan.secretsRequested || model.step == .consent) }, id: \.self) { step in Text(step.rawValue).foregroundStyle(model.step == step ? .primary : .secondary); if step != .report { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } } }
+            HStack { ForEach(ImportWizardViewModel.Step.allCases.filter { $0 != .progress && ($0 != .source || model.startedWithSource) && ($0 != .access || model.step == .access) && ($0 != .consent || model.plan.secretsRequested || model.step == .consent) }, id: \.self) { step in Text(step.rawValue).foregroundStyle(model.step == step ? .primary : .secondary); if step != .report { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } } }
             Divider()
             ScrollView { VStack(alignment: .leading, spacing: 14) {
                 switch model.step {
                 case .source:
                     ImportSourcePicker(model: model)
+                case .access:
+                    HStack(alignment: .top, spacing: 14) {
+                        BrowserMark(id: model.selectedSourceID).frame(width: 36, height: 36)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(model.accessTitle).font(.headline)
+                            Text(model.accessBody).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Waiting…").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
                 case .choose where !model.plan.isArc:
                     if let source = model.selectedSource, source.profiles.count > 1 {
                         Picker("Profile", selection: Binding(get: { model.selectedProfileID ?? "" }, set: { id in Task { await model.selectProfile(id) } })) {
                             ForEach(source.profiles) { Text($0.name).tag($0.id) }
                         }.frame(maxWidth: 320).disabled(model.busy)
                     }
-                    browserOption("Bookmarks", \.bookmarks); browserOption("History", \.history); browserOption("Search settings", \.searchSettings)
+                    browserOption("Bookmarks", \.bookmarks); browserOption("History", \.history)
+                    if model.browserFamily == .chromium { browserOption("Search settings", \.searchSettings) }
+                    else { browserOption("Passwords", \.passwords).disabled(!model.canImportBrowserPasswords || (model.familyCounts?.passwords ?? 0) == 0) }
+                    if model.needsPrimaryPassword && model.plan.passwords {
+                        SecureField("Firefox Primary Password", text: Binding(get: { model.plan.primaryPassword }, set: { model.plan.primaryPassword = $0 }))
+                            .frame(maxWidth: 320).accessibilityIdentifier("import-primary-password")
+                        Text("Your Firefox passwords are protected by a Primary Password. Open uses it once to read them and does not keep it.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if model.browserFamily == .safari { SafariFilesRow(model: model) }
                     Text(model.destinationText).font(.caption).foregroundStyle(.secondary)
                 case .review where !model.plan.isArc:
                     if model.plan.bookmarks { Text(model.destinationText) }
                     if model.plan.history { Text("History: " + model.countLabel("History")) }
                     if model.plan.searchSettings { Text("Search engine: " + model.countLabel("Search settings")) }
+                    if model.plan.passwords { Text("Passwords: " + model.countLabel("Passwords")) }
                 case .choose:
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
@@ -266,6 +419,12 @@ public struct ImportWizard: View {
                 if model.step != .report { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
                 Spacer()
                 switch model.step {
+                case .access:
+                    Button("Back") { model.backToSource() }
+                    if model.accessBlocker == .fullDiskAccess {
+                        Button("Use Exported File…") { if let url = SafariFilesRow.pick(types: ["zip"]) { Task { await model.useSafariExport(url) } } }
+                        Button("Open System Settings") { model.openFullDiskAccessSettings() }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle())
+                    }
                 case .source: Button("Next") { Task { await model.continueFromSource() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!model.canContinueFromSource)
                 case .choose:
                     if model.startedWithSource { Button("Back") { model.backToSource() }.disabled(model.busy) }
@@ -281,12 +440,38 @@ public struct ImportWizard: View {
                 }
             }.disabled(model.extensions.isInstalling)
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy).settingsSheet()
-        .task { if model.step == .source { await model.loadSources() } else if !model.readable { await model.refreshCounts() } }
+        .task { if model.step == .source { await model.loadSources() } else if model.step != .access && !model.readable { await model.refreshCounts() } }
     }
     private func browserOption(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
         HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
         HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
+    }
+}
+
+
+/// Safari's file choices on the Choose step: the export archive (instead of live files) and a passwords CSV.
+/// Arc: "Upload your Passwords.csv file" (browser-import.md §2, Safari passwords). Open uses a plain file picker
+/// here; the drop zone is a GUESS until capture (F3 §3 item 5).
+struct SafariFilesRow: View {
+    let model: ImportWizardViewModel
+    static func pick(types: [String]) -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = types.compactMap { UTType(filenameExtension: $0) }
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("From: " + (model.plan.safariFiles.exportArchive?.lastPathComponent ?? "Safari on this Mac")).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button("Choose Exported File…") { if let url = Self.pick(types: ["zip"]) { Task { await model.useSafariExport(url) } } }.disabled(model.busy)
+                Button("Choose Passwords File…") { if let url = Self.pick(types: ["csv"]) { Task { await model.usePasswordsFile(url) } } }
+                    .disabled(model.busy || !model.canImportBrowserPasswords)
+            }
+            Text("Safari passwords come from a file. In Safari or the Passwords app, choose File ▸ Export All Passwords. Delete the file when the import is finished.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

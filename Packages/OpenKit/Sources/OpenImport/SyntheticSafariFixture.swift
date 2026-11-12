@@ -77,11 +77,11 @@ public struct SyntheticSafariFixture: Sendable {
         let q = "\""
         let csv = [
             "Title,URL,Username,Password,Notes,OTPAuth",
-            "login1.example.test,https://login1.example.test/,synthetic-user-1,synthetic-pass-1,,",
-            "\(q)Quoted, title\(q),https://login2.example.test:8443/path,synthetic-user-2,\(q)synthetic-pass-\(q)\(q)2\(q)\(q)\(q),\(q)multi\r\nline note\(q),",
-            "app,login3.example.test,synthetic-user-3,synthetic-pass-3,,otpauth://totp/x",
-            "bad,ftp://files.example.test,synthetic-user-4,synthetic-pass-4,,",
-            "empty,https://empty.example.test,synthetic-user-5,,,",
+            "login1.example.com,https://login1.example.com/,synthetic-user-1,synthetic-pass-1,,",
+            "\(q)Quoted, title\(q),https://login2.example.com:8443/path,synthetic-user-2,\(q)synthetic-pass-\(q)\(q)2\(q)\(q)\(q),\(q)multi\r\nline note\(q),",
+            "app,login3.example.com,synthetic-user-3,synthetic-pass-3,,otpauth://totp/x",
+            "bad,ftp://files.example.com,synthetic-user-4,synthetic-pass-4,,",
+            "empty,https://empty.example.com,synthetic-user-5,,,",
             "",
         ].joined(separator: "\r\n")
         e.passwordRows = 5; e.passwordsKept = 3; e.passwordsUnsupported = 1; e.passwordsEmpty = 1

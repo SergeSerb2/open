@@ -17,7 +17,7 @@ extension AppImportRunner {
                      wizard: ImportWizardViewModel, progress: (String, Double?, Bool) -> Void) async -> BrowserImportResult {
     var result = BrowserImportResult()
     guard source.family == .chromium else {
-      result.errorText = "Open cannot import from \(source.name) yet."; return result
+      return await importOtherBrowser(source: source, profile: sourceProfile, plan: plan, undo: undo, wizard: wizard, progress: progress)
     }
     let key = plan.source.importKey
     // Destination: the focused Space of the front window, else the first Space.

@@ -63,6 +63,14 @@ actor ImportHistoryWriter {
     }
 }
 
+/// The App's builder (`BrowserBookmarksImport.sourceModel`), so the CLI proves the same IDs and tree.
+@MainActor
+func importedBookmarksFolder(_ roots: [ImportedBookmark], browserName: String, sourceKey: String) -> Folder {
+    let model = BrowserBookmarksImport.sourceModel(roots: roots.map(\.chromium), browserName: browserName, sourceKey: sourceKey,
+                                                   profileID: ProfileID(), settings: ProfileSettings(), spaceID: SpaceID())
+    return model.spaces.first?.pinned.first?.folder ?? Folder(title: BrowserBookmarksImport.folderTitle(browserName: browserName))
+}
+
 @MainActor
 func runImportFirefox(args: [String]) async throws {
     let (values, flags) = firefoxArgs(args, values: ["--firefox-root", "--db", "--profile", "--primary-password-file"], flags: ["--expect"])
@@ -101,7 +109,7 @@ func runImportFirefox(args: [String]) async throws {
     let reader = FirefoxPlacesReader(profileDirectory: profile.directory)
     let started = ContinuousClock.now
     let bookmarks = try await Task.detached(priority: .utility) { try reader.readBookmarks() }.value
-    let folder = ImportedBookmarksFolder.make(browserName: "Firefox", sourceKey: profile.sourceKey, roots: bookmarks.roots)
+    let folder = importedBookmarksFolder(bookmarks.roots, browserName: "Firefox", sourceKey: profile.sourceKey)
     func countNodes(_ nodes: [SidebarNode]) -> (tabs: Int, folders: Int) {
         nodes.reduce((0, 0)) { sum, node in
             switch node {
@@ -159,7 +167,7 @@ func runImportFirefox(args: [String]) async throws {
     // Logins. Values never print; with --expect, the synthetic fixture's own values are checked.
     let logins = FirefoxLoginsReader(profileDirectory: profile.directory)
     let needsPrimary = try logins.needsPrimaryPassword()
-    print("logins: rows=\(try logins.countOnly()) primaryPassword=\(needsPrimary ? "set" : "none")")
+    print("logins: importable=\(try logins.countOnly()) primaryPassword=\(needsPrimary ? "set" : "none")")
     if let expected { check("primaryPassword", needsPrimary ? 1 : 0, expected.primaryPassword ? 1 : 0) }
     if needsPrimary && primary.isEmpty {
         print("  skipped: Primary Password required")
