@@ -3,7 +3,39 @@
 Fixture hosts on the loopback server stand in for linear.app / notion.so (`glance-alias`);
 history rows are seeded in the Profile's real history store. No account, no network.
 """
+import os
+import struct
 import time
+import zlib
+
+
+def png_pixels(path):
+    """Minimal PNG reader (8-bit RGB/RGBA, not interlaced): width, height, rows of bytes."""
+    data = open(path, 'rb').read()
+    pos, idat, info = 8, b'', None
+    while pos < len(data):
+        length, kind = struct.unpack('>I4s', data[pos:pos + 8])
+        chunk = data[pos + 8:pos + 8 + length]
+        if kind == b'IHDR': info = struct.unpack('>IIBBBBB', chunk)
+        elif kind == b'IDAT': idat += chunk
+        pos += 12 + length
+    width, height, depth, color, _, _, interlace = info
+    assert depth == 8 and color in (2, 6) and interlace == 0, info
+    bpp = 3 if color == 2 else 4
+    raw, stride, rows, prev = zlib.decompress(idat), width * bpp, [], bytearray(width * bpp)
+    for y in range(height):
+        f, line = raw[y * (stride + 1)], bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        for i in range(stride):
+            a = line[i - bpp] if i >= bpp else 0
+            b, c = prev[i], prev[i - bpp] if i >= bpp else 0
+            if f == 1: line[i] = (line[i] + a) & 255
+            elif f == 2: line[i] = (line[i] + b) & 255
+            elif f == 3: line[i] = (line[i] + (a + b) // 2) & 255
+            elif f == 4:
+                p_ = a + b - c; pa, pb, pc = abs(p_ - a), abs(p_ - b), abs(p_ - c)
+                line[i] = (line[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(line); prev = line
+    return width, height, bpp, rows
 
 
 def run(factory, results, tmp, harness):
@@ -55,6 +87,22 @@ def run(factory, results, tmp, harness):
             and len(state.get('card', [])) == 4 and state['card'][2] == 240,
             'hover': shown, 'state': state}
 
+        # Real-window snapshot: the card casts the folder card's shadow on the window under it.
+        shot = os.path.join(tmp, 'live-recents-card.png')
+        window = app.call('window-state')
+        app.call('snapshot', window=window.get('number'), path=shot)
+        width, height, bpp, rows = png_pixels(shot)
+        scale = width / 1280  # window-frame set above: 1280 pt wide
+        x0, y0, cw, ch = state['card']
+        def lum(px, py):
+            px, py = int(px * scale), int(py * scale)
+            r = rows[min(py, height - 1)][px * bpp:px * bpp + 3]
+            return sum(r) / 3
+        cx = x0 + cw / 2
+        near, far = lum(cx, y0 + ch + 3), lum(cx, y0 + ch + 40)
+        if os.environ.get('OPEN_LIVE_DATA_FRAMES'):  # optional copy for look reviews
+            import shutil; shutil.copy(shot, os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-recents-card-window.png'))
+        results['live_recents_card_shadow'] = {'ok': far - near >= 6, 'near': near, 'far': far, 'scale': scale, 'card': state['card'], 'png': shot}
         opened = app.call('glance-open', row=0)
         first_state = app.call('peek-state')
         peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] and s['stack'][-1]['content'] > 0 else None)(app.call('peek-state')), timeout=5, step=.05)
