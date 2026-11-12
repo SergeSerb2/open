@@ -315,6 +315,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model = Self.makeDefaultModel()
       autoCreatedLaunchWindowID = model.windows.first?.id
     }
+    // Audit A7: folders of Profiles that an undone import created go now, if the loaded snapshot does not use
+    // them. Never from a fresh fallback model (an unreadable snapshot keeps every folder).
+    if loaded != nil {
+      do {
+        try ProfileTeardown.finishOrphanWipes(directories: ProfileDirectories(root: engine.root),
+                                              inUse: Set(model.profiles.map { $0.dataDirectoryName.lowercased() }))
+      } catch {
+        FileHandle.standardError.write(Data("Open: undone-import Profile cleanup postponed: \(error)\n".utf8))
+      }
+    }
     applyLaunchWindowPreference(to: model)
     let repaired = repairMissingProfiles(in: model)
     if model.windows.isEmpty, let space = model.spaces.first {
