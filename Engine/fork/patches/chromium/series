@@ -16,6 +16,7 @@
 0501-page-history-swipe-hooks.patch  # Page platform EP-1: Chromium's history swipe overlay reports its phases to the page handler and can stay hidden (open/browser/page/open_history_swipe_hooks.h); page-platform §6
 0504-page-notification-click.patch  # Page platform EP-6: a web notification click reaches the embedder's handler before Chromium dispatches it (open/browser/page/open_notification_hooks.h); page-platform §6
 0506-page-automation-notification-guard.patch  # Automation: skip native macOS dispatchers before they force-start the Alerts provider; normal launches unchanged
+0507-page-protocol-handler-request.patch  # Page: expose a pending registerProtocolHandler request's handler (scheme, URL) to the embedder's prompt
 0601-open-script-world.patch  # P7: reserve Open world; keep queued frame actions in the main context
 0801-open-password-prompt-routing.patch  # H-1: route password prompts to Open
 0802-open-address-bubble-handler-lookup.patch  # H-3: find address handlers without a BrowserView
