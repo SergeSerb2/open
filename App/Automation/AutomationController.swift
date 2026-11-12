@@ -347,6 +347,7 @@
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
+      case _ where Self.liveDataCommands.contains(cmd): return try await runLiveDataCommand(cmd, a)
       case "history-state", "history-clear", "library-history-state", "library-history-delete":
         return try await runHistoryCommand(cmd, a)
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
@@ -2173,6 +2174,7 @@
       switch preview.request?.kind {
       case .page(let id)?: kind = "page"; target = id.description
       case .folder(let id)?: kind = "folder"; target = id.description
+      case .glance(let id)?: kind = "glance"; target = id.description
       case nil: break
       }
       return ["kind": kind, "target": target, "card": preview.card.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],

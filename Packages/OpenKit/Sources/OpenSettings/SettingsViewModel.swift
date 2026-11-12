@@ -74,7 +74,7 @@ import OpenAdBlock
     }
     public var showsPreviews = false
     public var showsImport = false { didSet {
-        if showsImport && !oldValue { importWizard = ImportWizardViewModel(root: self) }
+        if showsImport && !oldValue { importWizard = ImportWizardViewModel(root: self, startsWithSource: true) }
     } }
     /// One wizard per presentation, shared by the visible sheet and App adapter.
     @ObservationIgnored public private(set) lazy var importWizard = ImportWizardViewModel(root: self)

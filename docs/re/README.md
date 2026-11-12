@@ -34,3 +34,5 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 | `passwords-autofill.md` | Password, card, and address prompts; fill dropdown; Manage pages; Keychain key; passkeys; Arc's importer |
 | `sidebar-completion.md` | Delete alerts copy, Space Manager, multi-select, Clear variants, pinned reset, folder archive, hover previews, tidy-title schema, unread dot, banner, first-hide hint (measured), haptics, sounds, gesture hide |
 | `capture-session-2-results.md` | Capture session 2 (2026-10-26): what each plan and open PR must change, contradictions with lead decisions, and what stays uncaptured. Measurements are in `interaction-states.md` §20 |
+| `browser-import.md` | Arc's import from Safari, Chromium-family browsers and Firefox: surfaces, strings, categories, source file formats, consent matrix |
+| `live-data.md` | Live Folders (GitHub), Calendar Preview and mail previews, Live Calendar, Join Meeting, Peek Email: surfaces, data paths, storage, flags (F2, 2026-11-11) |
