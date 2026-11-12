@@ -1,5 +1,6 @@
 import AppKit
 import OpenModel
+import OpenSidebar
 import OpenStore
 import OpenBoosts
 
@@ -70,6 +71,7 @@ final class AppImportUndo {
       if undoing { for (key, value) in entry.previous { if let value { store.set(value, forKey: key) } else { store.removeObject(forKey: key) } } }
       else { for (key, value) in entry.applied { store.set(value, forKey: key) } }
     }
+    SpaceHeaderPreference.shared.reload()
   }
 
   func append(provider undo: (@MainActor @Sendable () async throws -> Void)?, redo: (@MainActor @Sendable () async throws -> Void)?) {

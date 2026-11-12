@@ -413,6 +413,9 @@ public final class SidebarView: NSView {
         return SidebarMenus(context: context).profile(space)
     }
 
+    /// The focused page shows its Space header (false for a single unnamed Space unless "Show Space Header").
+    public var spaceHeaderVisible: Bool { pager.currentPage?.headerVisible ?? false }
+
     public var spaceHeaderFrame: NSRect? {
         pager.currentPage.map { convert($0.header.bounds, from: $0.header) }
     }

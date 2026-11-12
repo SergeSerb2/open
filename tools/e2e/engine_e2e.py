@@ -13350,6 +13350,8 @@ def main():
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
+            import space_header
+            space_header.run(factory, results["shell"], wait_until)
         elif opts.only == "relaunch":
             results["relaunch"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
