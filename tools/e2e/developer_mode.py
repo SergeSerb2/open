@@ -2,7 +2,8 @@
 
 A synthetic loopback server serves every page. Rows: the bar shows only for a Developer Mode site and replaces the
 page area's top 40 pt; Arc's nine controls in order with Arc's names; its light and dark colours; the sidebar
-outline and host subtitle; Console / Network / Inspect toggle the standard DevTools on that panel.
+outline and host subtitle; Console / Network / Inspect toggle the standard DevTools on that panel; the sidebar
+toolbar's reload chevron (capture PB3-a) and its menu; Arc's tooltip text (capture s10); the Capture Window hover entry.
 """
 import http.server
 import os
@@ -11,9 +12,11 @@ import time
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    page_loads = 0
     def log_message(self, *args): pass
 
     def do_GET(self):
+        if self.path.split('?')[0] == '/a': Handler.page_loads += 1
         pages = {
             '/a': b'<!doctype html><title>Example A</title><h1>A</h1><img src="/pixel.png"><script src="/app.js"></script>'
                   b'<script>fetch("/missing.json")</script>',
@@ -58,6 +61,30 @@ def run(factory, results, tmp, h):
                 'Inspect Element', 'Extensions Menu', 'Split View Menu'],
             url=on.get('url'), frame=frame, page=page,
             labels=[b['label'] for b in sorted(buttons.values(), key=lambda b: b['frame'][0])])
+
+        # Capture PB3-a: in Developer Mode a ▾ right of Reload opens the reload options; Reload moves 6.25 pt left.
+        assert h.wait_until(lambda: state().get('sidebarToolbar', {}).get('chevronShown'), timeout=10, step=.05), state().get('sidebarToolbar')
+        tb = state()['sidebarToolbar']; w = tb['sidebarWidth']; rf, cf = tb['reloadFrame'], tb['chevronFrame']
+        row('toolbar_reload_chevron', abs(rf[0] + rf[2] / 2 - (w - 28.25)) < .5 and abs(cf[0] + cf[2] / 2 - (w - 11.75)) < .5
+            and tb['menu'] == ['Refresh the Page', 'Force Refresh the Page', 'Clear Cache and Refresh'], toolbar=tb)
+        app.call('eval', tab=tab, js='window.openReloadMark = 1')
+        loads = Handler.page_loads
+        app.call('developer-panel', action='reload-menu', item='Force Refresh the Page')
+        reloaded = h.wait_until(lambda: Handler.page_loads > loads and app.call('eval', tab=tab, js='typeof window.openReloadMark') == 'undefined',
+                                timeout=15, step=.1)
+        app.call('wait', tab=tab, timeout=30)
+        row('toolbar_reload_menu_force_refresh', bool(reloaded), loads=[loads, Handler.page_loads])
+        tips = {b['id']: b.get('tooltip') for b in buttons.values()}
+        row('bar_tooltips_from_capture', tips == {
+            'siteSettings': 'Site Settings', 'copyLink': 'Copy Link ⇧⌘C', 'captureWindow': '',
+            'capture': 'Capture a portion of this page ⇧⌘2', 'console': 'Toggle Console ⌥⌘J', 'network': 'Toggle Network Panel',
+            'inspect': 'Inspect Element ⌥⌘C', 'extensionsMenu': 'Extensions', 'splitMenu': 'Split View Options'}, tooltips=tips)
+        # Capture s10: resting on Capture Window opens the Portrait Mode popover. Hover reaches the one entry; until
+        # EZ's popover lands it does nothing else (a click still runs the portrait capture).
+        before = state()['devtools'].get('portraitCaptureRequests', 0)
+        app.call('developer-panel', action='hover', button='captureWindow')
+        after = state()['devtools'].get('portraitCaptureRequests', 0)
+        row('capture_window_hover_reaches_portrait_entry', after == before + 1, requests=[before, after])
 
         # Pane 2: the sidebar marks a Developer Mode site. A second tab on "localhost" (another site) stays plain.
         other = h.new_tab(app, base.replace('127.0.0.1', 'localhost') + '/b')
@@ -122,6 +149,9 @@ def run(factory, results, tmp, h):
         unmarked = {r['url']: r for r in gone.get('rows', [])}.get(base + '/a', {})
         row('sidebar_unmarks_after_off', unmarked.get('subtitle') == '' and unmarked.get('titleBaseline') == 25 and unmarked.get('outline') is False,
             row=unmarked)
-        row('developer_mode_off_removes_bar', gone.get('shown') is False, state={k: gone.get(k) for k in ('shown', 'toolbar')})
+        off_tb = gone.get('sidebarToolbar', {}); orf = off_tb.get('reloadFrame', [0, 0, 0, 0])
+        row('developer_mode_off_removes_bar', gone.get('shown') is False and off_tb.get('chevronShown') is False
+            and abs(orf[0] + orf[2] / 2 - (off_tb.get('sidebarWidth', 0) - 22)) < .5,
+            state={k: gone.get(k) for k in ('shown', 'toolbar', 'sidebarToolbar')})
     finally:
         server.shutdown(); server.server_close()

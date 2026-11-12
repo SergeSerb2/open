@@ -35,19 +35,21 @@ public final class PaneSlotView: NSView {
                    close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping (Bool) -> Void,
                    toolbarMenu: (() -> NSMenu?)? = nil, reload: @escaping () -> Void, closeSadTab: @escaping () -> Void,
                    developer: Bool = false, developerActivePanel: DeveloperPanelAction? = nil,
-                   developerAction: ((DeveloperPanelAction, NSView) -> Void)? = nil) {
+                   developerAction: ((DeveloperPanelAction, NSView) -> Void)? = nil,
+                   developerHover: ((DeveloperPanelAction, NSView) -> Void)? = nil) {
         isFocused = split && focused
         self.style = style; swipeIndicator?.style = style
         focusRing.strokeColor = style.accentColor(.light).cgColor
         let developer = developer && !split
         if developer {
             if developerPanel == nil { let panel = DeveloperContentPanelView(); developerPanel = panel; clip.addSubview(panel) }
-            // The default theme uses Arc's measured bar colours; a themed Space tints the bar (GUESS, capture s3).
-            if !style.isDefaultTheme, let light = style.lightPalette?.background.nsColor, let dark = style.darkPalette?.background.nsColor {
-                developerPanel?.themeFills = (light, dark)
-            } else { developerPanel?.themeFills = nil }
+            // The default theme uses Arc's measured bar colours; a themed Space tints the bar with its accent
+            // colour (GUESS, capture s3; LEAD 12:18).
+            developerPanel?.themeFills = style.isDefaultTheme || style.accent == nil ? nil
+                : (style.accentColor(.light).nsColor, style.accentColor(.dark).nsColor)
             developerPanel?.urlString = tab.url.absoluteString
             developerPanel?.onAction = developerAction
+            developerPanel?.onHover = developerHover
             developerPanel?.activePanel = developerActivePanel
         } else { developerPanel?.removeFromSuperview(); developerPanel = nil }
         if split || (toolbar && !developer) {
@@ -191,6 +193,8 @@ public final class WebContentContainer: NSView {
     /// The DevTools toggle (Console, Network or Inspect) whose panel is open for a tab; the App answers.
     public var developerActivePanel: ((ItemID) -> DeveloperPanelAction?)?
     public var onDeveloperAction: ((ItemID, DeveloperPanelAction, NSView) -> Void)?
+    /// The pointer entered a hover control of a tab's developer bar (Capture Window); the view is the anchor.
+    public var onDeveloperHover: ((ItemID, DeveloperPanelAction, NSView) -> Void)?
     /// The App calls this when a tab's DevTools opened, closed or changed panel.
     public func developerPanelStateChanged() { updateSlots() }
     /// The Developer Mode site key of a URL: its lowercased http(s) host, or "file" (App `DeveloperMode.host(for:)`).
@@ -356,7 +360,8 @@ public final class WebContentContainer: NSView {
                            },
                            developer: Self.developerHost(tab.url).map { developerModeHosts.contains($0) } ?? false,
                            developerActivePanel: developerActivePanel?(id),
-                           developerAction: { [weak self] action, view in self?.onDeveloperAction?(id, action, view) })
+                           developerAction: { [weak self] action, view in self?.onDeveloperAction?(id, action, view) },
+                           developerHover: { [weak self] action, view in self?.onDeveloperHover?(id, action, view) })
             slot.paneChrome?.extensionsUI = extensionsUI
             slot.paneChrome?.onSiteControls = onSiteControls.map { handler in { handler(id) } }
             slot.paneChrome?.update()

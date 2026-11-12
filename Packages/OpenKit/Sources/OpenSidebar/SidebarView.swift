@@ -707,6 +707,22 @@ extension SidebarView {
         return ["subtitle": subtitle, "titleBaseline": cell.title.baseline, "outline": row?.showsDeveloperOutline ?? false]
     }
 
+    /// The toolbar's Developer Mode reload chevron: shown, frames and menu titles (PB3 row 5).
+    public func developerToolbarState() -> [String: Any] {
+        let menu = toolbar.reloadMenu, reload = toolbar.reload
+        return ["chevronShown": !menu.isHidden && !toolbar.isHidden,
+                "chevronFrame": [menu.frame.minX, menu.frame.minY, menu.frame.width, menu.frame.height],
+                "reloadFrame": [reload.frame.minX, reload.frame.minY, reload.frame.width, reload.frame.height],
+                "sidebarWidth": toolbar.bounds.width,
+                "menu": toolbar.makeReloadMenu().items.map(\.title)]
+    }
+    /// Runs one item of the Developer Mode reload menu by title, as a click on it would.
+    public func runDeveloperReloadItem(_ title: String) -> Bool {
+        let menu = toolbar.makeReloadMenu()
+        guard let index = menu.items.firstIndex(where: { $0.title == title }) else { return false }
+        menu.performActionForItem(at: index); return true
+    }
+
     public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
 
     public func resetAction(tabID: ItemID) -> NSView? {

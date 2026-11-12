@@ -48,6 +48,13 @@ public enum ChromeMetrics {
     public static func isCompact(sidebarWidth w: CGFloat) -> Bool { w < CompactToolbarMetrics.switchWidth }
     public static func forwardX(sidebarWidth w: CGFloat) -> CGFloat { w - reloadTrailingInset - 32 - navButtonPitch }
     public static func reloadX(sidebarWidth w: CGFloat) -> CGFloat { w - reloadTrailingInset - 32 }
+    /// Developer Mode: a ▾ chevron right of Reload opens the reload options, and Reload moves left to make room
+    /// (`44-pb3a-probe/d-0.png`, `d-2-dark.png` at 2x, sidebar width 363.5: back, forward and reload ink centers
+    /// 273.5 / 307.5 / 335.25 pt, chevron ink 8.5 × 4.5 pt centered at 351.75 pt, y center 23.25 like Reload).
+    public static let developerReloadShift: CGFloat = 6.25
+    public static let reloadMenuCenterInset: CGFloat = 11.75
+    public static let reloadMenuWidth: CGFloat = 16
+    public static let reloadMenuGlyph = CGSize(width: 8.5, height: 4.5)
 }
 
 /// Command / URL field.

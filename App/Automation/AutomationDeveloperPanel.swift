@@ -16,6 +16,15 @@ extension AutomationController {
             let button = slot?.developerPanel?.button(action) as? NSButton else { throw Failure(message: "no developer bar or unknown button") }
       button.performClick(nil)
     }
+    if (a["action"] as? String) == "hover" {
+      // The pointer entering the button (its tracking area's callback), without moving the system pointer.
+      guard let raw = a["button"] as? String, let action = DeveloperPanelAction(rawValue: raw), let panel = slot?.developerPanel,
+            let button = panel.button(action) else { throw Failure(message: "no developer bar or unknown button") }
+      panel.onHover?(action, button)
+    }
+    if (a["action"] as? String) == "reload-menu" {
+      guard let title = a["item"] as? String, controller.sidebar.runDeveloperReloadItem(title) else { throw Failure(message: "no reload item") }
+    }
     var state: [String: Any] = ["shown": slot?.developerPanel != nil, "toolbar": slot?.paneChrome != nil, "devtools": factory.developerPanel.state(slot?.tabID)]
     if let panel = slot?.developerPanel {
       state["frame"] = [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height]
@@ -24,7 +33,8 @@ extension AutomationController {
       state["palette"] = panel.paletteDescription
       state["buttons"] = DeveloperPanelAction.allCases.compactMap { action -> [String: Any]? in
         guard let view = panel.button(action) else { return nil }
-        return ["id": action.rawValue, "frame": [view.frame.minX, view.frame.minY, view.frame.width, view.frame.height], "label": view.accessibilityLabel() ?? ""]
+        return ["id": action.rawValue, "frame": [view.frame.minX, view.frame.minY, view.frame.width, view.frame.height], "label": view.accessibilityLabel() ?? "",
+                "tooltip": view.toolTip ?? ""]
       }
     }
     // Sidebar rows of the focused Space: host subtitle, title baseline and the dashed outline (pane 2).
@@ -34,6 +44,7 @@ extension AutomationController {
         row["url"] = tab.url.absoluteString; return row
       }
     }
+    state["sidebarToolbar"] = controller.sidebar.developerToolbarState()
     if let page = slot?.contentHostView { state["pageFrame"] = [page.frame.minX, page.frame.minY, page.frame.width, page.frame.height] }
     return state
   }

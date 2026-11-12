@@ -19,6 +19,9 @@ final class DeveloperModePanel {
     container.developerModeHosts = DeveloperMode.hosts
     container.developerActivePanel = { [weak self] in self?.activePanel($0) }
     container.onDeveloperAction = { [weak self] id, action, view in self?.perform(id, action, view) }
+    container.onDeveloperHover = { [weak self] _, action, view in
+      if action == .captureWindow { self?.showPortraitCapture(anchor: view, hover: true) }
+    }
   }
 
   func hostsChanged() { factory.controller?.container.developerModeHosts = DeveloperMode.hosts }
@@ -35,7 +38,7 @@ final class DeveloperModePanel {
     case .console, .network, .inspect: toggleDevTools(id, action)
     case .copyLink: controller.performCommand("copy-url")
     case .capture: controller.performCommand("capture-page")
-    case .captureWindow: controller.performCommand("capture-portrait")
+    case .captureWindow: showPortraitCapture(anchor: view, hover: false)
     case .extensionsMenu: controller.performCommand("manage-extensions")
     case .siteSettings: controller.container.onSiteControls?(id)
     case .splitMenu: controller.container.onPaneMenu?(id, view)
@@ -54,13 +57,28 @@ final class DeveloperModePanel {
     factory.controller?.container.developerPanelStateChanged()
   }
 
+  /// Shows "Capture in Portrait Mode" for the Capture Window button. Hover and click both come here.
+  /// Arc opens the Portrait Mode popover when the pointer rests on the button, anchored under it (C-report-s10).
+  /// EZ's popover (PB2) sets `portraitCapturePresenter`; until then a click runs the existing portrait capture
+  /// and a hover does nothing.
+  func showPortraitCapture(anchor: NSView, hover: Bool) {
+    portraitCaptureRequests += 1
+    if let present = Self.portraitCapturePresenter { present(anchor); return }
+    if !hover { factory.controller?.performCommand("capture-portrait") }
+  }
+  /// The Portrait Mode popover entry (EZ, PB2). It receives the button to anchor under.
+  static var portraitCapturePresenter: (@MainActor (NSView) -> Void)?
+  /// Requests that reached `showPortraitCapture` (verification).
+  private(set) var portraitCaptureRequests = 0
+
   /// A tab's host closed.
   func forget(_ id: ItemID) { opened[id] = nil }
 
   #if OPEN_AUTOMATION
   func state(_ id: ItemID?) -> [String: Any] {
     guard let id else { return [:] }
-    return ["activePanel": activePanel(id)?.rawValue ?? "", "hasDevTools": factory.hosts[id]?.content.hasDevTools ?? false]
+    return ["activePanel": activePanel(id)?.rawValue ?? "", "hasDevTools": factory.hosts[id]?.content.hasDevTools ?? false,
+            "portraitCaptureRequests": portraitCaptureRequests]
   }
   #endif
 }

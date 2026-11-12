@@ -13,8 +13,10 @@ import OpenDesign
 /// - Controls, left to right (Arc's AX descriptions, 28 × 28 pt): Site Settings ("i") · the full URL in a
 ///   monospaced face · Copy Link | Capture Window · Capture | Toggle Console · Toggle Network Panel ·
 ///   Inspect Element | Extensions Menu · Split View Menu, with thin dividers between the groups.
-/// A themed Space tints the bar (capture s3 `s7/12-devoff/d-devmode-on`: #76859C on a blue-grey Space); the
-/// tint rule is a GUESS: the Space palette's background, with the ink chosen by its brightness.
+/// A themed Space tints the bar (capture s3 `s7/12-devoff/d-devmode-on`: #76859C on a blue-grey Space). The tint
+/// rule is a GUESS (LEAD 12:18): the Space's accent colour, with the ink chosen by its brightness.
+/// Hover (capture s10 `v10/d1-devbar-hover-menus`, C-report-s10 PB3-a1): tooltips use Arc's tooltip text; the
+/// Capture Window button shows no tooltip, because resting on it opens the "Capture in Portrait Mode" popover.
 public enum DeveloperPanelAction: String, CaseIterable, Sendable {
     case siteSettings, copyLink, captureWindow, capture, console, network, inspect, extensionsMenu, splitMenu
 
@@ -32,7 +34,22 @@ public enum DeveloperPanelAction: String, CaseIterable, Sendable {
         case .splitMenu: "Split View Menu"
         }
     }
-    /// Our own glyphs (SF Symbols); no Arc asset.
+    /// Arc's tooltip text (C-report-s10 PB3-a1); nil for Capture Window, whose hover opens a popover.
+    /// Arc's tooltip pill also shows the key caps; Open uses the system tooltip with the keys as text.
+    public var tooltip: String? {
+        switch self {
+        case .siteSettings: "Site Settings"
+        case .copyLink: "Copy Link ⇧⌘C"
+        case .captureWindow: nil
+        case .capture: "Capture a portion of this page ⇧⌘2"
+        case .console: "Toggle Console ⌥⌘J"
+        case .network: "Toggle Network Panel"
+        case .inspect: "Inspect Element ⌥⌘C"
+        case .extensionsMenu: "Extensions"
+        case .splitMenu: "Split View Options"
+        }
+    }
+    /// Our own glyphs (SF Symbols, and a puzzle outline drawn in code); no Arc asset.
     var symbol: String {
         switch self {
         case .siteSettings: "info"
@@ -45,6 +62,10 @@ public enum DeveloperPanelAction: String, CaseIterable, Sendable {
         case .extensionsMenu: "puzzlepiece.extension"
         case .splitMenu: "square.split.2x1"
         }
+    }
+    @MainActor var image: NSImage {
+        if self == .extensionsMenu { return DeveloperPanelGlyphs.puzzle }
+        return NSImage(systemSymbolName: symbol, accessibilityDescription: title) ?? NSImage()
     }
     /// The three controls that toggle DevTools on a panel.
     public var isDevToolsToggle: Bool { self == .console || self == .network || self == .inspect }
@@ -64,6 +85,57 @@ public enum DeveloperPanelMetrics {
     static let separators: [CGFloat] = [69.1, 169.5, 247.6]
     /// Horizontal width of one stripe band; the stripes run at 45°.
     static let stripeBand: CGFloat = 22.5
+}
+
+/// Glyphs drawn in code (our own drawing).
+@MainActor
+enum DeveloperPanelGlyphs {
+    /// The Extensions Menu glyph: a puzzle-piece outline with knobs left and right and notches top and bottom.
+    /// Arc's ink box is 19 × 13 pt with a 1.5 pt stroke (`44-pb3a-probe/d-0.png` x 2427–2464, y 47–72 at 2x).
+    static let puzzle: NSImage = {
+        let image = NSImage(size: NSSize(width: 19, height: 13), flipped: false) { _ in
+            // Path through the stroke's center, inset 0.75 pt so the ink fills the 19 × 13 box.
+            let l: CGFloat = 3.5, r: CGFloat = 15.5, b: CGFloat = 0.75, t: CGFloat = 12.25, c: CGFloat = 2
+            let knob: CGFloat = 2.75, notch: CGFloat = 2.25, mid: CGFloat = 6.5, cx: CGFloat = 9.5
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: l + c, y: t))
+            path.line(to: CGPoint(x: cx - notch, y: t))
+            path.appendArc(withCenter: CGPoint(x: cx, y: t), radius: notch, startAngle: 180, endAngle: 0, clockwise: false)
+            path.line(to: CGPoint(x: r - c, y: t))
+            path.appendArc(withCenter: CGPoint(x: r - c, y: t - c), radius: c, startAngle: 90, endAngle: 0, clockwise: true)
+            path.line(to: CGPoint(x: r, y: mid + knob))
+            path.appendArc(withCenter: CGPoint(x: r, y: mid), radius: knob, startAngle: 90, endAngle: -90, clockwise: true)
+            path.line(to: CGPoint(x: r, y: b + c))
+            path.appendArc(withCenter: CGPoint(x: r - c, y: b + c), radius: c, startAngle: 0, endAngle: -90, clockwise: true)
+            path.line(to: CGPoint(x: cx + notch, y: b))
+            path.appendArc(withCenter: CGPoint(x: cx, y: b), radius: notch, startAngle: 0, endAngle: 180, clockwise: false)
+            path.line(to: CGPoint(x: l + c, y: b))
+            path.appendArc(withCenter: CGPoint(x: l + c, y: b + c), radius: c, startAngle: 270, endAngle: 180, clockwise: true)
+            path.line(to: CGPoint(x: l, y: mid - knob))
+            path.appendArc(withCenter: CGPoint(x: l, y: mid), radius: knob, startAngle: 270, endAngle: 90, clockwise: true)
+            path.line(to: CGPoint(x: l, y: t - c))
+            path.appendArc(withCenter: CGPoint(x: l + c, y: t - c), radius: c, startAngle: 180, endAngle: 90, clockwise: true)
+            path.close()
+            path.lineWidth = 1.5; path.lineJoinStyle = .round
+            NSColor.black.setStroke(); path.stroke()
+            return true
+        }
+        image.isTemplate = true; image.accessibilityDescription = DeveloperPanelAction.extensionsMenu.title
+        return image
+    }()
+}
+
+/// The Capture Window button reports the pointer entering it (C-report-s10: hover opens the Portrait Mode popover).
+final class DeveloperHoverButton: NSButton {
+    var onHover: (() -> Void)?
+    private var area: NSTrackingArea?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area { removeTrackingArea(area) }
+        let next = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(next); area = next
+    }
+    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); onHover?() }
 }
 
 /// The bar's colours for one appearance.
@@ -87,8 +159,10 @@ struct DeveloperPanelPalette {
 @MainActor
 public final class DeveloperContentPanelView: NSView {
     public var onAction: ((DeveloperPanelAction, NSView) -> Void)?
+    /// The pointer entered a control that acts on hover (today: Capture Window). The view is the anchor.
+    public var onHover: ((DeveloperPanelAction, NSView) -> Void)?
     public var urlString = "" { didSet { if urlString != oldValue { urlLabel.stringValue = urlString; needsLayout = true } } }
-    /// A themed Space's fills (light, dark); nil = the default theme, drawn with Arc's measured colours.
+    /// A themed Space's accent colours (light, dark); nil = the default theme, drawn with Arc's measured colours.
     public var themeFills: (light: NSColor, dark: NSColor)? { didSet { applyColors() } }
     /// The DevTools toggle whose panel is open; its button is drawn pressed (capture `d-network-w`).
     public var activePanel: DeveloperPanelAction? { didSet { if activePanel != oldValue { applyColors() } } }
@@ -102,11 +176,16 @@ public final class DeveloperContentPanelView: NSView {
         urlLabel.setAccessibilityLabel("Page URL")
         addSubview(urlLabel)
         for action in DeveloperPanelAction.allCases {
-            let button = NSButton(image: NSImage(systemSymbolName: action.symbol, accessibilityDescription: action.title) ?? NSImage(), target: self, action: #selector(press(_:)))
+            let button = action == .captureWindow ? DeveloperHoverButton() : NSButton()
+            button.image = action.image; button.target = self; button.action = #selector(press(_:))
+            (button as? DeveloperHoverButton)?.onHover = { [weak self, weak button] in
+                guard let self, let button else { return }
+                self.onHover?(action, button)
+            }
             button.isBordered = false; button.bezelStyle = .regularSquare; button.imagePosition = .imageOnly; button.wantsLayer = true
             button.setButtonType(.momentaryChange); button.layer?.cornerRadius = 6
             button.symbolConfiguration = .init(pointSize: action == .siteSettings ? 13 : 15, weight: .regular)
-            button.toolTip = action.title; button.setAccessibilityLabel(action.title); button.identifier = .init("developer-" + action.rawValue)
+            button.toolTip = action.tooltip; button.setAccessibilityLabel(action.title); button.identifier = .init("developer-" + action.rawValue)
             addSubview(button); buttons[action] = button
         }
         setAccessibilityElement(true); setAccessibilityRole(.toolbar); setAccessibilityLabel("Developer Mode")
