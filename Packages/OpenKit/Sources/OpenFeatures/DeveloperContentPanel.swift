@@ -129,6 +129,8 @@ public final class NetworkLog {
     public static let maxURLLength = 2_048
     public private(set) var entries: [Entry] = []
     private var index: [String: Int] = [:]
+    /// The top frame's ID, learnt from `Page.frameNavigated` without a parent.
+    private var mainFrameID: String?
     public var onChange: (() -> Void)?
     public init() {}
 
@@ -138,11 +140,17 @@ public final class NetworkLog {
     public func handle(_ method: String, _ p: [String: Any]) {
         switch method {
         case "Page.frameNavigated":
-            // A new top-level document starts a new list (DevTools' default, "Preserve log" off).
-            if let frame = p["frame"] as? [String: Any], frame["parentId"] == nil { clear() }
+            if let frame = p["frame"] as? [String: Any], frame["parentId"] == nil { mainFrameID = frame["id"] as? String }
         case "Network.requestWillBeSent":
             guard let id = p["requestId"] as? String, let request = p["request"] as? [String: Any],
                   let url = request["url"] as? String else { return }
+            // A new top-level document starts a new list (DevTools' default, "Preserve log" off). Chromium sends the
+            // document request before `Page.frameNavigated`, so the clear happens here: a navigation request
+            // (requestId == loaderId) of type Document in the top frame, not a redirect hop of the same request.
+            if (p["type"] as? String) == "Document", id == (p["loaderId"] as? String), p["redirectResponse"] == nil,
+               mainFrameID == nil || (p["frameId"] as? String) == mainFrameID {
+                entries.removeAll(); index.removeAll()
+            }
             let entry = Entry(id: id, url: String(url.prefix(Self.maxURLLength)), method: (request["method"] as? String) ?? "GET",
                               type: (p["type"] as? String) ?? "Other", start: (p["timestamp"] as? Double) ?? 0)
             if let i = index[id] { entries[i] = entry } // a redirect reuses the request ID
