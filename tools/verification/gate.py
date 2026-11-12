@@ -188,6 +188,18 @@ def run_heavy(args):
                                                seconds=round(time.monotonic() - start, 3), exit=rc))
     if rc:
         return rc
+    # The automation App (Debug, OPEN_AUTOMATION=1): the CLI build and the shipping App never compile
+    # `#if OPEN_AUTOMATION` code, so a break there passed the build gate (#458's first push). Same command
+    # and folder as the Debug e2e suites, so a later Debug app build is incremental.
+    start = time.monotonic()
+    with (log / 'automation-build.log').open('w') as output:
+        rc = subprocess.call([str(ROOT / 'tools/build.sh'), 'Debug'], cwd=ROOT,
+                             env=dict(os.environ, OPEN_AUTOMATION='1'),
+                             stdout=output, stderr=subprocess.STDOUT)
+    write_json(log / 'automation-build.json', dict(name='automation-build', result='PASS' if rc == 0 else 'FAIL',
+                                                 seconds=round(time.monotonic() - start, 3), exit=rc))
+    if rc:
+        return rc
     if args.app_config:
         start = time.monotonic()
         with (log / 'app-build.log').open('w') as output:
@@ -769,7 +781,13 @@ def main():
         rows.append(dict(row='build/shipping', status='PASS' if shipping_ok else 'FAIL',
                          reason='' if shipping_ok else 'Release App without OPEN_AUTOMATION failed to build',
                          evidence=str(directory/'shipping-build.log')))
-    if not cli or cli[0]['result'] != 'PASS' or not guard_ok or not shipping_ok:
+    automation_ok = ((directory/'automation-build.json').is_file()
+                     and read_json(directory/'automation-build.json')['result']=='PASS')
+    if guard_ok and shipping_ok:
+        rows.append(dict(row='build/automation', status='PASS' if automation_ok else 'FAIL',
+                         reason='' if automation_ok else 'Debug App with OPEN_AUTOMATION failed to build',
+                         evidence=str(directory/'automation-build.log')))
+    if not cli or cli[0]['result'] != 'PASS' or not guard_ok or not shipping_ok or not automation_ok:
         rows.append(dict(row='build/worker',status='FAIL',reason='heavy build worker failed',evidence=str(directory/'heavy.log')))
     else:
         if (directory/'app-build.json').is_file():
