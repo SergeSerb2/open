@@ -66,14 +66,17 @@ def run(factory, results, tmp, h):
 
         # 5. ⌃⇧N with the Little Open window in front: the Note lands in the browser window.
         if lo:
-            h.wait_until(lambda: any(s['id'] == lo[0]['id'] and s['key'] for s in app.call('little-open-state')['sessions']) or None, timeout=5, step=.05)
+            # The Little Open window must really be key, and the menu rebuilt for it (the App is
+            # then the menu's dispatcher): that is the state in which ⌃⇧N did nothing (DMG d).
+            is_key = h.wait_until(lambda: any(s['id'] == lo[0]['id'] and s['key'] for s in app.call('little-open-state')['sessions']) or None, timeout=5, step=.05)
+            time.sleep(.6)
             notes_before = [t['id'] for t in app.call('tabs') if t['url'].startswith('open://note/')]
             key('n', 'control', 'shift', window=lo[0]['window'])
             made = h.wait_until(lambda: [t for t in app.call('tabs') if t['url'].startswith('open://note/') and t['id'] not in notes_before] or None, timeout=5, step=.05) or []
             still = any(s['id'] == lo[0]['id'] for s in app.call('little-open-state')['sessions'])
             shown = note()
-            row('new_note_from_little_open_goes_to_browser_window', len(made) == 1 and still and shown['tab'] == made[0]['id'] and shown['shown'],
-                made=made, littleOpenStillOpen=still, shown={k: shown.get(k) for k in ('tab', 'shown')})
+            row('new_note_from_little_open_goes_to_browser_window', bool(is_key) and len(made) == 1 and still and shown['tab'] == made[0]['id'] and shown['shown'],
+                made=made, littleOpenKey=bool(is_key), littleOpenStillOpen=still, shown={k: shown.get(k) for k in ('tab', 'shown')})
         else:
             row('new_note_from_little_open_goes_to_browser_window', False, reason='no Little Open window')
     finally:
