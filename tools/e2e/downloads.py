@@ -204,10 +204,13 @@ def checks(factory, results, tmp, config, harness):
         app.call('download-row', id=known, action='Resume')
         resumed = wait(lambda: item(known).get('received', 0) > after_pause)
         check('resume', resumed and item(known)['state'] == 'inProgress', item=item(known))
-        app.call('library-open', section='archive')
+        # With a running download the Library button opens the in-window Library at Downloads, also
+        # when it last showed Archive (Arc: library-overlay.md, "Clicking the sidebar Downloads badge").
+        # The button toggles the in-window Library (#350), so it starts closed here. The old row
+        # pressed it with the Settings Library open and read that window's section.
+        app.call('library-open', section='archive'); dismiss_library()
         app.call('download-home')
-        # The Home button opens the in-window Library at Downloads (#350; the old row read the Settings Library).
-        check('home_running_entry', wait(lambda: bool(state()['rows']), 5), rows=len(state()['rows']))
+        check('home_running_entry', wait(lambda: bool(row(known)), 5), rows=len(state()['rows']))
         library()
         app.call('download-row', id=known, action='Cancel')
         check('cancel', wait(lambda: row(known).get('subtitle') == 'Cancelled'), row=row(known))
