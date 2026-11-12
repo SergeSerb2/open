@@ -1,60 +1,17 @@
 # Local Boost Gallery
 
-File ▸ Boost Gallery and the command-bar action open Library ▸ Boosts as a card
-grid. Window ▸ View Boosts keeps the list. Both commands reuse
-`AppSettingsActions.showLibrary(section:boostsPresentation:boostsProfileID:)`, one
-`LibraryPresenter`, and one `LibraryViewModel`. Presentation is transient; it
-does not add a preference or a second window.
+File ▸ Boost Gallery and the command-bar action open Library ▸ Boosts as cards.
+Window ▸ View Boosts selects the list. Both use the per-window native
+[Library panel](library.md), its `LibraryViewModel` and existing Boost providers.
+Profile, search and List/Gallery controls use the Library chip style. Cards
+show the site and Boost name; On/Off and Edit are chips. Delete lives in the
+card's “…” menu and retains its confirmation sheet. No page loads to create a
+preview. Actions still enter `App/Boosts/BoostLibraryActions.swift` and the same
+Boost engine adapter. Menus keep the existing private-window and global-enable
+guards. The separate Library window and its SwiftUI cards were removed.
 
-Browser commands pass the invoking factory's Profile; Little Open passes its
-session Profile. Only when the Library itself is key does its Profile picker
-stay unchanged. Otherwise an explicit Boosts open uses the caller's
-Profile, or the default regular Profile for an app-level command. A plain
-`view-library` call changes neither Profile nor presentation. The optional
-presentation parameter defaults to nil, which preserves the current layout.
-Only `view-boosts` explicitly requests list; only Gallery requests gallery.
-The Boosts section also has a small List/Gallery segmented control, including
-in its empty state. The editor's All Boosts path keeps the selected layout and
-uses the same Profile-preservation rule. The existing Profile picker and search
-apply to both layouts. `BoostsProvider` is the sole `app.stores.boosts` owner.
-Observation of its revision updates cards
-after changes in the editor, import or Library.
-
-Each card shows the name, host pattern with optional path prefix, the shared
-`BoostGlyph.fill` in `Core.brandBlue`, an enable switch, Edit and Delete. The
-context menu also keeps Rename. Card fill, border, fonts and radius use
-`SettingsTokens`; the adaptive grid uses the Library Captures grid's spacing
-and minimum width. The empty state uses the existing Library Boosts text.
-No preview image is requested, cached or generated. Opening the Gallery loads
-no site for a preview.
-
-The list and grid share bindings, Edit, Rename, and Delete confirmation state.
-Actions still enter `App/Boosts/BoostLibraryActions.swift`. Toggling a card uses
-`AppBoosts.setBoostEnabled` → `refresh(profile:)` → `BoostEngineAdapter.refresh`.
-There is no new delivery path. Toggle bindings and Edit callbacks capture the
-Profile when the row/card action is formed. Rename/Delete confirmations retain
-the original Profile and close if the Profile selection changes. Library Delete
-has no Boost-specific Undo registration today; this change keeps that behavior.
-
-Library Edit opens the stored HTTPS host/path. Its pending editor uses the
-engine's committed URL because the commit callback can precede the URL-property
-notification. This keeps the existing private-context, Profile, liveness and
-HTTP(S) checks. A non-editable commit does not consume the pending request.
-Cmd+L remains inert in the Library in both List and Gallery, as before. Cmd+T
-opens the browser command bar, Escape dismisses it, and Cmd+W closes Library.
-Browser Cmd+L still opens the location editor.
-
-Menu validation and the command-bar action gate refuse Gallery in private
-windows and while `open.advanced.enableBoosts` is false. Validation reads the
-preference through `BoostPreferences.globallyEnabledKey` without creating a
-Boost owner or opening a Profile. Settings, the editor, runtime and existing
-harnesses share that constant. With Settings/Library key, or with no browser
-window key, this remains an app-level Library command, as `view-boosts` is. It
-uses a regular Profile even if the only browser window is private; it never
-uses the private context (F3, accepted parity by the Section 12 lead).
-The existing command registry and action title are unchanged. The change is
-outside the command bar's text, drawing and keystroke code, but the lead's required TANDEM
-§4c/§4d timing qualification still applies.
+The historical validation below describes the original Gallery milestone. Its
+separate-window focus and layout details do not describe the current panel.
 
 ## Final validation, 2026-11-09
 

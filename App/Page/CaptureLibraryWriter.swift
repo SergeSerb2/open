@@ -31,7 +31,7 @@ final class CaptureLibraryWriter: CaptureLibrary {
     }
   }
 
-  func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String) async throws -> UUID {
+  func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String, title: String) async throws -> UUID {
     let id = UUID(), folder = directory, file = directory.appendingPathComponent("\(id.uuidString).png")
     try await Task.detached(priority: .utility) {
       try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -41,7 +41,7 @@ final class CaptureLibraryWriter: CaptureLibrary {
       var rows = try readIndex()
       guard rows.count < Self.maxRows else { throw Failure.indexFull }
       rows.append(CaptureItemSnapshot(id: id, fileName: file.lastPathComponent, createdAt: Date(),
-        kind: CaptureKind(rawValue: kind.rawValue) ?? .area, sourceHost: sourceHost))
+        kind: CaptureKind(rawValue: kind.rawValue) ?? .area, sourceHost: sourceHost, title: String(title.prefix(4096))))
       try writeIndex(rows)
     } catch {
       try? FileManager.default.removeItem(at: file)
