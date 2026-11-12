@@ -98,6 +98,7 @@ class Session:
         self.restore_actions = []
         self.saved_appearance = None
         self.fixture_server = None
+        self.companion = None
         self.fixture_site = None
         self.clipboard_expected = None
         self.manual_original = None
@@ -198,7 +199,16 @@ class Session:
                     continue
                 if n.get('subrole') == 'AXSystemDialog' and self.boost_editor_window(n):
                     continue
+                if n.get('subrole') == 'AXSystemDialog' and self.pip_window(n, now):
+                    continue
                 if n.get('subrole') == 'AXSystemDialog' or re.search(r'^(Sign [Ii]n|Log [Ii]n|Accessibility Access|Screen Recording)$', title):
+                    # Passive record for the lead: the owned app's AX windows and CG window list only.
+                    try:
+                        stamp = '%.2f' % (time.monotonic() - self.started)
+                        (self.out / ('stop-dialog-%s.ax.json' % stamp)).write_text(json.dumps(windows, indent=2))
+                        (self.out / ('stop-dialog-%s.windows.json' % stamp)).write_text(run(self.native, 'windows', self.pid))
+                    except Exception as error:
+                        self.log('stop-dialog-record-incomplete', error=str(error))
                     self.observe_download_prompt(now, owned_dialog=True)
                     raise Stopped('sign-in or system permission dialog in Arc')
         if event:
@@ -209,6 +219,53 @@ class Session:
                 self.log('foreground-stop', expected_pid=self.pid, actual_pid=now['frontmostPID'], actual_bundle=now['frontmostBundle'])
                 raise Stopped('frontmost app changed during AX read; no event sent')
         return now
+
+    def pip_window(self, node, state):
+        # LEAD 02:45: a possible auto-PiP window is recorded (never clicked) only when
+        # (1) its title is empty or matches the playing tab, (2) its full AX subtree has
+        # no text/secure field and no sign-in/allow/OK button, and (3) its CG window is
+        # owned by the Arc PID, above layer 0 and smaller than half the screen.
+        if not (self.script.get('pip_window_exception') is True and 'LEAD 02:45 readback: auto-PiP window exception' in self.rulings
+                and self.backend == 'arc' and self.pid):
+            return False
+        title = str(node.get('title') or '')
+        if title and not re.search(self.script.get('pip_title_re', r'(?!)'), title):
+            return False
+        frame = node.get('frame') or []
+        if len(frame) != 4:
+            return False
+        full = json.loads(run(self.native, 'ax-windows', self.pid))
+        twins = [n for n in walk(full) if n.get('role') == 'AXWindow' and all(abs(a - b) < 2 for a, b in zip(n.get('frame') or [0, 0, 0, 0], frame))]
+        if len(twins) != 1:
+            return False
+        for n in walk(twins[0]):
+            label = ' '.join(str(n.get(k) or '') for k in ('title', 'desc', 'value'))
+            if n.get('role') in ('AXTextField', 'AXSecureTextField', 'AXTextArea', 'AXComboBox') or n.get('subrole') == 'AXSecureTextField':
+                return False
+            if n.get('role') == 'AXButton' and re.search(r'\b(sign\s*in|log\s*in|allow|ok)\b', label, re.I):
+                return False
+        cg = json.loads(run(self.native, 'windows', self.pid))
+        sx, sy, sw, sh = state['screens'][0]['frame']
+        hits = [w for w in cg if all(abs(w['bounds'][k] - v) < 2 for k, v in zip(('X', 'Y', 'Width', 'Height'), frame))]
+        if len(hits) != 1:
+            return False
+        w = hits[0]
+        if w.get('pid', self.pid) != self.pid or not w.get('layer', 0) > 0 or w['bounds']['Width'] * w['bounds']['Height'] >= 0.5 * sw * sh:
+            return False
+        recorded = getattr(self, 'pip_recorded', set())
+        self.pip_recorded = recorded
+        if w['number'] not in recorded:
+            recorded.add(w['number'])
+            stem = 'pip-window-%d' % w['number']
+            (self.out / (stem + '.ax.json')).write_text(json.dumps(twins[0], indent=2))
+            (self.out / (stem + '.windows.json')).write_text(json.dumps(cg, indent=2))
+            try:
+                self.pixel_run(['/usr/sbin/screencapture', '-x', '-o', '-l', str(w['number']), str(self.out / (stem + '.png'))])
+            except Exception as error:
+                self.log('pip-window-frame-incomplete', error=str(error))
+            self.log('pip-window-recorded', number=w['number'], layer=w['layer'], bounds=w['bounds'], title=title,
+                     t=round(time.monotonic() - self.started, 3))
+        return True
 
     def owned_drag_window(self, node, state):
         if not (self.mouse_down and self.m1_input_ruling() and '## LEAD 20:32' in self.rulings):
@@ -331,6 +388,51 @@ class Session:
                                        'mouse_button_may_be_down': self.mouse_down,
                                        'dialog_identity': 'unclassified foreground/system AX signal after synthetic download'}
             raise Stopped('unclassified system-window signal after synthetic download; leaving owned Arc running for the user')
+
+    def companion_call(self, cmd, **args):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(10)
+            conn.connect(str(self.companion_socket))
+            conn.sendall((json.dumps({'id': 1, 'cmd': cmd, 'args': args}) + '\n').encode())
+            buf = b''
+            while not buf.endswith(b'\n'):
+                chunk = conn.recv(1 << 20)
+                if not chunk:
+                    break
+                buf += chunk
+        reply = json.loads(buf)
+        if not reply.get('ok'):
+            raise RuntimeError(str(reply.get('error')))
+        return reply['result']
+
+    def stop_arc_log(self):
+        proc = getattr(self, 'arc_log_proc', None)
+        self.arc_log_proc = None
+        if proc is None:
+            return
+        time.sleep(0.5)
+        proc.terminate()
+        try:
+            proc.wait(5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        self.arc_log_file.close()
+        self.log('arc-log-stop', code=proc.returncode)
+
+    def end_companion(self):
+        # SIGTERM to the exact Open PID this block started; never another process.
+        proc, self.companion = self.companion, None
+        if proc is None:
+            return
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(10)
+            except subprocess.TimeoutExpired:
+                self.cleanup_ok = False
+                self.log('open-cover-still-running', pid=proc.pid)
+                return
+        self.log('open-cover-ended', pid=proc.pid, code=proc.returncode)
 
     def call(self, cmd, **args):
         if not self.cleaning:
@@ -514,7 +616,10 @@ class Session:
     # Arc shortcuts used by plan C3. Never quit, settings, delete-data or system panels.
     S3_KEYS = {('s','cmd'), ('t','cmd'), ('l','cmd'), ('d','cmd'), ('left','cmd,opt'), ('right','cmd,opt'),
                ('left','opt,cmd'), ('right','opt,cmd'), ('space',''), ('delete',''), ('n','cmd,shift'), ('b','cmd,shift'), ('=','cmd'), ('-','cmd'), ('0','cmd'),
-               ('n','ctrl,shift'), ('n','ctrl,opt'), ('e','ctrl,shift')} | {(str(i),'ctrl') for i in range(1,10)}
+               ('n','ctrl,shift'), ('n','ctrl,opt'), ('e','ctrl,shift'), ('j','ctrl,cmd')} | {(str(i),'ctrl') for i in range(1,10)}
+
+    # Arc deep links the capture plan may open (PB1-c); nothing else is passed to `open`.
+    DEEP_LINKS = {'arcBrowser://quit', 'arcBrowser://space', 'arcBrowser://space/1', 'arcBrowser://restart'}
 
     def point_in(self, n, at=None):
         x,y,w,h = n['frame']
@@ -638,7 +743,10 @@ class Session:
                     self.burst_events.append({'operation':'type','start_unix':dispatched,'end_unix':time.time()})
         else:
             dispatched = time.time()
-            run(SCRIPTS / 'uidrive', *args)
+            if args[0] == 'click' and len(args) > 5:
+                self.log('click-flags', result=json.loads(run(self.native, 'click-flags', *args[1:6])))
+            else:
+                run(SCRIPTS / 'uidrive', *args)
             if self.burst_events is not None:
                 self.burst_events.append({'operation':args[0],'start_unix':dispatched,'end_unix':time.time()})
 
@@ -988,7 +1096,10 @@ class Session:
             self.log('fixture-download', filename=filename, url=url, bytes=size, transfer_seconds=duration)
             if self.backend == 'arc':
                 self.guard(event=True)
+                dispatched = time.time()
                 run('/usr/bin/open', '-a', '/Applications/Arc.app', url)
+                if self.burst_events is not None:
+                    self.burst_events.append({'operation': 'fixture-download', 'start_unix': dispatched, 'end_unix': time.time()})
                 self.download_requested_at = datetime.datetime.now().astimezone().isoformat()
             else:
                 self.guard(event=True)
@@ -1052,7 +1163,9 @@ class Session:
         elif op == 'pointer_ax':
             if step.get('expect') == 'selected' and not self.s3_ruling():
                 raise Stopped('selected expectation needs the Session3 scope')
-            if not self.m1_input_ruling() or step.get('expect') not in ('change', 'menu', 'selected') or not step.get('name'):
+            if step.get('expect') == 'observe' and step.get('button') != 'right':
+                raise Stopped('observe expectation is allowed only for a right-click')
+            if not self.m1_input_ruling() or step.get('expect') not in ('change', 'menu', 'selected', 'observe') or not step.get('name'):
                 raise Stopped('M1 pointer click needs the lead ruling, a named frame and an expected result')
             if step.get('button','left') not in ('left','right') or int(step.get('count',1)) not in (1,2):
                 raise Stopped('one verified left/right click or double-click is allowed')
@@ -1067,7 +1180,10 @@ class Session:
             if not any(a <= point[0] < a+c and b <= point[1] < b+d for a,b,c,d in windows):
                 raise Stopped('fresh AX target centre is outside the owned AX windows')
             self.log('pointer-target', ax_target=n, expected=step['expect'])
-            self.input('click', *point, step.get('button','left'), int(step.get('count',1)), verified_pointer=True, target_predicate=step['target'])
+            mods = step.get('modifiers') or []
+            if not set(mods) <= {'cmd', 'opt', 'shift'}:
+                raise Stopped('pointer modifiers must be cmd, opt or shift')
+            self.input('click', *point, step.get('button','left'), int(step.get('count',1)), *([','.join(mods)] if mods else []), verified_pointer=True, target_predicate=step['target'])
             deadline = time.monotonic() + 2
             if step['expect'] == 'selected':
                 # A sidebar row counts as selected when its AXRow/AXCell reports selected.
@@ -1082,6 +1198,19 @@ class Session:
                     if time.monotonic() >= deadline:
                         raise Stopped('expected row selection not observed within2s; no further click sent')
                     time.sleep(.1)
+                self.log('end', operation=op)
+                return
+            if step['expect'] == 'observe':
+                # D2 Library rows: a right-click that may open no menu. Record, never stop.
+                time.sleep(1.2)
+                self.guard(event=True)
+                old_ids = {w['number'] for w in json.loads(before.with_suffix('.windows.json').read_text()) if w['onscreen']}
+                wins = json.loads(run(self.native, 'windows', self.pid))
+                scoped = json.loads(run(self.native, 'ax-depth', self.pid, 3))
+                menu = any(e.get('role') in ('AXMenu',) for e in walk(scoped))
+                new = [w for w in wins if w['number'] not in old_ids and w['onscreen']]
+                self.log('pointer-observed', menu=menu, new_windows=new)
+                self.shot(step['name'], step.get('ax_depth'))
                 self.log('end', operation=op)
                 return
             if step['expect'] == 'menu':
@@ -1167,6 +1296,116 @@ class Session:
                     raise Stopped('expected drag-start result not observed within2s')
             else:
                 self.input('move', *self.point_in(n, step.get('at')))
+        elif op == 'deep_link':
+            if not self.s3_ruling() or step.get('url') not in self.DEEP_LINKS:
+                raise Stopped('deep link is not on the session-3 allowlist')
+            self.guard(event=True)
+            dispatched = time.time()
+            result = subprocess.run(['/usr/bin/open', step['url']], capture_output=True, text=True, timeout=10)
+            self.log('deep-link', url=step['url'], exit=result.returncode, stderr=result.stderr[-300:])
+            if self.burst_events is not None:
+                self.burst_events.append({'operation': 'deep-link', 'start_unix': dispatched, 'end_unix': time.time()})
+        elif op == 'open_cover':
+            # LEAD 02:10: cover Arc with an Open window on a fresh test profile,
+            # placed only through Open's automation socket. No input reaches Open.
+            if not self.s3_ruling() or 'LEAD 02:10 readback: PiP cover with Open' not in self.rulings or self.companion is not None:
+                raise Stopped('Open cover needs the LEAD 02:10 ruling and one companion per block')
+            exe = str(step.get('executable', ''))
+            if not re.fullmatch(r'/Users/[^/]+/\.re/open-c-capture/main-[0-9a-f]+/Open\.app/Contents/MacOS/Open', exe) or not Path(exe).exists():
+                raise Stopped('Open cover needs an owned capture build of Open')
+            root = Path.home() / '.re/open-c-capture' / ('s7-cover-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+            root.mkdir(parents=True, exist_ok=False)
+            sock = root / 'automation.sock'
+            self.guard(event=True)
+            x, y, w, h = self.target({'role': 'AXWindow', 'identifier': 're:^bigBrowserWindow'})['frame']
+            env = dict(os.environ, OPEN_USER_DATA=str(root), OPEN_SKIP_FIRST_RUN='1', OPEN_E2E_NO_CRASH_PROBES='1', OPEN_E2E_OWNER_PID=str(os.getpid()), OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS='1')
+            self.companion_log = (self.out / 'open-cover-app.log').open('a')
+            self.companion = subprocess.Popen([exe, '--user-data-dir=' + str(root), '--automation-socket=' + str(sock), '--skip-first-run', '--use-mock-keychain', '--style=chrome', 'about:blank'], env=env, stdout=self.companion_log, stderr=subprocess.STDOUT)
+            self.companion_socket = sock
+            for _ in range(150):
+                if sock.exists():
+                    break
+                if self.companion.poll() is not None:
+                    raise Stopped('Open cover exited during launch')
+                time.sleep(.1)
+            else:
+                raise Stopped('Open cover socket did not appear')
+            if self.companion_call('ping')['pid'] != self.companion.pid:
+                raise Stopped('Open cover socket PID mismatch')
+            height = self.initial['screens'][0]['frame'][3]
+            m = float(step.get('margin', 12))
+            frame = [x - m, height - (y + h) - m, w + 2 * m, h + 2 * m]
+            placed = self.companion_call('window-frame', frame=frame)
+            self.companion_call('activate')
+            activation = json.loads(run(self.native, 'activate', self.companion.pid))
+            ready = time.monotonic() + 3
+            while self.state()['frontmostPID'] != self.companion.pid and time.monotonic() < ready:
+                time.sleep(.05)
+            now = self.state()
+            self.log('open-cover', pid=self.companion.pid, data_root=str(root), frame=frame, placed=placed, activation=activation,
+                     frontmost_pid=now['frontmostPID'], frontmost_bundle=now['frontmostBundle'])
+            if now['frontmostPID'] != self.companion.pid:
+                raise Stopped('Open cover did not become frontmost')
+            if self.burst_events is not None:
+                self.burst_events.append({'operation': 'open-cover', 'start_unix': time.time(), 'end_unix': time.time()})
+        elif op == 'open_uncover':
+            if self.companion is None:
+                raise Stopped('no Open cover to end')
+            self.end_companion()
+            dispatched = time.time()
+            activation = json.loads(run(self.native, 'activate', self.pid))
+            ready = time.monotonic() + 2
+            while self.state()['frontmostPID'] != self.pid and time.monotonic() < ready:
+                time.sleep(.05)
+            if self.state()['frontmostPID'] != self.pid:
+                run('/usr/bin/open', '-a', '/Applications/Arc.app')
+                ready = time.monotonic() + 3
+                while self.state()['frontmostPID'] != self.pid and time.monotonic() < ready:
+                    time.sleep(.05)
+            now = self.state()
+            self.log('open-uncover', activation=activation, frontmost_pid=now['frontmostPID'], frontmost_bundle=now['frontmostBundle'])
+            if self.burst_events is not None:
+                self.burst_events.append({'operation': 'open-uncover', 'start_unix': dispatched, 'end_unix': time.time()})
+            if now['frontmostPID'] != self.pid:
+                raise Stopped('Arc did not return to the front after the Open cover')
+        elif op == 'arc_windows':
+            # Window list plus one frame per visible owned Arc window (a PiP window included).
+            if not step.get('name'):
+                raise Stopped('arc_windows needs a name')
+            self.guard()
+            wins = json.loads(run(self.native, 'windows', self.pid))
+            (self.out / (step['name'] + '.windows.json')).write_text(json.dumps(wins, indent=2))
+            seen = []
+            for w in wins:
+                if w.get('onscreen') and w['bounds']['Width'] > 2 and w['bounds']['Height'] > 2:
+                    path = self.out / ('%s-%d.png' % (step['name'], w['number']))
+                    self.pixel_run(['/usr/sbin/screencapture', '-x', '-o', '-l', str(w['number']), str(path)])
+                    seen.append({'number': w['number'], 'layer': w['layer'], 'bounds': w['bounds']})
+            self.log('arc-windows', name=step['name'], onscreen=seen, frontmost=self.state()['frontmostBundle'])
+        elif op == 'modkey':
+            # D2 item 3b: hold or release Option while an owned Arc menu is open.
+            if not self.s3_ruling() or step.get('key') != 'opt' or step.get('state') not in ('down', 'up'):
+                raise Stopped('modkey allows only Option down/up in the Session3 scope')
+            self.guard(event=True)
+            self.log('modkey', result=json.loads(run(self.native, 'modkey', 'opt', step['state'])))
+            self.opt_down = step['state'] == 'down'
+        elif op == 'arc_log':
+            # LEAD 10:50: read-only `log stream` of the owned Arc process (PB1-e / PB4 C9 sound mapping).
+            if not self.s3_ruling() or step.get('state') not in ('start', 'stop', 'mark'):
+                raise Stopped('arc_log needs the Session3 scope and start/stop/mark')
+            if step['state'] == 'start':
+                if getattr(self, 'arc_log_proc', None) is not None or not self.pid:
+                    raise Stopped('one Arc log stream per block, after launch')
+                self.arc_log_file = (self.out / 'arc-log.ndjson').open('a')
+                self.arc_log_proc = subprocess.Popen(['/usr/bin/log', 'stream', '--style', 'ndjson', '--level', 'debug',
+                                                      '--predicate', 'processIdentifier == %d' % self.pid],
+                                                     stdout=self.arc_log_file, stderr=subprocess.STDOUT)
+                time.sleep(1.0)
+                self.log('arc-log-start', pid=self.arc_log_proc.pid, arc_pid=self.pid)
+            elif step['state'] == 'mark':
+                self.log('arc-log-mark', label=str(step.get('label', ''))[:80], unix=time.time())
+            else:
+                self.stop_arc_log()
         elif op == 'allow_boost_editor':
             if not self.s3_ruling() or 'LEAD 18:00 (pending answer) readback: Boost editor dialog' not in self.rulings:
                 raise Stopped('Boost editor capture needs the LEAD 18:00 ruling')
@@ -1328,6 +1567,21 @@ class Session:
 
     def cleanup(self):
         self.cleaning = True
+        try:
+            self.stop_arc_log()
+        except Exception as error:
+            self.cleanup_ok = False
+            self.log('arc-log-stop-incomplete', error=str(error))
+        if getattr(self, 'opt_down', False):
+            try:
+                run(self.native, 'modkey', 'opt', 'up'); self.opt_down = False; self.log('modkey-released')
+            except Exception as error:
+                self.cleanup_ok = False; self.log('modkey-release-incomplete', error=str(error))
+        try:
+            self.end_companion()
+        except Exception as error:
+            self.cleanup_ok = False
+            self.log('open-cover-end-incomplete', error=str(error))
         if self.mouse_down and self.m1_input_ruling() and '## LEAD 20:32' in self.rulings:
             # The lead explicitly requires ending our held gesture before
             # any stop/handoff. Do not route Esc to a foreign foreground app.
