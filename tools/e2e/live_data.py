@@ -179,8 +179,6 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and {(r['url'], r['live']) for r in again.get('rows', [])} == before
             and bool(wait_until(lambda: app.call('live-folder-refresh').get('outcome') == 'success', timeout=15, step=.5)),
             'state': again}
-        app.call('sidebar-menu', item='Live Folders/GitHub')
-        gone = app.call('live-folder-state')
         # Signing in on GitHub (a tab leaves the sign-in page) refetches the folder without a manual
         # Refresh (live-data §2.4 item 4, Arc `githubUserSignedIn`).
         gh['signed_in'] = False
@@ -195,6 +193,8 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and signed_in.get('signInRefreshes', 0) == base_refreshes + 1, 'before': signed_out.get('outcome'), 'after': signed_in.get('outcome'),
             'signInRefreshes': signed_in.get('signInRefreshes')}
         app.call('close', tab=login)
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        gone = app.call('live-folder-state')
         app.call('sidebar-menu', item='Live Folders/GitHub')
         second = app.call('live-folder-state', wait=True)
         app.call('sidebar-menu', item='Live Folders/GitHub')
