@@ -217,12 +217,15 @@ def context_menu_checks(factory, results, tmp, h):
             if name in ('link', 'mailto', 'linked_image') and selection_text and 'Copy' in expected:
                 display = selection_text[:32] + ('…' if len(selection_text) > 32 else '')
                 expected.insert(expected.index('Copy') + 1, 'Search Local Search for “' + display + '”')
+                # PB4 row 5: Open's on-device Translate Selection follows the search item.
+                expected.insert(expected.index('Copy') + 2, app.call('translate', action='selection')['menuTitle'])
             if name in ('selection', 'url'):
                 expected = [title for title in expected if not title.startswith('Go to ')]
                 addition = ('Search Local Search for “bonjour menu contextuel”' if name == 'selection'
                             else 'Go to https://example.invalid/context-target')
                 anchor = expected.index('Copy') + 1
                 expected.insert(anchor, addition)
+                expected.insert(anchor + 1, app.call('translate', action='selection')['menuTitle'])
             if name == 'page':
                 anchor = next((i for i, title in enumerate(expected) if title.startswith(('View Page Source', 'Inspect'))), len(expected))
                 addition = ['Translate to English', 'Capture', 'Capture Full Page']
@@ -746,7 +749,9 @@ def context_menu_checks(factory, results, tmp, h):
         for identifier, path in [('help-center', '/blob/main/docs/commands.md'), ('getting-started', '#readme'),
                                  ('release-notes', '/releases'), ('contact-team', '/issues/new')]:
             run('cm_help_' + identifier, lambda i=identifier, p=path: help_item(i, 'https://github.com/SergeSerb2/open' + p))
-        run('cm_join_meeting_disabled', lambda: {'ok': row_enabled('join-meeting') is False})
+        # Join Meeting is live (CAL #331): enabled in a normal window. Menu validation never reads the calendar
+        # (no store, no Calendar prompt); with no meeting the command does nothing, as Arc (e2e `calendar`).
+        run('cm_join_meeting_enabled', lambda: {'ok': row_enabled('join-meeting') is True})
 
         # D2c menu order (docs/re/sidebar-menus-parity.md §1): Arc 1.172.2, capture session 3 Part D.
         # Open differences, each recorded: Share stays "Share…" (a picker) until C3 item 1 records Arc's submenu.

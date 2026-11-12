@@ -13,6 +13,14 @@ wrap the entire gate in the screen lock.
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --no-e2e --only sidebar-render,sidebar-compare
 ```
 
+`page/X1_apple_backend` depends on the Mac: it passes where the French → English
+macOS translation asset is installed (the M1) and is BLOCKED elsewhere. It is listed
+in `ENVIRONMENT_ROWS` (`gate_exceptions.py`), so a pass there reads
+`NOT_NEEDED_ON_THIS_MAC` instead of STALE and the exception stays for the other Macs.
+`window/chrome_capture_compare` and `window/chrome_dark_rings` need the private Arc
+capture frames, which only the M5 has; elsewhere both rows report SKIP with that
+reason (a gate FAIL: the window merge stage qualifies on the M5).
+
 The build stage also builds the Release App without `OPEN_AUTOMATION` in
 `build/shipping` (row `build/shipping`): the e2e suites use the automation App,
 so only this row catches a break in the shipping build (#371). The exceptions
@@ -1785,3 +1793,18 @@ harness-only exception therefore omits the full M5 `verify-all` gate.
 Every App build ran through the M1's `heavy.sh`, and each on-screen run
 held its `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`. No crash probe ran
 on the M5. No CrashReporter, ReportCrash, launchctl, or system setting changed.
+
+## Known load flakes: onboarding (LEAD 10:05, 2026-11-12)
+
+These `onboarding` rows failed once each on the M5 (Debug) while other agents' jobs held the machine at load1
+20–43. Each passed in the run before or after on the same head, and none touches the code under test.
+The lead ruled them load-induced. They do not block a PR. Do not spend screen time on them.
+
+| Row | Seen at | Note |
+|---|---|---|
+| `finish_releases_player` | load1 43 (heads bb9ffba1 / d2a31857 merge) | passed on the next run at load1 ~20 |
+| `favorite_icons_network_repeat`, `favorite_icons_network_repeat_pixels`, `favorite_icons_gmail_curated_fallback` | load1 ~20 | real network favicon fetches; passed in the runs before |
+
+The rented Macs are a separate case: they have no audio output and no real display animation, so 13
+`onboarding` rows fail there every time (list in PR #383). Those are not flakes. `onboarding` stays off
+`RENTED_ALLOWED_E2E`.

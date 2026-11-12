@@ -246,7 +246,30 @@ struct SidebarMenus {
 
     /// Favorite tile (S3D): the pinned menu with "Remove Favorite" last.
     func favorite(_ tab: Tab) -> NSMenu {
-        menu(liveCalendarItems(tab) + pinnedItems(tab) + [item("Remove Favorite", .removeFavorite(tabID: tab.id))])
+        menu(liveCalendarItems(tab) + tileItems(tab) + pinnedItems(tab) + [item("Remove Favorite", .removeFavorite(tabID: tab.id))])
+    }
+
+    /// Arc's Top App switches (audit A2; `ContextMenus/SidebarMenu+PlatformSpecificItems.swift`,
+    /// `FUN_102ee07bc`): checkmark items "Show Unread Badge" (an unread-count app) and "Show Time to
+    /// Next Meeting" (a Live Calendar tile). Placement before the pinned items: GUESS — capture pending.
+    func tileItems(_ tab: Tab) -> [NSMenuItem] {
+        let context = self.context
+        let url = tab.url
+        var items: [NSMenuItem] = []
+        if context.favoriteBadgesEnabled, FavoriteApp.match(url: url)?.hasUnreadBadge == true {
+            let on = context.favoriteTileSettings.showsBadge(url: url)
+            let badge = ClosureMenuItem("Show Unread Badge") { context.updateFavoriteTileSettings { $0.setShowsBadge(!on, url: url) } }
+            badge.state = on ? .on : .off
+            items.append(badge)
+        }
+        if context.liveCalendar != nil, CalendarProvider.match(url: url) != nil {
+            let on = context.favoriteTileSettings.showsSubtitle(url: url)
+            let subtitle = ClosureMenuItem("Show Time to Next Meeting") { context.updateFavoriteTileSettings { $0.setShowsSubtitle(!on, url: url) } }
+            subtitle.state = on ? .on : .off
+            items.append(subtitle)
+        }
+        if !items.isEmpty { items.append(.separator()) }
+        return items
     }
 
     /// Live Calendar items of a calendar Favorite (LD §4: "Show Meeting Link" with "Copy Link" and "Dismiss",
@@ -398,11 +421,21 @@ struct SidebarMenus {
             item(context.title(of: other), enabled: other.id != space.id, .exportSpaceIntoFolder(space: space.id, destination: other.id))
         })
         let rename = ClosureMenuItem("Rename Space…") { [beginRename] in beginRename(nil) }
+        // "Show/Hide Space Header" only where it matters: a single unnamed Space. GUESS — capture PB5-a pending
+        // (Arc strings "Show Space Header"/"Hide Space Header", "Menu item to toggle space header visibility").
+        var header: [NSMenuItem] = []
+        if context.incognitoTitle == nil, context.isSingleUnnamedSpace(space) {
+            let shown = SpaceHeaderPreference.shared.showOnSingleUnnamedSpace
+            header = [ClosureMenuItem(shown ? "Hide Space Header" : "Show Space Header") {
+                SpaceHeaderPreference.shared.showOnSingleUnnamedSpace = !shown
+            }]
+        }
         return menu([
             item("Change Space Icon…", .changeSpaceIcon(space.id)),
             rename,
             item("Edit Theme Color…", .editSpaceTheme(space.id)),
             profile,
+        ] + header + [
             .separator(),
             item("New Folder", .newFolder(in: .spacePinned(space.id))),
             liveFolders(space),

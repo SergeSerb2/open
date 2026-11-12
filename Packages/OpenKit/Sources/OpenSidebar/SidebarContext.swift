@@ -132,6 +132,21 @@ public final class SidebarContext {
     /// Live Calendar (LD §4): the countdown state of each calendar Favorite tile, set by the App's
     /// coordinator. Observed: a change redraws only the tiles that read it.
     public var liveCalendarTiles: [ItemID: LiveCalendar.TileState] = [:]
+    /// Favorite tile badge and subtitle switches (audit A2), read from `previewPreferences`.
+    /// Observed: a change redraws only the tiles that read it. Every window reloads them when
+    /// one window changes a switch (`FavoriteTileSettings.didChange`).
+    public private(set) var favoriteTileSettings = FavoriteTileSettings()
+    /// Unread badges and their menu item; false in render scenes and incognito windows (GUESS).
+    @ObservationIgnored public var favoriteBadgesEnabled = false
+    @ObservationIgnored private var favoriteSettingsObserver: (any NSObjectProtocol)?
+    public func updateFavoriteTileSettings(_ change: (inout FavoriteTileSettings) -> Void) {
+        var next = favoriteTileSettings
+        change(&next)
+        guard next != favoriteTileSettings else { return }
+        favoriteTileSettings = next
+        next.save(to: previewPreferences)
+        NotificationCenter.default.post(name: FavoriteTileSettings.didChange, object: previewPreferences)
+    }
     /// Live Calendar actions for the tile menu and the reminder; nil keeps tiles plain.
     @ObservationIgnored public var liveCalendar: LiveCalendarActions?
     public func glanceKind(for tab: Tab) -> GlanceKind? {
@@ -161,6 +176,15 @@ public final class SidebarContext {
         self.windowID = windowID
         self.incognitoTitle = incognitoTitle
         self.previewPreferences = previewPreferences
+        favoriteTileSettings = FavoriteTileSettings(defaults: previewPreferences)
+        favoriteSettingsObserver = NotificationCenter.default.addObserver(forName: FavoriteTileSettings.didChange,
+            object: previewPreferences, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let loaded = FavoriteTileSettings(defaults: self.previewPreferences)
+                if loaded != self.favoriteTileSettings { self.favoriteTileSettings = loaded }
+            }
+        }
         selection.onChange = { [weak self] in
             guard let outline = self?.sidebar?.focusedOutline else { return }
             NSAccessibility.post(element: outline, notification: .selectedRowsChanged)
@@ -168,6 +192,18 @@ public final class SidebarContext {
     }
 
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }
+
+    /// Arc hides the Space header when the browser has a single Space with no name, unless the user chose
+    /// "Show Space Header" (strings "Show Space Header" / "Hide Space Header", key
+    /// `showSpaceHeaderOnSingleUnnamedSpaces`; AUDIT-2026-11-12 A1). GUESS — capture PB5-a pending: the default
+    /// (off, from the key's name) and the "Space N" fallback counting as unnamed. Incognito keeps its header.
+    public func hidesHeader(for space: Space) -> Bool {
+        guard incognitoTitle == nil, !SpaceHeaderPreference.shared.showOnSingleUnnamedSpace else { return false }
+        return isSingleUnnamedSpace(space)
+    }
+    func isSingleUnnamedSpace(_ space: Space) -> Bool {
+        model.spaces.count == 1 && (space.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     public var focusedSpace: Space? {
         if let managerSpaceID { return model.space(id: managerSpaceID) ?? model.spaces.first }
@@ -563,4 +599,22 @@ public enum SidebarMediaHover: Equatable, Sendable {
 public struct SidebarMediaSourceItem: Equatable, Sendable {
     public var id: String, title: String, enabled: Bool
     public init(id: String, title: String, enabled: Bool) { self.id = id; self.title = title; self.enabled = enabled }
+}
+
+
+/// App-wide "Show Space Header" choice (Arc `showSpaceHeaderOnSingleUnnamedSpaces`), shared by every window.
+@MainActor
+@Observable
+public final class SpaceHeaderPreference {
+    public static let key = "open.sidebar.showSpaceHeaderOnSingleUnnamedSpace"
+    public static let shared = SpaceHeaderPreference()
+    public var showOnSingleUnnamedSpace: Bool {
+        didSet { if oldValue != showOnSingleUnnamedSpace { UserDefaults.standard.set(showOnSingleUnnamedSpace, forKey: Self.key) } }
+    }
+    private init() { showOnSingleUnnamedSpace = UserDefaults.standard.bool(forKey: Self.key) }
+    /// Re-reads the stored value (automation and settings resets).
+    public func reload() {
+        let stored = UserDefaults.standard.bool(forKey: Self.key)
+        if stored != showOnSingleUnnamedSpace { showOnSingleUnnamedSpace = stored }
+    }
 }

@@ -3718,7 +3718,12 @@ def chrome_capture_comparison(snapshots):
             ("cmd-s-restored", "20261026-101147-06-sidebar-width", 66, 228, (8,600)),
             ("card-revealed", "20261026-101324-05-reveal-card", 9, 233, (100,600))]:
         captures=glob.glob(os.path.join(sessions,session,"%04d-*"%frame,"win-70352.png"))
-        if not captures: return {"status":"SKIP", "reason":"capture session 2 frames absent"}, {}
+        if not captures:
+            # Both rows need the private Arc capture frames (the M5's .re). Each row
+            # states the skip; an empty row has no acceptance predicate and made the
+            # gate drop every other window row.
+            skip = {"status":"SKIP", "reason":"capture session 2 frames absent on this Mac; the window merge stage qualifies on the M5"}
+            return dict(skip), dict(skip)
         arc=captures[0]; ours=os.path.join(snapshots,name+".png")
         aw,ah,A=read_image(arc,srgb=True); ow,oh,O=read_image(ours,srgb=True); scale=ow/aw
         def mean(P, x,y,s):
@@ -6109,6 +6114,30 @@ def profiles_checks(factory, results, tmp, config):
 # Measurements (run with --config Release)
 
 
+# Idle CPU rows measure the steady state a real user sees (LEAD ruling 2026-11-12): a profile that
+# was launched once before, with Chromium's first-run component installs done. On a fresh profile the
+# component updater runs about 60-80 s after launch and starts ~24 short-lived children, which makes
+# an idle window incomplete (H2-handoff-engine.md). Limits are unchanged; the first launch is recorded.
+SECOND_LAUNCH_FIRST_RUN_SECONDS = 90
+
+
+def second_launch(factory, urls, **kwargs):
+    """Launch a fresh profile, keep it open past the component burst, quit, relaunch the same profile."""
+    begin_row("second-launch warm-up (first launch)")
+    first = factory(urls=urls, fresh=True, **kwargs)
+    started = time.time()
+    try:
+        time.sleep(SECOND_LAUNCH_FIRST_RUN_SECONDS)
+    finally:
+        first.quit()
+    record = {"firstLaunchWall": started, "firstLaunchSeconds": round(time.time() - started, 3),
+              "firstLaunchQuitOK": bool(first.quit_report.get("ok"))}
+    begin_row("second-launch warm-up (second launch)")
+    app = factory(urls=urls, fresh=False, **kwargs)
+    record["secondLaunchWall"] = time.time()
+    return app, record
+
+
 def process_cpu_window(app, seconds=60):
     """One OS CPU window of `seconds`. See process_cpu_windows."""
     app.begin_timing('OS idle CPU window')
@@ -6300,7 +6329,7 @@ def measure(app_factory, results, tmp):
 
     # D-11: the same paused-card speed gate as the media suite, on a local fixture.
     server, port = _media_server()
-    app = app_factory(urls=("http://127.0.0.1:%d/audio.html" % port,), fresh=True)
+    app, idle_profile = second_launch(app_factory, ("http://127.0.0.1:%d/audio.html" % port,))
     keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
     saved = {key: app.call("defaults", key=key, persistent=True) for key in keys}
     try:
@@ -6311,7 +6340,7 @@ def measure(app_factory, results, tmp):
         wait_until(lambda: app.call("media", tab=audio)["playback"] == "playing", timeout=10, step=.05)
         new_tab(app, "about:blank")
         wait_until(lambda: app.call("mini-players")["cards"], timeout=3, step=.02)
-        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
+        results["media_idle_cpu"] = dict(_media_idle_cpu(app, audio), profile=idle_profile)
     finally:
         _restore_defaults(app, saved)
         app.quit(); server.shutdown(); server.server_close()
@@ -6423,7 +6452,7 @@ def media_checks(factory, results, tmp):
     # Chromium's fake capture devices (recording card): no system camera or microphone is opened, so
     # macOS shows no permission prompt. The permission itself goes through Open's real request path
     # (automation policy "grant"); Chromium's fake permission UI would skip the capture indicator.
-    app = factory(urls=(base + "plain.html",), fresh=True, extra_args=["--use-fake-device-for-media-stream"])
+    app, idle_profile = second_launch(factory, (base + "plain.html",), extra_args=["--use-fake-device-for-media-stream"])
     def m(tab): return app.call("media", tab=tab)
     def players(window=None):
         return app.call("mini-players", **({"window": window} if window else {}))
@@ -6537,7 +6566,7 @@ def media_checks(factory, results, tmp):
         wait_until(lambda: ids() == [audio], timeout=3, step=.02)
 
         # E-M15 / D-11: same OS sampling and paused-card fixture as `measure`.
-        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
+        results["media_idle_cpu"] = dict(_media_idle_cpu(app, audio), profile=idle_profile)
         app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
         close_tab(audio)
 
@@ -7599,6 +7628,9 @@ def page_checks(factory, results, tmp, style="alloy"):
     if os.environ.get("OPEN_E2E_PAGE_COPY_ONLY") == "1":
         page_commands_checks(factory, results, tmp)
         return
+    if os.environ.get("OPEN_E2E_PAGE_TRANSLATE_ONLY") == "1":
+        page_translate_checks(factory, results, tmp)
+        return
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)
@@ -7784,7 +7816,7 @@ def capture_checks(factory, results, tmp):
         results['capture_c1_area'] = {'ok': len(new) == 1 and new[0]['kind'] == 'area' and new[0]['width'] == round(300 * scale)
             and new[0]['height'] == round(200 * scale) and new[0]['bytes'] > 0 and st['result']['saved'] == new[0]['id']
             and overlay.get('frame') == overlay.get('pageFrame') and overlay.get('firstResponder') is True
-            and overlay.get('hint') == 'Drag to capture. Press Esc to cancel.' and not overlay.get('hintHidden')
+            and overlay.get('hint') == 'Click or drag to capture a portion of this page' and not overlay.get('hintHidden')
             and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
             and card.get('actions') == ['copy', 'save', 'share', 'easel', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
             'scale': scale, 'row': new, 'steps': steps, 'state': st}
@@ -7816,6 +7848,22 @@ def capture_checks(factory, results, tmp):
         results['capture_shortcut_hint'] = {'ok': (closed or {}).get('hintShows') == 1 and isinstance(hint_time, (int, float)) and hint_time > 0,
                                             'hintShows': (closed or {}).get('hintShows'), 'stored': hint_time}
 
+        # C8: hover element capture (Arc FA CA-4, capture s4 `e6-capture-ui`): the pointer rests on
+        # an element, the overlay outlines it, and a click without a drag captures exactly it.
+        close_card()
+        app.eval(tab, "(() => { const d = document.createElement('div'); d.id = 'c8';"
+                      " d.style.cssText = 'position:fixed;left:60px;top:260px;width:240px;height:120px;background:#3a7;z-index:9';"
+                      " document.body.appendChild(d); return 1; })()")
+        before = rows()
+        r = app.call('capture', mode='area', click=[180, 320])
+        after = rows()
+        hovered = next((s_ for s_ in r['steps'] if s_.get('after') == 'hover'), {})
+        new = [x for x in after if x['id'] not in {y['id'] for y in before}]
+        results['capture_c8_hover_element'] = {'ok': hovered.get('element') == [60, 260, 240, 120] and len(new) == 1
+            and new[0]['width'] == round(240 * scale) and new[0]['height'] == round(120 * scale) and new[0]['kind'] == 'area',
+            'hover': hovered, 'row': new}
+        app.eval(tab, "document.getElementById('c8').remove()")
+        close_card()
         # C4: Cmd+Shift+2 on the real key path shows the overlay; Esc during it: no row.
         count, cancelled = len(rows()), state()['cancelled']
         app.call('key', key='2', modifiers=['cmd', 'shift'])
@@ -9467,6 +9515,7 @@ def commandbar_checks(factory, results, tmp, config):
             app.quit(); server.shutdown(); server.server_close()
 
     import settings_live
+    settings_live.dock_tile(factory, results, tmp, wait_until)
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
@@ -9496,6 +9545,13 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
         and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
         'rows': rows[:4], 'tab': doc}
+    # Top Domains (PB1, Open's own list): "netfl" offers a "Netflix" row (subtitle netflix.com); no inline completion.
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    bar('t', 'window'); typed = type_query('netfl')
+    site = next((r for r in typed.get('rows', []) if r.get('title') == 'Netflix'), None)
+    results['commandbar_top_domain_row'] = {'ok': bool(site) and 'netflix.com' in (site.get('url') or '')
+        and typed.get('fieldText', typed.get('text')) == 'netfl', 'row': site, 'field': typed.get('fieldText')}
+    press('escape')
     # "Undo <name>": archive a fresh Today tab, then the bar offers the named Undo and running it restores the tab.
     fresh = new_tab(app, 'about:blank#pb1-undo')
     app.call('select', tab=fresh); app.call('focus', tab=fresh)
@@ -9861,10 +9917,16 @@ def sidebar_a1_checks(app, results, require, evidence):
     pressed_again = app.call('toast-undo')
     require('E8_delete_folder_toast_undo_single_use', back and not pressed_again
             and app.call('sidebar-tree') == restored_sidebar, pressedAgain=pressed_again)
-    # Sound wiring (§3.13): the App resolves its own resources; the setting stays off by default.
-    sound = app.call('sound-effect', effect='capture')
+    # Sound wiring (§3.13): the App resolves its own resources; the switch is on by default (Arc's inverse key
+    # playUserInterfaceSoundsDisabled; audit A8) and turning it off gates every play.
+    sound_default = app.call('defaults', key='open.advanced.playSoundEffects')
+    app.call('defaults', key='open.advanced.playSoundEffects', value=False)
+    try:
+        sound = app.call('sound-effect', effect='capture')
+    finally:
+        app.call('defaults', key='open.advanced.playSoundEffects', value=None)
     require('A1_sound_effect_gated_off', sound['resource'] == 'open-capture.caf' and not sound['played'] and sound['plays'] == 0
-            and app.call('defaults', key='open.advanced.playSoundEffects') in (None, False), sound=sound)
+            and sound_default in (None, True), sound=sound, default=sound_default)
 
 
 def sidebar_a2_checks(app, results, require, evidence, tmp):
@@ -12785,7 +12847,45 @@ def page_translate_checks(factory, results, tmp):
           const out = { p1: document.getElementById('p1').textContent, title: document.getElementById('title').textContent,
             hadUnit: !!unit, applied: r.applied, units: b.units.length };
           t.restore();
-          return out; })()''')
+          return out; })()''', world='open')
+        # PB4 row 5: the runtime lives in Open's isolated world; the page's own scripts cannot see it.
+        app.call('translate', action='translate'); state_is('translated')
+        page_view = app.eval(spa_tab, "typeof window.__openTranslate")
+        open_view = app.eval(spa_tab, "typeof window.__openTranslate", world='open')
+        app.call('translate', action='revert'); state_is('offered')
+        results['X7_isolated_world'] = {'ok': page_view == 'undefined' and open_view == 'object', 'page': page_view, 'open': open_view}
+        # PB4 row 5: Translate Selection (context menu) on device, then Copy; an English selection is refused.
+        def select_text(js_node):
+            # Selects the node and returns its center (the right-click must land on the selection).
+            box = app.eval(spa_tab, "(() => { const n = " + js_node + "; n.scrollIntoView({block: 'center'}); const r = document.createRange(); r.selectNodeContents(n); const s = getSelection(); s.removeAllRanges(); s.addRange(r); const b = n.getBoundingClientRect(); return [b.left + Math.min(40, b.width / 2), b.top + b.height / 2]; })()")
+            return box
+        at = select_text("document.getElementById('p1')")
+        app.call('events'); app.call('policy', contextMenu='record')
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        sel_menu = wait_until(lambda: [e for e in app.call('events') if e['type'] == 'contextMenu'], timeout=5) or []
+        sel_items = sel_menu[-1].get('openItems', []) if sel_menu else []
+        title = app.call('translate', action='selection').get('menuTitle', '')
+        at = select_text("document.getElementById('p1')")
+        app.call('policy', contextMenu='run-open:' + title)
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        sel = wait_until(lambda: (lambda v: v if v.get('state') in ('translated', 'failed') else None)(app.call('translate', action='selection')), timeout=10, step=.1) or {}
+        # The App's own snapshot (its windows only, no screen-recording tool): window + popover overlay.
+        if sel.get('popoverWindow'):
+            app.call('snapshot', path=os.path.join(OUT, 'page-translate-selection.png'), overlayWindows=[sel['popoverWindow']])
+        copied = app.call('translate', action='selection-copy')
+        pasted = subprocess.run(['/usr/bin/pbpaste'], capture_output=True, text=True).stdout
+        app.call('translate', action='selection-close')
+        results['X8_translate_selection'] = {'ok': title in sel_items and sel.get('state') == 'translated' and sel.get('source') == 'fr'
+            and sel.get('shown') and sel.get('result') and sel.get('result') != sel.get('text') and sel.get('shownText') == sel.get('result') and sel.get('anchorInPage')
+            and copied.get('pressed') and pasted == sel.get('result'),
+            'items': sel_items, 'state': sel, 'pasted': pasted}
+        app.eval(spa_tab, "document.body.insertAdjacentHTML('beforeend', '<p id=\"en-x8\">This sentence is written in plain English for the test.</p>'); true")
+        at = select_text("document.getElementById('en-x8')")
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        same = wait_until(lambda: (lambda v: v if v.get('state') == 'failed' and 'already in' in v.get('message', '') else None)(app.call('translate', action='selection')), timeout=10, step=.1) or app.call('translate', action='selection')
+        app.call('policy', contextMenu='')
+        app.call('translate', action='selection-close')
+        results['X8_selection_same_language'] = {'ok': same.get('state') == 'failed' and 'already in' in same.get('message', ''), 'state': same}
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
             and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
         # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
@@ -13299,6 +13399,8 @@ def main():
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
+            import space_header
+            space_header.run(factory, results["shell"], wait_until)
         elif opts.only == "relaunch":
             results["relaunch"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
@@ -13450,6 +13552,10 @@ def main():
                         feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
+            if opts.only == "features" and not opts.features_passwords_engine_safety:
+                # Own launches: Chrome's startup-complete signal (BEST_EFFORT tasks).
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/startup_complete.py"))["run"](
+                    factory, results["features"], new_tab, wait_until, begin_row, opts.style)
 
     interrupted_attempts = []
     # Never replay a potentially crashing probe row after foreground loss.

@@ -410,3 +410,32 @@ def run(factory, results, tmp, h):
         and first_files == ['a', 'b', 'c'] and repeat.get('Example items') == 0 and undone == [] and redone == ['a', 'b', 'c'],
         chosen=provider, report=reported.get('report'), files=first_files, repeat=repeat.get('Example items'),
         undone=undone, redone=redone)
+
+    # Audit A7: Undo of a multi-Profile Arc import. In-session the Profile folders stay (Redo and re-import can bring
+    # the same Profile IDs back); they are journaled and wiped at the next launch if the saved model does not use them.
+    app.quit()
+    app = factory(urls=(), fresh=True, extra_args=['--host-resolver-rules=MAP * ~NOTFOUND'])
+    user_data = Path(app.user_data)
+    def dirs(): return {p['dataDirectoryName'] for p in json.loads(Path(app.call('save')).read_text())['profiles']}
+    before_dirs = dirs()
+    app.call('first-run', action='settings-import', directory=str(arc))
+    app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+    assert h.wait_until(lambda: state().get('settingsStep') == 'Report' and not state().get('settingsBusy'), timeout=120, step=.05), state()
+    app.call('first-run', action='settings-done')
+    created = sorted(dirs() - before_dirs)
+    existed = [d for d in created if (user_data/'Profiles'/d).is_dir()]
+    app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+    def press(*mods):
+        app.call('sidebar-key', key='z', modifiers=list(mods))
+        assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    press('command'); undone = state().get('importOrphans'); kept_in_session = all((user_data/'Profiles'/d).is_dir() for d in created)
+    press('command', 'shift'); redone = state().get('importOrphans'); back = set(created) <= dirs()
+    press('command'); undone_again = state().get('importOrphans')
+    app.quit()
+    app = factory(urls=(), fresh=False, extra_args=['--host-resolver-rules=MAP * ~NOTFOUND'])
+    after = {d: dict(profile=(user_data/'Profiles'/d).exists(), engine=(user_data/'Engine'/d).exists()) for d in created}
+    row('undo_import_profiles_wiped_next_launch', len(created) >= 1 and existed == created and sorted(undone or []) == created
+        and kept_in_session and redone == [] and back and sorted(undone_again or []) == created
+        and all(not v['profile'] and not v['engine'] for v in after.values())
+        and (user_data/'Profiles'/'Default').is_dir() and state().get('importOrphans') == [] and not (set(created) & dirs()),
+        created=created, undone=undone, redone=redone, undoneAgain=undone_again, after=after, journal=state().get('importOrphans'))

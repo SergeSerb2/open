@@ -156,6 +156,58 @@ final class ProfileTeardown {
     try removeIfPresent(engine)
   }
 
+  // MARK: Orphans of an undone import (audit A7)
+
+  /// Undo of an import removes the Profiles it created from the model, but Redo and a re-import in the same
+  /// session can bring the same Profile IDs back, and a wiped Profile's stores refuse to write again in this
+  /// process (`ProfileDataOwner` contract). So the folders are journaled here and wiped at the next launch,
+  /// before the engine starts, when no Profile of the loaded snapshot uses them.
+  private static func orphansURL(_ directories: ProfileDirectories) -> URL {
+    directories.root.appendingPathComponent("Profiles/.pending-orphans.json")
+  }
+  private static func orphans(_ directories: ProfileDirectories) throws -> [String] {
+    let url = orphansURL(directories)
+    guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+    // Same bounds as the pending-wipe list: 64 KiB, 1024 valid names.
+    let names = try JSONDecoder().decode([String].self, from: boundedData(url, maximum: 65_536))
+    guard names.count <= 1024, names.allSatisfy(valid), Set(names).count == names.count else {
+      throw failure("Invalid orphan Profile list.")
+    }
+    return names
+  }
+  private static func writeOrphans(_ names: [String], directories: ProfileDirectories) throws {
+    if names.isEmpty { try removeIfPresent(orphansURL(directories)); return }
+    let data = try JSONEncoder().encode(names)
+    guard names.count <= 1024, data.count <= 65_536 else { throw failure("Orphan Profile list is full.") }
+    let url = orphansURL(directories)
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    try writeAtomically(data, to: url)
+  }
+  /// Undo: these folders lost their Profile. Invalid names ("Default", paths) are never journaled.
+  static func journalOrphans(_ names: [String], directories: ProfileDirectories) throws {
+    var list = try orphans(directories)
+    for name in names where valid(name) && !list.contains(name) { list.append(name) }
+    try writeOrphans(list, directories: directories)
+  }
+  /// Redo: the Profiles are back.
+  static func unjournalOrphans(_ names: [String], directories: ProfileDirectories) throws {
+    let list = try orphans(directories)
+    let remaining = list.filter { !names.contains($0) }
+    if remaining != list { try writeOrphans(remaining, directories: directories) }
+  }
+  #if OPEN_AUTOMATION
+  static func journaledOrphans(directories: ProfileDirectories) -> [String] { (try? orphans(directories)) ?? [] }
+  #endif
+  /// Launch, after the snapshot loaded and before OEEngine.start: wipe every journaled folder that no Profile
+  /// of the loaded model uses (folders, engine data, Local State entries), through the pending-wipe journal.
+  static func finishOrphanWipes(directories: ProfileDirectories, inUse: Set<String>) throws {
+    let names = try orphans(directories)
+    guard !names.isEmpty else { return }
+    for name in names where !inUse.contains(name.lowercased()) { try enqueue(name, directories: directories) }
+    try finishPendingWipes(directories: directories)
+    try writeOrphans([], directories: directories)
+  }
+
   /// Call only while the data-root lock is held, before OEEngine.start.
   static func finishPendingWipes(directories: ProfileDirectories) throws {
     let names = try pending(directories)
