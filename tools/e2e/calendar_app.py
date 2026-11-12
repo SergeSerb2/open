@@ -354,7 +354,13 @@ def arc_preferences_checks(app, results, wait_until, tmp, harness):
         'didSetDefaultGoogleMeetRoute': True,
         'liveCalendarNotificationPreferences': json.dumps({'default': 'fiveMinutesBefore', 'unknown-profile': 'tenMinutesBefore'}).encode(),
         'unrelatedArcKey': 'ignored',
+        # Audit A2: Favorite tile switches and host lists.
+        'twitterBadgeEnabled': False, 'whatsAppBadgeEnabled': True,
+        'topAppsBadgingDisabledHosts': ['Mail.Google.com'], 'topAppsSubtitleDisabledHosts': ['calendar.google.com'],
     }
+    FAVORITE_KEYS = ('open.favorites.twitterBadgeEnabled', 'open.favorites.whatsAppBadgeEnabled',
+                     'open.favorites.badgingDisabledHosts', 'open.favorites.subtitleDisabledHosts')
+    for key in FAVORITE_KEYS: app.call('defaults', key=key, value=None)
     with open(prefs_dir / 'company.thebrowser.Browser.plist', 'wb') as f: plistlib.dump(prefs, f, fmt=plistlib.FMT_BINARY)
     def d(key): return app.call('defaults', key=key)
     for key in ARC_PREF_KEYS + ('open.links.didSetDefaultMeetRoute',): app.call('defaults', key=key, value=None)
@@ -363,7 +369,7 @@ def arc_preferences_checks(app, results, wait_until, tmp, harness):
     reminder_key = 'open.calendar.reminder.' + default_profile
     app.call('defaults', key=reminder_key, value=None)
     def state(): return app.call('first-run')
-    keys = ARC_PREF_KEYS + ('open.links.didSetDefaultMeetRoute', reminder_key)
+    keys = ARC_PREF_KEYS + ('open.links.didSetDefaultMeetRoute', reminder_key) + FAVORITE_KEYS
     before = {k: d(k) for k in keys}  # registered defaults read as their default value
     app.call('first-run', action='settings-import', directory=str(arc))
     app.call('first-run', action='settings-next')
@@ -374,10 +380,13 @@ def arc_preferences_checks(app, results, wait_until, tmp, harness):
     # previewsPages has no Arc key: it keeps its value.
     expected = {'open.general.previewsFolders': False, 'open.general.previewsRecents': False, 'open.general.previewsCalendar': True,
                 'open.general.previewsGmail': False, 'open.general.previewsPages': before['open.general.previewsPages'],
-                'open.links.didSetDefaultMeetRoute': True, reminder_key: 'fiveMinutes'}
+                'open.links.didSetDefaultMeetRoute': True, reminder_key: 'fiveMinutes',
+                'open.favorites.twitterBadgeEnabled': False, 'open.favorites.whatsAppBadgeEnabled': True,
+                'open.favorites.badgingDisabledHosts': ['mail.google.com'],
+                'open.favorites.subtitleDisabledHosts': ['calendar.google.com']}
     results['cal_arc_prefs_import'] = {
         'ok': bool(default_profile) and written == expected and report.get('lastOutcome', {}).get('Live Calendar reminders') == 1
-            and report.get('lastOutcome', {}).get('Arc settings') == 6 and not report.get('lastFailures', {}).get('Arc settings'),
+            and report.get('lastOutcome', {}).get('Arc settings') == 10 and not report.get('lastFailures', {}).get('Arc settings'),
         'written': written, 'mapped': mapped, 'outcome': report.get('lastOutcome'), 'failures': report.get('lastFailures')}
     try:
         app.call('first-run', action='settings-done')

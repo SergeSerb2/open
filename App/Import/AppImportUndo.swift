@@ -1,4 +1,5 @@
 import AppKit
+import OpenLiveData
 import OpenModel
 import OpenSidebar
 import OpenStore
@@ -72,6 +73,7 @@ final class AppImportUndo {
       else { for (key, value) in entry.applied { store.set(value, forKey: key) } }
     }
     SpaceHeaderPreference.shared.reload()
+    NotificationCenter.default.post(name: FavoriteTileSettings.didChange, object: store)
   }
 
   func append(provider undo: (@MainActor @Sendable () async throws -> Void)?, redo: (@MainActor @Sendable () async throws -> Void)?) {
