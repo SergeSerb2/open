@@ -545,8 +545,8 @@ def run(factory, results, tmp, api):
         a_tab = next((t for t in imported_tabs if t['url'] == a_url), None)
         a_objects = []
         if a_tab:
-            app.call('select', tab=a_tab['id'])
-            shown = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=a_tab['id'])), timeout=8, step=.1)
+            app.call('select', tab=a_tab['tab'])
+            shown = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=a_tab['tab'])), timeout=8, step=.1)
             a_objects = objects(shown) if shown else []
         record('W01_wizard_easels', before_pick.get('count') == 1 and chosen.get('count') == 3 and chosen.get('selected') is True
                and report.get('settingsOutcome', {}).get('Easels') == 3 and a_tab and a_tab['title'] == 'Board A'
