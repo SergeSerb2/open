@@ -479,7 +479,8 @@ def main():
     if args.record_transition:
         if args.attempts < 3:
             raise ValueError("record a transition with --attempts 3")
-        return record_transition(args.record_transition, key, color_limits, recorded_attempts)
+        # Re-recording keeps main's limits as the old ones, never this branch's raised ones.
+        return record_transition(args.record_transition, key, (moved or {}).get("oldColorLimits", color_limits), recorded_attempts)
     identical = sum(state["byteIdentical"] for state in receipt["states"])
     print(f"states passed: {13 - len(failed)}/13; tables byte-identical (informational): {identical}/13; output: {out}")
     return 1 if failed else 0
