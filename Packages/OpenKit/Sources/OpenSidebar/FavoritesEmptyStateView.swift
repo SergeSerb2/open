@@ -59,7 +59,8 @@ public final class FavoritesEmptyStateView: NSView {
         super.layout()
         // Offsets from the card top (measured at width 228: star y 101, "x" [W − 30, 98], title
         // y 123, card top y 89; the body's y is fitted so 12 pt stay under its second line).
-        dismissButton.frame = CGRect(x: bounds.width - 23 - 14, y: 9, width: 14, height: 14)
+        // Sidebar x W − 30 = card x (W − 14) − 23.
+        dismissButton.frame = CGRect(x: bounds.width - 23, y: 9, width: 14, height: 14)
         titleLabel.frame = CGRect(x: 11, y: 34, width: max(0, bounds.width - 22), height: 16)
         bodyLabel.frame = CGRect(x: max(11, (bounds.width - 150) / 2), y: 52, width: min(150, max(0, bounds.width - 22)), height: 30)
     }
