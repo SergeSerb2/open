@@ -1092,6 +1092,20 @@ App cleanups pass normally with zero survivors. History did not run. The
 earlier rented Mac 1 attempt stopped on App-launch and window-count helper
 timeouts; that original failed receipt remains separate.
 
-The outside-Library functional failure stops further qualification under the
-lead's failure-stop rule. No new M1 measurement or final gate has run. A scope
-ruling is pending; no permission, assertion, timeout or receipt was changed.
+Under LEAD 23:00, the other rented Mac also runs the complete Profiles suite
+at the D1 head. Its build finishes but xcodebuild does not exit; the bounded
+gate stops before App assertions. A direct suite using that completed artifact
+then fails at automation startup and the window-count helper. Exact main
+`db5c9631`, built on the healthy rented Mac and transferred with all hashes
+and signature verified, fails the same way on that host. This proves the host
+failure also occurs on main; it does not prove the separate Profile-directory
+permission cause. Both failed records and their failed cleanup receipts remain.
+A separate exact-PID audit finds no surviving App. The kernel-exiting compiler
+process survives TERM/KILL and remains explicitly reported.
+
+The lead permits continuation after this main comparison, without repair.
+Complete History passes 33/33 on the healthy rented Mac at `7839f881`,
+including Profile2 live rows, owner resets and internal filter navigation.
+Its original receipt is copied after release and hash-checked. The single M1
+replacement is pending; no new M1 measurement or final gate has run. No
+permission, assertion, timeout or receipt was changed.
