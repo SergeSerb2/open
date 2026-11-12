@@ -92,9 +92,9 @@ final class ToolbarView: NSView {
         let page = context.hasPage
         let reload = ClosureMenuItem("Refresh the Page", enabled: page) { [unowned context] in context.send(.reload) }
         reload.keyEquivalent = "r"; reload.keyEquivalentModifierMask = .command
-        let force = ClosureMenuItem("Force Refresh the Page", enabled: page) { [unowned context] in context.send(.performCommand("force-reload")) }
+        let force = ClosureMenuItem("Force Refresh the Page", enabled: page) { [unowned context] in context.send(.performWindowCommand("force-reload")) }
         force.keyEquivalent = "r"; force.keyEquivalentModifierMask = [.command, .shift]
-        let cache = ClosureMenuItem("Clear Cache and Refresh", enabled: page) { [unowned context] in context.send(.performCommand("clear-cache-and-refresh")) }
+        let cache = ClosureMenuItem("Clear Cache and Refresh", enabled: page) { [unowned context] in context.send(.performWindowCommand("clear-cache-and-refresh")) }
         for item in [reload, force, cache] { menu.addItem(item) }
         return menu
     }

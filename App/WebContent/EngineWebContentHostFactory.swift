@@ -926,6 +926,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
     case .manageExtensions: openExtensionsPage(nil); return true
     case .performCommand(let id): app.performCommand(id); return true
+    case .performWindowCommand(let id): controller?.performCommand(id); return controller != nil
     case .setSharedQuotes(let on): UserDefaults.standard.set(on, forKey: SidebarContext.sharedQuotesKey); return true
     case .showTranslation(let anchor): return translate.showPopover(anchor: anchor)
     case .shareQuote: return copyURLQuote()
