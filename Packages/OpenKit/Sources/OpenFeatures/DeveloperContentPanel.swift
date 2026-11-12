@@ -135,22 +135,22 @@ enum DeveloperPanelGlyphs {
             NSColor.black.set()
             let frame = NSBezierPath(roundedRect: CGRect(x: 0.625, y: 0.625, width: 15.75, height: 11.75), xRadius: 2.5, yRadius: 2.5)
             frame.lineWidth = 1.25; frame.stroke()
-            // Flower head: a rounded cup with two petal tips.
+            // Flower head: a rounded cup with two petal tips, about 4.6 × 3.8 pt.
             let head = NSBezierPath()
-            head.move(to: CGPoint(x: 6.6, y: 10.2))
-            head.line(to: CGPoint(x: 7.55, y: 9.4)); head.line(to: CGPoint(x: 8.5, y: 10.4)); head.line(to: CGPoint(x: 9.45, y: 9.4))
-            head.line(to: CGPoint(x: 10.4, y: 10.2))
-            head.curve(to: CGPoint(x: 8.5, y: 7), controlPoint1: CGPoint(x: 10.6, y: 8.2), controlPoint2: CGPoint(x: 9.7, y: 7))
-            head.curve(to: CGPoint(x: 6.6, y: 10.2), controlPoint1: CGPoint(x: 7.3, y: 7), controlPoint2: CGPoint(x: 6.4, y: 8.2))
+            head.move(to: CGPoint(x: 6.2, y: 10.9))
+            head.line(to: CGPoint(x: 7.35, y: 10.0)); head.line(to: CGPoint(x: 8.5, y: 11.1)); head.line(to: CGPoint(x: 9.65, y: 10.0))
+            head.line(to: CGPoint(x: 10.8, y: 10.9))
+            head.curve(to: CGPoint(x: 8.5, y: 7.1), controlPoint1: CGPoint(x: 11.0, y: 8.5), controlPoint2: CGPoint(x: 9.9, y: 7.1))
+            head.curve(to: CGPoint(x: 6.2, y: 10.9), controlPoint1: CGPoint(x: 7.1, y: 7.1), controlPoint2: CGPoint(x: 6.0, y: 8.5))
             head.close(); head.fill()
-            let stem = NSBezierPath(); stem.move(to: CGPoint(x: 8.5, y: 7.2)); stem.line(to: CGPoint(x: 8.5, y: 3.2))
-            stem.lineWidth = 1; stem.stroke()
-            // Two leaves from the stem's foot, up and out.
+            let stem = NSBezierPath(); stem.move(to: CGPoint(x: 8.5, y: 7.3)); stem.line(to: CGPoint(x: 8.5, y: 2.6))
+            stem.lineWidth = 1.1; stem.stroke()
+            // Two leaves from the stem's foot, up and out, about 9 pt across.
             for side: CGFloat in [-1, 1] {
-                let leaf = NSBezierPath(), base = CGPoint(x: 8.5, y: 3.4), tip = CGPoint(x: 8.5 + side * 3.6, y: 6.4)
+                let leaf = NSBezierPath(), base = CGPoint(x: 8.5, y: 2.8), tip = CGPoint(x: 8.5 + side * 4.4, y: 6.6)
                 leaf.move(to: base)
-                leaf.curve(to: tip, controlPoint1: CGPoint(x: 8.5 + side * 1.2, y: 3.0), controlPoint2: CGPoint(x: 8.5 + side * 3.4, y: 4.0))
-                leaf.curve(to: base, controlPoint1: CGPoint(x: 8.5 + side * 2.2, y: 6.4), controlPoint2: CGPoint(x: 8.5 + side * 0.6, y: 5.0))
+                leaf.curve(to: tip, controlPoint1: CGPoint(x: 8.5 + side * 1.6, y: 2.3), controlPoint2: CGPoint(x: 8.5 + side * 4.3, y: 3.6))
+                leaf.curve(to: base, controlPoint1: CGPoint(x: 8.5 + side * 2.4, y: 6.8), controlPoint2: CGPoint(x: 8.5 + side * 0.6, y: 5.2))
                 leaf.close(); leaf.fill()
             }
             return true
