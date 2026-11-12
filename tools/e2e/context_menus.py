@@ -731,14 +731,18 @@ def context_menu_checks(factory, results, tmp, h):
                     'space': items(None)['items'][:9] == ['Change Space Icon…', 'Rename Space…', 'Edit Theme Color…', 'Set Profile ▸',
                                                          '—', 'New Folder', 'Live Folders ▸', '—', 'Share Space…'],
                 }
-                # Behaviour of the new items: Archive Tabs Above (one undoable batch) and Duplicate on a favourite.
+                # Behaviour: Archive Tabs Above on the row whose menu enables it archives every row above, then undo.
                 before = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
-                app.call('sidebar-menu', node=before[-1], item='Archive Tabs Above')
-                after = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
-                rows['archive_above_acts'] = after == before[-1:]
-                app.call('key', key='z', modifiers=['command'], route='app')
-                rows['archive_above_undo'] = wait(lambda: [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab'] == before, timeout=3) is True
-                return {'ok': all(rows.values()), 'rows': rows, 'menus': {'todayFirst': first, 'todayLast': last, 'pinned': items(pinned), 'favorite': items(favorite)}}
+                target = next((t for t in before if 'Archive Tabs Above' not in items(t)['disabled']), None)
+                rows['archive_above_enabled_somewhere'] = target is not None and target != before[0]
+                if target is not None:
+                    app.call('sidebar-menu', node=target, item='Archive Tabs Above')
+                    after = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
+                    rows['archive_above_acts'] = target in after and len(after) < len(before)
+                    app.call('key', key='z', modifiers=['command'], route='app')
+                    rows['archive_above_undo'] = wait(lambda: [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab'] == before, timeout=3) is True
+                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target,
+                        'menus': {'todayFirst': first, 'todayLast': last, 'pinned': items(pinned), 'favorite': items(favorite)}}
             finally:
                 for tab_id in made:
                     h._try(lambda t=tab_id: app.call('close', tab=t))
