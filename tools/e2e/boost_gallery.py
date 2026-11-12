@@ -218,8 +218,10 @@ def run(factory, results, tmp, env):
                 assert wait(lambda: font(tab_a).startswith('Avenir'), timeout=5)
                 ui('search', text='Beta'); assert wait(lambda: 'boosts.' + first + '.card' not in ids(), timeout=5)
                 assert 'boosts.' + second + '.card' in ids()
-                ui('search', text=''); profile(name_b); assert not any(id.endswith('.card') for id in ids())
-                profile(name_a); assert all('boosts.' + id + '.card' in ids() for id in [first, second])
+                ui('search', text=''); profile(name_b)
+                assert wait(lambda: not any(id.endswith('.card') for id in ids()), timeout=5), app.call('library')
+                profile(name_a)
+                assert wait(lambda: all('boosts.' + id + '.card' in ids() for id in [first, second]), timeout=5), app.call('library')
                 app.call('snapshot', window=state()['library'], path=str(Path(tmp) / 'gallery-rest.png'))
                 env['shot'](app, 'boost-gallery-rest.png', window=state()['library'])
                 app.call('mouse', action='hover', window=state()['library'], x=300, y=150)
@@ -227,13 +229,22 @@ def run(factory, results, tmp, env):
                 gallery_number = state()['library']
                 def library_frame():
                     return next(w['frame'] for w in app.call('windows') if w['number'] == gallery_number)
+                def owner_zoomed():
+                    return app.call('window-state', id=normal)['zoomed']
+                # The embedded Library can start in a maximized browser. A
+                # maximized frame follows macOS's current visible screen bounds
+                # (including Dock changes), rather than an old fixed panel rect.
+                # Start unzoomed so the exact restore assertion tests that rect.
+                if owner_zoomed():
+                    app.call('menu-perform', id='zoom-window')
+                    assert wait(lambda: not owner_zoomed(), timeout=5)
                 original_frame = library_frame()
                 app.call('menu-perform', id='zoom-window')
-                assert wait(lambda: library_frame() != original_frame, timeout=5)
+                assert wait(lambda: owner_zoomed() and library_frame() != original_frame, timeout=5)
                 assert all('boosts.' + id + '.card' in ids() for id in [first, second])
                 env['shot'](app, 'boost-gallery-resized.png', window=state()['library'])
                 app.call('menu-perform', id='zoom-window')
-                assert wait(lambda: library_frame() == original_frame, timeout=5)
+                assert wait(lambda: not owner_zoomed() and library_frame() == original_frame, timeout=5), {'expectedFrame': original_frame, 'actualFrame': library_frame(), 'owner': app.call('window-state', id=normal)}
                 return {'liveToggleOffOn': True, 'otherSiteUnchanged': True, 'searchAndProfiles': True, 'nativeZoomResize': True}
             row('BG2_cards_toggle', bg2)
             def f4_toggle():

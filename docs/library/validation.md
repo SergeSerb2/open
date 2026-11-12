@@ -998,3 +998,6 @@ the unique `library.search` field, and bounded provider waits. It preserves
 all card, live-page, Profile isolation, edit, delete and owner assertions.
 The full Gallery rerun and single M1 open/list-scroll qualification are pending.
 Other accepted receipts carry only under the lead's unchanged-path ruling.
+
+
+Gallery's native zoom diagnosis retained the exact failing frames: before1280x695 aty74, after1280x697 aty72. The browser was zoomed both times; macOS visibleFrame had changed to the latter bounds. AppKit correctly recalculated its maximized frame. The check now first unzooms the real browser owner through the native menu, then requires native zoom, card retention and exact unzoomed-frame restoration. No product source or timing path changed. Empty/nonempty Profile card assertions also wait within the existing5-second bound for native row preparation after the provider completes. Original assertions remain. Complete Gallery rerun is required.
