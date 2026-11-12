@@ -220,7 +220,26 @@ enum RenderCLI {
         }
         if let preview = value(args, "--preview"), let space = context.focusedSpace {
             let parts = preview.split(separator: ":")
-            if parts.count == 2, parts[0] == "recents", let site = RecentsSite(rawValue: String(parts[1])) {
+            if parts.count == 1, parts[0] == "gmail" {
+                // Look frames only: the first Pinned tab becomes a Gmail inbox with synthetic mail.
+                guard let tab = space.pinned.compactMap(\.tab).first else { throw CLIError(description: "gmail preview needs a Pinned tab") }
+                tab.url = URL(string: "https://mail.google.com/mail/u/0/#inbox")!
+                tab.customTitle = "Gmail"
+                let state = value(args, "--gmail-state") ?? "mail"
+                context.mailGlanceSource = { _, _, _ in
+                    switch state {
+                    case "empty": return .mail([])
+                    case "signedOut": return .signedOut
+                    default:
+                        let base = "https://mail.google.com/mail/u/0/#inbox/"
+                        let rows: [(String, String, Double)] = [("Design review moved to Thursday", "Ada Park", 6), ("Your invoice for November", "Billing", 48),
+                            ("Re: Launch checklist", "Grace Lin", 130), ("Weekend plans?", "Sam", 60 * 20)]
+                        return .mail(rows.enumerated().map { i, r in UnreadMail(title: r.0, author: r.1, date: Date().addingTimeInterval(-r.2 * 60), url: URL(string: base + "\(i)")!) })
+                    }
+                }
+                if args.contains("--plain-theme") { space.theme = SpaceTheme() }
+                options.previewMail = tab.id
+            } else if parts.count == 2, parts[0] == "recents", let site = RecentsSite(rawValue: String(parts[1])) {
                 // Look frames only: the first Pinned tab becomes a synthetic site tab with synthetic history.
                 guard let tab = space.pinned.compactMap(\.tab).first else { throw CLIError(description: "recents preview needs a Pinned tab") }
                 tab.url = URL(string: site == .confluence ? "https://example.atlassian.net/wiki/home" : site.newURL.absoluteString.replacingOccurrences(of: "/new", with: "/"))!
