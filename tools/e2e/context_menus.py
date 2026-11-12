@@ -698,6 +698,52 @@ def context_menu_checks(factory, results, tmp, h):
                                  ('release-notes', '/releases'), ('contact-team', '/issues/new')]:
             run('cm_help_' + identifier, lambda i=identifier, p=path: help_item(i, 'https://github.com/SergeSerb2/open' + p))
         run('cm_join_meeting_disabled', lambda: {'ok': row_enabled('join-meeting') is False})
+
+        # D2c menu order (docs/re/sidebar-menus-parity.md §1): Arc 1.172.2, capture session 3 Part D.
+        # Open differences, each recorded: Share stays "Share…" (a picker) until C3 item 1 records Arc's submenu.
+        def sidebar_menu_order():
+            focus()
+            # Its own Space, so Archive Tabs Above touches only this case's rows.
+            app.call('space', space=app.call('space-create', title='Menu order', profile='Default'))
+            made = [app.call('open', url=origin + '/target.html?menu=%d' % i, background=True)['id'] for i in range(5)]
+            try:
+                today_top, today_mid, today_last, pinned, favorite = made
+                app.call('pin', tab=pinned)
+                app.call('favorite', tab=favorite)
+                empty = app.call('folder', tabs=[], title='Menu Empty', section='pinned')
+                today_ids = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
+                items = lambda node, **kw: app.call('sidebar-menu-items', node=node, **kw)
+                today_expected = ['Copy Link', 'Share…', '—', 'Change Icon…', 'Rename…', 'Mute', '—', 'Open in Split View',
+                                  'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Other Tabs', 'Archive Tabs Below',
+                                  'Archive Tabs Above']
+                pinned_head = ['Copy Link', 'Share…', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
+                               'Open in Split View', 'Duplicate', 'Move to ▸', '—']
+                first, last = items(today_ids[0]), items(today_ids[-1])
+                rows = {
+                    'today': first['items'] == today_expected,
+                    'today_first_above_disabled': 'Archive Tabs Above' in first['disabled'] and 'Archive Tabs Below' not in first['disabled'],
+                    'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'] and 'Archive Tabs Above' not in last['disabled'],
+                    'today_silent_mute_disabled': 'Mute' in first['disabled'],
+                    'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
+                    'favorite': items(favorite)['items'] == pinned_head + ['Remove Favorite'],
+                    'folder_empty': items(empty)['items'] == ['Share Folder…', '—', 'New Nested Folder…', 'Turn “Menu Empty” into Space',
+                                                              '—', 'Change Icon…', 'Rename…', '—', 'Duplicate', 'Move to ▸', '—', 'Delete'],
+                    'space': items(None)['items'][:9] == ['Change Space Icon…', 'Rename Space…', 'Edit Theme Color…', 'Set Profile ▸',
+                                                         '—', 'New Folder', 'Live Folders ▸', '—', 'Share Space…'],
+                }
+                # Behaviour of the new items: Archive Tabs Above (one undoable batch) and Duplicate on a favourite.
+                before = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
+                app.call('sidebar-menu', node=before[-1], item='Archive Tabs Above')
+                after = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
+                rows['archive_above_acts'] = after == before[-1:]
+                app.call('key', key='z', modifiers=['command'], route='app')
+                rows['archive_above_undo'] = wait(lambda: [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab'] == before, timeout=3) is True
+                return {'ok': all(rows.values()), 'rows': rows, 'menus': {'todayFirst': first, 'todayLast': last, 'pinned': items(pinned), 'favorite': items(favorite)}}
+            finally:
+                for tab_id in made:
+                    h._try(lambda t=tab_id: app.call('close', tab=t))
+                h._try(focus)
+        run('cm_sidebar_menu_order', sidebar_menu_order)
         if only_case and not ran_cases:
             raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:
