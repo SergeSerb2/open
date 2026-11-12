@@ -312,6 +312,9 @@ public enum CommandRegistry {
                           defaultShortcuts: [.cmdShift("l")], aliases: ["Library"]),
         CommandDefinition(id: "view-media", title: "View Media", menuPath: ["Window"]),
         CommandDefinition(id: "view-boosts", title: "View Boosts", menuPath: ["Window"]),
+        // Arc: Window ▸ View Easels & Notes, `viewEaselsAndNotes:` (docs/re/menus-and-hotkeys.md); opens
+        // the Library at its Easels page, which lists Easels and Notes.
+        CommandDefinition(id: "view-easels-notes", title: "View Easels & Notes", menuPath: ["Window"], aliases: ["Easels", "Notes"]),
         CommandDefinition(id: "minimize-window", title: "Minimize", menuPath: ["Window"],
                           defaultShortcuts: [.cmd("m")]),
         CommandDefinition(id: "zoom-window", title: "Zoom", menuPath: ["Window"]),
@@ -449,7 +452,6 @@ public enum CommandRegistry {
         CommandDefinition(id: "reserved-new-chatgpt-message", title: "New ChatGPT Message (reserved)",
                           defaultShortcuts: [KeyboardShortcut(key: "g", modifiers: [.command, .option])], isReserved: true),
         CommandDefinition(id: "reserved-send-to-dia", title: "Send to Dia (reserved)", isReserved: true),
-        CommandDefinition(id: "reserved-view-easels-notes", title: "View Easels & Notes (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-share-arc", title: "Share App (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-sign-out", title: "Sign Out (reserved)", isReserved: true),
     ]
