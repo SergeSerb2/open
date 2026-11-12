@@ -69,6 +69,8 @@ def run(factory, results, tmp, h):
             and tb['menu'] == ['Refresh the Page', 'Force Refresh the Page', 'Clear Cache and Refresh'], toolbar=tb)
         app.call('eval', tab=tab, js='window.openReloadMark = 1')
         loads = Handler.page_loads
+        # A click on the sidebar's menu happens in the key window; page commands go to the key window.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         app.call('developer-panel', action='reload-menu', item='Force Refresh the Page')
         reloaded = h.wait_until(lambda: Handler.page_loads > loads and app.call('eval', tab=tab, js='typeof window.openReloadMark') == 'undefined',
                                 timeout=15, step=.1)
