@@ -92,7 +92,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             titles=[m['title'] for m in menu(complete)]
             # Capture C3 s8 item 9: a right click on a Downloads row opens no menu and only selects; the … button tooltip is "More Options".
             rc=state(action='row-right-click',id=complete);check('download_right_click_no_menu',rc['menu'] is None and rc['selected'],result=rc)
-            check('download_more_options_tooltip','More Options' in (row(complete) or {}).get('actions',[]),actions=(row(complete) or {}).get('actions'))
+            state(action='hover-row',id=complete);check('download_more_options_tooltip',wait(lambda:'More Options' in (row(complete) or {}).get('buttonToolTips',[])),tooltips=(row(complete) or {}).get('buttonToolTips'))
             check('completed_native_menu', len(titles)==6 and titles[0].startswith('Open') and titles[1].startswith('Copy') and titles[2:]==['Show in Finder','separator','Hide from Open','Move to Trash'],items=menu(complete))
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
             menu(complete,titles[1]);check('download_copy_file',wait(lambda:app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt')))

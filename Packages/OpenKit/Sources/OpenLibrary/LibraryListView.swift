@@ -412,7 +412,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
             guard let item = item(at: row) else { return nil }
             let frame = root.convert(table.rect(ofRow: row),from: table)
             return ["id":item.id,"frame":[frame.minX,frame.minY,frame.width,frame.height],"title":item.title,"subtitle":item.subtitle,
-              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title)]
+              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),
+              "buttonToolTips":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonToolTips ?? []]
         }
     }
 }
@@ -440,6 +441,8 @@ private final class LibraryItemView: NSView {
     private let plate = CALayer(), ring = CAShapeLayer(), progressLayer = CAShapeLayer(), arrow = CAShapeLayer()
     override var wantsUpdateLayer: Bool { true }
     private var buttons: [LibraryControl] = []
+    /// Tooltips of the drawn row buttons (automation evidence).
+    var buttonToolTips: [String] { buttons.filter { !$0.isHidden }.compactMap(\.toolTip) }
     private var foreground = NSColor.labelColor, overlay = NSColor.labelColor
     private var tracking: NSTrackingArea?
     private var gallery = false
