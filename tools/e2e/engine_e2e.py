@@ -6531,12 +6531,17 @@ def media_checks(factory, results, tmp):
         mini_pip = wait_until(lambda: (lambda p: p if p["state"] == "active" and p.get("tab") == video else None)(pip()), timeout=3, step=.02)
         mini_decision = m(video)["decision"]
         app.call("window-deminiaturize")
+        # A Dock click also activates Open. Without that, the restored window is an inactive,
+        # covered window: by the same rule an occlusion (leave), so PiP would stay open.
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         restored = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
         restored_playing = app.eval(video, "document.getElementById('main').paused") is False
         results["media_auto_pip_window_hidden"] = {"ok": bool(mini_pip) and bool(mini_pip and mini_pip.get("automatic"))
             and bool(restored) and restored.get("reason") == "sourceShown" and restored_playing,
             "minimized": mini_pip, "decision": mini_decision, "restored": restored, "playing": restored_playing}
-        wait_until(lambda: app.call("window-state").get("isKeyWindow"), timeout=3, step=.05)
+        # Like the tab-return row: the page itself leaves PiP when the close animation ends.
+        settled = wait_until(lambda: pip()["state"] == "closed" and not m(video)["pictureInPicture"], timeout=3, step=.05)
+        results["media_auto_pip_window_hidden"]["settledClosed"] = bool(settled)
 
         # E-M7: Close pauses and snoozes until the tab shows again.
         select(home); wait_pip("active")
