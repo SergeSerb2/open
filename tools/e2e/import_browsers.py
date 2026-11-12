@@ -75,6 +75,13 @@ def fixture(library):
         db.executescript('''CREATE TABLE keywords(id INTEGER PRIMARY KEY, short_name VARCHAR NOT NULL, keyword VARCHAR NOT NULL,
             favicon_url VARCHAR NOT NULL DEFAULT '', url VARCHAR NOT NULL, suggest_url VARCHAR DEFAULT '', sync_guid VARCHAR);''')
         db.execute("INSERT INTO keywords(short_name,keyword,url,sync_guid) VALUES('Example Search','ex','https://search.example.com/find?q={searchTerms}&ie={inputEncoding}','example-guid')")
+    # Input limits: a Bookmarks file of exactly 64 MiB is read; one byte more is refused.
+    limit = 64 << 20
+    edge = library/'Application Support/Microsoft Edge/Default'; edge.mkdir(parents=True)
+    body = json.dumps({'roots': {'bookmark_bar': {'type': 'folder', 'children': [url('30000000-0000-4000-a000-000000000001', 'Example Edge', 'https://edge.example.com/')]}}})
+    (edge/'Bookmarks').write_text(body + ' ' * (limit - len(body)))
+    vivaldi = library/'Application Support/Vivaldi/Default'; vivaldi.mkdir(parents=True)
+    (vivaldi/'Bookmarks').write_text(body + ' ' * (limit + 1 - len(body)))
     (library/'Application Support/BraveSoftware/Brave-Browser').mkdir(parents=True)
     (library/'Application Support/Firefox/Profiles').mkdir(parents=True)
 
@@ -141,7 +148,7 @@ def run(factory, results, tmp, h):
         step=s.get('settingsStep'), title=s.get('settingsTitle'), selected=s.get('settingsSelectedSource'),
         sources={k: (v['selectable'], v['status'], len(v['profiles'])) for k, v in sources.items()})
     row('sources_unselectable', sources.get('brave', {}).get('selectable') is False and sources['brave']['status'] == 'No data'
-        and sources.get('firefox', {}).get('selectable') is False and 'edge' not in sources,
+        and sources.get('firefox', {}).get('selectable') is False and 'opera' not in sources,
         brave=sources.get('brave', {}).get('status'), firefox=sources.get('firefox', {}).get('status'))
     app.call('first-run', action='settings-cancel-passwords')
 
@@ -168,6 +175,16 @@ def run(factory, results, tmp, h):
         history=outcome.get('History'), visits=after_visits - before_visits)
     engines = {p['settings']['searchEngineID'] for p in data['profiles']}
     row('search_engine', outcome.get('Search settings') == 1 and 'duckduckgo' in engines, engines=sorted(engines))
+
+    def labels_for(source_id):
+        open_sources()
+        app.call('first-run', action='settings-source', id=source_id)
+        result = settle().get('settingsBrowserLabels', {})
+        app.call('first-run', action='settings-cancel-passwords')
+        return result
+    at_limit, over_limit = labels_for('edge'), labels_for('vivaldi')
+    row('bookmarks_size_limit', at_limit.get('Bookmarks') == 'Found: 1' and over_limit.get('Bookmarks') == 'Could not be read',
+        atLimit=at_limit.get('Bookmarks'), overLimit=over_limit.get('Bookmarks'))
 
     _, again = run_import()
     repeat = again.get('settingsOutcome', {})

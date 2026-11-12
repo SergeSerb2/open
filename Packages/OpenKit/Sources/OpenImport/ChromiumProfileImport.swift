@@ -28,6 +28,8 @@ public struct ChromiumProfileCounts: Sendable {
     public var historyVisits: Int?
     public var searchEngine: String?
     public var skippedBookmarks = 0
+    /// Categories whose file exists but was refused or could not be parsed.
+    public var unreadable: Set<String> = []
 }
 
 /// Reads one Chromium-family profile directory. Files are copied before SQLite opens them
@@ -36,19 +38,34 @@ public struct ChromiumProfileReader: Sendable {
     public let directory: URL
     public init(directory: URL) { self.directory = directory }
 
-    public enum ReadError: Error { case missing, unreadable }
+    public enum ReadError: Error { case missing, unreadable, tooLarge }
+
+    /// Hard limits on source input. Chrome's bookmark files are a few MiB for 10,000 bookmarks
+    /// (about 400 bytes per node), so 64 MiB and 200,000 nodes leave wide room. The worst single
+    /// allocation is the 64 MiB file buffer; the decoded tree is many small objects.
+    public static let maxJSONBytes = 64 << 20
+    public static let maxBookmarkNodes = 200_000
+    public static let maxDepth = 64
+
+    /// Reads a JSON object file of at most `maxJSONBytes`.
+    static func readJSON(_ file: URL) throws -> [String: Any] {
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int else { throw ReadError.missing }
+        guard size <= maxJSONBytes else { throw ReadError.tooLarge }
+        guard let data = try? Data(contentsOf: file), data.count <= maxJSONBytes,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ReadError.unreadable }
+        return json
+    }
 
     /// The three roots in Chromium order. Empty roots are dropped.
     /// GUESS — capture pending (F3 §3 item 3): Arc's subfolder titles for the roots.
     public func bookmarks() throws -> (roots: [ChromiumBookmark], skipped: Int) {
         let file = directory.appendingPathComponent("Bookmarks")
         guard FileManager.default.fileExists(atPath: file.path) else { throw ReadError.missing }
-        guard let data = try? Data(contentsOf: file),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let roots = json["roots"] as? [String: Any] else { throw ReadError.unreadable }
-        var skipped = 0
+        guard let roots = try Self.readJSON(file)["roots"] as? [String: Any] else { throw ReadError.unreadable }
+        var skipped = 0, nodes = 0
         func node(_ value: Any, depth: Int) -> ChromiumBookmark? {
-            guard depth < 64, let object = value as? [String: Any] else { return nil }
+            nodes += 1
+            guard depth < Self.maxDepth, nodes <= Self.maxBookmarkNodes, let object = value as? [String: Any] else { skipped += 1; return nil }
             let guid = (object["guid"] as? String) ?? (object["id"] as? String) ?? ""
             let title = (object["name"] as? String) ?? ""
             switch object["type"] as? String {
@@ -70,6 +87,7 @@ public struct ChromiumProfileReader: Sendable {
             guard let root = roots[key], case .folder(let guid, _, let children)? = node(root, depth: 0), !children.isEmpty else { continue }
             result.append(.folder(guid: guid.isEmpty ? key : guid, title: titles[key]!, children: children))
         }
+        guard nodes <= Self.maxBookmarkNodes else { throw ReadError.tooLarge }
         return (result, skipped)
     }
 
@@ -91,8 +109,7 @@ public struct ChromiumProfileReader: Sendable {
     /// `Preferences` → `default_search_provider_data.template_url_data`; else the
     /// `default_search_provider.guid` row in `Web Data` `keywords`. Nil: the browser default.
     public func defaultSearchEngine() -> ChromiumSearchEngine? {
-        if let data = try? Data(contentsOf: directory.appendingPathComponent("Preferences")),
-           let prefs = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let prefs = try? Self.readJSON(directory.appendingPathComponent("Preferences")) {
             if let template = (prefs["default_search_provider_data"] as? [String: Any])?["template_url_data"] as? [String: Any],
                let url = template["url"] as? String, !url.isEmpty {
                 return ChromiumSearchEngine(name: (template["short_name"] as? String) ?? "", keyword: (template["keyword"] as? String) ?? "",
@@ -118,8 +135,9 @@ public struct ChromiumProfileReader: Sendable {
     /// Counts for the wizard. Each part fails on its own.
     public func counts() -> ChromiumProfileCounts {
         var counts = ChromiumProfileCounts()
-        if let tree = try? bookmarks() { counts.bookmarks = tree.roots.reduce(0) { $0 + $1.urlCount }; counts.skippedBookmarks = tree.skipped }
-        counts.historyVisits = try? historyVisitCount()
+        do { let tree = try bookmarks(); counts.bookmarks = tree.roots.reduce(0) { $0 + $1.urlCount }; counts.skippedBookmarks = tree.skipped }
+        catch ReadError.missing {} catch { counts.unreadable.insert("Bookmarks") }
+        do { counts.historyVisits = try historyVisitCount() } catch ReadError.missing {} catch { counts.unreadable.insert("History") }
         counts.searchEngine = defaultSearchEngine().map { ChromiumSearchMapping.map($0).name }
         return counts
     }

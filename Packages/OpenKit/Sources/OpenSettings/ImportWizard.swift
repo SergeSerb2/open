@@ -128,7 +128,7 @@ import OpenImport
         if !plan.isArc {
             guard let browserCounts else { return counting ? "Counting…" : "Not found" }
             if category == "Search settings" { return browserCounts.searchEngine ?? "Browser default" }
-            return counts[category].map { "Found: \($0.formatted())" } ?? "Not found"
+            return counts[category].map { "Found: \($0.formatted())" } ?? (browserCounts.unreadable.contains(category) ? "Could not be read" : "Not found")
         }
         if let count=counts[category] {let partial=category == "History" ? probe?.historyPartial == true:category == "Passwords and cookies" && probe?.savedItemsPartial == true;return "Found: \(count.formatted())"+(partial ? " (partial)":"")}
         guard let probe else {return "Counting…"}

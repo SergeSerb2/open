@@ -126,8 +126,7 @@ public struct BrowserSourceCatalog: Sendable {
         }
         var names: [String: String] = [:]
         var order: [String] = []
-        if let data = try? Data(contentsOf: root.appendingPathComponent("Local State")),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        if let json = try? ChromiumProfileReader.readJSON(root.appendingPathComponent("Local State")),
            let profile = json["profile"] as? [String: Any] {
             if let cache = profile["info_cache"] as? [String: Any] {
                 for (key, value) in cache { names[key] = ((value as? [String: Any])?["name"] as? String) ?? key }
@@ -139,7 +138,8 @@ public struct BrowserSourceCatalog: Sendable {
         if let listed = try? fm.contentsOfDirectory(atPath: root.path) {
             directories += listed.filter { ($0 == "Default" || $0.hasPrefix("Profile ")) && !directories.contains($0) }.sorted()
         }
-        return directories.compactMap { directory in
+        // A real Chromium install has a handful of profiles; refuse to list more than 100.
+        return directories.prefix(100).compactMap { directory in
             guard Self.safeBasename(directory) else { return nil }
             let url = root.appendingPathComponent(directory, isDirectory: true)
             guard usable(url) else { return nil }
