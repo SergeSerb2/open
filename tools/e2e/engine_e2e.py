@@ -13402,6 +13402,10 @@ def main():
                         feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
+            if opts.only == "features" and not opts.features_passwords_engine_safety:
+                # Own launches: Chrome's startup-complete signal (BEST_EFFORT tasks).
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/startup_complete.py"))["run"](
+                    factory, results["features"], new_tab, wait_until, begin_row, opts.style)
 
     interrupted_attempts = []
     # Never replay a potentially crashing probe row after foreground loss.

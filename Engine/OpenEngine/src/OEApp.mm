@@ -176,9 +176,18 @@ class OEApp : public CefApp,
     // WebContentsDiscard: tab sleeping discards pages in place
     // (docs/plans/memory-fork.md §10; off on desktop by default, and
     // WebContents::Discard is NOTREACHED() without it).
+    // ImprovedStartupBestEffortDelay: Chrome holds BEST_EFFORT tasks until
+    // startup is complete. Without this feature only a visible page that
+    // reaches loaded-idle completes startup, so a launch that shows no web
+    // page (empty Space, Welcome, chrome:// page) waited for the 3-minute
+    // failsafe. With it, startup also completes 5 s after launch when no
+    // visible tab appears, and (with the param) when the visible tab's load
+    // times out (docs/engine-fork.md "Startup complete").
     std::string features = command_line->GetSwitchValue("enable-features");
     for (const char* feature :
-         {"ExtensionsPinnedByDefault", "WebContentsDiscard"}) {
+         {"ExtensionsPinnedByDefault", "WebContentsDiscard",
+          "ImprovedStartupBestEffortDelay:"
+          "StartupDelayStopOnLoadingTimedOut/true"}) {
       features += features.empty() ? feature : std::string(",") + feature;
     }
     command_line->AppendSwitchWithValue("enable-features", features);
