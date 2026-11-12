@@ -6,7 +6,7 @@ import OpenModel
 import OpenImport
 
 @MainActor @Observable public final class ImportWizardViewModel {
-    public enum Step: String, CaseIterable { case choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
+    public enum Step: String, CaseIterable { case source = "Source", choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
     unowned let root: SettingsViewModel
     private let importActions: any ImportActions
     public let extensions = ImportExtensionsViewModel()
@@ -27,8 +27,20 @@ import OpenImport
     public private(set) var outcome: ImportOutcome?
     public private(set) var consentWasDecided = false
     public private(set) var unfinishedSecretsImport: Bool
-    public init(root: SettingsViewModel, directory: URL? = nil, actions: (any ImportActions)? = nil) {
+    /// Settings starts on the source picker; first run and the automation folder path start on Choose.
+    public let startedWithSource: Bool
+    /// Browsers found on this Mac. Loaded when the picker appears, never at launch.
+    public private(set) var sources: [BrowserSource] = []
+    public private(set) var sourcesLoaded = false
+    /// "arc" or a `BrowserSourceDescriptor.id`.
+    public var selectedSourceID: String = "arc"
+    public private(set) var browserCounts: ChromiumProfileCounts?
+    /// Automation and fixtures point detection at a synthetic `~/Library`.
+    nonisolated(unsafe) public static var browserLibraryOverride: URL?
+    public init(root: SettingsViewModel, directory: URL? = nil, actions: (any ImportActions)? = nil, startsWithSource: Bool = false) {
         self.root = root; self.importActions = actions ?? root.actions
+        startedWithSource = startsWithSource
+        if startsWithSource { step = .source }
         unfinishedSecretsImport = self.importActions.hasUnfinishedSecretsImport
         let path = root.defaults.string(forKey: "open.import.lastArcDir")
         plan = ImportPlan(directory: directory ?? path.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Arc"))
@@ -38,9 +50,68 @@ import OpenImport
         if path.hasPrefix(root.root.path + "/") { return "Open Data/" + String(path.dropFirst(root.root.path.count + 1)) }
         return (path as NSString).abbreviatingWithTildeInPath
     }
-    public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
-    public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.directory = directory; await refreshCounts() }
+    public var canContinue: Bool {
+        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings) }
+        return readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
+    public var title: String { step == .source ? "Import from another browser" : "Import from " + plan.source.displayName }
+    public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.source = .arc; selectedSourceID = "arc"; if step == .source { step = .choose }; plan.directory = directory; await refreshCounts() }
+    // MARK: Source picker (IMC I-1; IMF adds Firefox and Safari readers)
+    public func loadSources() async {
+        guard !sourcesLoaded else { return }
+        let library = Self.browserLibraryOverride
+        let found = await Task.detached(priority: .userInitiated) {
+            (library.map { BrowserSourceCatalog(library: $0) } ?? BrowserSourceCatalog()).detect()
+        }.value
+        sources = found; sourcesLoaded = true
+        if selectedSourceID == "arc", let first = found.first(where: { $0.isSupported && !$0.profiles.isEmpty }) { selectedSourceID = first.id }
+    }
+    public var selectedSource: BrowserSource? { sources.first { $0.id == selectedSourceID } }
+    public var selectedProfileID: String? { if case .browser(_, let profile) = plan.source { return profile.id }; return nil }
+    public func canSelect(_ source: BrowserSource) -> Bool { source.isSupported && !source.accessDenied && !source.profiles.isEmpty }
+    public func sourceStatus(_ source: BrowserSource) -> String? {
+        if !source.isSupported { return "Coming soon" }
+        if source.accessDenied { return "No access" }
+        if source.profiles.isEmpty { return "No data" }
+        return nil
+    }
+    public var canContinueFromSource: Bool { !busy && (selectedSourceID == "arc" || selectedSource.map(canSelect) == true) }
+    public func continueFromSource() async {
+        guard step == .source, canContinueFromSource else { return }
+        clearConsent(); outcome = nil; errorText = ""
+        if selectedSourceID == "arc" { plan.source = .arc; step = .choose; await refreshCounts(); return }
+        guard let source = selectedSource, let profile = source.profiles.first else { return }
+        plan.source = .browser(source, profile: profile)
+        plan.bookmarks = true; plan.history = true; plan.searchSettings = true
+        step = .choose
+        await refreshCounts()
+    }
+    public func selectProfile(_ id: String) async {
+        guard !busy, case .browser(let source, let current) = plan.source, current.id != id,
+              let profile = source.profiles.first(where: { $0.id == id }) else { return }
+        plan.source = .browser(source, profile: profile)
+        await refreshCounts()
+    }
+    public func backToSource() { guard startedWithSource, !busy else { return }; errorText = ""; step = .source }
+    /// GUESS — capture pending (F3 §3 item 3): the destination copy.
+    public var destinationText: String { "Bookmarks go to a pinned folder, “\(BrowserBookmarksImport.folderTitle(browserName: plan.source.displayName))”, in your current Space." }
+    private func refreshBrowserCounts() async {
+        guard case .browser(_, let profile) = plan.source else { return }
+        let request = UUID(); countRequest = request
+        readable = false; counting = true; errorText = ""; probe = nil; browserCounts = nil; counts = [:]; spaceMapping = []
+        let source = plan.source
+        let result = await Task.detached(priority: .utility) { ChromiumProfileReader(directory: profile.directory).counts() }.value
+        guard request == countRequest, source == plan.source else { return }
+        browserCounts = result
+        var values: [String: Int] = [:]
+        if let count = result.bookmarks { values["Bookmarks"] = count }
+        if let count = result.historyVisits { values["History"] = count }
+        counts = values
+        readable = result.bookmarks != nil || result.historyVisits != nil || result.searchEngine != nil
+        counting = false
+        if !readable { errorText = "No readable import data found in this \(plan.source.displayName) profile." }
+    }
     public func refreshCounts() async {
+        if !plan.isArc { await refreshBrowserCounts(); return }
         let request=UUID();countRequest=request
         readable=false;counting=true;errorText="";probe=nil
         let directory=plan.directory
@@ -54,18 +125,28 @@ import OpenImport
         if !readable {errorText="No readable import data found at \(directoryDisplayPath)."}
     }
     public func countLabel(_ category:String)->String {
+        if !plan.isArc {
+            guard let browserCounts else { return counting ? "Counting…" : "Not found" }
+            if category == "Search settings" { return browserCounts.searchEngine ?? "Browser default" }
+            return counts[category].map { "Found: \($0.formatted())" } ?? (browserCounts.unreadable.contains(category) ? "Could not be read" : "Not found")
+        }
         if let count=counts[category] {let partial=category == "History" ? probe?.historyPartial == true:category == "Passwords and cookies" && probe?.savedItemsPartial == true;return "Found: \(count.formatted())"+(partial ? " (partial)":"")}
         guard let probe else {return "Counting…"}
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
-    public var displayedReportCategories: [String] { Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
+    public static let browserReportCategories=["Bookmarks","History","Search settings"]
+    public var displayedReportCategories: [String] { if !plan.isArc { return Self.browserReportCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
     public var unfinishedSecretsImportMessage: String? {
         unfinishedSecretsImport && !secretsReportLines.contains(ArcSecretsImportReport.unfinishedMessage) ? ArcSecretsImportReport.unfinishedMessage : nil
     }
     public var reportSummary:String {
+        if !plan.isArc {
+            guard outcome?.failures["Bookmarks"] == nil, plan.bookmarks else { return "Import finished." }
+            return "Imported "+ImportCountCopy.phrase(reportCount("Bookmarks"),singular:"bookmark",plural:"bookmarks")+"."
+        }
         var parts:[String]=[]
         if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
         if ["Imported tabs","Pinned and Today tabs","Favorites"].allSatisfy({outcome?.failures[$0] == nil}) {parts.append(ImportCountCopy.phrase(reportCount("Imported tabs"),singular:"tab",plural:"tabs"))}
@@ -88,7 +169,7 @@ import OpenImport
     public var passwordsCopy: PasswordsImportCopy {
         .init(canImport: canImportPasswordsAndCookies, savedItems: probe == nil ? nil : (probe?.secretsFound == false ? 0 : counts["Passwords and cookies"]))
     }
-    public func review() { guard canContinue else { return }; step = .review }
+    public func review() { guard step == .choose, canContinue else { return }; step = .review }
     public func beginImport() async {
         guard step == .review, canContinue else { return }
         clearConsent()
@@ -96,7 +177,7 @@ import OpenImport
     }
     /// First run can start while its estimate is still pending; the shared action reports read errors.
     public func beginImport(plan: ImportPlan) async {
-        guard !isImporting, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies) else { return }
+        guard !isImporting, plan.isArc, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies) else { return }
         self.plan=plan; if !canImportPasswordsAndCookies {self.plan.skipSecrets()}; consentWasDecided=false; outcome=nil; errorText=""; step = .review
         await requestImport()
     }
@@ -120,7 +201,7 @@ import OpenImport
         consentWasDecided = false
     }
     public func retry() { guard !busy else { return }; clearConsent(); outcome = nil; step = .choose }
-    public func finish(openLibrary: Bool = false) { guard !busy else { return }; if outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
+    public func finish(openLibrary: Bool = false) { guard !busy else { return }; if plan.isArc && outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
     public func installExtensions() async { guard step == .report else { return }; await extensions.install(using: importActions) }
 }
 public struct ImportWizard: View {
@@ -129,11 +210,25 @@ public struct ImportWizard: View {
     public init(model: ImportWizardViewModel) { _model = State(initialValue: model) }
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Import from Arc").font(.title2)
-            HStack { ForEach(ImportWizardViewModel.Step.allCases.filter { $0 != .progress && ($0 != .consent || model.plan.secretsRequested || model.step == .consent) }, id: \.self) { step in Text(step.rawValue).foregroundStyle(model.step == step ? .primary : .secondary); if step != .report { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } } }
+            Text(model.title).font(.title2)
+            HStack { ForEach(ImportWizardViewModel.Step.allCases.filter { $0 != .progress && ($0 != .source || model.startedWithSource) && ($0 != .consent || model.plan.secretsRequested || model.step == .consent) }, id: \.self) { step in Text(step.rawValue).foregroundStyle(model.step == step ? .primary : .secondary); if step != .report { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } } }
             Divider()
             ScrollView { VStack(alignment: .leading, spacing: 14) {
                 switch model.step {
+                case .source:
+                    ImportSourcePicker(model: model)
+                case .choose where !model.plan.isArc:
+                    if let source = model.selectedSource, source.profiles.count > 1 {
+                        Picker("Profile", selection: Binding(get: { model.selectedProfileID ?? "" }, set: { id in Task { await model.selectProfile(id) } })) {
+                            ForEach(source.profiles) { Text($0.name).tag($0.id) }
+                        }.frame(maxWidth: 320).disabled(model.busy)
+                    }
+                    browserOption("Bookmarks", \.bookmarks); browserOption("History", \.history); browserOption("Search settings", \.searchSettings)
+                    Text(model.destinationText).font(.caption).foregroundStyle(.secondary)
+                case .review where !model.plan.isArc:
+                    if model.plan.bookmarks { Text(model.destinationText) }
+                    if model.plan.history { Text("History: " + model.countLabel("History")) }
+                    if model.plan.searchSettings { Text("Search engine: " + model.countLabel("Search settings")) }
                 case .choose:
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
@@ -159,7 +254,7 @@ public struct ImportWizard: View {
                         ForEach(model.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
-                    if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
+                    if model.plan.isArc && model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
                     if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(.secondary) }
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     ImportExtensionsSection(model: model.extensions) { Task { await model.installExtensions() } }
@@ -171,7 +266,10 @@ public struct ImportWizard: View {
                 if model.step != .report { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
                 Spacer()
                 switch model.step {
-                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!model.canContinue)
+                case .source: Button("Next") { Task { await model.continueFromSource() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!model.canContinueFromSource)
+                case .choose:
+                    if model.startedWithSource { Button("Back") { model.backToSource() }.disabled(model.busy) }
+                    Button("Next") { model.review() }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!model.canContinue)
                 case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!model.canContinue)
                 case .consent:
                     if model.canImportPasswordsAndCookies {
@@ -183,7 +281,10 @@ public struct ImportWizard: View {
                 }
             }.disabled(model.extensions.isInstalling)
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy).settingsSheet()
-        .task { if !model.readable { await model.refreshCounts() } }
+        .task { if model.step == .source { await model.loadSources() } else if !model.readable { await model.refreshCounts() } }
+    }
+    private func browserOption(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
+        HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
         HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
