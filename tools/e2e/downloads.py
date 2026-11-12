@@ -36,7 +36,6 @@ int main(int argc, char **argv) {
 def quit_event_sender():
     """A pid-targeted kAEQuitApplication sender, as tools/release.sh's smoke uses (no osascript,
     no desktop input; the core quit event needs no Automation consent)."""
-    import tempfile
     folder = Path(tempfile.gettempdir()) / 'open-e2e-quit-event'
     folder.mkdir(exist_ok=True)
     binary = folder / 'quit-pid'
@@ -45,6 +44,8 @@ def quit_event_sender():
         subprocess.run(['clang', '-framework', 'Carbon', str(folder / 'quit-pid.m'), '-o', str(binary)], check=True)
     return str(binary)
 
+
+@contextlib.contextmanager
 def server():
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
