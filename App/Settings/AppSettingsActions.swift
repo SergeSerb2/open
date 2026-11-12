@@ -129,11 +129,29 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func showLibrary(section: LibrarySection? = nil, boostsPresentation: BoostsPresentation? = nil, boostsProfileID: ProfileID? = nil) {
     guard let controller = app.frontStandardWindowController ?? app.makeWindow(), let window = controller.window else { return }
     librarySessions = librarySessions.filter { $0.value.controller != nil }
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.sessionsFilter")
+    #endif
     app.downloadsCenter.refreshFiles(); app.downloadsCenter.acknowledgeLibrary()
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.downloadsRefresh")
+    #endif
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.archives")
+    #endif
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.histories")
+    #endif
     let session = makeLibrarySession(controller)
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.makeSession")
+    #endif
     session.model.registerStores(archives: archives, histories: histories)
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.registerStores")
+    #endif
     let target = section ?? session.model.section
     if target == .boosts, let boostsPresentation, session.model.boostsPresentation != boostsPresentation {
       if let panel = session.panel { panel.setBoostLayout(boostsPresentation == .gallery ? "Gallery" : "List") }
@@ -146,7 +164,13 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       if (target == .history || target == .boosts), session.model.historyProfileID != profileID { session.model.historyProfileID = profileID }
     }
     session.show(section: section)
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.sessionShow")
+    #endif
     window.makeKeyAndOrderFront(nil); NSApp.activate(); app.scheduleMenuRebuild()
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("library.keyActivateMenu")
+    #endif
   }
   func makeLibrarySession(_ controller:BrowserWindowController) -> AppLibrarySession {
     if let session = librarySessions[controller.windowID] { return session }

@@ -169,6 +169,8 @@
     }
 
     func handle(_ data: Data) async -> Data {
+      PerfAttribution.socketWork = true
+      defer { PerfAttribution.socketWork = false }
       let observationStart = ProcessInfo.processInfo.systemUptime
       var id: Any = NSNull()
       var response: [String: Any]
@@ -315,6 +317,7 @@
         guard app.engineReady else { return [] as [String] }
         return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
       case "speed-trace": return try await speedTrace(a)
+      case "perf-attribution": return try perfAttribution(a)
       case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
@@ -2527,7 +2530,9 @@
             windowNumber: target.windowNumber, context: nil, characters: eventCharacters, charactersIgnoringModifiers: eventCharacters,
             isARepeat: false, keyCode: code)
         else { continue }
+        PerfAttribution.beginEvent(event)
         if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
+        PerfAttribution.endEvent(window: target)
       }
       let dispatchMilliseconds = (ProcessInfo.processInfo.systemUptime - dispatchStarted) * 1000
       // CEF's window key callback is asynchronous. Report after its next pump

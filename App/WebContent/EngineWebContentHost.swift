@@ -107,6 +107,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
 
   func webContent(_ page: OEWebContent, didChange changes: OEWebContentChange) {
+    #if OPEN_AUTOMATION
+    PerfAttribution.count("engine.change.\(changes.rawValue)")
+    if !page.isLoading { PerfAttribution.mark("engine.change.settled.\(changes.rawValue)") }
+    #endif
     guard !closed, let owner else { return }
     let token = generation
     if (changes.contains(.loading) && page.isLoading) ||
@@ -322,6 +326,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if !closed { owner?.webContent(page, historySwipe: phase, direction: direction, progress: progress) }
   }
   func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
+    #if OPEN_AUTOMATION
+    PerfAttribution.count("engine.navigationCommit"); PerfAttribution.mark("engine.navigationCommit")
+    #endif
     guard !closed else { return }
     owner?.app.stores.boosts.pageCommitted(self, url: url, newDocument: true)
     owner?.findController?.didNavigate(page)

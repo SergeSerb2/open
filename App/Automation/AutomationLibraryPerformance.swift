@@ -48,6 +48,7 @@ extension AutomationController {
     case "open":
       let raw = args["section"] as? String ?? "downloads"
       guard let section = LibraryPanelSection(rawValue:raw), section != .easels else { throw Failure(message:"unknown benchmark section") }
+      PerfAttribution.beginManual("library.open")
       adapter.showLibrary(section:section.modelSection)
     case "section":
       guard let raw=args["section"] as? String, let section=LibraryPanelSection(rawValue:raw),
@@ -80,13 +81,16 @@ extension AutomationController {
     guard let panel=adapter.activeLibrarySession?.panel else { throw Failure(message:"Library not created") }
     let actionMilliseconds = (ProcessInfo.processInfo.systemUptime-started)*1000
     let pending = panel.hasPendingFirstScreen
+    PerfAttribution.mark("library.actionReturned")
     panel.submitNativeFrame()
+    PerfAttribution.mark("library.firstSubmitted")
     let first=(panel.nativeCommittedAt-started)*1000
     let firstPhases = panel.performanceCounters.filter { $0.key.hasPrefix("last.") }
     // An unchanged retained host is complete at its first submission. Do not
     // add an unrelated actor hop and a second compositor flush to that clock.
     if pending { await panel.finishPendingContent(); panel.submitNativeFrame() }
     let full=(panel.nativeCommittedAt-started)*1000
+    PerfAttribution.mark("library.contentSubmitted")
     if operation == "search" { panel.markSearchCommit() }
     return ["firstSubmittedMilliseconds":first,"contentSubmittedMilliseconds":full,
       "preparationBefore":preparationBefore,

@@ -37,17 +37,38 @@ final class AppLibrarySession {
     guard let controller else { return }
     let started = ProcessInfo.processInfo.systemUptime
     releaseTask?.cancel(); releaseTask = nil
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("show.cancelRelease")
+    #endif
     let panel = prepareShell()
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("show.prepareShell")
+    #endif
     if let section, !controller.isLibraryOpen || panel.section != LibraryPanelSection(section) {
       panel.select(LibraryPanelSection(section), animated: false)
     }
     panel.isPresented = true
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("show.isPresented")
+    #endif
     // Easels change outside the Library (new, renamed, deleted): read them again on each open.
     panel.reloadEasels()
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("show.reloadEasels")
+    #endif
     // Attach before asking the panel for its Spaces width.
     controller.presentLibraryPanel(panel, width: panel.section == .spaces ? (controller.contentView.bounds.width-56) : 417)
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("show.present")
+    #endif
     controller.libraryKeyHandler = { [weak panel] in panel?.handleKey($0) ?? false }
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("show.keyHandler")
+    #endif
     panel.focusRail()
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("show.focusRail")
+    #endif
     // This is dispatch/setup cost, not first-pixel or fully-drawn evidence.
     lastShowMilliseconds = (ProcessInfo.processInfo.systemUptime-started)*1000
   }

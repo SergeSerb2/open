@@ -149,10 +149,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var lastNavigationFocusRestored = false
   /// `userInitiated`: Cmd+T / Cmd+L, the menu, or the sidebar; false when the App shows the bar by itself (a new window).
   func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
+    #if OPEN_AUTOMATION
+    PerfAttribution.count("app.showCommandBar"); PerfAttribution.mark("commandBar.enter")
+    defer { PerfAttribution.mark("commandBar.return") }
+    #endif
     guard !isClosing, !app.terminationRequested else { return }
     iconPicker?.close()
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("commandBar.servicesReady")
+    #endif
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
     // A second Cmd+T while the New Tab bar is open, or a second Cmd+L while the address editor is
     // open, closes it (Arc 06-keys, 12c; plan D3 §2.3).
@@ -749,10 +756,20 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
   }
   func showSelection(focus: Bool = true) {
+    #if OPEN_AUTOMATION
+    PerfAttribution.count("app.showSelection"); PerfAttribution.mark("selection.enter")
+    defer { PerfAttribution.mark("selection.return") }
+    #endif
     guard let controller else { return }
     app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("selection.wakeRequested")
+    #endif
     controller.refresh(); mirror.sync(); extensions.focusChanged()
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("selection.refreshMirrorFocus")
+    #endif
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
     // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
     // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
@@ -769,9 +786,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.media.windowChanged(self)
   }
   func select(nodeID: ItemID?, focus: Bool = true) {
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("select.enter")
+    #endif
     controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
     withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nodeID) }
+    #if OPEN_AUTOMATION
+    PerfAttribution.mark("select.modelChanged")
+    #endif
     controller?.dismissSidebarReveal()
     showSelection(focus: focus); scheduleSave()
   }
@@ -1033,6 +1056,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
   }
   func record(_ type: String, _ content: OEWebContent?, _ info: [String: Any]) {
+    #if OPEN_AUTOMATION
+    PerfAttribution.count("factory.\(type)")
+    #endif
     var event = info; event["type"] = type; event["tab"] = content.flatMap { tabID(for: $0)?.description } ?? ""
     event["content"] = content?.identifier ?? 0; event["time"] = Date().timeIntervalSince1970
     events.append(event); if events.count > 2000 { events.removeFirst(events.count - 2000) }
