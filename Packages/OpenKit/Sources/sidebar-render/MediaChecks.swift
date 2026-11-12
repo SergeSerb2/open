@@ -72,7 +72,17 @@ import OpenWeb
         Checks.check(speaker() == nil, "RI1 silent unmuted row builds no speaker")
         Checks.check(host.frame.maxX < 0 && !host.isKeyWindow, "RI animation window stays offscreen and non-key (visible \(host.isVisible), occlusion \(host.occlusionState.rawValue))")
         tab.live.isAudible = true
+        // PB1-f: audio starting on a shown row slides the title and wipes the speaker in (0.16 s ease-out).
+        pump(0.005)
+        let revealTitle = speaker().flatMap(titleFrame) != nil ? speaker()?.superview?.subviews
+            .first { String(describing: type(of: $0)) == "TextLabel" }?.layer?.animation(forKey: "media.audioRevealTitle") as? CABasicAnimation : nil
+        let revealMask = speaker()?.layer?.mask?.animation(forKey: "media.audioRevealSpeaker") as? CABasicAnimation
+        Checks.check(revealTitle?.duration == Motion.rowAudioReveal && (revealTitle?.fromValue as? NSNumber)?.doubleValue == -Double(RowMediaMetrics.titleShift)
+                     && revealTitle?.isAdditive == true && revealMask?.duration == Motion.rowAudioReveal,
+                     "RI PB1-f audio start: title slides from -\(RowMediaMetrics.titleShift) and the speaker wipes in, \(Motion.rowAudioReveal) s (title \(revealTitle != nil), mask \(revealMask != nil))")
         _ = Checks.waitFor(settle: scene) { speaker() != nil }
+        pump(0.25)
+        Checks.check(speaker()?.layer?.mask == nil, "RI PB1-f speaker mask is removed after the wipe")
         guard let button = speaker() else { Checks.check(false, "RI1 audible speaker exists"); return }
         let symbol = descendants(button).compactMap { $0 as? NSImageView }.first
         Checks.check(button.frame == CGRect(x: 41, y: 7, width: 26, height: 26) && symbol?.image === Glyph.audioPlaying.image && Glyph.audioPlaying.spec.symbol == "speaker.wave.3" &&
@@ -130,7 +140,10 @@ import OpenWeb
         Checks.check(recording()?.frame.minX == 41 && speaker() == nil && recording().flatMap(titleFrame)?.minX == 57,
                      "RI recording-only row has the leading dot, no speaker, title at 57")
         SidebarDiagnostics.mediaReduceMotionOverride = true
-        tab.live.isAudible = true; pump()
+        tab.live.isAudible = true; pump(0.005)
+        let reducedTitle = button.superview?.subviews.first { String(describing: type(of: $0)) == "TextLabel" }?.layer?.animation(forKey: "media.audioRevealTitle")
+        Checks.check(reducedTitle == nil && button.layer?.mask == nil, "RI PB1-f Reduce Motion: no title slide, no speaker wipe")
+        pump()
         let staticBox = inkBox(button)
         Checks.check(descendants(button).allSatisfy { !($0 is NSImageView) } && animationKeys(button.layer).isEmpty && staticBox != nil,
                      "RI4 Reduce Motion uses static glyph without animation keys")
