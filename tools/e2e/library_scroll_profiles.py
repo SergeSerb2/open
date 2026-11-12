@@ -204,7 +204,9 @@ def main(args):
         model = seed(root, bundle, out); root = scroll_fixture(root, model)
         result['prelaunchQuiet'] = quiet()
         app = Open('Release', 'chrome', str(root), [], str(out/'app.log'),
-                   urls=('about:blank',), extra_env={'OPEN_E2E_APP_BUNDLE': str(bundle)})
+                   urls=('about:blank',), extra_env={'OPEN_E2E_APP_BUNDLE': str(bundle),
+                                                     # Record-only split of long run-loop turns (H2 follow-up row 1).
+                                                     'OPEN_AUTOMATION_RUNLOOP_TURNS': '1'})
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         result['open'] = app.call('library-performance', operation='open', section='downloads')
         assert result['open']['providerRows'] == 10000
@@ -237,6 +239,9 @@ def main(args):
                 operation='scroll-series', profile=profile, beginAtLaunchMilliseconds=150000), duration=duration)
             frames.close(); frames = None
             row = analyze(native, physical)
+            # INFO only: every main run-loop turn >= 8 ms from this profile's start, split into
+            # wake/timers/sources/CA commit. It classifies busy time that phase marks do not cover.
+            row['runloopTurns'] = app.call('runloop-turns', minimumMs=8, fromLaunchMs=row['startLaunchMilliseconds'])
             row.update(native=native, physical=physical, quietBefore=quiet_before,
                        loadAfter=os.getloadavg()[0], otherProcessesAfter=other_processes(app.bundle))
             result[profile] = row; save()
