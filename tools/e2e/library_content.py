@@ -121,7 +121,12 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='search',text='unmatched-library');check('download_search_empty',wait(lambda:not rows() and state()['emptyState']['title']=='No matches'))
             key('escape');check('escape_clears_search',state()['open'] and state()['search']=='')
             state(action='filter',open=True);check('download_profile_chips',len(state()['header']['chips'])>=1)
-            state(action='chip',id='profile:'+profile);check('profile_chip_selected',state()['filterActive']);capture('downloads-profile-filter')
+            # Outside entry selected the owner already. Exercise native clear
+            # and select, rather than toggling that selected chip off.
+            if state()['profiles']['downloads']==profile:
+                state(action='chip',id='profile:'+profile)
+                check('profile_chip_clears',state()['profiles']['downloads']=='all' and not state()['filterActive'])
+            state(action='chip',id='profile:'+profile);check('profile_chip_selected',state()['filterActive'] and state()['profiles']['downloads']==profile);capture('downloads-profile-filter')
             key('escape');check('escape_closes_filter',not state()['header']['filterOpen'] and state()['open'])
             state(action='filter',open=True);state(action='chip',id='profile:'+profile);state(action='filter',open=False)
             slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)]==['Pause','Cancel','Show in Finder']);capture('downloads-running')
