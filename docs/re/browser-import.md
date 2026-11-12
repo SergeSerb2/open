@@ -104,7 +104,17 @@ Schemas below come from Arc's own Chromium 156 `User Data/Default` (DISK), which
 | Cookies | `<profile>/Cookies` | `cookies(creation_utc, host_key, top_frame_site_key, name, value, encrypted_value, path, expires_utc, …, has_cross_site_ancestor)`, version 24 (DISK) |
 | Cards, addresses, search engines, form autocomplete | `<profile>/Web Data` | `credit_cards`, `addresses`, `keywords`, `autofill(name,value,…)`, version 160 (DISK) |
 | Extensions | `<profile>/Secure Preferences`, `Preferences` → `extensions.settings`; `Extensions/<id>/<version>/` | Open's `ArcExtensionsReader` already parses this. |
-| Open tabs | `<profile>/Sessions/Session_*`, `Tabs_*` (SNSS binary command log) | PUB: Chromium `components/sessions/core/session_service_commands.cc`. Not read by Open today. |
+| Open tabs | `<profile>/Sessions/Session_<time>` (clear) and `Sessions_Encrypted/` (OSCrypt) | SNSS command log, see §4.1.1. Open reads the newest clear `Session_*` file (IMC I-6). |
+
+#### 4.1.1 Session files (SNSS), from the Chromium 156 source in our engine tree
+
+Evidence: `components/sessions/core/command_storage_backend.cc`, `session_service_commands.cc`, `session_constants.cc`, `command_storage_features.cc` (read 2026-11-12; facts only).
+
+- Header: int32 signature `0x53534E53` ("SNSS"), int32 version. Version 3 is clear text with a marker command (id 255). Version 5 is encrypted with OSCrypt and is written to `Sessions_Encrypted/`. Versions 1, 2 and 4 are no longer read.
+- Feature `kEncryptSessionStorage` is on by default with stage `write_both_read_only_clear`: Chromium 156 writes both files and reads the clear one. So an importer can read `Sessions/Session_<time>` without the Keychain key, for now.
+- Clear command: uint16 size (native endian), then `size` bytes: uint8 command id + payload.
+- Command ids used: 0 SetTabWindow {window, tab}; 2 SetTabIndexInWindow {tab, index}; 6 UpdateTabNavigation (Pickle: uint32 payload size, int32 tab, int32 navigation index, string virtual URL, string16 title, string page state, int32 transition, …); 7 SetSelectedNavigationIndex {tab, index}; 9 SetWindowType {window, type; 0 = normal, 1 popup, 2 app, 3 devtools}; 12 SetPinnedState {tab, bool}; 16 TabClosed {id, int64 time}; 17 WindowClosed {id, int64 time}.
+- Pickle strings: int32 length then bytes (string16: length in UTF-16 units), each field padded to 4 bytes.
 
 Keychain secret per browser: service "<Product> Safe Storage", account "<Product>" (CS "saltysalt", "%s Safe Storage"; Open's `probeChromiumKeychainPair` already knows "Arc", "Chrome", "Chromium"). Brave, Edge, Vivaldi and Opera follow the same pattern (PUB, common importer tools; exact account names are a guess until checked against the user's Keychain by the user, never by an agent).
 

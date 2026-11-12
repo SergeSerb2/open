@@ -1,5 +1,6 @@
 """Zap and Pick Selector through the real App, native panel, and P7 transport."""
 import json
+import re
 import os
 import pathlib
 import time
@@ -86,7 +87,15 @@ class PickerFlow:
     def hidden(self, selector):
         return self.app.eval(self.tab, "getComputedStyle(document.querySelector(%s)).display === 'none'" % json.dumps(selector))
 
+    def overlay_text(self, selector):
+        html = self.app.call("devtools", tab=self.tab, method="DOM.getOuterHTML", params={"nodeId": self.dom(selector)})["outerHTML"]
+        return re.sub(r"<[^>]*>", "", html)
+
     def pick(self, target, action, expected_count=None):
+        self.open_popup(target)
+        self.overlay_click(action, expected_count=expected_count)
+
+    def open_popup(self, target):
         point = self.app.eval(self.tab, "(() => {const r=document.querySelector(%s).getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()" % json.dumps(target))
         self.app.call("devtools", tab=self.tab, method="Input.dispatchMouseEvent",
                       params={"type": "mouseMoved", "x": point[0], "y": point[1]})
@@ -95,7 +104,6 @@ class PickerFlow:
             return "hidden" not in attributes[::2]
         assert self.wait_until(highlighted, timeout=5, step=.02), "no hover highlight"
         self.app.call("click", tab=self.tab, selector=target)
-        self.overlay_click(action, expected_count=expected_count)
 
     def messages(self, kind):
         rows = self.app.call("open-world-messages", tab=self.tab)["messages"]
@@ -208,19 +216,36 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 caret = flow.state()["codeSelection"][0]
                 assert 0 < caret < len(original), "selector proof needs a caret inside the CSS text"
                 js = flow.state()["boost"]["js"]
-                flow.enter(select=True)
-                flow.pick("header", ".select")
-                assert wait(lambda: flow.messages("picker:selected"), timeout=5, step=.02)
-                picked = flow.messages("picker:selected")[-1]["selector"]
-                expected = original[:caret]+picked+original[caret:]
-                assert wait(lambda: not flow.state()["selecting"] and flow.state()["boost"]["css"] == expected, timeout=5, step=.02)
+                app.call("pasteboard-preserve")
+                try:
+                    flow.enter(select=True)
+                    flow.open_popup("header")
+                    labels = flow.overlay_text(".this"), flow.overlay_text(".related")
+                    assert labels == ("Copy selector for this", "Copy selector for related"), labels
+                    flow.overlay_click(".this")
+                    assert wait(lambda: flow.messages("picker:selected"), timeout=5, step=.02)
+                    picked = flow.messages("picker:selected")[-1]["selector"]
+                    expected = original[:caret]+picked+original[caret:]
+                    assert wait(lambda: not flow.state()["selecting"] and flow.state()["boost"]["css"] == expected, timeout=5, step=.02)
+                    assert app.call("pasteboard") == picked, "Copy selector for this did not reach the pasteboard"
+                    # Copy selector for related: the wider selector that matches every sibling article.
+                    app.call("open-world-messages", tab=tab, clear=True)
+                    flow.enter(select=True)
+                    flow.pick("article", ".related", expected_count=3)
+                    assert wait(lambda: flow.messages("picker:selected"), timeout=5, step=.02)
+                    related = flow.messages("picker:selected")[-1]
+                    assert related["matches"] == 3 and app.eval(tab, "document.querySelectorAll(%s).length" % json.dumps(related["selector"])) == 3
+                    assert app.call("pasteboard") == related["selector"], "Copy selector for related did not reach the pasteboard"
+                    assert wait(lambda: not flow.state()["selecting"], timeout=5, step=.02)
+                finally:
+                    app.call("pasteboard-restore")
                 assert flow.state()["boost"]["js"] == js
                 assert flow.state()["zapCount"] == 0 and not flow.active()
                 flow.tap("editor.code.js")
                 assert not next(c for c in flow.state()["controls"] if c["id"] == "editor.code.pick")["enabled"]
                 flow.tap("editor.code.back")
                 assert wait(lambda: flow.state()["mode"] == "simple", timeout=5, step=.02)
-                return {"insertedAtCaret":caret,"selected":picked,"jsUnchanged":True}
+                return {"insertedAtCaret":caret,"selected":picked,"related":related["selector"],"copied":True,"jsUnchanged":True}
             row("Z5_selector_css_caret", z5)
 
             def z6():
@@ -250,7 +275,10 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 base = dict(capability, selector="#promo-banner", matches=1)
                 bad = [dict(base, sessionNonce="invented-nonce"), dict(base, selector="x"*4097),
                        dict(base, label="x"*1025), dict(base, matches=True), dict(base, matches=-1),
-                       dict(base, extra=True)]
+                       dict(base, extra=True),
+                       # Quote-aware structure scan (#277 F6): rule breakout outside quotes is refused.
+                       dict(base, selector="#a{color:red}"), dict(base, selector="#a;"), dict(base, selector="#a /* x"),
+                       dict(base, selector="div\n#a"), dict(base, selector='[title="x]'), dict(base, selector="#a\\")]
                 for index, payload in enumerate(bad, 1):
                     assert flow.post("zap:committed", payload)["pickerAccepted"] is False, (
                         "malformed commit case %d was accepted after its native handler receipt" % index)
@@ -261,6 +289,13 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 assert flow.post("zap:removed", unknown)["pickerAccepted"] is False, (
                     "unknown-selector removal was accepted after its native handler receipt")
                 assert app.call("boosts", action="get", boost=boost_id) == before
+                # Structure characters inside a quoted attribute value stay legal.
+                quoted = dict(base, selector='[title="a{b};/*c"]', label="quoted")
+                assert flow.post("zap:committed", quoted)["pickerAccepted"] is True
+                assert wait(lambda: flow.state()["zapCount"] == 1, timeout=5, step=.02)
+                assert flow.post("zap:removed", dict(capability, selector=quoted["selector"], via="native"))["pickerAccepted"] is True
+                flow.overlay_click(".reveal")
+                assert wait(lambda: flow.state()["zapCount"] == 0, timeout=5, step=.02)
                 # Native transport and coordinator accept the exact selector and
                 # label limits, then the real reveal control removes that entry.
                 boundary = dict(base, selector="#"+"a"*4095, label="L"*1024)
@@ -277,7 +312,7 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 assert flow.post("zap:committed", base)["pickerAccepted"] is False
                 assert flow.state()["zapCount"] == 0 and flow.active()
                 flow.overlay_click(".done")
-                return {"nativeReceiptsAwaited":True,"malformedRefused":len(bad),"unknownRemovalRefused":True,"storedRemovalAccepted":True,"selectorBytesAccepted":4096,"labelBytesAccepted":1024,"expiredRefused":True}
+                return {"nativeReceiptsAwaited":True,"malformedRefused":len(bad),"quotedStructureAccepted":True,"unknownRemovalRefused":True,"storedRemovalAccepted":True,"selectorBytesAccepted":4096,"labelBytesAccepted":1024,"expiredRefused":True}
             row("Z7_native_authority_limits", authority)
 
             def unavailable():

@@ -8970,9 +8970,18 @@ def routing_checks(factory, results, tmp):
                 forced.append(pid)
                 try: os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError: pass
-        # This App was closed by the row itself; its cleanup receipt is the row's own process proof.
-        app.quit_report = {'ok': not forced and not any(pid_alive(p) for p in (old_pid, relaunched) if p),
-                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced}
+        # This App was closed by the row itself; its cleanup receipt is the row's own process and
+        # window proof, in the same shape as Open.quit() (gate_evidence checks windows_after_quit).
+        pids = [p for p in (old_pid, relaunched) if p]
+        remaining = [p for p in pids if pid_alive(p)]
+        try:
+            windows_after = json.loads(subprocess.run([app.window_counter] + [str(p) for p in pids],
+                                                      capture_output=True, text=True, timeout=10, check=True).stdout)
+        except Exception as error:
+            windows_after = {'count': None, 'error': str(error)}
+        app.quit_report = {'ok': not forced and not remaining and windows_after.get('count') == 0,
+                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced,
+                           'remaining_processes': remaining, 'windows_after_quit': windows_after, 'owned_pids': pids}
         record('routing_deep_link_restart_quit', sent.returncode == 0 and bool(gone) and bool(relaunched)
                and sent_quit is not None and sent_quit.returncode == 0 and bool(quit_done),
                oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done),

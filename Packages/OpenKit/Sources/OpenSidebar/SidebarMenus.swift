@@ -174,12 +174,14 @@ struct SidebarMenus {
 
     static func isEasel(_ tab: Tab) -> Bool { tab.url.scheme?.lowercased() == "open" && tab.url.host()?.lowercased() == "easel" }
 
-    /// Easel row (C-measurements-s4 `e7-row-menu-ax`): Copy Link · — · Change Icon… · Rename… ·
-    /// — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar · Delete Easel. Open has no
-    /// share links: "Copy Link" becomes "Save as Web Page…" (Arc's per-Easel export row).
+    /// Easel row in Arc's order (C-measurements-s4 `e7-row-menu-ax`, LEAD 04:05): Copy Link · — ·
+    /// Change Icon… · Rename… · — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar ·
+    /// Delete Easel. Copy Link copies the Easel's own address (`open://easel/…`, opens it from
+    /// the command bar); Arc's per-Easel "save as a web page" row sits with it.
     func easel(_ tab: Tab) -> NSMenu {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         return menu([
+            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             item("Save as Web Page…", .exportEasel(tabID: tab.id)),
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
