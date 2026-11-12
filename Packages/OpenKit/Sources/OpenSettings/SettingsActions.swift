@@ -21,6 +21,8 @@ public struct ImportPlan: Sendable {
     /// Arc keeps its folder-based path. Other browsers import bookmarks, history and the search engine (IMC I-1).
     public var source: ImportSource = .arc
     public var bookmarks = true
+    /// I-6: the source browser's open tabs from its last session.
+    public var openTabs = true
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
     public var isArc: Bool { source == .arc }

@@ -52,7 +52,7 @@ import OpenImport
         return (path as NSString).abbreviatingWithTildeInPath
     }
     public var canContinue: Bool {
-        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings || (plan.secretsRequested && canImportBrowserSecrets)) }
+        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.openTabs || plan.history || plan.searchSettings || (plan.secretsRequested && canImportBrowserSecrets)) }
         return readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public var title: String { step == .source ? "Import from another browser" : "Import from " + plan.source.displayName }
     public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.source = .arc; selectedSourceID = "arc"; if step == .source { step = .choose }; plan.directory = directory; await refreshCounts() }
@@ -92,7 +92,7 @@ import OpenImport
         }
         guard let source = selectedSource, let profile = source.profiles.first else { return }
         plan.source = .browser(source, profile: profile)
-        plan.bookmarks = true; plan.history = true; plan.searchSettings = true; plan.skipSecrets()
+        plan.bookmarks = true; plan.openTabs = true; plan.history = true; plan.searchSettings = true; plan.skipSecrets()
         step = .choose
         await refreshCounts()
     }
@@ -121,13 +121,14 @@ import OpenImport
         var values: [String: Int] = [:]
         if let count = result.bookmarks { values["Bookmarks"] = count }
         if let count = result.historyVisits { values["History"] = count }
+        if let count = result.openTabs { values["Open tabs"] = count }
         if let secrets = result.secrets {
             values["Passwords"] = secrets.loginRows; values["Cookies"] = secrets.cookieRows
             values["Cards"] = secrets.cardRows; values["Addresses"] = secrets.addressRows
             values["Passwords and cookies"] = secrets.loginRows + secrets.cookieRows + secrets.cardRows + secrets.addressRows
         }
         counts = values
-        readable = result.bookmarks != nil || result.historyVisits != nil || result.searchEngine != nil || result.secrets != nil
+        readable = result.bookmarks != nil || result.openTabs != nil || result.historyVisits != nil || result.searchEngine != nil || result.secrets != nil
         counting = false
         if !readable { errorText = "No readable import data found in this \(plan.source.displayName) profile." }
     }
@@ -157,7 +158,7 @@ import OpenImport
         return found ? "Could not be read":"Not found"
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
-    public static let browserReportCategories=["Bookmarks","History","Search settings"]
+    public static let browserReportCategories=["Bookmarks","Open tabs","History","Search settings"]
     public var displayedReportCategories: [String] { if !plan.isArc { return Self.browserReportCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
     public var unfinishedSecretsImportMessage: String? {
@@ -253,12 +254,13 @@ public struct ImportWizard: View {
                             ForEach(source.profiles) { Text($0.name).tag($0.id) }
                         }.frame(maxWidth: 320).disabled(model.busy)
                     }
-                    browserOption("Bookmarks", \.bookmarks); browserOption("History", \.history); browserOption("Search settings", \.searchSettings)
+                    browserOption("Bookmarks", \.bookmarks); browserOption("Open tabs", \.openTabs); browserOption("History", \.history); browserOption("Search settings", \.searchSettings)
                     browserOption("Passwords and cookies", \.secretsRequested).disabled(!model.canImportBrowserSecrets)
                     Text(model.destinationText).font(.caption).foregroundStyle(.secondary)
                 case .review where !model.plan.isArc:
                     VStack(spacing: 0) {
                         if model.plan.bookmarks { reviewRow("bookmark", "Bookmarks", model.reviewValue("Bookmarks")) }
+                        if model.plan.openTabs { reviewRow("square.on.square", "Open tabs", model.reviewValue("Open tabs")) }
                         if model.plan.history { reviewRow("clock.arrow.circlepath", "History", model.reviewValue("History")) }
                         if model.plan.searchSettings { reviewRow("magnifyingglass", "Search engine", model.reviewValue("Search settings")) }
                         if model.plan.secretsRequested && model.canImportBrowserSecrets {

@@ -15,6 +15,7 @@ public struct ChromiumProfileCounts: Sendable {
     public var historyVisits: Int?
     public var searchEngine: String?
     public var skippedBookmarks = 0
+    public var openTabs: Int?
     /// Row counts only (no decryption, no Keychain): saved passwords, cookies, cards, addresses.
     public var secrets: ArcSecretsReadReport?
     /// Categories whose file exists but was refused or could not be parsed.
@@ -128,6 +129,8 @@ public struct ChromiumProfileReader: Sendable {
         catch ReadError.missing {} catch { counts.unreadable.insert("Bookmarks") }
         do { counts.historyVisits = try historyVisitCount() } catch ReadError.missing {} catch { counts.unreadable.insert("History") }
         counts.searchEngine = defaultSearchEngine().map { ChromiumSearchMapping.map($0).name }
+        do { counts.openTabs = try ChromiumSessionReader(profileDirectory: directory).openTabs().count }
+        catch ChromiumSessionReader.ReadError.missing {} catch { counts.unreadable.insert("Open tabs") }
         do { counts.secrets = try ArcSecretsReader(profileDirectory: directory).countOnly() }
         catch ArcSecretsImportError.missingFiles {} catch { counts.unreadable.insert("Passwords and cookies") }
         return counts
@@ -175,11 +178,23 @@ public enum BrowserBookmarksImport {
     public static func folderTitle(browserName: String) -> String { ImportedBookmarksFolder.title(browserName: browserName) }
 
     /// Profile and Space IDs are the live destination IDs, so the merge lands in place.
+    /// Open tabs (I-6): pinned source tabs become pinned tabs after the folder; the rest become Today tabs.
+    /// GUESS — capture pending (F3 §3 item 3): Arc's placement of imported open tabs. One tab per URL; the ID
+    /// comes from the URL, so a re-import adds nothing.
+    public static func openTabID(sourceKey: String, url: URL) -> ItemID {
+        ImportedBookmarksFolder.itemID(sourceKey: sourceKey, sourceID: "open-tab:" + url.absoluteString)
+    }
     public static func sourceModel(roots: [ImportedBookmark], browserName: String, sourceKey: String,
-                                   profileID: ProfileID, settings: ProfileSettings, spaceID: SpaceID) -> BrowserModel {
+                                   profileID: ProfileID, settings: ProfileSettings, spaceID: SpaceID,
+                                   openTabs: [ChromiumOpenTab] = []) -> BrowserModel {
         let root = ImportedBookmarksFolder.make(browserName: browserName, sourceKey: sourceKey, roots: roots)
         let profile = Profile(id: profileID, settings: settings)
-        let space = Space(id: spaceID, profileID: profileID, pinned: root.children.isEmpty ? [] : [.folder(root)])
+        var seen = Set<URL>(), pinned: [SidebarNode] = root.children.isEmpty ? [] : [.folder(root)], today: [SidebarNode] = []
+        for tab in openTabs where seen.insert(tab.url).inserted {
+            let node = Tab(id: openTabID(sourceKey: sourceKey, url: tab.url), url: tab.url, title: tab.title, pinnedURL: tab.pinned ? tab.url : nil)
+            if tab.pinned { pinned.append(.tab(node)) } else { today.append(.tab(node)) }
+        }
+        let space = Space(id: spaceID, profileID: profileID, pinned: pinned, today: today)
         return BrowserModel(profiles: [profile], spaces: [space])
     }
 }
