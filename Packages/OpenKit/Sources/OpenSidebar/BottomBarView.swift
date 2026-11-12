@@ -75,7 +75,7 @@ final class BottomBarView: NSView {
         plus.frame = CGRect(origin: CGPoint(x: w - m.plusTrailingInset - m.buttonSize.width, y: m.buttonY), size: m.buttonSize)
         let stripRect = CGRect(x: m.switcherLeading, y: 0, width: max(0, w - m.switcherLeading - m.switcherTrailing), height: m.height)
         strip.frame = stripRect
-        let spaces = context.isIncognito ? [] : context.model.spaces
+        let spaces = context.hidesSpaceChrome ? [] : context.model.spaces
         let live = Set(spaces.map(\.id))
         for (id, v) in items where !live.contains(id) { v.removeFromSuperview(); items[id] = nil }
         // Centered when the items fit (4 Spaces: 136 pt in a 144 pt strip → 4 pt each side).

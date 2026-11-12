@@ -21,6 +21,8 @@ public struct ImportReport: Sendable {
     public var folders: Int = 0
     /// Arc Live Folders brought over with their settings (LF L7).
     public var liveFolders: Int = 0
+    /// Profiles whose Favorites empty-state card Arc had dismissed (A3).
+    public var favoritesEmptyDismissed: Int = 0
     public var splits: Int = 0
     public var routingRules: Int = 0
     public var skippedEasels: Int = 0
@@ -1099,6 +1101,14 @@ public struct ArcImporter {
             } catch { report.extensionProfilesUnreadable += 1 }
         }
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
+        // Favorites empty-state card (A3): Arc's dismissal per Profile key, or the older global flag.
+        if let prefs = try? ArcPreferences.read(arcDirectory: arcDirectory), prefs.found {
+            let all = prefs.bools[ArcPreferenceMapping.favoritesEmptyDismissedKey] == true
+            let ids = Set(prefs.favoritesEmptyDismissedProfiles.map { ProfileID(rawValue: Self.profileID(forArcProfileKey: $0)) })
+            for profile in model.profiles where all || ids.contains(profile.id) {
+                profile.favoritesEmptyStateDismissed = true; report.favoritesEmptyDismissed += 1
+            }
+        }
         return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords,
             sourceDefaultProfileID: defaultProfileID,
             sourceProfileDirectories: sourceProfileDirectories,

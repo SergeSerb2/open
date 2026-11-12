@@ -207,8 +207,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func computeRoot() -> [AnyObject] {
         var r: [AnyObject] = [spacer]
-        if !context.isIncognito, !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
-        if !context.isIncognito, !space.today.isEmpty { r.append(divider) }
+        if !context.hidesSpaceChrome, !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
+        if !context.hidesSpaceChrome, !space.today.isEmpty { r.append(divider) }
         if context.manager?.libraryLayout != true { r.append(newTab) }
         r += space.today.map(\.object)
         return r
@@ -778,7 +778,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         case let t as Tab: return context.model.isPinned(tabID: t.id) ? menus.pinnedTab(t) : menus.todayTab(t)
         case let f as Folder: return menus.folder(f)
         case let s as Split: return menus.split(s)
-        default: return context.isIncognito ? menus.emptyIncognito() : menus.space(space)
+        default: return context.hidesSpaceChrome ? menus.emptyIncognito() : menus.space(space)
         }
     }
 
@@ -1242,14 +1242,15 @@ final class SpaceHeaderView: NSView {
         CATransaction.commit()
         icon.frame = m.headerIconFrame
         chevron.frame = m.headerIconFrame
-        icon.isHidden = hovered && !context.isIncognito
-        chevron.isHidden = !hovered || context.isIncognito
+        // GUESS (C10 has no close-up): a Blank Window's header shows the title only, no Space icon.
+        icon.isHidden = context.isWindowOnly || (hovered && !context.isIncognito)
+        chevron.isHidden = !hovered || context.hidesSpaceChrome
         chevron.glyphView.glyph = space.isPinnedCollapsed ? .disclosureRight : .disclosureDown
         let s = m.headerMoreSize
         more.frame = CGRect(x: w - m.headerMoreTrailing - s, y: (m.headerHeight - s) / 2, width: s, height: s)
-        more.isHidden = !hovered || context.isIncognito
+        more.isHidden = !hovered || context.hidesSpaceChrome
         var right = hovered ? more.frame.minX - 2 : w - 17
-        let hasProfiles = tracked({ !context.isIncognito && context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
+        let hasProfiles = tracked({ !context.hidesSpaceChrome && context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
         profileIndicator.isHidden = !hasProfiles
         if hasProfiles {
             let size = ProfileIndicatorMetrics.hitSize
@@ -1259,14 +1260,14 @@ final class SpaceHeaderView: NSView {
         title.frame = CGRect(x: m.headerTitleX, y: m.headerTitleY, width: max(0, right - m.headerTitleX), height: 18)
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? { context.isIncognito ? nil : page.map { $0.menus.space($0.space) } }
+    override func menu(for event: NSEvent) -> NSMenu? { context.hidesSpaceChrome ? nil : page.map { $0.menus.space($0.space) } }
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2 { beginRename() }
     }
 
     func beginRename() {
-        guard !context.isIncognito else { return }
+        guard !context.hidesSpaceChrome else { return }
         page?.revealsHeaderForRename = true
         superview?.layoutSubtreeIfNeeded()
         context.suppressPreviews(.rename, true)
