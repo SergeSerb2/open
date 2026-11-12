@@ -13,15 +13,22 @@ enum NoteTab {
 
   static func matches(_ url: URL?) -> Bool { NoteLink.matches(url) }
 
-  /// New Note (⌃⇧N): a new Today tab at the top, selected.
+  /// New Note (⌃⇧N): a new Today tab at the top, selected (a Note, or the Profile's web document app).
   /// `split`: New Note (in Split) (⌃⌥N) puts it beside the current page.
   @discardableResult
   static func create(in factory: EngineWebContentHostFactory, split: Bool) -> ItemID? {
     guard !factory.isIncognito, let space = factory.focusedSpace else { return nil }
     let model = factory.model
     let current = factory.selectedTab
-    let tab = model.newTab(in: space.id, url: NoteLink.url(for: UUID()), title: untitled, at: 0)
-    tab.live.faviconPNG = faviconPNG
+    // Settings ▸ Profiles ▸ New documents: a web document app opens its "new" page instead.
+    let target = DocumentApp.resolve(factory.focusedProfile?.settings.defaultDocumentApp)
+    let tab: Tab
+    if let url = target.url {
+      tab = model.newTab(in: space.id, url: url, title: "", at: 0)
+    } else {
+      tab = model.newTab(in: space.id, url: NoteLink.url(for: UUID()), title: untitled, at: 0)
+      tab.live.faviconPNG = faviconPNG
+    }
     var selectID = tab.id
     if split, let current, current.id != tab.id {
       if case .splitPane(let splitID)? = model.parent(of: current.id),

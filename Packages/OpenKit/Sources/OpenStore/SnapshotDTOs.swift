@@ -35,8 +35,10 @@ public struct ProfileSettingsDTO: Codable, Sendable {
     public var searchEngineID: String
     public var sleepMode: String?
     public var keepAliveSites: [String]
+    /// What New Note creates in this Profile: "note" or a web document id (DocumentApps).
+    public var defaultDocumentApp: String
 
-    public init(autoArchiveAfter: String, littleOpenAutoArchiveAfter: String, searchEngineID: String, sleepMode: String? = nil, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = [], keepAliveSites: [String] = []) {
+    public init(autoArchiveAfter: String, littleOpenAutoArchiveAfter: String, searchEngineID: String, sleepMode: String? = nil, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = [], keepAliveSites: [String] = [], defaultDocumentApp: String = "note") {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
         self.searchSuggestEnabled = searchSuggestEnabled
@@ -46,10 +48,11 @@ public struct ProfileSettingsDTO: Codable, Sendable {
         self.searchEngineID = searchEngineID
         self.sleepMode = sleepMode
         self.keepAliveSites = keepAliveSites
+        self.defaultDocumentApp = defaultDocumentApp
     }
 
     private enum CodingKeys: String, CodingKey {
-        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode, keepAliveSites
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode, keepAliveSites, defaultDocumentApp
         case searchSuggestEnabled, downloadDirectory, askWhereToSaveEachFile, customSearchEngines
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
@@ -67,6 +70,7 @@ public struct ProfileSettingsDTO: Codable, Sendable {
         customSearchEngines = try container.decodeIfPresent([SearchEngine].self, forKey: .customSearchEngines) ?? []
         sleepMode = try container.decodeIfPresent(String.self, forKey: .sleepMode)
         keepAliveSites = try container.decodeIfPresent([String].self, forKey: .keepAliveSites) ?? []
+        defaultDocumentApp = try container.decodeIfPresent(String.self, forKey: .defaultDocumentApp) ?? "note"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -80,6 +84,7 @@ public struct ProfileSettingsDTO: Codable, Sendable {
         try container.encode(customSearchEngines, forKey: .customSearchEngines)
         try container.encodeIfPresent(sleepMode, forKey: .sleepMode)
         try container.encode(keepAliveSites, forKey: .keepAliveSites)
+        try container.encode(defaultDocumentApp, forKey: .defaultDocumentApp)
     }
 }
 
@@ -119,6 +124,8 @@ public struct TabDTO: Codable, Sendable {
     public var isMuted: Bool
     public var openerID: String?
     public var isUnread: Bool
+    /// Live Folder row's pull request URL (LF L2); absent for normal tabs.
+    public var liveItemURL: String? = nil
 }
 
 public struct FolderDTO: Codable, Sendable {
@@ -129,6 +136,8 @@ public struct FolderDTO: Codable, Sendable {
     public var customIcon: String?
     public var iconOverride: SpaceIconDTO?
     public var children: [NodeDTO]
+    /// Live Folder settings (LF L2); absent in older snapshots and for normal folders.
+    public var live: LiveFolderConfig? = nil
 }
 
 public struct SplitDTO: Codable, Sendable {
@@ -327,14 +336,14 @@ public enum SnapshotMapper {
     static func profileDTO(_ p: Profile) -> ProfileDTO {
         ProfileDTO(id: p.id.rawValue.uuidString, name: p.name, icon: iconDTO(p.icon),
                    favorites: p.favorites.map { .tab(tabDTO($0)) },
-                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID, sleepMode: p.settings.sleepMode.rawValue, searchSuggestEnabled: p.settings.searchSuggestEnabled, downloadDirectory: p.settings.downloadDirectory, askWhereToSaveEachFile: p.settings.askWhereToSaveEachFile, customSearchEngines: p.settings.customSearchEngines, keepAliveSites: p.settings.keepAliveSites),
+                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID, sleepMode: p.settings.sleepMode.rawValue, searchSuggestEnabled: p.settings.searchSuggestEnabled, downloadDirectory: p.settings.downloadDirectory, askWhereToSaveEachFile: p.settings.askWhereToSaveEachFile, customSearchEngines: p.settings.customSearchEngines, keepAliveSites: p.settings.keepAliveSites, defaultDocumentApp: p.settings.defaultDocumentApp),
                    dataDirectoryName: p.dataDirectoryName)
     }
 
     static func profile(from dto: ProfileDTO) -> Profile {
         Profile(id: ProfileID(uuidString: dto.id), name: dto.name, icon: icon(from: dto.icon),
                 favorites: dto.favorites.compactMap { if case .tab(let t) = $0 { return tab(from: t) }; return nil },
-                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID, sleepMode: dto.settings.sleepMode.flatMap(SleepMode.init(rawValue:)) ?? .balanced, searchSuggestEnabled: dto.settings.searchSuggestEnabled, downloadDirectory: dto.settings.downloadDirectory, askWhereToSaveEachFile: dto.settings.askWhereToSaveEachFile, customSearchEngines: dto.settings.customSearchEngines, keepAliveSites: dto.settings.keepAliveSites),
+                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID, sleepMode: dto.settings.sleepMode.flatMap(SleepMode.init(rawValue:)) ?? .balanced, searchSuggestEnabled: dto.settings.searchSuggestEnabled, downloadDirectory: dto.settings.downloadDirectory, askWhereToSaveEachFile: dto.settings.askWhereToSaveEachFile, customSearchEngines: dto.settings.customSearchEngines, keepAliveSites: dto.settings.keepAliveSites, defaultDocumentApp: dto.settings.defaultDocumentApp),
                 dataDirectoryName: dto.dataDirectoryName)
     }
 
@@ -355,7 +364,7 @@ public enum SnapshotMapper {
     static func nodeDTO(_ node: SidebarNode) -> NodeDTO {
         switch node {
         case .tab(let t): return .tab(tabDTO(t))
-        case .folder(let f): return .folder(FolderDTO(peekedChildID: f.peekedChildID?.description, id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }))
+        case .folder(let f): return .folder(FolderDTO(peekedChildID: f.peekedChildID?.description, id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }, live: f.live))
         case .split(let s): return .split(SplitDTO(id: s.id.rawValue.uuidString, orientation: s.orientation.rawValue, fractions: s.fractions, panes: s.panes.map { tabDTO($0) }, focusedPaneID: s.focusedPaneID?.rawValue.uuidString))
         }
     }
@@ -371,7 +380,10 @@ public enum SnapshotMapper {
     static func node(from dto: NodeDTO) -> SidebarNode {
         switch dto {
         case .tab(let t): return .tab(tab(from: t))
-        case .folder(let f): return .folder(Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }, peekedChildID: f.peekedChildID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) }))
+        case .folder(let f):
+            let folder = Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }, peekedChildID: f.peekedChildID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) })
+            folder.live = f.live
+            return .folder(folder)
         case .split(let s): return .split(Split(id: ItemID(uuidString: s.id), orientation: SplitOrientation(rawValue: s.orientation) ?? .horizontal, fractions: s.fractions, panes: s.panes.map { tab(from: $0) }, focusedPaneID: s.focusedPaneID.map { ItemID(uuidString: $0) }))
         }
     }
@@ -380,14 +392,16 @@ public enum SnapshotMapper {
         TabDTO(id: t.id.rawValue.uuidString, url: t.url.absoluteString, title: t.title, customTitle: t.customTitle,
                pinnedURL: t.pinnedURL?.absoluteString, customIcon: t.customIcon, iconOverride: iconDTO(t.iconOverride),
                createdAt: t.createdAt.timeIntervalSince1970, lastActiveAt: t.lastActiveAt.timeIntervalSince1970,
-               isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread)
+               isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread, liveItemURL: t.liveItemURL?.absoluteString)
     }
 
     static func tab(from dto: TabDTO) -> Tab {
-        Tab(id: ItemID(uuidString: dto.id), url: URL(string: dto.url) ?? URL(string: "about:blank")!, title: dto.title,
+        let tab = Tab(id: ItemID(uuidString: dto.id), url: URL(string: dto.url) ?? URL(string: "about:blank")!, title: dto.title,
             customTitle: dto.customTitle, pinnedURL: dto.pinnedURL.flatMap { URL(string: $0) }, customIcon: dto.customIcon, iconOverride: icon(from: dto.iconOverride),
             createdAt: Date(timeIntervalSince1970: dto.createdAt), lastActiveAt: Date(timeIntervalSince1970: dto.lastActiveAt),
             isMuted: dto.isMuted, openerID: dto.openerID.map { ItemID(uuidString: $0) }, isUnread: dto.isUnread)
+        tab.liveItemURL = dto.liveItemURL.flatMap(URL.init(string:))
+        return tab
     }
 
     static func windowDTO(_ w: BrowserWindowState) -> WindowDTO {

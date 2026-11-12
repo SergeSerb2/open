@@ -5,6 +5,23 @@ import OpenDesign
 import OpenModel
 import OpenSuggest
 import OpenEngine
+import OpenStore
+import Observation
+
+/// Row and input favicons from the App's stored favicon cache (the sidebar's), never a synchronous
+/// disk or network read: a miss returns nil and `loaded` runs once the cache entry fills (plan D3 §3).
+@MainActor
+final class StoredCommandBarFavicons: CommandBarFaviconSource {
+  let cache: StoredFaviconCache
+  init(cache: StoredFaviconCache) { self.cache = cache }
+  func favicon(for pageURL: URL, loaded: @escaping @MainActor (URL) -> Void) -> NSImage? {
+    var image: NSImage?
+    withObservationTracking { image = cache.image(for: pageURL) } onChange: {
+      Task { @MainActor in loaded(pageURL) }
+    }
+    return image
+  }
+}
 
 /// One lazy native command-bar controller for one standard window.
 @MainActor
@@ -13,6 +30,7 @@ final class AppCommandBarSession: CommandBarDelegate {
   private(set) var controller: CommandBarController?
   private lazy var extensionSource = EngineCommandBarSource(factory: factory)
   private var welcomeIcons: WelcomeCommandBarIcons?
+  private lazy var storedIcons: StoredCommandBarFavicons? = factory.app.stores.sidebarFavicons.map { StoredCommandBarFavicons(cache: $0) }
   private var openedAt = 0.0
   private var queryAt = 0.0
   private var queryRevision = 0
@@ -26,7 +44,9 @@ final class AppCommandBarSession: CommandBarDelegate {
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
 
   var isPresented: Bool { controller?.isPresented == true }
-  func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil) {
+  /// True when the user opened the current presentation (Cmd+T / Cmd+L, menu, sidebar): only then a second key closes it.
+  private(set) var openedByUser = false
+  func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
     openedAt = requestedAt
     let pinned = editingPinnedTab.flatMap { id in factory.model.tab(id: id).flatMap { $0.pinnedURL == nil ? nil : $0 } }
     pinnedEditTabID = pinned?.id
@@ -64,28 +84,40 @@ final class AppCommandBarSession: CommandBarDelegate {
       bar.view.frame = windowController.contentView.bounds
       bar.view.autoresizingMask = [.width, .height]
       windowController.contentView.addSubview(bar.view)
+      windowController.commandBarView = bar.view
+      bar.view.passesClickThrough = { [weak windowController] point in
+        windowController?.sidebar.isTabRow(atWindowPoint: point) ?? false
+      }
     }
     guard let bar = controller else { return }
     if WelcomeTab.matches(factory.selectedTab?.url) {
       if welcomeIcons == nil { welcomeIcons = WelcomeCommandBarIcons() }
       bar.favicons = welcomeIcons
-    } else { bar.favicons = nil }
+    } else { bar.favicons = factory.isIncognito ? nil : storedIcons }
+    // The Space accent; Light/Dark follows the window (the bar reads its own effective appearance).
     let style = factory.focusedSpace.map { windowController.context.style(for: $0) }
-    bar.theme = CommandBarTheme(style: style)
-    if let color = factory.hosts.values.first(where: { $0.content === factory.selectedContent })?.pageBackgroundColor?.usingColorSpace(.sRGB) {
-      let rgba = RGBA(Double(color.redComponent), Double(color.greenComponent), Double(color.blueComponent), Double(color.alphaComponent))
-      bar.backdrop = CommandBarBackdrop(color: rgba)
-    } else {
-      bar.backdrop = CommandBarBackdrop(color: style?.darkPalette?.background ?? CommandBarBackdrop.darkPage.color)
-    }
+    bar.theme = CommandBarTheme(style: style, isDark: ContentAppearance(bar.view.effectiveAppearance) == .dark)
     let peek = windowController.hasPeekController && windowController.peekController.isShown
     openingSelection = factory.selectedNodeID; openingProfile = profile.id
     openFirstResultsMilliseconds = nil; firstResultsMilliseconds = nil
+    // Cmd+L edits the address in place, in a card anchored to the sidebar URL field (plan D3 §2.2).
+    // A hidden sidebar, the content toolbar, and Edit Pinned Page keep the centred card.
+    var presentation = CommandBarPresentation.overlay
+    if mode == .editCurrentURL, pinned == nil, factory.windowState.sidebarMode == .anchored,
+       let field = windowController.sidebar.urlFieldFrame(in: bar.view) {
+      presentation = .anchored(CGRect(x: field.minX, y: field.minY + CommandCard.inlineTopOffset,
+                                      width: max(CommandCard.inlineMinimumWidth, field.width), height: 0))
+    }
+    // The sidebar behind the card (anchored mode only; a hidden sidebar shows none).
+    openedByUser = userInitiated; bar.closesOnModeKey = userInitiated
+    bar.view.sidebarMaxX = factory.windowState.sidebarMode == .anchored && !windowController.sidebar.isHidden
+      ? windowController.sidebar.convert(windowController.sidebar.bounds, to: bar.view).maxX : nil
     bar.present(CommandBarRequest(mode: mode, profileID: profile.id, spaceID: factory.focusedSpace?.id,
       currentTabID: pinned?.id ?? (peek ? nil : factory.selectedTab?.id),
       currentTabURL: pinned?.pinnedURL ?? (peek ? factory.selectedContent?.url : factory.selectedTab?.url),
       currentTabTitle: pinned?.displayTitle ?? (peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle),
-      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
+      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID),
+      presentation: presentation)
   }
   func contextDidChange() {
     guard isPresented else { return }
@@ -114,6 +146,8 @@ final class AppCommandBarSession: CommandBarDelegate {
     switch intent {
     case .open(let url, let destination, let modifiers),
          .search(_, let url, _, let destination, let modifiers):
+      // Option+Return: beside the current page in Split View (plan D3 §2.3).
+      if modifiers.contains(.option), !modifiers.contains(.command), factory.openFromCommandBarInSplit(url) { break }
       factory.navigateFromCommandBar(url, current: destination == .currentTab, background: modifiers.contains(.command))
     case .switchToTab(let id, let space): factory.selectTabForCommand(id, spaceID: space)
     case .runAction(let id, let space): factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)
@@ -150,7 +184,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "firstResultsMs": firstResultsMilliseconds ?? -1, "openFirstResultsMs": openFirstResultsMilliseconds ?? -1,
       "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation",
       "final": bar.isSnapshotFinal, "newTabHighlighted": factory.controller?.context.isNewTabCommandBarOpen ?? false,
-      "footer": bar.showsPrivacyFooter, "hidden": bar.view.isHidden, "animationKeys": bar.view.debugAnimationKeys,
+      "footer": bar.showsPrivacyFooter, "presentation": bar.view.presentationKind, "hidden": bar.view.isHidden, "animationKeys": bar.view.debugAnimationKeys,
       "panelOpacity": bar.view.debugPanelPresentationOpacity, "allAnimationKeys": bar.view.debugAllAnimationKeys,
       "panelFrame": { let f = bar.view.convert(bar.view.panelFrame, to: nil); let h = factory.window?.contentView?.bounds.height ?? 0
         return [f.minX, h - f.maxY, f.width, f.height] }(),

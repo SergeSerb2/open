@@ -170,7 +170,8 @@ Measured on S2 18/0044 (window 1728×1084, panel `[481, 373, 766, 329]`, 5 rows)
 | Input | Result | Evidence |
 |---|---|---|
 | Cmd+T (`.newTab`) | Empty field, rows for the empty query, row 1 selected | F0063 |
-| Cmd+L (`.editCurrentURL`) | Field holds the current URL, fully selected; typing replaces it | F0048 |
+| Cmd+L (`.editCurrentURL`) | Field holds the current URL, fully selected; typing replaces it. With the sidebar shown, the inline card anchored to the sidebar URL field (§12); with the sidebar hidden, the content toolbar, or Edit Pinned Page, the centred card | F0048; Arc 1.172 s2 14c (inline); D3 lead decisions |
+| Second Cmd+T / Cmd+L | Closes the bar opened by the same key (the bar's field editor handles it; the key router gives the open bar these keys) | Arc 1.172 s2 06-keys, 12c |
 | `.searchTabs` | Tab rows only; placeholder "Search Tabs…" | placeholder guess |
 | Typing (inline completion) | Row 1's host or URL completes in the field; the completed part is selected. Rules, keys, and evidence: §4.1. | CC-1…CC-7, CC-40 |
 | Typing | One query per committed text change. Marked IME text does not query; composition end submits exactly one query. Paste replaces CR/LF with spaces and caps visible input at 2,048 characters before querying that same text. | implementation; flows 36–44, 64–65 |
@@ -183,11 +184,13 @@ Measured on S2 18/0044 (window 1728×1084, panel `[481, 373, 766, 329]`, 5 rows)
 | Backspace on an empty scoped query, or a click on the chip | Leaves the scope; the field gets back the text from before it (caret at the end) and re-queries. A scope opened by command gives an empty Cmd+T bar. | features-core §4.6 rule 16; CC-19, CC-41 (S2 18/0021 restores "wikipedia"); flows 82, 84, 85, 91 |
 | Inside the Actions scope | Only actions; the empty field lists the available ones in registry order (12 rows, 5 shown); any query, no 2-character minimum; best action is the top hit (T2a); equal matches: the title the query covers more of | plan §4.3.3; order and tie-break are Open choices (Arc ranks by recent use) |
 | Pointer move over a row | Selects it (real moves only; rows sliding under a still pointer do not) | features-core §4.7 rule 17 (guess) |
-| Click a row / outside | Choose / close (`.clickOutside`) | outside click guess |
+| Click a row / outside | Choose / close (`.clickOutside`). A click on a sidebar tab or Split View row closes the bar **and** selects that row with the same click, in both New Tab and Cmd+L modes (`CommandBarView.passesClickThrough`, `SidebarView.isTabRow(atWindowPoint:)`). Other outside clicks only close. | Arc capture C-report-s5 §4 (LEAD 01:25); e2e E13 rows |
 | Click (i), or Cmd+I in the field | Show the privacy footer (§3.4); Cmd+I again hides it. No intent, no window. Tab stays free for Site Search or focus traversal. | CC-42 (S2 18/0044); Cmd+I is an Open rule; flows 34, 49, 88 |
 | Footer "Dismiss" / "Search Settings…" / "here" | Hide the footer and report the dismissal, then re-run the query / close with `.openSearchSettings` / close with `.open(privacyURL, .newTab, [])` | CC-42; flows 89–90 |
 | Present (any mode) | No footer. Only (i) and Cmd+I show it; it never shows by itself. | lead ruling 2026-10-26 (D14); flow 89 |
-| Cmd / Shift / Option + Return | Reported in the intent's `modifiers`; no other behavior | Arc names `CommandBarSelectionOptions`, but no capture or string proves the keys |
+| Cmd+Return on a page or search | Opens a background tab; the bar stays open with its text selected, so the next entry replaces it. While the bar is open a page view cannot take the keyboard except by a click | Arc 1.172 s2 11-returns; lead decision on the text |
+| Option+Return on a page or search | Opens the page beside the current page in Split View (`SplitViewController.openInSplit`); a 4-pane split loads it in the focused pane | Arc 1.172 s2 11-returns |
+| Shift+Return | Reported in the intent's `modifiers`; navigates like Return | Arc 1.172 s2 11-returns |
 
 During IME composition, Return, Tab, Esc, Space, and arrows go to the input method. Return commits composition without choosing a result. Each present and dismiss unmarks composition and clears the field editor's own undo stack. Presentation before window attachment focuses the input when its view gets a window.
 
@@ -440,3 +443,16 @@ Engine (`OpenSuggest`) gaps seen against Arc:
 3. Does the panel turn light in light macOS appearance? Answered by session 2: yes, in a default-theme Space the fill is `#F8F8F8`, the selection `#8E95FF`, the placeholder `#7D7D7D`, the separator `#E0E0DF` (`re/interaction-states.md` §20.11, S2 20/0018). Not built; no plan owns it yet (`re/capture-session-2-results.md` §2.7 "new work").
 4. Open and close timing. Answered by session 2: no animation (§5, CC-44); built in commandbar-completion Step 0.
 5. The Site Search chip's look and the scoped placeholder text. Answered by session 2: an orange text-only capsule (Display P3 #FFA500) and the placeholder "Search…" (CC-41); built in commandbar-completion Step 5 (§3.5).
+
+
+## 12. D3 card design (2026-11-11)
+
+Plan `.re/handoff/plans/D3-commandbar-fixes.md`; Arc facts from capture session 2 (`C-report-s2.md`, `C-measurements-s2.md`); lead rulings LEAD 11:45, 12:05, 12:12, 12:20, 12:40.
+
+- **Card.** Opaque body Light `#F9F9F9` / Dark `#30302E` from the window's effective appearance (not the Space's), radius 12, shadow y 22 σ 35 black 38 % plus a 0.5 pt black 22 % hairline, scrim black 10 % behind the New Tab card. New Tab card 768 wide at x 256 for a 1280 window (Arc08). `CommandCardLayout` holds the two sizes: New Tab (input 64, 19 pt Regular) and inline (input 50, 15 pt). Rows 46 + 4, radius 8, 15 pt Medium, selected Semibold with a white 24 pt tile and a 20 pt key cap.
+- **Tint.** The card is flat; its tint imitates the blur Arc's panel shows: it covers the part of the New Tab card that lies over the sidebar and fades over 60 pt (none with a hidden sidebar). The inline editor lies over the sidebar and gets a uniform tint (Arc 14c inline body #F6F0E0 at both thirds). Inference, marked in the code.
+- **Accent.** `OpenDesign/SpaceAccent.swift`, one type: accent = sidebar top mixed 8 % toward white (HSL lightness at most 0.62), dark accent = the top's hue at 32 % lightness, saturation × 1.4; Open's default theme uses #6F66D9 / #5148C4. Gold (sidebar #B9A35F): ΔE00 2.73 / 2.07 on the real frames.
+- **Favicons.** Rows and the input read the App's stored favicon cache by page URL (`StoredCommandBarFavicons`); a miss draws the globe and redraws when the entry fills.
+- **Checks.** `commandbar-render flows`; real App `engine_e2e.py --only commandbar` rows `cmd_t_twice_closes`, `cmd_l_inline_anchor`, `cmd_l_twice_closes`, `cmd_l_hidden_sidebar_centred`, `command_return_background`, `command_return_twice`, `option_return_split`, `option_return_full_split_loads_focused`. Real-window frames: `tools/e2e/commandbar_frames.py`.
+
+The sidebar URL field (D3 §2.4, LEAD 12:12): `[8, 46, W − 16, 36]` like the row plates; existing fill token (within ΔE00 0.34 of Arc session 3's rest/hover fills); Copy Link and Site Controls are not drawn and not in the accessibility tree at rest, show while the pointer is anywhere inside the sidebar or the Site Control panel is open, with AppKit tooltips "Copy Link" / "Site Controls"; a long host keeps its end and fades its leading 34 pt, 8 pt before the first control (`sidebar-render` checks).

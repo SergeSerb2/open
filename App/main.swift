@@ -54,6 +54,9 @@ ImportWizardViewModel.browserLibraryOverride = options.browserImportLibrary
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
 #if OPEN_AUTOMATION
+FixtureImportProvider.registerIfRequested(root: directories.root)
+#endif
+#if OPEN_AUTOMATION
 // A real launch through layout migration, before any window/engine or quit
 // saves the model. A normal pre-engine quit must keep its normal save path.
 if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LAYOUT_ONLY"] == "1" {
