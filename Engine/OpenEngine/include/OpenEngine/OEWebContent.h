@@ -556,6 +556,12 @@ NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEPermissionRequest : NSObject
 @property(nonatomic, readonly, copy) NSURL* origin;
 @property(nonatomic, readonly) OEPermissionKind kinds;
+/// For OEPermissionKindProtocolHandler: the scheme the page wants to handle
+/// (for example "mailto") and its handler URL template ("%s" marks the
+/// escaped URL). nil for other kinds.
+@property(nonatomic, readonly, copy, nullable) NSString* protocolHandlerScheme;
+@property(nonatomic, readonly, copy, nullable)
+    NSString* protocolHandlerURLTemplate;
 /// Call exactly one of these. An unanswered request is dismissed when it is
 /// deallocated.
 - (void)grant;

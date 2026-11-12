@@ -33,6 +33,8 @@ public enum SidebarIntent: Equatable, Sendable {
     case manageExtensions
     /// A main-menu command by its registry id (the URL field's Capture items). App.
     case performCommand(String)
+    /// A command for this window's page (force-reload, clear-cache-and-refresh), as its key window would run it. App.
+    case performWindowCommand(String)
     /// Settings ▸ Advanced "Enable Shared Quotes" (`SidebarContext.sharedQuotesKey`). App.
     case setSharedQuotes(Bool)
     /// The status button under the URL field (page-platform §4.7.3). `anchor` is the button's
@@ -117,6 +119,8 @@ public enum SidebarIntent: Equatable, Sendable {
     case hoverPreview(SidebarHoverPreviewRequest?)
     case openProfileSettings(ProfileID)
     case dismissAutoArchiveBanner
+    /// The "x" of the Favorites empty-state card (A3): hides it for that Profile.
+    case dismissFavoritesEmptyState(ProfileID)
 
     // Structure (drag and drop, "Move to")
     case move(nodeID: ItemID, to: NodeParent, index: Int?)

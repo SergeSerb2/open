@@ -18,7 +18,8 @@ final class SitePermissionStore {
     (.clipboard, "clipboard", "doc.on.clipboard"), (.MIDI, "MIDI devices", "pianokeys"),
     (.screenCapture, "screen", "lock"), (.multipleDownloads, "multiple files", "arrow.down.circle"),
     (.storageAccess, "storage", "externaldrive"), (.windowManagement, "windows", "lock"),
-    (.localFonts, "fonts", "lock"), (.idleDetection, "activity", "figure.stand"), (.other, "permissions", "lock")]
+    (.localFonts, "fonts", "lock"), (.idleDetection, "activity", "figure.stand"),
+    (.protocolHandler, "links", "envelope"), (.other, "permissions", "lock")]
   private static var stores: [ObjectIdentifier: SitePermissionStore] = [:]
   static func forContext(_ context: OEBrowserContext) -> SitePermissionStore {
     stores = stores.filter { $0.value.context != nil }
@@ -27,7 +28,8 @@ final class SitePermissionStore {
     let store = SitePermissionStore(context); stores[key] = store; return store
   }
   static func canPersist(_ kind: OEPermissionKind) -> Bool {
-    kind != .screenCapture && kind != .other && kinds.contains { $0.0 == kind }
+    // A protocol handler is stored by Chromium's handler registry on grant, not as a site setting.
+    kind != .screenCapture && kind != .other && kind != .protocolHandler && kinds.contains { $0.0 == kind }
   }
   private weak var context: OEBrowserContext?
   private var origins: Set<String> = []

@@ -107,6 +107,7 @@ public final class SidebarView: NSView {
         }) { [weak self] in self?.syncTheme() })
         loops.append(ObservationLoop(read: { [weak self] in
             _ = self?.context.favoritesProfile?.favorites.count
+            _ = self?.context.favoritesEmptyStateVisible
             _ = self?.context.sidebarWidth
         }) { [weak self] in self?.needsLayout = true })
         loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.peekSourceNodeID }) { [weak self] in self?.syncPeekDim() })
@@ -149,9 +150,12 @@ public final class SidebarView: NSView {
         if let resigned = notification.object as? NSWindow, resigned === window { context.isOptionHeld = false }
     }
 
+    /// The Favorites empty-state card while it shows (A3; checks and automation).
+    public var favoritesEmptyCard: FavoritesEmptyStateView? { favorites.emptyCard }
+
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
-        context.isIncognito ? 0 : FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
+        context.favoritesSectionHeight(width: bounds.width)
     }
 
     public override func layout() {
@@ -168,7 +172,7 @@ public final class SidebarView: NSView {
         let oldFavorites = favorites.frame, oldPagerFrame = pager.frame
         if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
         let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
-        favorites.isHidden = isCreatingSpace || context.isIncognito
+        favorites.isHidden = isCreatingSpace || context.hidesSpaceChrome
         let favH = isCreatingSpace ? 0 : favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
@@ -620,6 +624,10 @@ extension SidebarView {
     public var favoritesCollection: NSCollectionView { favorites.collection }
     /// Native Home control and its real badge layers, for App automation.
     public var homeButton: NSView { bottomBar.home }
+    /// Space dots drawn in the bottom bar, and whether the Favorites grid shows (Blank Window checks).
+    public var spaceSwitcherCount: Int { bottomBar.items.values.filter { !$0.isHidden && $0.superview != nil }.count }
+    public var favoritesShown: Bool { !favorites.isHidden && favoritesHeight > 0 }
+    public var plusButton: NSView { bottomBar.plus }
     public var downloadBadgeEvidence: [String: Any] { bottomBar.home.evidence }
 
     public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }
@@ -707,6 +715,24 @@ extension SidebarView {
         return ["subtitle": subtitle, "titleBaseline": cell.title.baseline, "outline": row?.showsDeveloperOutline ?? false]
     }
 
+    /// The toolbar's Developer Mode reload chevron: shown, frames and menu titles (PB3 row 5).
+    public func developerToolbarState() -> [String: Any] {
+        let menu = toolbar.reloadMenu, reload = toolbar.reload
+        return ["chevronShown": !menu.isHidden && !toolbar.isHidden,
+                "chevronFrame": [menu.frame.minX, menu.frame.minY, menu.frame.width, menu.frame.height],
+                "reloadFrame": [reload.frame.minX, reload.frame.minY, reload.frame.width, reload.frame.height],
+                "sidebarWidth": toolbar.bounds.width,
+                "navigationShown": !toolbar.back.isHidden && !toolbar.forward.isHidden && !toolbar.reload.isHidden,
+                "urlFieldShown": !urlField.isHidden,
+                "menu": toolbar.makeReloadMenu().items.map(\.title)]
+    }
+    /// Runs one item of the Developer Mode reload menu by title, as a click on it would.
+    public func runDeveloperReloadItem(_ title: String) -> Bool {
+        let menu = toolbar.makeReloadMenu()
+        guard let index = menu.items.firstIndex(where: { $0.title == title }) else { return false }
+        menu.performActionForItem(at: index); return true
+    }
+
     public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
 
     public func resetAction(tabID: ItemID) -> NSView? {
@@ -717,6 +743,12 @@ extension SidebarView {
     /// The context menu a row (or empty space, for nil) opens, for checks that run its items.
     /// The Library button's right-click menu ("Show media from:"), as a right click builds it.
     public func libraryButtonContextMenu() -> NSMenu? { bottomBar.home.contextMenuProvider?() }
+    /// The Library button's frame in `view` (the download flight's target); nil while it is hidden.
+    public func libraryButtonFrame(in view: NSView) -> CGRect? {
+        let home = bottomBar.home
+        guard !home.isHiddenOrHasHiddenAncestor, home.window != nil else { return nil }
+        return home.convert(home.bounds, to: view)
+    }
 
     public func contextMenu(nodeID: ItemID?) -> NSMenu? {
         // A Favorite tile's menu, as the grid builds it on right-click (Favorites are not outline rows).

@@ -128,9 +128,11 @@ How to use this plan:
 - Lead ruling 6 (2026-10-26): scriptlets (`##+js(...)`), `:style()` and the
   uBO `:remove*()` actions are **not** in v1 either. v1 is network blocking
   plus plain CSS hiding. Their design is kept in §8.5 (post-v1).
-- `$removeparam` on main-frame and subframe navigations (confirmed by lead
-  ruling 4, 2026-10-26). v1 rewrites subresource GET/HEAD requests only
-  (§7.4).
+- ~~`$removeparam` on main-frame and subframe navigations (lead ruling 4,
+  2026-10-26).~~ Reversed 2026-11-12 (LEAD 09:15, EZ 09:05): navigations
+  are rewritten too (§7.4 rule 4). Arc and uBO strip tracking parameters
+  from links; the crate's default types for a `$removeparam` rule are
+  document, subdocument and XHR.
 - Revised 2026-10-26: Open now has **one** Mojo interface of its own,
   `open_engine.mojom.AdBlockCosmetics` (process-level, §8.2). The
   `cef.mojom` frame pipes connect only after commit, so they cannot carry
@@ -1429,8 +1431,13 @@ Rules, in order:
    Brave also answers with a stub, not a redirect (F-33).
 4. **Rewrite** (`$removeparam`) when `matched` is false, `rewritten_url`
    is non-empty, `truncated` is false, the method is GET or HEAD, the
-   factory is not a navigation factory (lead ruling 4), and the rewritten URL has the
-   same origin as the request URL (ignore it otherwise). Send the client
+   and the rewritten URL has the
+   same origin as the request URL (ignore it otherwise). Since 2026-11-12
+   this includes navigations: a subframe navigation takes the same path,
+   and a main-frame navigation factory is wrapped for this rule only
+   (`StartMainFrameRequest`: checked as `document` with itself as source,
+   never blocked or stubbed, no loader hop unless a rewrite happens, the
+   excluded-site test uses the request's own host). Send the client
    a synthetic internal redirect, as WebRequest does (F-21): a
    `net::RedirectInfo` with status 307 and the new URL, and a head with
    `Location` and `Non-Authoritative-Reason: Open ad blocker`. When the
@@ -4156,7 +4163,7 @@ to confirm:
 | 1 | **Confirmed:** Open runs before extensions. Extensions never see or unblock what Open blocks. Also documented in the user-facing behavior notes | §7.9; §8.4 (new user-facing notes); §12.2 |
 | 2 | **Input cap 16 KiB**, not 8 KiB, cut at a separator. Step 4 measures G-1…G-3 at both 8 and 16 KiB on the real ad-URL corpus. 16 KiB stays unless a gate fails there; if one fails, the cap falls back to 8 KiB and the PR records the numbers | D-17; §5.5; §7.7; §7.8; Step 4 |
 | 3 | **Confirmed:** review 97-1 (regex perf features except `perf-literal`). It is in the engine lead's queue; Step 4 depends on it | §7.6; Step 4 entry gate |
-| 4 | **Confirmed:** no `$removeparam` on navigations in v1 | §0.2; §7.4 rule 4 |
+| 4 | ~~No `$removeparam` on navigations in v1~~ **Reversed 2026-11-12:** navigations are rewritten (main frame and subframe) | §0.2; §7.4 rule 4 |
 | 5 | **Confirmed:** one sync call per web page at document start, gated by C-G1 and C-G2. If C-G2 fails, the fallback is a page without cosmetic hiding for that load, never a blocked renderer | §8.2 (no-block rules); Step 5; R-9 |
 | 6 | **Not in v1:** scriptlets. v1 is network blocking plus plain CSS hiding, both specific and generic, including the class/ID observer in an isolated world. Procedural filters are dropped. `:style()` is also dropped. Scriptlets, `:style()` and procedural filters move to a post-v1 section with their design | §0.1; §0.2; D-14; §5.5; §8 (rewritten); §8.5 (post-v1); §9.2.1; §10; Steps 5 and 7; §13; R-6, R-11 |
 | 7 | **Confirmed:** resources change only with an app update. Without scriptlets, resources serve only `$redirect`. The manifest change stays in Step 7 | D-15; §9.3; Step 7 |

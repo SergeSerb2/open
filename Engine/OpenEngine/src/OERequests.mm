@@ -88,6 +88,12 @@
   return self;
 }
 
+- (void)oe_setProtocolHandlerScheme:(NSString*)scheme
+                        urlTemplate:(NSString*)urlTemplate {
+  _protocolHandlerScheme = [scheme copy];
+  _protocolHandlerURLTemplate = [urlTemplate copy];
+}
+
 - (void)oe_finish:(cef_permission_request_result_t)result {
   if (_media) {
     if (result == CEF_PERMISSION_RESULT_ACCEPT) {

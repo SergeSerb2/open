@@ -1,5 +1,6 @@
 #import "OEClient.h"
 
+#include "include/cef_open_page.h"
 #include "include/cef_parser.h"
 #include "OEContextMenuAllowlist.h"
 
@@ -535,6 +536,15 @@ bool OEClient::OnShowPermissionPrompt(
           mediaCallback:nullptr
          mediaRequested:0
          promptCallback:callback];
+  if (requested_permissions & CEF_PERMISSION_TYPE_REGISTER_PROTOCOL_HANDLER) {
+    // Fork API (cef_open_page.h): the scheme and URL of the pending request.
+    CefRefPtr<CefDictionaryValue> handler =
+        CefGetPendingProtocolHandlerRequest(browser);
+    if (handler) {
+      [request oe_setProtocolHandlerScheme:OEString(handler->GetString("scheme"))
+                               urlTemplate:OEString(handler->GetString("url"))];
+    }
+  }
   return [view.delegate webContent:view decidePermissionRequest:request];
 }
 

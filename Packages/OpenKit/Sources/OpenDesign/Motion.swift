@@ -123,3 +123,47 @@ extension Motion {
     public static let bannerOut: CFTimeInterval = 0.18
     public static let pipBackToTab: CFTimeInterval = 0.25
 }
+
+
+/// The download start animation (Arc `DownloadToLibrary`, `ProjectileIconKeyframeAnimation`): a file
+/// icon flies from the page to the sidebar Library button. Values are capture PB1-b (C-report-s10 (b),
+/// Arc 1.172.2, 56 fps): the icon appears 0.17 s after the click at about 34 pt, rises 31 pt to its apex
+/// after about 0.16 s, then falls with about 2,600 pt/s²; its horizontal speed is constant (about
+/// −360 pt/s over that 330 pt flight); it grows to 47 pt at the apex and shrinks to 10 pt at the end;
+/// the captured flight took about 0.90 s. Points use a top-left origin (y grows downward).
+public struct DownloadFlight: Sendable, Equatable {
+    public static let startDelay: CFTimeInterval = 0.17
+    public static let rise: CGFloat = 31
+    public static let gravity: CGFloat = 2600
+    public static let startSize: CGFloat = 34
+    public static let apexSize: CGFloat = 47
+    public static let endSize: CGFloat = 10
+
+    public let start: CGPoint
+    public let target: CGPoint
+
+    public init(start: CGPoint, target: CGPoint) { self.start = start; self.target = target }
+
+    /// Launch speed upward that reaches `rise` under `gravity` (apex after about 0.154 s).
+    static var launchSpeed: CGFloat { (2 * gravity * rise).squareRoot() }
+    public var apexTime: CFTimeInterval { CFTimeInterval(Self.launchSpeed / Self.gravity) }
+    /// Time to fall from the apex to the target's height. A target above the apex ends at the apex.
+    public var duration: CFTimeInterval {
+        let drop = max(0, target.y - (start.y - Self.rise))
+        return apexTime + CFTimeInterval((2 * drop / Self.gravity).squareRoot())
+    }
+    /// Constant: the horizontal distance over the whole flight.
+    public var horizontalSpeed: CGFloat { duration > 0 ? (target.x - start.x) / CGFloat(duration) : 0 }
+
+    public func position(at time: CFTimeInterval) -> CGPoint {
+        let t = CGFloat(min(max(0, time), duration))
+        return CGPoint(x: start.x + horizontalSpeed * t,
+                       y: start.y - Self.launchSpeed * t + Self.gravity * t * t / 2)
+    }
+    public func size(at time: CFTimeInterval) -> CGFloat {
+        let t = min(max(0, time), duration)
+        if t <= apexTime { return Self.startSize + (Self.apexSize - Self.startSize) * CGFloat(apexTime > 0 ? t / apexTime : 1) }
+        let fall = duration - apexTime
+        return Self.apexSize + (Self.endSize - Self.apexSize) * CGFloat(fall > 0 ? (t - apexTime) / fall : 1)
+    }
+}

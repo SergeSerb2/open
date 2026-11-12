@@ -23,6 +23,8 @@ public struct ProfileDTO: Codable, Sendable {
     public var favorites: [NodeDTO]
     public var settings: ProfileSettingsDTO
     public var dataDirectoryName: String
+    /// Favorites empty-state card dismissed (A3); absent in older snapshots.
+    public var favoritesEmptyStateDismissed: Bool? = nil
 }
 
 public struct ProfileSettingsDTO: Codable, Sendable {
@@ -337,14 +339,17 @@ public enum SnapshotMapper {
         ProfileDTO(id: p.id.rawValue.uuidString, name: p.name, icon: iconDTO(p.icon),
                    favorites: p.favorites.map { .tab(tabDTO($0)) },
                    settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID, sleepMode: p.settings.sleepMode.rawValue, searchSuggestEnabled: p.settings.searchSuggestEnabled, downloadDirectory: p.settings.downloadDirectory, askWhereToSaveEachFile: p.settings.askWhereToSaveEachFile, customSearchEngines: p.settings.customSearchEngines, keepAliveSites: p.settings.keepAliveSites, defaultDocumentApp: p.settings.defaultDocumentApp),
-                   dataDirectoryName: p.dataDirectoryName)
+                   dataDirectoryName: p.dataDirectoryName,
+                   favoritesEmptyStateDismissed: p.favoritesEmptyStateDismissed ? true : nil)
     }
 
     static func profile(from dto: ProfileDTO) -> Profile {
-        Profile(id: ProfileID(uuidString: dto.id), name: dto.name, icon: icon(from: dto.icon),
+        let profile = Profile(id: ProfileID(uuidString: dto.id), name: dto.name, icon: icon(from: dto.icon),
                 favorites: dto.favorites.compactMap { if case .tab(let t) = $0 { return tab(from: t) }; return nil },
                 settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID, sleepMode: dto.settings.sleepMode.flatMap(SleepMode.init(rawValue:)) ?? .balanced, searchSuggestEnabled: dto.settings.searchSuggestEnabled, downloadDirectory: dto.settings.downloadDirectory, askWhereToSaveEachFile: dto.settings.askWhereToSaveEachFile, customSearchEngines: dto.settings.customSearchEngines, keepAliveSites: dto.settings.keepAliveSites, defaultDocumentApp: dto.settings.defaultDocumentApp),
                 dataDirectoryName: dto.dataDirectoryName)
+        profile.favoritesEmptyStateDismissed = dto.favoritesEmptyStateDismissed ?? false
+        return profile
     }
 
     static func spaceDTO(_ s: Space) -> SpaceDTO {

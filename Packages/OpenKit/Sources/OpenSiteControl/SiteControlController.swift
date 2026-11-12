@@ -93,6 +93,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         }
         view.panel.onSecurity = { [weak self] in
             guard let self, let tabID = self.tabID else { return }
+            self.dismiss(reason: .action, animated: false)
             self.actions.showSecurityDetails(tabID: tabID)
         }
         changeObserver = source.observeChanges { [weak self] changed in

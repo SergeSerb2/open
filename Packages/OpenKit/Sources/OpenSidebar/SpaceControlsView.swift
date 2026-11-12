@@ -101,7 +101,7 @@ public final class SpaceControlsView: NSView {
         menu.popUp(positioning:nil,at:CGPoint(x:edit.frame.minX,y:edit.frame.maxY),in:self)
     }
     public func beginRename() {
-        guard !context.isIncognito else { return }
+        guard !context.hidesSpaceChrome else { return }
         context.suppressPreviews(.rename,true)
         let field = RenameField(frame:title.frame.insetBy(dx:-2,dy:-1))
         field.stringValue = context.title(of:space); field.font = title.font
