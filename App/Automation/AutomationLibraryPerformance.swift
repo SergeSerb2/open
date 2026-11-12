@@ -37,8 +37,10 @@ extension AutomationController {
       return ["profile":profile.rawValue,"frames":samples.prefix(profile.callbacks).map(\.json),
         "settlingFrames":samples.dropFirst(profile.callbacks).map(\.json),"counters":panel.performanceCounters,"inputError":probe.inputError,
         "idleWorkIntervals":panel.idleWorkIntervals.dropFirst(idleStart).map { slice in
-          ["startLaunchMilliseconds":(slice["startUptime"]!-launchUptime)*1000,
-           "endLaunchMilliseconds":(slice["endUptime"]!-launchUptime)*1000,"milliseconds":slice["milliseconds"]!]
+          var detail = slice
+          detail["startLaunchMilliseconds"] = (slice["startUptime"]!-launchUptime)*1000
+          detail["endLaunchMilliseconds"] = (slice["endUptime"]!-launchUptime)*1000
+          return detail
         },
         "heartbeatContexts":["0":"App main run loop outside scroll callback","1":"Library scrollToRow and submitNativeFrame","2":"NSWindow.sendEvent wheel delivery","3":"Library submitNativeFrame"]]
     }
