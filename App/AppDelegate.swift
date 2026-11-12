@@ -500,7 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   @discardableResult
-  private func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil) -> BrowserWindowController {
+  func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil, blankWindow: Bool = false) -> BrowserWindowController {
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("browser.windowAndFactory.create")
     defer { pacingRegion?.end() }
@@ -508,11 +508,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.phase("windowCreateBegin")
     let windowModel = privateModel ?? model!
     windowModel.setWindowContentVisible(windowID: state.id, visible: true)
-    let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session)
+    let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session, blankWindow: blankWindow)
     hostFactories[state.id] = factory
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
-      snapshotStore: session == nil && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title,
+      snapshotStore: session == nil && !blankWindow && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title,
+      windowOnlyTitle: blankWindow ? BlankWindow.sidebarTitle : nil,
       siteControlSource: factory.siteControlSource, siteControlActions: factory.siteControlSource)
     LaunchTiming.shared.phase("windowControllerCreated")
     if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay {
@@ -1180,7 +1181,8 @@ extension AppDelegate: CommandDispatcher {
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }
     switch id {
     case "new-incognito-window": makeIncognitoWindow()
-    case "new-window", "blank-window": makeUserWindow()
+    case "new-window": makeUserWindow()
+    case "blank-window": makeBlankWindow()
     case "new-tab":
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
