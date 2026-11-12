@@ -820,6 +820,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                     try await withAccessibleHost(LibraryPreview(viewModel: library), size: CGSize(width: 960, height: 640)) { host in
                         var seen = Set<ObjectIdentifier>()
                         @MainActor func visit(_ node: NSObject) {
+                            if let view = node as? NSView, view.isHiddenOrHasHiddenAncestor { return }
                             guard seen.insert(ObjectIdentifier(node)).inserted, seen.count < 4096 else { return }
                             for name in ["accessibilityLabel", "accessibilityValue"] {
                                 let selector = NSSelectorFromString(name)
@@ -835,7 +836,8 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 }
                 try await render(LibraryPreview(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts.png"))
                 let texts = try await renderedTexts()
-                try require(texts.contains(where: { $0.hasPrefix("Calm docs") }) && texts.contains("example.org"), "Boost rows did not render: \(texts)")
+                let expectedRows: Set<String> = ["example.com. Calm docs · on", "example.org. Reading · off"]
+                try require(expectedRows.isSubset(of:texts), "Boost rows did not render: \(texts)")
                 env.defaults.set(false, forKey: BoostPreferences.globallyEnabledKey)
                 try await withAccessibleHost(LibraryPreview(viewModel: library), size: CGSize(width: 684, height: 600)) { host in
                     try require(env.defaults.bool(forKey: BoostPreferences.globallyEnabledKey) == false, "negative control: Boosts were already on")
@@ -845,7 +847,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 env.libraryActions.boostRows = [:]
                 try await render(LibraryPreview(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts-empty.png"))
                 let empty = try await renderedTexts()
-                try require(empty.contains("No Boosts yet") && !empty.contains(where: { $0.hasPrefix("Calm docs") }), "Boost empty state did not replace rows")
+                try require(empty.contains("No Boosts yet") && empty.isDisjoint(with:expectedRows), "Boost empty state did not replace rows")
             case "empty-states":
                 try await env.prepareLibrary(); env.downloadFeed.downloads = []
                 for store in env.archives.values { try await store.deleteAll() }
