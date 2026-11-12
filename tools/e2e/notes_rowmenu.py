@@ -104,7 +104,8 @@ def run(factory, results, tmp, h):
         mixed = app.call('sidebar-menu-items', node=b)
         app.call('sidebar-key', key='escape')
         app.call('sidebar-click', node=b); app.call('sidebar-click', node=c, modifiers=['cmd'])
-        app.call('sidebar-menu', node=b, item='Remove Notes from Sidebar')
+        # Without the item (old code) the call is refused: the row then FAILs instead of stopping the suite.
+        h._try(lambda: app.call('sidebar-menu', node=b, item='Remove Notes from Sidebar'))
         removed = h.wait_until(lambda: all(t['id'] not in (b, c) for t in app.call('tabs')) or None, timeout=5, step=.05)
         row('selection_of_notes_menu', 'Remove Notes from Sidebar' in notes_only['items'] and 'Archive Tabs' not in notes_only['items']
             and {'Copy Links', 'Share 2 Items…'} <= set(notes_only['disabled'])
