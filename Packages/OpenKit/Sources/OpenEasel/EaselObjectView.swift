@@ -145,9 +145,10 @@ final class EaselObjectView: NSView {
     }
 }
 
-/// Text faces and sizes per family and paragraph style (findings §3.4 table). Fonts: E1 uses
-/// system faces (clean = SF, mono = SF Mono, fancy = New York, hip = SF Rounded); the OFL
-/// upstream faces wait for the lead's font decision (F1 Q5). GUESS — capture pending.
+/// Text faces and sizes per family and paragraph style (findings §3.4 table). Fonts: system
+/// faces that match the four captured looks (C-report-s6 §1: default sans, serif, wide display
+/// sans, monospace) — clean = SF, fancy = New York, hip = SF Expanded, mono = SF Mono. The OFL
+/// upstream faces wait for the lead's font decision (F1 Q5).
 enum EaselTextMetrics {
     static let inset: CGFloat = 5
     static func size(_ t: EaselText) -> (CGFloat, NSFont.Weight, CGFloat) {
@@ -169,10 +170,10 @@ enum EaselTextMetrics {
         switch t.fontFamily {
         case .mono: base = .monospacedSystemFont(ofSize: pt * scale, weight: weight)
         case .clean: base = .systemFont(ofSize: pt * scale, weight: weight)
-        case .fancy, .hip:
+        case .hip: base = .systemFont(ofSize: pt * scale, weight: weight, width: .expanded)
+        case .fancy:
             let sys = NSFont.systemFont(ofSize: pt * scale, weight: weight)
-            let design: NSFontDescriptor.SystemDesign = t.fontFamily == .fancy ? .serif : .rounded
-            base = sys.fontDescriptor.withDesign(design).flatMap { NSFont(descriptor: $0, size: pt * scale) } ?? sys
+            base = sys.fontDescriptor.withDesign(.serif).flatMap { NSFont(descriptor: $0, size: pt * scale) } ?? sys
         }
         return base
     }
