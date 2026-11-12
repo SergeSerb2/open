@@ -65,7 +65,7 @@ def run(factory, results, tmp, api):
         return path
 
     # Per-tool colours are a user preference (Arc's rectangleColor & co.): start from the defaults.
-    domain = 'io.github.sergeserb2.open'
+    domain = __import__('prefs_domain').domain()
     color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')] \
         + ['open.easel.liveWebCardEduSeen', 'open.easel.useAlignmentGuides', 'libraryShowsEasels']
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
