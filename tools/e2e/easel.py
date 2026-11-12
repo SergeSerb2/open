@@ -6,6 +6,8 @@ window and presses the real toolbar buttons. No global input, no real user data.
 """
 import json
 import os
+import plistlib
+import subprocess
 import time
 from pathlib import Path
 
@@ -36,6 +38,13 @@ def run(factory, results, tmp, api):
         app.call('snapshot', path=path)
         return path
 
+    # Per-tool colours are a user preference (Arc's rectangleColor & co.): start from the defaults.
+    domain = 'io.github.sergeserb2.open'
+    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')]
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    saved_prefs = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    for key in color_keys:
+        subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
     try:
         app = factory(urls=('about:blank',), fresh=True)
         blank = app.call('tabs')[0]['id']
@@ -119,7 +128,7 @@ def run(factory, results, tmp, api):
                and canvas(s)['undoName'] == 'Add Text', state=canvas(s))
         # An empty text box leaves nothing behind and no undo step.
         undo_before = canvas(s)['undoName']
-        easel(action='tool', tool='text'); easel(action='click', at=[520, 700])
+        easel(action='tool', tool='text'); easel(action='click', at=[700, 640])
         s = easel(action='click', at=[960, 150])
         record('E09_empty_text_discarded', len([x for x in objects(s) if x['kind'] == 'text']) == 1
                and canvas(s)['undoName'] == undo_before, state=canvas(s))
@@ -207,3 +216,8 @@ def run(factory, results, tmp, api):
     finally:
         if app:
             app.quit()
+        for key in color_keys:
+            if saved_prefs.get(key) is None:
+                subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+            else:
+                subprocess.run(['defaults', 'write', domain, key, '-string', saved_prefs[key]], capture_output=True)

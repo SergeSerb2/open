@@ -262,6 +262,9 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
 
     // MARK: Edit menu (responder chain)
 
+    /// The window's own undo: would use the sidebar's undo manager; the canvas has its own stack.
+    @objc func undo(_ sender: Any?) { canvas.canvasUndoManager.undo() }
+    @objc func redo(_ sender: Any?) { canvas.canvasUndoManager.redo() }
     @objc func copy(_ sender: Any?) { canvas.copySelection() }
     @objc func cut(_ sender: Any?) { canvas.cutSelection() }
     @objc func paste(_ sender: Any?) { canvas.paste() }
@@ -276,6 +279,12 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
+        case #selector(undo(_:)):
+            item.title = canvas.canvasUndoManager.undoMenuItemTitle
+            return canvas.canvasUndoManager.canUndo
+        case #selector(redo(_:)):
+            item.title = canvas.canvasUndoManager.redoMenuItemTitle
+            return canvas.canvasUndoManager.canRedo
         case #selector(copy(_:)), #selector(cut(_:)), #selector(delete(_:)), #selector(duplicate(_:)),
              #selector(bringToFront(_:)), #selector(sendToBack(_:)): return !canvas.selection.isEmpty
         case #selector(paste(_:)):
