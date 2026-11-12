@@ -22,4 +22,8 @@ Besides the websites you open, Open makes these requests:
 
 Open keeps its data in its own folder under `~/Library/Application Support`. Deleting that folder removes this data from the Mac.
 
+## What websites can read
+
+With Settings ▸ Advanced ▸ "Allow websites to get your theme data" on (the default), pages can read the colours of the current Space's theme as CSS variables. Turn the setting off to stop this.
+
 Questions: <https://github.com/SergeSerb2/open/issues>
