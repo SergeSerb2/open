@@ -9408,6 +9408,7 @@ def commandbar_checks(factory, results, tmp, config):
         results['edit_pinned_url'] = {'ok': bool(editing) and editing['mode'] == 'editCurrentURL' and editing['text'] == origin + '/pinned'
             and editing['range'] == [0, len(origin + '/pinned')] and bool(changed) and bool(moved) and not state().get('pinnedEdit'),
             'editing': {k: (editing or {}).get(k) for k in ('mode', 'text', 'range', 'pinnedEdit')}, 'pinnedURL': (changed or {}).get('pinnedURL')}
+        commandbar_pb1_checks(app, results, bar, press, type_query, state)
         time.sleep(.25)
         app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
         app.call('settings-toggle', name='external'); app.call('save'); app.quit()
@@ -9423,6 +9424,44 @@ def commandbar_checks(factory, results, tmp, config):
 
     import settings_live
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
+
+
+def commandbar_pb1_checks(app, results, bar, press, type_query, state):
+    """PB1 command-bar rows: the privacy footer link, Arc's new-document actions, Undo <name>."""
+    def top_rows(): return [(r.get('action'), r.get('title')) for r in state().get('rows', [])]
+    tab = app.call('tabs')[0]['id']
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    # Privacy footer: (i) shows the footer with its link; the link opens docs/privacy.md in a new tab.
+    bar('t', 'window')
+    app.call('commandbar-press', control='info')
+    before = {t['id'] for t in app.call('tabs')}
+    link = app.call('commandbar-press', control='privacyLink')
+    privacy = 'https://github.com/SergeSerb2/open/blob/main/docs/privacy.md'
+    opened = wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in before), None), timeout=8, step=.1)
+    results['commandbar_privacy_link'] = {'ok': link['pressed'] and bool(opened) and (opened or {}).get('url', '').startswith(privacy.split('/blob')[0])
+        and not app.call('commandbar-state').get('presented'), 'tab': opened}
+    if opened: app.call('select', tab=opened['id']); app.call('menu-perform', id='archive-tab')
+    # "New Google Doc": Arc's new-document table; a new foreground tab at doc.new.
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    bar('t', 'window'); type_query('new google doc')
+    rows = top_rows()
+    before = {t['id'] for t in app.call('tabs')}
+    press('return')
+    doc = wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in before), None), timeout=8, step=.1)
+    hosts = ('doc.new', 'docs.google.com', 'accounts.google.com')
+    results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
+        and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
+        'rows': rows[:4], 'tab': doc}
+    # "Undo <name>": close a tab, then the bar offers the named Undo and running it restores the tab.
+    count = len(app.call('tabs'))
+    app.call('menu-perform', id='archive-tab')
+    wait_until(lambda: len(app.call('tabs')) == count - 1, timeout=5, step=.05)
+    bar('t', 'window'); type_query('undo')
+    undo_rows = [r for r in state().get('rows', []) if r.get('action') == 'undo-by-name']
+    press('return')
+    restored = wait_until(lambda: len(app.call('tabs')) == count, timeout=5, step=.05)
+    results['commandbar_undo_by_name'] = {'ok': len(undo_rows) == 1 and undo_rows[0]['title'].startswith('Undo ') and len(undo_rows[0]['title']) > 5
+        and bool(restored), 'row': undo_rows[0] if undo_rows else None, 'tabs': len(app.call('tabs')), 'expected': count}
 
 
 def commandbar_footer_checks(app, results, tmp, bar, press, tab):

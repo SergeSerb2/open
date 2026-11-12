@@ -324,6 +324,7 @@ public struct ActionsProvider: SuggestProvider {
             guard q > 0 else { continue }
             rows.append(row(entry.action, quality: q, input: input, space: nil))
         }
+        rows += undoRows(input, minimumBytes: 2)
         // "Focus on <Space>" for the other Spaces of this Profile.
         let focus = BrowserAction(id: ActionRegistry.focusSpaceActionID, title: "", symbol: "rectangle.on.rectangle")
         for space in input.tabs.spaces
@@ -336,6 +337,21 @@ public struct ActionsProvider: SuggestProvider {
         }
         rows.sort(by: Ranking.order)
         return Array(rows.prefix(maxRows))
+    }
+
+    /// "Undo <name>" / "Redo <name>" for the App's next Undo/Redo (Arc "Action to undo/redo an action by
+    /// name"). Matched on the full title and on "Undo"/"Redo" alone.
+    private func undoRows(_ input: SuggestInput, minimumBytes: Int) -> [Suggestion] {
+        var rows: [Suggestion] = []
+        for (verb, id, name, symbol) in [("Undo", NewDocumentActions.undoByNameID, input.context.undoActionName, "arrow.uturn.backward"),
+                                         ("Redo", NewDocumentActions.redoByNameID, input.context.redoActionName, "arrow.uturn.forward")] {
+            guard let name, !name.isEmpty else { continue }
+            let action = BrowserAction(id: id, title: "\(verb) \(name)", aliases: [verb], symbol: symbol)
+            let q = ActionMatcher.quality(input.query, ActionMatcher.entry(for: action), minimumBytes: minimumBytes)
+            guard q > 0 else { continue }
+            rows.append(row(action, quality: q, input: input, space: nil))
+        }
+        return rows
     }
 
     /// The action Arc's empty Cmd+T lists after the open tabs (S2 18/0008, 18/0014, 18/0040–0046 AX:
@@ -370,6 +386,7 @@ public struct ActionsProvider: SuggestProvider {
             guard q > 0 else { continue }
             rows.append(row(entry.action, quality: q, input: input, space: nil))
         }
+        rows += undoRows(input, minimumBytes: 1)
         let focus = BrowserAction(id: ActionRegistry.focusSpaceActionID, title: "", symbol: "rectangle.on.rectangle")
         for space in input.tabs.spaces
         where (input.profileOrdinal == nil || space.profileOrdinal == input.profileOrdinal) && space.id != input.context.spaceID {

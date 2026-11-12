@@ -56,6 +56,9 @@ public struct CommandBarRequest: Sendable {
     public var currentTabTitle: String?
     public var allowsRemoteSuggestions: Bool
     public var searchEngineID: String?
+    /// The App's next Undo/Redo names, for "Undo <name>" / "Redo <name>" (Arc "Action to undo an action by name").
+    public var undoActionName: String? = nil
+    public var redoActionName: String? = nil
 
     public init(mode: CommandBarMode, profileID: ProfileID? = nil, spaceID: SpaceID? = nil,
                 currentTabID: ItemID? = nil, currentTabURL: URL? = nil, currentTabTitle: String? = nil,

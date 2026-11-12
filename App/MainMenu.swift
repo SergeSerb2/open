@@ -1,6 +1,7 @@
 import AppKit
 import OpenCommands
 import OpenSettings
+import OpenSuggest
 
 /// The registry owns titles, ordering, shortcuts and menu actions.
 @MainActor
@@ -164,6 +165,8 @@ enum AppCommand {
     default: helpURL
     }
   }
+  /// The command-bar privacy footer's page (LEAD 07:15). Change it when the public site exists.
+  static let privacyURL = URL(string: "https://github.com/SergeSerb2/open/blob/main/docs/privacy.md")!
   /// Settings ▸ Advanced "Show full URL when Toolbar is enabled" (CC-37).
   static let showFullURLKey = "open.advanced.showFullURLWithToolbar"
   static let featureIDs: Set<String> = ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space"]
@@ -202,6 +205,9 @@ extension EngineWebContentHostFactory {
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
     if SettingsSuggestionsProvider.url(for: id) != nil { return true }
+    if NewDocumentActions.url(for: id) != nil { return true }
+    if id == NewDocumentActions.undoByNameID { return app.undoManager.canUndo }
+    if id == NewDocumentActions.redoByNameID { return app.undoManager.canRedo }
     if id == "check-for-updates" { return true }
     if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
