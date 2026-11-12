@@ -615,3 +615,14 @@ Local historical receipts: `.re/handoff/sections/08-engine-basics-done.md`,
 `06-extensions-done.md`, `s8/E-engine.md`, and the build-check log named
 above. Current tree facts use only narrow file reads and directory/size
 checks in s8 and its main distribution view. Section 3's root was not read.
+
+## Built and adopted (2026-11-11)
+
+The official engine was built remotely (see `docs/engine-fork.md`, "Remote official build") and
+packaged as `cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal`.
+Record with hashes and inputs: `Engine/fork/official-distrib.json` (no binaries in git). Framework
+SHA-256 `6b6c8d5ce54e7674c3e66adfc08bb3b6b845fb9d8b2c73553557a99bdb9618a7`, UUID
+`4C4C4444-5555-3144-A1B1-0C672BC54A8C`. The dSYM and receipts are archived on the M5 in
+`~/Developer/open-engine/symbols/<distribution name>/`. The App build fetches it through the engine
+root's `distrib.txt`; adoption also applies the download-handler lifetime companion change in
+`Engine/OpenEngine/src/OEClient.{h,mm}`.

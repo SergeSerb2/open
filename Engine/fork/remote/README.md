@@ -31,6 +31,8 @@ worker sandboxes: ssh -L tunnel to the scheduler (key restricted to those two po
 | `build-nativelink.sh` | Builds NativeLink v1.8.3 with `MAX_BATCH_TOTAL_SIZE` = 4 MiB (upstream: 64 KiB, which makes Siso upload small files two per round trip). |
 | `worker-up.sh` | Starts the worker tunnel loop and the worker. |
 | `rr-proxy.py` | Round-robin TCP proxy on the Mac. |
+| `engine-remote-build` | Mac launcher: Siso with the remote backend, 4 local jobs, nice 10, xcrun-env cleared. |
+| `seed-cas-scheduler.sh`, `seed-move.py` | Bulk CAS seeding on the scheduler (see below). |
 
 ## Correctness rules
 
@@ -62,6 +64,27 @@ output directory (local Rust build-script links fail otherwise).
   parallel SSH streams to `/opt/e3/data/cas/d2/<sha256>-<size>-0`, then start NativeLink);
   one gRPC stream to the Mac moves only ~2 MB/s.
 - `-strict_remote` keeps Siso from compiling locally when a remote action fails.
+
+## Seed the CAS (required before the first full build)
+
+Siso's own first upload of ~5 GB of sources through the tunnels times out (DeadlineExceeded,
+keepalive failures; 2026-11-11 attempt 3 stopped after 12 min with 0.6 GB uploaded). Seed in bulk:
+
+1. On the Mac, list compile inputs: source files under `src` (no `.git`, no `out`), the libc++ and
+   host-clang trees, the output dir's generated sources, and the SDK.
+2. Stream them as `tar | zstd -1 | ssh scheduler 'zstd -d | tar -x -C /opt/e3/seed/...'`, 6–8 streams
+   (2026-11-11: 329k files + SDK in 293 s).
+3. On the scheduler: `seed-cas-scheduler.sh` (hash, dedupe, `seed-move.py` places
+   `d2/<sha256>-<size>-0`), then restart NativeLink so it indexes the store.
+4. Also seed the PGO profile (315 MB) the same way.
+
+Then resume the build; Siso finds ~75 % of inputs present and uploads only the rest.
+
+## Full build record (2026-11-11)
+
+`engine-remote-build out/Release_Official_arm64 cefsimple cefclient`: after seeding, 46 min 46 s;
+48,302 remote compiles, 3,504 local steps, 0 fallbacks; up to 13 large workers. M5: min free memory
+52 %, 5-min load briefly up to 15. boat.dev: 29.0 VM-hours. Report: `E-report-3.md` (handoff).
 
 ## Not in this directory
 

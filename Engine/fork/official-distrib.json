@@ -1,0 +1,25 @@
+{
+ "status": "official release engine for the App (adopted on engine/lane-2026-11-11)",
+ "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
+ "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
+ "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",
+ "framework_sha256": "6b6c8d5ce54e7674c3e66adfc08bb3b6b845fb9d8b2c73553557a99bdb9618a7",
+ "framework_uuid": "4C4C4444-5555-3144-A1B1-0C672BC54A8C",
+ "chromium_version": "156.0.8078.48",
+ "cef_version": "156.0.14+g4fa4ab5",
+ "chromium_head": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
+ "cef_head": "4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f",
+ "xcode": "Xcode 27.2 Build version 27B52",
+ "sdk": "MacOSX27.2.sdk",
+ "clang": "llvmorg-24-init-7747-g62397f8b-53",
+ "args_gn_sha256": "f78a723c71b6171f5bac4280685dba58d345d3947d5d00b0821df14ad458a62a",
+ "args_delta_vs_release_args_gn": "use_remoteexec = true",
+ "pgo_profile": "chrome-mac-arm-8078-1791925243-b77c87a12380c6212a5d36737d1c76576eaaa85d-8bf8e95f3aaaafc23171beddc0ee3f397abd1e12.profdata",
+ "pgo_profile_sha256": "15fbc265a780b68bd943e5a2f2c89b58a006c45e28435257e4d927f1c7ee0c20",
+ "open_patches": "all 45 active (Engine/fork/patches/*/series), incl. chromium/0011-open-thinlto-link-jobs.patch; 117 CEF patches; 141 overlay files (engine-status S-2..S-4 PASS)",
+ "built_at": "2026-11-11 23:05 America/Vancouver (remote compile, boat.dev + NativeLink; local link on the M5)",
+ "symbols": "dSYM + receipts archived on the M5 in ~/Developer/open-engine/symbols/<distribution_name>/ (not in git)",
+ "known_limits": [
+  "CEF framework links with --lto-O0 (thinlto_optimize_default); no link-time optimization"
+ ]
+}
