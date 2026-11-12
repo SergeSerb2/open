@@ -84,6 +84,7 @@ public final class PortraitPopoverPanel {
     public let chrome: PortraitPopoverChrome
     let panel: Panel
     private var monitor: Any?
+    private var keyMonitor: Any?
     private weak var parent: NSWindow?
     public var onClose: (() -> Void)?
 
@@ -117,6 +118,11 @@ public final class PortraitPopoverPanel {
         window.addChildWindow(panel, ordered: .above)
         parent = window
         panel.makeKeyAndOrderFront(nil)
+        // Esc closes it from any of the App's windows, as a transient popover does.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.keyCode == 53, self.panel.isVisible else { return event }
+            self.close(); return nil
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self else { return event }
             if event.window !== self.panel { self.close() }
@@ -126,6 +132,7 @@ public final class PortraitPopoverPanel {
 
     public func close() {
         if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil
         guard panel.isVisible || panel.parent != nil else { return }
         parent?.removeChildWindow(panel)
         panel.orderOut(nil)
