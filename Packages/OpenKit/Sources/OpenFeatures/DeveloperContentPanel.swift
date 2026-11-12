@@ -30,8 +30,10 @@ public enum DeveloperPanelMetrics {
 public final class DeveloperContentPanelView: NSView {
     public var onAction: ((DeveloperPanelAction, NSView) -> Void)?
     public var urlString = "" { didSet { if urlString != oldValue { urlLabel.stringValue = urlString; needsLayout = true } } }
-    /// The bar's fill; the ink follows its brightness.
-    public var fill: NSColor = .white { didSet { if fill != oldValue { applyColors() } } }
+    /// The bar's fill in light and dark appearance (the Space's palette); the ink follows its brightness.
+    public var fills: (light: NSColor, dark: NSColor) = (.white, NSColor(white: 0.16, alpha: 1)) { didSet { applyColors() } }
+    private var fill: NSColor { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? fills.dark : fills.light }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
     /// The network button shows its pressed state while the list is open.
     public var networkShown = false { didSet { if networkShown != oldValue { buttons[.network]?.state = networkShown ? .on : .off; applyColors() } } }
     private let urlLabel = NSTextField(labelWithString: "")
@@ -206,7 +208,6 @@ public final class NetworkListView: NSView, NSTableViewDataSource, NSTableViewDe
 
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         divider.boxType = .separator; addSubview(divider)
         title.font = .systemFont(ofSize: 12, weight: .semibold); addSubview(title)
         summary.font = .systemFont(ofSize: 11); summary.textColor = .secondaryLabelColor; addSubview(summary)
@@ -227,6 +228,9 @@ public final class NetworkListView: NSView, NSTableViewDataSource, NSTableViewDe
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+    public override var wantsUpdateLayer: Bool { true }
+    /// Dynamic colours resolve for the current appearance (a CGColor taken once stays light).
+    public override func updateLayer() { layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor }
     @objc private func clearList() { log?.clear() }
     @objc private func close() { onClose?() }
     private func reload() {

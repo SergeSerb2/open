@@ -43,7 +43,7 @@ public final class PaneSlotView: NSView {
         let developer = developer && !split
         if developer {
             if developerPanel == nil { let panel = DeveloperContentPanelView(); developerPanel = panel; clip.addSubview(panel) }
-            developerPanel?.fill = style.lightPalette?.background.nsColor ?? .white
+            developerPanel?.fills = (style.lightPalette?.background.nsColor ?? .white, style.darkPalette?.background.nsColor ?? NSColor(white: 0.16, alpha: 1))
             developerPanel?.urlString = tab.url.absoluteString
             developerPanel?.onAction = developerAction
             developerPanel?.networkShown = networkLog != nil
