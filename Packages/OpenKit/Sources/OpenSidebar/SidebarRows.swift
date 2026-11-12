@@ -695,6 +695,10 @@ final class FolderCellView: SidebarCellView {
     let title = TextLabel()
     private var unread: SidebarUnreadDot?
     private var unload: FolderUnloadButton?
+    /// Live Folder failure state (live-data §2.2 header states): warning glyph, Arc's text as
+    /// tooltip and accessibility label; a click opens sign-in or the pulls page. Placement and
+    /// form: GUESS — capture pending (F2 capture item 4; Arc shows the text in a folder header).
+    private(set) var liveState: LiveFolderStateButton?
     weak var folder: Folder? { didSet { bind() } }
 
     required init(frame: NSRect) {
@@ -756,7 +760,22 @@ final class FolderCellView: SidebarCellView {
             button.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - m.accessorySize, y: m.accessoryY, width: m.accessorySize, height: m.accessorySize)
             button.isHidden = !actionShown
         }
-        let right = actionShown ? bounds.width - m.accessoryTrailingInset - m.accessorySize : shown ? bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2 - 6 : bounds.width - m.titleTrailingInset
+        let message = tracked({ [weak self] in self?.folder?.live?.stateMessage }) { [weak self] in self?.needsLayout = true }
+        if message != nil || liveState != nil {
+            let button = liveState ?? LiveFolderStateButton()
+            if liveState == nil { addSubview(button); liveState = button }
+            button.isHidden = message == nil || actionShown
+            button.toolTip = message; button.setAccessibilityLabel(message)
+            button.ink = SidebarRole.rowAccessory.resolved(contentAppearance).nsColor
+            button.onPress = { [weak self] in
+                guard let self, let folder = self.folder else { return }
+                self.context?.send(.openLiveFolderState(folder.id))
+            }
+            let x = bounds.width - m.accessoryTrailingInset - m.accessorySize - (actionShown ? m.accessorySize + 4 : 0)
+            button.frame = CGRect(x: x, y: m.accessoryY, width: m.accessorySize, height: m.accessorySize)
+        }
+        let stateShown = message != nil && !actionShown
+        let right = actionShown ? bounds.width - m.accessoryTrailingInset - m.accessorySize : stateShown ? bounds.width - m.accessoryTrailingInset - m.accessorySize - 4 : shown ? bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2 - 6 : bounds.width - m.titleTrailingInset
         title.frame = CGRect(x: m.titleX + indent, y: 0, width: max(0, right - m.titleX - indent), height: m.rowHeight)
     }
 
@@ -767,6 +786,27 @@ final class FolderCellView: SidebarCellView {
             self?.context?.send(.rename(nodeID: id, title: value))
         }
     }
+}
+
+/// The Live Folder state glyph (SF Symbol `exclamationmark.triangle`, named in Arc's own
+/// header-state code: live-data §2.2).
+@MainActor
+final class LiveFolderStateButton: NSView {
+    var onPress: (@MainActor () -> Void)?
+    var ink: NSColor = .secondaryLabelColor { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityPerformPress() -> Bool { onPress?(); return true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let symbol = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium)) else { return }
+        let size = symbol.size
+        symbol.drawTinted(in: CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height), color: ink)
+    }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress?() } }
 }
 
 /// Q18 visual accessory. A non-AX element, matching the captured folder row.

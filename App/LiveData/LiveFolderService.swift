@@ -1,4 +1,5 @@
 import AppKit
+import OpenFeatures
 import OpenLiveData
 import OpenModel
 
@@ -12,8 +13,13 @@ final class LiveFolderService {
   static let minimumInterval: TimeInterval = 10
   static let introSeenKey = "open.liveFolders.introSeen"
   private unowned let app: AppDelegate
-  /// github.com, or a fixture origin set by automation.
-  var origin = GitHubQuery.defaultOrigin
+  /// github.com, or a fixture origin set by automation. Static so the per-navigation check in
+  /// `EngineWebContentHost` never creates the service.
+  static var origin = GitHubQuery.defaultOrigin
+  var origin: URL { get { Self.origin } set { Self.origin = newValue } }
+  /// Last origin URL per tab, to see "compare page → new PR page" (PR created).
+  private var lastOriginURL: [ItemID: URL] = [:]
+  private(set) var autoCreated = 0
   private var lastRefresh: [ItemID: Date] = [:]
   private var running: Set<ItemID> = []
   private(set) var refreshCount = 0
@@ -29,6 +35,7 @@ final class LiveFolderService {
       return true
     }
     guard let folder = model.createLiveFolder(in: spaceID, config: LiveFolderConfig()) else { return false }
+    UserDefaults.standard.set(true, forKey: BrowserWindowController.liveFolderAutoCreateKey)
     // The intro card shows on the first creation only (Arc `hasSeenGithubLiveFolderEducation`).
     if !UserDefaults.standard.bool(forKey: Self.introSeenKey), let controller = app.frontWindowController,
        controller.context.focusedSpace?.id == spaceID {
@@ -37,6 +44,61 @@ final class LiveFolderService {
     }
     Task { await refresh(folderID: folder.id, manual: true) }
     return true
+  }
+
+  // MARK: Triggers (live-data §2.5): window foreground, Space focus, PR created / reviewed.
+
+  /// Cheap static test used on every address change: only URLs on the GitHub origin go further.
+  static func isOnOrigin(_ url: URL) -> Bool {
+    url.host?.lowercased() == origin.host?.lowercased() && url.port == origin.port && url.scheme?.hasPrefix("http") == true
+  }
+
+  /// The app became active: refresh Live Folders of the visible Spaces (throttled, 10 s).
+  func windowForegrounded() {
+    for controller in app.windowControllers { if let space = controller.context.focusedSpace { spaceFocused(space.id) } }
+  }
+
+  func spaceFocused(_ spaceID: SpaceID) {
+    guard let folder = app.model.liveFolder(in: spaceID) else { return }
+    Task { await refresh(folderID: folder.id, manual: false) }
+  }
+
+  /// A tab's address changed on the GitHub origin. A compare page followed by a PR page means
+  /// "PR created"; a `#pullrequestreview-` fragment means "review submitted" (`S:114542`).
+  /// Either one moves the tab into the Space's Live Folder, creating the folder first when
+  /// automatic creation is on (Arc: `reparentPullRequestToLiveFolder`).
+  func addressChanged(tabID: ItemID, url: URL, space: Space?) {
+    let previous = lastOriginURL[tabID]
+    lastOriginURL[tabID] = url
+    guard let pr = Self.pullRequestURL(url) else { return }
+    let created = previous.map { $0.path.contains("/compare/") || $0.path.hasSuffix("/compare") } ?? false
+    let reviewed = url.fragment?.hasPrefix("pullrequestreview-") == true
+    guard created || reviewed, let model = app.model, let tab = model.tab(id: tabID), let space else { return }
+    var folder = model.liveFolder(in: space.id)
+    if folder == nil {
+      let on = UserDefaults.standard.object(forKey: BrowserWindowController.liveFolderAutoCreateKey) as? Bool ?? true
+      guard on, toggle(spaceID: space.id) else { return }
+      folder = model.liveFolder(in: space.id); autoCreated += 1
+    }
+    guard let folder, model.parent(of: tabID) != .folder(folder.id) else { return }
+    if folder.children.contains(where: { node in if case .tab(let t) = node { return t.liveItemURL == pr }; return false }) { return }
+    tab.liveItemURL = pr
+    model.moveNode(id: tabID, to: .folder(folder.id), at: 0)
+    Task { await refresh(folderID: folder.id, manual: true) }
+  }
+
+  /// `origin/owner/repo/pull/N` without query, fragment or sub-page; nil for other URLs.
+  static func pullRequestURL(_ url: URL) -> URL? {
+    guard isOnOrigin(url) else { return nil }
+    let parts = url.path.split(separator: "/")
+    guard parts.count >= 4, parts[2] == "pull", Int(parts[3]) != nil else { return nil }
+    return origin.appendingPathComponent(parts[0...3].joined(separator: "/"))
+  }
+
+  /// Folder header action: sign in when signed out, otherwise the pulls page.
+  func stateURL(folderID: ItemID) -> URL? {
+    guard let live = app.model.node(id: folderID)?.folder?.live, live.stateMessage != nil else { return nil }
+    return live.lastFetch?.outcome == .signedOut ? origin.appendingPathComponent("login") : origin.appendingPathComponent("pulls")
   }
 
   private func space(of folderID: ItemID) -> Space? {

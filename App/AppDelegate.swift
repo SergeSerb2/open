@@ -636,6 +636,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     return body()
   }
 
+  /// Live Folder refresh when the app comes to the front (live-data §2.5). Nothing runs (no
+  /// service is made) while no Live Folder exists.
+  func applicationDidBecomeActive(_ notification: Notification) {
+    guard let model, !model.liveFolders.isEmpty else { return }
+    liveFolders.windowForegrounded()
+  }
+
   func scheduleSave() {
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)

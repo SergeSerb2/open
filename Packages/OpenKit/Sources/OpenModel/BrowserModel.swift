@@ -945,6 +945,12 @@ public final class BrowserModel {
     /// back and drops the archive rows.
     public func closeTab(id: ItemID) {
         guard let parent = parentByID[id] else { return }
+        // A Live Folder row the user deletes stays hidden on later refreshes (live-data §2.7,
+        // Arc `liveFolderChildItemManuallyDeleted`).
+        if case .folder(let folderID) = parent, let folder = index[folderID]?.folder, folder.live != nil,
+           let url = tab(id: id)?.liveItemURL {
+            folder.live?.hiddenItems.insert(url.absoluteString)
+        }
         if case .splitPane(let splitID) = parent {
             guard let revert = closePane(id, of: splitID) else { return }
             registerUndo(revert, reapply: { $0.closePane(id, of: splitID) ?? Self.noRevert })
@@ -1766,6 +1772,20 @@ public final class BrowserModel {
             if let spaceID { _ = relocate(node.id, to: .spaceToday(spaceID), at: 0) }
         }
         _ = detach(id)
+    }
+
+    /// Every Live Folder in the model (any Space).
+    public var liveFolders: [Folder] { spaces.compactMap { liveFolder(in: $0.id) } }
+
+    /// Hides or shows a repository's rows (folder menu ▸ Repositories). The next refresh applies it.
+    public func setLiveRepository(folderID: ItemID, repository: String, hidden: Bool) {
+        guard let folder = index[folderID]?.folder, folder.live != nil else { return }
+        if hidden { folder.live?.hiddenRepositories.insert(repository) } else { folder.live?.hiddenRepositories.remove(repository) }
+        if hidden {
+            for node in folder.children {
+                if case .tab(let tab) = node, let url = tab.liveItemURL, LiveFolderConfig.repository(of: url) == repository { _ = detach(tab.id) }
+            }
+        }
     }
 
     /// Applies one refresh to a Live Folder: no undo step, no Archive (a merged PR just leaves).

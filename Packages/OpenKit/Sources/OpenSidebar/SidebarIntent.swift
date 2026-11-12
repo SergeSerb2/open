@@ -122,6 +122,12 @@ public enum SidebarIntent: Equatable, Sendable {
     case shareSpace(SpaceID)
     /// Space menu ▸ Live Folders ▸ GitHub (live-data §2.2): create or remove the Space's Live Folder.
     case toggleLiveFolder(SpaceID)
+    /// Live Folder menu (live-data §2.2): Repositories toggle, Refresh, Delete Live Folder (alert),
+    /// and the header-state action (opens github.com sign-in or the pulls page).
+    case setLiveRepository(folderID: ItemID, repository: String, hidden: Bool)
+    case refreshLiveFolder(ItemID)
+    case deleteLiveFolder(ItemID)
+    case openLiveFolderState(ItemID)
     case exportSpaceIntoFolder(space: SpaceID, destination: SpaceID)
     case deleteSpace(SpaceID)
     case moveSpace(SpaceID, toIndex: Int)

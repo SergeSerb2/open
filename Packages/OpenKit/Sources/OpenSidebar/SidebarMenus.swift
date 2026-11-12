@@ -258,6 +258,7 @@ struct SidebarMenus {
 
     /// Folder (F0119, F0134).
     func folder(_ folder: Folder) -> NSMenu {
+        if let live = folder.live, !context.isIncognito { return liveFolder(folder, live) }
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(folder.id) }
         return menu([
             item("Share Folder…", .share(nodeID: folder.id)),
@@ -275,6 +276,36 @@ struct SidebarMenus {
             .separator(),
             item("Delete", .deleteFolder(folderID: folder.id)),
         ])
+    }
+
+    /// Live Folder menu (live-data §2.2, `G:FUN_102eb5460` family): header, an optional
+    /// "Failed to update", Repositories (one toggle per repository with an active PR, plus the
+    /// hidden ones so they can come back) and its note, Single Sign-On ▸ Required and its note,
+    /// Refresh, Copy All Links, Delete Live Folder. Order: GUESS — capture pending (F2 item 3).
+    private func liveFolder(_ folder: Folder, _ live: LiveFolderConfig) -> NSMenu {
+        func note(_ text: String) -> NSMenuItem { let i = NSMenuItem(title: text, action: nil, keyEquivalent: ""); i.isEnabled = false; return i }
+        var items: [NSMenuItem] = [note(folder.title)]
+        if live.lastFetch?.outcome == .failed { items.append(note("Failed to update")) }
+        items.append(.separator())
+        let active = Set(folder.children.compactMap { node -> String? in
+            if case .tab(let tab) = node, let url = tab.liveItemURL { return LiveFolderConfig.repository(of: url) }; return nil
+        })
+        let repositories = active.union(live.hiddenRepositories).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let repoMenu = NSMenuItem(title: "Repositories", action: nil, keyEquivalent: "")
+        repoMenu.submenu = menu(repositories.map { repo in
+            let hidden = live.hiddenRepositories.contains(repo)
+            let i = item(repo, .setLiveRepository(folderID: folder.id, repository: repo, hidden: !hidden))
+            i.state = hidden ? .off : .on
+            return i
+        } + [.separator(), note("This list is generated based on your currently active pull requests.")])
+        repoMenu.isEnabled = true
+        let sso = NSMenuItem(title: "Single Sign-On", action: nil, keyEquivalent: "")
+        let required = note("Required"); required.state = live.lastFetch?.outcome == .needsSSO ? .on : .off
+        sso.submenu = menu([required, .separator(), note("SSO ensures all of your organizations' PRs appear")])
+        items += [repoMenu, sso, item("Refresh", .refreshLiveFolder(folder.id)), .separator(),
+                  item("Copy All Links", .copyAllLinks(folderID: folder.id, markdown: false)), .separator(),
+                  item("Delete Live Folder", .deleteLiveFolder(folder.id))]
+        return menu(items)
     }
 
     /// Shared Set Profile choices, also opened by Spaces ▸ Change Profile.
