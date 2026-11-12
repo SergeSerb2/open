@@ -119,7 +119,7 @@ AGENTS.md now includes every Arc feature except Arc Max AI, Arc accounts and syn
 | Live Folders | unplanned (in scope since 2026-11-10) |
 | Calendar preview, Join Meeting and Meet link toast | unplanned (in scope since 2026-11-10) |
 | Live-data hover previews, including email | unplanned (in scope since 2026-11-10) |
-| Library folder sources | unplanned (in scope since 2026-11-10) |
+| Library folder sources | implemented (PB1, branch `ns/pb1-library-sources`) |
 | Import from Safari, Chrome and Firefox | unplanned (in scope since 2026-11-10) |
 | Widevine (if licensing allows) | unplanned (in scope since 2026-11-10) |
 
@@ -594,7 +594,7 @@ The context-menu receipt records final native order for page/link/mailto/image/l
 | Clear Browsing Data per profile with time range | FC §7.2 Profiles | settings | `OpenSettings` sheet and action | main | `settings-preview` | done (partial) | Only cookies + cache together, all time (§1.10). |
 | Cmd+, opens Settings in the app | MH Arc menu | app-shell §4.11; settings adapter table (`docs/settings.md`) | `App/MainMenu.swift` | Section 7 | e2e `commandbar` typing guard | done | Shared presenter; Cmd+, is suppressed while the command bar field captures typing. Escape is unchanged. |
 | In-window Library: Archive, Downloads, Media, History | FA §9.6 LB-1 | settings §6 (D-9) | AppKit `OpenLibrary` panel with per-window `AppLibrarySession` | main | `settings-preview`; real-App `sidebar-completion` capture isolation/keyboard rows; Step C (#85) | done (partial) | Includes Spaces (the real Space Manager, #124). Corrupt/unreadable capture indexes affect Captures/Media only and retry on reopen. Both grids support Tab, arrows, Return, Cmd+C, and confirmed Delete. Captures come from the App's capture writer; screenshot-kind rows require a producer. External folder sources are unplanned (in scope since 2026-11-10). |
-| Library folder sources (Documents, Desktop, Downloads folders, Screenshots) | FA LB-1 | — | — | — | — | unplanned (in scope since 2026-11-10) | Replaces the earlier settings D-9 deferral. |
+| Library folder sources (Documents, Desktop, Downloads folders, Screenshots) | FA LB-1, LB-2; capture C-report-s3 Part D ("Show media from:" menu) | PB1 | `OpenSettings/LibraryMediaFolders.swift`; Media rows in `OpenLibrary/LibraryPanelContent.swift`; Library button right-click menu in `OpenSidebar` | `App/Settings/AppSettingsActions.swift` (`mediaFolders`, `State/library-media.json`) | `tools/e2e/library_media_folders.py` 8/8; `library_content.py` | implemented | All five sources on by default; nothing is read before "Choose Folders…" (macOS asks for folder access on that first read; Info.plist usage strings). Top level of each folder, images and movies only, newest 500 per folder; screen captures (Finder `kMDItemIsScreenCapture`) count as Screenshots wherever they are. Files can be hidden ("Hide from Library"), never deleted (LB-2). The populated Media look is a guess (Arc's needs folder consent, not captured). Tab does not reach "Choose Folders…" (followups). |
 | Account, Max, Staff panes | FC §7.1 | — | — | — | — | out of scope | |
 
 ### 1.19 First run

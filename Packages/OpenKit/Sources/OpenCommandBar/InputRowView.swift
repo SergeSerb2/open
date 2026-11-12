@@ -51,6 +51,8 @@ final class CommandBarFieldEditor: NSTextView {
     var isUpdatingComposition: Bool { compositionDepth > 0 }
     var onCompositionEnded: (() -> Void)?
     var onHelp: (() -> Bool)?
+    /// Cmd+T or Cmd+L while the bar has the keyboard: the key that opened this mode closes it (plan D3 §2.3).
+    var onModeKey: ((Character) -> Bool)?
 
     // Inline completion hooks (CompletionSession, commandbar-completion §4.1.5–§4.1.6).
 
@@ -180,10 +182,15 @@ final class CommandBarFieldEditor: NSTextView {
     var onShiftDelete: ((NSEvent.ModifierFlags) -> Bool)?
     var onModifiedReturn: ((NSEvent.ModifierFlags) -> Bool)?
     private func handleHelpKey(_ event: NSEvent) -> Bool {
-        if [36, 76].contains(event.keyCode), event.modifierFlags.contains(.command), !hasMarkedText(), !isUpdatingComposition, onModifiedReturn?(event.modifierFlags) == true { return true }
+        // Cmd+Return and Option+Return carry their modifiers from this event (plan D3 §2.3).
+        if [36, 76].contains(event.keyCode), !event.modifierFlags.intersection([.command, .option]).isEmpty, !hasMarkedText(), !isUpdatingComposition,
+           onModifiedReturn?(event.modifierFlags) == true { return true }
         if !hasMarkedText(), !isUpdatingComposition,
            event.modifierFlags.intersection([.command, .option, .shift, .control]) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "i", onHelp?() == true { return true }
+        if !hasMarkedText(), !isUpdatingComposition,
+           event.modifierFlags.intersection([.command, .option, .shift, .control]) == .command,
+           let key = event.charactersIgnoringModifiers?.lowercased().first, key == "t" || key == "l", onModeKey?(key) == true { return true }
         return false
     }
 
@@ -226,8 +233,18 @@ final class InputRowView: NSView {
         didSet {
             guard theme != oldValue else { return }
             applyEditorColors()
-            infoButton.fill = theme.infoFill
+            infoButton.theme = theme
             chipView.needsDisplay = true
+            iconView.needsDisplay = true
+            placeholderView.needsDisplay = true
+            hintView.needsDisplay = true
+        }
+    }
+    /// New Tab card (input 64, 19 pt) or inline editor (input 50, 15 pt), plan D3 §2.1–§2.2.
+    var layoutSpec = CommandCardLayout.newTab {
+        didSet {
+            guard layoutSpec != oldValue else { return }
+            applyFieldFont(); iconView.needsDisplay = true; needsLayout = true
         }
     }
     var extensionIcon: (@MainActor (String) -> NSImage?)? { didSet { iconView.needsDisplay = true; chipView.needsDisplay = true } }
@@ -255,10 +272,11 @@ final class InputRowView: NSView {
         placeholderView.paint = { [weak self] ctx in
             guard let self else { return }
             let font = self.fieldFont
-            let line = TextLine(self.input.placeholder, font: font, color: CommandBarRole.placeholder.cgColor)
+            let color = self.theme.secondaryText.cgColor
+            let line = TextLine(self.input.placeholder, font: font, color: color)
             let f = self.placeholderView.frame
-            line.truncated(to: f.width, font: font, color: CommandBarRole.placeholder.cgColor)
-                .draw(at: f.minX, baseline: f.minY + Self.placeholderBaseline, in: ctx)
+            line.truncated(to: f.width, font: font, color: color)
+                .draw(at: f.minX, baseline: self.textBaseline, in: ctx)
         }
         iconView.paint = { [weak self] ctx in self?.drawLeadingIcon(in: ctx) }
         chipView.paint = { [weak self] ctx in
@@ -267,15 +285,15 @@ final class InputRowView: NSView {
         }
         hintView.paint = { [weak self] ctx in
             guard let self, case .siteSearchHint(let name, let space) = self.input.trailing else { return }
-            self.drawHint(name: name, space: space, right: self.bounds.width - CommandBarMetrics.hintTrailing, in: ctx)
+            self.drawHint(name: name, space: space, right: self.bounds.width - self.layoutSpec.inputPaddingRight, in: ctx)
         }
         (field.cell as? CommandBarTextFieldCell)?.editor = editor
         field.isBezeled = false
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = BarFont.input
-        field.textColor = CommandBarRole.inputText.nsColor
+        field.font = BarFont.input(layoutSpec.inputFontSize)
+        field.textColor = theme.text.nsColor
         field.usesSingleLineMode = true
         field.cell?.isScrollable = true
         field.cell?.wraps = false
@@ -306,7 +324,7 @@ final class InputRowView: NSView {
         editor.writingToolsBehavior = .none
         applyEditorColors()
         addSubview(field)
-        infoButton.fill = theme.infoFill
+        infoButton.theme = theme
         addSubview(infoButton)
         closeButton.isHidden = true; addSubview(closeButton)
     }
@@ -329,8 +347,10 @@ final class InputRowView: NSView {
     private func applyEditorColors() {
         guard let cell = field.cell as? CommandBarTextFieldCell else { return }
         cell.selectionColor = theme.textSelection.nsColor
-        cell.selectedTextColor = CommandBarRole.inputTextSelected.nsColor
+        cell.selectedTextColor = theme.text.nsColor
         cell.apply(to: editor)
+        field.textColor = theme.text.nsColor
+        editor.textColor = theme.text.nsColor
     }
 
     /// Replaces the text (Site Search clears the trigger word); the caret goes to the end.
@@ -352,8 +372,12 @@ final class InputRowView: NSView {
     /// Text field origin inside the AX frame. fitted: AppKit insets the text 2 pt in a borderless field.
     static let fieldOffset = CGPoint(x: -2, y: 1)
 
-    /// 18 Medium, or 18 Regular inside a scope (CC-41 captures).
-    var fieldFont: NSFont { input.chip == nil ? BarFont.input : BarFont.inputScoped }
+    /// 19 Regular (New Tab) or 15 Regular (inline), scope or not (plan D3 §2.1).
+    var fieldFont: NSFont { BarFont.input(layoutSpec.inputFontSize) }
+    /// The field's text frame: one line of `fieldFont`, centred in the row.
+    var fieldHeight: CGFloat { ceil(fieldFont.ascender - fieldFont.descender + fieldFont.leading) + 1 }
+    /// Text baseline in row points (the placeholder uses the field's own baseline).
+    var textBaseline: CGFloat { field.frame.minY + Self.fieldOffset.y + fieldFont.ascender.rounded() }
 
     private func applyFieldFont() {
         field.font = fieldFont
@@ -370,29 +394,32 @@ final class InputRowView: NSView {
     }
 
     var trailingWidth: CGFloat {
-        let m = CommandBarMetrics.self
+        let m = CommandBarMetrics.self, l = layoutSpec
         if embedded { return m.infoButtonSize + m.infoButtonTrailing }
         switch input.trailing {
-        case .info: return m.infoButtonSize + m.infoButtonTrailing - (showsFooter ? m.footerFieldGrowth : 0)
-        case .siteSearchHint(let name, let space): return Self.hintWidth(name: name, space: space) + m.hintTrailing
-        case .none: return m.hintTrailing
+        case .info: return CommandCard.infoDiameter + l.inputPaddingRight - (showsFooter ? m.footerFieldGrowth : 0)
+        case .siteSearchHint(let name, let space): return Self.hintWidth(name: name, space: space) + l.inputPaddingRight
+        case .none: return l.inputPaddingRight
         }
     }
 
     override func layout() {
         super.layout()
-        let m = CommandBarMetrics.self
-        var x = m.textFieldX
+        let m = CommandBarMetrics.self, l = layoutSpec
+        var x = l.textX
         if input.chip != nil { x = chipRect.maxX + m.chipToText }
-        let right = bounds.width - trailingWidth - m.textFieldTrailingGap
-        field.frame = CGRect(x: x + Self.fieldOffset.x, y: m.textFieldY + Self.fieldOffset.y, width: max(20, right - x), height: m.textFieldHeight + 2)
+        let right = bounds.width - trailingWidth - l.inputGap
+        let h = fieldHeight
+        // AX frame [54, 20.5, 656, 23] in Arc08 at 19 pt: the field's text starts 2 pt inside it.
+        field.frame = CGRect(x: x + Self.fieldOffset.x, y: ((bounds.height - h) / 2).rounded(.down), width: max(20, right - x), height: h)
         closeButton.isHidden = !embedded
         closeButton.frame = m.littleOpenCloseFrame(width: bounds.width)
         infoButton.isHidden = !showsInfoButton
-        infoButton.frame = CGRect(x: bounds.width - m.infoButtonTrailing - m.infoButtonSize, y: m.infoButtonY, width: m.infoButtonSize, height: m.infoButtonSize)
-        iconView.frame = m.leadingIconFrame
+        let d = CommandCard.infoDiameter
+        infoButton.frame = CGRect(x: bounds.width - l.inputPaddingRight - d, y: ((bounds.height - d) / 2).rounded(), width: d, height: d)
+        iconView.frame = leadingIconFrame
         // Same origin as the field's text: the field's frame plus the text container's 2 pt padding.
-        placeholderView.frame = CGRect(x: field.frame.minX + 2, y: m.textFieldY - 2, width: max(0, field.frame.width - 4), height: m.textFieldHeight + 6)
+        placeholderView.frame = CGRect(x: field.frame.minX + 2, y: 0, width: max(0, field.frame.width - 4), height: bounds.height)
         textDidChange()
         chipView.isHidden = input.chip == nil
         // The view also holds the glow around the capsule.
@@ -404,7 +431,7 @@ final class InputRowView: NSView {
         if case .siteSearchHint(let name, let space) = input.trailing, !embedded {
             let w = ceil(Self.hintWidth(name: name, space: space))
             hintView.isHidden = false
-            hintView.frame = CGRect(x: bounds.width - m.hintTrailing - w, y: m.hintY, width: w, height: m.keycapHeight)
+            hintView.frame = CGRect(x: bounds.width - l.inputPaddingRight - w, y: ((bounds.height - m.keycapHeight) / 2).rounded(), width: w, height: m.keycapHeight)
         } else {
             hintView.isHidden = true
         }
@@ -412,20 +439,30 @@ final class InputRowView: NSView {
 
     var chipRect: CGRect {
         let m = CommandBarMetrics.self
-        return CGRect(x: m.chipX, y: m.textFieldY, width: chipWidth, height: m.chipHeight)
+        return CGRect(x: layoutSpec.textX - 2, y: ((bounds.height - m.chipHeight) / 2).rounded(), width: chipWidth, height: m.chipHeight)
+    }
+
+    /// Leading icon: 18 pt (New Tab) or 16 pt (inline) after the left padding, centred.
+    var leadingIconFrame: CGRect {
+        let l = layoutSpec
+        return CGRect(x: l.inputPaddingLeft, y: ((bounds.height - l.inputIconSize) / 2).rounded(), width: l.inputIconSize, height: l.inputIconSize)
     }
 
     // MARK: Drawing (row coordinates; each part view translates to its frame)
 
     private func drawLeadingIcon(in ctx: CGContext) {
-        let f = CommandBarMetrics.leadingIconFrame
+        let f = leadingIconFrame
         switch input.leadingIcon {
         case .extension(let id):
             if let image = extensionIcon?(id) { image.drawFlipped(in: f.insetBy(dx: 1, dy: 1)) }
             else { drawSymbol("puzzlepiece.extension", in: f) }
         case .favicon(let url, let fallback):
             if let image = favicons?.favicon(for: url, loaded: { [weak self] _ in self?.iconView.needsDisplay = true }) {
-                image.drawFlipped(in: f.insetBy(dx: 1, dy: 1))
+                ctx.saveGState()
+                let r = CommandCard.faviconRadius * f.width / 18
+                ctx.addPath(CGPath(roundedRect: f, cornerWidth: r, cornerHeight: r, transform: nil)); ctx.clip()
+                image.drawFlipped(in: f)
+                ctx.restoreGState()
             } else {
                 drawSymbol(fallback, in: f)
             }
@@ -441,7 +478,7 @@ final class InputRowView: NSView {
     }
 
     private func drawSymbol(_ name: String, in f: CGRect) {
-        guard let image = SymbolCache.image(name, size: BarGlyph.inputSymbolSize, weight: BarGlyph.inputSymbolWeight, color: CommandBarRole.inputIcon) else { return }
+        guard let image = SymbolCache.image(name, size: BarGlyph.inputSymbolSize, weight: BarGlyph.inputSymbolWeight, color: theme.secondaryText) else { return }
         let s = image.size
         image.drawFlipped(in: CGRect(x: (f.midX - s.width / 2).rounded(), y: (f.midY - s.height / 2 + BarGlyph.inputSymbolOffsetY).rounded(),
                                      width: s.width, height: s.height))
@@ -495,19 +532,19 @@ final class InputRowView: NSView {
     private func drawHint(name: String, space: Bool, right: CGFloat, in ctx: CGContext) {
         let m = CommandBarMetrics.self
         var x = right - Self.hintWidth(name: name, space: space)
-        let y = m.hintY
+        let y = hintView.frame.minY
         let baseline = y + Self.hintBaseline
-        let color = CommandBarRole.secondaryText.cgColor
+        let color = theme.secondaryText.cgColor
         let label = TextLine(CommandBarText.searchSite(name), font: BarFont.hint, color: color)
         label.draw(at: x, baseline: baseline, in: ctx)
         x += ceil(label.width) + m.hintLabelGap
-        x += Keycap.draw(CommandBarText.tabKey, at: CGPoint(x: x, y: y), height: m.keycapHeight, plate: CommandBarRole.plate, text: CommandBarRole.keycapText, in: ctx)
+        x += Keycap.draw(CommandBarText.tabKey, at: CGPoint(x: x, y: y), height: m.keycapHeight, plate: theme.plate, text: theme.secondaryText, in: ctx)
         if space {
             x += m.hintKeyGap
             let or = TextLine(CommandBarText.or, font: BarFont.hint, color: color)
             or.draw(at: x, baseline: baseline, in: ctx)
             x += ceil(or.width) + m.hintKeyGap
-            Keycap.draw(CommandBarText.spaceKey, at: CGPoint(x: x, y: y), height: m.keycapHeight, plate: CommandBarRole.plate, text: CommandBarRole.keycapText, in: ctx)
+            Keycap.draw(CommandBarText.spaceKey, at: CGPoint(x: x, y: y), height: m.keycapHeight, plate: theme.plate, text: theme.secondaryText, in: ctx)
         }
     }
 
@@ -518,16 +555,28 @@ final class InputRowView: NSView {
     static let placeholderBaseline: CGFloat = 20
 }
 
-/// The (i) button: a 24 pt circle in the theme's `dark.backgroundExtra` with the glyph.
+/// The (i) button: a round 24 pt button (Light white, Dark #1C1C1B) with a soft shadow (plan D3 §2.1).
 @MainActor
 final class InfoButton: NSView {
-    var fill = CommandBarRole.defaultInfoFill { didSet { if fill != oldValue { needsDisplay = true } } }
+    var theme = CommandBarTheme.default { didSet { if theme != oldValue { applyFill(); needsDisplay = true } } }
     var action: (() -> Void)?
+    private let circle = CALayer()
+    /// The glyph sits on its own layer above the circle (a sublayer would cover the view's own drawing).
+    private let glyph = CALayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.masksToBounds = false
+        circle.shadowColor = CGColor(gray: 0, alpha: 1)
+        circle.shadowOpacity = CommandCard.infoShadowOpacity
+        circle.shadowRadius = CommandCard.infoShadowRadius
+        circle.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "shadowPath": NSNull()]
+        layer?.addSublayer(circle)
+        glyph.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull()]
+        layer?.addSublayer(glyph)
+        applyFill()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -542,16 +591,35 @@ final class InfoButton: NSView {
         return true
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let d = CommandBarMetrics.infoCircleDiameter
-        let circle = CGRect(x: (bounds.width - d) / 2, y: (bounds.height - d) / 2, width: d, height: d)
-        ctx.setFillColor(fill.cgColor)
-        ctx.fillEllipse(in: circle)
-        if let image = SymbolCache.image(BarGlyph.infoSymbol, size: BarGlyph.infoSize, weight: BarGlyph.infoWeight, color: CommandBarRole.infoGlyph) {
+    private func applyFill() {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        circle.backgroundColor = theme.infoFill.cgColor
+        CATransaction.commit()
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let d = CommandCard.infoDiameter
+        circle.frame = CGRect(x: (bounds.width - d) / 2, y: (bounds.height - d) / 2, width: d, height: d)
+        circle.cornerRadius = d / 2
+        circle.shadowPath = CGPath(ellipseIn: circle.bounds, transform: nil)
+        // Flipped view: positive y is down.
+        circle.shadowOffset = CGSize(width: 0, height: (layer?.isGeometryFlipped ?? false) ? -CommandCard.infoShadowOffsetY : CommandCard.infoShadowOffsetY)
+        let scale = window?.backingScaleFactor ?? 2
+        if let image = SymbolCache.image(BarGlyph.infoSymbol, size: BarGlyph.infoSize, weight: BarGlyph.infoWeight, color: theme.secondaryText, scale: scale) {
             let s = image.size
-            image.drawFlipped(in: CGRect(x: (circle.midX - s.width / 2).rounded(), y: (circle.midY - s.height / 2).rounded(), width: s.width, height: s.height))
+            glyph.frame = CGRect(x: (bounds.midX - s.width / 2).rounded(), y: (bounds.midY - s.height / 2).rounded(), width: s.width, height: s.height)
+            glyph.contents = image.layerContents(forContentsScale: scale)
+            glyph.contentsScale = scale
         }
+        CATransaction.commit()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        needsLayout = true
     }
 
     override func mouseUp(with event: NSEvent) {

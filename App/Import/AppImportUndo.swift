@@ -24,6 +24,8 @@ final class AppImportUndo {
   private var boosts: [(ProfileID, BoostStore, [Boost])] = []
   /// Settings written by the import: the values before (nil = absent) and after.
   private var defaults: [(previous: [String: Any?], applied: [String: Any])] = []
+  /// Extra Arc data types (ArcImportProviders): their own undo and redo actions.
+  private var providers: [(undo: @MainActor @Sendable () async throws -> Void, redo: (@MainActor @Sendable () async throws -> Void)?)] = []
   private(set) var task: Task<Void, Never>?
   private(set) var pendingOperations = 0
   private(set) var errorText = ""
@@ -65,6 +67,11 @@ final class AppImportUndo {
       if undoing { for (key, value) in entry.previous { if let value { store.set(value, forKey: key) } else { store.removeObject(forKey: key) } } }
       else { for (key, value) in entry.applied { store.set(value, forKey: key) } }
     }
+  }
+
+  func append(provider undo: (@MainActor @Sendable () async throws -> Void)?, redo: (@MainActor @Sendable () async throws -> Void)?) {
+    guard let undo else { return }
+    providers.append((undo, redo)); registerIfNeeded()
   }
 
   func finishImport() {
@@ -113,6 +120,7 @@ final class AppImportUndo {
           guard await store.removeImportedHistory(receipt) else { throw UndoFailure.store }
         }
         for (store, records) in archives.reversed() { try await store.delete(ids: records.map(\.id)) }
+        for provider in providers.reversed() { try await provider.undo() }
       } else {
         applyModel(undoing: false)
         applyDefaults(undoing: false)
@@ -141,6 +149,7 @@ final class AppImportUndo {
           if !result.undo.isEmpty { replacedArchives.append((store, result.undo)) }
         }
         archives = replacedArchives
+        for provider in providers { try await provider.redo?() }
       }
     }
   }

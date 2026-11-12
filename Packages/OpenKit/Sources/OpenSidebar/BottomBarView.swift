@@ -35,6 +35,7 @@ final class BottomBarView: NSView {
         home.glyphTint = { _ in SidebarRole.homeGlyph.nsColor }
         home.inactiveTint = SidebarRole.homeGlyphInactive
         home.action = { [unowned context] in context.send(.showLibrary) }
+        home.contextMenuProvider = { [weak self] in self?.menus.libraryMediaSources() }
         home.tooltip = { [weak home] in Tooltip(title: home?.latestName ?? "Library", placement: .above, style: style()) }
         if context.isIncognito {
             home.isHidden = true; strip.isHidden = true

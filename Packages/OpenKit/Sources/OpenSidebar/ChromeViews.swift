@@ -128,6 +128,9 @@ final class URLFieldView: NSView {
     private let fill = CALayer()
     private let magnifier = GlyphView()
     private let label = TextLabel()
+    /// Leading fade for a long host: the end (the registrable domain) stays visible (plan D3 §2.4).
+    private let fadeMask = CAGradientLayer()
+    private var fadeKey: (String, CGFloat)?
     let copyLink = PlateButton(glyph: .copyLink)
     let siteControls = PlateButton(glyph: .siteControls)
     private(set) var extensionStrip: ExtensionStripView?
@@ -135,9 +138,12 @@ final class URLFieldView: NSView {
     var siteControlState = SiteControlButtonState.rest {
         didSet {
             guard siteControlState != oldValue else { return }
-            siteControlGlyph.isOpen = siteControlState.isOpen; siteControlGlyph.isBoosted = siteControlState.isBoosted
-            siteControls.glyphView.isHidden = siteControlState != .rest
-            siteControlGlyph.isHidden = siteControlState == .rest
+            // Open: the normal glyph on the pressed fill (the field fill again; Arc 14c, plan D3 §2.4).
+            // Only a Boosted site keeps its own art.
+            siteControlGlyph.isOpen = false; siteControlGlyph.isBoosted = siteControlState.isBoosted
+            siteControls.glyphView.isHidden = siteControlState.isBoosted
+            siteControlGlyph.isHidden = !siteControlState.isBoosted
+            siteControls.isLatched = siteControlState.isOpen
             needsLayout = true
         }
     }
@@ -172,13 +178,21 @@ final class URLFieldView: NSView {
             context.send(.showSiteControls)
         }
         siteControlGlyph.isHidden = true
+        siteControls.latchedColor = { [unowned self] in self.fieldFill(hovered: false) }
+        fadeMask.startPoint = CGPoint(x: 0, y: 0.5); fadeMask.endPoint = CGPoint(x: 1, y: 0.5)
+        fadeMask.colors = [CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 1)]
+        fadeMask.actions = ["position": NSNull(), "bounds": NSNull(), "locations": NSNull()]
         siteControlGlyph.tint = { SidebarRole.toolbarGlyph.nsColor }
         siteControls.addSubview(siteControlGlyph)
         let style: @MainActor () -> SpaceThemeStyle = { [unowned context] in
             context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
         }
-        copyLink.tooltip = { Tooltip(title: "Copy URL", keys: ["⇧", "⌘", "C"], style: style()) }
-        siteControls.tooltip = { Tooltip(title: "Site Controls", style: style()) }
+        // The standard AppKit tooltip with Open's names (LEAD 12:12).
+        _ = style
+        copyLink.toolTip = "Copy Link"
+        siteControls.toolTip = "Site Controls"
+        copyLink.accessibleTitle = { "Copy Link" }
+        siteControls.accessibleTitle = { "Site Controls" }
         addSubview(magnifier)
         addSubview(label)
         setAccessibilityElement(true)
@@ -190,10 +204,23 @@ final class URLFieldView: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
 
-    /// The copy and Site Control buttons show while a page is loaded and the
-    /// pointer is anywhere over the sidebar. guess: they came and went between
-    /// frames (F0015, F0016, F0019, F0035, F0123).
-    private var showsButtons: Bool { context.forcedHover != nil || context.pointerInSidebar || pointerInside }
+    /// The copy and Site Control buttons show while a page is loaded and the pointer is over the
+    /// field, or while the Site Control panel is open (Arc 14c rest/hover frames; plan D3 §2.4).
+    /// Copy Link and Site Controls: not drawn and not in the accessibility tree at rest; shown while the pointer is anywhere
+    /// inside the sidebar, and while the Site Control panel is open (Arc 1.172 session 3 URL rest/hover; LEAD 12:12).
+    /// Renders count any forced hover as a pointer inside the sidebar.
+    private var showsButtons: Bool {
+        context.forcedHover != nil || context.pointerInSidebar || pointerInside || siteControlState.isOpen
+    }
+
+    func fieldFill(hovered: Bool) -> DesignColor { Self.fill(context: context, hovered: hovered) }
+
+    /// Field fill: the existing measured token (LEAD 11:45; the theme pass sets this role later). The URL
+    /// status button under the field shares it.
+    static func fill(context: SidebarContext, hovered: Bool) -> DesignColor {
+        if context.isIncognito { return DesignColor(.white(0.15)) }
+        return hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill
+    }
 
     /// The pointer is over the field (or a render forces it). Arc darkens the field to
     /// `SidebarItemHoveredBackground` on hover (F0033 vs F0032: `#CF8B6F` vs `#D99273` at the
@@ -206,7 +233,8 @@ final class URLFieldView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(!context.animatesChanges)
         CATransaction.setAnimationDuration(Motion.hoverFade)
-        fill.backgroundColor = context.isIncognito ? NSColor(white: 1, alpha: 0.15).cgColor : (hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill).cgColor(appearance)
+        fill.backgroundColor = fieldFill(hovered: hovered).cgColor(appearance)
+        siteControls.needsDisplay = true
         CATransaction.commit()
     }
 
@@ -244,16 +272,40 @@ final class URLFieldView: NSView {
         let a = URLFieldMetrics.accessorySize
         siteControls.frame = CGRect(x: bounds.width + ox - URLFieldMetrics.siteControlsTrailing - a, y: URLFieldMetrics.accessoryY - oy, width: a, height: a)
         copyLink.frame = siteControls.frame.offsetBy(dx: -URLFieldMetrics.accessoryPitch, dy: 0)
-        copyLink.isHidden = !showAccessories
+        copyLink.isHidden = !hasPage || !showAccessories
         siteControls.isHidden = !hasPage || !siteControlsAvailable || !(showAccessories || siteControlState.isOpen)
         siteControlGlyph.frame = siteControls.bounds
         if showAccessories || siteControlState.isOpen {
-            right = copyLink.frame.minX - 2
+            right = (copyLink.isHidden ? siteControls.frame.minX : copyLink.frame.minX) - URLFieldMetrics.controlsTextGap
             if let strip = extensionStrip, strip.showsActions, let first = strip.geometry.frames.map(\.minX).min() {
-                right = first - ox - 2
+                right = first - ox - URLFieldMetrics.controlsTextGap
             }
         }
         label.frame = CGRect(x: textX, y: URLFieldMetrics.textY - oy, width: max(0, right - textX), height: 18)
+        updateFade(hasPage: hasPage)
+    }
+
+    /// A host wider than the label: right-aligned, never a trailing ellipsis, the leading 34 pt faded
+    /// to clear. Built once per text or width change; a short host has no mask (plan D3 §2.4).
+    private func updateFade(hasPage: Bool) {
+        let text = label.text(), width = label.bounds.width
+        let key = (text, width)
+        if let fadeKey, fadeKey == key { return }
+        fadeKey = key
+        let long = hasPage && label.textWidth > width
+        label.alignment = long ? .right : .left
+        label.trailingInset = 0
+        label.allowsOverflow = long
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if long {
+            let stop = NSNumber(value: Double(min(1, URLFieldMetrics.longHostFade / max(1, width))))
+            fadeMask.locations = [0, stop, 1]
+            fadeMask.frame = label.bounds
+            label.layer?.mask = fadeMask
+        } else {
+            label.layer?.mask = nil
+        }
+        CATransaction.commit()
     }
 
     override func updateTrackingAreas() {
@@ -276,4 +328,9 @@ final class URLFieldView: NSView {
     override func accessibilityPerformPress() -> Bool { context.send(.openCommandBar(.urlField)); return true }
     override func menu(for event: NSEvent) -> NSMenu? { SidebarMenus(context: context).urlField() }
     var displayedText: String { label.text() }
+    /// Diagnostics: the host label's frame, whether a long host is faded and right-aligned, and the first shown control's x.
+    var hostState: (frame: CGRect, faded: Bool, rightAligned: Bool, firstControlX: CGFloat?) {
+        let first = [copyLink, siteControls].filter { !$0.isHidden }.map(\.frame.minX).min()
+        return (label.frame, label.layer?.mask != nil, label.alignment == .right, first)
+    }
 }

@@ -388,6 +388,7 @@ public enum MenuBuilder {
         let menu = NSMenu(title: "Help")
         add(menu, ["help-center", "getting-started", "keyboard-shortcuts-edu", "release-notes", "contact-team"], target: target, overrides: overrides)
         menu.addItem(.separator())
+        add(menu, ["export-notes"], target: target, overrides: overrides)
         let troubleshooting = NSMenu(title: "Troubleshooting")
         add(troubleshooting, ["task-manager", "record-trace", "cancel-trace", "copy-open-info", "reveal-open-data"], target: target, overrides: overrides)
         menu.addItem(submenuItem("Troubleshooting", troubleshooting))

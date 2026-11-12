@@ -21,7 +21,8 @@ enum ChromeProbes {
             check("action outer ring is darker than material",CLI.luminance(pixel(body.minX+34,body.minY+9)) < CLI.luminance(pixel(body.minX+34,body.minY+7)))
             for offset: CGFloat in [37,180] {
                 let x = body.minX+offset,y = body.maxY-52-1/scale
-                let line = pixel(x,y),above = pixel(x,y-1/scale)
+                // The Dark separator is 1 pt at every scale, so the reference pixel sits one point above the line.
+                let line = pixel(x,y),above = pixel(x,y-1)
                 let lift = zip(line.prefix(3),above.prefix(3)).map { Int($0)-Int($1) }
                 check("separator additive RGB lift \(lift) ~= +35",lift.allSatisfy { abs($0-35)<=3 })
             }

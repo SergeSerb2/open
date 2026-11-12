@@ -22,6 +22,9 @@ public final class SidebarContext {
     public var media: MediaSourceStore?
     /// Session download progress supplied by the App; no sidebar polling.
     public var downloadBadge: DownloadBadgeState?
+    /// Library media sources for the Library button's "Show media from:" menu (PB1): id, title, on.
+    /// Empty hides the menu (render fixtures, windows without a Library).
+    public var libraryMediaSources: [SidebarMediaSourceItem] = []
     public var displayedTabIDs: Set<ItemID> = []
     /// Render-only forced states, analogous to forcedHover.
     public var forcedMediaHover: SidebarMediaHover?
@@ -67,7 +70,8 @@ public final class SidebarContext {
     /// Forced hover for offscreen rendering and checks. Nil follows the pointer.
     public var forcedHover: SidebarHoverTarget?
     /// The pointer is over the sidebar (or a hover is forced).
-    var pointerInSidebar = false
+    /// The pointer is inside the sidebar (tracking area). Public so renders can set the state they show.
+    public var pointerInSidebar = false
     /// Open Peeks by source tab. The source row shows the Peek page's favicon in a
     /// plate at its right end, also while another tab is selected (F0090, F0101).
     /// Transient: the window controller sets it; the model never stores it.
@@ -512,4 +516,10 @@ extension Tab {
 
 public enum SidebarMediaHover: Equatable, Sendable {
     case expanded, title(ItemID)
+}
+
+/// One row of the Library button's "Show media from:" menu.
+public struct SidebarMediaSourceItem: Equatable, Sendable {
+    public var id: String, title: String, enabled: Bool
+    public init(id: String, title: String, enabled: Bool) { self.id = id; self.title = title; self.enabled = enabled }
 }
