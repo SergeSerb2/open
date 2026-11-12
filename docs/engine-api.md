@@ -263,6 +263,32 @@ Fork API `cef/include/cef_open_page.h` (docs/engine-patches.md, "Page platform")
 - `OEBrowserContextDelegate.browserContext(_:didClickNotification:origin:persistent:)`: a web notification of the context was clicked (body or button), before Chromium dispatches the click to the page. No page is reported; find the tab by origin.
 - `OEBrowserContext.displayedNotifications(completion:)` and `simulateClickOnNotification(identifier:)`: test hooks, active only with `--open-automation` (otherwise an empty list and NO). The list is the display-service observer's set (`Engine/fork/src/open/browser/page/open_notifications.cc`, #160), independent of macOS delivery. Each item has id, origin, title and body.
 
+### Web protocol handlers (`mailto:`)
+
+A page calls `navigator.registerProtocolHandler(scheme, url)`. Chromium asks through the normal
+permission path: `OEPermissionRequest.kinds == .protocolHandler`, with `protocolHandlerScheme`
+(for example `mailto`) and `protocolHandlerURLTemplate` (`%s` marks the escaped URL). `grant()`
+stores the handler in the Profile's Chromium registry (persisted in the Profile); `deny()` stores
+nothing. There is no site setting for this kind (`SitePermissionStore.canPersist` is false).
+
+- `OEBrowserContext.protocolHandlers`: registered handlers (`scheme`, `urlTemplate`, `isDefault`).
+- `protocolHandlerURL(for:)`: where the default handler sends a URL, or nil. A page navigation to
+  the scheme already goes there; use this for URLs from outside (a `mailto:` Apple Event).
+- `removeProtocolHandler(_:)`.
+
+Engine: Chromium patch 0507 (accessor on the pending request) and overlay
+`open/browser/page/open_protocol_handlers.cc` (four functions in `cef_open_page.h`). e2e:
+`features/protocol_handler`.
+
+### Extension items in Alloy menus (Peek)
+
+Alloy-style pages (Peek, Alloy popups) now get extension `chrome.contextMenus` items in the same
+`OEContextMenu.items` list, after a separator, with Chrome's grouping (one item, or a submenu named
+after the extension) and Chrome's command ids. Running the command id through the normal
+completion fires `contextMenus.onClicked` (page, frame, link and selection data; no `tab`, because
+the page is outside `chrome.tabs`). No OpenEngine API change. Engine: CEF patch 0306 and overlay
+`open/browser/extensions/open_alloy_extension_menu.cc`. e2e: `context-menus/cm_peek_extension_items`.
+
 ### Context menu items
 
 A Chrome style page gets Chrome's full page context menu. OpenEngine keeps only the items on an explicit allowlist (`Engine/OpenEngine/src/OEContextMenuAllowlist.mm`, applied in `OEClient::OnBeforeContextMenu`). It then removes empty submenus and extra separators. An item a later Chromium adds stays hidden until it is added to the list. Alloy style menus are CEF's short list and are not filtered. The shell adds Open's own items (Capture, Share, Copy URL, Little Open, Split View, and Arc's "Manage Extensions", EX-18) to what remains. `select(command:)` runs only the id of an enabled item in the delivered `items` (submenus included); any other id is refused, logged, and the menu is cancelled, because CEF would run it directly without checking the list. Alloy pages (Peek; CEF's short list, by design) are not filtered. Extension windows use hosted Chrome style pages and the same allowlist.
