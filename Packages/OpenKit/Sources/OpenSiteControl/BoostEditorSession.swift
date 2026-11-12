@@ -199,6 +199,8 @@ public final class BoostEditorSession {
     }
     public func setScope(_ match: SiteMatch) { change("Change scope") { $0.siteMatch = match } }
     public func setFont(_ family: String?) { change("Change font") { $0.fontFamily = family } }
+    /// Arc's Size button cycles 100 → 110 → 125 → 150 → 90 → 100 % and stores the percent
+    /// (capture C11, Arc 1.172.2); the same four sizes and cycle order here.
     public static let textSizes: [Double?] = [0.9, nil, 1.1, 1.25, 1.5]
     public static let textSizeNames = ["Small", "Normal", "Medium", "Large", "Larger"]
     public static let textCases: [String?] = [nil, "capitalize", "uppercase", "lowercase"]

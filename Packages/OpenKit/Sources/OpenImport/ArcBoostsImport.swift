@@ -150,13 +150,19 @@ public struct ArcBoostsReader: Sendable {
                   selectors.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 4096 }) else { throw ArcCacheError.invalid }
             zaps = selectors.map { ZappedElement(selector: $0, createdAt: modified) }; report.mappedFields += 1
         }
+        var textZoom: Double?
         if let zoom = components["textZoom"], !(zoom is NSNull) {
             guard let object = zoom as? [String: Any], let level = object["level"] as? NSNumber,
                   CFGetTypeID(level) != CFBooleanGetTypeID(), level.doubleValue.isFinite,
                   level.doubleValue == Double(level.intValue) else { throw ArcCacheError.invalid }
-            // Arc's integer level is not Open's zoom multiplier. Its conversion
-            // remains unproven; retain neither an invented scale nor a clamp.
-            report.fieldsDropped["textZoom.level", default: 0] += 1
+            // Capture C11 (Arc 1.172.2): `level` is the percent itself (the Size button stores
+            // 110, 125, 150, 90; normal is the absent key). Open's multiplier is level / 100.
+            // A level outside Open's 50…200 % range is not a size Arc's editor can write:
+            // counted as dropped, never clamped into a different size.
+            if (50...200).contains(level.intValue) {
+                textZoom = level.intValue == 100 ? nil : level.doubleValue / 100
+                report.mappedFields += 1
+            } else { report.fieldsDropped["textZoom.level", default: 0] += 1 }
             report.unknownFields += object.keys.filter { $0 != "level" }.count
         }
         var wheel: BoostColorWheel?
@@ -201,7 +207,7 @@ public struct ArcBoostsReader: Sendable {
         if fork != nil { report.mappedFields += 1 }
         return Boost(id: BoostID(rawValue: ArcImporter.deterministicUUID(for: document.id, namespace: "boost")),
             name: title ?? "", siteMatch: SiteMatch(domain: bare), isEnabled: isEnabled,
-            css: css, js: js, colorWheel: wheel, fontFamily: font, textTransform: transform, zaps: zaps,
+            css: css, js: js, colorWheel: wheel, fontFamily: font, textZoom: textZoom, textTransform: transform, zaps: zaps,
             createdAt: document.createdAt ?? modified, updatedAt: modified, forkedFromID: fork)
     }
 }
