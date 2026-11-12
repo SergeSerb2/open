@@ -447,8 +447,14 @@ def checks(factory, results, tmp, config, harness):
               and len(restored) == len(state()['items']) and all(restored[k]['historical'] for k in required)
               and all(restored[k]['state'] == before_first[k]['state'] for k in before_first)
               and restored[other]['profile'] == profile2, items=list(restored.values()))
-        check('history_profile_filter_menu', state()['profileFilter'].get('titles', [])[0:1] == ['All Profiles']
-              and 'History Second' in state()['profileFilter'].get('titles', []), filter=state()['profileFilter'])
+        # The in-window Library's Profile filter is a chip group in the filter editor (no "All Profiles" item:
+        # pressing the selected chip clears the filter), not the retired Library window's pop-up.
+        app.call('library', action='filter', open=True)
+        chips = app.call('library')['header']['chips']
+        app.call('library', action='filter', open=False)
+        chip_ids = {c.get('id') for c in chips}
+        check('history_profile_filter_menu', {'profile:' + profile, 'profile:' + profile2} <= chip_ids
+              and any(c.get('title') == 'History Second' for c in chips), chips=chips)
         for selected, wanted in [(profile, set(before_first)), (profile2, {other})]:
             app.call('download-profile-filter', profile=selected)
             filtered = wait(lambda: wanted <= set(state()['visibleItems'])
@@ -478,8 +484,9 @@ def checks(factory, results, tmp, config, harness):
               and urllib.parse.unquote(urllib.parse.urlparse(state()['copiedFileURL']).path) == before_second['path'], actions=actions, receipt=opened)
 
         Path(before_first[completed]['path']).unlink()
-        app.call('download-profile-filter', profile=profile)
+        # Every outside entry scopes Downloads to the window owner's Profile: filter after the Library reopens.
         dismiss_library(); library()
+        app.call('download-profile-filter', profile=profile)
         missing = wait(lambda: row(completed).get('subtitle') == 'File moved or deleted.')
         missing_menu = menu(completed)
         check('history_missing_file_safe', missing and all(not v['enabled'] for v in missing_menu[:3])
