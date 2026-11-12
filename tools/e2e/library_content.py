@@ -143,7 +143,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='row-action',id=slow,name='Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused') and wait(lambda:'Resume' in row(slow).get('actions',[])));capture('downloads-paused')
             state(action='row-action',id=slow,name='Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
             menu(slow,'Cancel Download');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
-            cancelled_menu=menu(slow);check('cancelled_menu',[m['title'] for m in cancelled_menu][2:]==['Show in Finder','separator','Hide from Open'] and not any(m['enabled'] for m in cancelled_menu[:3]) and cancelled_menu[0]['title'].startswith('Open') and cancelled_menu[1]['title'].startswith('Copy'),items=cancelled_menu)
+            cancelled_ok=lambda m:[x['title'] for x in m][2:]==['Show in Finder','separator','Hide from Open'] and not any(x['enabled'] for x in m[:3]) and m[0]['title'].startswith('Open') and m[1]['title'].startswith('Copy')
+            # The row redraws a moment after the model turns cancelled; wait for its menu.
+            wait(lambda:cancelled_ok(menu(slow)));cancelled_menu=menu(slow);check('cancelled_menu',cancelled_ok(cancelled_menu),items=cancelled_menu)
             failed=start('/fail');check('failed_real_transfer',wait(lambda:item(failed).get('state')=='failed'))
             check('failed_menu',[m['title'] for m in menu(failed)]==['Retry','separator','Hide from Open']);capture('downloads-failed')
             # History is populated by real engine navigation.
