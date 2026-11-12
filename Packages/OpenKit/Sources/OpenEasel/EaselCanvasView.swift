@@ -325,14 +325,16 @@ public final class EaselCanvasView: NSView {
     public func cutSelection() { copySelection(); deleteSelection() }
     public func paste() {
         let pb = NSPasteboard.general
-        if let data = pb.data(forType: Self.pasteboardType), let objects = try? JSONDecoder().decode([EaselObject].self, from: data) {
+        if let data = pb.data(forType: Self.pasteboardType), data.count <= EaselDocument.maxFileBytes,
+           let objects = try? JSONDecoder().decode([EaselObject].self, from: data), EaselDocument.isValid(objects),
+           document.objects.count + objects.count <= EaselDocument.maxObjects {
             var z = document.maxZ
             let copies = objects.map { o -> EaselObject in
                 z += 1; return EaselObject(frame: Self.clamped(o.frame.offsetBy(dx: 20, dy: 20)), zIndex: z, content: o.content)
             }
             mutate("Paste") { $0.objects.append(contentsOf: copies) }
             setSelection(copies.map(\.id))
-        } else if let string = pb.string(forType: .string), !string.isEmpty {
+        } else if let string = pb.string(forType: .string), !string.isEmpty, string.utf16.count <= EaselDocument.maxTextLength {
             let center = docPoint(CGPoint(x: scrollView.contentView.bounds.midX, y: scrollView.contentView.bounds.midY))
             let id = insert(EaselObject(frame: CGRect(x: center.x - 150, y: center.y - 15, width: 300, height: 30), zIndex: 0,
                                         content: .text(EaselText(string: string))), name: "Paste")

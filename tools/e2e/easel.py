@@ -213,6 +213,21 @@ def run(factory, results, tmp, api):
                and s and again == saved and s['tabTitle'] == 'Trip board' and canvas(s)['palette'] == 'chill'
                and not s['recreated'] and s['favicon'], saved=saved, restored=again, unshown=unshown,
                state={k: v for k, v in (s or {}).items() if k != 'canvas'})
+
+        # E20: a corrupt document file is refused, kept aside, and the row opens a fresh Easel.
+        created = easel(action='create')
+        bad = easel(tab=created['tab'])
+        path = Path(app.call('easel', action='store', document=bad['document'])['path'])
+        app.call('select', tab=blank)
+        app.quit(); app = None
+        path.write_text('{"formatVersion": 1, "objects": [')
+        app = factory(urls=(), fresh=False)
+        app.call('select', tab=created['tab'])
+        s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=created['tab'])), timeout=8, step=.1)
+        aside = sorted(p.name for p in path.parent.glob('document.refused-*.json'))
+        record('E20_corrupt_file_set_aside', s and s['recreated'] and objects(s) == [] and len(aside) == 1
+               and (path.parent / aside[0]).read_text().startswith('{"formatVersion": 1'), aside=aside,
+               state={k: v for k, v in (s or {}).items() if k != 'canvas'})
     finally:
         if app:
             app.quit()

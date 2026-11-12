@@ -35,6 +35,7 @@ final class EaselContentHost: WebContentHost {
     var document = store.load(documentID)
     recreated = document == nil
     if document == nil {
+      store.setAsideRefused(documentID)
       // The file is gone (deleted outside Open or never written): start an empty Easel with
       // the row's title so the row and the page agree.
       let rowTitle = owner.model.tab(id: tabID)?.title

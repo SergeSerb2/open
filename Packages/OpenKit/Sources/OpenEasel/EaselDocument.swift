@@ -25,6 +25,37 @@ public struct EaselDocument: Codable, Equatable, Sendable {
         self.createdAt = createdAt; self.modifiedAt = createdAt; self.objects = objects
     }
 
+    /// Hard limits for documents and pasteboard objects read from outside the process.
+    /// A file over `maxFileBytes` is refused before decoding; a decoded document over any
+    /// count or length limit is refused (`EaselStore.setAsideRefused` renames the file and the
+    /// row shows a fresh empty Easel). Worst accepted decode: 10,000 objects × (≤ 64 KiB text or
+    /// ≤ 20,000 points × 16 B) stays far below 2 GiB because the file itself is ≤ 64 MiB.
+    public static let maxFileBytes = 64 << 20
+    public static let maxObjects = 10_000
+    public static let maxTextLength = 65_536
+    public static let maxPoints = 20_000
+    public static let maxTitleLength = 1_000
+
+    public static func isValid(_ objects: [EaselObject]) -> Bool {
+        guard objects.count <= maxObjects else { return false }
+        for o in objects {
+            guard o.frame.minX.isFinite, o.frame.minY.isFinite, o.frame.width.isFinite, o.frame.height.isFinite,
+                  abs(o.frame.minX) < 1e6, abs(o.frame.minY) < 1e7, o.frame.width >= 0, o.frame.height >= 0,
+                  o.frame.width < 1e6, o.frame.height < 1e7 else { return false }
+            switch o.content {
+            case .text(let t): if t.string.utf16.count > maxTextLength { return false }
+            case .shape(_, _, let arrow, let points):
+                if (points?.count ?? 0) > maxPoints { return false }
+                let all = (points ?? []) + (arrow.map { [$0.start, $0.end] } ?? [])
+                if all.contains(where: { !$0.x.isFinite || !$0.y.isFinite || abs($0.x) > 1e3 || abs($0.y) > 1e3 }) { return false }
+            }
+        }
+        return true
+    }
+    public var isValid: Bool {
+        formatVersion <= Self.currentFormatVersion && (title?.utf16.count ?? 0) <= Self.maxTitleLength && Self.isValid(objects)
+    }
+
     public var displayTitle: String {
         guard let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return Self.untitled }
         return title

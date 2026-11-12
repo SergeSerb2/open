@@ -22,8 +22,23 @@ public final class EaselStore {
     /// The pending (unsaved) copy wins over the file.
     public func load(_ id: UUID) -> EaselDocument? {
         if let doc = pending[id] { return doc }
-        guard let data = try? Data(contentsOf: fileURL(for: id)) else { return nil }
-        return try? Self.decoder.decode(EaselDocument.self, from: data)
+        let url = fileURL(for: id)
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int,
+              size <= EaselDocument.maxFileBytes,
+              let data = try? Data(contentsOf: url),
+              let doc = try? Self.decoder.decode(EaselDocument.self, from: data),
+              doc.id == id, doc.isValid else { return nil }
+        return doc
+    }
+
+    /// A file `load` refused is renamed `document.refused-<unix time>.json` beside it, so a new
+    /// empty document never overwrites it. Returns the new name.
+    @discardableResult
+    public func setAsideRefused(_ id: UUID) -> URL? {
+        let url = fileURL(for: id)
+        guard pending[id] == nil, FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let aside = url.deletingLastPathComponent().appendingPathComponent("document.refused-\(Int(Date().timeIntervalSince1970)).json")
+        return (try? FileManager.default.moveItem(at: url, to: aside)) != nil ? aside : nil
     }
 
     public func exists(_ id: UUID) -> Bool {
