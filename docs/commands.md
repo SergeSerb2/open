@@ -282,6 +282,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `keyboard-shortcuts-edu` | Essential Keyboard Shortcuts | — | window | Help |
 | `getting-started` | Getting Started | — | window | Help |
 | `contact-team` | Contact the Team | — | window | Help |
+| `export-notes` | Export Notes… | — | window | Help |
 | `release-notes` | Release Notes | — | window | Help |
 | `task-manager` | Open Task Manager | — | window | Help > Troubleshooting |
 | `record-trace` | Record Trace | — | window | Help > Troubleshooting |
@@ -361,7 +362,6 @@ Reserved (out-of-scope keys):
 - `reserved-new-chatgpt-message` New ChatGPT Message (reserved): Cmd+Opt+G
 - `reserved-send-to-dia` Send to Dia (reserved): —
 - `reserved-view-easels-notes` View Easels & Notes (reserved): —
-- `reserved-export-arc-notes` Export Notes (reserved): —
 - `reserved-share-arc` Share App (reserved): —
 - `reserved-sign-out` Sign Out (reserved): —
 

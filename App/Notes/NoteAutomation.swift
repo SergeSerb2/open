@@ -48,7 +48,8 @@ extension AutomationController {
     case "create": allowed = ["action", "split"]
     case "focus": allowed = ["action", "field"]
     case "type", "paste": allowed = ["action", "text", "field"]
-    case "flush": allowed = ["action"]
+    case "flush", "export-state": allowed = ["action"]
+    case "export": allowed = ["action", "path"]
     case "select": allowed = ["action", "start", "length"]
     case "press": allowed = ["action", "item"]
     case "gutter": allowed = ["action", "item"]
@@ -57,6 +58,21 @@ extension AutomationController {
     default: throw Failure(message: "unknown note action")
     }
     guard Set(args.keys).isSubset(of: allowed) else { throw Failure(message: "unknown note argument") }
+    if action == "export" || action == "export-state" {
+      // The same export as Help ▸ Export Notes… after its save panel.
+      if action == "export" {
+        guard let path = args["path"] as? String, path.hasSuffix(".zip") else { throw Failure(message: "path must end in .zip") }
+        NoteExporter.export(app: app, to: URL(fileURLWithPath: path))
+      }
+      var result: [String: Any] = ["running": NoteExporter.running]
+      switch NoteExporter.last {
+      case nil: result["last"] = ""
+      case .none?: result["last"] = "none"
+      case .exported(let count, let url)?: result["last"] = "exported"; result["count"] = count; result["path"] = url.path
+      case .failed(let reason)?: result["last"] = "failed"; result["reason"] = reason
+      }
+      return result
+    }
     let factory = try window
     switch action {
     case "create":
