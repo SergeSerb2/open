@@ -216,6 +216,86 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         server.shutdown()
 
 
+def gmail_fixture():
+    """Loopback stand-in for mail.google.com's Atom feed (synthetic mail only).
+    state: {'signed_in': bool, 'mail': [(subject, author, iso time)]}."""
+    import http.server, threading, html
+    state = {'signed_in': True, 'mail': [], 'requests': []}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = self.path.split('?')[0]; host = (self.headers.get('Host') or '').split(':')[0]
+            state['requests'].append((host, path))
+            port = self.server.server_address[1]
+            if host == 'mail.localhost' and path.endswith('/feed/atom'):
+                if not state['signed_in']:
+                    self.send_response(302); self.send_header('Location', 'http://accounts.localhost:%d/signin' % port)
+                    self.send_header('Content-Length', '0'); self.end_headers(); return
+                entries = ''.join('<entry><title>%s</title><link rel="alternate" href="http://mail.localhost:%d/mail/u/0/?msg=%d" type="text/html"/>'
+                                  '<issued>%s</issued><author><name>%s</name><email>x@example.com</email></author></entry>'
+                                  % (html.escape(t), port, i, d, html.escape(a)) for i, (t, a, d) in enumerate(state['mail']))
+                body = ('<?xml version="1.0" encoding="UTF-8"?><feed version="0.3" xmlns="http://purl.org/atom/ns#">'
+                        '<title>Inbox</title><fullcount>%d</fullcount>%s</feed>' % (len(state['mail']), entries)).encode()
+                kind = 'application/atom+xml; charset=utf-8'
+            else:
+                body = b'<!doctype html><title>Mail fixture</title><p>Mail fixture'
+                kind = 'text/html; charset=utf-8'
+            self.send_response(200); self.send_header('Content-Type', kind); self.send_header('Content-Length', str(len(body)))
+            self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1], state
+
+
+def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
+    server, port, mail = gmail_fixture()
+    def hover(node, ms=800):
+        app.call('hover', leave=True, ms=300)
+        return app.call('hover', node=node, ms=ms)
+    try:
+        cases = {'https://mail.google.com/mail/u/1/#inbox': 1, 'https://mail.google.com/mail/#inbox': 0, 'https://accounts.google.com/': None,
+                 'https://mail.google.com/chat/': None}
+        got = {u: app.call('glance-match', url=u).get('account') for u in cases}
+        results['live_gmail_host_match'] = {'ok': got == cases, 'got': got}
+        app.call('glance-alias', aliases=recents_aliases, mail=['mail.localhost'])
+        mail['mail'] = [('Quarterly numbers', 'Ada', '2026-11-12T09:00:00Z'), ('Lunch?', 'Grace', '2026-11-12T08:00:00Z')]
+        inbox = new_tab(app, 'http://mail.localhost:%d/mail/u/0/#inbox' % port)
+        app.call('pin', tab=inbox)
+        other = new_tab(app, 'http://plain.localhost:%d/elsewhere' % port)
+        app.call('select', tab=other)
+        shown = hover(inbox)
+        state = app.call('glance-state')
+        results['live_gmail_card_rows'] = {'ok': shown['kind'] == 'glance' and state.get('kind') == 'gmail' and state.get('phase') == 'mail'
+            and [r['title'] for r in state.get('rows', [])] == ['Quarterly numbers', 'Lunch?'] and state['rows'][0]['author'] == 'Ada'
+            and state.get('header') == 'Unread' and state.get('newLabel') == 'New Email'
+            and state.get('newURL') == 'http://mail.localhost:%d/mail/u/0/#compose' % port, 'state': state, 'hover': shown}
+        app.call('glance-open', row=1)
+        peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] and s['stack'][-1]['content'] > 0 else None)(app.call('peek-state')), timeout=5, step=.05)
+        href = ''
+        if peek:
+            app.call('wait', tab=peek['stack'][-1]['content']); href = app.eval(peek['stack'][-1]['content'], 'location.href')
+        results['live_gmail_row_opens_peek'] = {'ok': href == 'http://mail.localhost:%d/mail/u/0/?msg=1' % port, 'href': href}
+        app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        app.call('select', tab=other)
+        mail['mail'] = []
+        hover(inbox); empty = app.call('glance-state')
+        results['live_gmail_empty'] = {'ok': empty.get('phase') == 'empty' and empty.get('message') == 'No unread emails, you can exhale! 🍃'
+            and empty.get('rows') == [], 'state': empty}
+        mail['signed_in'] = False
+        hover(inbox); out = app.call('glance-state')
+        results['live_gmail_signed_out'] = {'ok': out.get('phase') == 'signedOut'
+            and out.get('message') == 'Sign in to your Email to see messages at a glance.', 'state': out}
+        mail['signed_in'] = True
+        app.call('defaults', key='open.general.previewsGmail', value=False)
+        off = hover(inbox)
+        app.call('defaults', key='open.general.previewsGmail', value=None)
+        results['live_gmail_switch_off_gives_page_card'] = {'ok': off['kind'] == 'page', 'hover': off}
+        app.call('hover', leave=True, ms=300)
+    finally:
+        server.shutdown()
+
+
 def run(factory, results, tmp, harness):
     new_tab, wait_until = harness['new_tab'], harness['wait_until']
     server, port = harness['_sleep_server']()
@@ -320,6 +400,7 @@ def run(factory, results, tmp, harness):
         app.call('defaults', key='open.general.previewsPages', value=None)
         app.call('hover', leave=True, ms=400)
         results['live_recents_hides_on_leave'] = {'ok': app.call('glance-state').get('shown') is False}
+        gmail_checks(app, results, wait_until, new_tab, {'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
         holder['app'] = app
         app = live_folder_checks(holder, results, wait_until, factory, new_tab)
     finally:
