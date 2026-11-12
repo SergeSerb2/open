@@ -10,8 +10,9 @@
   /// to the connection object, never to the fd number, because the kernel reuses numbers at once (a late
   /// write once hit a guarded system fd and killed the App with EXC_GUARD, 2026-11-12).
   final class AutomationServer: @unchecked Sendable {
-    /// Confined to `queue`.
-    private final class Connection {
+    /// Confined to `queue`. A reply task carries the reference across the main actor and hands it
+    /// back to `queue`; it never reads or writes the fields elsewhere.
+    private final class Connection: @unchecked Sendable {
       let fd: Int32
       let source: any DispatchSourceRead
       var buffer = Data()
@@ -50,7 +51,7 @@
         $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) }
       }
       guard bound == 0, listen(fd, 8) == 0 else {
-        close(fd)
+        Darwin.close(fd)
         throw POSIXError(.init(rawValue: errno) ?? .EIO)
       }
       chmod(path, 0o600)
