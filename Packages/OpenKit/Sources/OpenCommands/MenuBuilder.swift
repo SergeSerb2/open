@@ -226,6 +226,7 @@ public enum MenuBuilder {
         menu.addItem(.separator())
         // GUESS — capture pending: Arc 1.172 removed these items, so their position is not captured.
         add(menu, ["new-note", "new-note-in-split"], target: target, overrides: overrides)
+        add(menu, ["new-easel"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["archive-tab", "close-window", "restore-last-closed-tab"], target: target, overrides: overrides)
         menu.addItem(.separator())

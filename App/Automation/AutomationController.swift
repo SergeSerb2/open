@@ -315,6 +315,7 @@
       case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
         return try await mouse(a, nil)
       case "welcome": return try welcome(a)
+      case "easel": return try easel(a)
       case "note": return try note(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
