@@ -62,7 +62,7 @@ let package = Package(
         .target(name: "OpenRouting", dependencies: ["OpenModel"]),
         .target(name: "OpenStore", dependencies: ["OpenModel"], linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "OpenDocuments"),
-        .target(name: "OpenImport", dependencies: ["OpenModel", "OpenRouting", "OpenBoosts", "OpenDocuments"], linkerSettings: [.linkedLibrary("sqlite3"), .linkedFramework("Security")]),
+        .target(name: "OpenImport", dependencies: ["OpenModel", "OpenRouting", "OpenBoosts", "OpenEasel", "OpenDocuments"], linkerSettings: [.linkedLibrary("sqlite3"), .linkedFramework("Security")]),
         .target(name: "OpenWeb"),
         .target(name: "OpenTranslate", dependencies: ["OpenWeb"], resources: [.copy("Resources/translate-runtime.js")]),
         .target(name: "OpenSuggest", dependencies: ["OpenModel", "OpenStore"], resources: [.copy("Resources/public_suffix_list.dat")]),
