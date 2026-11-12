@@ -33,8 +33,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     // Command services can create Settings before its window is shown. An
     // unsupported engine must not open a Profile or schedule list updates then.
     if (!app.isFirstRun || app.firstRunSaved) && app.adBlockEngineAdapter.isSupported {
-      if let store = app.stores.adBlock { vm.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
-      else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
+      if let store = app.stores.existingAdBlock { vm.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
+      // A worker prepares the store; adBlockStoreDidOpen attaches it to this model.
+      else if !app.stores.prepareAdBlockInBackground() { vm.advanced.statusText = "Ad blocking settings could not be opened." }
     }
     app.defaultBrowserService.onChange = { [weak vm, weak app] state in
       vm?.general.refresh()
@@ -57,6 +58,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if settingsStorage.advanced.statusText == "Ad blocking settings could not be opened." {
       settingsStorage.advanced.statusText = ""
     }
+  }
+  func adBlockStoreFailedToOpen() {
+    guard let settingsStorage, settingsStorage.adBlock == nil else { return }
+    settingsStorage.advanced.statusText = "Ad blocking settings could not be opened."
   }
   func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool {
     guard app.engineReady, let profile = app.model.profile(id: profileID),

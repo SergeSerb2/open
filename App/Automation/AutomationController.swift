@@ -465,6 +465,9 @@
       case "settings-adblock-lifecycle": return try await settingsAdBlockLifecycle(a)
       #endif
       case "settings-adblock-engine": return settingsAdBlockEngine()
+      case "startup-trace":
+        guard let trace = StartupMainThreadTrace.current else { throw Failure(message: "start with OPEN_AUTOMATION_STARTUP_TRACE=1") }
+        return trace.json(minimumMilliseconds: a["minimumMs"] as? Double ?? 8)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
         if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }
