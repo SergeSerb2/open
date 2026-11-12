@@ -78,9 +78,13 @@ container first, then applies the returned rows. Plain skeleton plates appear
 only if the provider takes more than 120 ms.
 
 The viewport uses fixed frame geometry, cached attributed text and icons,
-layer plates, and a bounded pool of native cells that stay attached. A settled
-section configures, lays out and displays one screen of overscan above and
-below. Scrolling reuses those cells. A fast scroll also prefetches the predicted
+layer plates, and a bounded pool of native cells. Idle preparation constructs
+spare and missing overscan cells away from the attached layer tree. It checks
+elapsed time and a conservative next-body estimate before raster work, with a
+6 ms body budget to reserve time below the 8.3 ms slice ceiling for submission.
+Text layers can finish on separate turns; only completed cells join the pool
+or overscan hierarchy. A settled section prepares one screen above and below.
+Scrolling reuses those attached cells. A fast scroll also prefetches the predicted
 next viewport. The scroll benchmark records nested clip/dequeue/configure/layout,
 tracking, display and flush phases. Its run-loop heartbeat and 2 ms background
 watchdog exist only during that benchmark and stop before the socket reply. Search uses a retained plain

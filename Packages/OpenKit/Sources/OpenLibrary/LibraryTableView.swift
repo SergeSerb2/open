@@ -116,17 +116,31 @@ final class LibraryTableView: NSView, NSDraggingSource {
         overscanViewport = viewport
         for row in range.location..<(range.location+range.length) {
             guard !Task.isCancelled,isCurrent() else { return }
-            let completed = await LibraryIdleWork.perform {
+            let descriptor = rows[row]
+            // Visible rows already belong to the normal display path. Only
+            // prepare missing overscan cells here, away from the layer tree.
+            if let entry = live[descriptor.key],entry.version == descriptor.version { continue }
+            var prepared:NSView?
+            guard await LibraryIdleWork.perform({
                 guard isCurrent(),rows.indices.contains(row),
                     viewport == (enclosingScrollView?.contentView.bounds ?? bounds) else { return }
-                let started = ProcessInfo.processInfo.systemUptime
                 LibraryIdleWork.realizedRow(row)
-                reconciling = true
-                realize(row,display:true)
-                reconciling = false
-                record("reconcile",started)
-            }
-            guard completed else { return }
+                if live[descriptor.key] != nil { retire(descriptor.key) }
+                prepared = makeRow?(row)
+                prepared?.removeFromSuperview()
+                prepared?.frame = rect(ofRow:row)
+                LibraryIdleWork.measure("layout.pass") { prepared?.layoutSubtreeIfNeeded() }
+            }),let view = prepared else { return }
+            var installed = false
+            defer { if !installed { park(view) } }
+            guard await LibraryIdleWork.prepareLayers(of:view,scale:window?.backingScaleFactor ?? 2,row:row,operation:3,isCurrent:isCurrent) else { return }
+            guard await LibraryIdleWork.perform({
+                guard isCurrent(),rows.indices.contains(row),
+                    rows[row].key == descriptor.key,rows[row].version == descriptor.version,
+                    viewport == (enclosingScrollView?.contentView.bounds ?? bounds) else { return }
+                addSubview(view);view.isHidden = false
+                live[descriptor.key] = (row,descriptor.version,view);installed = true
+            }),installed else { return }
         }
     }
     func view(atColumn:Int,row:Int,makeIfNecessary:Bool) -> NSView? {

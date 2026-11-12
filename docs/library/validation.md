@@ -1062,3 +1062,21 @@ copied after release and hash-compared; no source metadata is rewritten.
 LEAD 22:10 authorises one new quiet M1 ticket, at most 15 minutes, for three open
 samples plus wheel/scroller after functional verification. It replaces the
 failed open set and keeps that set in the record. Qualification is pending.
+
+The replacement at `fafa2be1` stopped at a valid later-row preparation failure.
+Open samples 1/2 were 15.794417/15.659917 ms. Later slice 22 took 10.187083 ms
+against 8.3 ms; Library overlap was 10.187125 ms. Open 3 and wheel/scroller
+did not run. Both failed qualification sets remain evidence.
+
+Under LEAD 22:35, one M5 job repeated the same real fixture with finer marks.
+At trace-only head `2c87294e`, launch 4 reproduced an 8.430667 ms later slice
+on Downloads row 14. Two text rasters took 7.363708 ms; configuration took
+0.281042 ms and flush took 0.315958 ms. Image decode did not cause that miss.
+All Apps quit normally, with no owned survivors. The trace is diagnostic,
+not an M1 performance receipt.
+
+Preparation now separates detached row construction and text raster bodies.
+It checks elapsed time plus the next-body estimate before each layer and
+attaches only completed rows. Fixed M5 slices, rented functional suites and
+one new M1 replacement set are pending. The earlier failures do not qualify
+open or scroll, and their original limits and receipts remain unchanged.

@@ -99,20 +99,31 @@ final class LibraryListView: NSView, NSMenuDelegate {
         let capacity = Int(ceil(bounds.height/(gallery ? 118 : 56)))*3+6
         while cellsCreated < capacity {
             guard generation == overscanGeneration,!Task.isCancelled else { return }
-            let completed = await LibraryIdleWork.perform {
+            var prepared:LibraryItemView?
+            guard await LibraryIdleWork.perform({
+                guard generation == overscanGeneration else { return }
+                prepared = LibraryIdleWork.measure("cell.creation") { LibraryItemView() }
+            }),let view = prepared else { return }
+            view.identifier = .init("row")
+            // Always return a reserved cell to the pool, including cancellation.
+            var parked = false
+            defer { if !parked { table.park(view); cellsCreated += 1 } }
+            guard await LibraryIdleWork.perform({
             guard generation == overscanGeneration else { return }
-            let view = LibraryIdleWork.measure("cell.creation") { LibraryItemView() }; view.identifier = .init("row"); cellsCreated += 1
             if let first = sources.first {
                 view.frame = CGRect(x:0,y:0,width:bounds.width,height:gallery ? 118 : 56)
                 let item = LibraryIdleWork.measure("row.resolve") { first.resolve() }
                 LibraryIdleWork.row(cellsCreated-1,kind:gallery ? "boostGallery" : item.kind,operation:1)
                 LibraryIdleWork.measure("cell.configure") { view.configure(item,foreground:foreground,overlay:overlay,gallery:gallery,text:first.preparedText) }
                 LibraryIdleWork.measure("layout.pass") { view.layoutSubtreeIfNeeded() }
-                LibraryIdleWork.measure("display") { view.displayIfNeeded(); view.layer?.displayIfNeeded() }
             }
-            LibraryIdleWork.measure("cell.park") { table.park(view) }
-            }
-            guard completed else { return }
+            }) else { return }
+            guard await LibraryIdleWork.prepareLayers(of:view,scale:window?.backingScaleFactor ?? 2,
+                row:cellsCreated,operation:1,isCurrent:{ generation == self.overscanGeneration }) else { return }
+            guard await LibraryIdleWork.perform({
+                LibraryIdleWork.measure("cell.park") { table.park(view) }
+                cellsCreated += 1;parked = true
+            }) else { return }
         }
         let headingCount = entries.reduce(0) { count,entry in if case .heading = entry { return count+1 }; return count }
         while headingsCreated < min(capacity,headingCount) {
