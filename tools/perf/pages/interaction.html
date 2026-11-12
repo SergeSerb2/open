@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>Open performance interaction</title>
+<style>html,body{margin:0;background:#18435a;color:white;font:24px system-ui}header{padding:30px}#color{height:450px;background:#245b74}a{color:white}article{height:80px;padding:8px;border-bottom:1px solid #ddd}</style>
+<header>Local interaction fixture <a id="peek" href="/interaction.html?variant=peek">Open local target</a><span id="state"> ready</span></header><div id="color"></div><main id="rows"></main>
+<script>
+const color=document.getElementById('color'),state=document.getElementById('state');
+const interactionParams=new URLSearchParams(location.search);let serial=0;
+const rows=document.getElementById('rows');for(let i=0;i<1000;i++){const n=document.createElement('article');n.textContent='Synthetic scrolling row '+i;rows.append(n)}
+document.title='Perf local '+(interactionParams.get('variant')||'A')+' '+(interactionParams.get('run')||'probe');
+if(interactionParams.get('variant')==='B')color.style.background='#ab4c32';
+window.perfChanges=[];window.perfFrames=[];let raf=0;
+function paint(){const stamp=performance.now();color.style.background=(++serial%2)?'#df4a21':'#186dbb';perfChanges.push({serial,stamp,wall:performance.timeOrigin+stamp});state.textContent=' change '+serial}
+window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='x'){const delay=+(interactionParams.get('delay')||0);const input=performance.now();setTimeout(()=>{paint();perfChanges.at(-1).input=input;perfChanges.at(-1).delay=delay;fetch('/collect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({run:interactionParams.get('run'),event:'calibration',score:performance.now()-input,delay_ms:delay})})},delay)}});
+window.perfAnimate=(duration,stall=0)=>{const end=performance.now()+duration;let offset=0;color.style.backgroundImage='repeating-linear-gradient(90deg,#df4a21 0px,#df4a21 10px,#186dbb 10px,#186dbb 20px)';const frame=t=>{perfFrames.push(t);color.style.backgroundPosition=(offset+=3)+'px 0';const until=performance.now()+stall;while(performance.now()<until){}if(performance.now()<end)raf=requestAnimationFrame(frame)};raf=requestAnimationFrame(frame)};
+window.perfChanges=[];
+</script><script src="reporter.js"></script>

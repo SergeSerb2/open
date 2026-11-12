@@ -13,6 +13,102 @@
   import OpenSpaceEditor
   import Synchronization
   import MachO
+  import QuartzCore
+
+  /// Opt-in, bounded observations of the actual clip view during a wheel run.
+  /// Display-link callbacks sample bounds; they do not prove scanout or drawing.
+  @MainActor
+  private final class AutomationScrollCadence: NSObject {
+    private weak var clip: NSClipView?
+    private var link: CADisplayLink?
+    private var observer: (any NSObjectProtocol)?
+    private var oldPosts: Bool
+    private var ticks: [Double] = []
+    private var changes: [Double] = []
+    private var origins: [[Double]] = []
+    private var lastOrigin: NSPoint
+    private let started = ProcessInfo.processInfo.systemUptime
+    private var truncated = false
+    init(clip: NSClipView) {
+      self.clip = clip; oldPosts = clip.postsBoundsChangedNotifications; lastOrigin = clip.bounds.origin
+      super.init()
+      clip.postsBoundsChangedNotifications = true
+      observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification,
+        object: clip, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.changed() }
+      }
+      let display = clip.displayLink(target: self, selector: #selector(frame(_:)))
+      link = display; display.add(to: .main, forMode: .common)
+    }
+    private func changed() {
+      guard let clip, clip.bounds.origin != lastOrigin else { return }
+      lastOrigin = clip.bounds.origin
+      guard changes.count < 4096 else { truncated = true; stop(); return }
+      changes.append(ProcessInfo.processInfo.systemUptime)
+      origins.append([lastOrigin.x, lastOrigin.y])
+    }
+    @objc private func frame(_ display: CADisplayLink) {
+      guard ticks.count < 4096, ProcessInfo.processInfo.systemUptime - started < 10 else {
+        truncated = true; stop(); return
+      }
+      ticks.append(display.timestamp)
+    }
+    func stop() {
+      link?.invalidate(); link = nil
+      if let observer { NotificationCenter.default.removeObserver(observer) }; observer = nil
+      clip?.postsBoundsChangedNotifications = oldPosts
+    }
+    var state: [String: Any] {
+      ["displayTimestamps": ticks, "boundsChangeTimestamps": changes, "origins": origins,
+       "truncated": truncated, "running": link != nil,
+       "scope": "App display-link callbacks and actual clip bounds changes; excludes drawing and scanout"]
+    }
+  }
+
+  /// A CG scroll event with an explicit local destination. AppKit's CG bridge
+  /// does not populate a synthetic scroll's window-relative location.
+  private final class AutomationScrollEvent: NSEvent {
+    private let native: NSEvent
+    private weak var destination: NSWindow?
+    private let number: Int
+    private let point: NSPoint
+    @MainActor init(native: NSEvent, window: NSWindow, point: NSPoint) {
+      self.native = native; destination = window; number = window.windowNumber; self.point = point
+      super.init()
+    }
+    required init?(coder: NSCoder) { return nil }
+    override var type: NSEvent.EventType { .scrollWheel }
+    override var window: NSWindow? { destination }
+    override var windowNumber: Int { number }
+    override var locationInWindow: NSPoint { point }
+    override var timestamp: TimeInterval { native.timestamp }
+    override var modifierFlags: NSEvent.ModifierFlags { native.modifierFlags }
+    override var cgEvent: CGEvent? { native.cgEvent }
+    override var deltaX: CGFloat { native.deltaX }
+    override var deltaY: CGFloat { native.deltaY }
+    override var deltaZ: CGFloat { native.deltaZ }
+    override var scrollingDeltaX: CGFloat { native.scrollingDeltaX }
+    override var scrollingDeltaY: CGFloat { native.scrollingDeltaY }
+    override var hasPreciseScrollingDeltas: Bool { native.hasPreciseScrollingDeltas }
+    override var phase: NSEvent.Phase {
+      switch native.cgEvent?.getIntegerValueField(.scrollWheelEventScrollPhase) ?? 0 {
+      case 1: .began
+      case 2: .changed
+      case 4: .ended
+      case 8: .cancelled
+      default: []
+      }
+    }
+    override var momentumPhase: NSEvent.Phase {
+      switch native.cgEvent?.getIntegerValueField(.scrollWheelEventMomentumPhase) ?? 0 {
+      case 1: .began
+      case 2: .changed
+      case 3: .ended
+      default: []
+      }
+    }
+    override var isDirectionInvertedFromDevice: Bool { native.isDirectionInvertedFromDevice }
+  }
 
   /// Executes automation commands (docs/automation.md) on the main actor.
   /// Every command answers `{"id":…, "ok":true, "result":…}` or
@@ -30,6 +126,7 @@
     /// An action menu kept by `ext-menu keep`, for a later `stale` select.
     private var staleMenu: OEExtensionActionMenu?
     private var pointerRequestID = 0
+    private var scrollCadence: AutomationScrollCadence?
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
@@ -2091,6 +2188,63 @@
           pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
       }
       let action = a["action"] as? String
+      if action == "scroll-cadence-stop" {
+        guard let scrollCadence else { throw Failure(message: "no scroll cadence probe") }
+        scrollCadence.stop(); self.scrollCadence = nil
+        return scrollCadence.state
+      }
+      if action == "scroll" || action == "scroll-cadence-start" {
+        // Performance harness: normal own-window AppKit dispatch only. Never
+        // posts a CGEvent to the system or changes the hardware pointer.
+        let dx = a["dx"] as? Double ?? 0, dy = a["dy"] as? Double ?? 0
+        let x = a["x"] as? Double ?? 0, y = a["y"] as? Double ?? 0
+        guard dx.isFinite, dy.isFinite, abs(dx) <= 4096, abs(dy) <= 4096,
+          x.isFinite, y.isFinite, x >= 0, y >= 0, x < target.frame.width, y < target.frame.height,
+          let root = target.contentView else { throw Failure(message: "invalid scroll") }
+        let point = NSPoint(x: x, y: target.frame.height - y)
+        let local = root.convert(point, from: nil)
+        guard let hit = root.hitTest(local) else { throw Failure(message: "no scroll target") }
+        if action == "scroll-cadence-start" {
+          var view: NSView? = hit
+          while let candidate = view, !(candidate is NSClipView) { view = candidate.superview }
+          guard let clip = view as? NSClipView else { throw Failure(message: "no native scroll clip") }
+          scrollCadence?.stop(); scrollCadence = AutomationScrollCadence(clip: clip)
+          return ["started": true, "limit": 4096] as [String: Any]
+        }
+        guard
+          let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+            wheelCount: 2, wheel1: Int32(dy), wheel2: Int32(dx), wheel3: 0)
+        else { throw Failure(message: "no scroll target") }
+        let phase: Int64
+        switch a["phase"] as? String ?? "changed" {
+        case "none": phase = 0
+        case "began": phase = 1
+        case "changed": phase = 2
+        case "ended": phase = 4
+        case "cancelled": phase = 8
+        default: throw Failure(message: "invalid scroll phase")
+        }
+        cg.location = target.convertPoint(toScreen: point)
+        cg.location.y = (NSScreen.screens.first?.frame.maxY ?? 0) - cg.location.y
+        cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
+        cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+        let momentum = a["momentum"] as? Int64 ?? 0
+        guard (0...3).contains(momentum) else { throw Failure(message: "invalid momentum phase") }
+        cg.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum)
+        cg.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(number))
+        cg.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: Int64(number))
+        guard let native = NSEvent(cgEvent: cg) else { throw Failure(message: "scroll event refused") }
+        let event = AutomationScrollEvent(native: native, window: target, point: point)
+        guard event.window === target else { throw Failure(message: "scroll event did not address own window") }
+        NSApp.sendEvent(event)
+        return ["eventTimestamp": event.timestamp, "dx": dx, "dy": dy,
+          "window": event.windowNumber, "phase": phase, "momentum": momentum,
+          "routedPhase": event.phase.rawValue, "routedMomentum": event.momentumPhase.rawValue,
+          "scrollingDelta": [event.scrollingDeltaX, event.scrollingDeltaY],
+          "location": [event.locationInWindow.x, event.locationInWindow.y],
+          "targetPoint": [point.x, point.y]] as [String: Any]
+      }
       if action == "down" || action == "drag" || action == "up" {
         let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
         BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
