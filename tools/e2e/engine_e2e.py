@@ -7767,7 +7767,10 @@ def portrait_rows(app, results, tab, rows, tmp, wait_until):
         and pop.get('buttonTitle') == 'Capture in Portrait Mode' and pop.get('labels') == ['Use Website Color', 'Use Desktop Wallpaper', 'Portrait Capture Watermark Toggle']
         and pop.get('button', [0])[2] > 240 and pop.get('website', [0, 0, 0])[2] == 17 and pop.get('wallpaper', [0, 0, 0])[2] == 17
         and abs(pv.get('width', 0) / max(1, pv.get('height', 1)) - PORTRAIT_ASPECT) < 0.02
-        and place.get('popoverMaxX', 9e9) <= place.get('pageMinX', 0) + 2 and abs(place.get('popoverMidY', 0) - place.get('pageMidY', 9e9)) < 40
+        # Anchored at the page's sidebar-side edge, vertically centred. AppKit puts it on the sidebar
+        # side when there is room (Arc's capture) and flips it onto the page when there is not.
+        and min(abs(place.get('popoverMaxX', 9e9) - place.get('pageMinX', 0)), abs(place.get('popoverMinX', 9e9) - place.get('pageMinX', 0))) < 40
+        and abs(place.get('popoverMidY', 0) - place.get('pageMidY', 9e9)) < 40
         and len(rows()) == count and s.get('style', {}).get('source') == 'color', 'state': s}
     a = app.call('capture-portrait', action='color', value=0.0)
     b = app.call('capture-portrait', action='color', value=1.0)

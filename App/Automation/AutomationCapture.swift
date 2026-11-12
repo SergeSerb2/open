@@ -154,7 +154,7 @@ extension AutomationController {
         let anchor = page.convert(page.bounds, to: nil)
         if let frame = capture.portraitPopover?.contentViewController?.view.window?.frame, let window = page.window {
           let pageInScreen = window.convertToScreen(anchor)
-          state["placement"] = ["popoverMaxX": Double(frame.maxX), "pageMinX": Double(pageInScreen.minX),
+          state["placement"] = ["popoverMaxX": Double(frame.maxX), "popoverMinX": Double(frame.minX), "pageMinX": Double(pageInScreen.minX),
             "popoverMidY": Double(frame.midY), "pageMidY": Double(pageInScreen.midY)]
         }
       }
