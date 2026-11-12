@@ -8,6 +8,8 @@ import OpenSettings
   private var restoreScheduled = false
   private var selectionGeneration = 0
   private static let artworkVersion = 1
+  /// Read by `OpenDockTilePlugIn` (in the Dock's process) — keep the key in sync.
+  static let dockTileFileKey = "open.appIcon.dockTileFile"
   private(set) var appliedID = "openDefault"
   private(set) var errorText = ""
   private(set) var restoreStartedMs: Double?
@@ -50,6 +52,9 @@ import OpenSettings
     }
     NSApp.applicationIconImage = image
     appliedImage = image; appliedID = id; errorText = ""
+    // The Dock tile plug-in (DockTile/) draws this file while Open is not running; no file = bundle icon.
+    if option == .openDefault { UserDefaults.standard.removeObject(forKey: Self.dockTileFileKey) }
+    else { UserDefaults.standard.set(cacheFile(option).path, forKey: Self.dockTileFileKey) }
     return nil
   }
 
@@ -70,6 +75,10 @@ import OpenSettings
       return
     }
     let file = cacheFile(option)
+    // Selections made before the Dock tile plug-in existed: point it at the same cached file.
+    if UserDefaults.standard.string(forKey: Self.dockTileFileKey) != file.path {
+      UserDefaults.standard.set(file.path, forKey: Self.dockTileFileKey)
+    }
     Task { [weak self] in
       let decoded = await Task.detached(priority: .utility) { Self.decode(file) }.value
       guard let self, generation == self.selectionGeneration,
