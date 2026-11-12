@@ -87,7 +87,14 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.onScroll = { [weak self] in self?.overscanGeneration += 1 }
         table.onPrefetch = { [weak self] range,direction,stride in self?.prefetchRows(range,direction:direction,stride:stride) }
         table.menuAtRow = { [weak self] row in
-            guard let self else { return nil }; let menu = self.menu(at:row); self.activeMenu = menu; return menu
+            guard let self else { return nil }
+            // Arc: a right click on a Downloads or Archived Tabs row opens no menu; it only selects the row
+            // (capture C3 s8 items 9 and 11). The … button still opens the menu.
+            if let kind = self.item(at: row)?.kind, ["download", "archive"].contains(kind) {
+                if row >= 0 { self.table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+                return nil
+            }
+            let menu = self.menu(at:row); self.activeMenu = menu; return menu
         }
         table.setAccessibilityLabel("Library items")
         scroll.documentView = table; addSubview(scroll)
@@ -348,6 +355,13 @@ final class LibraryListView: NSView, NSMenuDelegate {
         }
         return menu
     }
+    /// What a right click on the row would show (nil: no menu), and the selection after it.
+    func rightClickMenu(id: String) -> (menu: NSMenu?, selected: Bool)? {
+        guard let row = entryIndex(id) else { return nil }
+        let menu = table.menuAtRow?(row)
+        if menu != nil { activeMenu = nil }
+        return (menu, table.selectedRow == row)
+    }
     func showMenu(id:String,escapeOnOpen:Bool = false) -> Bool {
         guard let row = entryIndex(id), let menu = menu(at:row), let cell = table.view(atColumn:0,row:row,makeIfNecessary:true) else { return false }
         activeMenu = menu
@@ -458,7 +472,8 @@ private final class LibraryItemView: NSView {
             }) }
         }
         var actions = item.hoverActions
-        if !item.actions.isEmpty { actions.append(.init(title:"More",glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
+        // Arc's tooltip on the row's … button is "More Options" (capture C3 s8 item 9).
+        if !item.actions.isEmpty { actions.append(.init(title:"More Options",glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
         // The table's reuse identifier stays "row". Item identity belongs to AX,
         // not the viewport reuse pool.
         setAccessibilityIdentifier(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")

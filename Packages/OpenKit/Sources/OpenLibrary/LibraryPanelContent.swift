@@ -97,6 +97,10 @@ extension LibraryPanelView {
     @discardableResult public func hoverRow(_ id:String,hovered:Bool) -> Bool { listView.hover(id:id,value:hovered) }
     @discardableResult public func performRow(_ id:String,action:String) -> Bool { listView.perform(id:id,action:action) }
     public func rowMenu(_ id:String,select:String? = nil) -> [[String:Any]]? { listView.menuState(id:id,select:select) }
+    /// Automation: the row's right-click result (menu item titles, or nil for no menu) and its selection.
+    public func rightClickRow(_ id: String) -> (titles: [String]?, selected: Bool)? {
+        listView.rightClickMenu(id: id).map { ($0.menu?.items.map { $0.isSeparatorItem ? "separator" : $0.title }, $0.selected) }
+    }
     @discardableResult public func showRowMenu(_ id:String,escapeOnOpen:Bool = false) -> Bool { listView.showMenu(id:id,escapeOnOpen:escapeOnOpen) }
     public func dragPayload(_ id:String) -> [String:Any]? { listView.dragState(id:id) }
     public func selectRow(_ id:String) -> Bool {
@@ -375,7 +379,8 @@ extension LibraryPanelView {
             var hover: [LibraryRowAction] = []
             if progress {
                 menu = [.init(title:named("Open"),enabled:false,run:{}),.init(title:named("Copy"),enabled:false,run:{}),
-                    .init(title:"Show in Finder",enabled:available,run:{ actions.revealDownload(id:id) }),.init(title:"-",run:{}),
+                    // Capture C3 s8 item 10: Show in Finder is disabled while the file is still downloading.
+                    .init(title:"Show in Finder",enabled:false,run:{}),.init(title:"-",run:{}),
                     .init(title:"Cancel Download",run:{ actions.cancelDownload(id:id) }),.init(title:"-",run:{}),
                     .init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })]
                 hover = [item.state == .paused ? .init(title:"Resume",glyph:.resume,run:{ actions.resumeDownload(id:id) })
@@ -392,6 +397,11 @@ extension LibraryPanelView {
                     .init(title:"Show in Finder",enabled:available,run:{ actions.revealDownload(id:id) }),
                     .init(title:"-",run:{}),.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) }),
                     .init(title:"Move to Trash",enabled:available,run:{ actions.trashDownload(id:id) })]
+            } else if item.state == .cancelled {
+                // Capture C3 s8 item 10: Open/Copy/Show in Finder drawn disabled · — · Hide; no Retry or Resume.
+                menu = [.init(title:named("Open"),enabled:false,run:{}),.init(title:named("Copy"),enabled:false,run:{}),
+                    .init(title:"Show in Finder",enabled:false,run:{}),.init(title:"-",run:{}),
+                    .init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })]
             } else { menu = [.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })] }
             return LibraryRowItem(id:id,title:item.fileName,subtitle:subtitle,kind:"download",day:"",
                 fileURL:progress ? nil : URL(fileURLWithPath:item.filePath ?? item.fileName),progress:progress ? item.progress ?? 0 : nil,

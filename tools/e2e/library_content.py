@@ -90,6 +90,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             complete=start('/file');check('completed_download_row',wait(lambda:item(complete).get('state')=='completed') and wait(lambda:row(complete)['subtitle']=='Download'),row=row(complete))
             # Arc's download menu (D2c #394): "Open ‹ext›", "Copy ‹ext›", then the fixed items.
             titles=[m['title'] for m in menu(complete)]
+            # Capture C3 s8 item 9: a right click on a Downloads row opens no menu and only selects; the … button tooltip is "More Options".
+            rc=state(action='row-right-click',id=complete);check('download_right_click_no_menu',rc['menu'] is None and rc['selected'],result=rc)
+            check('download_more_options_tooltip','More Options' in (row(complete) or {}).get('actions',[]),actions=(row(complete) or {}).get('actions'))
             check('completed_native_menu', len(titles)==6 and titles[0].startswith('Open') and titles[1].startswith('Copy') and titles[2:]==['Show in Finder','separator','Hide from Open','Move to Trash'],items=menu(complete))
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
             menu(complete,titles[1]);check('download_copy_file',wait(lambda:app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt')))
@@ -131,10 +134,11 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='chip',id='profile:'+profile);check('profile_chip_selected',state()['filterActive'] and state()['profiles']['downloads']==profile);capture('downloads-profile-filter')
             key('escape');check('escape_closes_filter',not state()['header']['filterOpen'] and state()['open'])
             state(action='filter',open=True);state(action='chip',id='profile:'+profile);state(action='filter',open=False)
-            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)][2:]==['Show in Finder','separator','Cancel Download','separator','Hide from Open'],items=menu(slow));capture('downloads-running')
+            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)][2:]==['Show in Finder','separator','Cancel Download','separator','Hide from Open'] and [m['enabled'] for m in menu(slow)][:3]==[False,False,False],items=menu(slow));capture('downloads-running')
             state(action='row-action',id=slow,name='Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused') and wait(lambda:'Resume' in row(slow).get('actions',[])));capture('downloads-paused')
             state(action='row-action',id=slow,name='Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
             menu(slow,'Cancel Download');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
+            cancelled_menu=menu(slow);check('cancelled_menu',[m['title'] for m in cancelled_menu][2:]==['Show in Finder','separator','Hide from Open'] and not any(m['enabled'] for m in cancelled_menu[:3]) and cancelled_menu[0]['title'].startswith('Open') and cancelled_menu[1]['title'].startswith('Copy'),items=cancelled_menu)
             failed=start('/fail');check('failed_real_transfer',wait(lambda:item(failed).get('state')=='failed'))
             check('failed_menu',[m['title'] for m in menu(failed)]==['Retry','separator','Hide from Open']);capture('downloads-failed')
             # History is populated by real engine navigation.
