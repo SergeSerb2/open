@@ -112,7 +112,7 @@ def run(factory, results, tmp, api):
         editing = canvas(s)['editingText']
         s = easel(action='type', text='Trip ideas')
         typed = canvas(s)['editorText']
-        s = easel(action='click', at=[900, 900])
+        s = easel(action='click', at=[960, 150])
         texts = [x for x in objects(s) if x['kind'] == 'text']
         record('E08_text', editing and typed == 'Trip ideas' and len(texts) == 1 and texts[0]['text'] == 'Trip ideas'
                and texts[0]['paragraphStyle'] == 'body' and canvas(s)['editingText'] is None
@@ -120,7 +120,7 @@ def run(factory, results, tmp, api):
         # An empty text box leaves nothing behind and no undo step.
         undo_before = canvas(s)['undoName']
         easel(action='tool', tool='text'); easel(action='click', at=[520, 700])
-        s = easel(action='click', at=[900, 900])
+        s = easel(action='click', at=[960, 150])
         record('E09_empty_text_discarded', len([x for x in objects(s) if x['kind'] == 'text']) == 1
                and canvas(s)['undoName'] == undo_before, state=canvas(s))
 
@@ -144,7 +144,7 @@ def run(factory, results, tmp, api):
 
         # E13: context menus (C-measurements-s4) and their actions.
         object_menu = easel(action='menu', at=[200, 300])
-        canvas_menu = easel(action='menu', at=[900, 900])
+        canvas_menu = easel(action='menu', at=[960, 150])
         record('E13_menus', object_menu == ['Bring to Front', 'Send to Back', 'Delete', '—', 'Cut', 'Copy', 'Paste', '—', 'Duplicate']
                and canvas_menu[:3] == ['Paste', '—', 'Color Palette ▸'], objectMenu=object_menu, canvasMenu=canvas_menu)
         z_before = {x['id']: x['zIndex'] for x in objects()}
@@ -155,7 +155,7 @@ def run(factory, results, tmp, api):
         s = easel(action='key', key='delete')
         record('E14_menu_actions', top['id'] == rect_id and top['zIndex'] > max(z_before.values())
                and dup_count == 6 and len(objects(s)) == 5, top=top, count=len(objects(s)))
-        s = easel(action='menu', at=[900, 900], item='Color Palette', submenu='Chill')
+        s = easel(action='menu', at=[960, 150], item='Color Palette', submenu='Chill')
         record('E15_palette', canvas(s)['palette'] == 'chill', state=canvas(s)['palette'])
 
         # E16: the title edits the sidebar row too.
@@ -187,6 +187,8 @@ def run(factory, results, tmp, api):
         # E19: persistence. Quit, relaunch on the same data: every frame, colour, z, title and
         # the palette come back exactly; nothing loads until the Easel is selected.
         final = easel(action='flush')
+        # Leave a web tab selected, so the relaunch shows that nothing Easel loads until selected.
+        app.call('select', tab=blank)
         stored = app.call('easel', action='store', document=final['document'])
         saved = sorted((x['id'], x['kind'], x.get('color'), tuple(x['frame']), x['zIndex'], x.get('text')) for x in objects(final))
         record('E19_file', stored['exists'] and len(stored['json']['objects']) == len(saved)
@@ -200,7 +202,8 @@ def run(factory, results, tmp, api):
         again = sorted((x['id'], x['kind'], x.get('color'), tuple(x['frame']), x['zIndex'], x.get('text')) for x in objects(s)) if s else []
         record('E19_relaunch_restores', restored_tab and not unshown.get('shown') and unshown.get('hostCount') == 0
                and s and again == saved and s['tabTitle'] == 'Trip board' and canvas(s)['palette'] == 'chill'
-               and not s['recreated'] and s['favicon'], saved=saved, restored=again)
+               and not s['recreated'] and s['favicon'], saved=saved, restored=again, unshown=unshown,
+               state={k: v for k, v in (s or {}).items() if k != 'canvas'})
     finally:
         if app:
             app.quit()

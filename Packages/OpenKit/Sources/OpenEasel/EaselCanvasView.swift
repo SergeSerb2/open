@@ -87,6 +87,12 @@ public final class EaselCanvasView: NSView {
     static let titleTop: CGFloat = 32
     static let titleSize = CGSize(width: 546, height: 66)
 
+    /// The host sizes this view by frame (no constraints): lay out on every size change.
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsLayout = true
+    }
+
     public override func layout() {
         super.layout()
         scrollView.frame = bounds
