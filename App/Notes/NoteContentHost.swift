@@ -35,7 +35,11 @@ final class NoteContentHost: WebContentHost {
     self.tabID = tabID; self.noteID = noteID; self.store = store; self.owner = owner
     note = store.document(noteID)
     unreadable = store.isUnreadable(noteID)
-    editor.setContent(title: note.title, body: note.text)
+    let id = noteID
+    let body = NoteRichText.attributed(text: note.text, formats: note.formats) { [store] name in
+      store.assetURL(note: id, name: name).flatMap(NoteImages.image(contentsOf:))
+    }
+    editor.setContent(title: note.title, body: body)
     if unreadable {
       // Arc's error title (STR). Never overwrite a file we could not read.
       editor.titleView.placeholder = "Can't load this note"
@@ -44,12 +48,18 @@ final class NoteContentHost: WebContentHost {
     }
     updateAppearance()
     editor.onChange = { [weak self] title, body in self?.edited(title: title, body: body) }
+    editor.onImage = { [weak self] data, ext in
+      guard let self, !self.unreadable else { return nil }
+      return try? self.store.writeAsset(data, ext: ext, note: self.noteID)
+    }
+    editor.onOpenLink = { [weak self] url in self?.owner?.openFromNote(url) }
   }
 
-  private func edited(title: String, body: String) {
+  private func edited(title: String, body: NSAttributedString) {
     guard !closed, !unreadable else { return }
     let titleChanged = title != note.title
-    note.title = title; note.text = body
+    note.title = title; note.text = body.string
+    note.formats = NoteRichText.formats(of: body)
     store.update(note)
     note = store.document(noteID)
     if titleChanged {
