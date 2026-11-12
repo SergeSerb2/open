@@ -12763,6 +12763,9 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.only == "features":
+        # The widevine row needs the opt-in CDM component (off by default, patch 0012).
+        extra.append("--open-enable-widevine")
     if opts.features_passwords_engine_safety:
         extra.append('--open-allow-mock-keychain-secrets')
     if opts.only == "extensions-e2":

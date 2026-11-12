@@ -483,3 +483,6 @@ Python steps (4 jobs) and the links (nice 10). Everything is in `Engine/fork/rem
   absolute path, with the Linux clang mounted over the Mac clang path and `-mlinker-version=1249`.
 - Seed the CAS in bulk before the first full build (README, "Seed the CAS").
 - Package as before: `engine-distrib --config release --skip-build`.
+- Tiny incremental rebuilds need no sandboxes: `OFFLINE=1 E3_LOG_DIR=… engine-remote-build out/Release_Official_arm64 cefsimple cefclient`
+  (2026-11-12, patch 0012: one compile + the framework link, 2 min 34 s).
+- Widevine is opt-in at run time (patch 0012, `--open-enable-widevine`); see `docs/release/official-engine.md`.

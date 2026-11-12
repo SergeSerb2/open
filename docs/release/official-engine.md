@@ -621,8 +621,17 @@ checks in s8 and its main distribution view. Section 3's root was not read.
 The official engine was built remotely (see `docs/engine-fork.md`, "Remote official build") and
 packaged as `cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal`.
 Record with hashes and inputs: `Engine/fork/official-distrib.json` (no binaries in git). Framework
-SHA-256 `6b6c8d5ce54e7674c3e66adfc08bb3b6b845fb9d8b2c73553557a99bdb9618a7`, UUID
-`4C4C4444-5555-3144-A1B1-0C672BC54A8C`. The dSYM and receipts are archived on the M5 in
+SHA-256 `cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b`, UUID
+`4C4C44F3-5555-3144-A1A2-041993A5F496` (after patch 0012; the first build `6b6c8d5c…` is superseded). The dSYM and receipts are archived on the M5 in
 `~/Developer/open-engine/symbols/<distribution name>/`. The App build fetches it through the engine
 root's `distrib.txt`; adoption also applies the download-handler lifetime companion change in
 `Engine/OpenEngine/src/OEClient.{h,mm}`.
+
+### Widevine (option D with a switch)
+
+Release args keep the CEF-required plumbing: `enable_widevine = true`, `bundle_widevine_cdm = false`,
+`ignore_missing_widevine_signing_cert = true` (no CDM is bundled). Patch `chromium/0012-open-widevine-opt-in.patch`
+registers Chromium's Widevine CDM component only when the browser process has `--open-enable-widevine`.
+The App passes it when Settings → Advanced → "Play DRM-protected video" is on (`open.advanced.enableWidevine`,
+off by default; takes effect at the next launch). Then the component updater downloads Google's CDM. Open has no
+Widevine licence or VMP signature, so services that enforce VMP may still refuse playback.
