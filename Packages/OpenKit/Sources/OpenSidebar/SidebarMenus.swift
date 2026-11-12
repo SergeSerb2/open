@@ -499,7 +499,9 @@ struct SidebarMenus {
     }
 
     /// Space: right-click on the Space title or on empty sidebar space (F0117, A0414).
-    func space(_ space: Space) -> NSMenu {
+    /// `inLibrary`: Library › Spaces card header and footer "…" show the same menu without "Manage Spaces…"
+    /// (capture session 8 item 13, `v13/34-item-13`).
+    func space(_ space: Space, inLibrary: Bool = false) -> NSMenu {
         let profile = NSMenuItem(title: "Set Profile", action: nil, keyEquivalent: "")
         profile.submenu = self.profile(space)
 
@@ -530,8 +532,7 @@ struct SidebarMenus {
             item("Share Space…", enabled: false, .shareSpace(space.id)),
             export,
             .separator(),
-            item("Manage Spaces…", .manageSpaces),
-            .separator(),
+        ] + (inLibrary ? [] : [item("Manage Spaces…", .manageSpaces), .separator()]) + [
             item("Delete Space", enabled: context.model.spaces.count > 1, .deleteSpace(space.id)),
         ])
     }

@@ -223,6 +223,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('boost-gallery-ui',action='profile',name=profile_name);check('boost_profile_restored',wait(lambda:bool(row(boost))))
             state(action='select',section='spaces');manager=app.call('space-manager-state')
             check('spaces_second_card',len(manager['columns'])==2)
+            # Capture session 8 item 13: the card header right-click and the footer "…" show the Space menu without Manage Spaces….
+            footer_menu=app.call('space-manager-menu',space=second_space,item='?');header_menu=app.call('space-manager-menu',space=second_space,item='?',header=True)
+            check('space_card_menu_order',footer_menu==header_menu and 'Manage Spaces…' not in footer_menu and footer_menu[-2:]==['separator','Delete Space'] and footer_menu[-3].startswith('Export ') and footer_menu[0]=='Change Space Icon…',footer=footer_menu,header=header_menu)
             app.call('space-manager-menu',space=second_space,item='Rename Space…');key('a',['cmd']);app.call('key',text='Reading List',route='app');key('return')
             check('space_visible_rename',wait(lambda:any(s['id']==second_space and s['title']=='Reading List' for s in app.call('spaces'))))
             check('space_rename_returns_focus',state()['firstResponder']!='NSTextView',responder=state()['firstResponder'])
