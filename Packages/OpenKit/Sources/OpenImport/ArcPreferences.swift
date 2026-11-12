@@ -82,6 +82,8 @@ public enum ArcPreferenceMapping {
         ("notionCalendarPreviewEnabled", "open.general.previewsCalendar"),
         // Reserved for LF's Gmail card (L6); Settings shows no row until it lands.
         ("gmailPreviewEnabled", "open.general.previewsGmail"),
+        // "Show Space Header" on a single unnamed Space (OpenSidebar `SpaceHeaderPreference.key`).
+        ("showSpaceHeaderOnSingleUnnamedSpaces", "open.sidebar.showSpaceHeaderOnSingleUnnamedSpace"),
     ]
     /// Arc keys read but not mapped, with the reason (shown in the import report counts).
     public static let unmapped: [String: String] = [

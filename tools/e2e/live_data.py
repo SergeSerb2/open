@@ -419,6 +419,14 @@ def run(factory, results, tmp, harness):
         if os.environ.get('OPEN_LIVE_DATA_FRAMES'):  # optional copy for look reviews
             import shutil; shutil.copy(shot, os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-recents-card-window.png'))
         results['live_recents_card_shadow'] = {'ok': far - near >= 6, 'near': near, 'far': far, 'scale': scale, 'card': state['card'], 'png': shot}
+        # The snapshot above re-lays out the window; on a real screen AppKit then recomputes the
+        # row's tracking areas from the REAL pointer (not over the row on the M1), which ends the
+        # hover and hides the card. That is correct for a user; the Peek check hovers again.
+        survived = app.call('glance-state', wait=False).get('shown') is True
+        if not survived:
+            hover(linear)
+            app.call('glance-state')
+        results['live_recents_card_after_snapshot'] = {'ok': True, 'info': 'card survived the window snapshot: %s' % survived}
         opened = app.call('glance-open', row=0)
         first_state = app.call('peek-state')
         peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] and s['stack'][-1]['content'] > 0 else None)(app.call('peek-state')), timeout=5, step=.05)

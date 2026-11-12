@@ -38,6 +38,10 @@
         guard p.view.press(pressed) else { throw Failure(message: "popover has no \(action) button now") }
         return adapter.stateForAutomation()
       case "dismiss": adapter.popover?.dismiss(); return adapter.stateForAutomation()
+      // Translate Selection (PB4 row 5): its state, and its Copy button's real press.
+      case "selection": return adapter.selection.state
+      case "selection-copy": return ["pressed": adapter.selection.pressCopy(), "state": adapter.selection.state]
+      case "selection-close": adapter.selection.close(); return adapter.selection.state
       case "detect":
         // The real detector on a text (X1: the translated body is no longer French).
         let text = String((a["text"] as? String ?? "").prefix(PageLanguageDetector.maxProbeCharacters))

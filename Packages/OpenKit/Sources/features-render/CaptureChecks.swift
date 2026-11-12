@@ -159,7 +159,7 @@ enum CaptureChecks {
         let restImage = Pixels(OffscreenRenderer().render(restRoot, scale: 1))
         let hint = rest.hint.frame
         check(hint.minY == CaptureMetrics.hintTop && hint.height == CaptureMetrics.hintHeight && abs(hint.midX - size.width / 2) <= 0.5
-              && !rest.hint.isHidden && rest.hint.text == "Drag to capture. Press Esc to cancel.",
+              && !rest.hint.isHidden && rest.hint.text == "Click or drag to capture a portion of this page",
               "R-C1 hint capsule centered 16 pt from the page top, 28 tall: \(hint)")
         // Band 2 (blue 0.25, 0.45, 0.95; y 200–300) under the 0.35 dim at y 250.
         let dimmed = [0.25, 0.45, 0.95].map { Int(($0 * 255 * 0.65).rounded()) }
