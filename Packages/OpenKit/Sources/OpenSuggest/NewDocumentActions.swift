@@ -25,8 +25,8 @@ public enum NewDocumentActions {
     ]
 
     private static func entry(_ key: String, _ name: String, _ url: String, _ aliases: [String]) -> Entry {
-        // No aliases: Arc matches word starts of the title only ("new d" does not find New Google Doc,
-        // "new g" does; capture PB1-h). `aliases` documents common names but is not searched.
+        // No aliases: Arc matches the title only (capture PB1-h). `aliases` documents common names but is
+        // not searched. Arc's "new d" does not find New Google Doc; Open's scorer still does (followups).
         Entry(id: "new-document-" + key, title: "New " + name, url: URL(string: url)!, aliases: [])
     }
 
