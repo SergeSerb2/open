@@ -485,11 +485,21 @@ struct SidebarMenus {
             item(context.title(of: other), enabled: other.id != space.id, .exportSpaceIntoFolder(space: space.id, destination: other.id))
         })
         let rename = ClosureMenuItem("Rename Space…") { [beginRename] in beginRename(nil) }
+        // "Show/Hide Space Header" only where it matters: a single unnamed Space. GUESS — capture PB5-a pending
+        // (Arc strings "Show Space Header"/"Hide Space Header", "Menu item to toggle space header visibility").
+        var header: [NSMenuItem] = []
+        if context.incognitoTitle == nil, context.isSingleUnnamedSpace(space) {
+            let shown = SpaceHeaderPreference.shared.showOnSingleUnnamedSpace
+            header = [ClosureMenuItem(shown ? "Hide Space Header" : "Show Space Header") {
+                SpaceHeaderPreference.shared.showOnSingleUnnamedSpace = !shown
+            }]
+        }
         return menu([
             item("Change Space Icon…", .changeSpaceIcon(space.id)),
             rename,
             item("Edit Theme Color…", .editSpaceTheme(space.id)),
             profile,
+        ] + header + [
             .separator(),
             item("New Folder", .newFolder(in: .spacePinned(space.id))),
             liveFolders(space),

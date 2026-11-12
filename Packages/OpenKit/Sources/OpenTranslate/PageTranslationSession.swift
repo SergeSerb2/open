@@ -120,7 +120,7 @@ public final class PageTranslationSession {
         let token = generation
         detection = Task { [weak self] in
             guard let self, let page = self.page else { return }
-            let raw = try? await page.evaluateJavaScript(PageLanguageDetector.probeScript)
+            let raw = try? await Self.evaluate(page, PageLanguageDetector.probeScript)
             guard !Task.isCancelled, !self.closed, self.generation == token,
                   let raw, let probe = PageLanguageProbe(json: raw),
                   let detected = PageLanguageDetector.detect(probe) else { return }
@@ -150,7 +150,7 @@ public final class PageTranslationSession {
         // newer generation, and this action must then give way.
         let token = generation
         if active {
-            _ = try? await page.evaluateJavaScript("window.__openTranslate ? window.__openTranslate.restore() : false")
+            _ = try? await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.restore() : false")
             guard generation == token, !closed else { return }
         }
         if let target { offer.target = target }
@@ -164,10 +164,10 @@ public final class PageTranslationSession {
             case .unsupported: throw TranslationFailure("Unsupported language pair")
             }
             guard generation == token, !closed else { return }
-            // Blocked on P7: isolated world. Until Site Control E5 lands, the runtime runs in the
-            // page's main world (§4.7.4, R-9): page scripts can see `window.__openTranslate`.
-            _ = try await page.evaluateJavaScript(runtimeSource)
-            let started = try await page.evaluateJavaScript("window.__openTranslate.start()") as? [String: Any]
+            // Open's isolated world (engine P7, PB4 row 5): the page cannot see or call
+            // `window.__openTranslate`; the runtime shares only the DOM with it.
+            _ = try await Self.evaluate(page, runtimeSource)
+            let started = try await Self.evaluate(page, "window.__openTranslate.start()") as? [String: Any]
             guard generation == token, !closed else { return }
             if userAction || stickyTarget?.host == offer.host { stickyTarget = (offer.host, offer.target) }
             let units = (started?["units"] as? NSNumber)?.intValue ?? 0
@@ -177,6 +177,12 @@ public final class PageTranslationSession {
             guard generation == token, !closed else { return }
             fail(offer, error)
         }
+    }
+
+    /// Runs in Open's isolated world; a backend without one (render fakes) uses the page world.
+    static func evaluate(_ page: any WebContent, _ script: String) async throws -> Any {
+        do { return try await page.evaluateJavaScript(script, in: .open) }
+        catch ScriptWorldError.unsupported { return try await page.evaluateJavaScript(script) }
     }
 
     private func finishFirstRound(_ offer: Offer, userAction: Bool) {
@@ -189,7 +195,7 @@ public final class PageTranslationSession {
             var announced = announced
             while let self, !Task.isCancelled, self.generation == token, !self.closed, let page = self.page {
                 let raw: Any
-                do { raw = try await page.evaluateJavaScript("window.__openTranslate ? window.__openTranslate.nextBatch() : null") }
+                do { raw = try await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.nextBatch() : null") }
                 catch {
                     // The document went away (a new page, a crash, or close): nothing to restore.
                     if self.generation == token, !self.closed { self.loop = nil; self.state = .idle }
@@ -207,7 +213,7 @@ public final class PageTranslationSession {
                         guard self.generation == token, !self.closed else { return }
                         guard results.count == batch.texts.count else { throw TranslationFailure("Invalid translation result") }
                         let json = String(decoding: try JSONSerialization.data(withJSONObject: results), as: UTF8.self)
-                        let applied = try await page.evaluateJavaScript("window.__openTranslate.apply(\(batch.id), \(json))") as? [String: Any]
+                        let applied = try await Self.evaluate(page, "window.__openTranslate.apply(\(batch.id), \(json))") as? [String: Any]
                         guard self.generation == token, !self.closed else { return }
                         self.batchesApplied += 1
                         self.unitsFallback += (applied?["fallback"] as? NSNumber)?.intValue ?? 0
@@ -224,7 +230,7 @@ public final class PageTranslationSession {
     private func fail(_ offer: Offer, _ error: any Error) {
         let reason = TranslationFailure.reason(for: error)
         stop()
-        if let page { Task { _ = try? await page.evaluateJavaScript("window.__openTranslate ? window.__openTranslate.restore() : false") } }
+        if let page { Task { _ = try? await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.restore() : false") } }
         state = .failed(offer, reason: reason)
         onEvent?(.failed(reason: reason))
     }
@@ -236,7 +242,7 @@ public final class PageTranslationSession {
         stop()
         if userAction { stickyTarget = nil }
         state = .offered(offer)
-        _ = try? await page.evaluateJavaScript("window.__openTranslate ? window.__openTranslate.restore() : false")
+        _ = try? await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.restore() : false")
         onEvent?(.reverted(to: offer.source, userAction: userAction))
     }
 
@@ -250,7 +256,7 @@ public final class PageTranslationSession {
         switch state { case .translating, .translated: wasTranslated = true; default: wasTranslated = false }
         stop()
         state = .idle
-        if wasTranslated, let page { _ = try? await page.evaluateJavaScript("window.__openTranslate ? window.__openTranslate.restore() : false") }
+        if wasTranslated, let page { _ = try? await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.restore() : false") }
     }
 
     /// The preferences changed (Reset Translated-site Prompts): nothing to do until the next load.

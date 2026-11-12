@@ -413,6 +413,9 @@ public final class SidebarView: NSView {
         return SidebarMenus(context: context).profile(space)
     }
 
+    /// The focused page shows its Space header (false for a single unnamed Space unless "Show Space Header").
+    public var spaceHeaderVisible: Bool { pager.currentPage?.headerVisible ?? false }
+
     public var spaceHeaderFrame: NSRect? {
         pager.currentPage.map { convert($0.header.bounds, from: $0.header) }
     }
@@ -694,6 +697,14 @@ extension SidebarView {
     public func drawnTitleFrame(tabID: ItemID) -> CGRect? {
         guard let row = cell(nodeID: tabID) as? TabCellView else { return nil }
         return convert(row.title.bounds, from: row.title)
+    }
+
+    /// Developer Mode row state (PB3 row 5): the host subtitle, the title baseline, and the dashed outline.
+    public func developerRowState(tabID: ItemID) -> [String: Any]? {
+        guard let cell = cell(nodeID: tabID) as? TabCellView else { return nil }
+        let row = cell.superview as? SidebarRowView
+        let subtitle = cell.hostSubtitle.flatMap { $0.isHidden ? nil : $0.text() } ?? ""
+        return ["subtitle": subtitle, "titleBaseline": cell.title.baseline, "outline": row?.showsDeveloperOutline ?? false]
     }
 
     public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
