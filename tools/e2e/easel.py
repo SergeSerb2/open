@@ -384,9 +384,9 @@ def run(factory, results, tmp, api):
             shown = api.wait_until(lambda: (lambda x: x if x['livePages'] == 3 else None)(easel(tab=e2)), timeout=8, step=.1)
             record('E31_live_release_when_hidden', hidden['livePages'] == 0 and shown, hidden=hidden['livePages'])
             # E32: back to the screenshot (no question the second time).
-            easel(action='edit', op='selectAll', tab=e2)
+            # Duplicates sit 20 pt down-right of each other: each card's top-left corner is its own.
             for x in [x for x in objects(easel(tab=e2)) if x['kind'] == 'webCard' and x.get('live')]:
-                g = x['frame']; easel(action='menu', at=[g[0] + g[2] / 2, g[1] + g[3] / 2], item='Show Screenshot', tab=e2)
+                g = x['frame']; easel(action='menu', at=[g[0] + 6, g[1] + 6], item='Show Screenshot', tab=e2)
             s = easel(tab=e2)
             record('E32_show_screenshot', s['livePages'] == 0 and not any(x.get('live') for x in objects(s) if x['kind'] == 'webCard'),
                    livePages=s['livePages'])
