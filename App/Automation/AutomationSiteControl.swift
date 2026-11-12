@@ -105,6 +105,9 @@ extension AutomationController {
               owner.sidebar.pressSiteControls() else { throw Failure(message: "no visible URL anchor") }
       } else { throw Failure(message: "via must be urlField or pane") }
     case "close": scc.dismiss(reason: .escape, animated: false)
+    case "end-sheet":
+      guard let window = owner.window, let sheet = window.attachedSheet else { throw Failure(message: "no attached sheet") }
+      window.endSheet(sheet); sheet.orderOut(nil)
     case "material":
       // Measurement only: try a public material and overlay constants on the open panel (LEAD 12:05 fit).
       func rgba(_ key: String) -> RGBA {
@@ -174,6 +177,7 @@ extension AutomationController {
       "anchor": rect(scc.view.anchorFrame), "body": rect(scc.view.panelFrame), "tip": [Double(tip.x), Double(tip.y)],
       "urlButtonState": owner.sidebar.siteControlState.rawValue,
       "security": controls.first(where: { $0["id"] as? String == "security" }) ?? [:],
+      "sheet": owner.window?.attachedSheet.map { String(describing: type(of: $0)) } ?? "",
       "focusedControl": (owner.window?.firstResponder as? SiteControlButton)?.controlID ?? "",
       "firstDrawMilliseconds": (try? window.siteControlDrawSamples) ?? [],
       "firstDrawNativeProbe": (try? window.siteControlDrawNativeProbeSamples) ?? [],
