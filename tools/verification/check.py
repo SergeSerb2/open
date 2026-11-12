@@ -425,6 +425,45 @@ def folder_peek_import(cli):
     print('FP11 folder peek import PASS: 6 synthetic variants, standard window, direct-child map, deterministic IDs and roundtrip')
 
 
+def favorites_empty_import(cli):
+    """A3: Arc's dismissed Favorites empty-state card through the real `openkit import-arc` (synthetic
+    Arc homes only). Arc keeps `topAppsEmptyStateDismissedForProfiles` = an array of Arc Profile keys
+    (C-report-s10 (a) 5/6); an older global `topAppsEmptyStateDismissed` covers every Profile."""
+    import plistlib
+    def home(name, prefs):
+        arc = Path(name).resolve() / "Library" / "Application Support" / "Arc"
+        arc.mkdir(parents=True)
+        items = []
+        spaces = []
+        for key, ref in (("default", {"default": True}), ("p2", {"custom": {"_0": {"directoryBasename": "Profile 2", "machineID": "synthetic"}}})):
+            items += ["c-" + key, {"id": "c-" + key, "childrenIds": [], "data": {"itemContainer": {}}}]
+            spaces += ["s-" + key, {"id": "s-" + key, "title": "Synthetic " + key, "profile": ref,
+                                    "containerIDs": ["pinned", "c-" + key], "customInfo": {}}]
+        source = {"version": 1, "sidebar": {"containers": [{"global": {}}, {"items": items, "spaces": spaces, "topAppsContainerIDs": []}]}}
+        (arc / "StorableSidebar.json").write_text(json.dumps(source))
+        if prefs is not None:
+            directory = Path(name).resolve() / "Library" / "Preferences"
+            directory.mkdir(parents=True)
+            with open(directory / "company.thebrowser.Browser.plist", "wb") as stream:
+                plistlib.dump(prefs, stream, fmt=plistlib.FMT_BINARY)
+        return arc
+    cases = [("per-profile", {"topAppsEmptyStateDismissedForProfiles": ["Profile 2"]}, {"Profile 2"}),
+             ("global", {"topAppsEmptyStateDismissed": True}, {"Default", "Profile 2"}),
+             ("absent", None, set()),
+             ("unknown-id", {"topAppsEmptyStateDismissedForProfiles": ["Profile 9", 7]}, set())]
+    for name, prefs, expected in cases:
+        arc = home("fav-empty-" + name, prefs)
+        output = Path("fav-empty-out-" + name).resolve()
+        report = run(cli, "import-arc", "--arc-dir", str(arc), "--out", str(output), "--counts-only")
+        matches(r"favoritesEmptyDismissed=%d\b" % len(expected), report)
+        data = json.loads((output / "State/browser.json").read_text())
+        dismissed = {p["dataDirectoryName"] for p in data["profiles"] if p.get("favoritesEmptyStateDismissed")}
+        require(len(data["profiles"]) == 2 and dismissed == expected,
+                "A3 import %s: dismissed %s, expected %s" % (name, sorted(dismissed), sorted(expected)))
+        matches(r"^roundtrip OK$", run(cli, "roundtrip", str(output)))
+    print("A3 Favorites empty-state import PASS: per-Profile array, global flag, absent, unknown ids; roundtrip")
+
+
 def route(cli, root, seed):
     for name in ("route-check.sh", "verify-routing.sh", "verify-route.sh"):
         runner = root / "tools" / name
@@ -848,6 +887,7 @@ def main():
         shutil.copytree(directory, seed, dirs_exist_ok=True)
         archive_migration(cli)
         folder_peek_import(cli)
+        favorites_empty_import(cli)
     elif name == "space-legacy":
         legacy_space_fixture(cli, root)
         space_icon_import(cli)
