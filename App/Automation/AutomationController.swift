@@ -829,7 +829,7 @@
         return try runPeekAppCommand(cmd, a)
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
-      case "handoff-state", "handoff-continue":
+      case "handoff-state", "handoff-continue", "deep-link-state":
         return try await runHandoffCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)

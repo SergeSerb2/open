@@ -74,6 +74,16 @@
 			<key>LSHandlerRank</key>
 			<string>Default</string>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Open Browser</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>open-browser</string>
+			</array>
+		</dict>
 	</array>
 	<key>SUFeedURL</key>
 	<string>https://sergeserb2.github.io/open/appcast.xml</string>

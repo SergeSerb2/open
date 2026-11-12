@@ -83,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var downloadsCenter = DownloadsCenter(app: self)
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
+  lazy var deepLinks = DeepLinkRouter(app: self)
   lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
   var lastLittleOpenRequest: LittleOpenRequest?
   var executedExternalLink = false
@@ -214,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     let icons = wasEngineReady && !windowControllers.isEmpty ? stores.sidebarFavicons : nil
     terminationRequested = true
+    deepLinks.relaunchIfRequested()
     preparedOnboardingSound?.stop(); preparedOnboardingSound = nil
     if let onboardingStartObserver { CFRunLoopObserverInvalidate(onboardingStartObserver); self.onboardingStartObserver = nil }
     onboardingWindowController?.stop()

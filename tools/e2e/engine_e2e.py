@@ -8896,6 +8896,59 @@ def routing_checks(factory, results, tmp):
         record('routing_default_browser_read_only', state_before == state_after
                and state_after['isDefaultBrowser'] == (state_after['http']['isDefault'] and state_after['https']['isDefault']),
                before=state_before, after=state_after)
+
+        # PB1 deep links: open-browser://<route> through real LaunchServices delivery.
+        def deep(url, handled):
+            sent = deliver(url)
+            state = wait_until(lambda: (lambda d: d if d['handled'] >= handled else None)(app.call('deep-link-state')), timeout=8, step=.05)
+            return sent.returncode == 0, state
+        def focused_space(): return next(s for s in app.call('spaces') if s['focused'])['id']
+        base_handled = app.call('deep-link-state')['handled']
+        spaces = app.call('spaces')
+        app.call('space', space=spaces[0]['id'])
+        ok_index, by_index = deep('open-browser://space/2', base_handled + 1)
+        index_focus = wait_until(lambda: focused_space() == spaces[1]['id'], timeout=3, step=.05)
+        app.call('space', space=spaces[0]['id'])
+        # The seeded target Space is titled "Routing target"; the name match ignores case.
+        ok_name, by_name = deep('open-browser://space/routing%20TARGET', base_handled + 2)
+        name_focus = wait_until(lambda: focused_space() == target['id'], timeout=3, step=.05)
+        record('routing_deep_link_space', ok_index and ok_name and bool(index_focus) and bool(name_focus)
+               and by_index['result'] == 'space' and by_name['result'] == 'space', index=by_index, name=by_name,
+               titles=[s['title'] for s in spaces])
+        tabs_before = len(app.call('tabs'))
+        ok_bad, missing = deep('open-browser://space/99', base_handled + 3)
+        ok_unknown, unknown = deep('open-browser://no-such-route/x', base_handled + 4)
+        record('routing_deep_link_unknown_noop', ok_bad and ok_unknown and missing['result'] == 'no-space'
+               and unknown['result'] == 'unknown' and focused_space() == target['id'] and len(app.call('tabs')) == tabs_before,
+               missing=missing, unknown=unknown)
+        ok_welcome, welcome = deep('open-browser://welcome', base_handled + 5)
+        welcome_tab = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == 'open://welcome' and t['selected']), None), timeout=5, step=.05)
+        record('routing_deep_link_welcome', ok_welcome and welcome['result'] == 'welcome' and bool(welcome_tab), state=welcome, tab=welcome_tab)
+
+        # restart: the same executable and options come back after this process exits.
+        old_pid = app.call('deep-link-state')['pid']
+        app.quitting = True  # an intended exit: not an App death
+        sent = deliver('open-browser://restart')
+        def pid_alive(pid):
+            try: os.kill(pid, 0); return True
+            except ProcessLookupError: return False
+        gone = wait_until(lambda: not pid_alive(old_pid), timeout=20, step=.1)
+        def new_pid():
+            try:
+                pid = app.call('deep-link-state', timeout=2)['pid']
+                return pid if pid != old_pid else None
+            except Exception:
+                return None
+        relaunched = wait_until(new_pid, timeout=30, step=.25)
+        # quit: the relaunched instance exits through the normal quit path.
+        sent_quit = deliver('open-browser://quit') if relaunched else None
+        quit_done = wait_until(lambda: not pid_alive(relaunched), timeout=20, step=.1) if relaunched else False
+        if relaunched and not quit_done:
+            try: os.kill(relaunched, signal.SIGKILL)
+            except ProcessLookupError: pass
+        record('routing_deep_link_restart_quit', sent.returncode == 0 and bool(gone) and bool(relaunched)
+               and sent_quit is not None and sent_quit.returncode == 0 and bool(quit_done),
+               oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done))
     finally:
         _restore_defaults(app, saved)
         if app: app.quit()

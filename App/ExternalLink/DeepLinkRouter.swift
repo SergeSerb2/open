@@ -1,0 +1,97 @@
+import AppKit
+import OpenModel
+
+/// `open-browser://` deep links (Arc parity: Arc registers `arcBrowser`, role Editor;
+/// route names quit, restart, space, welcomeToArc and others in Arc 1.170.0 strings).
+/// Lead ruling 2026-11-12 01:25: routes quit, restart, space/<name|index>, welcome.
+/// Guess — capture pending (C3-PB1-c): Arc's URL and argument shapes; match them when recorded.
+/// Unknown routes do nothing and log one line (never the full URL).
+@MainActor
+final class DeepLinkRouter {
+  static let scheme = "open-browser"
+  private unowned let app: AppDelegate
+  private var pending: [URL] = []
+  /// Automation evidence: the last route and its result.
+  private(set) var last: (route: String, result: String)?
+  private(set) var handledCount = 0
+  /// Set by the restart route; the relauncher starts only when the quit is committed.
+  private(set) var restartRequested = false
+
+  init(app: AppDelegate) { self.app = app }
+
+  static func matches(_ url: URL) -> Bool { url.scheme?.lowercased() == scheme }
+
+  func handle(_ url: URL) {
+    if app.linkIntake.ready { route(url) } else { pending.append(url) }
+  }
+
+  func markReady() {
+    let queued = pending; pending.removeAll()
+    for url in queued { route(url) }
+  }
+
+  /// `open-browser://space/2` parses as host "space", path "/2"; also accept
+  /// `open-browser:space/2` (no authority).
+  static func components(_ url: URL) -> [String] {
+    var parts: [String] = []
+    if let host = url.host(percentEncoded: false), !host.isEmpty { parts.append(host) }
+    let path = url.host == nil ? (URLComponents(url: url, resolvingAgainstBaseURL: false)?.path ?? "") : url.path(percentEncoded: false)
+    parts += path.split(separator: "/").map(String.init).compactMap { $0.removingPercentEncoding ?? $0 }
+    return parts.filter { !$0.isEmpty }
+  }
+
+  private func route(_ url: URL) {
+    handledCount += 1
+    let parts = Self.components(url)
+    let name = parts.first?.lowercased() ?? ""
+    let result: String
+    switch name {
+    case "quit":
+      result = "quit"; NSApp.terminate(nil)
+    case "restart":
+      result = "restart"; restartRequested = true; NSApp.terminate(nil)
+    case "welcome":
+      if let factory = frontFactory() { factory.openBasics(nil); result = "welcome" } else { result = "no-window" }
+    case "space":
+      result = focusSpace(parts.dropFirst().joined(separator: "/"))
+    default:
+      result = "unknown"
+    }
+    last = (name, result)
+    if result != name {
+      // Route names are a fixed, short vocabulary; anything else is reported by length only.
+      let label = ["quit", "restart", "welcome", "space"].contains(name) ? name : "<\(name.count) chars>"
+      AppDelegate.commandLog("Deep link \(label) did nothing (\(result)).")
+    }
+  }
+
+  private func frontFactory() -> EngineWebContentHostFactory? {
+    app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+  }
+
+  /// A 1-based index (the Ctrl+1…9 order) or a Space title (case-insensitive).
+  private func focusSpace(_ argument: String) -> String {
+    guard let factory = frontFactory() else { return "no-window" }
+    let spaces = app.model.spaces
+    let space: Space?
+    if let index = Int(argument) { space = (1...max(1, spaces.count)).contains(index) && !spaces.isEmpty ? spaces[index - 1] : nil }
+    else { space = spaces.first { $0.title?.compare(argument, options: [.caseInsensitive]) == .orderedSame } }
+    guard let space else { return "no-space" }
+    factory.focus(space: space)
+    return "space"
+  }
+
+  /// Called once the quit is committed. Starts the same executable with the same
+  /// options after this process exits (launch URLs are not repeated).
+  func relaunchIfRequested() {
+    guard restartRequested else { return }
+    let arguments = ProcessInfo.processInfo.arguments
+    guard let executable = arguments.first else { return }
+    let options = arguments.dropFirst().filter { $0.hasPrefix("-") }
+    let waiter = Process()
+    waiter.executableURL = URL(fileURLWithPath: "/bin/sh")
+    waiter.arguments = ["-c", "while /bin/kill -0 \"$0\" 2>/dev/null; do /bin/sleep 0.1; done; exec \"$@\"",
+      String(ProcessInfo.processInfo.processIdentifier), executable] + options
+    do { try waiter.run() } catch { AppDelegate.commandLog("Restart could not start the relauncher.") }
+  }
+}
