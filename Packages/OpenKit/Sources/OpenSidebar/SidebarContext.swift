@@ -5,6 +5,7 @@ import OpenModel
 import OpenMedia
 import OpenStore
 import OpenExtensionsUI
+import OpenLiveData
 
 /// Shared state for every sidebar view: the model, the window it shows, and
 /// view-only state that is not part of the model (window active, command bar
@@ -104,6 +105,18 @@ public final class SidebarContext {
     public var folderIconOverrideProvider: (@MainActor (Folder) -> String?)?
 
     public var storedFavicons: StoredFaviconCache?
+
+    /// Recents hover card data (live-data §3.4): history rows of a Profile whose URLs contain one
+    /// of the given phrases (`RecentsSite.historyPhrases`), newest first. The App sets it for normal windows; nil (incognito, render scenes) keeps the page card.
+    @ObservationIgnored public var recentPagesSource: (@MainActor (ProfileID, [String]) async -> [(url: URL, title: String, lastVisit: Date)])?
+    /// Automation fixtures only: extra hosts that count as a Recents site. Empty in normal use.
+    @ObservationIgnored public var glanceHostAliases: [String: RecentsSite] = [:]
+    /// The live-data card a sidebar tab gets on hover, or nil for the page card.
+    public func glanceKind(for tab: Tab) -> GlanceKind? {
+        guard recentPagesSource != nil, let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases) else { return nil }
+        let key = kind.preferenceKey
+        return previewPreferences.object(forKey: key) == nil || previewPreferences.bool(forKey: key) ? kind : nil
+    }
 
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?

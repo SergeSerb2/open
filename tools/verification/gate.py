@@ -41,12 +41,12 @@ RENTED_ALLOWED_E2E = {
               'secrets-import', 'shell', 'owner-watch', 'toolbar', 'numbering', 'history',
               'tabstrip', 'extensions', 'extensions-p3', 'extensions-e2', 'find', 'measure',
               'peek', 'media', 'sleep', 'context-menus', 'routing', 'littleopen',
-              'boost-gallery', 'sitedata'},
+              'boost-gallery', 'sitedata', 'calendar'},
     'observers': {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'},
 }
 RENTED_LANES = ('merge', 'observers')
 REFUSED = []  # Receipts found under --m1-receipts that were refused, with the reason.
-SAFE_M5 = set('ntp onboarding welcome import-robust firstrun shell extensions tabstrip window sidebar peek commandbar app-actions actions extensions-p3 extensions-ui sitecontrol extensions-e2 sidebar-completion toolbar numbering media relaunch page page-chrome sleep context-menus routing history applescript boosteditor boost-gallery space-editor incognito sitedata find split littleopen downloads measure'.split())
+SAFE_M5 = set('ntp onboarding welcome import-robust firstrun shell extensions tabstrip window sidebar peek live-data commandbar app-actions actions extensions-p3 extensions-ui sitecontrol extensions-e2 sidebar-completion toolbar numbering media relaunch page page-chrome sleep context-menus routing history applescript boosteditor boost-gallery space-editor incognito sitedata calendar find split littleopen downloads measure'.split())
 CLI = ('commands-demo roundtrip space-legacy space-pad-compare suggest-check commands-dump '
        'route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles '
        'sidebar-render sidebar-compare commandbar-render extensions-render '

@@ -127,6 +127,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var sidebarShareRequest: [String: Any] = [:]
   /// The last Shared Quotes offer: how long the page took to answer, whether it showed.
   var lastQuoteOffer: [String: Any] = [:]
+  /// The last Join Meeting outcome (`AutomationCalendar`).
+  var lastJoinMeeting: [String: Any] = [:]
   var sidebarShareDismissTimerForAutomation: Timer?
   var sidebarShareDismissAttemptsForAutomation = 0
   var profileMenuResponseForAutomation: String?
