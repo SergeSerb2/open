@@ -13202,6 +13202,7 @@ def main():
             sidebar_checks(factory, results["sidebar"], tmp)
         elif opts.only == "calendar":
             results["calendar"] = CheckedResults(tracker)
+            import runpy
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "calendar_app.py"))["run"](factory, results["calendar"], tmp, globals())
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
