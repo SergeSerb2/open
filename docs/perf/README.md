@@ -205,9 +205,10 @@ The engine release build can run as a slotless background job. An exclusive
 ticket does not exclude it. No M5 score measurement is valid while that
 build runs. Phase 2 replay checks live background-holder records before and
 after each session and refuses scoring. `--calibrate` may run functional
-flows under load once the user's browser is quit; it records actual load,
-skips the quiet-load gate, labels loaded sessions **under load, not for scoring**,
-and writes no scorecard. Quiet calibration remains explicitly unscored.
+flows with a background build once the user's browser is quit; it records
+actual load and still requires the declared paired load gate. Loaded
+sessions are labelled **under load, not for scoring**, and calibration
+writes no scorecard. Quiet calibration remains explicitly unscored.
 The scorer also refuses calibration receipts.
 Older Phase 1 entry points require the same operator check; do not run them
 for scores during a background build.

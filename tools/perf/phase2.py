@@ -26,6 +26,7 @@ from run import (ROOT, ARC, ARC_DATA, OPEN, BASE, PLANS, Browser, atomic, now, p
 from server import Collector, CollectorClient
 from score import summarize, metric_rows
 from campaign import MAIN_DELTA
+from display import displays_match
 
 DEFAULT_KEYS=['SUEnableAutomaticChecks','SUAutomaticallyUpdate','openExternalLinksInLittleBrowserEnabled']
 
@@ -256,7 +257,7 @@ def worker(cfg):
         if sha(ROOT/'.re/perf/bin'/name)!=digest:raise RuntimeError('Measurement helper changed: '+name)
     for path,digest_key in [(OPEN/'Contents/MacOS/Open','app_main_sha256'),(OPEN/'Contents/Frameworks/OpenEngine.framework/Versions/A/OpenEngine','engine_sha256')]:
         if sha(path)!=expected[digest_key]:raise RuntimeError('Frozen Open artifact changed')
-    if row['display_before']!=expected['display'] or (not open_only and
+    if not displays_match(expected['display'],row['display_before']) or (not open_only and
         (row['arc_core_before']!=expected['arc_core'] or row['arc_version_before']!=expected['arc_version'])):
         raise RuntimeError('Session provenance changed')
     root=Path(cfg['root']);c=CollectorClient(cfg['collector']);b=Browser(cfg['browser'],root,out,c,'phase2')
@@ -366,7 +367,8 @@ def worker(cfg):
         if row['background_jobs_after'] and not calibration:row['error']='Background build invalidates score measurements'
         row['valid']=not row.get('error') and not row.get('restore_error') and row.get('cleanup') and (calibration or max(row['load_before'][0],row['load_after'][0])<=max_load)
         for what in ('arc_version','arc_core','display'):
-            if row[what+'_before']!=row[what+'_after']:row['valid']=False;row['error']=what+' changed'
+            matches=displays_match(row[what+'_before'],row[what+'_after']) if what=='display' else row[what+'_before']==row[what+'_after']
+            if not matches:row['valid']=False;row['error']=what+' changed'
         for path,k in [(OPEN/'Contents/MacOS/Open','app_main_sha256'),(OPEN/'Contents/Frameworks/OpenEngine.framework/Versions/A/OpenEngine','engine_sha256')]:
             if sha(path)!=expected[k]:row['valid']=False;row['error']='Frozen Open artifact changed'
         for name,digest in expected['measurement_helpers'].items():

@@ -12,13 +12,17 @@ from frame_client import Frames
 from phase2_input import ax, web_rect, scroll_script, dispatch_scroll, center, largest
 from run import Browser, ROOT, atomic, existing_pids, ARC, OPEN, probe, provenance, now, guard
 from server import Collector
+from profile_state import quiet_pair
 
 def main():
     if os.environ.get('OPEN_HEAVY_HELD')!='1':raise RuntimeError('Missing exclusive queue slot')
     out=ROOT/'.re/perf'/os.environ.get('OPEN_PERF_CONTROL_OUT','phase2-control-5');out.mkdir(exist_ok=False)
     result={'date':now(),'provenance':provenance(include_arc=False),'load_before':list(os.getloadavg()),'passed':False}
     if existing_pids(ARC) or existing_pids(OPEN):raise RuntimeError('Foreign browser running; no adoption')
-    if os.getloadavg()[0]>10:raise RuntimeError('Load gate refused')
+    result['quiet_readings'],quiet=quiet_pair(6)
+    if not quiet:
+        result['error']='Paired load gate refused';atomic(out/'result.json',result);return 75
+    if existing_pids(ARC) or existing_pids(OPEN):raise RuntimeError('Foreign browser running after quiet gate; no adoption')
     root=Path(tempfile.mkdtemp(prefix='op.'));c=Collector(out/'collector');b=Browser('open',root,out,c,'control');frames=None
     try:
         b.start(c.url+'/interaction.html?run=control&delay=0')
