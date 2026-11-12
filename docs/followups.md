@@ -595,3 +595,4 @@ change a user's live preferences. Today the real-App suites (for example
 `tools/e2e/updater.py`) write keys such as `open.general.warnBeforeQuitting`
 in the shared `io.github.sergeserb2.open` domain and restore them in `finally`.
 A user's running Open session can see those values while a suite runs.
+- **Favorites empty-state card in older e2e suites (A3, 2026-11-12).** The e2e harness launches with `--favorites-empty-state=hidden` (automation builds only), so suites and visual references written before the card keep their sidebar geometry; only `favorites-empty` runs with the card shown. At the next reference refresh, move the suites to the product default (card shown on a fresh Profile) and drop the launch option.

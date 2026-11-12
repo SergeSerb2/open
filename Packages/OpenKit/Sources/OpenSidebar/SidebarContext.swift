@@ -314,7 +314,8 @@ public final class SidebarContext {
     /// Height of the Favorites section for this window at `width`.
     public func favoritesSectionHeight(width: CGFloat) -> CGFloat {
         if isIncognito { return 0 }
-        if favoritesEmptyStateVisible { return FavoritesMetrics.emptyStateSectionHeight }
+        // The card grows when its text wraps at a narrow sidebar (section 136.5 at the minimum, measured).
+        if favoritesEmptyStateVisible { return FavoritesMetrics.emptyStateSectionHeight - 95 + FavoritesEmptyStateView.cardHeight(sidebarWidth: width) }
         return FavoritesMetrics.sectionHeight(count: favoritesProfile?.favorites.count ?? 0, sidebarWidth: width)
     }
 

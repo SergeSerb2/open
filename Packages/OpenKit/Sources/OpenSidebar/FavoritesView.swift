@@ -59,7 +59,10 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         if emptyCard == nil { collection.addSubview(card); emptyCard = card }
         let id = profile.id
         card.onDismiss = { [weak self] in self?.context.send(.dismissFavoritesEmptyState(id)) }
-        if let space = context.focusedSpace { card.apply(roles: context.roles(for: space), appearance: context.appearance(for: space)) }
+        if let space = context.focusedSpace {
+            let appearance = context.appearance(for: space)
+            card.apply(roles: context.roles(for: space), appearance: appearance)
+        }
         needsLayout = true
     }
     /// A tab or link is dragged over the Favorites section: the card dims (interaction-states §20.3).
@@ -72,7 +75,11 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     override func layout() {
         super.layout()
         collection.frame = bounds
-        emptyCard?.frame = FavoritesMetrics.emptyCardFrame(sidebarWidth: bounds.width)
+        if let emptyCard {
+            var frame = FavoritesMetrics.emptyCardFrame(sidebarWidth: bounds.width)
+            frame.size.height = FavoritesEmptyStateView.cardHeight(sidebarWidth: bounds.width)
+            emptyCard.frame = frame
+        }
         gridLayout.invalidateLayout()
     }
 

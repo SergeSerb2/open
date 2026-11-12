@@ -27,7 +27,7 @@ extension AutomationController {
         "profile": context.favoritesProfile?.id.description ?? "", "favorites": context.favoritesProfile?.favorites.count ?? 0,
         "card": card.map(rect) ?? [], "dismissButton": card.map { rect($0.dismissButton) } ?? [],
         "title": card == nil ? "" : FavoritesEmptyStateView.title, "body": card == nil ? "" : FavoritesEmptyStateView.body,
-        "dropTarget": card?.isDropTarget ?? false, "sectionHeight": Double(controller.sidebar.favoritesHeight),
+        "dropTarget": card?.isDropTarget ?? false, "colors": card?.resolvedColors ?? [:], "sectionHeight": Double(controller.sidebar.favoritesHeight),
         "sidebarWidth": Double(context.sidebarWidth)] as [String: Any]
     default: throw Failure(message: "unknown favorites-empty-state action")
     }

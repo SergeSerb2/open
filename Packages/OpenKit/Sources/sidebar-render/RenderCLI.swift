@@ -141,6 +141,10 @@ enum RenderCLI {
             context.favoritesProfile?.favorites = []; model.rebuildIndex()
             context.showsFavoritesEmptyState = true
             if args.contains("--plain-theme"), let s = context.focusedSpace { s.theme = SpaceTheme() }
+            // --favorites-preset N: one of SpaceStylePresets.all (3 = the red "Brand 4").
+            if let n = value(args, "--favorites-preset").flatMap(Int.init), SpaceStylePresets.all.indices.contains(n), let s = context.focusedSpace {
+                s.theme = SpaceTheme(style: SpaceStylePresets.all[n].style)
+            }
         }
         // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
         if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }
@@ -215,6 +219,7 @@ enum RenderCLI {
         options.revealCard = args.contains("--reveal")
         options.trafficLights = !args.contains("--no-lights")
         options.emptyPanel = !args.contains("--page")
+        options.favoritesDropTarget = args.contains("--favorites-drop")
         if args.contains("--live-folder"), let space = context.focusedSpace {
             // LF look frames: a synthetic Live Folder at the end of Pinned with synthetic PR rows.
             if args.contains("--plain-theme") { space.theme = SpaceTheme() }
