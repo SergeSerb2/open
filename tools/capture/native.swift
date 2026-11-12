@@ -440,5 +440,32 @@ case "windows":
   emit(rows.filter { ($0[kCGWindowOwnerPID as String] as? Int) == pid }.map { w in
     ["number": w[kCGWindowNumber as String] ?? 0, "bounds": w[kCGWindowBounds as String] ?? [:], "onscreen": w[kCGWindowIsOnscreen as String] ?? false, "layer": w[kCGWindowLayer as String] ?? 0]
   })
+case "click-flags":
+  // Our own click with held modifiers (cmd/opt/shift). Callers run the pointer guards first.
+  let p = CGPoint(x: Double(a[2])!, y: Double(a[3])!)
+  let right = a[4] == "right"
+  let count = max(1, min(2, Int(a[5]) ?? 1))
+  var flags: CGEventFlags = []
+  for m in a[6].split(separator: ",") { switch m { case "cmd": flags.insert(.maskCommand); case "opt": flags.insert(.maskAlternate); case "shift": flags.insert(.maskShift); default: exit(2) } }
+  CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+  usleep(80_000)
+  for i in 1...count {
+    for type in (right ? [CGEventType.rightMouseDown, .rightMouseUp] : [CGEventType.leftMouseDown, .leftMouseUp]) {
+      let e = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: right ? .right : .left)
+      e?.flags = flags
+      e?.setIntegerValueField(.mouseEventClickState, value: Int64(i))
+      e?.post(tap: .cghidEventTap)
+      usleep(50_000)
+    }
+  }
+  emit(["sent": [p.x, p.y], "flags": a[6], "count": count])
+case "modkey":
+  // Press or release the left Option key only (flagsChanged), e.g. while a menu is open.
+  guard a[2] == "opt", a[3] == "down" || a[3] == "up" else { exit(2) }
+  let e = CGEvent(keyboardEventSource: nil, virtualKey: 58, keyDown: a[3] == "down")
+  e?.type = .flagsChanged
+  e?.flags = a[3] == "down" ? .maskAlternate : []
+  e?.post(tap: .cghidEventTap)
+  emit(["opt": a[3]])
 default: exit(2)
 }

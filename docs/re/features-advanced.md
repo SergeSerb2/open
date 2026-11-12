@@ -807,6 +807,7 @@ Module: bundle `ARC_SoundEffects.bundle` containing exactly two audio files (lis
 
 - **SE-1 — One toggle: "Play Arc sound effects".** Label verbatim from strings. Rule: a single Settings toggle enables or disables all UI sounds (`SoundEffectClient.setIsEnabled` / `isEnabled`). Default unknown (open question).
 - **SE-2 — Two sounds ship; their event mapping is not named in strings.** Files `capture.wav` and `event.m4a` with `SoundEffect` enum and `Unable to load sound effect` error. Guess: `capture.wav` plays on Capture (§9.1) and `event.m4a` is the generic event sound (tab or window events). Open must record its own two sounds (never copy Arc's files) and map them: capture sound on capture; event sound on the events found at runtime. Which events play sounds is a runtime question.
+  **Answered in part (capture C9, 2026-11-12, Arc 1.172.2 on the M1; read-only log stream with time marks, the Capture gesture as the control with 308 AudioQueue lines):** with "Play Arc sound effects" on, **only Capture plays a sound**. Silent: new Space, new folder, pin, unpin, Split View from the menu, archive (⌘W), Space switch (⌃1 and swipe), new Easel, download start and finish, Little Arc from another app, the Space delete toast, Boost created. Not tested: Favorite add/remove, Split by drag, Little Arc "Open in Arc", ATC rule, extension install, import finished, auto-archive banner. So no trigger of `event.m4a` is known. Open plays its capture effect on Capture only; its general effect has no caller (`SoundEffects.swift`).
 
 ### 9.8 Arc Menu
 
