@@ -528,6 +528,11 @@ def run(factory, results, tmp, api):
                    and lib['easels']['cardTitle'] == 'Your Easels are yours to keep' and lib['easels']['exportTitle'] == 'Export All Easels →'
                    and {'Board A', 'Board B'} <= set(rows) and lib['easels']['items'] == len(lib['rows']),
                    easels=(lib or {}).get('easels'), titles=sorted(rows))
+            time.sleep(.6)   # thumbnails draw on the next turn
+            snapshot('l01-library-easels-light')
+            app.call('appearance', name='dark'); time.sleep(.6)
+            snapshot('l01-library-easels-dark')
+            app.call('appearance', name='light')
             b_row = rows.get('Board B', {}).get('id', '')
             menu = library(action='row-menu', id=b_row)['items'] if b_row else []
             library(action='row-action', id=b_row, name='open')
