@@ -579,6 +579,7 @@ final class AppImportRunner: ProfileDataOwner {
         throw BrowserModel.ProfileImportError.invalidProfile
       }
       live.favorites = profile.favorites
+      live.favoritesEmptyStateDismissed = profile.favoritesEmptyStateDismissed
       try app.directories.ensureProfileDirectories(for: live)
     }
     destination.spaces = source.spaces

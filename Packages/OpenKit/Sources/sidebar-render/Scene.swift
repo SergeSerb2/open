@@ -18,6 +18,8 @@ final class RenderScene: NSView {
         var previewFolderID: ItemID?
         /// LF look frames: the intro card beside this Live Folder row.
         var liveIntroFolderID: ItemID?
+        /// A3 look frames: the empty-state card in its drag-over state.
+        var favoritesDropTarget = false
         /// LF L6 look frames: a Pinned tab shown with the Gmail card.
         var previewMail: ItemID?
         /// A Pinned tab shown with the Recents card (LF L1 look frames).
@@ -74,6 +76,7 @@ final class RenderScene: NSView {
             mailShadow.wantsLayer = true; mailShadow.shadow = shadow
             addSubview(mailShadow); mailShadow.addSubview(view); mailPreview = view
         }
+        if options.favoritesDropTarget { sidebar.layoutSubtreeIfNeeded(); sidebar.favoritesEmptyCard?.isDropTarget = true }
         if options.liveIntroFolderID != nil {
             let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
             let intro = LiveFolderIntroView(appearance: appearance)

@@ -62,7 +62,10 @@ final class PageChromeCoordinator {
     return true
   }
   func request(_ request: OEPermissionRequest, page: OEWebContent) -> Bool {
-    owner.record("permission", page, ["origin": request.origin.absoluteString, "kinds": request.kinds.rawValue])
+    var event: [String: Any] = ["origin": request.origin.absoluteString, "kinds": request.kinds.rawValue]
+    if let scheme = request.protocolHandlerScheme { event["protocolScheme"] = scheme }
+    if let template = request.protocolHandlerURLTemplate { event["protocolURLTemplate"] = template }
+    owner.record("permission", page, event)
     switch owner.permissionPolicy {
     case "grant": request.grant(); owner.app.tabSleep.permissionsChanged(context: page.context)
     case "deny": request.deny(); owner.app.tabSleep.permissionsChanged(context: page.context)

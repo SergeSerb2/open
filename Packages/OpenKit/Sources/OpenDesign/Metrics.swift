@@ -48,6 +48,13 @@ public enum ChromeMetrics {
     public static func isCompact(sidebarWidth w: CGFloat) -> Bool { w < CompactToolbarMetrics.switchWidth }
     public static func forwardX(sidebarWidth w: CGFloat) -> CGFloat { w - reloadTrailingInset - 32 - navButtonPitch }
     public static func reloadX(sidebarWidth w: CGFloat) -> CGFloat { w - reloadTrailingInset - 32 }
+    /// Developer Mode: a ▾ chevron right of Reload opens the reload options, and Reload moves left to make room
+    /// (`44-pb3a-probe/d-0.png`, `d-2-dark.png` at 2x, sidebar width 363.5: back, forward and reload ink centers
+    /// 273.5 / 307.5 / 335.25 pt, chevron ink 8.5 × 4.5 pt centered at 351.75 pt, y center 23.25 like Reload).
+    public static let developerReloadShift: CGFloat = 6.25
+    public static let reloadMenuCenterInset: CGFloat = 11.75
+    public static let reloadMenuWidth: CGFloat = 16
+    public static let reloadMenuGlyph = CGSize(width: 8.5, height: 4.5)
 }
 
 /// Command / URL field.
@@ -110,6 +117,16 @@ public enum FavoritesMetrics {
     /// the header's hover fill (F0001, A0413). Fitted: Arc shows a favorites empty-state card
     /// here (`sidebarFavoritesEmptyStateDismissButton`, not captured); its window-only sidebar
     /// (A0361, a different header with no Favorites section) starts its list 1–3 pt lower.
+    /// Favorites empty-state card (audit A3; interaction-states §20.3, S2 07/0001 at width 228): the
+    /// card is 95 pt tall, 7 pt in from the sides and the section top; the Space title then sits
+    /// 50 pt lower than with one tile row (y 204 against 154), so the section is 63 + 50 = 113.
+    /// After Dismiss Arc's section has no content and the Space title sits 17 pt under its top
+    /// (C-report-s10 (a) 4): that is Open's 8 pt empty section (title 9 pt under the section end).
+    public static let emptyStateSectionHeight: CGFloat = 113
+    public static func emptyCardFrame(sidebarWidth: CGFloat) -> CGRect {
+        CGRect(x: 7, y: 7, width: max(0, sidebarWidth - 14), height: 95)
+    }
+
     public static func sectionHeight(count: Int, sidebarWidth: CGFloat) -> CGFloat {
         guard count > 0 else { return inset }
         let cols = columns(count: count, sidebarWidth: sidebarWidth)
