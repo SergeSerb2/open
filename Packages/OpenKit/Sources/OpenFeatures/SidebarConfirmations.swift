@@ -25,6 +25,13 @@ public enum SidebarConfirmations {
         return alert(title: title, text: "Deleting this folder will archive the tabs inside it.", destructive: "Delete Folder")
     }
 
+    /// Live Folder: "Delete your GitHub Live Folder?" and its restore note (live-data §2.2,
+    /// `G:FUN_102a75b50`, `S:132820–132824`); the folder buttons ("Delete Folder", "Cancel").
+    public static func deleteLiveFolderAlert(source: String = "GitHub") -> NSAlert {
+        alert(title: "Delete your \(source) Live Folder?",
+              text: "You can restore this folder at any time by right-clicking the sidebar.", destructive: "Delete Folder")
+    }
+
     /// "Folder deleted" / "Folders deleted" (`FUN_102a76ff0`).
     public static func folderToast(count: Int) -> String { count == 1 ? "Folder deleted" : "Folders deleted" }
 

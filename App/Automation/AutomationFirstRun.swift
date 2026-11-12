@@ -82,6 +82,7 @@ extension AutomationController {
           if let on = args["history"] as? Bool { wizard.plan.history = on }
           if let on = args["search"] as? Bool { wizard.plan.searchSettings = on }
           if let on = args["passwords"] as? Bool { wizard.plan.passwords = on }
+          if let on = args["openTabs"] as? Bool { wizard.plan.openTabs = on }
           if let value = args["primaryPassword"] as? String, value.utf8.count <= 256 { wizard.plan.primaryPassword = value }
         case "settings-safari-export", "settings-passwords-file":
           // Synthetic files only: the path must sit next to the synthetic browser library.

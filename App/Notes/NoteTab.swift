@@ -94,3 +94,22 @@ extension EngineWebContentHostFactory {
   func openFromNote(_ url: URL) { navigateFromCommandBar(url, current: false) }
   func refreshNoteAppearance() { for host in noteHosts.values { host.updateAppearance() } }
 }
+
+extension BrowserModel {
+  /// Every tab of every Space and Profile (pinned, Today, folders, split panes, Favorites).
+  func allTabsForNotes() -> [Tab] {
+    var result: [Tab] = []
+    func visit(_ nodes: [SidebarNode]) {
+      for node in nodes {
+        switch node {
+        case .tab(let tab): result.append(tab)
+        case .folder(let folder): visit(folder.children)
+        case .split(let split): result.append(contentsOf: split.panes)
+        }
+      }
+    }
+    for profile in profiles { result.append(contentsOf: profile.favorites) }
+    for space in spaces { visit(space.pinned); visit(space.today) }
+    return result
+  }
+}

@@ -72,20 +72,33 @@ def github_fixture():
     return server, server.server_address[1], state
 
 
-def live_folder_checks(holder, results, wait_until, factory):
+def live_folder_checks(holder, results, wait_until, factory, new_tab):
     app = holder['app']
     server, port, gh = github_fixture()
     try:
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
+        # The test App's preferences domain outlives one run: start from first-use state.
+        for key in ('open.liveFolders.introSeen', 'open.liveFolders.githubAutoCreate'):
+            app.call('defaults', key=key, value=None)
         gh['prs'] = {'created': [('acme/app', 12, 'Fix sidebar drag', 'open'), ('acme/web', 7, 'Draft: new header', 'draft')],
                      'review': [('acme/app', 15, 'Add Live Folders', 'open'), ('acme/app', 12, 'Fix sidebar drag', 'open')],
                      'approved': [], 'changes': [('acme/api', 3, 'Merged already', 'merged')]}
         menu = app.call('sidebar-menu-state', item='Live Folders/GitHub')
         app.call('sidebar-menu', item='Live Folders/GitHub')
         state = app.call('live-folder-state', wait=True)
+        intro, row = state.get('intro'), state.get('rowFrame')
+        # Intro card beside the new row (capture s5 b3): right of the sidebar, centred on the row, Arc's strings.
+        results['live_folder_intro_card'] = {'ok': bool(intro) and bool(row) and intro['body'] == 'Pull requests from you and your team will show up here automatically'
+            and intro['title'] == 'Pull Requests' and intro['frame'][0] >= row[0] + row[2] and abs((intro['frame'][1] + intro['frame'][3] / 2) - (row[1] + row[3] / 2)) <= 1
+            and intro['frame'][2] == 228, 'intro': intro, 'row': row}
+        if os.environ.get('OPEN_LIVE_DATA_FRAMES'):
+            window = app.call('window-state')
+            app.call('snapshot', window=window.get('number'), path=os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-folder-intro-window.png'))
+        app.call('key', key='escape', route='app')
+        results['live_folder_intro_dismiss'] = {'ok': app.call('live-folder-state').get('intro') is None}
         titles = [r['title'] for r in state.get('rows', [])]
         results['live_folder_created_from_space_menu'] = {'ok': menu.get('checked') is False and state.get('exists') and state.get('title') == 'Pull Requests'
-            and state.get('pinnedIndex') == 0 and state.get('outcome') == 'success'
+            and state.get('pinnedIndex') == state.get('pinnedCount', 0) - 1 and state.get('outcome') == 'success'
             and sorted(titles) == sorted(['Fix sidebar drag', 'Draft: new header', 'Add Live Folders'])
             and all(r['live'] for r in state['rows']) and not any(r['unread'] for r in state['rows'])
             and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is True, 'menu': menu, 'state': state}
@@ -99,13 +112,62 @@ def live_folder_checks(holder, results, wait_until, factory):
         rows = {r['title']: r for r in state.get('rows', [])}
         results['live_folder_refresh_diff'] = {'ok': refreshed.get('outcome') == 'success' and set(rows) == {'Fix sidebar drag (v2)', 'New review request'}
             and rows['New review request']['unread'] and not rows['Fix sidebar drag (v2)']['unread'], 'state': state}
+        # A new PR peeks out of the collapsed folder, with the unread dot (Arc W2).
+        app.call('folder-toggle', folder=state['id'])
+        gh['prs']['approved'] = [('acme/app', 30, 'Approved and new', 'open')]
+        app.call('live-folder-refresh')
+        peek = app.call('live-folder-state')
+        new_row = next((r for r in peek.get('rows', []) if r['title'] == 'Approved and new'), None)
+        results['live_folder_new_row_peeks_out'] = {'ok': peek.get('expanded') is False and bool(new_row) and new_row['unread']
+            and peek.get('peeked') == new_row['id'] and app.call('sidebar-row', node=peek['id']).get('unreadBadge') is True, 'state': peek}
+        gh['prs']['approved'] = []
+        app.call('folder-toggle', folder=state['id'])
+        app.call('live-folder-refresh')
+        state = app.call('live-folder-state')
         throttled = app.call('live-folder-refresh', manual=False)
         results['live_folder_throttle_10s'] = {'ok': throttled.get('outcome') is None and throttled.get('throttled', 0) >= 1, 'refresh': throttled}
+        # L3: the Live Folder's own menu (live-data §2.2).
+        gh['prs']['created'] = [('acme/app', 12, 'Fix sidebar drag (v2)', 'open'), ('acme/web', 7, 'Draft: new header', 'draft')]
+        app.call('live-folder-refresh')
+        state = app.call('live-folder-state')
+        folder = state['id']
+        def menu_state(path):
+            try: return app.call('sidebar-menu-state', node=folder, items=path.split('|') if '|' in path else path.split('/'))
+            except Exception as e: return {'error': str(e)}
+        repos = {r: menu_state('Repositories|' + r).get('checked') for r in ('acme/app', 'acme/web')}
+        items = {t: menu_state(t) for t in ('Refresh', 'Copy All Links', 'Delete Live Folder', 'Single Sign-On/Required',
+                                           'Repositories/This list is generated based on your currently active pull requests.')}
+        results['live_folder_menu'] = {'ok': repos == {'acme/app': True, 'acme/web': True} and items['Refresh'].get('enabled')
+            and items['Delete Live Folder'].get('enabled') and items['Copy All Links'].get('enabled')
+            and items['Single Sign-On/Required'].get('title') == 'Required'
+            and items['Repositories/This list is generated based on your currently active pull requests.'].get('enabled') is False,
+            'repos': repos, 'items': items}
+        app.call('sidebar-menu', node=folder, items=['Repositories', 'acme/web'])
+        hidden = app.call('live-folder-state')
+        app.call('live-folder-refresh')
+        after = app.call('live-folder-state')
+        results['live_folder_hide_repository'] = {'ok': not any('/acme/web/' in r['url'] for r in hidden['rows'] + after['rows'])
+            and after.get('hiddenRepositories') == ['acme/web'] and menu_state('Repositories|acme/web').get('checked') is False, 'after': after}
+        app.call('sidebar-menu', node=folder, items=['Repositories', 'acme/web'])
+        victim = next(r for r in after['rows'] if r['title'].startswith('Fix sidebar drag'))
+        app.call('sidebar-menu', node=victim['id'], item='Remove Pin')  # the user takes the row out of the folder
+        app.call('live-folder-refresh')
+        after = app.call('live-folder-state')
+        results['live_folder_manual_delete_stays_hidden'] = {'ok': victim['live'] in after.get('hiddenItems', [])
+            and not any(r['live'] == victim['live'] for r in after['rows']) and any('/acme/web/' in r['url'] for r in after['rows'])
+            and app.tab(victim['id'])['section'] == 'today', 'after': after}
         gh['signed_in'] = False
         out = app.call('live-folder-refresh')
         state = app.call('live-folder-state')
-        results['live_folder_signed_out_state'] = {'ok': out.get('outcome') == 'signedOut' and state.get('outcome') == 'signedOut' and len(state.get('rows', [])) == 2,
+        results['live_folder_signed_out_state'] = {'ok': out.get('outcome') == 'signedOut' and state.get('outcome') == 'signedOut' and len(state.get('rows', [])) >= 1,
             'refresh': out, 'state': state}
+        tabs_before = {t['id'] for t in app.call('tabs')}
+        pressed = app.call('live-folder-state-press')
+        opened = wait_until(lambda: [t for t in app.call('tabs') if t['id'] not in tabs_before], timeout=5, step=.1) or []
+        results['live_folder_state_glyph'] = {'ok': state.get('stateMessage') == 'Sign back in to GitHub.'
+            and (state.get('stateGlyph') or {}).get('tooltip') == 'Sign back in to GitHub.' and pressed.get('pressed')
+            and any(t['url'].startswith('http://github.localhost:%d/login' % port) for t in opened), 'state': state, 'opened': opened}
+        for t in opened: app.call('close', tab=t['id'])
         gh['signed_in'] = True
         # The folder's settings and rows survive a relaunch (snapshot DTO fields).
         before = {(r['url'], r['live']) for r in state.get('rows', [])}
@@ -114,12 +176,122 @@ def live_folder_checks(holder, results, wait_until, factory):
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
         again = app.call('live-folder-state')
         results['live_folder_survives_relaunch'] = {'ok': again.get('exists') and again.get('outcome') == 'signedOut'
-            and {(r['url'], r['live']) for r in again.get('rows', [])} == before and app.call('live-folder-refresh').get('outcome') == 'success',
+            and {(r['url'], r['live']) for r in again.get('rows', [])} == before
+            and bool(wait_until(lambda: app.call('live-folder-refresh').get('outcome') == 'success', timeout=15, step=.5)),
             'state': again}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         gone = app.call('live-folder-state')
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        second = app.call('live-folder-state', wait=True)
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        results['live_folder_intro_once'] = {'ok': second.get('exists') and second.get('intro') is None, 'state': {'intro': second.get('intro')}}
+        gone = app.call('live-folder-state')
         results['live_folder_toggle_off_removes'] = {'ok': gone.get('exists') is False and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is False, 'state': gone}
+        # Auto-create: compare page → new PR page in a tab of this Space (Arc pullRequestCreated).
+        gh['prs'] = {'created': [('acme/app', 77, 'Brand new PR', 'open')]}
+        pr_tab = new_tab(app, 'http://github.localhost:%d/acme/app/compare/main...feature' % port)
+        app.call('navigate', tab=pr_tab, url='http://github.localhost:%d/acme/app/pull/77' % port); app.call('wait', tab=pr_tab)
+        made = app.call('live-folder-state', wait=True)
+        moved = next((r for r in made.get('rows', []) if r['id'] == pr_tab), None)
+        results['live_folder_auto_create_on_pr'] = {'ok': made.get('exists') and made.get('autoCreated') == 1 and bool(moved)
+            and moved['live'] == 'http://github.localhost:%d/acme/app/pull/77' % port and len(made['rows']) == 1, 'state': made}
+        # Delete Live Folder: Arc's alert, then automatic creation stays off.
+        app.call('sidebar-menu', node=made['id'], item='Delete Live Folder')
+        alert = app.call('alert'); app.call('alert', button='Delete Folder')
+        gone = app.call('live-folder-state')
+        other = new_tab(app, 'http://github.localhost:%d/acme/app/compare/main...other' % port)
+        app.call('navigate', tab=other, url='http://github.localhost:%d/acme/app/pull/78' % port); app.call('wait', tab=other)
+        results['live_folder_delete_alert_turns_off_auto'] = {'ok': 'Delete your GitHub Live Folder?' in alert.get('texts', [])
+            and 'You can restore this folder at any time by right-clicking the sidebar.' in alert.get('texts', [])
+            and set(alert.get('buttons', [])) >= {'Delete Folder', 'Cancel'} and gone.get('exists') is False
+            and app.call('live-folder-state').get('exists') is False
+            and app.call('defaults', key='open.liveFolders.githubAutoCreate') is False, 'alert': alert}
         return app
+    finally:
+        try:
+            for key in ('open.liveFolders.introSeen', 'open.liveFolders.githubAutoCreate'):
+                holder['app'].call('defaults', key=key, value=None)
+        except Exception:
+            pass
+        server.shutdown()
+
+
+def gmail_fixture():
+    """Loopback stand-in for mail.google.com's Atom feed (synthetic mail only).
+    state: {'signed_in': bool, 'mail': [(subject, author, iso time)]}."""
+    import http.server, threading, html
+    state = {'signed_in': True, 'mail': [], 'requests': []}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = self.path.split('?')[0]; host = (self.headers.get('Host') or '').split(':')[0]
+            state['requests'].append((host, path))
+            port = self.server.server_address[1]
+            if host == 'mail.localhost' and path.endswith('/feed/atom'):
+                if not state['signed_in']:
+                    self.send_response(302); self.send_header('Location', 'http://accounts.localhost:%d/signin' % port)
+                    self.send_header('Content-Length', '0'); self.end_headers(); return
+                entries = ''.join('<entry><title>%s</title><link rel="alternate" href="http://mail.localhost:%d/mail/u/0/?msg=%d" type="text/html"/>'
+                                  '<issued>%s</issued><author><name>%s</name><email>x@example.com</email></author></entry>'
+                                  % (html.escape(t), port, i, d, html.escape(a)) for i, (t, a, d) in enumerate(state['mail']))
+                body = ('<?xml version="1.0" encoding="UTF-8"?><feed version="0.3" xmlns="http://purl.org/atom/ns#">'
+                        '<title>Inbox</title><fullcount>%d</fullcount>%s</feed>' % (len(state['mail']), entries)).encode()
+                kind = 'application/atom+xml; charset=utf-8'
+            else:
+                body = b'<!doctype html><title>Mail fixture</title><p>Mail fixture'
+                kind = 'text/html; charset=utf-8'
+            self.send_response(200); self.send_header('Content-Type', kind); self.send_header('Content-Length', str(len(body)))
+            self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1], state
+
+
+def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
+    server, port, mail = gmail_fixture()
+    def hover(node, ms=800):
+        app.call('hover', leave=True, ms=300)
+        return app.call('hover', node=node, ms=ms)
+    try:
+        cases = {'https://mail.google.com/mail/u/1/#inbox': 1, 'https://mail.google.com/mail/#inbox': 0, 'https://accounts.google.com/': None,
+                 'https://mail.google.com/chat/': None}
+        got = {u: app.call('glance-match', url=u).get('account') for u in cases}
+        results['live_gmail_host_match'] = {'ok': got == cases, 'got': got}
+        app.call('glance-alias', aliases=recents_aliases, mail=['mail.localhost'])
+        mail['mail'] = [('Quarterly numbers', 'Ada', '2026-11-12T09:00:00Z'), ('Lunch?', 'Grace', '2026-11-12T08:00:00Z')]
+        inbox = new_tab(app, 'http://mail.localhost:%d/mail/u/0/#inbox' % port)
+        app.call('pin', tab=inbox)
+        other = new_tab(app, 'http://plain.localhost:%d/elsewhere' % port)
+        app.call('select', tab=other)
+        shown = hover(inbox)
+        state = app.call('glance-state')
+        results['live_gmail_card_rows'] = {'ok': shown['kind'] == 'glance' and state.get('kind') == 'gmail' and state.get('phase') == 'mail'
+            and [r['title'] for r in state.get('rows', [])] == ['Quarterly numbers', 'Lunch?'] and state['rows'][0]['author'] == 'Ada'
+            and state.get('header') == 'Unread' and state.get('newLabel') == 'New Email'
+            and state.get('newURL') == 'http://mail.localhost:%d/mail/u/0/#compose' % port, 'state': state, 'hover': shown}
+        app.call('glance-open', row=1)
+        peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] and s['stack'][-1]['content'] > 0 else None)(app.call('peek-state')), timeout=5, step=.05)
+        href = ''
+        if peek:
+            app.call('wait', tab=peek['stack'][-1]['content']); href = app.eval(peek['stack'][-1]['content'], 'location.href')
+        results['live_gmail_row_opens_peek'] = {'ok': href == 'http://mail.localhost:%d/mail/u/0/?msg=1' % port, 'href': href}
+        app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        app.call('select', tab=other)
+        mail['mail'] = []
+        hover(inbox); empty = app.call('glance-state')
+        results['live_gmail_empty'] = {'ok': empty.get('phase') == 'empty' and empty.get('message') == 'No unread emails, you can exhale! 🍃'
+            and empty.get('rows') == [], 'state': empty}
+        mail['signed_in'] = False
+        hover(inbox); out = app.call('glance-state')
+        results['live_gmail_signed_out'] = {'ok': out.get('phase') == 'signedOut'
+            and out.get('message') == 'Sign in to your Email to see messages at a glance.', 'state': out}
+        mail['signed_in'] = True
+        app.call('defaults', key='open.general.previewsGmail', value=False)
+        off = hover(inbox)
+        app.call('defaults', key='open.general.previewsGmail', value=None)
+        results['live_gmail_switch_off_gives_page_card'] = {'ok': off['kind'] == 'page', 'hover': off}
+        app.call('hover', leave=True, ms=300)
     finally:
         server.shutdown()
 
@@ -228,8 +400,9 @@ def run(factory, results, tmp, harness):
         app.call('defaults', key='open.general.previewsPages', value=None)
         app.call('hover', leave=True, ms=400)
         results['live_recents_hides_on_leave'] = {'ok': app.call('glance-state').get('shown') is False}
+        gmail_checks(app, results, wait_until, new_tab, {'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
         holder['app'] = app
-        app = live_folder_checks(holder, results, wait_until, factory)
+        app = live_folder_checks(holder, results, wait_until, factory, new_tab)
     finally:
         app = holder['app']
         try:

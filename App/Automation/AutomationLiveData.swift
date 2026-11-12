@@ -9,7 +9,7 @@ import OpenSidebar
 /// open paths. `glance-alias` lets a fixture host count as a Recents site so e2e runs without
 /// the real sites or any account; `history-record` seeds the Profile's real history store.
 extension AutomationController {
-  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record", "live-fetch", "live-folder-state", "live-folder-refresh", "live-folder-origin"]
+  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record", "live-fetch", "live-folder-state", "live-folder-refresh", "live-folder-origin", "live-folder-state-press"]
 
   func runLiveDataCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     switch cmd {
@@ -19,13 +19,15 @@ extension AutomationController {
         guard let site = RecentsSite(rawValue: raw) else { throw Failure(message: "unknown Recents site \(raw)") }
         aliases[host.lowercased()] = site
       }
-      for controller in app.windowControllers { controller.context.glanceHostAliases = aliases }
-      return ["aliases": aliases.mapValues(\.rawValue)]
+      let mail = Set((a["mail"] as? [String] ?? []).map { $0.lowercased() })
+      for controller in app.windowControllers { controller.context.glanceHostAliases = aliases; controller.context.glanceMailHosts = mail }
+      return ["aliases": aliases.mapValues(\.rawValue), "mail": Array(mail)]
     case "glance-match":
       guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "glance-match needs url") }
       switch GlanceKind.match(url: url) {
       case .recents(let site)?: return ["kind": "recents", "site": site.rawValue]
       case .calendar(let provider)?: return ["kind": "calendar", "provider": provider.rawValue]
+      case .gmail(let account)?: return ["kind": "gmail", "account": account]
       case nil: return ["kind": "none"]
       }
     case "history-record":
@@ -52,6 +54,10 @@ extension AutomationController {
       guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "live-folder-origin needs url") }
       app.liveFolders.origin = url
       return ["origin": url.absoluteString]
+    case "live-folder-state-press":
+      let space = try liveSpace(a)
+      guard let folder = app.model.liveFolder(in: space.id), let controller = app.frontWindowController else { throw Failure(message: "no Live Folder") }
+      return ["pressed": controller.sidebar.pressLiveFolderStateGlyph(nodeID: folder.id)]
     case "live-folder-refresh":
       let space = try liveSpace(a)
       guard let folder = app.model.liveFolder(in: space.id) else { throw Failure(message: "no Live Folder") }
@@ -72,7 +78,16 @@ extension AutomationController {
                 "unread": tab.isUnread]
       }
       let index = space.pinned.firstIndex { $0.id == folder.id } ?? -1
-      return ["exists": true, "id": folder.id.description, "title": folder.title, "pinnedIndex": index, "rows": rows,
+      let intro = app.frontWindowController?.liveFolderIntro.map { v -> [String: Any] in
+        let f = v.superview.map { v.convert(v.bounds, to: $0) } ?? .zero
+        return ["frame": [f.minX, f.minY, f.width, f.height], "title": LiveFolderIntroView.title, "body": LiveFolderIntroView.body]
+      }
+      let row = app.frontWindowController.flatMap { c in c.sidebar.rowFrame(nodeID: folder.id).map { c.contentView.convert($0, from: c.sidebar) } }
+      return ["exists": true, "id": folder.id.description, "title": folder.title, "pinnedIndex": index, "pinnedCount": space.pinned.count, "rows": rows,
+        "intro": intro ?? NSNull(), "stateMessage": live.stateMessage ?? NSNull(), "expanded": folder.isExpanded, "peeked": folder.peekedChildID?.description ?? NSNull(),
+        "stateGlyph": app.frontWindowController.flatMap { $0.sidebar.liveFolderStateGlyph(nodeID: folder.id) }.map { ["tooltip": $0.tooltip] } ?? NSNull(),
+        "hiddenItems": Array(live.hiddenItems).sorted(), "hiddenRepositories": Array(live.hiddenRepositories).sorted(),
+        "autoCreated": app.liveFolders.autoCreated, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
         "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
         "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":
@@ -80,6 +95,20 @@ extension AutomationController {
       guard case .glance(let id)? = controller.hoverPreview.request?.kind else { return ["shown": false] }
       if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
         return try await calendarGlanceState(calendar, controller: controller, tab: id, wait: a["wait"] as? Bool != false)
+      }
+      if let mail = controller.hoverPreview.card?.content as? MailPreviewView {
+        if a["wait"] as? Bool != false {
+          let deadline = Date().addingTimeInterval(25)
+          while !mail.isLoaded, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        }
+        controller.contentView.layoutSubtreeIfNeeded()
+        let root = controller.contentView
+        let card = controller.hoverPreview.card.map { root.convert($0.bounds, from: $0) } ?? .zero
+        return ["shown": true, "kind": "gmail", "account": mail.account, "tab": id.description, "phase": mail.phase.rawValue,
+          "header": GmailGlance.header, "newLabel": mail.newButton.toolTip ?? "",
+          "newURL": GmailGlance.composeURL(for: mail.tab.url, account: mail.account).absoluteString, "message": mail.message ?? "",
+          "rows": mail.mail.map { ["title": $0.title, "author": $0.author, "url": $0.url.absoluteString] },
+          "card": [card.minX, card.minY, card.width, card.height]] as [String: Any]
       }
       guard let view = controller.hoverPreview.card?.content as? RecentsPreviewView else { return ["shown": false] }
       if a["wait"] as? Bool != false {
@@ -96,6 +125,10 @@ extension AutomationController {
         "card": [card.minX, card.minY, card.width, card.height]] as [String: Any]
     case "glance-open":
       let controller = try glanceController(a)
+      if let mail = controller.hoverPreview.card?.content as? MailPreviewView {
+        if a["new"] as? Bool == true { mail.openNew() } else { mail.open(row: a["row"] as? Int ?? 0) }
+        return ["opened": true]
+      }
       if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
         switch a["control"] as? String ?? "new" {
         case "new": calendar.openNew()

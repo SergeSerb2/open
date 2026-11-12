@@ -11,6 +11,9 @@ public struct NoteDocument: Codable, Equatable, Sendable {
     public var formats: [NoteFormat]
     public var createdAt: Date
     public var modifiedAt: Date
+    /// Set on a Note that Import from Arc created without its text (Arc kept it on its servers).
+    /// An imported Arc Notes export may replace such a Note; an edit clears the flag.
+    public var importPlaceholder: Bool?
 
     public init(id: UUID = UUID(), title: String = "", text: String = "", formats: [NoteFormat] = [],
                 createdAt: Date = Date(), modifiedAt: Date? = nil) {

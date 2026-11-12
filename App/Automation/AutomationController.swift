@@ -689,15 +689,17 @@
       case "sidebar-menu", "sidebar-menu-state":
         // Builds the same NSMenu a right-click shows (a row, or the Space with no node)
         // and performs the item at a "/" path; `alternate` picks the ⌥ alternate title.
-        guard let controller = app.frontWindowController, let path = a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
+        // `items` (an array) addresses titles that contain "/" (Live Folder repositories).
+        guard let controller = app.frontWindowController, let path = (a["items"] as? [String])?.joined(separator: "\u{1F}") ?? a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
         let node: ItemID?
         if let raw = a["node"] {
           guard let text = raw as? String, let uuid = UUID(uuidString: text), app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
           node = ItemID(rawValue: uuid)
         } else { node = nil }
-        guard !path.isEmpty, !path.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0.isEmpty }) else { throw Failure(message: "empty sidebar menu path") }
+        let separator: Character = a["items"] != nil ? "\u{1F}" : "/"
+        guard !path.isEmpty, !path.split(separator: separator, omittingEmptySubsequences: false).contains(where: { $0.isEmpty }) else { throw Failure(message: "empty sidebar menu path") }
         guard var level = controller.sidebar.contextMenu(nodeID: node) else { throw Failure(message: "no sidebar menu") }
-        let parts = path.split(separator: "/").map(String.init)
+        let parts = path.split(separator: separator).map(String.init)
         for (depth, part) in parts.enumerated() {
           let matches = level.items.indices.filter { index in
             let item = level.items[index]
