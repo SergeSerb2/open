@@ -99,9 +99,9 @@ final class ToolbarView: NSView {
         return menu
     }
 
-    /// Our own ▾: two 1.25 pt strokes, 8.5 × 4.5 pt ink (Arc's measured box), drawn in Reload's grey.
+    /// Our own ▾: two 1 pt strokes, 8.5 × 4.5 pt ink (Arc's measured box), drawn in Reload's grey.
     static let chevron: NSImage = {
-        let size = ChromeMetrics.reloadMenuGlyph, line: CGFloat = 1.25
+        let size = ChromeMetrics.reloadMenuGlyph, line: CGFloat = 1
         let image = NSImage(size: NSSize(width: size.width + line, height: size.height + line), flipped: true) { _ in
             let path = NSBezierPath(), h = line / 2
             path.move(to: CGPoint(x: h, y: h)); path.line(to: CGPoint(x: h + size.width / 2, y: h + size.height))
