@@ -122,6 +122,8 @@ final class AppImportRunner: ProfileDataOwner {
       let browser = await importBrowser(source: source, profile: profile, plan: plan, undo: undo, wizard: wizard,
                                         progress: { progress($0, $1, landed: $2) })
       counts = browser.counts; failures = browser.failures
+      extensions = browser.extensions; extensionProfileCount = 1
+      secretsReportLines = browser.secretsReportLines
       return result(browser.errorText)
     }
     var imported: ArcImportResult

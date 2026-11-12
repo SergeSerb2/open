@@ -4,7 +4,7 @@ import AppKit
 /// a move changes only its frame (no redraw), so drags stay at display rate.
 @MainActor
 final class EaselObjectView: NSView {
-    var object: EaselObject { didSet { if oldValue.content != object.content { needsDisplay = true } } }
+    var object: EaselObject { didSet { if oldValue.content != object.content { needsDisplay = true; applyCardShadow() } } }
     var palette: EaselPalette = .vibrant { didSet { if oldValue != palette { needsDisplay = true } } }
     var scale: CGFloat = 1 { didSet { if oldValue != scale { needsDisplay = true } } }
     /// Resolves an image file name to its URL (the Easel's `images/` folder).
@@ -19,7 +19,27 @@ final class EaselObjectView: NSView {
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
+        applyCardShadow()
     }
+
+    var isCard: Bool {
+        switch object.content { case .webCard, .link: true; default: false }
+    }
+    /// Web and link cards cast the floating toolbar's shadow (blur 6, 1 pt down, black 8 %).
+    /// A shadow path keeps it cheap: no offscreen pass while dragging.
+    func applyCardShadow() {
+        guard let layer else { return }
+        if isCard {
+            layer.shadowColor = NSColor.black.cgColor
+            layer.shadowOpacity = 0.08
+            layer.shadowRadius = 3   // NSShadow blur 6 ≈ layer radius 3
+            layer.shadowOffset = CGSize(width: 0, height: -1)
+            layer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: EaselCards.corner, cornerHeight: EaselCards.corner, transform: nil)
+        } else if layer.shadowOpacity != 0 {
+            layer.shadowOpacity = 0; layer.shadowPath = nil
+        }
+    }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); if isCard { applyCardShadow() } }
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     /// A live web card's page (a pooled engine view, owned by the App's content host). The
@@ -35,7 +55,12 @@ final class EaselObjectView: NSView {
     /// Header above a live page: GUESS 28 pt — capture pending (Arc's live state is uncaptured).
     static let liveHeader: CGFloat = 28
     func layoutLive() {
-        liveView?.frame = CGRect(x: 0, y: Self.liveHeader, width: bounds.width, height: max(0, bounds.height - Self.liveHeader))
+        guard let liveView else { return }
+        liveView.frame = CGRect(x: 0.5, y: Self.liveHeader, width: max(0, bounds.width - 1), height: max(0, bounds.height - Self.liveHeader - 0.5))
+        // The page keeps the card's rounded corners (its top corners sit on the card fill).
+        liveView.wantsLayer = true
+        liveView.layer?.cornerRadius = EaselCards.corner
+        liveView.layer?.masksToBounds = true
     }
     override func resizeSubviews(withOldSize oldSize: NSSize) { super.resizeSubviews(withOldSize: oldSize); layoutLive() }
     /// The document view does all hit testing (z order, handles, tools), except inside a live page.

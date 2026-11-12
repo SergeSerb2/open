@@ -27,16 +27,32 @@ final class EaselImageCache {
     }
 }
 
-/// Drawing of picture, web card and link card objects. Card chrome keeps fixed point sizes
-/// (findings §3.4 "WebCardConstants": corner 10, bar 36, inset 6, favicon 16).
+/// Drawing of picture, web card and link card objects. Card chrome (lead look ruling E2,
+/// 03:30): 8 pt corners, a hairline border (black 0.1 light / white 0.1 dark) and the floating
+/// toolbar's soft shadow (`EaselObjectView.applyCardShadow`).
 enum EaselCards {
-    static let corner: CGFloat = 10
+    static let corner: CGFloat = 8
     static let bar: CGFloat = 36
     static let inset: CGFloat = 6
 
     /// `ImageFiller` #000 10 % light / #686A6B dark (findings §3.4).
     static func filler(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x686A6B) : NSColor(white: 0, alpha: 0.1) }
-    static func border(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.1) : NSColor(white: 0, alpha: 0.08) }
+    static func border(dark: Bool) -> NSColor { NSColor(white: dark ? 1 : 0, alpha: 0.1) }
+
+    /// A page snapshot: scaled to the card width, drawn from the page's top-left, so the page
+    /// shows at its natural layout; anything below the card's height is cut off at the bottom.
+    static func drawPageSnapshot(_ image: CGImage?, in rect: CGRect, dark: Bool) {
+        guard let image, let ctx = NSGraphicsContext.current?.cgContext else { filler(dark: dark).setFill(); rect.fill(); return }
+        let s = rect.width / CGFloat(image.width)
+        let r = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: CGFloat(image.height) * s)
+        ctx.saveGState()
+        ctx.clip(to: rect)
+        ctx.translateBy(x: 0, y: r.maxY + r.minY)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: r)
+        ctx.restoreGState()
+    }
 
     static func drawImage(_ image: CGImage?, in rect: CGRect, fill: Bool, dark: Bool) {
         guard let image, let ctx = NSGraphicsContext.current?.cgContext else { filler(dark: dark).setFill(); rect.fill(); return }
@@ -63,7 +79,8 @@ enum EaselCards {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: corner, yRadius: corner)
         NSGraphicsContext.saveGraphicsState()
         shape.addClip()
-        drawImage(image, in: bounds, fill: true, dark: dark)
+        EaselStyle.floating(dark: dark).setFill(); bounds.fill()
+        drawPageSnapshot(image, in: bounds, dark: dark)
         NSGraphicsContext.restoreGraphicsState()
         border(dark: dark).setStroke(); shape.lineWidth = 1; shape.stroke()
     }

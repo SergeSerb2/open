@@ -150,6 +150,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     guard !closed, generation == token else { return }
     onLiveStateChange?(liveState)
     owner.app.media.contentChanged(self, changes: changes)
+    owner.app.handoff.pageChanged(content, changes: changes)
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }

@@ -346,7 +346,7 @@ def run(factory, results, tmp, api):
             # E26: Capture → Easel. The card offers Add to Easel; its menu lists New Easel and
             # each Easel; a row adds the capture as a web card and selects that Easel.
             page = api.new_tab(app, origin + '/page.html')
-            r = app.call('capture', mode='area', rect=[40, 40, 200, 120])
+            r = app.call('capture', mode='area', rect=[0, 0, 400, 240])
             actions = r['state'].get('card', {}).get('actions', [])
             rows = app.call('easel', action='capture-menu')
             target_title = easel(tab=e2)['tabTitle']
