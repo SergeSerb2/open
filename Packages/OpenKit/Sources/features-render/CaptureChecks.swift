@@ -418,10 +418,12 @@ enum CaptureChecks {
         // C7 (offscreen): an incognito page saves nothing; the card offers Copy, Save…, Share.
         isPrivate = true
         let savedRows = library.rows.count
+        let completedBefore = capture.completedCount
         capture.start(.portrait)
         await wait { capture.portraitView?.preview != nil }
-        check(capture.portraitPopover?.isShown == true && capture.portraitView?.preview != nil && capture.phase != .capturing,
-              "C3 Portrait Mode opens the popover with a preview and captures nothing yet")
+        // Offscreen windows do not order a popover in (`isShown`); the e2e row checks that on screen.
+        check(capture.portraitPopover != nil && capture.portraitView?.preview != nil && capture.phase != .capturing && capture.completedCount == completedBefore,
+              "C3 Portrait Mode makes the popover with a preview and captures nothing yet (preview \(capture.portraitView?.preview != nil), phase \(capture.phase))")
         capture.portraitView?.captureButton.performClick(nil)
         await wait { capture.phase == .showing }
         let portrait = capture.lastResult
