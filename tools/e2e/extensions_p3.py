@@ -14,7 +14,7 @@ import zipfile
 import zlib
 
 
-def pack_probe(root, tmp, prefix="probe", icon_png=None, name=None):
+def pack_probe(root, tmp, prefix="probe", icon_png=None, name=None, edit=None):
     folder = Path(tmp) / (prefix + "-packed")
     shutil.copytree(Path(root) / "tools/e2e/fixtures/action-probe", folder, dirs_exist_ok=True)
     manifest = json.loads((folder / "manifest.json").read_text())
@@ -28,6 +28,8 @@ def pack_probe(root, tmp, prefix="probe", icon_png=None, name=None):
         # The boundary fixture exercises metadata icons, not background events.
         manifest.pop("background", None)
         (folder / "boundary.png").write_bytes(icon_png)
+    if edit is not None:
+        edit(manifest)
     manifest.pop("key", None)  # This run has its own signing key and extension id.
     (folder / "manifest.json").write_text(json.dumps(manifest))
     private, public = Path(tmp) / (prefix + ".pem"), Path(tmp) / (prefix + ".der")
@@ -345,3 +347,60 @@ def run(app, results, tmp, root, wait_until, new_tab):
     finally:
         try: app.call("ext-prompt", clear=True, handler=False)
         finally: app.cleanup_surfaces()
+
+
+def global_commands(app, results, tmp, root, wait_until):
+    """PB3 row 1: OS-global extension commands (`"global": true`). Chromium's extension global-shortcut listener
+    registers them with Carbon inside the Open process; Open must not register them a second time. Proof without
+    pressing keys: a probe registration of the same key works before install, is refused as taken (-9878) while
+    the extension is installed, and works again after uninstall. The command itself runs through Chromium's
+    command dispatch (`ext-run-command`, the path its listener uses)."""
+    def edit(manifest):
+        manifest["name"] = "Open global command probe"
+        manifest["commands"] = {
+            "probe-global": {"suggested_key": {"default": "Ctrl+Shift+8", "mac": "Command+Shift+8"},
+                             "global": True, "description": "Run the global probe command"}}
+        # The background script also uses chrome.omnibox: keep it, under its own keyword.
+        manifest["omnibox"] = {"keyword": "probeglobal"}
+    crx = pack_probe(root, tmp, "global", name="Open global command probe", edit=edit)
+    pending = lambda: (lambda p: p if p.get("pending") else None)(app.call("ext-prompt"))
+    listed = lambda: app.call("extensions")["installed"]
+    def installed(identifier): return next((x for x in listed() if x["id"] == identifier), None)
+    def probe(): return app.call("hotkey-probe", key="8", modifiers=["command", "shift"])
+    identifier = None
+    try:
+        before = probe()
+        app.call("ext-prompt", handler=True, clear=True)
+        assert app.call("ext-manage", action="install-crx", extension="local", path=crx)
+        prompt = wait_until(pending, timeout=20)
+        if not prompt:
+            results["global_command_engine_registers"] = {"ok": False, "reason": "no install prompt"}
+            return
+        identifier = prompt["extension"]
+        app.call("ext-prompt", answer="accept", twice=True)
+        wait_until(lambda: installed(identifier), timeout=20)
+        command = wait_until(lambda: next((c for c in app.call("ext-commands")["commands"] if c["extension"] == identifier), None), timeout=10) or {}
+        held = wait_until(lambda: (lambda p: p if not p["registered"] else None)(probe()), timeout=10) or probe()
+        # Chromium encodes Command+Shift+8 as key "*" + Command; Open must read it as ⇧⌘8 (shortcut table fix).
+        results["global_command_engine_registers"] = {
+            "ok": before.get("registered") is True and held.get("registered") is False and "-9878" in held.get("error", "")
+                and command.get("global") is True and command.get("shortcut") == "⇧⌘8",
+            "before": before, "installed": held, "command": command}
+        tab = app.call("open", url="chrome-extension://%s/popup.html" % identifier)["id"]
+        app.call("wait", tab=tab)
+        ran = app.call("ext-run-command", extension=identifier, name="probe-global")
+        got = wait_until(lambda: (lambda s: s if s.get("commands") == ["probe-global"] else None)(
+            app.eval(tab, "chrome.storage.session.get(['commands'])")), timeout=10)
+        results["global_command_runs"] = {"ok": ran is True and bool(got), "storage": got}
+        app.call("close", tab=tab)
+        app.call("ext-manage", action="uninstall", extension=identifier)
+        if wait_until(pending, timeout=10): app.call("ext-prompt", answer="accept")
+        removed = wait_until(lambda: not installed(identifier), timeout=10)
+        after = wait_until(lambda: (lambda p: p if p["registered"] else None)(probe()), timeout=10) or probe()
+        results["global_command_released"] = {"ok": bool(removed) and after.get("registered") is True, "after": after}
+        identifier = None
+    finally:
+        if pending(): app.call("ext-prompt", answer="cancel")
+        if identifier and installed(identifier):
+            app.call("ext-manage", action="uninstall", extension=identifier)
+            if wait_until(pending, timeout=10): app.call("ext-prompt", answer="accept")
