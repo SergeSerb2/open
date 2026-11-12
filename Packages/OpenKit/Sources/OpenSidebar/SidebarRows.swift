@@ -383,6 +383,10 @@ final class TabCellView: SidebarCellView {
     /// Built on first use: most rows never show them, and every extra layer-backed
     /// subview costs time when a row scrolls into view.
     private var audio: RowSpeakerButton?
+    /// Last laid-out speaker state for this row's tab, to animate only a real "audio starts" change.
+    private var shownAudioTabID: ItemID?
+    private var shownAudio = false
+    private var pendingAudioReveal = false
     private var recording: RowRecordingView?
     private(set) var accessory: PlateButton?
     private(set) var peekBadge: PeekBadgeView?
@@ -604,6 +608,33 @@ final class TabCellView: SidebarCellView {
             CATransaction.commit()
         }
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
+        if pendingAudioReveal { pendingAudioReveal = false; animateAudioReveal() }
+    }
+
+    /// Capture PB1-f: the title slides right by the speaker slot and the speaker appears left to right,
+    /// one finite ease-out (Motion.rowAudioReveal). Additive, so the laid-out frames stay exact.
+    private func animateAudioReveal() {
+        let c = Motion.rowAudioRevealCurve
+        let timing = CAMediaTimingFunction(controlPoints: c.0, c.1, c.2, c.3)
+        if let layer = title.layer {
+            let slide = CABasicAnimation(keyPath: "transform.translation.x")
+            slide.fromValue = -RowMediaMetrics.titleShift; slide.toValue = 0; slide.isAdditive = true
+            slide.duration = Motion.rowAudioReveal; slide.timingFunction = timing
+            layer.add(slide, forKey: "media.audioRevealTitle")
+        }
+        if let button = audio, let layer = button.layer {
+            let mask = CALayer(); mask.backgroundColor = NSColor.black.cgColor
+            mask.anchorPoint = CGPoint(x: 0, y: 0.5)
+            mask.frame = layer.bounds
+            layer.mask = mask
+            let wipe = CABasicAnimation(keyPath: "bounds.size.width")
+            wipe.fromValue = 0; wipe.toValue = layer.bounds.width
+            wipe.duration = Motion.rowAudioReveal; wipe.timingFunction = timing
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { [weak layer, weak mask] in if let layer, layer.mask === mask { layer.mask = nil } }
+            mask.add(wipe, forKey: "media.audioRevealSpeaker")
+            CATransaction.commit()
+        }
     }
 
     /// The one placement function for the leading media slots (media plan §4.1, Step 2b):
@@ -615,6 +646,11 @@ final class TabCellView: SidebarCellView {
     private func layoutMediaAccessories(audible: Bool, muted: Bool, capturing: Bool, x0: CGFloat,
                                         titleX: CGFloat, titleRight: CGFloat) -> CGFloat {
         let m = RowMediaMetrics.self, showAudio = audible || muted
+        // Audio starts on the same tab of a shown row: slide the title and reveal the speaker (PB1-f).
+        pendingAudioReveal = showAudio && !shownAudio && shownAudioTabID == tab?.id && tab != nil
+            && !SidebarDiagnostics.mediaReducesMotion && !isHiddenOrHasHiddenAncestor
+            && (window?.isVisible == true || SidebarDiagnostics.forceAnimations)
+        shownAudio = showAudio; shownAudioTabID = tab?.id
         if !showAudio && !capturing && audio == nil && recording == nil { return titleX }
         audio?.isHidden = !showAudio
         if !showAudio { audio?.update(tabID: tab?.id, muted: muted, animate: false) }
