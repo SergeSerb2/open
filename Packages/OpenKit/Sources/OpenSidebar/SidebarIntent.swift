@@ -141,6 +141,9 @@ public enum SidebarIntent: Equatable, Sendable {
     /// Easel row menu: save as a web page, delete permanently (App).
     case exportEasel(tabID: ItemID)
     case deleteEasel(tabID: ItemID)
+    /// Note row menu: export this Note, delete it permanently (App).
+    case exportNote(tabID: ItemID)
+    case deleteNote(tabID: ItemID)
 }
 
 

@@ -70,6 +70,14 @@ final class NoteContentHost: WebContentHost {
     }
   }
 
+  /// Row rename: the title field shows it and the Note saves it.
+  func setTitle(_ title: String) {
+    guard !closed, !unreadable else { return }
+    editor.titleView.string = title
+    edited(title: title, body: editor.bodyView.attributedString())
+    editor.needsLayout = true
+  }
+
   /// View ▸ Appearance (website colour scheme) decides; Automatic follows the system.
   func updateAppearance() {
     let dark: Bool
