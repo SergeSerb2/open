@@ -20,7 +20,8 @@ class OEClient : public CefClient,
                  public CefFocusHandler,
                  public CefDevToolsMessageObserver {
  public:
-  explicit OEClient(OEWebContent* content) : view_(content) {}
+  explicit OEClient(OEWebContent* content)
+      : view_(content), download_context_(content.context) {}
 
   void SetClosing() { closing_ = true; }
   void Detach() { view_ = nil; }
@@ -212,6 +213,9 @@ class OEClient : public CefClient,
 
  private:
   __weak OEWebContent* view_;
+  // CEF patch 1001 can deliver a download update after this page is gone.
+  // Keep its original Profile attribution without retaining the page or Profile.
+  __weak OEBrowserContext* download_context_;
   bool closing_ = false;
   // The shell was told about a close it did not start (oe_requestClose).
   bool close_requested_ = false;

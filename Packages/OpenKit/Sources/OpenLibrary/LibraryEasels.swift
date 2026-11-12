@@ -91,8 +91,10 @@ extension LibraryPanelView {
             defer { if generation == host.providerGeneration { host.provider = nil } }
             let started = ProcessInfo.processInfo.systemUptime
             let items = await self.easelsProvider?.libraryEasels() ?? []
+            let notes = await self.notesProvider?.libraryNotes() ?? []   // Notes share the page (NT)
             guard !Task.isCancelled, host.providerGeneration == generation else { return }
             self.easelItems = items
+            self.noteItems = notes
             host.phaseMilliseconds["provider"] = (ProcessInfo.processInfo.systemUptime - started) * 1000
             host.loaded = true; host.dirty = true
             if self.section == .easels, self.contentActive {

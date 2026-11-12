@@ -1,0 +1,38 @@
+{
+ "status": "official release engine for the App (adopted on engine/lane-2026-11-11)",
+ "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
+ "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
+ "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",
+ "framework_sha256": "b8d6e3363eec07f880bbc1505580480c143b4625a7247d84032753852751259f",
+ "framework_uuid": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+ "chromium_version": "156.0.8078.48",
+ "cef_version": "156.0.14+g4fa4ab5",
+ "chromium_head": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
+ "cef_head": "4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f",
+ "xcode": "Xcode 27.2 Build version 27B52",
+ "sdk": "MacOSX27.2.sdk",
+ "clang": "llvmorg-24-init-7747-g62397f8b-53",
+ "args_gn_sha256": "f78a723c71b6171f5bac4280685dba58d345d3947d5d00b0821df14ad458a62a",
+ "args_delta_vs_release_args_gn": "use_remoteexec = true",
+ "pgo_profile": "chrome-mac-arm-8078-1791925243-b77c87a12380c6212a5d36737d1c76576eaaa85d-8bf8e95f3aaaafc23171beddc0ee3f397abd1e12.profdata",
+ "pgo_profile_sha256": "15fbc265a780b68bd943e5a2f2c89b58a006c45e28435257e4d927f1c7ee0c20",
+ "open_patches": "all 47 active (Engine/fork/patches/*/series), incl. chromium/0011 (ThinLTO jobs 6), 0012 (Widevine opt-in), 0013 (bookmark deletion barrier); 117 CEF patches; 141 overlay files (engine-status S-2..S-4 PASS)",
+ "built_at": "2026-11-11 23:05 America/Vancouver (remote compile, boat.dev + NativeLink); 2026-11-12 00:54 incremental local rebuild for patch 0012 (1 compile + framework link); 2026-11-12 03:47 incremental local rebuild for patch 0013 (138 steps)",
+ "symbols": "dSYM + receipts archived on the M5 in ~/Developer/open-engine/symbols/<distribution_name>/ (not in git)",
+ "known_limits": [
+  "CEF framework links with --lto-O0 (thinlto_optimize_default); no link-time optimization"
+ ],
+ "widevine": "enable_widevine=true, bundle_widevine_cdm=false (release.args.gn); CDM component registers only with --open-enable-widevine (Advanced setting \"Play DRM-protected video\", off by default)",
+ "superseded": [
+  {
+   "framework_sha256": "cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b",
+   "framework_uuid": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+   "reason": "before patch 0013"
+  },
+  {
+   "framework_sha256": "6b6c8d5ce54e7674c3e66adfc08bb3b6b845fb9d8b2c73553557a99bdb9618a7",
+   "framework_uuid": "4C4C4444-5555-3144-A1B1-0C672BC54A8C",
+   "reason": "before patch 0012"
+  }
+ ]
+}

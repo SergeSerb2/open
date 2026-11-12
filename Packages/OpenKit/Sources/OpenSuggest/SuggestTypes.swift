@@ -35,6 +35,10 @@ public struct SuggestContext: Sendable {
     /// The bar's last edit was an insertion at the end of the text with no selection (typing, or an IME
     /// commit at the end). Only then may the snapshot carry an inline completion (commandbar-completion §4.1.1).
     public var allowsInlineCompletion: Bool
+    /// Names of the App's next Undo and Redo ("Rename Space"), for "Undo <name>" / "Redo <name>" actions.
+    /// Nil: nothing to undo/redo. Empty: an unnamed step (plain "Undo"/"Redo").
+    public var undoActionName: String? = nil
+    public var redoActionName: String? = nil
 
     public init(
         mode: SuggestMode = .newTab,

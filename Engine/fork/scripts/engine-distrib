@@ -25,12 +25,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 case "$config" in dev) out=$OUT_DIR_DEV ;; release) out=$OUT_DIR_RELEASE ;; *) die "invalid config: $config" ;; esac
+distrib_args=(--output-dir="$SRC_DIR/cef/binary_distrib" --ninja-build
+    --arm64-build --minimal --no-symbols --no-docs --no-archive
+    --release-build-dir="$SRC_DIR/$out")
 if [[ "$config" == release ]]; then
-    die "release packaging not wired yet: CEF's make_distrib expects out/Release_GN_arm64; see docs/plans/fork-infra.md Step 10"
+    # Keep official and dev distributions distinct even with identical pins.
+    distrib_args+=(--distrib-subdir-suffix=-official)
+else
+    distrib_args+=(--allow-partial)
 fi
 if [[ $dry == 1 ]]; then
     log "dry-run: would engine-build --config $config --target \"cefsimple cefclient\" (skip-build=$skip)"
-    log "dry-run: (cd $SRC_DIR/cef/tools && python3 make_distrib.py --output-dir=$SRC_DIR/cef/binary_distrib --allow-partial --ninja-build --arm64-build --minimal --no-symbols --no-docs --no-archive)"
+    log "dry-run: (cd $SRC_DIR/cef/tools && python3 make_distrib.py ${distrib_args[*]})"
     log "dry-run: would discover one updated child in $SRC_DIR/cef/binary_distrib and write $STATE_DIR/distrib.txt"
     exit 0
 fi
@@ -44,8 +50,25 @@ acquire_lock distrib
 require_no_build_running
 export_engine_env
 [[ -f "$SRC_DIR/cef/tools/make_distrib.py" ]] || die "missing $SRC_DIR/cef/tools/make_distrib.py"
-# make_distrib hard-codes out/Release_GN_arm64 as its input. It has no option
-# for the separate official output directory (see the release gate above).
+# CEF patch 0001 accepts the selected input explicitly. Never alias or rename
+# the dev output to satisfy the packager's upstream directory convention.
+grep -q -- "'--release-build-dir'" "$SRC_DIR/cef/tools/make_distrib.py" ||
+    die 'CEF packaging patch 0001 is missing; run engine-apply --only cef'
+if [[ "$config" == release ]]; then
+    python3 - "$SRC_DIR/$out/args.gn" <<'PY'
+import pathlib, re, sys
+args = pathlib.Path(sys.argv[1]).read_text()
+required = dict(is_official_build='true', is_debug='false',
+                dcheck_always_on='false', chrome_pgo_phase='2',
+                use_thin_lto='true', target_cpu='"arm64"')
+for name, expected in required.items():
+    values = re.findall(r'^\s*' + re.escape(name) + r'\s*=\s*([^\n#]+)',
+                        args, re.M)
+    if not values or values[-1].strip() != expected:
+        raise SystemExit('refusing release packaging: ' + name +
+                         ' must be explicitly ' + expected)
+PY
+fi
 snapshot() {
     python3 - "$1" <<'PY'
 import json, pathlib, sys
@@ -65,7 +88,8 @@ out = pathlib.Path(sys.argv[1])
 files = [out/'cefsimple.app/Contents/MacOS/cefsimple', out/'cefclient.app/Contents/Frameworks/Chromium Embedded Framework.framework/Versions/A/Chromium Embedded Framework'] + sorted(out.glob('Chromium Embedded Framework.framework/Chromium Embedded Framework'))
 if not any(p.is_file() for p in files[1:]):
     raise SystemExit('no built framework; run engine-build first')
-print(hashlib.sha256(repr((sys.argv[2:], [(str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in files if p.is_file()])).encode()).hexdigest())
+args_hash = hashlib.sha256((out/'args.gn').read_bytes()).hexdigest()
+print(hashlib.sha256(repr((sys.argv[2:], args_hash, [(str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in files if p.is_file()])).encode()).hexdigest())
 PY
 )
 stamp="$STATE_DIR/distrib-$config.done"
@@ -79,9 +103,7 @@ before=$(snapshot "$SRC_DIR/cef/binary_distrib")
 # minimal type, so make_distrib copies dSYMs, which only official builds or
 # enable_dsyms=true produce (dev builds fail with a missing .dSYM). The app
 # uses the directory, so skip the slow tar.bz2 archive.
-(cd "$SRC_DIR/cef/tools" && python3 make_distrib.py \
-    --output-dir="$SRC_DIR/cef/binary_distrib" --allow-partial --ninja-build \
-    --arm64-build --minimal --no-symbols --no-docs --no-archive)
+(cd "$SRC_DIR/cef/tools" && python3 make_distrib.py "${distrib_args[@]}")
 after=$(snapshot "$SRC_DIR/cef/binary_distrib")
 chosen=$(python3 - "$before" "$after" <<'PY'
 import json, pathlib, sys

@@ -354,6 +354,25 @@
       case "library-captures-state": return try libraryCapturesState(a)
       case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure", "ext-shortcuts":
         return try await runExtensionCommand(cmd, a)
+      case "hotkey-probe":
+        // Tries a system-wide registration of one shortcut and releases it at once: `exists` means another
+        // registration (Chromium's extension global-shortcut listener, or another app) holds the key.
+        guard let key = a["key"] as? String, !key.isEmpty, key.utf8.count <= 16 else { throw Failure(message: "bad key") }
+        var modifiers: ShortcutModifiers = []
+        for name in a["modifiers"] as? [String] ?? [] {
+          switch name {
+          case "command", "cmd": modifiers.insert(.command)
+          case "shift": modifiers.insert(.shift)
+          case "option": modifiers.insert(.option)
+          case "control": modifiers.insert(.control)
+          default: throw Failure(message: "bad modifier \(name)")
+          }
+        }
+        let shortcut = KeyboardShortcut(key: key, modifiers: modifiers)
+        let probe = GlobalHotkeyService(identifier: 9_999)
+        defer { probe.unregister() }
+        do { try probe.register(shortcut: shortcut) {}; return ["registered": true, "error": ""] }
+        catch { return ["registered": false, "error": String(describing: error)] }
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
@@ -468,6 +487,9 @@
       case "settings-adblock-lifecycle": return try await settingsAdBlockLifecycle(a)
       #endif
       case "settings-adblock-engine": return settingsAdBlockEngine()
+      case "runloop-turns":
+        guard let trace = RunLoopTurnTrace.current else { throw Failure(message: "start with OPEN_AUTOMATION_RUNLOOP_TURNS=1") }
+        return trace.json(minimumMilliseconds: a["minimumMs"] as? Double ?? 8, fromLaunchMilliseconds: a["fromLaunchMs"] as? Double ?? 0)
       case "startup-trace":
         guard let trace = StartupMainThreadTrace.current else { throw Failure(message: "start with OPEN_AUTOMATION_STARTUP_TRACE=1") }
         return trace.json(minimumMilliseconds: a["minimumMs"] as? Double ?? 8)

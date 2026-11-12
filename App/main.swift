@@ -2,9 +2,9 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
-import OpenSettings  // Import from Arc providers and the wizard model are used in every build.
 #if OPEN_AUTOMATION
 import OpenOnboarding
+import OpenSettings
 #endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
@@ -29,6 +29,7 @@ let appDelegate = AppDelegate()
 LaunchTiming.shared.phase("delegateCreated")
 #if OPEN_AUTOMATION
 StartupMainThreadTrace.startIfRequested()
+RunLoopTurnTrace.startIfRequested()
 #endif
 app.delegate = appDelegate
 #if OPEN_AUTOMATION
@@ -147,6 +148,12 @@ configuration.verboseLogging = options.verboseLogging
 // our unbranded Release build (thread_profiler_configuration.cc treats it as
 // local). Open does not use its startup or periodic sampling collections.
 configuration.additionalSwitches.append("--disable-stack-profiler")
+// Widevine DRM (F3 option D): off by default; Open has no Widevine licence or
+// VMP signature. With the Advanced setting on, the engine registers Google's CDM
+// component (patch 0012) and the component updater downloads it.
+if UserDefaults.standard.bool(forKey: "open.advanced.enableWidevine") {
+  configuration.additionalSwitches.append("--open-enable-widevine")
+}
 // No userAgentProduct: Chrome's own User-Agent, as Arc does. A non-Chrome
 // product token replaces "Chrome/156", and sites and extensions then take
 // their Safari path (Bitwarden never finished loading).
