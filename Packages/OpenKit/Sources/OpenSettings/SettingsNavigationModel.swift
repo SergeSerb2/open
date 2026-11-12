@@ -127,6 +127,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.passwordsCards, "passwords", "Passwords"),
             .init(.passwordsCards, "cards", "Credit Cards"),
             .init(.browsingData, "clear", "Clear Browsing Data", help: "History, cookies, cache, and download history for this Profile."),
+            .init(.profiles, "new-documents", "New documents", help: "What New Note creates: a Note, or a Google Doc, Notion, Word, or Confluence page.", synonyms: "default document app note google doc notion word confluence"),
             .init(.profiles, "manage", "Your Profiles", help: "Create, rename, change an icon, assign Spaces, or delete an unused Profile."),
             .init(.profiles, "name", "Profile name"),
             .init(.profiles, "delete", "Delete Profile"),
@@ -203,6 +204,7 @@ extension SettingsViewModel {
         case "ad-blocking/lists": return adBlock.map { $0.isReady && Set($0.enabledIDs) != Set($0.store.catalog.defaultIDs) } ?? false
         case "ad-blocking/allowed-sites": return adBlock.map { !$0.domains.isEmpty } ?? false
         case "search/suggestions": return !profiles.suggestions
+        case "profiles/new-documents": return profiles.defaultDocumentApp != DocumentApp.note.id
         case "downloads/ask": return profiles.askWhereToSave
         case "downloads/location": return !["", "~/Downloads"].contains(profiles.downloadDirectory)
         case "appearance/toolbar": return appearanceToolbar

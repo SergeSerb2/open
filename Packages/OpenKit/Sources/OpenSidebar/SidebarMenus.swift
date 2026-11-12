@@ -174,12 +174,14 @@ struct SidebarMenus {
 
     static func isEasel(_ tab: Tab) -> Bool { tab.url.scheme?.lowercased() == "open" && tab.url.host()?.lowercased() == "easel" }
 
-    /// Easel row (C-measurements-s4 `e7-row-menu-ax`): Copy Link · — · Change Icon… · Rename… ·
-    /// — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar · Delete Easel. Open has no
-    /// share links: "Copy Link" becomes "Save as Web Page…" (Arc's per-Easel export row).
+    /// Easel row in Arc's order (C-measurements-s4 `e7-row-menu-ax`, LEAD 04:05): Copy Link · — ·
+    /// Change Icon… · Rename… · — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar ·
+    /// Delete Easel. Copy Link copies the Easel's own address (`open://easel/…`, opens it from
+    /// the command bar); Arc's per-Easel "save as a web page" row sits with it.
     func easel(_ tab: Tab) -> NSMenu {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         return menu([
+            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             item("Save as Web Page…", .exportEasel(tabID: tab.id)),
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
@@ -329,6 +331,7 @@ struct SidebarMenus {
             profile,
             .separator(),
             item("New Folder", .newFolder(in: .spacePinned(space.id))),
+            liveFolders(space),
             .separator(),
             item("Share Space…", enabled: false, .shareSpace(space.id)),
             export,
@@ -339,10 +342,35 @@ struct SidebarMenus {
         ])
     }
 
+    /// "Live Folders ▸ GitHub" (live-data §2.2: G:FUN_102ed863c / FUN_102edaf50); GitHub is a
+    /// checkmark toggle. Incognito windows have no Live Folders.
+    private func liveFolders(_ space: Space) -> NSMenuItem {
+        let github = item("GitHub", enabled: context.incognitoTitle == nil, .toggleLiveFolder(space.id))
+        github.state = context.model.liveFolder(in: space.id) == nil ? .off : .on
+        let parent = NSMenuItem(title: "Live Folders", action: nil, keyEquivalent: "")
+        parent.submenu = menu([github])
+        return parent
+    }
+
     /// Bottom-bar plus button. guess: not captured.
     /// Right-click on the URL field (CC-36; order guess).
     func urlField() -> NSMenu {
         menu([item("Show as Toolbar", .setToolbarShown(true)), .separator(), item("Manage Extensions", .manageExtensions)])
+    }
+
+    /// Right click on the Library button (capture C-report-s3 Part D): a disabled
+    /// "Show media from:" header, then Documents · Desktop · Screenshots · Captures · Downloads.
+    func libraryMediaSources() -> NSMenu? {
+        let sources = context.libraryMediaSources
+        guard !sources.isEmpty else { return nil }
+        var items: [NSMenuItem] = [ClosureMenuItem("Show media from:", enabled: false) {}]
+        for source in sources {
+            let entry = item(source.title, .toggleLibraryMediaSource(source.id))
+            entry.state = source.enabled ? .on : .off
+            entry.identifier = NSUserInterfaceItemIdentifier("library-media-source-" + source.id)
+            items.append(entry)
+        }
+        return menu(items)
     }
 
     func plus() -> NSMenu {

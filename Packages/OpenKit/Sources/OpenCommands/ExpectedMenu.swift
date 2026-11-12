@@ -39,6 +39,7 @@ public enum ExpectedMenu {
         ("new-little-open-window", "New Little Arc Window", "New Little Open Window"),
         ("little-open-global", "Show Little Arc (Global)", "Show Little Open (Global)"),
         ("open-in-current-space", "Open Little Arc or Peek in…", "Open Little Open or Peek in…"),
+        ("export-notes", "Export Arc Notes", "Export Notes…"),
     ]
 
     /// Extra built titles the comparison allows: system and dynamic rows that

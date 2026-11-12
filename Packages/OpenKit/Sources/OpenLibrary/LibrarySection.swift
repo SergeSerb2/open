@@ -24,7 +24,8 @@ public enum LibraryPanelSection: String, CaseIterable, Sendable {
         switch self {
         case .media: ("No media yet", "Page captures you take appear here.", nil)
         case .downloads: ("No downloads yet", "Files you download appear here.", nil)
-        case .easels: ("No Easels yet", "Press + in the sidebar to start one.", nil)
+        // docs/re/easels.md: "Click the + sign in the Sidebar to create a new Easel."
+        case .easels: ("No Easels yet", "Click the + sign in the Sidebar to create a new Easel.", nil)
         case .spaces: ("No Spaces yet", "Your Spaces appear here.", nil)
         case .boosts: ("No Boosts yet", "Open a site and choose Boost to change how it looks.", nil)
         case .archive: ("Nothing archived yet", "Tabs you close, and tabs that Open tidies away, appear here.", "Learn more")
@@ -32,6 +33,8 @@ public enum LibraryPanelSection: String, CaseIterable, Sendable {
         }
     }
     public static func visible(in defaults: UserDefaults) -> [Self] {
-        allCases.filter { $0 != .easels || defaults.bool(forKey: "libraryShowsEasels") }
+        // Easels ship with EZ (LEAD 04:05): shown unless `libraryShowsEasels` is set to false
+        // (the six-tile Library checks set it false on purpose).
+        allCases.filter { $0 != .easels || (defaults.object(forKey: "libraryShowsEasels") as? Bool ?? true) }
     }
 }

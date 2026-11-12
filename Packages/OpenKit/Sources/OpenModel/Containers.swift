@@ -40,8 +40,10 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
     public var searchEngineID: String
     public var sleepMode: SleepMode
     public var keepAliveSites: [String]
+    /// What New Note creates in this Profile: "note" or a web document id (DocumentApps).
+    public var defaultDocumentApp: String
 
-    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "google", sleepMode: SleepMode = .balanced, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = [], keepAliveSites: [String] = []) {
+    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "google", sleepMode: SleepMode = .balanced, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = [], keepAliveSites: [String] = [], defaultDocumentApp: String = "note") {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
         self.searchSuggestEnabled = searchSuggestEnabled
@@ -51,10 +53,11 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         self.searchEngineID = searchEngineID
         self.sleepMode = sleepMode
         self.keepAliveSites = keepAliveSites
+        self.defaultDocumentApp = defaultDocumentApp
     }
 
     private enum CodingKeys: String, CodingKey {
-        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode, keepAliveSites
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode, keepAliveSites, defaultDocumentApp
         case searchSuggestEnabled, downloadDirectory, askWhereToSaveEachFile, customSearchEngines
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
@@ -72,6 +75,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         customSearchEngines = try container.decodeIfPresent([SearchEngine].self, forKey: .customSearchEngines) ?? []
         sleepMode = try container.decodeIfPresent(SleepMode.self, forKey: .sleepMode) ?? .balanced
         keepAliveSites = try container.decodeIfPresent([String].self, forKey: .keepAliveSites) ?? []
+        defaultDocumentApp = try container.decodeIfPresent(String.self, forKey: .defaultDocumentApp) ?? "note"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -85,6 +89,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         try container.encode(customSearchEngines, forKey: .customSearchEngines)
         try container.encode(sleepMode, forKey: .sleepMode)
         try container.encode(keepAliveSites, forKey: .keepAliveSites)
+        try container.encode(defaultDocumentApp, forKey: .defaultDocumentApp)
     }
 }
 

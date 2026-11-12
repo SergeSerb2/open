@@ -24,6 +24,29 @@ extension EngineWebContentHostFactory {
     return true
   }
 
+  /// Copy Link on an Easel row: its own address; "Copied Easel URL" (Arc toast string).
+  func copyEaselLink(tabID: ItemID) -> Bool {
+    guard let tab = model.tab(id: tabID), EaselTab.matches(tab.url) else { return false }
+    NSPasteboard.general.clearContents()
+    let copied = NSPasteboard.general.setString(tab.url.absoluteString, forType: .string)
+    if copied, controller?.window?.isKeyWindow == true { controller?.toasts.show(ToastContent(title: "Copied Easel URL")) }
+    return copied
+  }
+
+  /// Shows an Easel: its row (any Space of this window's model), or a new row at the top of
+  /// Today in the focused Space for an Easel that has none. False for an unknown document.
+  @discardableResult
+  func showEasel(documentID: UUID) -> Bool {
+    if let tab = easelRow(documentID: documentID) { selectTabForCommand(tab.id); return true }
+    guard !isIncognito, let space = focusedSpace, app.easels.exists(documentID) else { return false }
+    let title = app.easels.load(documentID)?.displayTitle ?? EaselDocument.untitled
+    let tab = model.newTab(in: space.id, url: EaselTab.url(for: documentID), title: title, at: 0)
+    tab.live.faviconPNG = EaselIcon.faviconPNG
+    select(nodeID: tab.id)
+    scheduleSave()
+    return true
+  }
+
   func easelExportItem(_ tab: Tab) -> EaselExporter.Item? {
     guard let documentID = EaselTab.documentID(tab.url) else { return nil }
     if let host = easelHosts[tab.id], !host.closed { host.canvas.commitPendingEdits() }
@@ -94,7 +117,7 @@ extension EngineWebContentHostFactory {
 }
 
 extension AppDelegate {
-  /// Every Easel of every Profile (sidebar rows), for Export All Easels.
+  /// Every Easel (sidebar rows first, then documents without a row), for Export All Easels.
   func allEaselItems() -> [EaselExporter.Item] {
     var seen = Set<UUID>(), items: [EaselExporter.Item] = []
     for factory in hostFactories.values { for host in factory.easelHosts.values { host.canvas.commitPendingEdits() } }
@@ -113,6 +136,11 @@ extension AppDelegate {
         }
       }
       visit(flat(space.pinned + space.today))
+    }
+    // Easels whose row or Space is gone are still the user's (Library › Easels lists them).
+    for entry in EaselStore.readIndex(directory: easels.directory) where seen.insert(entry.id).inserted {
+      guard let doc = easels.load(entry.id) else { continue }
+      items.append(EaselExporter.Item(document: doc, imagesDirectory: easels.imagesDirectory(for: entry.id)))
     }
     return items
   }

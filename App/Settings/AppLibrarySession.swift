@@ -19,6 +19,8 @@ final class AppLibrarySession {
   var releasePending: Bool { releaseTask != nil }
   #endif
   private(set) var panelGeneration = 0
+  /// Library › Easels data (EZ); the panel holds it weakly.
+  private(set) var easelsProvider: EaselLibraryProvider?
   private(set) weak var releasedPanel: LibraryPanelView?
 
   init(model: LibraryViewModel, controller: BrowserWindowController) {
@@ -40,6 +42,8 @@ final class AppLibrarySession {
       panel.select(LibraryPanelSection(section), animated: false)
     }
     panel.isPresented = true
+    // Easels change outside the Library (new, renamed, deleted): read them again on each open.
+    panel.reloadEasels()
     // Attach before asking the panel for its Spaces width.
     controller.presentLibraryPanel(panel, width: panel.section == .spaces ? (controller.contentView.bounds.width-56) : 417)
     controller.libraryKeyHandler = { [weak panel] in panel?.handleKey($0) ?? false }
@@ -58,6 +62,12 @@ final class AppLibrarySession {
     }
     self.panel = panel; panelGeneration += 1
     panel.onIdleRefresh = { [weak self] in self?.controller?.onLibraryIdleRefresh?() }
+    if let app = NSApp.delegate as? AppDelegate {
+      let easels = easelsProvider ?? EaselLibraryProvider(app: app)
+      easels.controller = controller
+      easelsProvider = easels
+      panel.easelsProvider = easels
+    }
     controller?.prepareLibraryPanel(panel,width:panel.section == .spaces ? max(417,(controller?.contentView.bounds.width ?? 1280)-56) : 417)
     return panel
   }

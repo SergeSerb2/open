@@ -183,7 +183,8 @@ enum RowPresentation {
             case .extension(let id): return .extension(id)
             case .emoji(let e): return .emoji(e)
             case .symbol(let name): return .symbol(name, plate: false)
-            case .favicon(let u): return .favicon(u, fallback: "globe")
+            // The page URL is the favicon cache key (FaviconStore keys pages, not "/favicon.ico").
+            case .favicon(let u): return .favicon(s.url ?? u, fallback: "globe")
             case nil: return s.url.map { .favicon($0, fallback: "globe") } ?? .symbol("globe", plate: false)
             }
         }

@@ -23,8 +23,10 @@ final class LibraryControl: NSButton {
     var onArrow: ((Int) -> Void)?
     var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
     private var tracking: NSTrackingArea?
-    override var acceptsFirstResponder: Bool { isEnabled }
-    override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
+    /// False keeps an enabled control out of the key-view loop (mouse and AXPress still work).
+    var allowsKeyView = true
+    override var acceptsFirstResponder: Bool { isEnabled && allowsKeyView }
+    override var canBecomeKeyView: Bool { isEnabled && allowsKeyView && !isHiddenOrHasHiddenAncestor }
     override var mouseDownCanMoveWindow: Bool { false }
 
     init(title: String, glyph: LibraryGlyph? = nil, tile: Bool = false) {

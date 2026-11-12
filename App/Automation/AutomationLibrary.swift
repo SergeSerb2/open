@@ -60,6 +60,9 @@ extension AutomationController {
       case "chip":
         guard let id = args["id"] as? String, panel.toggleChip(id) else { throw Failure(message:"unknown filter chip") }
       case "focus-list": panel.focusList()
+      case "easels-export":
+        // "Export All Easels →" on the Easels card, as a click.
+        guard panel.pressExportAllEasels() else { throw Failure(message:"Export All Easels is not available") }
       case "row-select":
         guard let id = args["id"] as? String, panel.selectRow(id) else { throw Failure(message:"unknown row") }
       case "hover-row":
@@ -97,6 +100,7 @@ extension AutomationController {
         guard let raw=args["section"] as? String, let section=LibraryPanelSection(rawValue:raw) else { throw Failure(message:"unknown section") }
         panel.hoverTile(section,hovered:args["hovered"] as? Bool ?? true)
       case "back": panel.pressBack()
+      case "empty-button": guard panel.pressEmptyButton() else { throw Failure(message:"empty-state button is not available") }
       case "refresh": panel.refresh()
       case "resize":
         guard let width=args["width"] as? Double, let height=args["height"] as? Double,

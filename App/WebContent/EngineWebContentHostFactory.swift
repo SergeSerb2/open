@@ -147,13 +147,20 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// On-device page translation for this window (page-platform Step 10).
   private(set) lazy var translate = TranslateAdapter(factory: self)
   private(set) var lastNavigationFocusRestored = false
-  func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
+  /// `userInitiated`: Cmd+T / Cmd+L, the menu, or the sidebar; false when the App shows the bar by itself (a new window).
+  func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
     guard !isClosing, !app.terminationRequested else { return }
     iconPicker?.close()
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
-    commandBarSession?.show(mode, requestedAt: requestedAt, editingPinnedTab: editingPinnedTab)
+    // A second Cmd+T while the New Tab bar is open, or a second Cmd+L while the address editor is
+    // open, closes it (Arc 06-keys, 12c; plan D3 §2.3).
+    if userInitiated, let session = commandBarSession, session.isPresented, session.openedByUser, editingPinnedTab == nil,
+       session.pinnedEditTabID == nil, mode == .newTab || mode == .editCurrentURL, session.controller?.request?.mode == mode {
+      session.dismiss(); return
+    }
+    commandBarSession?.show(mode, requestedAt: requestedAt, editingPinnedTab: editingPinnedTab, userInitiated: userInitiated)
   }
   /// Edit Pinned URL confirmed in the command bar (app-shell §4.1): the pinned URL changes; a tab that
   /// was still on its old pinned page also goes to the new one (guess: no capture of Arc's dialog).
@@ -178,6 +185,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }()
   #if OPEN_AUTOMATION
   var siteControlDrawSamples: [Double] = []
+  var siteControlDrawPhaseSamples: [[String: Double]] = []
   var siteControlDrawNativeProbeSamples: [[UInt64]] = []
   var popupCallbackClose: (phase: String, toggle: Bool)?
   func releaseBrowsersForAutomation() -> [String: Any] {
@@ -318,6 +326,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if self.siteControlDrawSamples.count > 128 {
         self.siteControlDrawSamples.removeFirst(); self.siteControlDrawNativeProbeSamples.removeFirst()
       }
+    }
+    controller.siteControl?.onFirstDrawPhases = { [weak self] phases in
+      guard let self else { return }
+      self.siteControlDrawPhaseSamples.append(phases)
+      if self.siteControlDrawPhaseSamples.count > 128 { self.siteControlDrawPhaseSamples.removeFirst() }
     }
     #endif
     pageChrome.permissionAnchorProvider = { [weak self] page in
@@ -741,7 +754,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
-    if focus {
+    // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
+    // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
+    if focus, commandBarSession?.isPresented != true {
       if let id = selectedTab?.id, let native = welcomeHosts[id] { native.focus() }
       else if let id = selectedTab?.id, let note = noteHosts[id] { note.updateAppearance(); note.focus() }
       else if let id = selectedTab?.id, let easel = easelHosts[id] { easel.focus() }
@@ -795,7 +810,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
-           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .newEasel, .exportEasel, .deleteEasel: return false
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .newEasel, .exportEasel, .deleteEasel: return false
       case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
@@ -874,6 +889,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
         let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
       select(nodeID: tab.id); return true
+    case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
+      return copyEaselLink(tabID: id)
     case .copyLink(let id, let markdown):
       return copyLinks(ids: [id], markdown: markdown)
     case .copyLinks(let ids, let markdown): return copyLinks(ids: ids, markdown: markdown)
@@ -886,6 +903,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
+    case .toggleLibraryMediaSource(let id): return app.settingsPresenter.toggleLibraryMediaSource(id)
     case .showLibrary:
       app.settingsPresenter.toggleLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
     // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
@@ -906,6 +924,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
+    case .toggleLiveFolder(let id):
+      return app.liveFolders.toggle(spaceID: id)
     case .shareSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
@@ -1060,8 +1080,8 @@ extension EngineWebContentHostFactory {
 }
 
 extension EngineWebContentHostFactory {
-  @objc func newTab(_ sender: Any?) { showCommandBar(.newTab) }
-  @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
+  @objc func newTab(_ sender: Any?) { showCommandBar(.newTab, userInitiated: true) }
+  @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL, userInitiated: true) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
     if let panel = controller?.boostEditor?.panel, candidate === panel || candidate.sheetParent === panel { return true }
@@ -1070,6 +1090,8 @@ extension EngineWebContentHostFactory {
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
+    // An Easel's own address (Copy Link) opens that Easel.
+    if let document = EaselTab.documentID(url) { showEasel(documentID: document); return }
     // Welcome is created by the hand-off or Help only; arbitrary internal routes
     // typed in the command bar never reach a page or a system URL handler.
     guard !WelcomeTab.isInternal(url) else { return }
@@ -1096,6 +1118,18 @@ extension EngineWebContentHostFactory {
       if background { _ = ensureContent(for: tab) }
       else { commandBarNavigationFocus.insert(tab.id) }
     }
+  }
+  /// Option+Return in the command bar: the page opens beside the current page in Split View (Arc 11-returns,
+  /// plan D3 §2.3). A split that already has the maximum number of panes loads it in the focused pane.
+  /// Returns false when no split can be made and nothing is focused (the caller then opens it as usual).
+  @discardableResult
+  func openFromCommandBarInSplit(_ url: URL) -> Bool {
+    guard !WelcomeTab.isInternal(url), let splits = controller?.splitController, let current = splits.focusedTab else { return false }
+    guard splits.canAddPane else { navigateFromCommandBar(url, current: true); return true }
+    guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
+    _ = ensureContent(for: tab)
+    splits.openInSplit(tab.id)
+    return true
   }
   private func finishCommandBarNavigation(_ page: OEWebContent) {
     guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }

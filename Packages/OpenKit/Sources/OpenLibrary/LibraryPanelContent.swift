@@ -157,6 +157,7 @@ extension LibraryPanelView {
     }
     func startProvider(_ target:LibraryPanelSection) {
         let host = host(for:target)
+        if target == .easels { if !host.loaded, host.provider == nil { startEaselsProvider(host) }; return }
         guard !host.loaded,host.provider == nil,let mapped = target.modelSection else { return }
         if target == .archive { host.storeVersion = viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(viewModel.archives[$0]!.contentVersion) }.joined(separator:",") }
         host.providerGeneration += 1
@@ -196,6 +197,7 @@ extension LibraryPanelView {
                 case .archive: _ = viewModel.archiveRows; _ = viewModel.archives.values.map(\.contentVersion)
                 case .history: _ = viewModel.historyRows; _ = viewModel.historyProfileID
                 case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages
+                    _ = viewModel.mediaFolders?.files; _ = viewModel.mediaFolders?.enabled; _ = viewModel.mediaFolders?.onboarded
                 case .boosts: _ = viewModel.boostsProvider?.libraryBoostsVersion; _ = viewModel.historyProfileID
                 default: break
                 }
@@ -264,8 +266,10 @@ extension LibraryPanelView {
             case .downloads: host.sources = downloadSources()
             case .archive: host.sources = archivedSources()
             case .history: host.sources = historySources()
-            case .media: host.sources = captureSources()
+            case .media: host.sources = ((viewModel.mediaFolders?.isEnabled(.capture) ?? true ? captureSources() : []) + mediaFileSources())
+                .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
             case .boosts: host.sources = boostSources()
+            case .easels: host.sources = easelSources()
             default: host.sources = []
             }
             host.sourceVersion += 1
@@ -339,11 +343,12 @@ extension LibraryPanelView {
         boostList.isHidden = section != .boosts; boostGallery.isHidden = section != .boosts; boostsProfile.isHidden = section != .boosts
         let boostsOff = section == .boosts && !viewModel.defaults.bool(forKey:"open.advanced.enableBoosts")
         boostDisabledText.isHidden = !boostsOff; boostTurnOn.isHidden = !boostsOff
+        easelsCard.isHidden = section != .easels || filterOpen
         listView.identifier = .init(section == .boosts ? (viewModel.boostsPresentation == .gallery ? "boosts.gallery" : "boosts.list") : "library.rows")
         boostList.selected = viewModel.boostsPresentation == .list; boostGallery.selected = viewModel.boostsPresentation == .gallery
         boostsProfile.title = viewModel.model.profile(id:viewModel.historyProfileID)?.name ?? "Profile"
         if filterOpen { configureFilter() }
-        let layoutKey = "\(section == .spaces)|\(section.hasFilter)|\(filterOpen)|\(section == .boosts)|\(boostsOff)|\(statusLabel.isHidden)"
+        let layoutKey = "\(section == .easels)|\(section == .spaces)|\(section.hasFilter)|\(filterOpen)|\(section == .boosts)|\(boostsOff)|\(statusLabel.isHidden)"
         if lastHeaderLayoutKey != layoutKey { lastHeaderLayoutKey = layoutKey; needsLayout = true }
     }
     func symbol(_ name:String) -> NSImage? {
@@ -449,6 +454,25 @@ extension LibraryPanelView {
                     .init(title:"-",run:{}),.init(title:"Delete",run:{ [weak self] in self?.confirm("Delete this capture?",message:"This permanently deletes the file.") { [weak self] in
                         self?.viewModel.pendingCaptureDelete = id; self?.viewModel.deleteCaptureConfirmed(); self?.renderRows()
                     } })])
+          }
+        }
+    }
+    /// Folder files (PB1). Same row as a capture; files can be hidden, never deleted (Arc LB-2).
+    func mediaFileSources() -> [LibraryRowSource] {
+        guard let folders = viewModel.mediaFolders else { return [] }
+        return folders.files.map { file in
+          let subtitle = file.source.title+" · "+file.date.formatted(date:.abbreviated,time:.omitted)
+          return LibraryRowSource(id:"file:"+file.url.path,date:file.date,text:file.name+" "+file.source.title,prepareText:{
+              LibraryRowText(title:file.name,subtitle:subtitle)
+          }) { [unowned self] _ in
+            let url = file.url
+            let open: () -> Void = { NSWorkspace.shared.open(url) }
+            return LibraryRowItem(id:"file:"+url.path,title:file.name,subtitle:subtitle,kind:"media",day:"",fileURL:url,dragURL:url,activate:open,
+                actions:[.init(title:"Open",run:open),
+                    .init(title:"Copy",run:{ NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([url as NSURL]) }),
+                    .init(title:"Show in Finder",run:{ NSWorkspace.shared.activateFileViewerSelecting([url]) }),
+                    .init(title:"-",run:{}),
+                    .init(title:"Hide from Library",run:{ [weak self] in folders.hide(file); self?.renderRows() })])
           }
         }
     }

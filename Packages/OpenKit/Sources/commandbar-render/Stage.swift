@@ -204,21 +204,27 @@ final class Stage {
         if case .embedded = controller.view.presentation { embedded = true } else { embedded = false }
         if root.backdrop.image == nil, root.bottomColor == nil, !embedded {
             let c = root.backdrop.color
-            let expected = [c.red * 255, c.green * 255, c.blue * 255]
+            // The New Tab card's scrim darkens the page by black 10 % (plan D3 §2.1).
+            let scrim = controller.isPresented && controller.view.presentation == .overlay ? 1 - CommandCard.scrim.alpha : 1
+            let expected = [c.red * 255 * scrim, c.green * 255 * scrim, c.blue * 255 * scrim]
             let h = CGFloat(image.height) / scale - 4, w = CGFloat(image.width) / scale - 4
             for corner in [px(4, 4), px(4, h), px(w, h)] where zip(corner, expected).contains(where: { abs($0 - $1) > 3 }) { return false }
         }
         guard controller.isPresented else { return true }
-        // Panel fill in the input row's empty middle: a dark, opaque-looking material.
+        // Panel body past the tint in the input row: the theme's opaque body (embedded: any opaque fill).
         let p = controller.view.panelFrame
         func luma(_ c: [Double]) -> Double { 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] }
-        guard (8..<120).contains(luma(px(p.minX + 300, p.minY + 6))) else { return false }
-        // Drawn content: light pixels (icon, text) in the input row's leading part and in row 1.
+        let bodyColor = controller.theme.body
+        let bodyLuma = luma([bodyColor.red * 255, bodyColor.green * 255, bodyColor.blue * 255])
+        let sample = luma(px(p.minX + p.width * 0.7, p.minY + 6))
+        if embedded { guard (8..<250).contains(sample) else { return false } }
+        else { guard abs(sample - bodyLuma) < 8 else { return false } }
+        // Drawn content: ink (icon, text) that contrasts with the body in the input row's leading part and in row 1.
         func hasInk(_ r: CGRect) -> Bool {
             var y = r.minY
             while y < r.maxY {
                 var x = r.minX
-                while x < r.maxX { if luma(px(x, y)) > 140 { return true }; x += 0.5 }
+                while x < r.maxX { if abs(luma(px(x, y)) - (embedded ? 0 : bodyLuma)) > 100 { return true }; x += 0.5 }
                 y += 0.5
             }
             return false

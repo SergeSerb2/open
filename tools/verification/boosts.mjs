@@ -213,14 +213,15 @@ try {
   await settle();
   assert.equal((await overlayNodes('.hl'))[0].background, 'rgba(255, 214, 10, 0.35)');
   await page.mouse.click(selectBanner.x + 10, selectBanner.y + 10);
-  assert.equal((await overlayNodes('.select'))[0].text, 'Use Selector');
-  assert.equal((await overlayNodes('.this'))[0].display, 'none');
-  assert.equal((await overlayNodes('.related'))[0].display, 'none');
+  // Pick Selector uses Arc's copy labels (BO-20) on the same two buttons; Zap actions stay out.
+  assert.equal((await overlayNodes('.this'))[0].text, 'Copy selector for this');
+  assert.equal((await overlayNodes('.related'))[0].text, 'Copy selector for related');
+  assert.equal((await overlayNodes('.select')).length, 0);
   await clickOverlay('.cancel');
   assert.equal(await page.evaluate(() => window.__harness.messages.filter(m => m.type === 'picker:selected').length), 0);
   await page.mouse.click(selectBanner.x + 10, selectBanner.y + 10);
-  await clickOverlay('.select');
-  assert.equal((await overlayNodes('.popup'))[0].display, 'none', 'Use Selector closes card');
+  await clickOverlay('.this');
+  assert.equal((await overlayNodes('.popup'))[0].display, 'none', 'Copy selector for this closes card');
   const selection = await page.evaluate(() => window.__harness.messages.find(m => m.type === 'picker:selected'));
   assert.equal(selection.v, 1);
   assert.deepEqual(Object.keys(selection.payload).sort(), ['boostID', 'matches', 'selector', 'sessionNonce']);
@@ -237,7 +238,7 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(() => window.__openZap.isActive()), false);
   assert.equal(await page.evaluate(() => window.__harness.messages.at(-1).payload.reason), 'esc');
-  console.log('S1 PASS: select frame/tint, one action, Cancel, authenticated selection, no commit/hide/store/undo, Escape');
+  console.log('S1 PASS: select frame/tint, copy labels, Cancel, authenticated selection, no commit/hide/store/undo, Escape');
   await fresh();
   await page.click('#fixture-F1');
   await page.click('#enter-zap');
