@@ -19,15 +19,13 @@ extension AutomationController {
         guard let site = RecentsSite(rawValue: raw) else { throw Failure(message: "unknown Recents site \(raw)") }
         aliases[host.lowercased()] = site
       }
-      let mail = Set((a["mail"] as? [String] ?? []).map { $0.lowercased() })
-      for controller in app.windowControllers { controller.context.glanceHostAliases = aliases; controller.context.glanceMailHosts = mail }
-      return ["aliases": aliases.mapValues(\.rawValue), "mail": Array(mail)]
+      for controller in app.windowControllers { controller.context.glanceHostAliases = aliases }
+      return ["aliases": aliases.mapValues(\.rawValue)]
     case "glance-match":
       guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "glance-match needs url") }
       switch GlanceKind.match(url: url) {
       case .recents(let site)?: return ["kind": "recents", "site": site.rawValue]
       case .calendar(let provider)?: return ["kind": "calendar", "provider": provider.rawValue]
-      case .gmail(let account)?: return ["kind": "gmail", "account": account]
       case nil: return ["kind": "none"]
       }
     case "history-record":
@@ -96,20 +94,6 @@ extension AutomationController {
       if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
         return try await calendarGlanceState(calendar, controller: controller, tab: id, wait: a["wait"] as? Bool != false)
       }
-      if let mail = controller.hoverPreview.card?.content as? MailPreviewView {
-        if a["wait"] as? Bool != false {
-          let deadline = Date().addingTimeInterval(25)
-          while !mail.isLoaded, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
-        }
-        controller.contentView.layoutSubtreeIfNeeded()
-        let root = controller.contentView
-        let card = controller.hoverPreview.card.map { root.convert($0.bounds, from: $0) } ?? .zero
-        return ["shown": true, "kind": "gmail", "account": mail.account, "tab": id.description, "phase": mail.phase.rawValue,
-          "header": GmailGlance.header, "newLabel": mail.newButton.toolTip ?? "",
-          "newURL": GmailGlance.composeURL(for: mail.tab.url, account: mail.account).absoluteString, "message": mail.message ?? "",
-          "rows": mail.mail.map { ["title": $0.title, "author": $0.author, "url": $0.url.absoluteString] },
-          "card": [card.minX, card.minY, card.width, card.height]] as [String: Any]
-      }
       guard let view = controller.hoverPreview.card?.content as? RecentsPreviewView else { return ["shown": false] }
       if a["wait"] as? Bool != false {
         let deadline = Date().addingTimeInterval(5)
@@ -125,10 +109,6 @@ extension AutomationController {
         "card": [card.minX, card.minY, card.width, card.height]] as [String: Any]
     case "glance-open":
       let controller = try glanceController(a)
-      if let mail = controller.hoverPreview.card?.content as? MailPreviewView {
-        if a["new"] as? Bool == true { mail.openNew() } else { mail.open(row: a["row"] as? Int ?? 0) }
-        return ["opened": true]
-      }
       if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
         switch a["control"] as? String ?? "new" {
         case "new": calendar.openNew()

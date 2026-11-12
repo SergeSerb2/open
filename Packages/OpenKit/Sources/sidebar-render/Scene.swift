@@ -18,8 +18,6 @@ final class RenderScene: NSView {
         var previewFolderID: ItemID?
         /// LF look frames: the intro card beside this Live Folder row.
         var liveIntroFolderID: ItemID?
-        /// LF L6 look frames: a Pinned tab shown with the Gmail card.
-        var previewMail: ItemID?
         /// A Pinned tab shown with the Recents card (LF L1 look frames).
         var previewRecents: (tabID: ItemID, site: RecentsSite)?
         /// A Pinned tab shown with the calendar card (CAL L4 look frames).
@@ -37,8 +35,6 @@ final class RenderScene: NSView {
     let recentsPreview: RecentsPreviewView?
     let recentsShadow = NSView()
     var liveIntro: LiveFolderIntroView?
-    var mailPreview: MailPreviewView?
-    let mailShadow = NSView()
     let calendarPreview: CalendarPreviewView?
 
     init(context: SidebarContext, options: Options, delegate: any SidebarDelegate) {
@@ -63,16 +59,6 @@ final class RenderScene: NSView {
         if !options.sidebarHidden || options.revealCard { addSubview(sidebar) }
         if let folderPreview {
             addSubview(folderPreview)
-        }
-        if let id = options.previewMail, let tab = context.model.tab(id: id) {
-            let view = MailPreviewView(context: context, tab: tab, account: 0)
-            let deadline = Date().addingTimeInterval(2)
-            while !view.isLoaded, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
-            let m = HoverPreviewMetrics.self, shadow = NSShadow()
-            shadow.shadowColor = NSColor.black.withAlphaComponent(CGFloat(m.shadowOpacity))
-            shadow.shadowBlurRadius = m.shadowRadius; shadow.shadowOffset = CGSize(width: 0, height: -m.shadowOffsetY)
-            mailShadow.wantsLayer = true; mailShadow.shadow = shadow
-            addSubview(mailShadow); mailShadow.addSubview(view); mailPreview = view
         }
         if options.liveIntroFolderID != nil {
             let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
@@ -135,14 +121,6 @@ final class RenderScene: NSView {
             let row = sidebar.rowFrame(nodeID: folderPreview.folder.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
             folderPreview.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
                                          width: HoverPreviewMetrics.folderWidth, height: height)
-        }
-        if let mailPreview {
-            sidebar.layoutSubtreeIfNeeded()
-            let height = min(mailPreview.fittingSize.height, bounds.height - 20)
-            let row = sidebar.rowFrame(nodeID: mailPreview.tab.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
-            mailShadow.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
-                                      width: HoverPreviewMetrics.folderWidth, height: height)
-            mailPreview.frame = mailShadow.bounds
         }
         if let liveIntro, let id = options.liveIntroFolderID {
             sidebar.layoutSubtreeIfNeeded()

@@ -121,7 +121,7 @@ extension AutomationController {
           if let on = args["secrets"] as? Bool { flow.includeSecrets = on }
         case "import":
           guard let steps = app.onboardingWindowController?.steps, steps.step == .name else { throw Failure(message: "not on Name") }
-          if flow.probe == nil { await flow.refreshProbe() }; steps.next()
+          if flow.probe == nil { await flow.refreshProbe() }; await flow.loadBrowserSources(); steps.next()
         case "fresh":
           guard [.welcome, .importChoices, .failed, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() }
         case "back":
@@ -171,6 +171,9 @@ extension AutomationController {
     if let current {
       state["welcome"] = current.welcomeStatus
       state["probeReady"] = current.probe != nil
+      state["browserSource"] = current.browserSourceID ?? ""
+      state["browserSources"] = current.browserSources.map(\.id)
+      state["suggestedHosts"] = current.suggestedHosts
       state["counts"] = current.probe?.settingsCounts ?? [:]
       state["sidebarFound"] = current.probe?.sidebarFound ?? false
       state["secretsEnabled"] = current.wizard.canImportPasswordsAndCookies

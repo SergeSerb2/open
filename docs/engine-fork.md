@@ -465,3 +465,24 @@ Also re-check that no new Chromium item duplicates a kept item's job (a new
 item stays hidden until it is listed: e2e `--only tabstrip` →
 `context_menu_allowlist` names what each target shows).
 
+
+## Remote official build (E3, 2026-11-11)
+
+The official release engine is too heavy for the M5 (the 09:55 local attempt restarted it). It now
+compiles on Linux sandboxes (boat.dev) through Siso's REAPI client; the M5 runs only Siso, local
+Python steps (4 jobs) and the links (nice 10). Everything is in `Engine/fork/remote/` (README there).
+
+- Release args add one line: `use_remoteexec = true` (compile commands unchanged).
+- Patch `chromium/0011-open-thinlto-link-jobs.patch` caps ThinLTO links at 6 threads. 2, 6 and 18
+  threads give identical output apart from the per-link random UUID.
+- `engine-build` and `engine-remote-build` put Xcode's real `python3` first on `PATH` (Xcode 27.2's
+  `/usr/bin/python3` shim fails with the symlinked SDK in the output dir) and clear `SDKROOT`, `CPATH`
+  and `LIBRARY_PATH` (an xcrun-launched parent exports `LIBRARY_PATH=/usr/local/lib`, which breaks
+  Rust build-script links).
+- Remote objects are byte-identical to local compiles: the worker runs each action at the Mac's
+  absolute path, with the Linux clang mounted over the Mac clang path and `-mlinker-version=1249`.
+- Seed the CAS in bulk before the first full build (README, "Seed the CAS").
+- Package as before: `engine-distrib --config release --skip-build`.
+- Tiny incremental rebuilds need no sandboxes: `OFFLINE=1 E3_LOG_DIR=… engine-remote-build out/Release_Official_arm64 cefsimple cefclient`
+  (2026-11-12, patch 0012: one compile + the framework link, 2 min 34 s).
+- Widevine is opt-in at run time (patch 0012, `--open-enable-widevine`); see `docs/release/official-engine.md`.

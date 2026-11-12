@@ -1,5 +1,6 @@
 # Open patches for CEF. One patch per line: <file>.patch  # rationale
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
+0001-open-distrib-build-dir.patch  # Packaging: select the official release output without aliasing dev
 0101-mem-visibility.patch  # Tab sleeping P-MEM-01: WasHidden of windowed Alloy browsers reaches WebContents (Chrome style: in 0302); memory-fork §5.1
 0104-mem-navigation-history.patch  # Tab sleeping P-MEM-04: CefNavigationEntry GetReferrerURL/GetFaviconURL; capture/restore itself is overlay (cef_navigation_history.h); memory-fork §5.3
 0105-mem-no-renderer-create.patch  # Tab sleeping P-MEM-05: CefBrowserSettings.no_renderer -> kNoRendererProcess + initially_hidden (Alloy; hosted tabs in the OpenTabStrip overlay); memory-fork §5.2
@@ -17,3 +18,4 @@
 # 0704: local CRX completion is overlay-only (03xx extensions area, S10 number).
 # No upstream hook or patch entry: cef_extension_manager.h and open_extension_manager.mm.
 0901-open-adblock-renderer-agent.patch  # Ad-block Step 5 P-4: attach the per-frame cosmetic agent; Mojo/user sheets/observer live in overlay
+1001-download-handler-lifetime.patch  # Downloads: retain original handler after browser close; requires null-browser API

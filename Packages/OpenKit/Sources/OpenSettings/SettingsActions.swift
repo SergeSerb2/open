@@ -64,7 +64,7 @@ public struct ImportOutcome: Sendable {
 /// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
 public enum ImportOutcomeKeys {
     public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
-    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Boosts","Passwords and cookies","Passwords","Cookies","Addresses","Cards"]
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Boosts","Passwords and cookies","Passwords","Cookies","Addresses","Cards","Bookmarks","Open tabs"]
 }
 public extension ImportOutcome {
     func importedCount(_ category:String)->Int {

@@ -56,8 +56,7 @@ struct SettingsPreviewsSection: View {
             OpenPreferenceRow(root: root, id: "previews/folders", title: "Folders", key: "open.general.previewsFolders", help: root.bool("open.general.previewsEnabled") ? "Preview the tabs in a folder." : "Turn on Open Previews to preview folders.").disabled(!root.bool("open.general.previewsEnabled"))
             OpenPreferenceRow(root: root, id: "previews/pages", title: "Pinned tabs and Favorites", key: "open.general.previewsPages", help: root.bool("open.general.previewsEnabled") ? "Preview a page from the sidebar." : "Turn on Open Previews to preview pages.").disabled(!root.bool("open.general.previewsEnabled"))
             OpenPreferenceRow(root: root, id: "previews/recents", title: "Recent pages on Linear, Notion, Figma, and Confluence", key: "open.general.previewsRecents", help: root.bool("open.general.previewsEnabled") ? "Show the pages you visited last when you hover a pinned tab of these sites." : "Turn on Open Previews to see recent pages.").disabled(!root.bool("open.general.previewsEnabled"))
-            OpenPreferenceRow(root: root, id: "previews/calendar", title: "Upcoming meetings on Google, Outlook, and Notion Calendar", key: "open.general.previewsCalendar", help: root.bool("open.general.previewsEnabled") ? "Show today's meetings and a Join button when you hover a pinned calendar tab." : "Turn on Open Previews to see upcoming meetings.").disabled(!root.bool("open.general.previewsEnabled"))
-            OpenPreferenceRow(root: root, id: "previews/gmail", title: "Unread mail in Gmail", key: "open.general.previewsGmail", help: root.bool("open.general.previewsEnabled") ? "Show your unread mail when you hover a pinned Gmail tab." : "Turn on Open Previews to see unread mail.", last: true).disabled(!root.bool("open.general.previewsEnabled"))
+            OpenPreferenceRow(root: root, id: "previews/calendar", title: "Upcoming meetings on Google, Outlook, and Notion Calendar", key: "open.general.previewsCalendar", help: root.bool("open.general.previewsEnabled") ? "Show today's meetings and a Join button when you hover a pinned calendar tab." : "Turn on Open Previews to see upcoming meetings.", last: true).disabled(!root.bool("open.general.previewsEnabled"))
         }
     }
 }
@@ -203,7 +202,8 @@ struct SettingsAdvancedSection: View {
             row("shared-quotes", "Enable Shared Quotes when highlighting text", key: "enableSharedQuotes", help: "You can always use Copy URL as Quote from the menu.")
             row("picture-in-picture", "Enable Picture in Picture when you leave a video tab", key: "enablePictureInPictureOnLeave")
             row("theme-data", "Allow websites to get your theme data", key: "allowSitesThemeData")
-            row("boosts", "Enable Boosts on websites you visit", key: "enableBoosts", last: true)
+            row("boosts", "Enable Boosts on websites you visit", key: "enableBoosts")
+            row("widevine", "Play DRM-protected video", key: "enableWidevine", help: "Downloads Google's Widevine module. Some services may still refuse. Applies after you quit and reopen Open.", last: true)
         }
         OpenSettingsGroup("Tools") {
             OpenSettingsRow(root: root, id: "advanced/translate", title: "Translated-site prompts", help: "Show translation prompts again for this Profile.") { Button("Reset prompts") { root.advanced.resetTranslate() } }
