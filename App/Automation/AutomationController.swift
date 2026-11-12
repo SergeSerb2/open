@@ -902,6 +902,11 @@
       case "boost-gallery-ui": return try await boostGalleryUI(a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
+      case "theme-data-state":
+        // The theme variables the App sets for a tab (setting on), or none.
+        let tab = try modelTab(a, w)
+        let values = ThemeData.variables(tabID: tab.id, factory: w) ?? []
+        return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x })] as [String: Any]
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
       case "handoff-state", "handoff-continue", "deep-link-state":

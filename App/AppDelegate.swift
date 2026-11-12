@@ -969,6 +969,7 @@ extension AppDelegate: CommandDispatcher {
       defer { region?.end() }
       #endif
       self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
+      ThemeData.refreshVisible(app: self)
       // Menu rebuilds follow tab, Space and window changes: the same moments Handoff must follow.
       self.handoff.setNeedsUpdate()
     }
@@ -1054,6 +1055,7 @@ extension AppDelegate: CommandDispatcher {
       MainActor.assumeIsolated {
         guard let self else { return }
         self.applyToolbarSettings()
+        ThemeData.settingMaybeChanged(app: self)
         let options = self.currentNumberedShortcutOptions
         guard options != self.numberedShortcutOptions else { return }
         self.numberedShortcutOptions = options; self.scheduleMenuRebuild()
