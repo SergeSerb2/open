@@ -864,9 +864,6 @@ extension AppDelegate: CommandDispatcher {
           // Each service body gets its own main run-loop turn, so input is
           // handled between them and no turn carries several bodies.
           if !self.commandServicesPrepared {
-            // The Settings model is the larger half of command services; it is cached.
-            self.startupRegion("afterPaint.settingsModel") { _ = self.settingsPresenter.settings }
-            guard await self.nextStartupTurn() else { return }
             self.startupRegion("afterPaint.commandServices") { self.prepareCommandServices() }
             guard await self.nextStartupTurn() else { return }
             // Suggest engine creation and its tab-index build take one turn each.
@@ -927,7 +924,8 @@ extension AppDelegate: CommandDispatcher {
   func prepareCommandServices() {
     guard !commandServicesPrepared else { return }
     commandServicesPrepared = true
-    _ = settingsPresenter.settings
+    // The Settings model stays lazy until Settings or a Settings action needs it
+    // (its first open is budgeted from a lazy model; launch does not read it).
     numberedShortcutOptions = currentNumberedShortcutOptions
     commandDefaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated {
