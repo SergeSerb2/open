@@ -47,15 +47,31 @@ final class AppStores: ProfileDataOwner {
       let preparation = await prepare.value
       guard let self else { return nil }
       defer { self.adBlockPreparation = nil }
-      guard !self.app.shutdownPrepared, let preparation else { return nil }
-      let store = AdBlockStore(preparation: preparation)
-      self.adBlockStorage = store
-      self.app.adBlockEngineAdapter.bind(store)
-      self.app.settingsPresenter.adBlockStoreDidOpen(store)
+      guard !self.app.shutdownPrepared else { return nil }
+      guard let preparation else { self.app.settingsPresenter.adBlockStoreFailedToOpen(); return nil }
+      var store: AdBlockStore!
+      // Installing a prepared store performs no file IO on the main actor.
+      self.app.startupRegion("adBlock.install") {
+        store = AdBlockStore(preparation: preparation)
+        self.adBlockStorage = store
+        self.app.adBlockEngineAdapter.bind(store)
+        self.app.settingsPresenter.adBlockStoreDidOpen(store)
+      }
       return store
     }
     adBlockPreparation = task
     return await task.value
+  }
+  /// After-paint start-up and early Settings use the worker preparation above,
+  /// never the synchronous getter: its lease, catalog, pins, resources and PSL
+  /// reads cost about 22 ms (M5) to 60 ms (M1) on the main thread. Returns false
+  /// when no store can come (an earlier attempt failed or shutdown began).
+  @discardableResult
+  func prepareAdBlockInBackground() -> Bool {
+    if adBlockStorage != nil || adBlockPreparation != nil { return true }
+    guard !attemptedAdBlock, !app.shutdownPrepared else { return false }
+    Task { _ = await self.adBlockForFreshProfile() }
+    return true
   }
   lazy var favicons = try? FaviconStore(databaseURL: app.directories.root.appendingPathComponent("State/favicons.sqlite3"))
   lazy var sidebarFavicons = favicons.map { StoredFaviconCache(store: $0) }
