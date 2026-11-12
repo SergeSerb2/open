@@ -103,6 +103,11 @@ final class EaselTextEditor: NSView, NSTextViewDelegate {
 @MainActor
 final class EaselEditorTextView: NSTextView {
     var onEscape: (() -> Void)?
+    /// Typing undo stays inside the box while it is open; committing is one canvas undo step.
+    private let typingUndo = UndoManager()
+    override var undoManager: UndoManager? { typingUndo }
+    @objc func undo(_ sender: Any?) { typingUndo.undo() }
+    @objc func redo(_ sender: Any?) { typingUndo.redo() }
     override func cancelOperation(_ sender: Any?) { onEscape?() }
 }
 

@@ -40,6 +40,11 @@ public final class EaselCanvasView: NSView {
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         scrollView.scrollerStyle = .overlay
+        // The page starts at the content top: no automatic title-bar inset.
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsetsZero
+        // One explicit group per canvas edit (not per run-loop event).
+        canvasUndoManager.groupsByEvent = false
         scrollView.documentView = docView
         docView.canvas = self
         addSubview(scrollView)
@@ -157,13 +162,17 @@ public final class EaselCanvasView: NSView {
         registerUndo(restoring: old, name: name)
     }
     func registerUndo(restoring old: EaselDocument, name: String) {
-        canvasUndoManager.registerUndo(withTarget: self) { canvas in
+        let manager = canvasUndoManager
+        let grouped = !manager.isUndoing && !manager.isRedoing
+        if grouped { manager.beginUndoGrouping() }
+        manager.registerUndo(withTarget: self) { canvas in
             let current = canvas.document
             canvas.endTextEditing(commit: false)
             canvas.apply(old)
             canvas.registerUndo(restoring: current, name: name)
         }
-        canvasUndoManager.setActionName(name)
+        manager.setActionName(name)
+        if grouped { manager.endUndoGrouping() }
     }
     func apply(_ next: EaselDocument) {
         document = next

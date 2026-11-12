@@ -128,7 +128,7 @@ def run(factory, results, tmp, api):
                and canvas(s)['undoName'] == 'Add Text', state=canvas(s))
         # An empty text box leaves nothing behind and no undo step.
         undo_before = canvas(s)['undoName']
-        easel(action='tool', tool='text'); easel(action='click', at=[700, 640])
+        easel(action='tool', tool='text'); easel(action='click', at=[700, 600])
         s = easel(action='click', at=[960, 150])
         record('E09_empty_text_discarded', len([x for x in objects(s) if x['kind'] == 'text']) == 1
                and canvas(s)['undoName'] == undo_before, state=canvas(s))
