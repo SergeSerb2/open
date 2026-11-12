@@ -724,10 +724,12 @@ def context_menu_checks(factory, results, tmp, h):
                 pinned_head = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
                                'Open in Split View', 'Duplicate', 'Move to ▸', '—']
                 first, last = items(today_ids[0]), items(today_ids[-1])
+                try: share = items(today_ids[0], path='Share')
+                except RuntimeError as error: share = {'items': [], 'error': str(error), 'menu': first, 'tab': app.tab(today_ids[0])}
                 rows = {
                     'today': first['items'] == today_expected,
                     'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'],
-                    'share_lists_services': len(items(today_ids[0], path='Share')['items']) > 0,
+                    'share_lists_services': len(share['items']) > 0,
                     'move_to_current_checked': app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order').get('checked') is True,
                     'today_silent_mute_disabled': 'Mute' in first['disabled'],
                     'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
@@ -747,7 +749,7 @@ def context_menu_checks(factory, results, tmp, h):
                     rows['archive_above_acts'] = target in after and len(after) < len(before)
                     app.call('key', key='z', modifiers=['command'], route='app')
                     rows['archive_above_undo'] = wait(lambda: [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab'] == before, timeout=3) is True
-                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target,
+                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target, 'share': share,
                         'menus': {'todayFirst': first, 'todayLast': last, 'pinned': items(pinned), 'favorite': items(favorite)}}
             finally:
                 for tab_id in made:
