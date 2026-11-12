@@ -1,0 +1,8 @@
+# Site Control panel material (D3, 2026-11-11)
+
+Lead rulings LEAD 12:05, 12:20, 12:40. Arc evidence: the Arc 1.170 dark capture behind S11/S12 and the Arc 1.172 session 2 frame `14c-sidebar-url/s2-sidebar-site-control` (numbers only; images stay private).
+
+- **Geometry** stays Arc-measured (padding 10, tiles 48 × 32 every 56, one setting row → 254 pt); the session 2 frame confirms it.
+- **Material**: public `NSVisualEffectView`, `.headerView`, `.withinWindow`, `.active`. Chosen by measurement among all public materials; the opaque ones in this mode (`.sheet`, `.windowBackground`, `.contentBackground`, `.underPageBackground`) were excluded. Every added layer is at most 50 % opaque, so the blurred backdrop stays visible and nothing behind is legible (S14).
+- **Layers** inside the effect view: a uniform overlay (Dark rgb(168,170,171) α 0.5; Light rgb(246,246,232) α 0.4), a tint over the part of the panel above the sidebar (the sidebar colour's hue, saturation × 2.0, lightness × 1.02, Dark lightness ≤ 0.18; α 0.55 / 0.56; fades ±20 pt across the sidebar edge; Light adds a tail of 30 % over 120 pt), and in Dark a top zone (the URL-field plate over the sidebar colour, 30 % toward white, α 0.5 over the top 48 pt). The rim and separator sit in their own view above the effect view; the shadow is cut out under the translucent body. No timer, no continuous animation.
+- **Rows** in the `sitecontrol` suite: S11 (Dark, Arc 1.170 targets; P4 moved to (300,250) because (260,250) sampled row text), S12 (46 elements; ΔE00 ≤ 2, edge rows ≤ 4, four INFO rows ≤ 10 with the reason in `tools/e2e/sitecontrol_pixels.py`), S11_light (Arc 14c samples), S11_light_neutral (Night, no yellow cast), S14_no_ghost (contrast < 1.05 : 1).

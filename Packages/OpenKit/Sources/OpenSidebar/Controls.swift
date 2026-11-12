@@ -34,6 +34,8 @@ final class TextLabel: NSView {
     /// Space kept free at the right end when the text truncates.
     var trailingInset: CGFloat = 0 { didSet { needsDisplay = true } }
     var alignment: NSTextAlignment = .left { didSet { needsDisplay = true } }
+    /// Draws the whole line even when it is wider than the view (the URL field's faded long host).
+    var allowsOverflow = false { didSet { if allowsOverflow != oldValue { needsDisplay = true } } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -63,7 +65,7 @@ final class TextLabel: NSView {
         let available = bounds.width - inset - trailingInset
         let width = CTLineGetTypographicBounds(line, nil, nil, nil)
         var wasTruncated = false
-        if width > available {
+        if width > available, !allowsOverflow {
             // Tail truncation, like Arc's titles ("Keepi…", F0079). A box too narrow
             // for even "…" (four-pane split rows) draws nothing rather than overflow.
             var tokenAttrs = attrs
@@ -303,6 +305,8 @@ class PlateButton: NSView {
     var accessibleTitle: (@MainActor () -> String)?
     var action: (@MainActor () -> Void)?
     var menuProvider: (@MainActor () -> NSMenu?)?
+    /// Right click only; the left click keeps `action`.
+    var contextMenuProvider: (@MainActor () -> NSMenu?)?
     var tooltip: (@MainActor () -> Tooltip?)?
     var isEnabled: @MainActor () -> Bool = { true } { didSet { needsDisplay = true } }
     var glyphTint: @MainActor (_ enabled: Bool) -> NSColor = { enabled in
@@ -320,6 +324,9 @@ class PlateButton: NSView {
     var hoverKey: SidebarHoverTarget?
     weak var context: SidebarContext?
     private(set) var isPressed = false { didSet { needsDisplay = true } }
+    /// Shows the plate in `latchedColor` while set (the URL field's Site Controls button while its panel is open).
+    var isLatched = false { didSet { if isLatched != oldValue { needsDisplay = true } } }
+    var latchedColor: (@MainActor () -> DesignColor)?
     private var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; hoverChanged() } } }
     private var tracking: NSTrackingArea?
 
@@ -362,8 +369,13 @@ class PlateButton: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(context?.animatesChanges == false)
         CATransaction.setAnimationDuration(Motion.hoverFade)
-        plate.backgroundColor = plateColor(isPressed).cgColor(appearance)
-        plate.opacity = showsHoverPlate && enabled && (hovered || isPressed) ? 1 : 0
+        if isLatched, let latchedColor, !isPressed {
+            plate.backgroundColor = latchedColor().cgColor(appearance)
+            plate.opacity = 1
+        } else {
+            plate.backgroundColor = plateColor(isPressed).cgColor(appearance)
+            plate.opacity = showsHoverPlate && enabled && (hovered || isPressed) ? 1 : 0
+        }
         CATransaction.commit()
     }
 
@@ -406,7 +418,7 @@ class PlateButton: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        if let menu = menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) } else { super.rightMouseDown(with: event) }
+        if let menu = contextMenuProvider?() ?? menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) } else { super.rightMouseDown(with: event) }
     }
 
     override func accessibilityRole() -> NSAccessibility.Role? { .button }

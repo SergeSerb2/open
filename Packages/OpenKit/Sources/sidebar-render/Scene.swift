@@ -31,6 +31,7 @@ final class RenderScene: NSView {
     let options: Options
     let folderPreview: FolderPreviewView?
     let recentsPreview: RecentsPreviewView?
+    let recentsShadow = NSView()
     let calendarPreview: CalendarPreviewView?
 
     init(context: SidebarContext, options: Options, delegate: any SidebarDelegate) {
@@ -60,7 +61,16 @@ final class RenderScene: NSView {
             // The card's history read is async; renders wait for it (synthetic rows, < 1 s).
             let deadline = Date().addingTimeInterval(2)
             while !recentsPreview.isLoaded, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
-            addSubview(recentsPreview)
+            // The App wraps the card in PreviewCardView; renders draw the same shadow (HoverPreviewMetrics).
+            // NSView.shadow, not layer props: AppKit resets a layer-backed view's layer shadow in this scene.
+            let m = HoverPreviewMetrics.self
+            recentsShadow.wantsLayer = true
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(CGFloat(m.shadowOpacity))
+            shadow.shadowBlurRadius = m.shadowRadius; shadow.shadowOffset = CGSize(width: 0, height: -m.shadowOffsetY)
+            recentsShadow.shadow = shadow
+            addSubview(recentsShadow)
+            recentsShadow.addSubview(recentsPreview)
         }
         if let calendarPreview {
             let deadline = Date().addingTimeInterval(2)
@@ -109,8 +119,10 @@ final class RenderScene: NSView {
             let height = min(recentsPreview.fittingSize.height, bounds.height - 20)
             // As HoverPreviewController's glance placement: 4 pt right of the sidebar, centered on the row.
             let row = sidebar.rowFrame(nodeID: recentsPreview.tab.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
-            recentsPreview.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
-                                          width: HoverPreviewMetrics.folderWidth, height: height)
+            recentsShadow.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
+                                         width: HoverPreviewMetrics.folderWidth, height: height)
+            recentsPreview.frame = recentsShadow.bounds
+            recentsShadow.layer?.shadowPath = CGPath(roundedRect: recentsShadow.bounds, cornerWidth: HoverPreviewMetrics.radius, cornerHeight: HoverPreviewMetrics.radius, transform: nil)
         }
         if let calendarPreview {
             sidebar.layoutSubtreeIfNeeded()

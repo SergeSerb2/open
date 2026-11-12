@@ -62,7 +62,7 @@ import OpenImport
     }
     public var canContinue: Bool {
         if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.openTabs || plan.history || plan.searchSettings || plan.passwords || (plan.secretsRequested && canImportBrowserSecrets)) && passwordsReady }
-        return readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
+        return readable && !busy && (!plan.providers.isEmpty || plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public var title: String { step == .source ? "Import from another browser" : "Import from " + plan.source.displayName }
     public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.source = .arc; selectedSourceID = "arc"; if step == .source { step = .choose }; plan.directory = directory; await refreshCounts() }
     // MARK: Source picker (IMC I-1; IMF adds Firefox and Safari readers)
@@ -270,6 +270,7 @@ import OpenImport
         let labels=await Task.detached(priority:.utility) {(try? ArcImporter(arcDirectory:directory).spaceMappingLabels()) ?? []}.value
         guard !Task.isCancelled,request == countRequest,directory == plan.directory else {if request == countRequest {counting=false};return}
         probe=result;counts=result.settingsCounts;spaceMapping=labels
+        await refreshProviderCounts()
         readable=result.sidebarFound && result.spaces != nil
         counting=false
         if !readable {errorText="No readable import data found at \(directoryDisplayPath)."}
@@ -301,7 +302,28 @@ import OpenImport
         default: Self.browserReportCategories
         }
     }
-    public var displayedReportCategories: [String] { if !plan.isArc { return browserCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
+    // MARK: Extra Arc data types (ArcImportProviders; EZ adds Easels)
+    public private(set) var providerCounts: [String: Int] = [:]
+    public var providers: [any ArcImportDataProvider] { ArcImportProviders.all }
+    public func refreshProviderCounts() async {
+        var values: [String: Int] = [:]
+        for provider in providers {
+            if let count = await provider.count(arcDirectory: plan.directory, file: plan.providerFiles[provider.id]) { values[provider.id] = count }
+        }
+        providerCounts = values
+    }
+    public func setProvider(_ id: String, selected: Bool) { if selected { plan.providers.insert(id) } else { plan.providers.remove(id) } }
+    public func chooseProviderFile(_ id: String, url: URL?) async {
+        guard !isImporting, ArcImportProviders.provider(id: id) != nil else { return }
+        plan.providerFiles[id] = url
+        if url != nil { plan.providers.insert(id) }
+        await refreshProviderCounts()
+    }
+    public func providerLabel(_ provider: any ArcImportDataProvider) -> String {
+        let file = plan.providerFiles[provider.id].map { " · " + $0.lastPathComponent } ?? ""
+        return (providerCounts[provider.id].map { "Found: \($0.formatted())" } ?? "Not found") + file
+    }
+    public var displayedReportCategories: [String] { if !plan.isArc { return browserCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } + providers.filter { plan.providers.contains($0.id) }.map(\.title) }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
     public var unfinishedSecretsImportMessage: String? {
         unfinishedSecretsImport && !secretsReportLines.contains(ArcSecretsImportReport.unfinishedMessage) ? ArcSecretsImportReport.unfinishedMessage : nil
@@ -443,11 +465,15 @@ public struct ImportWizard: View {
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
                     option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested).disabled(!model.canImportPasswordsAndCookies)
                     Text("Imports your search engine choice only.").font(.caption).foregroundStyle(.secondary)
+                    ForEach(model.providers, id: \.id) { provider in providerRow(provider) }
                 case .review:
                     ForEach(model.spaceMapping, id: \.self) { Text($0) }
                     Text("Found: \(ImportCountCopy.phrase(model.counts["Profiles",default:0],singular:"Profile",plural:"Profiles")) · \(ImportCountCopy.phrase(model.counts["Routing rules",default:0],singular:"routing rule",plural:"routing rules"))")
                     Text("Skipped: \(ImportCountCopy.phrase(model.counts["Skipped easels",default:0],singular:"Easel",plural:"Easels")), \(ImportCountCopy.phrase(model.counts["Skipped notes",default:0],singular:"Note",plural:"Notes")), \(ImportCountCopy.phrase(model.counts["Skipped unknown",default:0],singular:"unknown item",plural:"unknown items")).")
-                    Text("Easels and Notes do not import. Open has no Easels or Notes.").foregroundStyle(.secondary)
+                    ForEach(model.providers.filter { model.plan.providers.contains($0.id) }, id: \.id) { provider in
+                        Label("\(provider.title): \(model.providerLabel(provider))", systemImage: provider.symbol)
+                    }
+                    if model.providers.isEmpty { Text("Easels and Notes do not import. Open has no Easels or Notes.").foregroundStyle(.secondary) }
                 case .consent:
                     let copy=model.passwordsCopy
                     Text(copy.title).font(.headline)
@@ -511,6 +537,25 @@ public struct ImportWizard: View {
     }
     private func browserOption(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
         HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
+    }
+    private func providerRow(_ provider: any ArcImportDataProvider) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Toggle(provider.title, isOn: Binding(get: { model.plan.providers.contains(provider.id) }, set: { model.setProvider(provider.id, selected: $0) }))
+                if !provider.fileTypes.isEmpty {
+                    Button("Choose…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = provider.fileTypes.contains(.folder)
+                        let files = provider.fileTypes.filter { $0 != .folder }
+                        panel.canChooseFiles = !files.isEmpty
+                        if !files.isEmpty { panel.allowedContentTypes = files }
+                        if panel.runModal() == .OK, let url = panel.url { Task { await model.chooseProviderFile(provider.id, url: url) } }
+                    }.disabled(model.busy)
+                }
+                Spacer(); Text(model.providerLabel(provider)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+            }
+            Text(provider.help).font(.caption).foregroundStyle(.secondary).padding(.leading, 20)
+        }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
         HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }

@@ -66,7 +66,7 @@ enum SplitFlows {
             let image = s.render(scale: 2)
             let p = s.controller.view.panelFrame
             let rowTop = p.minY + CommandBarMetrics.listTop + CGFloat(index) * CommandBarMetrics.rowHeight - s.controller.view.debugListScrollOffset
-            let rowX = p.minX + 8 // row views sit 8 pt inside the list (ResultsView)
+            let rowX = p.minX + CommandCardLayout.newTab.listPaddingX // row views sit 9 pt inside the list (ResultsView)
             func px(_ x: CGFloat, _ y: CGFloat) -> [Int] { CLI.pixel(image, CGPoint(x: (rowX + x) * 2, y: (rowTop + y) * 2)) }
             let cell = px(19, 14), gap = px(27.25, 14), rightCell = px(34.5, 14), outside = px(45, 25)
             // Selected: white cells, the gap shows the selection fill; unselected: plate cells over the panel, panel in the gap.

@@ -37,6 +37,19 @@ def background_response(app, tab, private, env, scale):
                 fallback='Separate follow-up PR: borderless child window with .behindWindow blending (plan §11.1).')
 
 
+# LEAD 12:20 (2026-11-11) approves ΔE00 ≤ 4 for exactly these rows, all others keep ΔE00 ≤ 2. Reason: "Arc's backdrop
+# kernel is wider than any public material; values at the panel's edges cannot be reproduced exactly".
+EDGE_LIMIT = 4
+# The More glyph sits inside the More circle and shares its edge limit (LEAD 17:55, at 1x and 2x).
+EDGE_ELEMENTS = frozenset(['Arrow row %d' % i for i in range(1, 10)] + ['Share ring', 'New Boost ring', 'More circle', 'More glyph'])
+# LEAD 12:40 closing rule: rows that still miss ΔE00 ≤ 4 after the last tuning session are INFO rows. They print the Arc
+# target, Open's value and ΔE00, and still fail above ΔE00 10 or a position change over 1 pt.
+INFO_ELEMENTS = frozenset(['Arrow row 0', 'Capture ring', 'Top rim', 'Bottom rim'])
+INFO_LIMIT = 10
+INFO_REASON = "edge value of Arc's backdrop blur; not reproducible with a public material (lead ruling 2026-11-11)"
+def color_limit(name): return INFO_LIMIT if name in INFO_ELEMENTS else EDGE_LIMIT if name in EDGE_ELEMENTS else 2
+
+
 def compare_live(path, state, scale, private, env, negative_path=None):
     captures = Path(env['ROOT'], '.re/runtime/sessions')
     frames = list(captures.glob('*09-site-controls-first/0010-*/win-73938.png'))
@@ -45,6 +58,14 @@ def compare_live(path, state, scale, private, env, negative_path=None):
     reference=str(frames[0])
     _,_,arc=env['read_image'](reference,srgb=True)
     _,_,ours=env['read_image'](path,srgb=True)
+    snapshot_scale = scale
+    if scale != 1:
+        # The reference is a 1x Arc capture: compare a 1x box-filtered copy of a 2x snapshot (like-for-like rasterization).
+        s, base = int(round(scale)), ours
+        def ours(x, y, s=s, base=base):
+            px = [base(int(x) * s + i + .5, int(y) * s + j + .5) for i in range(s) for j in range(s)]
+            return tuple(sum(p[c] for p in px) / len(px) for c in range(3))
+        scale = 1
     delta=env['chrome_delta_e']
     bx,by,bw,bh=state['body']
     # Same elements, with footer translated to each panel's measured bottom.
@@ -59,7 +80,8 @@ def compare_live(path, state, scale, private, env, negative_path=None):
             return [statistics.mean(p[i] for p in points) for i in range(3)]
         ac,oc=mean(arc,a,1),mean(ours,o,scale)
         de=delta(ac,oc)
-        probes.append(dict(element=name,arcRGB=ac,openRGB=oc,deltaE00=de,ok=de<=2))
+        probes.append(dict(element=name,arcRGB=ac,openRGB=oc,deltaE00=de,limit=color_limit(name),ok=de<=color_limit(name),
+                           **({'status':'INFO','reason':INFO_REASON} if name in INFO_ELEMENTS else {})))
     def add(name, a, o, text=False, arrow=False):
         def plane(px, rect, factor):
             x,y,w,h=rect
@@ -121,7 +143,8 @@ def compare_live(path, state, scale, private, env, negative_path=None):
         else:error=None
         de=delta(ac,oc) if ac and oc else None
         probes.append(dict(element=name,arcBox=ab,openBox=ob,positionError=error,deltaE00=de,
-                           ok=error is not None and error<=1 and (text or de is not None and de<=2)))
+                           limit=color_limit(name),ok=error is not None and error<=1 and (text or de is not None and de<=color_limit(name)),
+                           **({'status':'INFO','reason':INFO_REASON} if name in INFO_ELEMENTS else {})))
     for row in range(10):
         add('Arrow row '+str(row),[183,81+row,36,1],[state['tip'][0]-18,state['tip'][1]+row,36,1],arrow=True)
     for i,name in enumerate(['Share','New Boost','Capture','Capture Full Page']):
@@ -145,13 +168,127 @@ def compare_live(path, state, scale, private, env, negative_path=None):
     fill('Top rim',[120,91,1,1],[bx+37,by,1,1])
     fill('Bottom rim',[120,387,1,1],[bx+37,by+bh-1,1,1])
     report=dict(ok=all(p['ok'] for p in probes),elements=probes,capture=reference,snapshot=path,
-                limits={'positionPoints':1,'deltaE00':2},
+                limits={'positionPoints':1,'deltaE00':2,'edgeDeltaE00':EDGE_LIMIT,'edgeElements':sorted(EDGE_ELEMENTS),
+                        'infoDeltaE00':INFO_LIMIT,'infoElements':sorted(INFO_ELEMENTS),'infoReason':INFO_REASON},
                 excluded='Different site-setting title/glyph and HTTP Insecure pill; Developer Mode per Q14',
                 load=list(os.getloadavg()))
     if negative_path:
-        negative=compare_live(negative_path,state,scale,private,env)
+        negative=compare_live(negative_path,state,snapshot_scale,private,env)
         report['negativeRejected']=not negative['ok']
         report['negativeFailedElements']=[p['element'] for p in negative['elements'] if not p['ok']]
         report['ok']=report['ok'] and report['negativeRejected']
         (Path(private)/'S12-elements.json').write_text(__import__('json').dumps(report,indent=2))
     return report
+
+
+# Arc 1.172 session 2, 14c-sidebar-url/s2-sidebar-site-control (golden Space, Light, page #F3F5EE, 1280×800, sidebar 366,
+# panel body [221,91,236,254]). Numbers only: body-relative point → sRGB (embedded ICC → sRGB, 3×3 mean at 2×).
+# Footer samples are measured from the panel's bottom edge (negative y): the fixture may show more setting rows.
+ARC_LIGHT = [('body left third', (40, 150), (237, 211, 138), 3), ('body right third', (200, 150), (246, 248, 234), 3),
+             ('tile', (14, 26), (250, 250, 250), 3), ('footer chip', (30, -18), (225, 200, 131), 3),
+             ('footer hairline', (120, -53), (213, 190, 125), None)]
+# Key #BD9C26 renders Arc's golden sidebar #B9A35F through Open's theme math.
+GOLD = {'mathVersion': 1, 'keyColor': {'red': 0xBD / 255, 'green': 0x9C / 255, 'blue': 0x26 / 255, 'alpha': 1}, 'colorCount': 1,
+        'wheel': 'analogous', 'appearance': 'automatic', 'noiseFactor': 0, 'texture': 'grain', 'intensityFactor': .8}
+
+
+def light_and_ghost(app, origin, private, env, record):
+    """S11_light: the Light material against Arc 14c. S14_no_ghost: shapes behind the panel are not recognisable in it."""
+    import time
+    wait = env['wait_until']
+    app.call('appearance', name='light')
+    app.call('window-frame', frame=[80, 60, 1280, 800])
+    state = app.call('window-state')
+    if state['sidebarWidth'] != 366:
+        app.call('mouse', **{'from': [state['sidebarWidth'], 400], 'to': [366, 400]})
+    app.call('theme-set', style=GOLD); time.sleep(.6)
+    tabs = [env['new_tab'](app, origin + '/light.html?%d' % i) for i in range(6)]
+    for t in tabs: app.call('wait', tab=t)
+    def opened():
+        if app.call('site-controls', action='state')['presented']: app.call('site-controls', action='close')
+        s = app.call('site-controls', action='open', via='urlField')
+        app.call('mouse', action='hover', x=800, y=500); time.sleep(.5)
+        return s
+    def snap(name):
+        path = str(Path(private) / name)
+        app.call('snapshot', path=path, window=app.call('window-state')['number']); return path
+    # The panel's empty material beside the Add tile: body + (70…130, 82…108) over the sidebar, + (160…225, 82…108) over the page.
+    app.call('select', tab=tabs[0]); s = opened(); bx, by = s['body'][0], s['body'][1]
+    rows = {t: app.call('sidebar-row', node=t)['frame'] for t in tabs}
+    band = (by + 82, by + 108)
+    behind = max(tabs, key=lambda t: min(rows[t][1] + rows[t][3], band[1]) - max(rows[t][1], band[0]))
+    away = min(tabs, key=lambda t: abs(rows[t][1] - (by + 300)))
+    # A: the selected row and a black page block behind the empty material. B: neither.
+    app.call('select', tab=behind)
+    app.eval(behind, "document.getElementById('ghost').style.visibility='visible';true")
+    s = opened(); a_path = snap('S14-with-shapes.png')
+    width, _, px = env['read_image'](a_path, srgb=True); scale = width / app.call('window-state')['frame'][2]
+    delta = env['chrome_delta_e']
+    probes = []
+    bh = s['body'][3]
+    at = lambda y: y if y >= 0 else bh + y
+    for name, (x, y), target, limit in ARC_LIGHT:
+        y = at(y)
+        pts = [px((bx + x + dx / 2) * scale, (by + y + dy / 2) * scale) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+        rgb = [sum(p[i] for p in pts) / 9 for i in range(3)]
+        de = delta(rgb, list(target))
+        probes.append(dict(element=name, point=[x, y], arc=list(target), open=rgb, deltaE00=round(de, 2), limit=limit,
+                           ok=limit is None or de <= limit))
+    app.call('site-controls', action='close'); time.sleep(.3)
+    # The same state without the panel: the S11_light negative and the S14 "shapes are visible" proof.
+    _, _, neg = env['read_image'](snap('S11-light-closed.png'), srgb=True)
+    closed_px = neg
+    negative = [delta(list(neg((bx + x) * scale, (by + at(y)) * scale)), list(t)) for _, (x, y), t, limit in ARC_LIGHT if limit]
+    negative_rejected = any(d > 3 for d in negative)
+    record('S11_light', all(p['ok'] for p in probes) and negative_rejected, probes=probes, negativeDeltaE00=negative,
+           negativeRejected=negative_rejected, reference='Arc 1.172 14c s2-sidebar-site-control (numbers only)', scale=scale)
+    # B: another tab selected (its row far below), the page block hidden.
+    app.call('select', tab=away)
+    for t in tabs: app.eval(t, "document.getElementById('ghost').style.visibility='hidden';true")
+    opened(); b_path = snap('S14-without-shapes.png')
+    _, _, pb = env['read_image'](b_path, srgb=True)
+    app.call('site-controls', action='close'); time.sleep(.3)
+    _, _, closed_b = env['read_image'](snap('S14-without-shapes-closed.png'), srgb=True)
+    def luminance(c):
+        f = lambda v: (v / 255) / 12.92 if v / 255 <= 0.04045 else (((v / 255) + 0.055) / 1.055) ** 2.4
+        return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2])
+    def region(p, x0, x1):
+        vals = [luminance(p(x * scale, y * scale)) for x in range(bx + x0, bx + x1, 2) for y in range(band[0], band[1], 2)]
+        return sum(vals) / len(vals)
+    areas = {'selected row': (70, 130), 'page heading': (160, 225)}
+    contrast = {k: (max(region(px, *v), region(pb, *v)) + .05) / (min(region(px, *v), region(pb, *v)) + .05) for k, v in areas.items()}
+    # Negative proof: the same shapes without the panel are plainly recognisable.
+    neg_contrast = {k: (max(region(closed_px, *v), region(closed_b, *v)) + .05) / (min(region(closed_px, *v), region(closed_b, *v)) + .05) for k, v in areas.items()}
+    record('S14_no_ghost', all(c < 1.05 for c in contrast.values()) and all(c >= 1.05 for c in neg_contrast.values()), contrast={k: round(v, 4) for k, v in contrast.items()},
+           limit=1.05, rows={'behind': rows[behind], 'band': list(band)}, snapshots=[a_path, b_path],
+           sameStateWithoutPanelContrast={k: round(v, 3) for k, v in neg_contrast.items()})
+    app.call('site-controls', action='close')
+    # S11_light_neutral: Night (Open's default theme), Light, same page. The panel adds no yellow cast of its own: the
+    # right-third body equals the same point with the tint layer off (ΔE00 ≤ 2), and its b* is within ±2 of the page's.
+    app.call('theme-set', style=None); time.sleep(.6)
+    app.call('select', tab=tabs[0])
+    s = opened(); bx, by = s['body'][0], s['body'][1]
+    point = ((bx + 200) * scale, (by + 150) * scale)
+    _, _, with_tint = env['read_image'](snap('S11-neutral-tint.png'), srgb=True)
+    app.call('site-controls', action='material', appearance='light', material=10, overlay=[246 / 255, 246 / 255, 232 / 255, 0.4], tintAlpha=0)
+    time.sleep(.4)
+    _, _, without = env['read_image'](snap('S11-neutral-notint.png'), srgb=True)
+    app.call('site-controls', action='material', appearance='light', material=-1)
+    app.call('site-controls', action='close'); time.sleep(.3)
+    _, _, page = env['read_image'](snap('S11-neutral-closed.png'), srgb=True)
+    a_rgb, b_rgb, p_rgb = list(with_tint(*point)), list(without(*point)), list(page(*point))
+    de = delta(a_rgb, b_rgb); b_star = lab(a_rgb)[2]; page_b = lab(p_rgb)[2]
+    record('S11_light_neutral', de <= 2 and abs(b_star - page_b) <= 2, withTint=a_rgb, tintOff=b_rgb, deltaE00=round(de, 2),
+           bStar=round(b_star, 2), pageBStar=round(page_b, 2), page=p_rgb)
+
+
+def lab(rgb):
+    def lin(c):
+        c = c / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(v) for v in rgb[:3])
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
