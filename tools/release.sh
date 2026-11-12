@@ -615,6 +615,20 @@ hygiene() {
     bundle_check "$STAGE/hygiene/Open.app"
     output "$STAGE/hygiene"
 }
+# Every nested code item must carry the release signature: Team ID $TEAM in
+# production, ad-hoc in a dry run. Catches code that the explicit list misses.
+nested_signatures() {
+    local item info expected bad=0
+    expected=${TEAM:-not set}; [[ $DRY == 0 ]] || expected='not set'
+    while IFS= read -r -d '' item; do
+        info=$(codesign -dvv "$item" 2>&1) || { log "unsigned nested code: ${item#$1/}"; bad=1; continue; }
+        if ! grep -q "TeamIdentifier=$expected" <<< "$info" || ! grep -q 'runtime' <<< "$info"; then
+            log "nested code without the release signature or Hardened Runtime: ${item#$1/}"; bad=1
+        fi
+    done < <(find "$1/Contents" \( -name '*.app' -o -name '*.framework' -o -name '*.xpc' -o -name '*.appex' -o -name '*.docktileplugin' -o -name '*.plugin' -o -name '*.dylib' \) -print0 | LC_ALL=C sort -z)
+    [[ $bad == 0 ]] || die 'nested code is not signed like the App; see the lines above'
+    log "Nested code signatures: all carry TeamIdentifier=$expected and Hardened Runtime"
+}
 sign_one() {
     local target=$1 entitlements=${2:-} preserve=${3:-0}
     local args=(--force --options runtime --sign "$IDENTITY")
@@ -661,6 +675,9 @@ sign_app() {
         ent="$ROOT/Helper/Entitlements/helper$suffix.entitlements"
         sign_one "$frameworks/$name.app" "$ent"
     done
+    # App extensions and plug-ins (for example the Dock tile plug-in, #388) are
+    # nested code too: sign each before the App, or notarization rejects them.
+    while IFS= read -r -d '' file; do sign_one "$file"; done < <(find "$a/Contents/PlugIns" -mindepth 1 -maxdepth 1 \( -name '*.docktileplugin' -o -name '*.plugin' -o -name '*.appex' \) -print0 2>/dev/null | LC_ALL=C sort -z)
     if [[ $DRY == 0 ]]; then
         python3 - "$a/Contents/Info.plist" <<'PYKEY'
 import base64,plistlib,sys
@@ -672,6 +689,7 @@ PYKEY
     fi
     sign_one "$a" "$ROOT/App/Open.entitlements"
     codesign --verify --deep --strict --verbose=2 "$a"
+    nested_signatures "$a"
     exact_entitlements "$a"
     codesign -dvv "$a" 2> "$STAGE/signature.txt"
     grep -q runtime "$STAGE/signature.txt" || die 'signature lacks Hardened Runtime'
