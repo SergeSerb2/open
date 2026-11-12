@@ -187,7 +187,7 @@ def checks(factory, results, tmp, config, harness):
         flight = next((f for f in state().get('flights', []) if f['id'] == known), None)
         played = bool(flight) and 'duration' in flight and 0.2 < flight['duration'] < 2.5 \
             and flight['target'][0] < flight['start'][0] and flight['target'][1] > flight['start'][1]
-        check('download_flight', played or (bool(flight) and flight.get('skipped') in ('Library open', 'Reduce Motion')), flight=flight)
+        # Recorded below: a result write here delays the next rows while /slow must still be running.
         live = wait(lambda: (lambda v: v if v.get('received', 0) > 0 and v.get('total', 0) else None)(item(known)))
         library()
         running = wait(lambda: (lambda v: v if '/s · from 127.0.0.1' in v.get('subtitle', '') else None)(row(known)))
@@ -220,6 +220,7 @@ def checks(factory, results, tmp, config, harness):
         failed = start('/fail'); library()
         check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed to Download', 30), item=item(failed), row=row(failed))
         dismiss_library()
+        check('download_flight', played or (bool(flight) and flight.get('skipped') in ('Library open', 'Reduce Motion')), flight=flight)
 
 
     def files_flow():
