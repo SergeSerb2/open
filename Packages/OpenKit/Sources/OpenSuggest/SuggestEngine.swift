@@ -60,7 +60,7 @@ public final class SuggestEngine {
         self.siteSearches = sites
         self.siteIndex = SiteSearchIndex(sites)
         var list: [any SuggestProvider] = [
-            WhatYouTypedProvider(), TabsProvider(), CalculatorProvider(), TopDomainsProvider(),
+            WhatYouTypedProvider(), TabsProvider(), CalculatorProvider(),
             ActionsProvider(registry: actions), SiteSearchProvider(sites: sites),
         ]
         if let historyStore { list.append(HistoryProvider(store: historyStore)) }
