@@ -861,17 +861,25 @@ extension AppDelegate: CommandDispatcher {
               !self.terminationRequested, !Task.isCancelled else { return }
         let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
         if painted == true {
+          // Each service body gets its own main run-loop turn, so input is
+          // handled between them and no turn carries several bodies.
           if !self.commandServicesPrepared {
             self.startupRegion("afterPaint.commandServices") { self.prepareCommandServices() }
+            guard await self.nextStartupTurn() else { return }
             self.startupRegion("afterPaint.storesPrewarm") {
               if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
             }
+            guard await self.nextStartupTurn() else { return }
           }
           // Startup T5: the sleep controller starts after first paint, never before.
           self.startupRegion("afterPaint.sleep") { self.tabSleep.start() }
+          guard await self.nextStartupTurn() else { return }
           self.startupRegion("afterPaint.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
+          guard await self.nextStartupTurn() else { return }
           self.startupRegion("afterPaint.findPrewarm") { FindBarPrewarm.schedule(afterPaintIn: self) }
+          guard await self.nextStartupTurn() else { return }
           self.startupRegion("afterPaint.icon") { self.applicationIcon.restoreAfterContent() }
+          guard await self.nextStartupTurn() else { return }
           self.startupRegion("afterPaint.updater") { self.prepareUpdaterAfterPaint() }
           return
         }
@@ -880,10 +888,19 @@ extension AppDelegate: CommandDispatcher {
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
       self.startupRegion("fallback.sleep") { self.tabSleep.start() }
+      guard await self.nextStartupTurn() else { return }
       self.startupRegion("fallback.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
+      guard await self.nextStartupTurn() else { return }
       self.startupRegion("fallback.icon") { self.applicationIcon.restoreAfterContent() }
+      guard await self.nextStartupTurn() else { return }
       self.startupRegion("fallback.updater") { self.prepareUpdaterAfterPaint() }
     }
+  }
+  /// Ends this run-loop turn (a 1 ms timer wake, not a queue hop that can run
+  /// in the same drain) and reports whether start-up may continue.
+  private func nextStartupTurn() async -> Bool {
+    try? await Task.sleep(for: .milliseconds(1))
+    return engineReady && !shutdownPrepared && !terminationRequested && !Task.isCancelled
   }
   /// Automation builds record a named start-up region; product builds only run the body.
   func startupRegion(_ name: String, _ body: () -> Void) {
