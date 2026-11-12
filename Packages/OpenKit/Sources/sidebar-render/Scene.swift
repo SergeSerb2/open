@@ -18,6 +18,8 @@ final class RenderScene: NSView {
         var previewFolderID: ItemID?
         /// A Pinned tab shown with the Recents card (LF L1 look frames).
         var previewRecents: (tabID: ItemID, site: RecentsSite)?
+        /// A Pinned tab shown with the calendar card (CAL L4 look frames).
+        var previewCalendar: (tabID: ItemID, provider: CalendarProvider)?
     }
 
     let background: ThemeBackgroundView
@@ -29,6 +31,7 @@ final class RenderScene: NSView {
     let options: Options
     let folderPreview: FolderPreviewView?
     let recentsPreview: RecentsPreviewView?
+    let calendarPreview: CalendarPreviewView?
 
     init(context: SidebarContext, options: Options, delegate: any SidebarDelegate) {
         self.options = options
@@ -36,6 +39,9 @@ final class RenderScene: NSView {
         sidebar = SidebarView(context: context)
         folderPreview = options.previewFolderID.flatMap { context.model.node(id: $0)?.folder }.map { FolderPreviewView(context: context, folder: $0) }
         recentsPreview = options.previewRecents.flatMap { item in context.model.tab(id: item.tabID).map { RecentsPreviewView(context: context, tab: $0, site: item.site) } }
+        calendarPreview = options.previewCalendar.flatMap { item in
+            context.model.tab(id: item.tabID).flatMap { tab in context.calendarGlance.map { CalendarPreviewView(context: context, tab: tab, provider: item.provider, source: $0) } }
+        }
         super.init(frame: CGRect(origin: .zero, size: options.size))
         wantsLayer = true
         sidebar.delegate = delegate
@@ -55,6 +61,11 @@ final class RenderScene: NSView {
             let deadline = Date().addingTimeInterval(2)
             while !recentsPreview.isLoaded, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
             addSubview(recentsPreview)
+        }
+        if let calendarPreview {
+            let deadline = Date().addingTimeInterval(2)
+            while !calendarPreview.isLoaded, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+            addSubview(calendarPreview)
         }
         if options.trafficLights && !(options.sidebarHidden && !options.revealCard) {
             if options.revealCard { sidebar.addSubview(lights) } else { addSubview(lights) }
@@ -100,6 +111,13 @@ final class RenderScene: NSView {
             let row = sidebar.rowFrame(nodeID: recentsPreview.tab.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
             recentsPreview.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
                                           width: HoverPreviewMetrics.folderWidth, height: height)
+        }
+        if let calendarPreview {
+            sidebar.layoutSubtreeIfNeeded()
+            let height = min(calendarPreview.fittingSize.height, bounds.height - 20)
+            let row = sidebar.rowFrame(nodeID: calendarPreview.tab.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
+            calendarPreview.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
+                                           width: HoverPreviewMetrics.folderWidth, height: height)
         }
 
     }

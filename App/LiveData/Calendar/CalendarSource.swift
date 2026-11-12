@@ -1,17 +1,6 @@
 import EventKit
 import Foundation
-
-/// Calendar access as the user sees it. Lead ruling F-questions LEAD 11:05 Q1: EventKit first, behind this protocol;
-/// a web-session Google source may be added later behind the same protocol.
-enum CalendarAccess: String, Sendable {
-  /// macOS has not asked yet. The first user action that needs events asks (never at launch).
-  case notDetermined
-  case granted
-  /// The user said no, or only write access was given.
-  case denied
-  /// A management profile blocks access.
-  case restricted
-}
+import OpenLiveData
 
 @MainActor
 protocol CalendarSource: AnyObject {

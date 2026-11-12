@@ -111,8 +111,20 @@ public final class SidebarContext {
     /// Automation fixtures only: extra hosts that count as a Recents site. Empty in normal use.
     @ObservationIgnored public var glanceHostAliases: [String: RecentsSite] = [:]
     /// The live-data card a sidebar tab gets on hover, or nil for the page card.
+    /// Calendar card data (live-data §3.2, plan NS §2 CAL). The App sets it for normal windows;
+    /// nil (incognito, render scenes) keeps the page card on calendar tabs.
+    @ObservationIgnored public var calendarGlance: CalendarGlanceSource?
+    /// Live Calendar (LD §4): the countdown state of each calendar Favorite tile, set by the App's
+    /// coordinator. Observed: a change redraws only the tiles that read it.
+    public var liveCalendarTiles: [ItemID: LiveCalendar.TileState] = [:]
+    /// Live Calendar actions for the tile menu and the reminder; nil keeps tiles plain.
+    @ObservationIgnored public var liveCalendar: LiveCalendarActions?
     public func glanceKind(for tab: Tab) -> GlanceKind? {
-        guard recentPagesSource != nil, let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases) else { return nil }
+        guard let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases) else { return nil }
+        switch kind {
+        case .recents: guard recentPagesSource != nil else { return nil }
+        case .calendar: guard calendarGlance != nil else { return nil }
+        }
         let key = kind.preferenceKey
         return previewPreferences.object(forKey: key) == nil || previewPreferences.bool(forKey: key) ? kind : nil
     }
