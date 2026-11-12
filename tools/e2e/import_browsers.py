@@ -1,0 +1,214 @@
+"""IMC: import from Chrome-family browsers through the real Settings import sheet.
+
+Every source file is a synthetic fixture under a private `Library` root that the
+App reads through `--browser-import-library`. No real browser data is read.
+Rows: source detection, counts, bookmarks folder tree, history, search engine,
+re-import idempotency, Undo, second profile with a custom search engine, and
+unselectable sources (no data / not yet supported).
+"""
+import json
+import os
+from pathlib import Path
+import sqlite3
+import time
+
+CHROME_EPOCH = 11644473600 * 1000000
+
+
+def chromium_time(unix):
+    return str(int(unix * 1000000) + CHROME_EPOCH)
+
+
+def write_history(path, rows):
+    with sqlite3.connect(path) as db:
+        db.executescript('''
+            CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
+            INSERT INTO meta VALUES('version','70');
+            CREATE TABLE urls(id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR, visit_count INTEGER DEFAULT 0 NOT NULL,
+                typed_count INTEGER DEFAULT 0 NOT NULL, last_visit_time INTEGER NOT NULL DEFAULT 0, hidden INTEGER DEFAULT 0 NOT NULL);
+            CREATE TABLE visits(id INTEGER PRIMARY KEY, url INTEGER NOT NULL, visit_time INTEGER NOT NULL, from_visit INTEGER,
+                transition INTEGER DEFAULT 0 NOT NULL, incremented_omnibox_typed_score BOOLEAN DEFAULT FALSE NOT NULL);
+            CREATE TABLE keyword_search_terms(keyword_id INTEGER NOT NULL, url_id INTEGER NOT NULL, term LONGVARCHAR NOT NULL);
+        ''')
+        now = time.time() - 3600
+        for i, (url, title, visits) in enumerate(rows):
+            db.execute('INSERT INTO urls(id,url,title) VALUES(?,?,?)', (i + 1, url, title))
+            for v in range(visits):
+                db.execute('INSERT INTO visits(url,visit_time,transition) VALUES(?,?,?)',
+                           (i + 1, int(chromium_time(now - 60 * (i * 10 + v))), 1 if v == 0 else 0))
+
+
+def fixture(library):
+    """Synthetic Chrome (two profiles), an empty Brave folder, and a Firefox folder."""
+    chrome = library/'Application Support/Google/Chrome'
+    (chrome/'Default').mkdir(parents=True)
+    (chrome/'Profile 1').mkdir()
+    (chrome/'Local State').write_text(json.dumps({'profile': {
+        'info_cache': {'Default': {'name': 'Example Person'}, 'Profile 1': {'name': 'Example Work'}},
+        'profiles_order': ['Default', 'Profile 1']}}))
+    added = chromium_time(time.time() - 86400)
+    def url(guid, name, href):
+        return {'type': 'url', 'guid': guid, 'id': guid[-2:], 'name': name, 'url': href, 'date_added': added}
+    bookmarks = {'version': 1, 'checksum': '0', 'roots': {
+        'bookmark_bar': {'type': 'folder', 'guid': '00000000-0000-4000-a000-000000000001', 'name': 'Bookmarks bar', 'children': [
+            url('10000000-0000-4000-a000-000000000001', 'Example One', 'https://one.example.com/'),
+            url('10000000-0000-4000-a000-000000000002', 'Example Two', 'https://two.example.com/'),
+            {'type': 'folder', 'guid': '10000000-0000-4000-a000-000000000003', 'name': 'Example Folder', 'children': [
+                url('10000000-0000-4000-a000-000000000004', 'Example Nested', 'https://nested.example.com/a'),
+                url('10000000-0000-4000-a000-000000000005', 'Example Script', 'javascript:void(0)')]}]},
+        'other': {'type': 'folder', 'guid': '00000000-0000-4000-a000-000000000002', 'name': 'Other bookmarks', 'children': [
+            url('10000000-0000-4000-a000-000000000006', 'Example Other', 'https://other.example.com/')]},
+        'synced': {'type': 'folder', 'guid': '00000000-0000-4000-a000-000000000003', 'name': 'Mobile bookmarks', 'children': []}}}
+    (chrome/'Default/Bookmarks').write_text(json.dumps(bookmarks))
+    write_history(chrome/'Default/History', [('https://one.example.com/', 'Example One', 3),
+                                             ('https://two.example.com/', 'Example Two', 2),
+                                             ('chrome://settings/', 'Settings', 1)])
+    (chrome/'Default/Preferences').write_text(json.dumps({'default_search_provider_data': {'template_url_data': {
+        'short_name': 'DuckDuckGo', 'keyword': 'duckduckgo.com', 'url': 'https://duckduckgo.com/?q={searchTerms}'}}}))
+    work = {'version': 1, 'checksum': '0', 'roots': {
+        'bookmark_bar': {'type': 'folder', 'guid': '00000000-0000-4000-b000-000000000001', 'name': 'Bookmarks bar', 'children': [
+            url('20000000-0000-4000-a000-000000000001', 'Example Work', 'https://work.example.com/')]},
+        'other': {'type': 'folder', 'guid': '00000000-0000-4000-b000-000000000002', 'name': 'Other bookmarks', 'children': []}}}
+    (chrome/'Profile 1/Bookmarks').write_text(json.dumps(work))
+    (chrome/'Profile 1/Preferences').write_text(json.dumps({'default_search_provider': {'guid': 'example-guid'}}))
+    with sqlite3.connect(chrome/'Profile 1/Web Data') as db:
+        db.executescript('''CREATE TABLE keywords(id INTEGER PRIMARY KEY, short_name VARCHAR NOT NULL, keyword VARCHAR NOT NULL,
+            favicon_url VARCHAR NOT NULL DEFAULT '', url VARCHAR NOT NULL, suggest_url VARCHAR DEFAULT '', sync_guid VARCHAR);''')
+        db.execute("INSERT INTO keywords(short_name,keyword,url,sync_guid) VALUES('Example Search','ex','https://search.example.com/find?q={searchTerms}&ie={inputEncoding}','example-guid')")
+    # Input limits: a Bookmarks file of exactly 64 MiB is read; one byte more is refused.
+    limit = 64 << 20
+    edge = library/'Application Support/Microsoft Edge/Default'; edge.mkdir(parents=True)
+    body = json.dumps({'roots': {'bookmark_bar': {'type': 'folder', 'children': [url('30000000-0000-4000-a000-000000000001', 'Example Edge', 'https://edge.example.com/')]}}})
+    (edge/'Bookmarks').write_text(body + ' ' * (limit - len(body)))
+    vivaldi = library/'Application Support/Vivaldi/Default'; vivaldi.mkdir(parents=True)
+    (vivaldi/'Bookmarks').write_text(body + ' ' * (limit + 1 - len(body)))
+    (library/'Application Support/BraveSoftware/Brave-Browser').mkdir(parents=True)
+    (library/'Application Support/Firefox/Profiles').mkdir(parents=True)
+
+
+def sidebar(app):
+    data = json.loads(Path(app.call('save')).read_text())
+    found = []
+    def walk(nodes, path):
+        for node in nodes:
+            if 'folder' in node:
+                folder = node['folder']['_0']
+                found.append(('folder', path + [folder['title']], None))
+                walk(folder.get('children', []), path + [folder['title']])
+            elif 'tab' in node:
+                tab = node['tab']['_0']
+                found.append(('tab', path, tab.get('pinnedURL')))
+    for space in data['spaces']:
+        walk(space.get('pinned', []), [space['id']])
+    return data, found
+
+
+def visit_count(app):
+    total = 0
+    for file in (Path(app.user_data)/'Profiles').glob('*/State/history.sqlite3'):
+        with sqlite3.connect('file:' + str(file) + '?mode=ro', uri=True) as db:
+            if db.execute("SELECT count(*) FROM sqlite_master WHERE name='visits'").fetchone()[0]:
+                total += db.execute('SELECT count(*) FROM visits').fetchone()[0]
+    return total
+
+
+def run(factory, results, tmp, h):
+    library = Path(tmp)/'import-browsers'/'Library'
+    if library.exists():
+        import shutil; shutil.rmtree(library)
+    fixture(library)
+    def row(name, ok, **detail):
+        results[name] = dict(ok=bool(ok), **detail)
+    app = factory(urls=(), fresh=True, extra_args=['--browser-import-library=' + str(library),
+                                                   '--host-resolver-rules=MAP * ~NOTFOUND'])
+    def state(): return app.call('first-run', action='settings-inspect')
+    def settle():
+        assert h.wait_until(lambda: not state().get('settingsBusy'), timeout=30, step=.05), state()
+        return state()
+    def open_sources():
+        app.call('first-run', action='settings-open-sources')
+        return settle()
+    def run_import(profile=None, **select):
+        open_sources()
+        app.call('first-run', action='settings-source', id='chrome')
+        if profile: app.call('first-run', action='settings-profile', id=profile)
+        if select: app.call('first-run', action='settings-browser-select', **select)
+        chosen = settle()
+        app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+        assert h.wait_until(lambda: state().get('settingsStep') == 'Report' and not state().get('settingsBusy'), timeout=120, step=.05), state()
+        report = state()
+        app.call('first-run', action='settings-done')
+        return chosen, report
+
+    s = open_sources()
+    sources = {item['id']: item for item in s.get('settingsSources', [])}
+    row('sources_detected', s.get('settingsStep') == 'Source' and s.get('settingsTitle') == 'Import from another browser'
+        and sources.get('chrome', {}).get('selectable') and [p['name'] for p in sources['chrome']['profiles']] == ['Example Person', 'Example Work']
+        and s.get('settingsSelectedSource') == 'chrome',
+        step=s.get('settingsStep'), title=s.get('settingsTitle'), selected=s.get('settingsSelectedSource'),
+        sources={k: (v['selectable'], v['status'], len(v['profiles'])) for k, v in sources.items()})
+    row('sources_unselectable', sources.get('brave', {}).get('selectable') is False and sources['brave']['status'] == 'No data'
+        and sources.get('firefox', {}).get('selectable') is False and 'opera' not in sources,
+        brave=sources.get('brave', {}).get('status'), firefox=sources.get('firefox', {}).get('status'))
+    app.call('first-run', action='settings-cancel-passwords')
+
+    before_data, before_nodes = sidebar(app)
+    before_visits = visit_count(app)
+    chosen, report = run_import()
+    labels = chosen.get('settingsBrowserLabels', {})
+    row('choose_counts', chosen.get('settingsTitle') == 'Import from Chrome' and labels.get('Bookmarks') == 'Found: 4'
+        and labels.get('History') == 'Found: 6' and labels.get('Search settings') == 'DuckDuckGo',
+        title=chosen.get('settingsTitle'), labels=labels)
+    outcome = report.get('settingsOutcome', {})
+    data, nodes = sidebar(app)
+    imported = [n for n in nodes if n not in before_nodes]
+    folders = sorted('/'.join(n[1][1:]) for n in imported if n[0] == 'folder')
+    tabs = sorted(n[2] for n in imported if n[0] == 'tab')
+    row('bookmarks_folder_tree', outcome.get('Bookmarks') == 4 and folders == [
+            'Imported from Chrome', 'Imported from Chrome/Bookmarks bar', 'Imported from Chrome/Bookmarks bar/Example Folder',
+            'Imported from Chrome/Other bookmarks'] and tabs == ['https://nested.example.com/a', 'https://one.example.com/',
+            'https://other.example.com/', 'https://two.example.com/'] and outcome.get('Skipped bookmarks') == 1
+        and report.get('settingsReportSummary') == 'Imported 4 bookmarks.' and not report.get('settingsError'),
+        outcome=outcome, folders=folders, tabs=len(tabs), summary=report.get('settingsReportSummary'), error=report.get('settingsError'))
+    after_visits = visit_count(app)
+    row('history_imported', outcome.get('History') == 5 and after_visits - before_visits == 5,
+        history=outcome.get('History'), visits=after_visits - before_visits)
+    engines = {p['settings']['searchEngineID'] for p in data['profiles']}
+    row('search_engine', outcome.get('Search settings') == 1 and 'duckduckgo' in engines, engines=sorted(engines))
+
+    def labels_for(source_id):
+        open_sources()
+        app.call('first-run', action='settings-source', id=source_id)
+        result = settle().get('settingsBrowserLabels', {})
+        app.call('first-run', action='settings-cancel-passwords')
+        return result
+    at_limit, over_limit = labels_for('edge'), labels_for('vivaldi')
+    row('bookmarks_size_limit', at_limit.get('Bookmarks') == 'Found: 1' and over_limit.get('Bookmarks') == 'Could not be read',
+        atLimit=at_limit.get('Bookmarks'), overLimit=over_limit.get('Bookmarks'))
+
+    _, again = run_import()
+    repeat = again.get('settingsOutcome', {})
+    data2, nodes2 = sidebar(app)
+    row('reimport_idempotent', repeat.get('Bookmarks') == 0 and repeat.get('History') == 0 and repeat.get('Duplicates', 0) >= 9
+        and sorted(map(str, nodes2)) == sorted(map(str, nodes)) and visit_count(app) == after_visits,
+        repeat=repeat, nodes=len(nodes2))
+
+    # Undo the no-op repeat, then the real import (the Edit menu path via the sidebar key).
+    undo_title = state().get('undoTitle')
+    app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+    for _ in range(2):
+        app.call('sidebar-key', key='z', modifiers=['command'])
+        assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    _, undone = sidebar(app)
+    row('undo', undo_title == 'Import from Chrome' and sorted(map(str, undone)) == sorted(map(str, before_nodes))
+        and visit_count(app) == before_visits, undoTitle=undo_title, nodes=len(undone), visits=visit_count(app) - before_visits)
+
+    chosen, report = run_import(profile='Profile 1', history=False)
+    outcome = report.get('settingsOutcome', {})
+    data, nodes = sidebar(app)
+    custom = [e for p in data['profiles'] for e in p['settings'].get('customSearchEngines', [])]
+    engines = {p['settings']['searchEngineID'] for p in data['profiles']}
+    row('second_profile_custom_search', outcome.get('Bookmarks') == 1 and 'History' not in outcome
+        and chosen.get('settingsBrowserLabels', {}).get('Search settings') == 'Example Search'
+        and 'imported-ex' in engines and any(e['id'] == 'imported-ex' and e['searchURLTemplate'] == 'https://search.example.com/find?q=%s&ie=UTF-8' for e in custom),
+        outcome=outcome, engines=sorted(engines), custom=[e['id'] for e in custom])
