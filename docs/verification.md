@@ -13,6 +13,14 @@ wrap the entire gate in the screen lock.
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --no-e2e --only sidebar-render,sidebar-compare
 ```
 
+`page/X1_apple_backend` depends on the Mac: it passes where the French → English
+macOS translation asset is installed (the M1) and is BLOCKED elsewhere. It is listed
+in `ENVIRONMENT_ROWS` (`gate_exceptions.py`), so a pass there reads
+`NOT_NEEDED_ON_THIS_MAC` instead of STALE and the exception stays for the other Macs.
+`window/chrome_capture_compare` and `window/chrome_dark_rings` need the private Arc
+capture frames, which only the M5 has; elsewhere both rows report SKIP with that
+reason (a gate FAIL: the window merge stage qualifies on the M5).
+
 The build stage also builds the Release App without `OPEN_AUTOMATION` in
 `build/shipping` (row `build/shipping`): the e2e suites use the automation App,
 so only this row catches a break in the shipping build (#371). The exceptions

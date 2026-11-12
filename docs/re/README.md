@@ -39,3 +39,4 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 | `live-data.md` | Live Folders (GitHub), Calendar Preview and mail previews, Live Calendar, Join Meeting, Peek Email: surfaces, data paths, storage, flags (F2, 2026-11-11) |
 | `browser-import.md` | Arc's import from Safari, Chromium-family browsers and Firefox: surfaces, strings, categories, source file formats, consent matrix |
 | `live-data.md` | Live Folders (GitHub), Calendar Preview and mail previews, Live Calendar, Join Meeting, Peek Email: surfaces, data paths, storage, flags (F2, 2026-11-11) |
+| `audit-a11-a16-a17.md` | Parity-audit items: Arc's one-time uBlock allow-list script for YouTube (out of scope), Dia's clean-tabs keys in the Arc binary (not an Arc feature), `domainToProfilePreferences` (needs one runtime read) |
