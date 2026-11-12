@@ -9,8 +9,8 @@ import OpenModel
 /// `Arc/BrowserExtensionsMainMenuProvider.swift`): page CSS custom properties `--arc-palette-*`
 /// (12 roles) and `--arc-background-{gradient-color,gradient-overlay-color,simple-color}`.
 /// LEAD 10:00: expose Arc's names for site compatibility and the same values under `--open-*`.
-/// GUESS — capture C3-PB1-d pending: the exact variable list, the value format (sRGB hex here),
-/// where Arc sets them (inline on <html> here) and whether they update live.
+/// Capture C3-PB1-d (C-report-s6 §6) settles the list, format and values. Difference kept: Arc injects a
+/// user stylesheet the page cannot see as a node; Open sets them inline on <html> (per-tab Space values).
 @MainActor
 enum ThemeData {
   static let defaultsKey = "open.advanced.allowSitesThemeData"
@@ -69,19 +69,32 @@ enum ThemeData {
     return suffixes.flatMap { ["--arc-" + $0, "--open-" + $0] }
   }()
 
-  /// The variables for a Space style in one appearance (sRGB hex, alpha only when below 1).
-  static func variables(style: SpaceThemeStyle, appearance: ContentAppearance) -> [(String, String)] {
+  /// Arc's default-theme values (capture C-report-s6 §6, PB1-d): the same in light and dark.
+  static let defaultPalette: [String: String] = [
+    "foregroundPrimary": "#3139FBFF", "foregroundSecondary": "#8489FBFF", "foregroundTertiary": "#ECEDFEFF",
+    "maxContrastColor": "#212AFBFF", "minContrastColor": "#ECEDFEFF", "backgroundExtra": "#FDFDFFFF",
+    "background": "#E9EAFEFF", "focus": "#9094FBFF", "hover": "#D3D4FDFF", "cutoutColor": "#ECEDFEFF",
+    "title": "#0A0D4BFF", "subtitle": "#A6AAFBFF",
+  ]
+
+  /// The variables for a Space style. Capture PB1-d (C-report-s6 §6): uppercase `#RRGGBBAA`; values do
+  /// not follow View › Appearance (Open uses the light palette); the default theme has the palette above and
+  /// no background values; a one-colour theme sets `background-simple-color` = foregroundPrimary.
+  /// GUESS: gradient values for multi-colour themes (only a one-colour theme was captured).
+  static func variables(style: SpaceThemeStyle) -> [(String, String)] {
     var values: [(String, String)] = []
-    if let palette = style.palette(for: appearance) {
+    if let palette = style.palette(for: .light) {
       for (name, path) in paletteNames { values.append(("palette-" + name, hex(palette[keyPath: path]))) }
-    }
-    switch style.fill {
-    case .blended(let base, let overlay):
-      if base.count >= 2 { values.append(("background-gradient-color", hex(base[0]))) }
-      if let first = overlay.first { values.append(("background-gradient-overlay-color", hex(first))) }
-      if base.count == 1 { values.append(("background-simple-color", hex(base[0]))) }
-    case .corners(let colors):
-      if let first = colors.first { values.append(("background-simple-color", hex(first))) }
+      if case .blended(let base, let overlay) = style.fill {
+        if base.count >= 2 {
+          values.append(("background-gradient-color", hex(base[0])))
+          if let first = overlay.first { values.append(("background-gradient-overlay-color", hex(first))) }
+        } else {
+          values.append(("background-simple-color", hex(palette.foregroundPrimary)))
+        }
+      }
+    } else {
+      for (name, _) in paletteNames { if let value = defaultPalette[name] { values.append(("palette-" + name, value)) } }
     }
     return values.flatMap { [("--arc-" + $0.0, $0.1), ("--open-" + $0.0, $0.1)] }
   }
@@ -89,16 +102,13 @@ enum ThemeData {
   static func hex(_ color: RGBA) -> String {
     let srgb = color.nsColor.usingColorSpace(.sRGB) ?? color.nsColor
     func byte(_ v: CGFloat) -> String { String(format: "%02X", Int((max(0, min(1, v)) * 255).rounded())) }
-    let rgb = "#" + byte(srgb.redComponent) + byte(srgb.greenComponent) + byte(srgb.blueComponent)
-    return srgb.alphaComponent < 0.999 ? rgb + byte(srgb.alphaComponent) : rgb
+    return "#" + byte(srgb.redComponent) + byte(srgb.greenComponent) + byte(srgb.blueComponent) + byte(srgb.alphaComponent)
   }
 
   /// The variables for one tab of a window (nil: setting off, or no Space theme for the tab).
   static func variables(tabID: ItemID, factory: EngineWebContentHostFactory) -> [(String, String)]? {
     guard enabled, let controller = factory.controller, let space = factory.space(for: tabID) else { return nil }
-    let style = controller.context.style(for: space)
-    let appearance = style.resolvedAppearance(system: controller.context.systemAppearance)
-    return variables(style: style, appearance: appearance)
+    return variables(style: controller.context.style(for: space))
   }
 
   /// Sets (or, when `values` is nil, removes) Open's theme variables on the page's <html>, through
