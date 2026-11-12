@@ -456,6 +456,61 @@ def run(factory, results, tmp, api):
             record('E38_delete_easel', alert and 'Are you sure you want to delete this Easel?' in alert['texts']
                    and 'Doing so will delete the Easel permanently.' in alert['texts'] and sorted(alert['buttons']) == ['Cancel', 'Delete']
                    and gone and not folder.exists(), alert=alert, folderExists=folder.exists())
+
+            # ---- I1: Arc "Export All Easels" folder → Open Easels ----
+            export = Path(tmp) / 'Arc Easels - synthetic'
+            def easel_json(folder, doc):
+                (export / folder).mkdir(parents=True, exist_ok=True)
+                (export / folder / 'easel.json').write_text(json.dumps(doc))
+            (export / 'Board A' / 'images').mkdir(parents=True, exist_ok=True)
+            make_png(export / 'Board A' / 'images' / 'pic.png', 300, 200, (10, 160, 90))
+            easel_json('Board A', {'formatVersion': 1, 'id': 'arc-easel-a', 'title': 'Board A', 'palette': 'chill',
+                'exportedAt': '2026-11-01T10:00:00Z', 'objects': [
+                {'id': '11111111-0000-4000-8000-000000000001', 'frame': {'x': .1, 'y': .2, 'width': .3, 'height': .05}, 'zIndex': 1,
+                 'content': {'type': 'text', 'string': 'Hello from Arc', 'fontFamily': 'mono', 'paragraphStyle': 'h2'}},
+                {'id': '11111111-0000-4000-8000-000000000002', 'frame': {'x': .5, 'y': .2, 'width': .2, 'height': .1}, 'zIndex': 2,
+                 'content': {'type': 'shape', 'kind': 'rectangle', 'color': 'purple'}},
+                {'id': '11111111-0000-4000-8000-000000000003', 'frame': {'x': .1, 'y': .4, 'width': .3, 'height': .2}, 'zIndex': 3,
+                 'content': {'type': 'image', 'src': 'images/pic.png', 'size': {'width': 300, 'height': 200}}},
+                {'id': '11111111-0000-4000-8000-000000000004', 'frame': {'x': .5, 'y': .4, 'width': .3, 'height': .2}, 'zIndex': 4,
+                 'content': {'type': 'webCard', 'url': 'https://example.com/a', 'title': 'Example', 'image': 'images/pic.png'}},
+                {'id': '11111111-0000-4000-8000-000000000005', 'frame': {'x': .1, 'y': .7, 'width': .3, 'height': .07}, 'zIndex': 5,
+                 'content': {'type': 'link', 'source': 'https://example.org/', 'title': 'Org', 'description': 'An example'}},
+                {'id': '11111111-0000-4000-8000-000000000006', 'frame': {'x': .5, 'y': .7, 'width': .3, 'height': .2}, 'zIndex': 6,
+                 'content': {'type': 'browser', 'url': 'https://example.net/'}},
+                {'id': '11111111-0000-4000-8000-000000000007', 'frame': {'x': .1, 'y': .9, 'width': .3, 'height': .05}, 'zIndex': 7,
+                 'content': {'type': 'richText', 'text': 'Rich words', 'formats': []}},
+                {'id': '11111111-0000-4000-8000-000000000008', 'frame': {'x': .1, 'y': 1.0, 'width': .3, 'height': .05}, 'zIndex': 8,
+                 'content': {'type': 'hologram'}}]})
+            easel_json('Board B', {'formatVersion': 1, 'id': 'arc-easel-b', 'title': 'Board B', 'palette': 'vibrant', 'objects': []})
+            easel_json('From the future', {'formatVersion': 9, 'id': 'arc-easel-c', 'title': 'Future', 'objects': []})
+            easel_json('Escape', {'formatVersion': 1, 'id': 'arc-easel-d', 'title': 'Escape', 'objects': [
+                {'id': '11111111-0000-4000-8000-000000000009', 'frame': {'x': .1, 'y': .1, 'width': .1, 'height': .1}, 'zIndex': 1,
+                 'content': {'type': 'image', 'src': '../Board A/images/pic.png'}}]})
+            count = len(app.call('tabs'))
+            first_import = app.call('easel', action='import-arc-export', path=str(export))
+            tabs = app.call('tabs')
+            titles = [t['title'] for t in tabs[:4]]
+            record('I01_import_counts', first_import['imported'] == 3 and first_import['newRows'] == 3
+                   and len(first_import['skipped']) == 1 and 'From the future' in first_import['skipped'][0]
+                   and first_import['droppedObjects'] == 2 and len(tabs) == count + 3
+                   and {'Board A', 'Board B', 'Escape'} <= set(titles), result=first_import, titles=titles)
+            a_id = app.call('easel', action='document-id', arcID='arc-easel-a')
+            board_a = next(t for t in tabs if t['url'] == 'open://easel/' + a_id)
+            app.call('select', tab=board_a['id'])
+            s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=board_a['id'])), timeout=8, step=.1)
+            got = [(x['kind'], x.get('text') or x.get('url') or x.get('color') or x.get('file')) for x in objects(s)] if s else []
+            text = next((x for x in objects(s) if x['kind'] == 'text'), {}) if s else {}
+            record('I02_import_content', s and [k for k, _ in got] == ['text', 'rectangle', 'image', 'webCard', 'link', 'link', 'text']
+                   and close(text.get('frame', [0] * 4), [100, 200, 300, 50]) and text.get('fontFamily') == 'mono'
+                   and text.get('paragraphStyle') == 'h2' and canvas(s)['palette'] == 'chill' and canvas(s)['title'] == 'Board A'
+                   and len(s['imageFiles']) == 1, got=got)
+            again = app.call('easel', action='import-arc-export', path=str(export))
+            archive = Path(tmp) / 'arc-easels.zip'
+            subprocess.run(['/usr/bin/ditto', '-c', '-k', '--keepParent', str(export), str(archive)], check=True)
+            zipped = app.call('easel', action='import-arc-export', path=str(archive))
+            record('I03_reimport_and_zip', again['imported'] == 3 and again['newRows'] == 0 and zipped['imported'] == 3
+                   and zipped['newRows'] == 0 and len(app.call('tabs')) == count + 3, again=again, zipped=zipped)
         finally:
             server.shutdown()
     finally:

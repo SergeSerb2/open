@@ -53,6 +53,16 @@ extension AutomationController {
       return ["shown": true, "isSavePanel": sheet is NSSavePanel, "buttons": all.map(\.title),
               "texts": labels(content).filter { !$0.isEmpty }, "message": (sheet as? NSSavePanel)?.message ?? ""]
     }
+    if action == "import-arc-export" {
+      guard let path = args["path"] as? String else { throw Failure(message: "path needed") }
+      let r = factory.importArcEaselExport(URL(fileURLWithPath: path))
+      return ["imported": r.imported, "newRows": r.newRows, "skipped": r.skipped, "droppedObjects": r.droppedObjects]
+    }
+    if action == "document-id" {
+      // The Open document id for an Arc Easel id (what an imported Arc sidebar row uses).
+      guard let arc = args["arcID"] as? String else { throw Failure(message: "arcID needed") }
+      return EaselImporter.documentID(forArcEaselID: arc).uuidString.lowercased()
+    }
     if action == "export-all" {
       guard let path = args["path"] as? String else { throw Failure(message: "path needed") }
       let (count, failures) = try app.exportAllEasels(to: URL(fileURLWithPath: path))
