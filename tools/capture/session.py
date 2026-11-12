@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -616,7 +617,10 @@ class Session:
     # Arc shortcuts used by plan C3. Never quit, settings, delete-data or system panels.
     S3_KEYS = {('s','cmd'), ('t','cmd'), ('l','cmd'), ('d','cmd'), ('left','cmd,opt'), ('right','cmd,opt'),
                ('left','opt,cmd'), ('right','opt,cmd'), ('space',''), ('delete',''), ('n','cmd,shift'), ('b','cmd,shift'), ('=','cmd'), ('-','cmd'), ('0','cmd'),
-               ('n','ctrl,shift'), ('n','ctrl,opt'), ('e','ctrl,shift'), ('j','ctrl,cmd')} | {(str(i),'ctrl') for i in range(1,10)}
+               ('n','ctrl,shift'), ('n','ctrl,opt'), ('e','ctrl,shift'), ('j','ctrl,cmd'), ('t','cmd,shift')} | {(str(i),'ctrl') for i in range(1,10)}
+
+    ARC_DEFAULT_KEYS = {'domainToProfilePreferences', 'topAppsEmptyStateDismissed', 'topAppsEmptyStateDismissedForProfiles',
+                        'topAppsBadgingDisabledHosts', 'topAppsSubtitleDisabledHosts', 'twitterBadgeEnabled', 'playUserInterfaceSoundsDisabled'}
 
     # Arc deep links the capture plan may open (PB1-c); nothing else is passed to `open`.
     DEEP_LINKS = {'arcBrowser://quit', 'arcBrowser://space', 'arcBrowser://space/1', 'arcBrowser://restart'}
@@ -1389,6 +1393,44 @@ class Session:
             self.guard(event=True)
             self.log('modkey', result=json.loads(run(self.native, 'modkey', 'opt', step['state'])))
             self.opt_down = step['state'] == 'down'
+        elif op == 'arc_store_grep':
+            # NT C11 (LEAD 11:50): read-only extract of Boost zoom/colour numbers from Arc's own store files.
+            # Runs only while Arc is not running (before `launch`). Fixed pattern: no titles, hosts or URLs.
+            if self.pid or not step.get('name') or self.script.get('capture_scope') != 'session3':
+                raise Stopped('arc_store_grep runs before launch, with a name, in the Session3 scope')
+            root = Path.home() / 'Library/Application Support/Arc'
+            pattern = re.compile(r'"(textZoom|level|primaryHueDegrees|primarySaturation|secondaryHueOffset|invertLightness|baseAppearance)"\s*:\s*(\{[^{}]{0,80}\}|-?[0-9.eE+-]+|true|false|"[a-zA-Z]{0,24}")')
+            lines = []
+            for f in sorted(root.glob('Storable*.json')):
+                if re.search(r'\.\d{4}-\d{2}-\d{2}-', f.name) or f.stat().st_size > 64 << 20:
+                    continue
+                text = f.read_text(errors='replace')
+                if 'textZoom' in text or 'primaryHueDegrees' in text:
+                    lines.append('## ' + f.name)
+                    lines += ['%s: %s' % m for m in pattern.findall(text)][:200]
+            (self.out / (step['name'] + '.store.txt')).write_text('\n'.join(lines) or 'no Boost numbers found')
+            self.log('arc-store-grep', name=step['name'], lines=len(lines))
+        elif op == 'arc_firestore_copy':
+            # NT C11: private copy of Arc's Firestore offline cache (Boost documents) while Arc is not running.
+            # The copy holds account documents: it stays in the run folder under .re/ and is never committed.
+            if self.pid or not re.fullmatch(r'[a-z0-9-]{1,40}', str(step.get('name', ''))) or self.script.get('capture_scope') != 'session3':
+                raise Stopped('arc_firestore_copy runs before launch, with a simple name, in the Session3 scope')
+            source = Path.home() / 'Library/Application Support/firestore/Arc/bcny-arc-server/main'
+            size = sum(f.stat().st_size for f in source.glob('*') if f.is_file())
+            if not source.is_dir() or size > 64 << 20:
+                raise Stopped('Firestore cache missing or larger than 64 MiB')
+            shutil.copytree(source, self.out / ('firestore-' + step['name']))
+            self.log('arc-firestore-copy', name=step['name'], bytes=size)
+        elif op == 'arc_defaults':
+            # Read-only `defaults read` of allowlisted Arc preference keys. Raw output stays in the run folder.
+            if not self.s3_ruling() or not step.get('name') or not set(step.get('keys') or ['?']) <= self.ARC_DEFAULT_KEYS:
+                raise Stopped('arc_defaults needs the Session3 scope, a name and allowlisted keys')
+            lines = []
+            for key in step['keys']:
+                r = subprocess.run(['/usr/bin/defaults', 'read', 'company.thebrowser.Browser', key], capture_output=True, text=True, timeout=10)
+                lines.append('## %s (exit %d)\n%s' % (key, r.returncode, r.stdout if r.returncode == 0 else 'absent'))
+            (self.out / (step['name'] + '.defaults.txt')).write_text('\n'.join(lines))
+            self.log('arc-defaults', name=step['name'], keys=step['keys'])
         elif op == 'arc_log':
             # LEAD 10:50: read-only `log stream` of the owned Arc process (PB1-e / PB4 C9 sound mapping).
             if not self.s3_ruling() or step.get('state') not in ('start', 'stop', 'mark'):
