@@ -150,7 +150,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         view.window?.makeFirstResponder(view)
         if self.mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
         mark("focus")
-        animateOpen(animated)
+        animateOpen(animated, mark: mark)
         mark("focusAndAnimation")
         if let measureFirstDraw {
             // The automation callback is installed only by OPEN_AUTOMATION.
@@ -360,8 +360,9 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         let commands = ["share": "share-page", "capture": "capture-page", "captureFull": "capture-full-page"]
         if let command = commands[id] { actions.perform(command: command, tabID: tabID, anchor: rect) }
     }
-    private func animateOpen(_ animated: Bool) {
+    private func animateOpen(_ animated: Bool, mark: (String) -> Void = { _ in }) {
         view.prepareAnimationAnchor()
+        mark("anchor")
         for layer in view.presentationLayers {
             layer.removeAllAnimations(); layer.opacity = 1; layer.transform = CATransform3DIdentity
             guard animated else { continue }
