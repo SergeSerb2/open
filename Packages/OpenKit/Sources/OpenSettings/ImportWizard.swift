@@ -61,7 +61,7 @@ import OpenImport
         return (path as NSString).abbreviatingWithTildeInPath
     }
     public var canContinue: Bool {
-        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings || plan.passwords || (plan.secretsRequested && canImportBrowserSecrets)) && passwordsReady }
+        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings || plan.passwords || plan.openTabs || (plan.secretsRequested && canImportBrowserSecrets)) && passwordsReady }
         return readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public var title: String { step == .source ? "Import from another browser" : "Import from " + plan.source.displayName }
     public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.source = .arc; selectedSourceID = "arc"; if step == .source { step = .choose }; plan.directory = directory; await refreshCounts() }
@@ -104,7 +104,7 @@ import OpenImport
         guard let source = selectedSource, let profile = source.profiles.first else { return }
         plan.source = .browser(source, profile: profile)
         plan.bookmarks = true; plan.history = true; plan.searchSettings = source.family == .chromium; plan.skipSecrets()
-        plan.passwords = false; plan.safariFiles = SafariImportFiles(); plan.primaryPassword = ""
+        plan.passwords = false; plan.openTabs = false; plan.safariFiles = SafariImportFiles(); plan.primaryPassword = ""
         familyCounts = nil
         await enterChooseOrAccess()
     }
@@ -228,6 +228,8 @@ import OpenImport
         if let count = result.bookmarks { values["Bookmarks"] = count }
         if let count = result.historyVisits { values["History"] = count }
         if let count = result.passwords { values["Passwords"] = count }
+        if let count = result.openTabs { values["Open tabs"] = count }
+        plan.openTabs = (result.openTabs ?? 0) > 0
         counts = values
         if (result.passwords ?? 0) == 0 || !canImportBrowserPasswords { plan.passwords = false }
         else if family == .firefox && !plan.passwords && plan.primaryPassword.isEmpty && !result.needsPrimaryPassword { plan.passwords = true }
@@ -291,7 +293,13 @@ import OpenImport
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public static let browserReportCategories=["Bookmarks","History","Search settings"]
     public static let otherBrowserReportCategories=["Bookmarks","History","Passwords"]
-    public var browserCategories: [String] { browserFamily == .firefox || browserFamily == .safari ? Self.otherBrowserReportCategories : Self.browserReportCategories }
+    public var browserCategories: [String] {
+        switch browserFamily {
+        case .firefox: Self.otherBrowserReportCategories + ["Open tabs"]
+        case .safari: Self.otherBrowserReportCategories
+        default: Self.browserReportCategories
+        }
+    }
     public var displayedReportCategories: [String] { if !plan.isArc { return browserCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
     public var unfinishedSecretsImportMessage: String? {
@@ -403,6 +411,7 @@ public struct ImportWizard: View {
                         browserOption("Search settings", \.searchSettings)
                         browserOption("Passwords and cookies", \.secretsRequested).disabled(!model.canImportBrowserSecrets)
                     } else { browserOption("Passwords", \.passwords).disabled(!model.canImportBrowserPasswords || (model.familyCounts?.passwords ?? 0) == 0) }
+                    if model.browserFamily == .firefox { browserOption("Open tabs", \.openTabs).disabled((model.familyCounts?.openTabs ?? 0) == 0) }
                     if model.needsPrimaryPassword && model.plan.passwords {
                         SecureField("Firefox Primary Password", text: Binding(get: { model.plan.primaryPassword }, set: { model.plan.primaryPassword = $0 }))
                             .frame(maxWidth: 320).accessibilityIdentifier("import-primary-password")
@@ -416,6 +425,7 @@ public struct ImportWizard: View {
                         if model.plan.history { reviewRow("clock.arrow.circlepath", "History", model.reviewValue("History")) }
                         if model.plan.searchSettings { reviewRow("magnifyingglass", "Search engine", model.reviewValue("Search settings")) }
                         if model.plan.passwords { reviewRow("key", "Passwords", model.reviewValue("Passwords")) }
+                        if model.plan.openTabs { reviewRow("square.on.square", "Open tabs", model.reviewValue("Open tabs")) }
                         if model.plan.secretsRequested && model.canImportBrowserSecrets {
                             reviewRow("key", "Passwords", model.reviewValue("Passwords"))
                             reviewRow("checkmark.shield", "Cookies", model.reviewValue("Cookies"))
