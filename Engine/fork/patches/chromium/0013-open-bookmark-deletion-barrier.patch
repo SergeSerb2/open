@@ -1,0 +1,114 @@
+diff --git a/components/bookmarks/browser/bookmark_storage.h b/components/bookmarks/browser/bookmark_storage.h
+index 6e791d2ecfd1898a70c396f5eb8a72c5a1096eda..ae95a6e86be8e8c302801801c8aae9ea62295aa5 100644
+--- a/components/bookmarks/browser/bookmark_storage.h
++++ b/components/bookmarks/browser/bookmark_storage.h
+@@ -103,6 +103,12 @@
+   // If there is a pending write, performs it immediately.
+   void SaveNowIfScheduledForTesting();
+ 
++  // Open: Profile deletion barrier. Performs any pending write now, refuses
++  // every later save (including the one at destruction), and runs `done` on
++  // the calling sequence after all writes posted so far have finished on the
++  // backend sequence.
++  void SaveNowAndStop(base::OnceClosure done);
++
+   // Saves the given `json_content` to the clear text or encrypted file right
+   // away based on `encryption_type`. The 'json_content' should be a clear text
+   // JSON string coming from a bookmarks file that was properly loaded. It will
+@@ -172,6 +178,9 @@
+   // once.
+   bool was_scheduled_save_ever_called_ = false;
+ 
++  // Open: set by SaveNowAndStop(); no save is scheduled afterwards.
++  bool stopped_ = false;
++
+   base::WeakPtrFactory<BookmarkStorage> weak_factory_{this};
+ };
+ 
+diff --git a/components/bookmarks/browser/bookmark_storage.cc b/components/bookmarks/browser/bookmark_storage.cc
+index 1290d5b7b36d99212f7c719382b077ce68a76a44..cc241b655f43ff4d0f1de18e51530bfe63f3d2c1 100644
+--- a/components/bookmarks/browser/bookmark_storage.cc
++++ b/components/bookmarks/browser/bookmark_storage.cc
+@@ -207,6 +207,9 @@
+ }
+ 
+ void BookmarkStorage::ScheduleSave() {
++  if (stopped_) {
++    return;
++  }
+   // If this is the first scheduled save, create a backup before overwriting the
+   // JSON file.
+   if (!backup_triggered_ && ShouldSaveBackupFile(permanent_node_selection_)) {
+@@ -315,7 +318,16 @@
+ }
+ 
+ void BookmarkStorage::SaveNowIfScheduledForTesting() {
++  SaveNowIfScheduled();
++}
++
++void BookmarkStorage::SaveNowAndStop(base::OnceClosure done) {
+   SaveNowIfScheduled();
++  stopped_ = true;
++  // The backup task and every write run on `backend_task_runner_` in order, so
++  // the reply runs after the last of them.
++  backend_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
++                                         std::move(done));
+ }
+ 
+ void BookmarkStorage::SaveNowIfScheduled() {
+diff --git a/components/bookmarks/browser/bookmark_model.h b/components/bookmarks/browser/bookmark_model.h
+index 0cd8a9554d8fdbfde0012afd93d8665ac4ee8410..c00bcc6ff15f07f804522d44851f2b9d64b18875 100644
+--- a/components/bookmarks/browser/bookmark_model.h
++++ b/components/bookmarks/browser/bookmark_model.h
+@@ -17,6 +17,7 @@
+ #include "base/check_op.h"
+ #include "base/compiler_specific.h"
+ #include "base/containers/flat_map.h"
++#include "base/functional/callback_forward.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -456,6 +457,10 @@
+   // cleanly first.
+   void CommitPendingWriteForTest();
+ 
++  // Open: Profile deletion barrier. Writes any pending change now, stops all
++  // later writes to disk, and runs `done` after those writes have finished.
++  void FlushAndStopWritesForProfileDeletion(base::OnceClosure done);
++
+   // Returns whether pending writes are pending/scheduled.
+   bool LocalOrSyncableStorageHasPendingWriteForTest() const;
+   bool AccountStorageHasPendingWriteForTest() const;
+diff --git a/components/bookmarks/browser/bookmark_model.cc b/components/bookmarks/browser/bookmark_model.cc
+index 3dc2181e28b431e24605ff34df876642e1aa4b07..85c22b859b48b4efe96f0665c2078a26577cb400 100644
+--- a/components/bookmarks/browser/bookmark_model.cc
++++ b/components/bookmarks/browser/bookmark_model.cc
+@@ -11,6 +11,7 @@
+ #include <string>
+ #include <utility>
+ 
++#include "base/barrier_closure.h"
+ #include "base/check.h"
+ #include "base/check_op.h"
+ #include "base/debug/crash_logging.h"
+@@ -1230,6 +1231,20 @@
+   }
+ }
+ 
++void BookmarkModel::FlushAndStopWritesForProfileDeletion(
++    base::OnceClosure done) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  base::RepeatingClosure barrier = base::BarrierClosure(2, std::move(done));
++  for (BookmarkStorage* store :
++       {local_or_syncable_store_.get(), account_store_.get()}) {
++    if (store) {
++      store->SaveNowAndStop(barrier);
++    } else {
++      barrier.Run();
++    }
++  }
++}
++
+ bool BookmarkModel::LocalOrSyncableStorageHasPendingWriteForTest() const {
+   return local_or_syncable_store_->HasScheduledSaveForTesting();  // IN-TEST
+ }

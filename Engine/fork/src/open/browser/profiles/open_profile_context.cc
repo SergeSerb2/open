@@ -25,6 +25,7 @@
 #include "cef/libcef/browser/chrome/chrome_browser_context.h"
 #include "cef/libcef/browser/request_context_impl.h"
 #include "cef/libcef/browser/thread_util.h"
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
+#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -162,6 +164,20 @@ class ProfileDeletion : public ProfileObserver {
       return;
     }
     profile_->GetPrefs()->OnStoreDeletionFromDisk();
+    // Bookmark storage would otherwise do its final save on its own backend
+    // sequence after Profile destruction, recreating the deleted directory
+    // (Bookmarks, EncryptedBookmarks2). Flush it now, stop later writes, and
+    // release the Profile only after those writes finished (patch 0013).
+    if (auto* bookmarks =
+            BookmarkModelFactory::GetForBrowserContextIfExists(profile_)) {
+      bookmarks->FlushAndStopWritesForProfileDeletion(base::BindOnce(
+          &ProfileDeletion::Release, weak_factory_.GetWeakPtr()));
+      return;
+    }
+    Release();
+  }
+
+  void Release() {
     handler_->OnReadyToRelease();
     keep_alive_.reset();
     released_ = true;

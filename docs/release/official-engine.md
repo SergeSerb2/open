@@ -621,8 +621,8 @@ checks in s8 and its main distribution view. Section 3's root was not read.
 The official engine was built remotely (see `docs/engine-fork.md`, "Remote official build") and
 packaged as `cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal`.
 Record with hashes and inputs: `Engine/fork/official-distrib.json` (no binaries in git). Framework
-SHA-256 `cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b`, UUID
-`4C4C44F3-5555-3144-A1A2-041993A5F496` (after patch 0012; the first build `6b6c8d5c…` is superseded). The dSYM and receipts are archived on the M5 in
+SHA-256 `a77b13e17bb44acb53c6971012b596fd12448b0934a32b346a1065fe8ecb8ce6`, UUID
+`4C4C44AA-5555-3144-A10E-754E49025308` (after patches 0012 and 0013; earlier builds `6b6c8d5c…` and `cd76f997…` are superseded). The dSYM and receipts are archived on the M5 in
 `~/Developer/open-engine/symbols/<distribution name>/`. The App build fetches it through the engine
 root's `distrib.txt`; adoption also applies the download-handler lifetime companion change in
 `Engine/OpenEngine/src/OEClient.{h,mm}`.
@@ -635,3 +635,11 @@ registers Chromium's Widevine CDM component only when the browser process has `-
 The App passes it when Settings → Advanced → "Play DRM-protected video" is on (`open.advanced.enableWidevine`,
 off by default; takes effect at the next launch). Then the component updater downloads Google's CDM. Open has no
 Widevine licence or VMP signature, so services that enforce VMP may still refuse playback.
+
+### Profile deletion barrier (patch 0013)
+
+`chromium/0013-open-bookmark-deletion-barrier.patch` adds `BookmarkModel::FlushAndStopWritesForProfileDeletion`
+(and `BookmarkStorage::SaveNowAndStop`). `ProfileDeletion::Wiped` in `open/browser/profiles/open_profile_context.cc`
+calls it and releases the Profile only after the bookmark backend sequence has finished its writes. Before, the
+storage's final save ran after the deletion completed and recreated `Bookmarks` / `EncryptedBookmarks2` in the
+deleted Profile folder (e2e-profiles failed 6/6 on rented Macs, 2026-11-12).
