@@ -180,6 +180,8 @@ def checks(factory, results, tmp, config, harness):
 
 
     def controls_flow():
+        dismiss_library()  # the flight needs the sidebar's Library button on screen
+        wait(lambda: not app.call('library-section')['visible'], 3)
         known = start('/slow')
         # PB1-b: a download that starts on a page plays the flight to the Library button (capture values).
         flight = wait(lambda: next((f for f in state().get('flights', []) if f['id'] == known), None), 3)

@@ -1,4 +1,5 @@
 import AppKit
+import OpenDesign
 import UniformTypeIdentifiers
 import Darwin
 import Observation
@@ -346,7 +347,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     }
     let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
     guard let view = controller.playDownloadFlight(from: start, icon: NSWorkspace.shared.icon(for: type)) else {
-      reason = "not played (Reduce Motion or no Library button on screen)"; return
+      reason = controller.isLibraryOpen ? "Library open" : Motion.reducesMotion ? "Reduce Motion" : "no Library button on screen"; return
     }
     #if OPEN_AUTOMATION
     let f = view.flight

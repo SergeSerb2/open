@@ -80,7 +80,8 @@ extension BrowserWindowController {
     /// GUESS: Arc with a hidden sidebar is not captured.
     @discardableResult
     public func playDownloadFlight(from start: CGPoint? = nil, icon: NSImage) -> DownloadFlightView? {
-        guard !Motion.reducesMotion, let target = sidebar.libraryButtonFrame(in: contentView) else { return nil }
+        // With the Library panel open the sidebar is covered: no target, no flight.
+        guard !Motion.reducesMotion, !isLibraryOpen, let target = sidebar.libraryButtonFrame(in: contentView) else { return nil }
         // contentView is not flipped: convert to top-left points for the model.
         let height = contentView.bounds.height
         func flipped(_ p: CGPoint) -> CGPoint { contentView.isFlipped ? p : CGPoint(x: p.x, y: height - p.y) }
