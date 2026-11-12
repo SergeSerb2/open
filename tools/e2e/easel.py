@@ -147,10 +147,14 @@ def run(factory, results, tmp, api):
         editing = canvas(s)['editingText']
         s = easel(action='type', text='Trip ideas')
         typed = canvas(s)['editorText']
+        # "Aa" moves the box to the next face and keeps editing (C-report-s6 §1).
+        s = easel(action='size', button='family')
+        still_editing = canvas(s)['editingText'] == editing
         s = easel(action='click', at=[960, 150])
         texts = [x for x in objects(s) if x['kind'] == 'text']
         record('E08_text', editing and typed == 'Trip ideas' and len(texts) == 1 and texts[0]['text'] == 'Trip ideas'
-               and texts[0]['paragraphStyle'] == 'body' and canvas(s)['editingText'] is None
+               and texts[0]['paragraphStyle'] == 'body' and texts[0]['fontFamily'] == 'fancy' and still_editing
+               and canvas(s)['editingText'] is None
                and canvas(s)['undoName'] == 'Add Text', state=canvas(s))
         # An empty text box leaves nothing behind and no undo step.
         undo_before = canvas(s)['undoName']
@@ -205,8 +209,19 @@ def run(factory, results, tmp, api):
         app.call('menu-perform', id='zoom-actual-size'); reset = canvas()['zoom']
         app.call('menu-perform', id='zoom-in'); zin = canvas()['zoom']
         app.call('menu-perform', id='zoom-actual-size')
-        record('E17_zoom', [round(z, 2) for z in zooms] == [0.75, 0.5, 0.33, 0.33] and reset == 1 and zin == 1.25,
-               zooms=zooms, reset=reset, zoomIn=zin)
+        zins = []
+        for _ in range(4):
+            app.call('menu-perform', id='zoom-in'); zins.append(canvas()['zoom'])
+        app.call('menu-perform', id='zoom-actual-size')
+        record('E17_zoom', [round(z, 2) for z in zooms] == [0.75, 0.5, 0.33, 0.33] and reset == 1 and zin == 1.75
+               and zins == [1.75, 2.5, 4, 4], zooms=zooms, reset=reset, zoomIn=zin, zoomIns=zins)
+
+        # E17b: a click without a drag makes a 200 × 200 shape centred on the click (C-report-s6 §1).
+        easel(action='tool', tool='ellipse')
+        s = easel(action='click', at=[880, 560])
+        clicked = objects(s)[-1]
+        record('E17b_click_without_drag', clicked['kind'] == 'circle' and close(clicked['frame'], [780, 460, 200, 200])
+               and canvas(s)['tool'] == 'pointer' and canvas(s)['selection'] == [clicked['id']], frame=clicked['frame'])
 
         # Frames for the look review: light and dark, with a selected shape.
         easel(action='click', at=[500, 300])

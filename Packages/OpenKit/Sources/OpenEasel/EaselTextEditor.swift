@@ -93,7 +93,7 @@ final class EaselTextEditor: NSView, NSTextViewDelegate {
         switch action {
         case .larger: if let s = style.paragraphStyle.larger { style.paragraphStyle = s }
         case .smaller: if let s = style.paragraphStyle.smaller { style.paragraphStyle = s }
-        case .family(let f): style.fontFamily = f
+        case .nextFamily: style.fontFamily = style.fontFamily.next
         }
         if let canvas { layoutIn(canvas: canvas) }
         window?.makeFirstResponder(textView)
@@ -111,10 +111,11 @@ final class EaselEditorTextView: NSTextView {
     override func cancelOperation(_ sender: Any?) { onEscape?() }
 }
 
-/// Vertical pill: "+", "Aa" (family menu), "−". Sizes GUESS — capture pending.
+/// Vertical pill: "+", "Aa", "−". "Aa" has no menu: each click moves the box to the next face
+/// and keeps editing (C-report-s6 §1). Pill sizes GUESS — capture pending.
 @MainActor
 final class EaselSizeControl: NSView {
-    enum Action { case larger, smaller, family(EaselFontFamily) }
+    enum Action { case larger, smaller, nextFamily }
     static let size = CGSize(width: 28, height: 84)
     var onAction: ((Action) -> Void)?
     var canGrow = true { didSet { plus.isEnabled = canGrow } }
@@ -131,6 +132,10 @@ final class EaselSizeControl: NSView {
         for (i, b) in [plus, family, minus].enumerated() {
             b.isBordered = false
             b.font = .systemFont(ofSize: i == 1 ? 12 : 16, weight: .semibold)
+            // The "Aa" glyph is always drawn in the serif face (s6).
+            if i == 1, let serif = NSFont.systemFont(ofSize: 13, weight: .regular).fontDescriptor.withDesign(.serif) {
+                b.font = NSFont(descriptor: serif, size: 13)
+            }
             b.target = self
             b.action = #selector(pressed(_:))
             b.frame = CGRect(x: 0, y: CGFloat(i) * 28, width: 28, height: 28)
@@ -151,29 +156,13 @@ final class EaselSizeControl: NSView {
     @objc private func pressed(_ sender: NSButton) {
         if sender === plus { onAction?(.larger) }
         else if sender === minus { onAction?(.smaller) }
-        else {
-            let menu = NSMenu()
-            for f in EaselFontFamily.allCases {
-                let item = NSMenuItem(title: f.title, action: #selector(pickFamily(_:)), keyEquivalent: "")
-                item.target = self; item.representedObject = f.rawValue
-                menu.addItem(item)
-            }
-            menu.popUp(positioning: nil, at: CGPoint(x: sender.frame.maxX, y: sender.frame.minY), in: self)
-        }
-    }
-    @objc private func pickFamily(_ item: NSMenuItem) {
-        if let raw = item.representedObject as? String, let f = EaselFontFamily(rawValue: raw) { onAction?(.family(f)) }
+        else { onAction?(.nextFamily) }
     }
 }
 
 extension EaselFontFamily {
-    /// Menu titles: Open's own names. GUESS — Arc's titles need capture.
-    var title: String {
-        switch self {
-        case .clean: "Clean"
-        case .mono: "Mono"
-        case .fancy: "Fancy"
-        case .hip: "Hip"
-        }
+    /// "Aa" order (s6): default sans → serif → wide display sans → monospace → default sans.
+    var next: EaselFontFamily {
+        switch self { case .clean: .fancy; case .fancy: .hip; case .hip: .mono; case .mono: .clean }
     }
 }
