@@ -72,7 +72,8 @@ def github_fixture():
     return server, server.server_address[1], state
 
 
-def live_folder_checks(app, results, wait_until):
+def live_folder_checks(holder, results, wait_until, factory):
+    app = holder['app']
     server, port, gh = github_fixture()
     try:
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
@@ -106,9 +107,19 @@ def live_folder_checks(app, results, wait_until):
         results['live_folder_signed_out_state'] = {'ok': out.get('outcome') == 'signedOut' and state.get('outcome') == 'signedOut' and len(state.get('rows', [])) == 2,
             'refresh': out, 'state': state}
         gh['signed_in'] = True
+        # The folder's settings and rows survive a relaunch (snapshot DTO fields).
+        before = {(r['url'], r['live']) for r in state.get('rows', [])}
+        app.quit()
+        app = holder['app'] = factory(urls=(), fresh=False)
+        app.call('live-folder-origin', url='http://github.localhost:%d' % port)
+        again = app.call('live-folder-state')
+        results['live_folder_survives_relaunch'] = {'ok': again.get('exists') and again.get('outcome') == 'signedOut'
+            and {(r['url'], r['live']) for r in again.get('rows', [])} == before and app.call('live-folder-refresh').get('outcome') == 'success',
+            'state': again}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         gone = app.call('live-folder-state')
         results['live_folder_toggle_off_removes'] = {'ok': gone.get('exists') is False and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is False, 'state': gone}
+        return app
     finally:
         server.shutdown()
 
@@ -117,6 +128,7 @@ def run(factory, results, tmp, harness):
     new_tab, wait_until = harness['new_tab'], harness['wait_until']
     server, port = harness['_sleep_server']()
     app = factory(urls=(), fresh=True)
+    holder = {'app': app}
     key = 'open.general.previewsRecents'
     def url(host, path):
         return 'http://%s.localhost:%d/%s' % (host, port, path)
@@ -216,8 +228,10 @@ def run(factory, results, tmp, harness):
         app.call('defaults', key='open.general.previewsPages', value=None)
         app.call('hover', leave=True, ms=400)
         results['live_recents_hides_on_leave'] = {'ok': app.call('glance-state').get('shown') is False}
-        live_folder_checks(app, results, wait_until)
+        holder['app'] = app
+        app = live_folder_checks(holder, results, wait_until, factory)
     finally:
+        app = holder['app']
         try:
             app.call('glance-alias', aliases={})
         finally:
