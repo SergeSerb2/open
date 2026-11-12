@@ -5,6 +5,7 @@ import OpenEngine
 import OpenModel
 import OpenSiteControl
 import OpenWeb
+import SecurityInterface
 
 /// The Boost runtime owns matching, persistence and the editor. The SCC only
 /// reads its values and forwards actions. Nil is the supported interim state.
@@ -157,7 +158,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: boostProfileID) ?? [] : []
     return SiteControlSnapshot(context: context, tiles: tiles, boosts: boosts,
       boostsGloballyEnabled: boostProvider?.boostsGloballyEnabled ?? true,
-      capabilities: factory.extensions.host == nil ? [.clearCache, .securityState] : [.clearCache, .securityState, .extensionPinning],
+      capabilities: Set<SiteCapability>([.clearCache, .securityState])
+        .union(factory.extensions.host == nil ? [] : [.extensionPinning])
+        .union(context.url.scheme?.lowercased() == "https" ? [.certificateViewer] : []),
       commandsEnabled: ["new-boost": boostProvider != nil && !context.isIncognito, "share-page": true,
         "capture-page": context.isWebsite, "capture-full-page": context.isWebsite])
   }
@@ -205,7 +208,16 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard factory?.selectedTab?.id == tabID else { return }; factory?.extensions.run(id, source: .menuEntry)
   }
   func setExtensionPinned(_ id: String, pinned: Bool) { factory?.extensions.host?.setPinned(pinned, extensionID: id) }
-  func showSecurityDetails(tabID: ItemID) {} // Certificate viewer is post-v1.
+  /// SC-16: the footer's security pill opens the page's certificate chain (ArcCore
+  /// `showCertificateDialog`). Open uses the system certificate sheet on the window.
+  func showSecurityDetails(tabID: ItemID) {
+    guard let factory, factory.selectedTab?.id == tabID, let snapshot = snapshot(for: tabID),
+          snapshot.capabilities.contains(.certificateViewer),
+          let chain = factory.hosts[tabID]?.content.certificateChain, !chain.isEmpty,
+          let window = factory.window, window.attachedSheet == nil else { return }
+    SFCertificatePanel.shared().beginSheet(for: window, modalDelegate: nil, didEnd: nil, contextInfo: nil,
+                                           certificates: chain, showGroup: true)
+  }
   func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID) {
     guard kinds == .cookies || kinds == .cache,
           let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
