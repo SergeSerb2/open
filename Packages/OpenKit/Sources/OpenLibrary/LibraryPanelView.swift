@@ -156,6 +156,10 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyBody.font = .systemFont(ofSize:14); emptyBody.alignment = .center
         emptyBody.maximumNumberOfLines = 4
         emptyButton.baseAlpha = 0.09; emptyButton.labelSize = 13
+        // As an enabled key view this button kept a released panel alive (library_content
+        // `closed_view_released` FAIL; passes with it out of the key-view loop). Mouse and
+        // AXPress still press it. Follow-up: find the AppKit owner and restore Tab access.
+        emptyButton.allowsKeyView = false
         // "Choose Folders…": turn on folder sources; reading them next asks macOS for access.
         emptyButton.onPress = { [weak self] in
             guard let self, self.section == .media, let folders = self.viewModel.mediaFolders else { return }

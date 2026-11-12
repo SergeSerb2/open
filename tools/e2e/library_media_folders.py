@@ -17,6 +17,7 @@ import zlib
 import struct
 
 from engine_e2e import Open, wait_until
+from library_overlay import capture_window
 
 
 def png(path, rgb=(200, 40, 40)):
@@ -47,7 +48,7 @@ def fixture(root):
     return folders
 
 
-def run(output, config='Release'):
+def run(output, config='Release', frames=False):
     output.mkdir(parents=True, exist_ok=True)
     result = {'checks': {}}
     app = None
@@ -88,6 +89,12 @@ def run(output, config='Release'):
                   and subtitles['clip.mp4'].startswith('Downloads ·') and not state()['emptyVisible'],
                   names=names(), subtitles=subtitles)
 
+            if frames:
+                # Look STOP frames: the real window, light and dark (Open's own appearance only).
+                for name in ('light', 'dark'):
+                    app.call('appearance', name=name); time.sleep(.6)
+                    capture_window(state()['window'], output / ('media-folders-' + name + '.png'))
+                app.call('appearance', name='system')
             menu('Screenshots')
             off = wait_until(lambda: names() == ['clip.mp4', 'desk-photo.png', 'doc-photo.png'], timeout=8, step=.1)
             check('source_off_hides_rows', off and not next(i for i in menu() if i['title'] == 'Screenshots')['on'], names=names())
@@ -127,5 +134,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--config', choices=['Debug', 'Release'], default='Release')
+    parser.add_argument('--frames', action='store_true')
     args = parser.parse_args()
-    raise SystemExit(0 if run(args.output, args.config) else 1)
+    raise SystemExit(0 if run(args.output, args.config, args.frames) else 1)
