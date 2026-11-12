@@ -234,6 +234,12 @@ enum Checks {
         }
         check(sidebar.menuTitles(nodeID: folder.id).first == "Share Folder…" && sidebar.menuTitles(nodeID: folder.id).last == "Delete", "folder menu (F0119 order)")
         check(sidebar.menuTitles(nodeID: nil).first == "Change Space Icon…" && sidebar.menuTitles(nodeID: nil).last == "Delete Space", "Space menu on empty space (F0117 order)")
+        // Capture session 8 item 8: the header's hover "…" (26 × 26, 13 pt from the right edge, 5 pt down) opens the Space menu.
+        context.forcedHover = .header; scene.needsLayout = true; OffscreenRenderer.settle(scene, runLoop: 0.01)
+        let more = sidebar.spaceHeaderMore
+        check(more.map { !$0.hidden && $0.frame == CGRect(x: sidebar.bounds.width - 39, y: 5, width: 26, height: 26) && $0.menu == sidebar.menuTitles(nodeID: nil) } ?? false,
+              "Space header \"…\" on hover: \(more.map { "\($0.frame) hidden \($0.hidden)" } ?? "none"), menu = the Space menu")
+        context.forcedHover = nil; OffscreenRenderer.settle(scene, runLoop: 0.01)
 
         print("drag and drop targets")
         let pinnedCount = space.pinned.count
