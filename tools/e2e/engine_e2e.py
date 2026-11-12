@@ -13612,7 +13612,10 @@ def main():
         try: return plistlib.loads(blob) if blob else {}
         except Exception: return {}
     _before, _after = _real_keys(real_before), _real_keys(real_after)
-    results["preferences"] = {"ok": _before == _after, "domain": prefs_domain.domain(),
+    # macOS's open/save panel service writes its own keys for the bundle ID; put those back, then compare again.
+    _restored = prefs_domain.restore_system_panel_keys(_before, _after)
+    if _restored: _after = _real_keys(prefs_domain.real_snapshot())
+    results["preferences"] = {"ok": _before == _after, "domain": prefs_domain.domain(), "restoredSystemPanelKeys": _restored,
                               "changedRealKeys": sorted(k for k in set(_before) | set(_after) if _before.get(k) != _after.get(k))}
     print("real_preferences_untouched " + ("PASS" if results["preferences"]["ok"] else "FAIL"), flush=True)
     name = (probe_result_name if opts.only == 'passwords-probe' else

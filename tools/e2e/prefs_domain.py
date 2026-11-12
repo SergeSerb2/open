@@ -34,3 +34,22 @@ def domain():
 def real_snapshot():
     """The user's real domain, read only: for the 'untouched' proof."""
     return subprocess.run(['/usr/bin/defaults', 'export', REAL, '-'], capture_output=True).stdout
+
+
+# Keys that macOS itself writes for the App's bundle ID, outside the App's own preferences object: the open/save
+# panel service records its last folder and layout there (seen: NSOSPLastRootDirectory in the commandbar suite).
+SYSTEM_PANEL_PREFIXES = ('NSOSP', 'NSNav')
+
+
+def restore_system_panel_keys(before, after):
+    """Puts the system panel keys of the real domain back to their values before the run. Returns their names.
+    Only keys with a system panel prefix are ever written; every other difference stays, and fails the run."""
+    changed = sorted(k for k in set(before) | set(after)
+                     if k.startswith(SYSTEM_PANEL_PREFIXES) and before.get(k) != after.get(k))
+    for key in changed:
+        if key in before:
+            import runpy
+            runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'restore_defaults.py'))['write_collection'](key, before[key], REAL)
+        else:
+            subprocess.run(['/usr/bin/defaults', 'delete', REAL, key], capture_output=True)
+    return changed
