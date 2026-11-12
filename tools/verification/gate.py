@@ -3,6 +3,7 @@
 import argparse
 import ast
 import contextlib
+import functools
 import hashlib
 import json
 import os
@@ -30,6 +31,21 @@ M1_E2E = {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwo
 E2E_DEPENDENCIES = {'sidebar': ('profiles',)}
 OBSERVER_SUITES = {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'}
 M5_E2E = {'applescript'}  # No external AppleScript/osascript over SSH on the M1.
+# Rented Macs (NS-MACS.md) qualify functional merge/observers stages only for
+# suites that passed completely there, with clean cleanup, in one gate invocation
+# per suite at main 3ef4c11c (2026-11-11; table in docs/verification.md). Add a
+# suite only with such a rented receipt. Display-keyed visual stages (incognito),
+# intentional-crash stages (actions) and timing rows stay M1-only.
+RENTED_ALLOWED_E2E = {
+    'merge': {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwords',
+              'secrets-import', 'shell', 'owner-watch', 'toolbar', 'numbering', 'history',
+              'tabstrip', 'extensions', 'extensions-p3', 'extensions-e2', 'find', 'measure',
+              'peek', 'media', 'sleep', 'context-menus', 'routing', 'littleopen',
+              'boost-gallery', 'sitedata'},
+    'observers': {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'},
+}
+RENTED_LANES = ('merge', 'observers')
+REFUSED = []  # Receipts found under --m1-receipts that were refused, with the reason.
 SAFE_M5 = set('ntp onboarding welcome import-robust firstrun shell extensions tabstrip window sidebar peek commandbar app-actions actions extensions-p3 extensions-ui sitecontrol extensions-e2 sidebar-completion toolbar numbering media relaunch page page-chrome sleep context-menus routing history applescript boosteditor boost-gallery space-editor incognito sitedata find split littleopen downloads measure'.split())
 CLI = ('commands-demo roundtrip space-legacy space-pad-compare suggest-check commands-dump '
        'route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles '
@@ -66,8 +82,27 @@ def inside_heavy():
     return any(pid in holders for pid, _ in ancestors())
 
 
+@functools.lru_cache(maxsize=1)
+def machine_info():
+    """Host metadata recorded in every receipt; rented Macs are identified from it."""
+    def sysctl(name):
+        return subprocess.run(['sysctl', '-n', name], capture_output=True, text=True).stdout.strip()
+    def sw(flag):
+        return subprocess.run(['sw_vers', flag], capture_output=True, text=True).stdout.strip()
+    return dict(chip=sysctl('machdep.cpu.brand_string'), model=sysctl('hw.model'),
+                virtual=sysctl('kern.hv_vmm_present') == '1', osVersion=sw('-productVersion'), osBuild=sw('-buildVersion'))
+
+
+def is_rented(info):
+    # A rented Namespace Mac: macOS 27 on a virtual Apple M5 Max (NS-MACS.md).
+    return (info.get('virtual') is True and str(info.get('chip', '')).startswith('Apple M5')
+            and str(info.get('model', '')).startswith('VirtualMac') and str(info.get('osVersion', '')).startswith('27.'))
+
+
 def machine():
-    chip = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip()
+    info = dict(machine_info()); chip = info['chip']
+    if is_rented(info):
+        return 'rented'
     return 'M1' if chip.startswith('Apple M1') else 'M5' if chip.startswith('Apple M5') else chip
 
 
@@ -170,6 +205,13 @@ def run_screen(args):
     if dialogs:
         write_json(directory/'screen-end.json', dict(safe=False, systemWindows=dialogs, reason='system dialog present; left untouched'))
         return 2
+    if machine() == 'rented':
+        # An idle rented desktop sleeps its display; NSRunningApplication.activate
+        # of the App child is then refused (R 17:10). Declare user activity and
+        # keep the display awake until this screen worker exits.
+        subprocess.run(['/usr/bin/caffeinate', '-u', '-t', '5'], check=False)
+        subprocess.Popen(['/usr/bin/caffeinate', '-d', '-w', str(os.getpid())],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     command = json.loads(args.command)
     if not isinstance(command, list) or not all(isinstance(s, str) for s in command):
         raise RuntimeError('invalid internal screen command')
@@ -287,7 +329,24 @@ def use_m1_receipt(directory, row_name, identity, config, style, lane):
     matches = []
     for path in paths:
         receipt = read_json(path)
-        if (receipt.get('machine') == 'M1' and receipt.get('source') == identity
+        host = receipt.get('machine')
+        if host == 'rented':
+            stage_names = {stage.get('name') for stage in receipt.get('stages', [])}
+            if row_name not in stage_names:
+                continue
+            if not is_rented(receipt.get('machineInfo') or {}):
+                refuse(path, row_name, 'rented receipt lacks Namespace host metadata (virtual Apple M5, VirtualMac, macOS 27)')
+                continue
+            if receipt.get('lane') not in RENTED_LANES:
+                refuse(path, row_name, 'rented receipts qualify only the merge and observers lanes')
+                continue
+            if row_name[4:] not in RENTED_ALLOWED_E2E.get(receipt.get('lane'), ()):
+                refuse(path, row_name, 'suite is not on the rented ' + str(receipt.get('lane'))
+                       + '-lane allowlist (RENTED_ALLOWED_E2E); add it only with rented proof')
+                continue
+        elif host != 'M1':
+            continue
+        if (receipt.get('source') == identity
                 and receipt.get('config') == config
                 and receipt.get('lane') == lane and receipt.get('partialSelectors') == []):
             stages = [stage for stage in receipt.get('stages', []) if stage.get('name') == row_name]
@@ -296,13 +355,41 @@ def use_m1_receipt(directory, row_name, identity, config, style, lane):
                 continue
             stage = stages[0]
             checks = stage.get('rows')
+            if host == 'rented':
+                # Rented timing observations are never acceptance: drop them here;
+                # the M5 merge run then requires the quiet M1 timing receipt.
+                if not isinstance(checks, list):
+                    continue
+                timing = [row for row in checks if isinstance(row, dict) and row.get('timing') is True]
+                if any(row.get('functionalOK') is not True or row not in receipt.get('rows', []) for row in timing):
+                    continue
+                if timing:
+                    refuse(path, row_name, 'rented timing rows are INFO only; the quiet M1 timing receipt is still required: '
+                           + ', '.join(row.get('row', '?') for row in timing[:8]))
+                functional = [row for row in checks if row not in timing]
+                if (not functional or any(row not in receipt.get('rows', [])
+                        or row.get('status') not in ('PASS', 'BLOCKED', 'DEFERRED') for row in functional)):
+                    continue
+                rows = [dict(row, sourceMachine=host) for row in functional]
+                # The M5 merge run renames these and requires the M1 timing row.
+                rows += [dict(row, sourceMachine=host, status='INFO', observedStatus=row.get('status'),
+                              reason='Rented timing observation; not acceptance') for row in timing]
+                matches.append(dict(stage, rows=rows, evidence=str(path), machine=host))
+                continue
             if (not isinstance(checks, list) or not checks or len(checks) > 4096
                     or any(row not in receipt.get('rows', []) or row.get('status') not in ('PASS', 'BLOCKED', 'DEFERRED') for row in checks)):
                 continue
-            matches.append(dict(stage, evidence=str(path), machine='M1'))
+            matches.append(dict(stage, rows=[dict(row, sourceMachine=host) for row in checks],
+                                evidence=str(path), machine=host))
     if len(matches) > 1:
-        raise ValueError('ambiguous M1 receipts for '+row_name)
+        raise ValueError('ambiguous M1/rented receipts for '+row_name)
     return matches[0] if matches else None
+
+
+def refuse(path, row_name, reason):
+    entry = dict(receipt=str(path), row=row_name, reason=reason)
+    if entry not in REFUSED:
+        REFUSED.append(entry)
 
 
 def collect_e2e(directory, suite, source, config, style, lane):
@@ -322,6 +409,9 @@ def use_m1_timing(directory, row_name, identity, config):
     matches = []
     for path in paths:
         receipt = read_json(path)
+        if receipt.get('machine') == 'rented' and receipt.get('lane') == 'timing':
+            refuse(path, row_name, 'rented timing receipt refused: timing rows need the quiet M1 lane')
+            continue
         if (receipt.get('machine') != 'M1' or receipt.get('source') != identity
                 or receipt.get('config') != config or receipt.get('lane') != 'timing'
                 or receipt.get('partialSelectors') != []):
@@ -583,9 +673,11 @@ def main():
         selected.remove('import-arc')
     if options.lane == 'observers' and any(n not in ['features-idle', *('e2e-'+s for s in OBSERVER_SUITES)] for n in selected):
         parser.error('selected row has no observer stage')
-    if options.lane == 'observers' and machine() != 'M1':
-        parser.error('observer lane requires the M1; no injected launch is allowed here')
+    if options.lane == 'observers' and machine() not in ('M1', 'rented'):
+        parser.error('observer lane requires the M1 or a rented Mac; no injected launch is allowed here')
     if options.lane == 'timing':
+        if machine() == 'rented':
+            parser.error('timing lane refused on a rented Mac: timing rows need the quiet M1 (NS-MACS.md)')
         if machine() != 'M1' or options.config != 'Release':
             parser.error('timing lane requires M1 Release')
         # Queue v3 labels a one-slot M1 holder "build" even when it requested
@@ -615,7 +707,8 @@ def main():
     global GATE_DIRECTORY
     GATE_DIRECTORY = directory
     rows = []; stages = []; start = time.time()
-    receipt = dict(schema=1, machine=machine(), source=source, config=options.config,
+    receipt = dict(schema=1, machine=machine(), machineInfo=machine_info(), refusedReceipts=REFUSED,
+                   source=source, config=options.config,
                    style='chrome', lane=options.lane, selected=selected, partialSelectors=sorted(partial),
                    prReady=not options.only and not options.quick and not options.no_e2e and options.lane=='merge',
                    started=start, rows=rows, stages=stages)
@@ -632,7 +725,8 @@ def main():
     e2e = [n[4:] for n in selected if n.startswith('e2e-')] + (['window'] if 'timing-window' in selected else [])
     def required_elsewhere(name):
         return ((machine() == 'M5' and (name in M1_E2E or name not in SAFE_M5))
-                or (machine() == 'M1' and name in M5_E2E))
+                or (machine() == 'M1' and name in M5_E2E)
+                or (machine() == 'rented' and name in M5_E2E))
     local_e2e = [n for n in e2e if not required_elsewhere(n)]
     heavy = Path.home() / 'Library/Caches/OpenRE/scripts/heavy.sh'
     command = [str(heavy), sys.executable, str(Path(__file__).resolve()), '--heavy-worker',
@@ -683,7 +777,7 @@ def main():
             launch_only = name == 'window' and 'timing-window' in selected
             label = 'timing-window' if launch_only else 'e2e-'+name
             if required_elsewhere(name):
-                if machine() == 'M1':
+                if machine() in ('M1', 'rented') and name in M5_E2E:
                     rows.append(dict(row=label+'/receipt',status='M5_REQUIRED',
                                      reason='M1 forbids external AppleScript over SSH',evidence=''))
                     continue
@@ -738,7 +832,12 @@ def main():
                         check['timingSample'] = str(sample_path)
                         check['sampleValid'] = bool(sample and sample.get('validBefore') is True
                                                     and check.get('sampleValid', True) is True)
-                        if not check['sampleValid']:
+                        if machine() == 'rented' and check.get('functionalOK') is True:
+                            # A rented Mac never judges timing (NS-MACS.md); keep the raw result.
+                            check['observedStatus'] = check['status']
+                            check['status'] = 'INFO'
+                            check['reason'] = 'Rented Mac timing observation; quiet M1 timing row required'
+                        elif not check['sampleValid']:
                             check['observedStatus'] = check['status']
                             if check.get('functionalOK') is True:
                                 check['status'] = 'INFO' if machine() == 'M5' else 'INVALID_SAMPLE'
@@ -774,7 +873,7 @@ def main():
             imported = use_m1_timing(options.m1_receipts, name, source, options.config)
             # Keep the M5 observation separate from the authoritative quiet-M1
             # row. A valid M5 miss still fails; an invalid one remains INFO.
-            row['row'] = 'm5/'+name
+            row['row'] = ('rented/' if row.get('sourceMachine') == 'rented' else 'm5/')+name
             rows.append(imported if imported else dict(row=name, status='M1_REQUIRED',
                         reason='Quiet M1 timing lane required (LEAD 06:30)', evidence=''))
     if rc and not any(row['status'] in ('FAIL', 'INTERRUPTED') or row.get('observedStatus') == 'FAIL' for row in rows):
@@ -784,6 +883,9 @@ def main():
     write_json(directory/'gate.json',receipt)
     lines=['| Row | Status | Observed | Policy | Reason |','|---|---|---|---|---|']
     lines += ['| '+r['row']+' | '+r['status']+' | '+r.get('observedStatus', r['status'])+' | '+r['policy']+' | '+r.get('reason','').replace('|','/')+' |' for r in rows]
+    if REFUSED:
+        lines += ['', '| Refused receipt | Row | Reason |', '|---|---|---|']
+        lines += ['| '+r['receipt']+' | '+r['row']+' | '+r['reason'].replace('|','/')+' |' for r in REFUSED]
     lines += ['', '| Exception | Verdict | Clears when |', '|---|---|---|']
     lines += ['| '+r['row']+' | '+r['verdict']+' | '+r['clearsWhen']+' |' for r in inventory]
     lines += ['', 'Logs: '+str(directory), 'Gate: '+('FAIL' if failed else 'PASS')]
