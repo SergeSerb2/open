@@ -568,6 +568,17 @@ def run(factory, results, tmp, api):
         # L05: a profile with no Easels shows the empty state (docs/re/easels.md copy).
         app.quit(); app = None
         app = factory(urls=('about:blank',), fresh=True)
+        # L06: Window ▸ View Easels & Notes (Arc's `viewEaselsAndNotes:`) opens the Library at Easels,
+        # also when the Library last showed another page.
+        app.call('library', action='open', section='downloads')
+        app.call('library-close')
+        menu = {r['id']: r for r in app.call('menu-state') if r['id'] == 'view-easels-notes'}
+        app.call('menu-perform', id='view-easels-notes')
+        opened = api.wait_until(lambda: (lambda x: x if x.get('open') and x.get('section') == 'easels' else None)(app.call('library')), timeout=8, step=.2)
+        record('L06_view_easels_and_notes', bool(opened) and menu.get('view-easels-notes', {}).get('enabled') is True
+               and menu['view-easels-notes'].get('title') == 'View Easels & Notes',
+               menu=menu, section=(opened or app.call('library')).get('section'))
+        app.call('library-close')
         app.call('library', action='open', section='easels')
         empty = api.wait_until(lambda: (lambda x: x if x.get('section') == 'easels' and x.get('emptyVisible') else None)(app.call('library')), timeout=8, step=.2)
         record('L05_library_empty', empty and empty['emptyState']['title'] == 'No Easels yet'
