@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var directories: ProfileDirectories!
   /// Easel documents (`<data root>/Easels`); made on the first Easel open, never at launch.
   private var easelStore: EaselStore?
+  var hasEaselStore: Bool { easelStore != nil }
+  /// Command bar search over every Easel (made on the first command bar open).
+  private(set) lazy var easelSearch = EaselSearch(app: self)
   var easels: EaselStore {
     if let easelStore { return easelStore }
     let store = EaselStore(root: directories.root); easelStore = store; return store
