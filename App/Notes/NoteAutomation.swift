@@ -4,6 +4,34 @@ import OpenDocuments
 import OpenModel
 
 extension AutomationController {
+  static func formatRows(_ formats: [NoteFormat]) -> [[String: Any]] {
+    formats.map { f in
+      var row: [String: Any] = ["type": f.type, "location": f.location, "length": f.length]
+      if let url = f.url { row["url"] = url }
+      if let level = f.level { row["level"] = level }
+      return row
+    }
+  }
+  static func barState(_ editor: NoteEditorView) -> [String: Any] {
+    let bar = editor.formatBar
+    var selectionTop: Double = 0
+    if let manager = editor.bodyView.layoutManager, let container = editor.bodyView.textContainer {
+      let glyphs = manager.glyphRange(forCharacterRange: editor.bodyView.selectedRange(), actualCharacterRange: nil)
+      selectionTop = Double(editor.convert(manager.boundingRect(forGlyphRange: glyphs, in: container), from: editor.bodyView).maxY)
+    }
+    return ["visible": !bar.isHidden, "frame": [bar.frame.minX, bar.frame.minY, bar.frame.width, bar.frame.height].map { Double($0) },
+            "selectionTop": selectionTop, "editingLink": bar.isEditingLink,
+            "on": bar.buttons.filter(\.isOn).map(\.name), "items": bar.buttons.map(\.name)]
+  }
+  static func imageCount(_ editor: NoteEditorView) -> Int {
+    var count = 0
+    let storage = editor.bodyView.attributedString()
+    storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
+      if (value as? NSTextAttachment)?.image != nil { count += 1 }
+    }
+    return count
+  }
+
   static func hex(_ color: CGColor?) -> String {
     guard let color, let rgb = NSColor(cgColor: color)?.usingColorSpace(.sRGB) else { return "" }
     let parts: [CGFloat] = [rgb.redComponent, rgb.greenComponent, rgb.blueComponent]
@@ -21,6 +49,11 @@ extension AutomationController {
     case "focus": allowed = ["action", "field"]
     case "type", "paste": allowed = ["action", "text", "field"]
     case "flush": allowed = ["action"]
+    case "select": allowed = ["action", "start", "length"]
+    case "press": allowed = ["action", "item"]
+    case "gutter": allowed = ["action", "item"]
+    case "paste-file": allowed = ["action", "path"]
+    case "click-link": allowed = ["action", "at"]
     default: throw Failure(message: "unknown note action")
     }
     guard Set(args.keys).isSubset(of: allowed) else { throw Failure(message: "unknown note argument") }
@@ -57,6 +90,42 @@ extension AutomationController {
         }
       }
     case "flush": app.notes.flush()
+    case "select", "press", "gutter", "paste-file", "click-link":
+      guard let tab = factory.selectedTab, let host = factory.noteHosts[tab.id], let window = host.editor.window else {
+        throw Failure(message: "the selected tab is not a shown Note")
+      }
+      let editor = host.editor
+      switch action {
+      case "select":
+        guard let start = args["start"] as? Int, let length = args["length"] as? Int, start >= 0, length >= 0,
+          start + length <= (editor.bodyView.string as NSString).length else { throw Failure(message: "range outside the body") }
+        window.makeFirstResponder(editor.bodyView)
+        editor.bodyView.setSelectedRange(NSRange(location: start, length: length))
+        editor.layoutSubtreeIfNeeded(); editor.updateChrome()
+      case "press":
+        // The real button: target/action of the visible format bar.
+        guard let item = args["item"] as? String, !editor.formatBar.isHidden,
+          let button = editor.formatBar.buttons.first(where: { $0.name == item }) else { throw Failure(message: "format bar hidden or unknown item") }
+        button.performClick(nil)
+      case "gutter":
+        // The menu the visible "+" pops, item by title.
+        guard let item = args["item"] as? String, !editor.gutterButton.isHidden else { throw Failure(message: "gutter hidden") }
+        let menu = editor.gutterMenu()
+        guard let index = menu.items.firstIndex(where: { $0.title == item }) else { throw Failure(message: "unknown gutter item") }
+        menu.performActionForItem(at: index)
+      case "paste-file":
+        // AppKit's paste path with a file URL on a private pasteboard (also the drop path).
+        guard let path = args["path"] as? String else { throw Failure(message: "missing path") }
+        window.makeFirstResponder(editor.bodyView)
+        let board = NSPasteboard(name: NSPasteboard.Name("open.automation.note-paste"))
+        board.clearContents(); board.writeObjects([URL(fileURLWithPath: path) as NSURL])
+        _ = editor.bodyView.readSelection(from: board, type: .fileURL)
+        board.releaseGlobally()
+      default:
+        guard let at = args["at"] as? Int, let storage = editor.bodyView.textStorage, at >= 0, at < storage.length,
+          let link = storage.attribute(.link, at: at, effectiveRange: nil) else { throw Failure(message: "no link there") }
+        editor.bodyView.clicked(onLink: link, at: at)
+      }
     default: break
     }
     var tab = factory.selectedTab
@@ -91,6 +160,16 @@ extension AutomationController {
       "background": Self.hex(host?.editor.layer?.backgroundColor),
       "editable": host.map { $0.editor.titleView.isEditable && $0.editor.bodyView.isEditable } ?? false,
       "unreadable": host?.unreadable ?? false,
+      "formats": host.map { Self.formatRows(NoteRichText.formats(of: $0.editor.bodyView.attributedString())) } ?? [],
+      "storedFormats": noteID.flatMap { id in (try? Data(contentsOf: app.notes.fileURL(for: id))).flatMap {
+        (try? JSONSerialization.jsonObject(with: $0) as? [String: Any])?["formats"] } } ?? [],
+      "selection": host.map { [$0.editor.bodyView.selectedRange().location, $0.editor.bodyView.selectedRange().length] } ?? [],
+      "typingBlock": host.flatMap { $0.editor.bodyView.typingAttributes[.noteBlock] as? String } ?? "",
+      "formatBar": host.map { Self.barState($0.editor) } ?? [:],
+      "gutterVisible": host.map { !$0.editor.gutterButton.isHidden } ?? false,
+      "images": host.map { Self.imageCount($0.editor) } ?? 0,
+      "imageError": host?.editor.lastImageError ?? "",
+      "assets": noteID.map { (try? FileManager.default.contentsOfDirectory(atPath: app.notes.assetDirectory(for: $0).path))?.count ?? 0 } ?? 0,
       "favicon": tab?.live.faviconPNG == NoteTab.faviconPNG && tab?.live.faviconPNG != nil,
       "file": file?.path ?? "", "stored": stored,
       "pendingWrites": app.notes.hasPendingWrites, "writeCount": app.notes.writeCount,
