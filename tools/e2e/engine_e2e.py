@@ -10416,9 +10416,9 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     undo()
     require('E3_unpin_and_menu_duplicate_selection', unpinned and len(ids_after - ids_before) == 3 and shape(tree()['today']) == before_dup,
             newIDs=sorted(ids_after - ids_before), tree=tree())
-    select(abc); app.call('sidebar-menu', node=a, item='Pin Tabs')
+    select(abc); app.call('sidebar-menu', node=a, item='Pin Tabs', alternate=True)
     menu_pinned = all(app.tab(n)['section'] == 'pinned' for n in abc)
-    app.call('sidebar-menu', node=a, item='Unpin Tabs')
+    app.call('sidebar-menu', node=a, item='Unpin Tabs', alternate=True)
     before_context_dup = shape(tree()['today']); ids_before = {n['id'] for n in walk(tree()['today'])}
     app.call('sidebar-menu', node=a, item='Duplicate'); ids_after = {n['id'] for n in walk(tree()['today'])}; undo()
     require('A3_selection_context_pin_duplicate', menu_pinned and all(app.tab(n)['section'] == 'today' for n in abc)
@@ -10430,7 +10430,7 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     # Copy plain/Markdown and both move variants use real selection menus.
     select(abc)
     app.call('sidebar-menu', node=a, item='Copy Links'); plain = app.call('pasteboard')
-    app.call('sidebar-menu', node=a, item='Copy links as Markdown'); markdown = app.call('pasteboard')
+    app.call('sidebar-menu', node=a, item='Copy links as Markdown', alternate=True); markdown = app.call('pasteboard')
     require('A3_selection_copy_links', plain.splitlines() == [app.tab(n)['url'] for n in abc]
             and markdown.splitlines() == ['[%s](%s)' % (app.tab(n)['title'], app.tab(n)['url']) for n in abc])
     dest = fresh('Move Destination'); app.call('space', space=space); select(abc)

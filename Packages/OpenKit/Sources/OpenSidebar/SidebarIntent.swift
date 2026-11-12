@@ -73,6 +73,10 @@ public enum SidebarIntent: Equatable, Sendable {
     case copyLink(nodeID: ItemID, markdown: Bool)
     case copyAllLinks(folderID: ItemID, markdown: Bool)
     case share(nodeID: ItemID)
+    /// "Share ▸ ‹service›" on a row or the URL field: the system share service by title. App.
+    case shareVia(nodeID: ItemID, service: String)
+    /// "Share Split View…": the system share picker with the panes' links without trackers. App.
+    case shareSplit(splitID: ItemID)
     case changeIcon(nodeID: ItemID)
     case customizePage(tabID: ItemID)
     case openInSplitView(tabID: ItemID)
@@ -97,6 +101,10 @@ public enum SidebarIntent: Equatable, Sendable {
     case archiveNodes(ids: [ItemID])
     case deleteFolders(ids: [ItemID])
     case newFolderFromSelection(ids: [ItemID])
+    /// Selection menu "Open in Split View": the selected tabs become one split (2…4 tabs).
+    case splitNodes(ids: [ItemID])
+    /// Selection menu "Share N Items…": the share picker with the selection's links. App.
+    case shareNodes(ids: [ItemID])
     case setPinned(ids: [ItemID], pinned: Bool)
     case duplicateNodes(ids: [ItemID])
     case copyLinks(ids: [ItemID], markdown: Bool)

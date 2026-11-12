@@ -694,6 +694,18 @@
         }
         let fresh = controller.sidebar.libraryButtonContextMenu() ?? menu
         return ["items": fresh.items.map { ["title": $0.title, "enabled": $0.isEnabled, "on": $0.state == .on] as [String: Any] }]
+      case "plus-popover":
+        // The bottom-bar "+" popover: op=toggle (as a click on "+"), op=key code=<125|126|36|53>, or state only.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no window") }
+        switch a["op"] as? String {
+        case "toggle"?: controller.sidebar.togglePlusPopover()
+        case "key"?:
+          guard let code = a["code"] as? Int, [125, 126, 36, 76, 53].contains(code) else { throw Failure(message: "unsupported key code") }
+          controller.sidebar.plusPopoverKey(UInt16(code))
+        case nil: break
+        default: throw Failure(message: "unknown plus-popover op")
+        }
+        return controller.sidebar.plusPopoverState
       case "sidebar-menu-items":
         // The right-click menu of a row (or the Space with no node) in Arc's notation:
         // "—" for a separator, "Title ▸" for a submenu; `disabled` lists disabled titles.

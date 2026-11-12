@@ -11,7 +11,8 @@ def checks(app, results, origin, h):
     def copy(name, node, menu, expected, title):
         shown = app.call('toasts')['shown']
         app.call('pasteboard', text='clean-links-copy-sentinel')
-        app.call('sidebar-menu', node=node, item=menu)
+        # Open's "Copy links as Markdown" on a selection is an ⌥ alternate (drawn menu = Arc's, session 8 item 6).
+        app.call('sidebar-menu', node=node, item=menu, **({'alternate': True} if menu == 'Copy links as Markdown' else {}))
         actual = app.call('pasteboard')
         toast_state = app.call('toasts')
         toast = h.page_newest_toast(app, title) if title else None
@@ -55,7 +56,9 @@ def checks(app, results, origin, h):
         # The live model must retain the original navigation URLs.
         record('navigation_unchanged', [app.tab(tab)['url'] for tab in ids] == raw)
         app.call('select', tab=ids[0])
-        share('row_share', lambda: app.call('sidebar-menu', node=ids[0], item='Share…'), ids[0])
+        # Share ▸ lists the system services (capture session 8 item 1); the first one, recorded, not opened.
+        service = app.call('sidebar-menu-items', node=ids[0], path='Share')['items'][0]
+        share('row_share', lambda: app.call('sidebar-menu', items=['Share', service], node=ids[0]), ids[0])
         share('page_share', lambda: app.call('menu-perform', id='share-page'), 'page')
         app.call('menu-perform', id='copy-url')
         share('toast_share', lambda: app.call('toast-action', index=0), 'toast')
@@ -103,7 +106,7 @@ def checks(app, results, origin, h):
         panes = [pane['id'] for pane in app.call('split', op='state')['panes']]
         record('split_contains_both_tabs', set(panes) == set(ids))
         split = app.call('split', op='state')['id']
-        copy('split_pane_markdown', split, 'Clean Split Tracker/Copy Link as Markdown',
+        copy('split_pane_markdown', split, 'Clean Split Tracker/Copy link as Markdown',
              '[%s](%s)' % (app.tab(ids[1])['title'], clean[1]), singular)
         shown = app.call('toasts')['shown']
         app.call('split', op='menu', item='Copy Link')

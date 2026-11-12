@@ -133,9 +133,11 @@ public enum SpaceListMetrics {
     public static let headerTitleBaselineOffset: CGFloat = 14
     /// Header hover fill `[8, 0, W − 16, 36]` (A0413).
     public static let headerFillInsetX: CGFloat = 8
-    /// "…" button, shown on hover at the header's right end. guess size.
+    /// "…" button, shown on hover at the header's right end: 26 × 26 at `[W − 39, 5]` (capture
+    /// session 8 item 8, AX `sidebarSpaceEditButton` [341, 265, 26, 26] in a 360 pt sidebar at
+    /// x 20, header top 260; the title ends 2 pt before it).
     public static let headerMoreSize: CGFloat = 26
-    public static let headerMoreTrailing: CGFloat = 11
+    public static let headerMoreTrailing: CGFloat = 13
     /// First outline row is an empty 3 pt spacer.
     public static let spacerRowHeight: CGFloat = 3
     public static let rowHeight: CGFloat = 41
