@@ -36,7 +36,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | Archived Tabs (S1L; session 8 item 11, `v10/29`, `v12/29a`) | right-click opens no menu; hover shows a tooltip with the tab title; rows show the title and the URL without its scheme; the Trash and Undo glyphs of S1L did not show in session 8 (condition not established) | the same; hover Delete / Restore kept | glyph condition unknown |
 | Media | not captured (Media stayed at its first-use card) | Open · Copy · Show in Finder · Save As… · — · Delete (captures); Open · Copy · Show in Finder · — · Hide from Library (folder files) | C3 item 12 |
 | Easels (S4) | card menu: a single "Delete" | a single "Delete" | none |
-| Spaces | rows select a tab; card and row menus not captured | none | C3 item 13 |
+| Spaces (session 8 item 13, `v13/34-item-13`) | card header right-click and footer "…": the sidebar Space menu without "Manage Spaces…" and its separator; a tab row keeps the row menu | the same (`SidebarMenus.space(_:inLibrary:)`) | none |
 | Boosts | not captured | Edit Boost · Turn On/Off · — · Delete | C3 item 14 |
 | History | not a Library category in Arc; ⌘Y opens the browser's own History page (S1L) | Open has a History section | Open addition; its menus are Open's own (no Arc parity target) |
 

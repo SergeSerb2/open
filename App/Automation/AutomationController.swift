@@ -2839,7 +2839,15 @@
           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
         else { throw Failure(message: "could not create row menu event") }
         menu = outline.menu(for: event)
+      } else if args["header"] as? Bool == true, let controls = manager.controls(spaceID: id) {
+        // A right-click on the card header (Library › Spaces), through the view's own menu(for:).
+        let point = controls.convert(NSPoint(x: controls.bounds.midX, y: 12), to: nil)
+        guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        else { throw Failure(message: "could not create header menu event") }
+        menu = controls.menu(for: event)
       } else { menu = manager.controls(spaceID: id)?.makeMenu() }
+      if title == "?" { return menu?.items.map { $0.isSeparatorItem ? "separator" : $0.title } ?? [] }
       // "Turn into Folder/<Space>" walks one submenu level per path component.
       var level = menu
       let path = title.split(separator: "/").map(String.init)
