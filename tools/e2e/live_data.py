@@ -25,7 +25,7 @@ def run(factory, results, tmp, harness):
         got = {u: app.call('glance-match', url=u).get('site') for u in cases}
         results['live_glance_host_match'] = {'ok': got == cases, 'got': got}
 
-        app.call('glance-alias', aliases={'recents.localhost': 'linear', 'empty.localhost': 'notion'})
+        app.call('glance-alias', aliases={'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
         now_rows = [  # (path, title, seconds ago) — newest first after sorting.
             ('issue/ENG-3', 'ENG-3 Newest issue', 60),
             ('issue/ENG-2', 'ENG-2 Middle issue', 600),
@@ -41,7 +41,7 @@ def run(factory, results, tmp, harness):
         empty = new_tab(app, url('empty', ''))
         app.call('pin', tab=empty)
         today = new_tab(app, url('plain', 'today'))
-        today_url = url('recents', 'today-row')
+        today_url = url('today', 'design/today-row')  # own host: its visit must not reach the Linear card
         today_site = new_tab(app, today_url)
         app.call('select', tab=today)
 
@@ -55,17 +55,19 @@ def run(factory, results, tmp, harness):
             and len(state.get('card', [])) == 4 and state['card'][2] == 240,
             'hover': shown, 'state': state}
 
-        app.call('glance-open', row=0)
+        opened = app.call('glance-open', row=0)
+        first_state = app.call('peek-state')
         peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] and s['stack'][-1]['content'] > 0 else None)(app.call('peek-state')), timeout=5, step=.05)
         top = peek['stack'][-1] if peek else {}
         href = ''
         if peek:
             app.call('wait', tab=top['content'])
             href = app.eval(top['content'], 'location.href')
-        results['live_recents_row_opens_peek'] = {'ok': bool(peek) and href == url('recents', 'issue/ENG-3') and top.get('source') == linear
-            and app.call('glance-state').get('shown') is False, 'peek': peek, 'href': href}
+        results['live_recents_row_opens_peek'] = {'ok': bool(peek) and href == url('recents', 'issue/ENG-3') and top.get('source') == linear and app.call('window-state').get('selected') == linear
+            and app.call('glance-state').get('shown') is False, 'peek': peek, 'href': href, 'opened': opened, 'first': first_state, 'window': app.call('window-state')}
         app.call('peek-close')
         wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        app.call('select', tab=today)  # the Peek selected its Pinned source; hover skips the current tab
 
         shown = hover(empty)
         state = app.call('glance-state')
