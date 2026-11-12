@@ -112,6 +112,9 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         throttled = app.call('live-folder-refresh', manual=False)
         results['live_folder_throttle_10s'] = {'ok': throttled.get('outcome') is None and throttled.get('throttled', 0) >= 1, 'refresh': throttled}
         # L3: the Live Folder's own menu (live-data §2.2).
+        gh['prs']['created'] = [('acme/app', 12, 'Fix sidebar drag (v2)', 'open'), ('acme/web', 7, 'Draft: new header', 'draft')]
+        app.call('live-folder-refresh')
+        state = app.call('live-folder-state')
         folder = state['id']
         def menu_state(path): 
             try: return app.call('sidebar-menu-state', node=folder, item=path)
