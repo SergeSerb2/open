@@ -189,7 +189,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         var r: [AnyObject] = [spacer]
         if !context.isIncognito, !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
         if !context.isIncognito, !space.today.isEmpty { r.append(divider) }
-        r.append(newTab)
+        if context.manager?.libraryLayout != true { r.append(newTab) }
         r += space.today.map(\.object)
         return r
     }
@@ -782,7 +782,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         SidebarDiagnostics.countFolderWork("height-queries")
         return switch item {
-        case is SpacerItem: SpaceListMetrics.spacerRowHeight
+        // NSOutlineView requires a strictly positive height. Keep the sentinel
+        // for existing child/drop indexes, with no visible card-top spacing.
+        case is SpacerItem: context.manager?.libraryLayout == true ? 0.01 : SpaceListMetrics.spacerRowHeight
         case is DividerItem: SpaceListMetrics.dividerRowHeight
         default: SpaceListMetrics.rowHeight
         }
@@ -870,7 +872,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             let pinnedCount = space.isPinnedCollapsed ? 0 : space.pinned.count
             let pinnedEnd = 1 + pinnedCount
             let newTabIndex = pinnedEnd + (space.today.isEmpty ? 0 : 1)
-            let todayStart = newTabIndex + 1
+            let todayStart = newTabIndex + (context.manager?.libraryLayout == true ? 0 : 1)
             if childIndex <= pinnedEnd { return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil) }
             if childIndex <= todayStart { return (.spaceToday(space.id), 0, childIndex == todayStart ? nil : (nil, todayStart)) }
             return (.spaceToday(space.id), childIndex - todayStart, nil)
@@ -1201,7 +1203,7 @@ final class SpaceHeaderView: NSView {
         let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true; self?.needsLayout = true }
         CATransaction.begin()
         CATransaction.setDisableActions(!context.animatesChanges)
-        fill.backgroundColor = SidebarRole.rowHover.cgColor(contentAppearance)
+        fill.backgroundColor = context.style(for: space).rowHoverFill(contentAppearance).cgColor
         CATransaction.setAnimationDuration(Motion.hoverFade)
         fill.opacity = hovered ? 1 : 0
         CATransaction.commit()

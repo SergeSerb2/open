@@ -182,16 +182,18 @@ enum EditorChecks {
     static func modes() throws {
         let scene = try EditorScene()
         let knob = scene.controller.state.knob
-        for (index, mode, range) in [(2, SpaceStyleAppearance.dark, 0.01...0.425), (1, .light, 0.575...0.97), (0, .automatic, 0.575...0.97)] {
+        let key = scene.controller.state.style!.keyColor, range = scene.controller.state.range
+        for (index, mode, scheme) in [(2, SpaceStyleAppearance.dark, ContentAppearance.dark), (1, .light, .light), (0, .automatic, .light)] {
             scene.click(scene.view.modes.buttons[index])
             let state = scene.controller.state
-            let content = SpaceThemeStyle(theme: scene.space.theme, system: .light).contentAppearance
+            let style = SpaceThemeStyle(theme: scene.space.theme, system: .light)
             let primary = ThemeColorMath.primaryPalette(key: ThemeColorMath.toP3(state.style!.keyColor))
             let palettes = ThemeColorMath.semanticPalettes(primary)
-            let expected = mode == .dark ? ContentAppearance.dark : mode == .light ? .light
-                : ThemeColorMath.contentAppearance(key: ThemeColorMath.toP3(state.style!.keyColor), light: palettes.light, dark: palettes.dark, bias: ThemeTuning.automaticBias)
-            check(state.appearance == mode && state.range == range && near(state.knob, knob) && content == expected,
-                  "E5 \(mode.rawValue) keeps knob radius and derives the required palette and range")
+            // Arc 1.172.2: every mode keeps the key and the §6.5 polarity; the mode picks the window scheme.
+            let expected = ThemeColorMath.contentAppearance(key: ThemeColorMath.toP3(state.style!.keyColor), light: palettes.light, dark: palettes.dark, bias: SidebarThemeRules.polarityBias)
+            check(state.appearance == mode && state.style!.keyColor == key && state.range == range && near(state.knob, knob)
+                  && style.contentAppearance == expected && style.windowColorScheme == scheme,
+                  "E5 \(mode.rawValue) keeps the key and polarity and sets the window scheme")
         }
         scene.controller.close()
     }

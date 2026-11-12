@@ -6525,23 +6525,19 @@ def media_checks(factory, results, tmp):
         still = app.eval(video, "document.getElementById('main').paused") is False
         results["media_auto_pip_return"] = {"ok": bool(closed) and still and closed.get("reason") == "sourceShown", "pip": pip(), "playing": still}
 
-        # PB1 / D-4 revised: a minimized window is a leave for the tab it shows (Arc:
-        # `presentPipForOccludedWindow`); restoring it closes the automatic PiP like a tab return.
+        # D-4, confirmed by capture (C-report-s6 §5, Arc 1.172.2): minimizing a window that shows
+        # audible video opens no PiP. Only a tab leave does.
         app.call("window-miniaturize")
-        mini_pip = wait_until(lambda: (lambda p: p if p["state"] == "active" and p.get("tab") == video else None)(pip()), timeout=3, step=.02)
-        mini_decision = m(video)["decision"]
+        mini_state = state_when(app, lambda st: st["miniaturized"], timeout=5, step=.05)
+        time.sleep(1.0)
+        mini_pip = pip()
         app.call("window-deminiaturize")
-        # A Dock click also activates Open. Without that, the restored window is an inactive,
-        # covered window: by the same rule an occlusion (leave), so PiP would stay open.
         app.call("window-focus", id=app.call("window-state")["id"], activate=True)
-        restored = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
+        restored_state = state_when(app, lambda st: not st["miniaturized"], timeout=5, step=.05)
         restored_playing = app.eval(video, "document.getElementById('main').paused") is False
-        results["media_auto_pip_window_hidden"] = {"ok": bool(mini_pip) and bool(mini_pip and mini_pip.get("automatic"))
-            and bool(restored) and restored.get("reason") == "sourceShown" and restored_playing,
-            "minimized": mini_pip, "decision": mini_decision, "restored": restored, "playing": restored_playing}
-        # Like the tab-return row: the page itself leaves PiP when the close animation ends.
-        settled = wait_until(lambda: pip()["state"] == "closed" and not m(video)["pictureInPicture"], timeout=3, step=.05)
-        results["media_auto_pip_window_hidden"]["settledClosed"] = bool(settled)
+        results["media_no_auto_pip_on_minimize"] = {"ok": bool(mini_state) and mini_pip["state"] != "active"
+            and not m(video)["pictureInPicture"] and bool(restored_state) and restored_playing,
+            "pipWhileMinimized": mini_pip, "playing": restored_playing}
 
         # E-M7: Close pauses and snoozes until the tab shows again.
         select(home); wait_pip("active")

@@ -3,6 +3,7 @@ import AppKit
 import OpenModel
 import OpenSettings
 import OpenSpaceEditor
+import OpenSidebar
 
 extension AutomationController {
   /// The real Settings presenter, native text field and AX buttons. These
@@ -28,7 +29,7 @@ extension AutomationController {
       vm.confirmsDelete=false;vm.confirmsUnused=false;vm.showsCreate=false;vm.showsSuggestNotice=false
       adapter.profileIconPicker?.close()
     case "press":
-      let owner = args["library"] as? Bool == true ? adapter.libraryPresenter?.window : adapter.settingsPresenter.window
+      let owner = args["library"] as? Bool == true ? adapter.libraryWindow : adapter.settingsPresenter.window
       guard let label=args["label"] as? String, let owner,
         let control=profileAX(owner.attachedSheet ?? owner,label:label) else { throw Failure(message:"Profile control not found") }
       let press=NSSelectorFromString("accessibilityPerformPress")
@@ -55,10 +56,29 @@ extension AutomationController {
       guard let raw=args["url"] as? String,raw.utf8.count <= 8192,let url=URL(string:raw) else {throw Failure(message:"invalid Profile URL")}
       adapter.openURL(url,profileID:adapter.settings.selectedProfileID)
     case "indicator-menu":
-      let views = args["library"] as? Bool == true
-        ? profileIndicatorViews(in:adapter.libraryPresenter?.window?.contentView,identifier:"spaceManagerSpaceHeaderIndicator")
-        : profileIndicatorViews()
-      guard let view=views.first else {throw Failure(message:"no visible Profile indicator")}
+      let inLibrary = args["library"] as? Bool == true
+      let view: NSView
+      if inLibrary {
+        guard let manager = profileLibraryManager(in:adapter.libraryWindow?.contentView) else {
+          throw Failure(message:"Library Space cards are not visible")
+        }
+        let id: SpaceID
+        if let raw = args["space"] as? String {
+          guard raw.utf8.count <= 36, let uuid = UUID(uuidString:raw) else { throw Failure(message:"invalid Space ID") }
+          id = SpaceID(rawValue:uuid)
+        } else {
+          guard let first = manager.columnOrder.first else { throw Failure(message:"Library has no Space card") }
+          id = first
+        }
+        guard let controls = manager.controls(spaceID:id),
+          let button = controls.subviews.first(where: { !$0.isHiddenOrHasHiddenAncestor && $0.accessibilityLabel() == "More options" }) else {
+          throw Failure(message:"Space card More options button is not visible")
+        }
+        view = button
+      } else {
+        guard let indicator = profileIndicatorViews().first else { throw Failure(message:"no visible Profile indicator") }
+        view = indicator
+      }
       let selection = args["item"] as? String
       guard (selection?.utf8.count ?? 0) <= 1024 else {throw Failure(message:"Profile menu title too long")}
       profileIndicatorMenuTitles=[]
@@ -68,12 +88,16 @@ extension AutomationController {
         nonisolated(unsafe) let menu=note.object as? NSMenu
         MainActor.assumeIsolated {
           guard let menu else {return}
-          self?.profileIndicatorMenuTitles=menu.items.map(\.title)
+          // Library cards have no Profile indicator. Open their real More
+          // options menu and select the real Set Profile submenu action.
+          let choices = inLibrary ? menu.items.first(where: { $0.title == "Set Profile" })?.submenu : menu
+          self?.profileIndicatorMenuTitles=choices?.items.map(\.title) ?? []
+          nonisolated(unsafe) let profileMenu=choices
           nonisolated(unsafe) let trackingMenu=menu
           let timer=Timer(timeInterval:0.05,repeats:false) { _ in
             MainActor.assumeIsolated {
-              if let selection, let index=trackingMenu.items.firstIndex(where:{$0.title == selection && $0.isEnabled}) {
-                trackingMenu.performActionForItem(at:index)
+              if let selection, let profileMenu, let index=profileMenu.items.firstIndex(where:{$0.title == selection && $0.isEnabled}) {
+                profileMenu.performActionForItem(at:index)
               }
               trackingMenu.cancelTrackingWithoutAnimation()
             }
@@ -85,12 +109,13 @@ extension AutomationController {
       // service an ordinary main-queue async block on this AppKit version.
       defer {NotificationCenter.default.removeObserver(observer)}
       _=view.accessibilityPerformPress()
+      guard !profileIndicatorMenuTitles.isEmpty else { throw Failure(message:"Set Profile menu is missing") }
       if let selection, !profileIndicatorMenuTitles.contains(selection) {throw Failure(message:"Profile menu item not found")}
     default:throw Failure(message:"unknown Profiles shell action")
     }
     await Task.yield()
     let owner=adapter.settingsPresenter.window, sheet=owner?.attachedSheet
-    let managerSheet = adapter.libraryPresenter?.window?.attachedSheet
+    let managerSheet = adapter.libraryWindow?.attachedSheet
     let delete=sheet.flatMap {profileAX($0,label:"Delete")}
     let enabled:Bool?=delete.flatMap {object in
       if let element=object as? any NSAccessibilityProtocol { return element.isAccessibilityEnabled() }
@@ -123,11 +148,24 @@ extension AutomationController {
       "noticeShown":app.missingProfileNoticeCount,"noticeTitles":app.missingProfileNoticeTitles,
       "noticeVisible":app.missingProfileNotice?.window.isVisible ?? false,
       "iconPicker":adapter.profileIconPicker?.isClosed == false,"indicatorMenu":profileIndicatorMenuTitles,
-      "managerIndicators":profileIndicatorViews(in:adapter.libraryPresenter?.window?.contentView,identifier:"spaceManagerSpaceHeaderIndicator").map { $0.accessibilityLabel() ?? "" },
+      "managerProfiles":profileLibraryManager(in:adapter.libraryWindow?.contentView).map { manager in
+        manager.columnOrder.compactMap { id -> [String:String]? in
+          guard manager.controls(spaceID:id) != nil, let space=app.model.space(id:id), let profile=app.model.profile(id:space.profileID) else { return nil }
+          return ["space":id.description,"profile":profile.id.description,"name":profile.name,"owner":manager.context.windowID.description]
+        }
+      } ?? [],
       "indicators":profileIndicatorViews().map {view in
         ["label":view.accessibilityLabel() ?? "","id":view.accessibilityIdentifier() ?? "",
          "frame":[view.frame.minX,view.frame.minY,view.frame.width,view.frame.height]] as [String:Any]
       }]
+  }
+
+  private func profileLibraryManager(in root:NSView?)->SpaceManagerView? {
+    guard let root, !root.isHiddenOrHasHiddenAncestor else { return nil }
+    root.layoutSubtreeIfNeeded()
+    if let manager=root as? SpaceManagerView { return manager }
+    for child in root.subviews { if let manager=profileLibraryManager(in:child) { return manager } }
+    return nil
   }
 
   private func profileEditableField(_ view:NSView)->NSTextField? {

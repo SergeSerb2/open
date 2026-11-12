@@ -5,13 +5,9 @@ import OpenWeb
 public enum AutoPiPPolicy {
     public enum LeaveEvent: Sendable {
         case selection, space, split, minimize, occlusion, appHide, appSwitch, close, splitFocus, peek
-        /// D-4 revised (PB1, 2026-11-12): a window that stops being visible (minimize, occlusion
-        /// while Open is inactive, app hide) is a leave. Arc evidence: remote flag
-        /// `autoPictureInPictureOnWindowOccluded`, action `presentPipForOccludedWindow`,
-        /// `WindowResignActiveOcclusionStateCancellable` (strings in Arc 1.170.0 main binary).
-        public var isLeave: Bool {
-            switch self { case .selection, .space, .split, .minimize, .occlusion, .appHide: true; default: false }
-        }
+        /// D-4 (confirmed by capture C-report-s6 §5, Arc 1.172.2): only a tab leave opens auto-PiP.
+        /// Minimize, app hide and occlusion by another window do not, even with audible video.
+        public var isLeave: Bool { switch self { case .selection, .space, .split: true; default: false } }
     }
     public enum Decision: Sendable, Equatable {
         case open, alreadyInPictureInPicture, notLeave, settingOff, noPlayingVideo, tooSmall, inaudible, disallowed, hostDisabled, snoozed, manualPiP, videoDisabled, chromiumAutoPiP

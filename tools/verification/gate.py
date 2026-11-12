@@ -49,7 +49,7 @@ REFUSED = []  # Receipts found under --m1-receipts that were refused, with the r
 SAFE_M5 = set('ntp onboarding welcome import-robust firstrun shell extensions tabstrip window sidebar peek live-data commandbar app-actions actions extensions-p3 extensions-ui sitecontrol extensions-e2 sidebar-completion toolbar numbering media relaunch page page-chrome sleep context-menus routing history applescript boosteditor boost-gallery space-editor incognito sitedata calendar find split littleopen downloads measure'.split())
 CLI = ('commands-demo roundtrip space-legacy space-pad-compare suggest-check commands-dump '
        'route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles '
-       'sidebar-render sidebar-compare commandbar-render extensions-render '
+       'sidebar-render sidebar-theme-roles sidebar-compare commandbar-render extensions-render '
        'onboarding-render boosts import-arc verify-secrets-fixture').split()
 
 
