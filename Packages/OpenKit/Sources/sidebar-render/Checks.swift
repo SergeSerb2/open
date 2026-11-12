@@ -222,10 +222,13 @@ enum Checks {
 
         print("menus")
         let pinnedTab = space.pinned.compactMap(\.tab).last!
-        check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share…", "—", "Change Icon…", "Rename…", "Mute", "Customize Page…", "Edit Pinned Page", "—", "Add Split View", "Duplicate", "Move to", "—", "Remove Pin"],
-              "pinned tab menu (F0116 order): \(sidebar.menuTitles(nodeID: pinnedTab.id).joined(separator: " · "))")
+        // Arc 1.172.2 orders (capture session 3 Part D; docs/re/sidebar-menus-parity.md §1).
+        check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share…", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—", "Open in Split View", "Duplicate", "Move to", "—", "Remove Pin"],
+              "pinned tab menu (S3D order): \(sidebar.menuTitles(nodeID: pinnedTab.id).joined(separator: " · "))")
         if let todayTab = space.today.first {
-            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "—", "Open in Split View", "Move to", "—", "Archive Tab", "Archive Tabs Below"], "Today tab menu (capture session 2 frame 0050)")
+            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "Share…", "—", "Change Icon…", "Rename…", "Mute", "—", "Open in Split View", "Duplicate", "Move to", "—",
+                                                              "Archive Tab", "Archive Other Tabs", "Archive Tabs Below", "Archive Tabs Above"],
+                  "Today tab menu (S3D order): \(sidebar.menuTitles(nodeID: todayTab.id).joined(separator: " · "))")
         }
         check(sidebar.menuTitles(nodeID: folder.id).first == "Share Folder…" && sidebar.menuTitles(nodeID: folder.id).last == "Delete", "folder menu (F0119 order)")
         check(sidebar.menuTitles(nodeID: nil).first == "Change Space Icon…" && sidebar.menuTitles(nodeID: nil).last == "Delete Space", "Space menu on empty space (F0117 order)")
