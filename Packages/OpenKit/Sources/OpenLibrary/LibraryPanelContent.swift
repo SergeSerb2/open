@@ -362,41 +362,46 @@ extension LibraryPanelView {
           LibraryRowSource(id:item.id,date:item.startedAt,text:item.fileName+" "+item.sourceHost,prepareText:{ LibraryRowText(title:item.fileName,subtitle:downloadSubtitle(item)) }) { [unowned self] prepared in
             let available = viewModel.fileAvailable(item)
             let progress = item.state == .inProgress || item.state == .paused
-            let subtitle = prepared?.subtitle ?? (item.state == .completed ? (available ? "Download" : "File moved or deleted.") : downloadSubtitle(item))
+            let subtitle = prepared?.subtitle ?? downloadSubtitle(item)
             let actions = viewModel.actions, id = item.id
-            // Arc's download menu (capture session 1 `19c-downloads-more`; Arc's string keys "Open/Copy download menu
-            // item format", "Show in finder", "Hide from Arc", "Move to Trash", "Cancel download"): the first two
-            // titles carry the file extension ("Open txt"). No extension: "Open" / "Copy" (guess, C3 session 8 item 9).
-            // Arc has no pause, resume or retry menu strings: Open keeps them as row hover controls.
-            let ext = URL(fileURLWithPath:item.fileName).pathExtension
-            let named = { (verb: String) in ext.isEmpty ? verb : verb + " " + ext }
+            // Arc's download menu, capture session 8 items 9–10 (`v10/27`, `v11/28a`, `v13/35`; read from the menu
+            // window frames): "Open ‹kind›" · "Copy ‹kind›" · Show in Finder · — · … · Hide from Arc. ‹kind› is Arc's
+            // file-kind word (`downloadKind`), else the extension ("Open txt"); no extension: "Open" (guess).
+            // Arc has no pause, resume or retry menu items: Open keeps them as row hover controls.
+            let word = downloadKind(item.fileName) ?? URL(fileURLWithPath:item.fileName).pathExtension
+            let named = { (verb: String) in word.isEmpty ? verb : verb + " " + word }
             let done = item.state == .completed && available
+            let hide = LibraryRowAction(title:"Hide from Open",run:{ actions.removeDownload(id:id) })
             var menu: [LibraryRowAction] = []
             var hover: [LibraryRowAction] = []
-            if progress {
-                menu = [.init(title:named("Open"),enabled:false,run:{}),.init(title:named("Copy"),enabled:false,run:{}),
-                    .init(title:"Show in Finder",enabled:available,run:{ actions.revealDownload(id:id) }),.init(title:"-",run:{}),
-                    .init(title:"Cancel Download",run:{ actions.cancelDownload(id:id) }),.init(title:"-",run:{}),
-                    .init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })]
+            switch item.state {
+            case .inProgress, .paused:
+                // Running: Open ‹kind› drawn enabled (guess: it opens the file when it is there), Copy and Show in Finder disabled.
+                menu = [.init(title:named("Open"),run:{ actions.openDownload(id:id) }),.init(title:named("Copy"),enabled:false,run:{}),
+                    .init(title:"Show in Finder",enabled:false,run:{}),.init(title:"-",run:{}),
+                    .init(title:"Cancel Download",run:{ actions.cancelDownload(id:id) }),.init(title:"-",run:{}),hide]
                 hover = [item.state == .paused ? .init(title:"Resume",glyph:.resume,run:{ actions.resumeDownload(id:id) })
                                                : .init(title:"Pause",glyph:.pause,run:{ actions.pauseDownload(id:id) }),
                          .init(title:"Cancel",glyph:.cancel,run:{ actions.cancelDownload(id:id) })]
-            } else if item.state == .failed {
-                // Open's own: Arc's failed-download menu is capture pending (C3 session 8 item 10).
-                menu = [.init(title:"Retry",run:{ actions.retryDownload(id:id) }),.init(title:"-",run:{}),
-                    .init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })]
-                hover = [.init(title:"Retry",glyph:.retry,run:{ actions.retryDownload(id:id) })]
-            } else if item.state == .completed {
+            case .completed:
                 menu = [.init(title:named("Open"),enabled:done,run:{ actions.openDownload(id:id) }),
                     .init(title:named("Copy"),enabled:done,run:{ actions.copyDownload(id:id) }),
                     .init(title:"Show in Finder",enabled:available,run:{ actions.revealDownload(id:id) }),
-                    .init(title:"-",run:{}),.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) }),
+                    .init(title:"-",run:{}),hide,
                     .init(title:"Move to Trash",enabled:available,run:{ actions.trashDownload(id:id) })]
-            } else { menu = [.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })] }
+            case .cancelled, .failed:
+                // Cancelled and interrupted: the three file items disabled · — · Hide from Arc; no Retry item.
+                menu = [.init(title:named("Open"),enabled:false,run:{}),.init(title:named("Copy"),enabled:false,run:{}),
+                    .init(title:"Show in Finder",enabled:false,run:{}),.init(title:"-",run:{}),hide]
+                // Open's own: Retry stays a hover control on a failed download (Arc shows none).
+                if item.state == .failed { hover = [.init(title:"Retry",glyph:.retry,run:{ actions.retryDownload(id:id) })] }
+            }
             return LibraryRowItem(id:id,title:item.fileName,subtitle:subtitle,kind:"download",day:"",
                 fileURL:progress ? nil : URL(fileURLWithPath:item.filePath ?? item.fileName),progress:progress ? item.progress ?? 0 : nil,
                 dragURL:available && item.state == .completed ? item.filePath.map { URL(fileURLWithPath:$0) } : nil,
-                activate:{ if available && item.state == .completed { actions.openDownload(id:id) } },actions:menu,hoverActions:hover)
+                activate:{ if available && item.state == .completed { actions.openDownload(id:id) } },actions:menu,hoverActions:hover,
+                // Arc: a right-click on a download row opens no menu, it only selects the row; the More button opens it.
+                contextMenu:false,moreTooltip:"More Options")
           }
         }
     }
@@ -633,9 +638,26 @@ extension LibraryPanelView {
     @objc func select() { run() }
 }
 
+/// Arc's download file-kind word (string keys "Sidebar download cell file type copy for a PDF / an image / a disk image /
+/// a movie file / audio files / zip archives / generic archives"; titles from the code's small-string immediates:
+/// PDF, Image, Disk Image, Movie, Audio, Zip Archive, Archive). Nil: no kind word (the caller uses the extension).
+nonisolated func downloadKind(_ fileName: String) -> String? {
+    let ext = URL(fileURLWithPath: fileName).pathExtension
+    guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return nil }
+    if type.conforms(to: .pdf) { return "PDF" }
+    if type.conforms(to: .diskImage) { return "Disk Image" }
+    if type.conforms(to: .zip) { return "Zip Archive" }
+    if type.conforms(to: .archive) { return "Archive" }
+    if type.conforms(to: .image) { return "Image" }
+    if type.conforms(to: .movie) { return "Movie" }
+    if type.conforms(to: .audio) { return "Audio" }
+    return nil
+}
+
 nonisolated private func downloadSubtitle(_ item:DownloadItemSnapshot) -> String {
     switch item.state {
-    case .completed: return item.fileExists == true ? "Download" : "File moved or deleted."
+    // Arc's subtitle is the file-kind word ("PDF", "Archive"), else "Download" (capture session 8 item 9).
+    case .completed: return item.fileExists == true ? (downloadKind(item.fileName) ?? "Download") : "File moved or deleted."
     case .failed: return "Failed"
     case .cancelled: return "Cancelled"
     case .paused: return "Paused"
