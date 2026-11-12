@@ -9484,6 +9484,12 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     results['commandbar_top_domain_row'] = {'ok': bool(site) and 'netflix.com' in (site.get('url') or '')
         and typed.get('fieldText', typed.get('text')) == 'netfl', 'row': site, 'field': typed.get('fieldText')}
     press('escape')
+    # Capture PB1-h: titles match by word starts only; "new d" lists no "New Google Doc".
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    bar('t', 'window'); typed_d = type_query('new d')
+    titles_d = [r.get('title') for r in typed_d.get('rows', [])]
+    results['commandbar_new_document_word_starts'] = {'ok': 'New Google Doc' not in titles_d, 'rows': titles_d}
+    press('escape')
     # "Undo <name>": archive a fresh Today tab, then the bar offers the named Undo and running it restores the tab.
     fresh = new_tab(app, 'about:blank#pb1-undo')
     app.call('select', tab=fresh); app.call('focus', tab=fresh)
