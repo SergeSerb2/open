@@ -29,6 +29,9 @@ struct LaunchOptions {
   var faviconNetworkBlocked = false
   var faviconCuratedFailure = false
   var introSound = "normal"
+  /// Automation builds: `--favorites-empty-state=hidden` keeps the 8 pt empty Favorites section, so
+  /// suites written before the empty-state card (A3) keep their sidebar geometry. The product shows it.
+  var hideFavoritesEmptyState = false
   var reduceMotion = false
   var measureIntroFrames = false
   var replayOnboarding = false
@@ -78,6 +81,10 @@ struct LaunchOptions {
       } else if value("favicon-curated") == "fail" {
         #if OPEN_AUTOMATION
         faviconCuratedFailure = true
+        #endif
+      } else if arg == "--favorites-empty-state=hidden" {
+        #if OPEN_AUTOMATION
+        hideFavoritesEmptyState = true
         #endif
       } else if arg == "--reduce-motion" {
         #if OPEN_AUTOMATION

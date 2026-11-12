@@ -242,6 +242,8 @@ OEPermissionKind OEPermissionKindsFromPrompt(uint32_t p) {
   if (p & CEF_PERMISSION_TYPE_LOCAL_FONTS) k |= OEPermissionKindLocalFonts;
   if (p & CEF_PERMISSION_TYPE_IDLE_DETECTION)
     k |= OEPermissionKindIdleDetection;
+  if (p & CEF_PERMISSION_TYPE_REGISTER_PROTOCOL_HANDLER)
+    k |= OEPermissionKindProtocolHandler;
   if (k == 0 && p != 0) k = OEPermissionKindOther;
   return k;
 }
@@ -747,6 +749,36 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   _context->SetContentSetting(url, url, type, value);
 }
 
+#pragma mark Protocol handlers (fork API cef_open_page.h)
+
+- (NSArray<OEProtocolHandler*>*)protocolHandlers {
+  if (!_context || _oe_closing) return @[];
+  CefRefPtr<CefListValue> items = CefGetProtocolHandlers(_context);
+  NSMutableArray<OEProtocolHandler*>* handlers = [NSMutableArray array];
+  for (size_t i = 0; items && i < items->GetSize(); ++i) {
+    CefRefPtr<CefDictionaryValue> item = items->GetDictionary(i);
+    if (!item) continue;
+    [handlers addObject:[[OEProtocolHandler alloc]
+                            initOEWithScheme:OEString(item->GetString("scheme"))
+                                 urlTemplate:OEString(item->GetString("url"))
+                                   isDefault:item->GetBool("default")]];
+  }
+  return handlers;
+}
+
+- (NSURL*)protocolHandlerURLForURL:(NSURL*)url {
+  if (!_context || _oe_closing || !url) return nil;
+  CefString translated =
+      CefTranslateProtocolHandlerURL(_context, OECef(url.absoluteString));
+  return translated.empty() ? nil : OEURL(translated);
+}
+
+- (BOOL)removeProtocolHandler:(OEProtocolHandler*)handler {
+  if (!_context || _oe_closing || !handler) return NO;
+  return CefRemoveProtocolHandler(_context, OECef(handler.scheme),
+                                  OECef(handler.urlTemplate));
+}
+
 #pragma mark Appearance
 
 - (void)setWebsiteColorScheme:(OEColorSchemePreference)scheme {
@@ -874,6 +906,21 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   if ([_delegate respondsToSelector:@selector(browserContext:downloadDidUpdate:)]) {
     [_delegate browserContext:self downloadDidUpdate:download];
   }
+}
+
+@end
+
+@implementation OEProtocolHandler
+
+- (instancetype)initOEWithScheme:(NSString*)scheme
+                      urlTemplate:(NSString*)urlTemplate
+                        isDefault:(BOOL)isDefault {
+  if ((self = [super init])) {
+    _scheme = [scheme copy];
+    _urlTemplate = [urlTemplate copy];
+    _defaultHandler = isDefault;
+  }
+  return self;
 }
 
 @end

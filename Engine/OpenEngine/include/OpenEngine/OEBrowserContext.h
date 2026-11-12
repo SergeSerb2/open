@@ -113,8 +113,23 @@ typedef NS_OPTIONS(uint32_t, OEPermissionKind) {
   OEPermissionKindWindowManagement = 1u << 9,
   OEPermissionKindLocalFonts = 1u << 10,
   OEPermissionKindIdleDetection = 1u << 11,
+  /// navigator.registerProtocolHandler ("Make <site> your default mail
+  /// app?"). The request carries the scheme and the handler URL.
+  OEPermissionKindProtocolHandler = 1u << 12,
   OEPermissionKindOther = 1u << 31,
 };
+
+/// One registered web protocol handler.
+NS_SWIFT_SENDABLE
+OE_EXPORT @interface OEProtocolHandler : NSObject
+/// For example "mailto".
+@property(nonatomic, readonly, copy) NSString* scheme;
+/// The handler URL with "%s" where the escaped URL goes.
+@property(nonatomic, readonly, copy) NSString* urlTemplate;
+/// The handler that navigations to the scheme use.
+@property(nonatomic, readonly, getter=isDefault) BOOL defaultHandler;
+- (instancetype)init NS_UNAVAILABLE;
+@end
 
 typedef NS_ENUM(NSInteger, OEPermissionState) {
   OEPermissionStateAsk = 0,
@@ -200,6 +215,21 @@ OE_EXPORT @interface OEBrowserContext : NSObject
 /// Network filter for the whole context. nil allows everything. The block is
 /// read atomically on the network thread.
 @property(atomic, copy, nullable) OERequestFilter requestFilter;
+
+/// Web protocol handlers of this Profile (navigator.registerProtocolHandler,
+/// stored by Chromium after the user grants OEPermissionKindProtocolHandler).
+/// Empty for a context that is not initialized or is closing.
+@property(nonatomic, readonly, copy)
+    NSArray<OEProtocolHandler*>* protocolHandlers;
+/// The URL the default handler of `url`'s scheme opens for it (for example a
+/// webmail compose page for a `mailto:` URL), or nil when the scheme has no
+/// handler. A page navigation to `url` already goes there; this is for URLs
+/// that arrive from outside a page.
+- (nullable NSURL*)protocolHandlerURLForURL:(NSURL*)url
+    NS_SWIFT_NAME(protocolHandlerURL(for:));
+/// Removes one registered handler. Returns NO if it is not registered.
+- (BOOL)removeProtocolHandler:(OEProtocolHandler*)handler
+    NS_SWIFT_NAME(removeProtocolHandler(_:));
 
 /// Per-site permission state (Chromium content settings).
 - (OEPermissionState)permissionStateForKind:(OEPermissionKind)kind

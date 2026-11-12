@@ -206,6 +206,7 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
   }
   // §7.2 rule 3: the factory types that are proxied.
   bool subframe_navigation = false;
+  bool main_frame_navigation = false;
   switch (type) {
     case FactoryType::kDocumentSubResource:
     case FactoryType::kWorkerSubResource:
@@ -214,11 +215,13 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
     case FactoryType::kServiceWorkerScript:
       break;
     case FactoryType::kNavigation:
-      // Main frames are never blocked and get no extra hop.
+      // Main frames are never blocked; their factory only applies
+      // $removeparam (§7.4 rule 4) and passes every other request on.
       if (!frame || !frame->GetParentOrOuterDocument()) {
-        return;
+        main_frame_navigation = true;
+      } else {
+        subframe_navigation = true;
       }
-      subframe_navigation = true;
       break;
     default:
       return;
@@ -238,7 +241,9 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
   } else {
     top_host = HostOf(request_initiator);
   }
-  if (service->IsExcludedOnUi(top_host)) {
+  // A main-frame navigation's site is its URL, which can change on redirect;
+  // the factory checks each request's host instead.
+  if (!main_frame_navigation && service->IsExcludedOnUi(top_host)) {
     return;
   }
 
@@ -251,7 +256,9 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
   }
   context.top_host = std::move(top_host);
   context.subframe_navigation = subframe_navigation;
-  if (frame) {
+  context.main_frame_navigation = main_frame_navigation;
+  // Rewrites are not counted, so a main-frame factory has no document.
+  if (frame && !main_frame_navigation) {
     // A subframe navigation counts for the page that holds the frame.
     content::RenderFrameHost* counting =
         subframe_navigation ? frame->GetParentOrOuterDocument() : frame;

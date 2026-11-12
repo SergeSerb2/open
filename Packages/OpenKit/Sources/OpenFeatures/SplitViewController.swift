@@ -53,6 +53,7 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
     }
     public var canAddPane: Bool { if let split { return split.panes.count < 4 }; return focusedTab.map { canSplit($0.id) } ?? false }
     public func addEmptyPane() {
+        // GUESS: the alert beep on a refused split is not captured (C9 tested only the successful split; features-advanced SE-2).
         guard canAddPane, let space, let current = focusedTab else { NSSound.beep(); return }
         let tab = model.newTab(in: space.id, url: URL(string: "about:blank")!, at: 0); tab.live.sleepPhase = .live
         if let split { _ = model.addPane(splitID: split.id, tabID: tab.id) }

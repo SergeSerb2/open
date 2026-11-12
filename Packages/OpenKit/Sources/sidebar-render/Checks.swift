@@ -223,15 +223,48 @@ enum Checks {
         print("menus")
         let pinnedTab = space.pinned.compactMap(\.tab).last!
         // Arc 1.172.2 orders (capture session 3 Part D; docs/re/sidebar-menus-parity.md §1).
-        check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share…", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—", "Open in Split View", "Duplicate", "Move to", "—", "Remove Pin"],
+        check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—", "Open in Split View", "Duplicate", "Move to", "—", "Remove Pin"],
               "pinned tab menu (S3D order): \(sidebar.menuTitles(nodeID: pinnedTab.id).joined(separator: " · "))")
         if let todayTab = space.today.first {
-            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "Share…", "—", "Change Icon…", "Rename…", "Mute", "—", "Open in Split View", "Duplicate", "Move to", "—",
-                                                              "Archive Tab", "Archive Other Tabs", "Archive Tabs Below", "Archive Tabs Above"],
+            // ⌥ alternates (Archive Other Tabs, Archive Tabs Above) are not drawn (capture session 8).
+            let split = context.currentTab?.id == todayTab.id ? "Add Split View" : "Open in Split View"
+            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "—", split, "Duplicate", "Move to", "—",
+                                                              "Archive Tab", "Archive Tabs Below"],
                   "Today tab menu (S3D order): \(sidebar.menuTitles(nodeID: todayTab.id).joined(separator: " · "))")
         }
+        if let todayTab = space.today.first, let share = sidebar.contextMenu(nodeID: todayTab.id)?.item(withTitle: "Share")?.submenu {
+            let services = share.items.map(\.title)
+            check(!services.isEmpty && !services.contains("Add to Reading List") && share.items.allSatisfy { $0.image != nil },
+                  "Share ▸ lists the system share services with icons, without Safari's Reading List: \(services.joined(separator: " · "))")
+        } else { check(false, "Today tab menu has a Share submenu") }
         check(sidebar.menuTitles(nodeID: folder.id).first == "Share Folder…" && sidebar.menuTitles(nodeID: folder.id).last == "Delete", "folder menu (F0119 order)")
         check(sidebar.menuTitles(nodeID: nil).first == "Change Space Icon…" && sidebar.menuTitles(nodeID: nil).last == "Delete Space", "Space menu on empty space (F0117 order)")
+        // Capture session 8 item 8: the header's hover "…" (26 × 26, 13 pt from the right edge, 5 pt down) opens the Space menu.
+        context.forcedHover = .header; scene.needsLayout = true; OffscreenRenderer.settle(scene, runLoop: 0.01)
+        let more = sidebar.spaceHeaderMore
+        check(more.map { !$0.hidden && $0.frame == CGRect(x: sidebar.bounds.width - 39, y: 5, width: 26, height: 26) && $0.menu == sidebar.menuTitles(nodeID: nil) } ?? false,
+              "Space header \"…\" on hover: \(more.map { "\($0.frame) hidden \($0.hidden)" } ?? "none"), menu = the Space menu")
+        context.forcedHover = nil; OffscreenRenderer.settle(scene, runLoop: 0.01)
+        // Capture session 8 item 7: the "+" popover. Body 210 × 290 with a 6 pt margin and a 7 pt arrow; rows 194 × 40,
+        // groups 17 pt apart; opens on the last row; ↓ wraps to the first, ↑ returns; Esc closes; "+" shows "×" meanwhile.
+        sidebar.togglePlusPopover()
+        var plus = sidebar.plusPopoverState
+        let rows = plus["rows"] as? [[String: Any]] ?? []
+        let frames = rows.compactMap { $0["frame"] as? [CGFloat] }
+        check(plus["shown"] as? Bool == true && plus["closeGlyph"] as? Bool == true && plus["size"] as? [CGFloat] == [222, 309]
+              && rows.compactMap { $0["title"] as? String } == ["New Space", "New Folder", "New Easel", "New Boost", "New Split", "New Tab"]
+              && frames.allSatisfy { $0[0] == 14 && $0[2] == 194 && $0[3] == 40 } && frames.map { $0[1] } == [14, 54, 111, 151, 208, 248],
+              "plus popover: 6 rows in 3 groups at Arc's geometry (\(plus["size"] ?? "?"), row tops \(frames.map { $0[1] }))")
+        let opened = plus["highlighted"] as? String
+        sidebar.plusPopoverKey(125); let down = sidebar.plusPopoverState["highlighted"] as? String
+        sidebar.plusPopoverKey(125); let down2 = sidebar.plusPopoverState["highlighted"] as? String
+        sidebar.plusPopoverKey(126); sidebar.plusPopoverKey(126); let up = sidebar.plusPopoverState["highlighted"] as? String
+        check(opened == "New Tab" && down == "New Space" && down2 == "New Folder" && up == "New Tab", "plus popover keys: opens on New Tab, ↓ wraps to New Space, ↑ returns (\(opened ?? "") \(down ?? "") \(down2 ?? "") \(up ?? ""))")
+        sidebar.plusPopoverKey(53); plus = sidebar.plusPopoverState
+        check(plus["shown"] as? Bool == false && plus["closeGlyph"] as? Bool == false, "plus popover: Esc closes and the button shows \"+\" again")
+        delegate.log.removeAll(); sidebar.togglePlusPopover(); sidebar.plusPopoverKey(36)
+        OffscreenRenderer.settle(scene, runLoop: 0.02)
+        check(delegate.log.contains(.newTab) && sidebar.plusPopoverState["shown"] as? Bool == false, "plus popover: Return on New Tab sends .newTab and closes (\(delegate.log), shown \(sidebar.plusPopoverState["shown"] ?? "?"))")
 
         print("drag and drop targets")
         let pinnedCount = space.pinned.count

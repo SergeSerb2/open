@@ -20,3 +20,15 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   })().then(value => respond({ok: value}), error => respond({ok: false, error: error.message}));
   return true;
 });
+
+// Clicks delivered to the extension (A12: items in Alloy/Peek menus). Kept in
+// memory: the rows read them back within seconds of the click.
+const clicks = [];
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  clicks.push({menuItemId: info.menuItemId, pageUrl: info.pageUrl || null, linkUrl: info.linkUrl || null,
+    frameId: info.frameId ?? null, hasTab: !!tab});
+});
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (message.op !== 'clicks') return;
+  respond({ok: true, clicks: clicks.splice(0)});
+});
