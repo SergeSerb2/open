@@ -13,6 +13,12 @@ wrap the entire gate in the screen lock.
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --no-e2e --only sidebar-render,sidebar-compare
 ```
 
+The build stage also builds the Release App without `OPEN_AUTOMATION` in
+`build/shipping` (row `build/shipping`): the e2e suites use the automation App,
+so only this row catches a break in the shipping build (#371). The exceptions
+file may only shrink relative to the merge base of HEAD and `origin/main`, so a
+run pinned to an older main commit is unaffected when main moves on.
+
 Run one full gate per PR on its final functional head. After a later clean
 merge of main whose changed files are disjoint from the PR, retain that full
 receipt and run `--only build` plus the PR's area checks on the merged head.

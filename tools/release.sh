@@ -415,7 +415,8 @@ PY
 from pathlib import Path
 import hashlib,re,sys
 args,dist,chromium,cef,fw=sys.argv[1:];s=Path(args).read_text()
-for key,value in [('is_official_build','true'),('chrome_pgo_phase','2'),('use_thin_lto','true'),('enable_widevine','false')]:
+# Widevine option D (#345): support compiled in, CDM never bundled, runtime opt-in only.
+for key,value in [('is_official_build','true'),('chrome_pgo_phase','2'),('use_thin_lto','true'),('enable_widevine','true'),('bundle_widevine_cdm','false')]:
  vals=re.findall(r'^\s*'+key+r'\s*=\s*(\w+)\s*(?:#.*)?$',s,re.M)
  if not vals or vals[-1]!=value:raise SystemExit('official args mismatch: '+key)
 d=Path(dist);readme=(d/'README.txt').read_text()

@@ -9,6 +9,11 @@ final class QuitWarningCoordinator {
   private(set) var presenting = false
   private var systemQuit = false
   private var relaunchQuit = false
+  /// The attempt began with a quit Apple event from another process (a script, the Dock, a
+  /// release smoke). The generic warning is for the user's own ⌘Q or Quit menu item: a modal
+  /// alert answering an Apple event can sit behind other apps and hold the quit forever.
+  /// The downloads alert still applies, because quitting then loses data.
+  private var appleEventQuit = false
   /// Set when this quit attempt returned `.terminateCancel` only to retry itself (history flush,
   /// sleep capture, page beforeunload replies). The retry keeps the attempt's approval and
   /// reasons; any other entry starts a fresh attempt.
@@ -29,6 +34,8 @@ final class QuitWarningCoordinator {
       // A logout another app aborted, or an install quit that was not retried, must not
       // leave later quits prompt-free.
       approved = false; systemQuit = false; relaunchQuit = relaunch
+      let event = NSAppleEventManager.shared().currentAppleEvent
+      appleEventQuit = event?.eventClass == AEEventClass(kCoreEventClass) && event?.eventID == AEEventID(kAEQuitApplication)
     }
     // Retain the reason across the async history/sleep shutdown retries, which have no
     // Apple event of their own.
@@ -61,6 +68,7 @@ final class QuitWarningCoordinator {
     if harnessQuit { return false }
     #endif
     guard !withoutPrompts, !approved else { return false }
+    if appleEventQuit { return false }
     // Downloads own this attempt, even after their accepted alert cancels transfers.
     if downloadsWarned { approved = true; return false }
     guard UserDefaults.standard.bool(forKey: "open.general.warnBeforeQuitting") else { return false }

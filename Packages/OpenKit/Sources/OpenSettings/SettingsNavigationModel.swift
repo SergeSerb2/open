@@ -110,6 +110,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.previews, "pages", "Pinned tabs and Favorites", help: "Preview pages on hover.", key: "open.general.previewsPages"),
             .init(.previews, "recents", "Recent pages on Linear, Notion, Figma, and Confluence", help: "Preview recent pages of these sites on hover.", key: "open.general.previewsRecents"),
             .init(.previews, "calendar", "Upcoming meetings on Google, Outlook, and Notion Calendar", help: "Preview today's meetings and join calls on hover.", key: "open.general.previewsCalendar"),
+            .init(.previews, "gmail", "Unread mail in Gmail", help: "Preview unread Gmail messages on hover.", key: "open.general.previewsGmail"),
             .init(.links, "little-open-hotkey", "Open Little Open in any app", key: "open.links.littleOpenHotkeyEnabled"),
             .init(.links, "option-command-click", "Open Little Open with Option-Command-click", key: "open.links.optionCommandClickLittleOpen"),
             .init(.links, "external-links", "Links from other apps open in Little Open", key: "open.links.externalInLittleOpen"),
