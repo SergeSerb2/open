@@ -52,10 +52,14 @@ public enum ChromeMetrics {
 
 /// Command / URL field.
 public enum URLFieldMetrics {
-    /// `[8, 46, W − 16, 36]`.
+    /// `[8, 46, W − 16, 36]`: aligned with the tab-row plates (`SpaceListMetrics.rowFillInsetX`; LEAD 11:45).
     public static let y: CGFloat = 46
     public static let height: CGFloat = 36
-    public static let insetX: CGFloat = 8
+    public static let insetX: CGFloat = SpaceListMetrics.rowFillInsetX
+    /// Space between the end of the host text and the first visible control (LEAD 11:45).
+    public static let controlsTextGap: CGFloat = 8
+    /// A long host keeps its end visible; its leading 34 pt fade to clear (Arc 23-url-loading-long).
+    public static let longHostFade: CGFloat = 34
     /// Same shape as favorite tiles. Fitted by the comparison loop (docs/design.md).
     public static let cornerRadius: CGFloat = 10
     /// Magnifier button `[14, 52, 24, 24]`, glyph ink 12×12.

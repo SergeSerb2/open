@@ -21,13 +21,19 @@ def run(factory, results, origin, tmp, env):
                 app.call('site-controls', action='open')
                 time.sleep(.3)
                 app.call('site-controls', action='close')
-            all_samples = app.call('site-controls', action='state')['firstDrawMilliseconds']
+            state = app.call('site-controls', action='state')
+            all_samples = state['firstDrawMilliseconds']
+            # Per-sample phase split (ms from the request): snapshot, apply, layout, focusAndAnimation, subtreeLayout, display, flush.
+            phases = state.get('firstDrawPhases', [])
             samples = all_samples[-30:]
             p95 = sorted(samples)[int(.95 * (len(samples) - 1))]
             p95_all = sorted(all_samples)[int(.95 * (len(all_samples) - 1))]
             data = dict(timing=True, functionalOK=len(all_samples) == 35 and len(samples) == 30, milliseconds=samples, allMilliseconds=all_samples,p95=p95,p95IncludingCold=p95_all,limit=8,warmups=5,coldMilliseconds=all_samples[0],
-                        load=list(os.getloadavg()))
-            if app.config == 'Release': data['ok'] = len(all_samples) == 35 and len(samples) == 30 and p95 < 8 and p95_all < 8
+                        load=list(os.getloadavg()), phases=phases)
+            if app.config == 'Release':
+                data['ok'] = len(all_samples) == 35 and len(samples) == 30 and p95 < 8 and p95_all < 8
+                # Exact text of the DEFERRED gate exception (LEAD 17:55, PR #324).
+                if data['functionalOK'] and not data['ok']: data['reason'] = 'first-draw p95 must be below 8 ms (warm 30 and including cold)'
             else: data.update(status='BLOCKED', reason='Release required for first-draw budget')
             results['P1_first_draw'] = data
             # Review receipt through real page loads. State reads do not ask the

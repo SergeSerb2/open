@@ -100,6 +100,7 @@ extension AutomationController {
         guard let raw=args["section"] as? String, let section=LibraryPanelSection(rawValue:raw) else { throw Failure(message:"unknown section") }
         panel.hoverTile(section,hovered:args["hovered"] as? Bool ?? true)
       case "back": panel.pressBack()
+      case "empty-button": guard panel.pressEmptyButton() else { throw Failure(message:"empty-state button is not available") }
       case "refresh": panel.refresh()
       case "resize":
         guard let width=args["width"] as? Double, let height=args["height"] as? Double,

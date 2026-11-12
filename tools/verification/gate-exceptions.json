@@ -117,24 +117,6 @@
     "expires": "Engine callback-lifetime patch lands"
   },
   {
-    "row": "sitecontrol/S11_material",
-    "status": "DEFERRED",
-    "reason": "S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)",
-    "clearsWhen": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control",
-    "owner": "lead / design D3",
-    "added": "2026-11-11",
-    "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
-  },
-  {
-    "row": "sitecontrol/S12_elements",
-    "status": "DEFERRED",
-    "reason": "S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)",
-    "clearsWhen": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control",
-    "owner": "lead / design D3",
-    "added": "2026-11-11",
-    "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
-  },
-  {
     "row": "sitecontrol/P1_first_draw",
     "status": "DEFERRED",
     "reason": "first-draw p95 must be below 8 ms (warm 30 and including cold)",

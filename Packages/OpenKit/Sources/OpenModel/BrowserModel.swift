@@ -1740,6 +1740,50 @@ public final class BrowserModel {
     /// Creates a folder at the end of `parent` and moves `nodeIDs` into it, in order.
     /// Nodes that may not move there are skipped. Nil when `parent` cannot hold a folder.
     @discardableResult
+    // MARK: Live Folders (LF L2, live-data §2)
+
+    /// The Space's GitHub Live Folder (top level of Pinned), if any.
+    public func liveFolder(in spaceID: SpaceID) -> Folder? {
+        space(id: spaceID)?.pinned.lazy.compactMap(\.folder).first { $0.live != nil }
+    }
+
+    /// Creates "Pull Requests" at the top of the Space's Pinned section. Undoable like New Folder.
+    @discardableResult
+    public func createLiveFolder(in spaceID: SpaceID, config: LiveFolderConfig, title: String = "Pull Requests") -> Folder? {
+        guard liveFolder(in: spaceID) == nil, let folder = createFolder(in: .spacePinned(spaceID), at: 0, title: title) else { return nil }
+        folder.live = config
+        return folder
+    }
+
+    /// Removes a Live Folder and its rows without Archive entries (rows are fetched data, not the
+    /// user's tabs; a tab the user moved in by hand is moved out to Today first).
+    public func removeLiveFolder(id: ItemID) {
+        guard let folder = index[id]?.folder, folder.live != nil, let parent = parentByID[id] else { return }
+        let spaceID: SpaceID? = { if case .spacePinned(let s)? = section(of: parent) { return s }; return nil }()
+        for node in folder.children {
+            if case .tab(let tab) = node, tab.liveItemURL != nil { continue }
+            if let spaceID { _ = relocate(node.id, to: .spaceToday(spaceID), at: 0) }
+        }
+        _ = detach(id)
+    }
+
+    /// Applies one refresh to a Live Folder: no undo step, no Archive (a merged PR just leaves).
+    /// Only rows with `liveItemURL` are removed or retitled. Returns the IDs of added rows.
+    @discardableResult
+    public func applyLiveRows(folderID: ItemID, add: [(url: URL, title: String)], remove: [ItemID], retitle: [ItemID: String],
+                              unread: Bool) -> [ItemID] {
+        guard let folder = index[folderID]?.folder, folder.live != nil else { return [] }
+        for id in remove where tab(id: id)?.liveItemURL != nil && parentByID[id] == .folder(folderID) { _ = detach(id) }
+        for (id, title) in retitle { if let tab = tab(id: id), tab.liveItemURL != nil, tab.customTitle == nil { tab.title = title } }
+        var added: [ItemID] = []
+        for item in add.reversed() {
+            let tab = Tab(url: item.url, title: item.title, pinnedURL: item.url, isUnread: unread)
+            tab.liveItemURL = item.url
+            if attach(.tab(tab), to: .folder(folderID), at: 0) != nil { added.append(tab.id) }
+        }
+        return added
+    }
+
     public func createFolder(in parent: NodeParent, at position: Int? = nil, title: String = "Folder", withNodes nodeIDs: [ItemID] = []) -> Folder? {
         switch parent {
         case .favorites, .splitPane: return nil

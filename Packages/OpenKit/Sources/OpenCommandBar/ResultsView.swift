@@ -23,6 +23,14 @@ final class ResultsView: NSView {
             updateSelectionLayer()
         }
     }
+    /// New Tab card or inline editor (plan D3 §2.1, §2.2).
+    var layoutSpec = CommandCardLayout.newTab {
+        didSet {
+            guard layoutSpec != oldValue else { return }
+            for v in rowViews { v.layoutSpec = layoutSpec }
+            needsLayout = true
+        }
+    }
     /// Pointer moved onto row `i` (a real mouse move, not rows sliding under a still pointer).
     var onHover: ((Int) -> Void)?
     /// Click on row `i`.
@@ -32,7 +40,7 @@ final class ResultsView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.masksToBounds = true
-        selectionLayer.cornerRadius = CommandBarMetrics.selectionRadius
+        selectionLayer.cornerRadius = CommandCard.rowRadius
         selectionLayer.cornerCurve = .continuous
         selectionLayer.isHidden = true
         selectionLayer.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull(), "backgroundColor": NSNull()]
@@ -70,7 +78,7 @@ final class ResultsView: NSView {
         didSet { if occludedBottom != oldValue { needsLayout = true } }
     }
     var visibleHeight: CGFloat { max(0, bounds.height - occludedBottom) }
-    var contentHeight: CGFloat { CGFloat(rows.count) * CommandBarMetrics.rowHeight }
+    var contentHeight: CGFloat { CGFloat(rows.count) * layoutSpec.rowPitch }
     var maxScroll: CGFloat { max(0, contentHeight - visibleHeight) }
 
     /// Replaces the rows. Views whose row did not change are not redrawn.
@@ -81,6 +89,7 @@ final class ResultsView: NSView {
             v.favicons = favicons
             v.extensionIcon = extensionIcon
             v.theme = theme
+            v.layoutSpec = layoutSpec
             let index = rowViews.count
             v.onPress = { [weak self] in self?.onClick?(index, []) }
             addSubview(v)
@@ -111,7 +120,7 @@ final class ResultsView: NSView {
 
     /// Keeps row `i` inside the visible window (keyboard navigation).
     func scrollToVisible(_ i: Int) {
-        let h = CommandBarMetrics.rowHeight
+        let h = layoutSpec.rowPitch
         let top = CGFloat(i) * h, bottom = top + h
         // Whole rows: a footer that leaves 199 of 200 pt shows 4 rows, not 3 plus a 1 pt scroll.
         let viewport = max(h, (visibleHeight / h).rounded() * h)
@@ -126,11 +135,11 @@ final class ResultsView: NSView {
     }
 
     private func layoutRows() {
-        let m = CommandBarMetrics.self
-        let w = bounds.width - 2 * m.rowInsetX
+        let l = layoutSpec
+        let w = bounds.width - 2 * l.listPaddingX
         let visible = CGRect(x: 0, y: 0, width: bounds.width, height: visibleHeight).insetBy(dx: 0, dy: -1)
         for (i, v) in rowViews.enumerated() where i < rows.count {
-            let f = CGRect(x: m.rowInsetX, y: CGFloat(i) * m.rowHeight - scrollOffset, width: w, height: m.rowHeight)
+            let f = CGRect(x: l.listPaddingX, y: CGFloat(i) * l.rowPitch - scrollOffset, width: w, height: l.rowPitch)
             // Rows outside the clip are hidden so AppKit does not draw them.
             let shown = f.intersects(visible)
             if v.isHidden == shown { v.isHidden = !shown }
@@ -141,13 +150,13 @@ final class ResultsView: NSView {
     }
 
     private func updateSelectionLayer() {
-        let m = CommandBarMetrics.self
+        let l = layoutSpec
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if let i = selectedIndex {
-            let inset = m.selectionInset
-            selectionLayer.frame = CGRect(x: m.rowInsetX + inset, y: CGFloat(i) * m.rowHeight - scrollOffset + inset,
-                                          width: bounds.width - 2 * (m.rowInsetX + inset), height: m.rowHeight - 2 * inset)
+            // One rule for keyboard and hover selection: the row's 46 pt fill, radius 8.
+            selectionLayer.frame = CGRect(x: l.listPaddingX, y: CGFloat(i) * l.rowPitch - scrollOffset,
+                                          width: bounds.width - 2 * l.listPaddingX, height: l.rowHeight)
             selectionLayer.backgroundColor = theme.focus.cgColor
             selectionLayer.isHidden = false
         } else {
@@ -170,9 +179,9 @@ final class ResultsView: NSView {
 
     func rowIndex(at point: NSPoint) -> Int? {
         let y = point.y + scrollOffset
-        guard point.x >= CommandBarMetrics.rowInsetX, point.x <= bounds.width - CommandBarMetrics.rowInsetX, y >= 0,
+        guard point.x >= layoutSpec.listPaddingX, point.x <= bounds.width - layoutSpec.listPaddingX, y >= 0,
               point.y < visibleHeight else { return nil }
-        let i = Int(y / CommandBarMetrics.rowHeight)
+        let i = Int(y / layoutSpec.rowPitch)
         return rows.indices.contains(i) ? i : nil
     }
 
@@ -194,7 +203,7 @@ final class ResultsView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * CommandBarMetrics.rowHeight
+        let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * layoutSpec.rowPitch
         let next = min(max(0, scrollOffset - dy), maxScroll)
         guard next != scrollOffset else { return }
         scrollOffset = next
