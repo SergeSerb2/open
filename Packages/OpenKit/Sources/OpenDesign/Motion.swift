@@ -98,6 +98,11 @@ extension Motion {
     /// Guesses centralized per media plan §4.2.7 and §4.4.7; reduce motion uses fades.
     /// Finite fallback approved after the native offscreen transition produced no effect keys.
     public static let rowMediaFallback: CFTimeInterval = 0.25
+    /// Audio starts in a row: the title slides right and the speaker is revealed left to right
+    /// (capture PB1-f, C-report-s6 §6: about 0.16 s, 47/75/89/95 % at 45/75/100/128 ms, no overshoot).
+    public static let rowAudioReveal: CFTimeInterval = 0.16
+    /// Quadratic ease-out, the closest standard curve to those four samples.
+    public static let rowAudioRevealCurve: (Float, Float, Float, Float) = (0.25, 0.46, 0.45, 0.94)
     // Media plan §13.6: guess from the measured 0.20 s Space spring (§20.12); pending mini-player O9 capture.
     public static let miniPlayerStack = SpringToken(response: 0.2, dampingFraction: 1)
     public static let miniPlayerResize: CFTimeInterval = 0.2
