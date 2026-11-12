@@ -561,7 +561,7 @@ Types use `NSSound` and `AVAudioPlayer`.
 | `event.m4a` (SoundEffects) | AAC, stereo 44.1 kHz | 3.52 s | Notice chime |
 | `intro-music.mp3` (AuthFeature) | MP3, stereo 48 kHz, 320 kbps | 21.34 s | Onboarding music |
 
-The event map is a guess. `capture` fits the Capture feature name. No string links a file name to an event.
+Capture C9 (2026-11-12) confirms `capture`: of thirteen actions tested, only Capture plays a sound; no trigger of `event.m4a` was found (list in `features-advanced.md` SE-2). `capture` fits the Capture feature name. No string links a file name to an event.
 The exact trigger for `event.m4a` needs a decompiled read of `Sounds.swift` call sites.
 Open must record its own sounds. Do not copy these files.
 Add a mute switch. `SoundEffectClient.isEnabled` proves Arc has one (fact).
