@@ -50,7 +50,8 @@
       let bound = withUnsafePointer(to: &addr) {
         $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) }
       }
-      guard bound == 0, listen(fd, 8) == 0 else {
+      // A burst of clients (parallel suite helpers) must not get ECONNREFUSED: the old backlog of 8 did that.
+      guard bound == 0, listen(fd, 128) == 0 else {
         Darwin.close(fd)
         throw POSIXError(.init(rawValue: errno) ?? .EIO)
       }
