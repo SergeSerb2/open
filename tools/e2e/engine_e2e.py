@@ -8041,7 +8041,10 @@ def toolbar_checks(factory, results, tmp):
         field_menu = app.call('url-field-menu')
         app.call('url-field-menu', item='Show as Toolbar')
         again = wait_until(lambda: (lambda s: s if s['toolbar']['drawn'] else None)(ws()), timeout=3, step=.05)
-        results['toolbar_url_field_show_as_toolbar'] = {'ok': field_menu == ['Show as Toolbar', '-', 'Manage Extensions'] and bool(again), 'menu': field_menu}
+        # Arc 1.172.2's URL-field menu (capture session 3 Part D, D2c #392). Share is "Share…" today and
+        # becomes the "Share" submenu with capture session 8; Shared Quotes is on by default.
+        results['toolbar_url_field_show_as_toolbar'] = {'ok': field_menu[:1] + field_menu[2:] == ['Copy URL', 'Capture…', 'Capture Full Page',
+            'Capture in Portrait Mode', '-', 'Show as Toolbar', 'Disable Shared Quotes'] and field_menu[1:2] in (['Share…'], ['Share']) and bool(again), 'menu': field_menu}
         windows_before = len(app.call('shell-windows'))
         app.call('key', key='n', modifiers=['cmd'])
         second = wait_until(lambda: (lambda s: s if len(app.call('shell-windows')) > windows_before and s['id'] != before['id'] else None)(ws()), timeout=5, step=.1)
@@ -11775,7 +11778,7 @@ def space_editor_creation_checks(factory, results, tmp):
                 and app.call('theme-get')['style'] == draft and created['icon'] == {'type': 'emoji', 'value': '😀'}, spaces=spaces())
         undo()
         require('A5_create_one_undo_restores_previous_focus', spaces() == before and focused()['id'] == source, spaces=spaces())
-        app.call('split', op='plus', item='New Space…')
+        app.call('split', op='plus', item='New Space')  # Arc's plus title (capture session 3 Part D, D2c #393)
         require('A5_plus_menu_opens_form', state()['open'] and state()['nameFocused'])
         key('escape'); require('A5_plus_cancel_no_change', spaces() == before)
         cancel_icon_generation = state()['modelUndoGeneration']
@@ -12831,6 +12834,13 @@ def page_translate_checks(factory, results, tmp):
         copied = app.call('translate', action='selection-copy')
         pasted = subprocess.run(['/usr/bin/pbpaste'], capture_output=True, text=True).stdout
         app.call('translate', action='selection-close')
+        # LEAD 10:45: the whole bubble stays inside the web content area (8 pt inset) and its
+        # arrow points at the middle of the selection (a short text at the page's left edge).
+        pf, ca = sel.get('panelFrame', [0, 0, 0, 0]), sel.get('contentArea', [0, 0, 0, 0])
+        inside = (pf[2] > 0 and pf[0] >= ca[0] + 8 - .5 and pf[0] + pf[2] <= ca[0] + ca[2] - 8 + .5
+                  and pf[1] >= ca[1] + 8 - .5 and pf[1] + pf[3] <= ca[1] + ca[3] - 8 + .5)
+        results['X8_bubble_inside_content'] = {'ok': inside and abs(sel.get('arrowTipX', -99) - sel.get('selectionMidX', 99)) <= 1
+            and abs(pf[0] - (ca[0] + 8)) <= .5, 'panel': pf, 'content': ca, 'arrowTipX': sel.get('arrowTipX'), 'selectionMidX': sel.get('selectionMidX')}
         results['X8_translate_selection'] = {'ok': title in sel_items and sel.get('state') == 'translated' and sel.get('source') == 'fr'
             and sel.get('shown') and sel.get('result') and sel.get('result') != sel.get('text') and sel.get('shownText') == sel.get('result') and sel.get('anchorInPage')
             and copied.get('pressed') and pasted == sel.get('result'),
