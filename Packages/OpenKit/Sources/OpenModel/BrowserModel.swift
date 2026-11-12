@@ -769,6 +769,10 @@ public final class BrowserModel {
                         }))
             }
             guard let target = profile(id: id) else { continue }
+            // Arc's dismissed Favorites empty-state card (A3) comes with the Profile's Favorites; undoable.
+            if includeFavorites, imported.favoritesEmptyStateDismissed, !target.favoritesEmptyStateDismissed {
+                perform({ _ in target.favoritesEmptyStateDismissed = true }, undo: { _ in target.favoritesEmptyStateDismissed = false; return true })
+            }
             if includeSearch {
                 var settings = target.settings
                 settings.searchEngineID = imported.settings.searchEngineID
