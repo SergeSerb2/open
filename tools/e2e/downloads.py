@@ -237,7 +237,8 @@ def checks(factory, results, tmp, config, harness):
         paths = [item(v).get('path') for v in (fast, fast2)]
         check('folder_unique', len(set(paths)) == 2 and all(Path(v).parent == first and Path(v).stat().st_size == 131072 for v in paths) and sentinel.read_text() == 'do not overwrite', paths=paths)
         library()
-        completed = row(fast2)
+        # The open Library may still show its previous rows; wait for this download's row.
+        completed = wait(lambda: row(fast2) or None) or {}
         check('completed_subtitle', completed.get('subtitle') == 'Download', row=completed)  # Arc: the kind word, else "Download" (C3 s8 item 9); .txt has none
         titles = [v['title'] for v in menu(fast2)]
         check('finished_menu_order', len(titles) == 6 and titles[0].startswith('Open ') and titles[1].startswith('Copy ') and titles[2:] == ['Show in Finder', 'separator', 'Hide from Open', 'Move to Trash'], titles=titles)
