@@ -1,5 +1,6 @@
 import AppKit
 import OpenDesign
+import OpenLiveData
 import OpenModel
 import OpenSidebar
 import OpenStore
@@ -201,9 +202,21 @@ enum RenderCLI {
         options.emptyPanel = !args.contains("--page")
         if let preview = value(args, "--preview"), let space = context.focusedSpace {
             let parts = preview.split(separator: ":")
-            let folders = (space.pinned + space.today).compactMap(\.folder)
-            guard parts.count == 2, parts[0] == "folder", let index = Int(parts[1]), folders.indices.contains(index) else { throw CLIError(description: "no preview folder \(preview)") }
-            options.previewFolderID = folders[index].id
+            if parts.count == 2, parts[0] == "recents", let site = RecentsSite(rawValue: String(parts[1])) {
+                // Look frames only: the first Pinned tab becomes a synthetic site tab with synthetic history.
+                guard let tab = space.pinned.compactMap(\.tab).first else { throw CLIError(description: "recents preview needs a Pinned tab") }
+                tab.url = URL(string: site == .confluence ? "https://example.atlassian.net/wiki/home" : site.newURL.absoluteString.replacingOccurrences(of: "/new", with: "/"))!
+                tab.customTitle = site.rawValue.capitalized
+                let empty = args.contains("--recents-empty")
+                context.recentPagesSource = { _, _ in empty ? [] : RecentsFixture.rows(site) }
+                options.previewRecents = (tab.id, site)
+                // Look frames in both modes: the Space follows --appearance (default theme).
+                if args.contains("--plain-theme") { space.theme = SpaceTheme() }
+            } else {
+                let folders = (space.pinned + space.today).compactMap(\.folder)
+                guard parts.count == 2, parts[0] == "folder", let index = Int(parts[1]), folders.indices.contains(index) else { throw CLIError(description: "no preview folder \(preview)") }
+                options.previewFolderID = folders[index].id
+            }
         }
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
         let delegate: any SidebarDelegate = context.media == nil ? RecordingDelegate() : MediaScene.delegate(context: context)
@@ -341,5 +354,23 @@ enum RenderCLI {
         }
         try Synthetic.write(model, to: URL(fileURLWithPath: out))
         print("wrote synthetic snapshot to \(out): \(model.spaces.count) Spaces, \(model.index.count) nodes")
+    }
+}
+
+
+/// Synthetic Recents history for look frames (no user data).
+enum RecentsFixture {
+    static func rows(_ site: RecentsSite) -> [(url: URL, title: String, lastVisit: Date)] {
+        let base: String, titles: [String]
+        switch site {
+        case .linear: base = "https://linear.app/acme/issue/"; titles = ["ENG-142 Sidebar drag jank on resize", "ENG-139 Archive sweep runs twice", "Q4 Roadmap", "ENG-131 Command bar ranking", "Design review notes"]
+        case .notion: base = "https://www.notion.so/acme/"; titles = ["Weekly planning", "Launch checklist", "Reading list", "Interview loop", "Team handbook"]
+        case .figma: base = "https://www.figma.com/design/"; titles = ["Sidebar v3", "Command bar explorations", "Icons", "Onboarding flow", "Marketing site"]
+        case .confluence: base = "https://example.atlassian.net/wiki/spaces/ENG/pages/"; titles = ["Release process", "On-call runbook", "Architecture overview", "Hiring plan", "Q4 OKRs"]
+        }
+        let minutes: [Double] = [4, 27, 95, 60 * 26, 60 * 24 * 6]
+        return titles.enumerated().map { i, title in
+            (URL(string: base + "\(100 + i)")!, title, Date().addingTimeInterval(-minutes[i] * 60))
+        }
     }
 }
