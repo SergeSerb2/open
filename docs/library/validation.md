@@ -1,13 +1,16 @@
 # Library validation
 
-Status: LEAD00:50 applies the user’s speed rules. Per-PR acceptance is a
-merge of origin/main, `tools/verify-all.sh --only build`, touched real-App e2e
-suites and the review checklist on the rented Mac. Those final checks are
-pending. No more per-PR M1 tickets or busy-interval diagnosis. The historical
-8.676792 ms after-wheel slice against 8 ms is a timing follow-up (8.46% over),
-explicitly accepted for this PR. All raw timing failures below remain intact,
-including the later full-busy assertion; none is rewritten as PASS. The single
-per-DMG M1 timing lane belongs to R. Earlier status/ruling sections are history.
+Status: main `bffd89a2` is merged at `b95019f6`. The scoped checks on this
+new Calendar/Notes merge are pending. The last completed scoped receipt,
+`fcb4473c`, passes the build verifier, Release App and all six touched suites;
+54 original files are copied and hash-verified. See the final section for that
+receipt and artifact. The review checklist is complete.
+
+No further per-PR M1 ticket or busy-interval diagnosis ran. The historical
+8.676792 ms after-wheel slice against 8 ms remains the accepted timing follow-up
+(8.46% over). Every raw timing failure below remains intact, including the later
+11.162417/8.3 ms full-busy failure and missing scroller. The per-DMG M1 timing
+lane belongs to R. Earlier status and ruling sections are historical.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -1201,3 +1204,43 @@ normal cleanup before the stop arrived. No external sampler ran. Unfinished
 additional trace instrumentation was removed without a product change. Main
 `d091677d` is already merged. Final scoped checks run on rented Mac
 `d0km8jp744d2q` through its FIFO queue, with one screen suite per invocation.
+
+
+## 2026-11-12 final scoped PR checks — PASS
+
+Main `a0dae317` merged cleanly at `3c67b603`. Final functional source is
+`fcb4473c8cc93500ef8dd5c74ed8f3b93b9e21f9`. The incoming live-data dispatcher had a local
+`import runpy` that hid the existing module import from History and other suite
+branches. History failed before any App launch. The one-line automation repair
+removes that redundant import. No product code or assertion changed for it.
+
+| Check | Result | Original receipt |
+|---|---|---|
+| Build verifier, `--only build` | PASS, 2/2 | `build-gate/gate.json` |
+| Release automation App build | PASS | `app-build.log` |
+| Library content | PASS, 96/96 | `library-content/result.json` |
+| Library overlay | PASS, 40/40 | `library-overlay/result.json` |
+| History, including Profile2 | PASS, 33/33 | `history/results-history-release.json` |
+| Boost Gallery | PASS, 14/14 | `boost-gallery/results-boost-gallery-release.json` |
+| Profiles shell only | PASS, 38/38 | `profiles/results-profiles-release.json` |
+| Downloads, observers lane | PASS, 7/7 | `downloads/results-downloads-release.json` |
+
+All checks ran on rented Mac `4r06u8rh5tfga`, through fresh FIFO heavy tickets and one screen suite per invocation. The 54 original files were copied after the runner ended and every SHA-256 matched. Release executable SHA-256: `b4e7b1fec027175308794dac6ec87bee18e0787bdd5b1a73d7ae108a5aac81df`. Receipt-manifest SHA-256: `7e29b67d20ca62eec6f9c3570693306544f404fd2292b2956e7ad7b5132c4326`.
+
+All owned App cleanup guards pass with zero surviving windows or processes.
+Content retains its forced native drag-source teardown; a foreign-app drop
+remains unverified. Profiles shell qualifies the touched Library integration;
+it does not qualify engine deletion.
+
+Existing Gallery and Profiles suites write 11 capture PNGs into `docs/`. The
+first replacement runner retained all eight passing stage exits but failed its
+final clean-tree assertion on those outputs. Its original exit and source audit
+remain intact. The final runner preserves the known captures privately, restores
+only those outputs, and verifies the checkout is clean. No source or check code
+changes during the run. The destroyed host run is excluded. The pre-launch
+post-merge History failure is also preserved.
+
+Final originals: `.re/l3/rented-0050-r3/d1-delivery-0050-r3/`. Earlier replacement
+originals: `.re/l3/rented-0050/` and `.re/l3/rented-0050-r2/`. Final documentation
+changes do not change App, package, engine, build or e2e inputs. The self-review
+against `docs/review-checklist.md` is complete; its result table is in the PR.
