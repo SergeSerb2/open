@@ -4,6 +4,7 @@ import OpenOnboarding
 import AppKit
 import OpenEngine
 import OpenFeatures
+import OpenDocuments
 import OpenModel
 import OpenStore
 import OpenSidebar
@@ -89,6 +90,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
   var welcomeHosts: [ItemID: WelcomeContentHost] = [:]
+  /// Native Note pages (`open://note/<uuid>`), one per shown Note tab.
+  var noteHosts: [ItemID: NoteContentHost] = [:]
   var easelHosts: [ItemID: EaselContentHost] = [:]
   func queueWelcomeDestination(_ id: ItemID, url: URL) { queuedNavigations[id] = url }
   private var developerModeObserver: (any NSObjectProtocol)?
@@ -128,6 +131,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var sidebarShareRequest: [String: Any] = [:]
   /// The last Shared Quotes offer: how long the page took to answer, whether it showed.
   var lastQuoteOffer: [String: Any] = [:]
+  /// The last Join Meeting outcome (`AutomationCalendar`).
+  var lastJoinMeeting: [String: Any] = [:]
   var sidebarShareDismissTimerForAutomation: Timer?
   var sidebarShareDismissAttemptsForAutomation = 0
   var profileMenuResponseForAutomation: String?
@@ -214,6 +219,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     self.incognitoSession = incognitoSession
     super.init()
     WelcomeTab.restoreIcons(in: self.model)
+    NoteTab.restoreIcons(in: self.model)
     EaselTab.restoreIcons(in: self.model)
     observerID = self.model.addObserver { [weak self] change in self?.treeChanged(change) }
   }
@@ -554,6 +560,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       welcomeHosts[tabID] = host
       return host
     }
+    if let noteID = NoteLink.id(from: url ?? model.tab(id: tabID)?.url), !isIncognito {
+      if let host = noteHosts[tabID], !host.closed, host.noteID == noteID { return host }
+      let host = NoteContentHost(tabID: tabID, noteID: noteID, store: app.notes, owner: self)
+      noteHosts[tabID] = host
+      return host
+    }
     if let document = EaselTab.documentID(url ?? model.tab(id: tabID)?.url) {
       if let host = easelHosts[tabID], !host.closed { return host }
       let host = EaselContentHost(tabID: tabID, documentID: document, owner: self)
@@ -620,6 +632,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let native = host as? WelcomeContentHost {
       return native.owner === self && native.tabID == tabID && !native.closed
     }
+    if let native = host as? NoteContentHost {
+      return native.owner === self && native.tabID == tabID && !native.closed
+    }
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
           profile(for: tabID)?.id == host.profileID else { return false }
     // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
@@ -679,6 +694,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if model.tab(id: id) == nil { controller?.container.closeHost(for: id); host.close() }
       else { host.page.updateColors() }
     }
+    for (id, host) in noteHosts where model.tab(id: id).map({ NoteLink.id(from: $0.url) != host.noteID }) ?? true {
+      controller?.container.closeHost(for: id); host.close()
+    }
     for (id, host) in easelHosts where model.tab(id: id).map({ EaselTab.documentID($0.url) != host.documentID }) ?? true {
       controller?.container.closeHost(for: id); host.close()
     }
@@ -708,7 +726,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// from a stored back list), so their wake kind and history are right (memory-fork §9.4).
   func markVisibleTabsLive() {
     for tab in visibleTabs {
-      if WelcomeTab.matches(tab.url) || EaselTab.matches(tab.url) { tab.live.sleepPhase = .live; continue }
+      if WelcomeTab.matches(tab.url) || NoteTab.matches(tab.url) || EaselTab.matches(tab.url) { tab.live.sleepPhase = .live; continue }
       if app.tabSleep.wakesThroughController(tab, hasHost: hosts[tab.id].map { !$0.closed } ?? false) { app.tabSleep.wake(tab.id) }
       else { tab.live.sleepPhase = .live }
     }
@@ -721,6 +739,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
     if focus {
       if let id = selectedTab?.id, let native = welcomeHosts[id] { native.focus() }
+      else if let id = selectedTab?.id, let note = noteHosts[id] { note.updateAppearance(); note.focus() }
       else if let id = selectedTab?.id, let easel = easelHosts[id] { easel.focus() }
       else { selectedContent?.focusPage() }
     }
@@ -930,6 +949,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !isClosing else { return }
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
+    for host in Array(noteHosts.values) { host.close() }
+    noteHosts.removeAll()
     for host in Array(easelHosts.values) { host.close() }
     easelHosts.removeAll()
     controller?.boostEditor?.close(returnFocus: false)
@@ -1047,6 +1068,7 @@ extension EngineWebContentHostFactory {
     if current, let tab = selectedTab, WelcomeTab.matches(tab.url) {
       leaveWelcome(tabID: tab.id, for: url); return
     }
+    if current, NoteTab.matches(selectedTab?.url) { navigateFromCommandBar(url, current: false, background: background); return }
     // An Easel tab is never replaced by a page: the address opens in a new tab.
     if current, let tab = selectedTab, EaselTab.matches(tab.url) {
       _ = openNewTab(url: url, background: background, typed: true); return

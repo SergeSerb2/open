@@ -189,8 +189,9 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
         canvas.draftView?.frame = canvas.viewRect(object.frame)
     }
 
-    /// A new shape from a drag, in document points. A click (no drag) makes a default-size
-    /// shape: GUESS 200 × 150 (rectangle/ellipse) and a 160-pt arrow — capture pending.
+    /// A new shape from a drag, in document points. A click (no drag) makes a 200 × 200 shape
+    /// centred on the click (C-report-s6 §1: ellipse 198 × 198 + outline; the rectangle is
+    /// assumed the same) and a 160-pt arrow (GUESS — capture pending).
     static func shape(kind: EaselShapeKind, start: CGPoint, end: CGPoint, points: [CGPoint], square: Bool, draft: Bool = false) -> EaselObject? {
         let color = EaselDefaults.color(for: kind)
         let tiny = hypot(end.x - start.x, end.y - start.y) < 4
@@ -198,7 +199,7 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
         switch kind {
         case .rectangle, .circle:
             var r: CGRect
-            if tiny { r = CGRect(x: start.x - 100, y: start.y - 75, width: 200, height: 150) }
+            if tiny { r = CGRect(x: start.x - 100, y: start.y - 100, width: 200, height: 200) }
             else {
                 var w = end.x - start.x, h = end.y - start.y
                 if square { let m = max(abs(w), abs(h)); w = w < 0 ? -m : m; h = h < 0 ? -m : m }
@@ -471,7 +472,7 @@ final class EaselColorPopover: NSView {
         if arrowDown { tip.move(to: CGPoint(x: ax - 6, y: card.maxY)); tip.line(to: CGPoint(x: ax, y: card.maxY + 6)); tip.line(to: CGPoint(x: ax + 6, y: card.maxY)) }
         else { tip.move(to: CGPoint(x: ax - 6, y: card.minY)); tip.line(to: CGPoint(x: ax, y: card.minY - 6)); tip.line(to: CGPoint(x: ax + 6, y: card.minY)) }
         tip.close(); path.append(tip)
-        EaselStyle.floating(dark: dark).setFill(); path.fill()
+        EaselStyle.popover(dark: dark).setFill(); path.fill()
         for colors in EaselColor.rows {
             for color in colors {
                 guard let c = center(of: color) else { continue }
@@ -479,7 +480,9 @@ final class EaselColorPopover: NSView {
                 let swatch = NSBezierPath(ovalIn: CGRect(x: c.x - 10, y: c.y - 10, width: 20, height: 20))
                 fill.setFill(); swatch.fill()
                 swatch.lineWidth = 1
-                (fill.blended(withFraction: 0.18, of: .black) ?? fill).withAlphaComponent(color == .white ? 0.25 : 1).setStroke()
+                // The swatch that matches the popover (white in light, black in dark) gets a visible ring.
+                (color == .white ? NSColor(white: dark ? 1 : 0, alpha: dark ? 0.35 : 0.15)
+                    : fill.blended(withFraction: 0.18, of: .black) ?? fill).setStroke()
                 swatch.stroke()
                 if color == current {
                     let check = NSBezierPath(); check.lineWidth = 1.8; check.lineCapStyle = .round; check.lineJoinStyle = .round
