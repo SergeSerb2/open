@@ -105,7 +105,9 @@ def run(config, output, force_failure, expected_engine):
     output.mkdir(parents=True, exist_ok=False)
     scratch = Path(tempfile.mkdtemp(prefix="open-previews-"))
     name = "Open-E2E-previews-" + uuid.uuid4().hex[:16]
-    domain = "com.open.previews-e2e." + uuid.uuid4().hex
+    # The App launched through `Open` reads this run's private preferences domain (prefs_domain.py); write and read
+    # the setting there. The unique bundle ID below still keeps any other process-level state apart.
+    domain = __import__("prefs_domain").domain()
     data = Path.home() / "Library/Application Support" / name
     cache = Path.home() / "Library/Caches" / name
     bundle = scratch / "Open.app"
