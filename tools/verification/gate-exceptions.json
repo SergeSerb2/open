@@ -108,15 +108,6 @@
     "expires": "A dialog-free HTTP Basic probe exists; the superseded observation remains opt-in"
   },
   {
-    "row": "downloads/history_retry",
-    "status": "DEFERRED",
-    "reason": "engine: download callbacks end when the originating tab closes (CEF download_manager_delegate_impl.cc:331-344, 483-492)",
-    "clearsWhen": "Engine patch delivers terminal download callbacks to a Profile-level owner after originating-tab close; unchanged Retry predicate passes",
-    "owner": "engine lane / lead",
-    "added": "2026-11-10",
-    "expires": "Engine callback-lifetime patch lands"
-  },
-  {
     "row": "sitecontrol/S11_material",
     "status": "DEFERRED",
     "reason": "S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)",

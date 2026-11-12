@@ -103,3 +103,10 @@ After approval, run the unchanged `downloads/history_retry` predicate, normal
 and close-during-transfer downloads, named-Profile attribution, Profile
 retirement, and the Web Store download flow. No fix or performance gain is
 claimed from source preparation alone.
+
+## Accepted on the official engine (2026-11-12)
+
+The official remote-built engine (`Engine/fork/official-distrib.json`) includes CEF patch 1001 and the
+OEClient companion. On the M5 (Release, `tools/verify-all.sh --only e2e-downloads`), the unchanged
+`downloads/history_retry` row passed, and the gate reported its deferral as STALE. The deferral is
+removed from `tools/verification/gate-exceptions.json`.
