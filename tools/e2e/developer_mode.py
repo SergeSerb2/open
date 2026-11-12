@@ -46,7 +46,8 @@ def run(factory, results, tmp, h):
         row('bar_hidden_without_developer_mode', off.get('shown') is False, state={k: off.get(k) for k in ('shown', 'toolbar')})
 
         app.call('command', id='toggle-developer-mode')
-        assert h.wait_until(lambda: state().get('shown'), timeout=10, step=.05), state()
+        # The bar gets its frame on the slot's next layout pass.
+        assert h.wait_until(lambda: state().get('shown') and state().get('frame', [0, 0, 0, 0])[3] > 0, timeout=10, step=.05), state()
         on = state()
         frame, page = on.get('frame', [0, 0, 0, 0]), on.get('pageFrame', [0, 0, 0, 0])
         buttons = {b['id']: b for b in on.get('buttons', [])}
@@ -103,6 +104,7 @@ def run(factory, results, tmp, h):
 
         # The bar's colours follow the appearance (Arc's measured default-theme values).
         palettes = {}
+        if frames: time.sleep(4)  # the "Developer Mode On" toast is gone before the look frames
         for mode in ('light', 'dark'):
             app.call('appearance', name=mode); time.sleep(.5)
             palettes[mode] = state().get('palette')
