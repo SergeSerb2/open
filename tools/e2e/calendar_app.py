@@ -267,7 +267,9 @@ def live_checks(app, results, wait_until, new_tab, cal, fav):
     seen = {}
     for minutes in (9, 10, 13):
         s = at(minutes)
-        seen[minutes] = ((s.get('tiles') or [{}])[0].get('subtitle'), len(s.get('reminders', [])))
+        # Count only this event's reminders: the calendar Favorite from the Join Meeting rows keeps Live Calendar on
+        # during their fixtures, so the log can hold reminders for those events too.
+        seen[minutes] = ((s.get('tiles') or [{}])[0].get('subtitle'), sum(r.get('event') == 'm' for r in s.get('reminders', [])))
     toast = toasts()
     gone = at(21)
     results['cal_live_tile_times'] = {
