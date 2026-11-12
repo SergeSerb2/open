@@ -18,9 +18,9 @@
   "interrupted_attempts": [],
   "lane": "all",
   "load": [
-    8.60888671875,
-    10.51416015625,
-    10.70458984375
+    4.16455078125,
+    7.0947265625,
+    9.1318359375
   ],
   "notes": {
     "suite": {
@@ -31,8 +31,8 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "18aae28a7dbba6dfe0cab9e01b7b8ee1c3f2b5d0"
+    "head": "fcac027637936f3ceb539f57e56d15276d3e2580"
   },
-  "started": "2026-11-12 01:46:44",
+  "started": "2026-11-12 01:51:21",
   "style": "chrome"
 }
