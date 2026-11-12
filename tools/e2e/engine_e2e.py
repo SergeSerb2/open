@@ -3674,7 +3674,12 @@ def chrome_capture_comparison(snapshots):
             ("cmd-s-restored", "20261026-101147-06-sidebar-width", 66, 228, (8,600)),
             ("card-revealed", "20261026-101324-05-reveal-card", 9, 233, (100,600))]:
         captures=glob.glob(os.path.join(sessions,session,"%04d-*"%frame,"win-70352.png"))
-        if not captures: return {"status":"SKIP", "reason":"capture session 2 frames absent"}, {}
+        if not captures:
+            # Both rows need the private Arc capture frames (the M5's .re). Each row
+            # states the skip; an empty row has no acceptance predicate and made the
+            # gate drop every other window row.
+            skip = {"status":"SKIP", "reason":"capture session 2 frames absent on this Mac; the window merge stage qualifies on the M5"}
+            return dict(skip), dict(skip)
         arc=captures[0]; ours=os.path.join(snapshots,name+".png")
         aw,ah,A=read_image(arc,srgb=True); ow,oh,O=read_image(ours,srgb=True); scale=ow/aw
         def mean(P, x,y,s):
