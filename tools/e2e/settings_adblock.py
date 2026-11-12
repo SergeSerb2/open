@@ -457,6 +457,7 @@ def real_engine(factory, results, wait):
                 name = Path(urllib.parse.urlsplit(self.path).path).name
                 body = (b'[Adblock Plus 2.0]\n||demand.supply/ad.js$script\n'
                         b'||demand.supply/resource.js$script,redirect=noopjs\n'
+                        b'||open-adblock.test^$removeparam=utm_source\n'
                         # A byte-identical 200 response correctly skips reload.
                         # Change only a comment so the refresh assertion observes
                         # a new generation with the same official blocking rules.
@@ -945,6 +946,40 @@ def real_engine(factory, results, wait):
         resource_tab = app.call('open', url='about:blank')['id']
         visit(resource_tab, 'resources_text_blocks', True)
         resource_probe(resource_tab, 'resources_text_stub', True)
+
+        # $removeparam (plan 7.4 rule 4): main-frame and subframe navigations
+        # and fetches lose the listed parameter through one internal redirect;
+        # the server never sees it. An excluded site keeps its URL.
+        def removeparam(name, stripped):
+            requests.clear()
+            app.call('navigate', tab=resource_tab, url=origin + '/rp-' + name + '?utm_source=mail&keep=1')
+            app.call('wait', tab=resource_tab)
+            assert wait(lambda: app.call('eval', tab=resource_tab, js='window.__done===2'), timeout=20)
+            observed = app.call('eval', tab=resource_tab, js='''(async () => {
+                const frame = document.createElement('iframe');
+                const loaded = new Promise(resolve => frame.onload = resolve);
+                frame.src = '/rpframe-%s?a=1&utm_source=frame';
+                document.body.append(frame);
+                await loaded;
+                const fetched = await fetch('/rpfetch-%s?utm_source=fetch&b=2');
+                return {main: location.pathname + location.search,
+                        frame: frame.contentWindow.location.pathname + frame.contentWindow.location.search,
+                        fetch: new URL(fetched.url).pathname + new URL(fetched.url).search,
+                        redirected: fetched.redirected};
+            })()''' % (name, name))
+            seen = sorted(p for p in requests if p.startswith('/rp'))
+            expected = (dict(main='/rp-%s?keep=1' % name, frame='/rpframe-%s?a=1' % name,
+                             fetch='/rpfetch-%s?b=2' % name, redirected=True) if stripped else
+                        dict(main='/rp-%s?utm_source=mail&keep=1' % name, frame='/rpframe-%s?a=1&utm_source=frame' % name,
+                             fetch='/rpfetch-%s?utm_source=fetch&b=2' % name, redirected=False))
+            row('removeparam_' + name, observed == expected
+                and seen == sorted(expected[k] for k in ('main', 'frame', 'fetch')),
+                observed=observed, expected=expected, serverSaw=seen)
+        removeparam('navigation_strips', True)
+        app.call('settings-adblock', host='open-adblock.test', excluded=True)
+        removeparam('excluded_site_keeps', False)
+        app.call('settings-adblock', host='open-adblock.test', excluded=False)
+        removeparam('restored_strips', True)
         app.call('save')
         app.quit()
         app = factory(urls=('about:blank',), load_extensions=False, extra_args=args, extra_env=source_env)
