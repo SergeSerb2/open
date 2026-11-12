@@ -10,6 +10,7 @@ import OpenModel
 final class LiveFolderService {
   /// Arc's built-in minimum between refreshes of one folder (live-data §2.5: 10 s).
   static let minimumInterval: TimeInterval = 10
+  static let introSeenKey = "open.liveFolders.introSeen"
   private unowned let app: AppDelegate
   /// github.com, or a fixture origin set by automation.
   var origin = GitHubQuery.defaultOrigin
@@ -28,6 +29,12 @@ final class LiveFolderService {
       return true
     }
     guard let folder = model.createLiveFolder(in: spaceID, config: LiveFolderConfig()) else { return false }
+    // The intro card shows on the first creation only (Arc `hasSeenGithubLiveFolderEducation`).
+    if !UserDefaults.standard.bool(forKey: Self.introSeenKey), let controller = app.frontWindowController,
+       controller.context.focusedSpace?.id == spaceID {
+      UserDefaults.standard.set(true, forKey: Self.introSeenKey)
+      DispatchQueue.main.async { controller.showLiveFolderIntro(folderID: folder.id) }
+    }
     Task { await refresh(folderID: folder.id, manual: true) }
     return true
   }

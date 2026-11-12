@@ -844,6 +844,15 @@ final class FolderIconView: NSView {
             CustomIcon.folderPeek(in: bounds.insetBy(dx: 1, dy: 1), color: usesDefaultAccent ? SidebarRole.folderPeekDefaultAccent.light.nsColor : accent,
                                   dotsColor: SidebarRole.folderPeekDots.light.nsColor)
         } else { CustomIcon.folder(open: expansion == .expanded, in: ink, color: accent) }
+        // Live Folder (capture s5 b3: a folder glyph with a service badge). Our badge is Open's own
+        // pull-request glyph in the folder body, never GitHub's mark. Size and placement:
+        // GUESS — capture pending (only one 2x frame of Arc's glyph exists).
+        if folder.live != nil, icon == nil, folder.peekedChildID == nil {
+            lastDrawnGlyph = "folder.live"
+            let body = CGRect(x: ink.minX, y: ink.minY + ink.height * 0.30, width: ink.width, height: ink.height * 0.70)
+            let side = min(body.width, body.height) * 0.78
+            PullRequestGlyph.draw(in: CGRect(x: body.midX - side / 2, y: body.midY - side / 2, width: side, height: side), color: .white)
+        }
     }
 }
 

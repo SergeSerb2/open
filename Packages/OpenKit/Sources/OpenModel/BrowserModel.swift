@@ -1747,10 +1747,11 @@ public final class BrowserModel {
         space(id: spaceID)?.pinned.lazy.compactMap(\.folder).first { $0.live != nil }
     }
 
-    /// Creates "Pull Requests" at the top of the Space's Pinned section. Undoable like New Folder.
+    /// Creates "Pull Requests" at the end of the Space's Pinned section (capture s5 b3). Undoable like New Folder.
     @discardableResult
     public func createLiveFolder(in spaceID: SpaceID, config: LiveFolderConfig, title: String = "Pull Requests") -> Folder? {
-        guard liveFolder(in: spaceID) == nil, let folder = createFolder(in: .spacePinned(spaceID), at: 0, title: title) else { return nil }
+        guard liveFolder(in: spaceID) == nil, let space = space(id: spaceID),
+              let folder = createFolder(in: .spacePinned(spaceID), at: space.pinned.count, title: title) else { return nil }
         folder.live = config
         return folder
     }

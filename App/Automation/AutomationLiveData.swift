@@ -72,7 +72,13 @@ extension AutomationController {
                 "unread": tab.isUnread]
       }
       let index = space.pinned.firstIndex { $0.id == folder.id } ?? -1
-      return ["exists": true, "id": folder.id.description, "title": folder.title, "pinnedIndex": index, "rows": rows,
+      let intro = app.frontWindowController?.liveFolderIntro.map { v -> [String: Any] in
+        let f = v.superview.map { v.convert(v.bounds, to: $0) } ?? .zero
+        return ["frame": [f.minX, f.minY, f.width, f.height], "title": LiveFolderIntroView.title, "body": LiveFolderIntroView.body]
+      }
+      let row = app.frontWindowController.flatMap { c in c.sidebar.rowFrame(nodeID: folder.id).map { c.contentView.convert($0, from: c.sidebar) } }
+      return ["exists": true, "id": folder.id.description, "title": folder.title, "pinnedIndex": index, "pinnedCount": space.pinned.count, "rows": rows,
+        "intro": intro ?? NSNull(), "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
         "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
         "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":

@@ -252,6 +252,30 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         return preview
     }()
+    /// Live Folder intro card (capture s5 b3) beside the new folder row; one at a time.
+    public private(set) var liveFolderIntro: LiveFolderIntroView?
+    private var liveFolderIntroMonitor: Any?
+    public func showLiveFolderIntro(folderID: ItemID) {
+        dismissLiveFolderIntro()
+        sidebar.layoutSubtreeIfNeeded()
+        guard let row = sidebar.rowFrame(nodeID: folderID) else { return }
+        let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
+        let view = LiveFolderIntroView(appearance: appearance)
+        let rowInRoot = root.convert(row, from: sidebar)
+        let size = view.fittingSize
+        view.frame = CGRect(x: context.sidebarWidth + HoverPreviewMetrics.folderSidebarGap, y: rowInRoot.midY - size.height / 2, width: size.width, height: size.height)
+        root.addSubview(view, positioned: .below, relativeTo: toastOverlay)
+        liveFolderIntro = view
+        // Any click or key dismisses it (capture s5: Esc closes it); the event still goes on.
+        liveFolderIntroMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+            MainActor.assumeIsolated { if event.window === self?.window { self?.dismissLiveFolderIntro() } }
+            return event
+        }
+    }
+    public func dismissLiveFolderIntro() {
+        if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor); self.liveFolderIntroMonitor = nil }
+        liveFolderIntro?.removeFromSuperview(); liveFolderIntro = nil
+    }
     /// The delete confirmation sheet currently shown on this window (completion §3.3).
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.

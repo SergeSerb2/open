@@ -83,9 +83,19 @@ def live_folder_checks(holder, results, wait_until, factory):
         menu = app.call('sidebar-menu-state', item='Live Folders/GitHub')
         app.call('sidebar-menu', item='Live Folders/GitHub')
         state = app.call('live-folder-state', wait=True)
+        intro, row = state.get('intro'), state.get('rowFrame')
+        # Intro card beside the new row (capture s5 b3): right of the sidebar, centred on the row, Arc's strings.
+        results['live_folder_intro_card'] = {'ok': bool(intro) and bool(row) and intro['body'] == 'Pull requests from you and your team will show up here automatically'
+            and intro['title'] == 'Pull Requests' and intro['frame'][0] >= row[0] + row[2] and abs((intro['frame'][1] + intro['frame'][3] / 2) - (row[1] + row[3] / 2)) <= 1
+            and intro['frame'][2] == 228, 'intro': intro, 'row': row}
+        if os.environ.get('OPEN_LIVE_DATA_FRAMES'):
+            window = app.call('window-state')
+            app.call('snapshot', window=window.get('number'), path=os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-folder-intro-window.png'))
+        app.call('key', key='escape', route='app')
+        results['live_folder_intro_dismiss'] = {'ok': app.call('live-folder-state').get('intro') is None}
         titles = [r['title'] for r in state.get('rows', [])]
         results['live_folder_created_from_space_menu'] = {'ok': menu.get('checked') is False and state.get('exists') and state.get('title') == 'Pull Requests'
-            and state.get('pinnedIndex') == 0 and state.get('outcome') == 'success'
+            and state.get('pinnedIndex') == state.get('pinnedCount', 0) - 1 and state.get('outcome') == 'success'
             and sorted(titles) == sorted(['Fix sidebar drag', 'Draft: new header', 'Add Live Folders'])
             and all(r['live'] for r in state['rows']) and not any(r['unread'] for r in state['rows'])
             and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is True, 'menu': menu, 'state': state}
@@ -117,6 +127,11 @@ def live_folder_checks(holder, results, wait_until, factory):
             and {(r['url'], r['live']) for r in again.get('rows', [])} == before and app.call('live-folder-refresh').get('outcome') == 'success',
             'state': again}
         app.call('sidebar-menu', item='Live Folders/GitHub')
+        gone = app.call('live-folder-state')
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        second = app.call('live-folder-state', wait=True)
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        results['live_folder_intro_once'] = {'ok': second.get('exists') and second.get('intro') is None, 'state': {'intro': second.get('intro')}}
         gone = app.call('live-folder-state')
         results['live_folder_toggle_off_removes'] = {'ok': gone.get('exists') is False and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is False, 'state': gone}
         return app
