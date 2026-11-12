@@ -96,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var deepLinks = DeepLinkRouter(app: self)
+  lazy var mailto = MailtoRouter(app: self)
   lazy var linkIntake: ExternalLinkIntake = {
     let intake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
     let meet = MeetRoute(app: self)

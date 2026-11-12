@@ -937,7 +937,7 @@
         return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x })] as [String: Any]
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
-      case "handoff-state", "handoff-continue", "deep-link-state":
+      case "handoff-state", "handoff-continue", "deep-link-state", "mailto-state":
         return try await runHandoffCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)

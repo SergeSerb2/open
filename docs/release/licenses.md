@@ -121,19 +121,16 @@ gate. The plan ships the acknowledgment; it does not clear the patent risk.
 
 ## Public MPL source location (U-8)
 
-Public MPL source location: https://github.com/SergeSerb2/open-releases
+Public MPL source location: https://github.com/SergeSerb2/open
 
-Decision (user-approved, 2026-11-12): the development repository stays private. The public repository
-`SergeSerb2/open-releases` holds the release downloads, the update feed (GitHub Pages, `gh-pages`) and, for
-each release, the exact MPL sources listed here (adblock with Open's changes, both PSL snapshots, the psl
-crate's list source). The release lane publishes them there before the first public release and checks
-anonymous access.
+Decision (user, 2026-11-12 13:35): the development repository `SergeSerb2/open` is public (its history was
+scanned first: no secrets, no Arc assets, no personal data). It is the public MPL source offer: the exact
+shipped sources of each release (adblock with Open's changes in `Engine/fork/patches/rust/`, both Swift PSL
+snapshots, the psl crate's list source) are at that release's tag. `SergeSerb2/open-releases` stays the home
+of the release downloads and the update feed (GitHub Pages, `gh-pages`).
 
-The user must choose a public repository or mirror under release plan U-8.
-Publish the exact adblock sources and Open modifications, both Swift PSL
-snapshots and the psl crate's generated list source without authentication.
-The pinned private repository alone does not meet the public source offer.
-Then replace UNSET above with the HTTPS location and verify anonymous access.
+Anonymous access checked 2026-11-12 with `curl` (no token): `https://github.com/SergeSerb2/open` 200, the
+`main` source tarball 200, `raw.githubusercontent.com/SergeSerb2/open/main/docs/release/licenses/MPL-2.0.txt` 200.
 The generator checks URL syntax only; it does not test public access.
 `--require-public-source` and `--require-cef-credits` refuse an unset offer.
 No source was published or release user step performed by this audit.

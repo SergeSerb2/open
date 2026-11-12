@@ -6,6 +6,9 @@ extension AutomationController {
   /// `handoff-continue {url}`: hands a web-browsing activity to the real
   /// NSApplicationDelegate continue path, as macOS does for an incoming Handoff.
   func runHandoffCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {
+    if cmd == "mailto-state" {
+      return ["handled": app.mailto.handledCount, "translated": app.mailto.last?.output ?? ""] as [String: Any]
+    }
     if cmd == "deep-link-state" {
       return ["handled": app.deepLinks.handledCount, "route": app.deepLinks.last?.route ?? "",
         "result": app.deepLinks.last?.result ?? "", "pid": Int(ProcessInfo.processInfo.processIdentifier)] as [String: Any]

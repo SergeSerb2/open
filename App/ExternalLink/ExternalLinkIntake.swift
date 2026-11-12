@@ -109,6 +109,7 @@ extension AppDelegate {
   private func finishExternalLinkRestoration() {
     linkIntake.markReady()
     deepLinks.markReady()
+    mailto.markReady()
   }
 
   func applicationWillFinishLaunching(_ notification: Notification) {
@@ -123,6 +124,7 @@ extension AppDelegate {
       Self.commandLog("Ignored malformed external URL event."); return
     }
     if DeepLinkRouter.matches(url) { deepLinks.handle(url); return }
+    if MailtoRouter.matches(url) { mailto.handle(url, source: SourceAppResolver.source(from: event)); return }
     linkIntake.handle(urls: [url], source: SourceAppResolver.source(from: event))
   }
 
@@ -132,6 +134,7 @@ extension AppDelegate {
     for url in urls {
       if url.isFileURL, self.application(application, openFile: url.path) { continue }
       if DeepLinkRouter.matches(url) { deepLinks.handle(url); continue }
+      if MailtoRouter.matches(url) { mailto.handle(url, source: .unknown); continue }
       linkIntake.handle(urls: [url], source: .unknown)
     }
   }

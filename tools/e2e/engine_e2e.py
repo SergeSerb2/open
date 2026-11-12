@@ -9112,6 +9112,26 @@ def routing_checks(factory, results, tmp):
         welcome_tab = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == 'open://welcome' and t['selected']), None), timeout=5, step=.05)
         record('routing_deep_link_welcome', ok_welcome and (welcome or {}).get('result') == 'welcome' and bool(welcome_tab), state=welcome, tab=welcome_tab)
 
+        # PB1 mailto: an external mailto: link (LaunchServices, real kAEGetURL) goes to the focused Profile's
+        # web protocol handler (engine #471) and lands like a web link; with no handler nothing opens.
+        app.call('policy', permissions='grant')
+        mail_tab = new_tab(app, origin + '/mail-home')
+        template = origin + '/compose?to=%s'
+        app.eval(mail_tab, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+        registered = wait_until(lambda: any(h['scheme'] == 'mailto' and h['default'] for h in app.call('protocol-handlers')['handlers']), timeout=8, step=.1)
+        mail_before = app.call('mailto-state')['handled']
+        expected_mail = origin + '/compose?to=mailto%3Asomeone%40example.org'
+        sent_mail = deliver('mailto:someone@example.org')
+        mail_landed = landed(expected_mail)
+        mail_state = app.call('mailto-state')
+        app.call('protocol-handlers', removeScheme='mailto', removeURLTemplate=template)
+        tabs_before_none = len(app.call('tabs'))
+        sent_none = deliver('mailto:nobody@example.org')
+        none_state = wait_until(lambda: (lambda st: st if st['handled'] >= mail_before + 2 else None)(app.call('mailto-state')), timeout=8, step=.1)
+        record('routing_mailto_handler', bool(registered) and sent_mail.returncode == 0 and mail_landed
+               and mail_state['translated'] == expected_mail and sent_none.returncode == 0 and bool(none_state)
+               and none_state['translated'] == '' and len(app.call('tabs')) == tabs_before_none,
+               state=mail_state, noHandler=none_state)
         # restart: the same executable and options come back after this process exits.
         # The harness stops talking to the old App (it exits on purpose); the relaunched
         # instance answers on the same automation socket and is driven with short raw calls.
