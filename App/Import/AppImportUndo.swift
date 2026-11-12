@@ -15,6 +15,8 @@ final class AppImportUndo {
   /// Undo permanently stops this import, even if Redo is pressed before a
   /// pending store batch returns. Store inverses wait for its final receipt.
   private(set) var cancelled = false
+  /// Menu title of the Undo item, per import source.
+  var actionName = "Import from Arc"
   private var importing = true
   private var importWaiters: [CheckedContinuation<Void, Never>] = []
   private var archives: [(ArchiveStore, [ArchivedTabRecord])] = []
@@ -70,7 +72,7 @@ final class AppImportUndo {
     manager.registerUndo(withTarget: self) { [self] _ in
       MainActor.assumeIsolated { apply(undoing: undoing) }
     }
-    manager.setActionName("Import from Arc")
+    manager.setActionName(actionName)
     if group { manager.endUndoGrouping() }
   }
 
