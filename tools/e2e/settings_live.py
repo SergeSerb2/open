@@ -80,8 +80,15 @@ def run(factory, results, tmp, wait_until, restore_defaults):
             'advancedStatus': s['advancedStatus'], 'negativeBeforeWindow': before_boosts['library'] == 0,
             'negativeClosed': library_before, 'legacyExpectedError': legacy_error,
             'negativeOldAssertionRejected': not legacy_assertion}
+        # Cmd+W with the in-window Library open closes the Library, not the tab hidden behind it
+        # (#350 regression: the Library stayed and the tab was archived).
+        tabs_before = [t['id'] for t in app.call('tabs')]
         app.call('key', key='w', modifiers=['cmd'], window=s['library'], route='app')
-        assert wait_until(lambda: not app.call('library-section')['visible'], timeout=5, step=.05)
+        library_closed = wait_until(lambda: not app.call('library-section')['visible'], timeout=5, step=.05)
+        tabs_after = [t['id'] for t in app.call('tabs')]
+        results['settings_cmd_w_closes_library_not_tab'] = {'ok': bool(library_closed) and tabs_after == tabs_before,
+            'tabsBefore': tabs_before, 'tabsAfter': tabs_after}
+        assert library_closed
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
 
         # The picker action writes the actual preference and replaces NSApp's actual image.

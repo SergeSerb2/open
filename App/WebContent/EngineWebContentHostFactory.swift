@@ -1223,6 +1223,12 @@ extension EngineWebContentHostFactory {
       return
     }
     if let panel = NSApp.keyWindow as? NSPanel, let page = auxiliaryPages.first(where: { $0.panel === panel }) { closeAuxiliary(page); return }
+    // Cmd+W with the in-window Library open closes the Library, never the tab hidden behind it
+    // (as before #350, when the Library was its own window; same as Escape). GUESS — capture pending:
+    // Arc's Cmd+W with its Library open (C3-PB1-j).
+    if let controller, controller.isLibraryOpen, let session = app.settingsPresenter.librarySessions[controller.windowID] {
+      session.close(); return
+    }
     if let tab = selectedTab { closeTab(id: tab.id) }
   }
 
