@@ -135,7 +135,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             key('escape')
             check('escape_clears_search', state()['open'] and state()['search'] == '')
             key('f', ['cmd'])
-            check('cmd_f_search', state()['firstResponder'] == 'NSTextView', state=state())
+            check('cmd_f_search', state()['firstResponder'] == 'LibrarySearchEditor', state=state())
             app.call('key', text='socket typing', route='app')
             check('native_search_typing', state()['search'] == 'socket typing')
             key('escape')

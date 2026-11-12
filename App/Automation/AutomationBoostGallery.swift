@@ -55,6 +55,12 @@ extension AutomationController {
       if target.responds(to: enabled), !unsafeBitCast(target.method(for: enabled), to: BooleanAction.self)(target, enabled) {
         throw Failure(message: "Gallery control is disabled")
       }
+      if let button = target as? NSButton, button.target != nil, button.action != nil {
+        // Native Library controls use NSButton's target/action path. Their
+        // layer-backed cells do not implement the hosted AX press method.
+        guard button.isEnabled else { throw Failure(message: "Gallery control is disabled") }
+        button.performClick(nil); return
+      }
       let selector = NSSelectorFromString("accessibilityPerformPress")
       guard target.responds(to: selector), unsafeBitCast(target.method(for: selector), to: BooleanAction.self)(target, selector)
       else { throw Failure(message: "Gallery control refused press") }
