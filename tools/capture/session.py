@@ -513,7 +513,8 @@ class Session:
 
     # Arc shortcuts used by plan C3. Never quit, settings, delete-data or system panels.
     S3_KEYS = {('s','cmd'), ('t','cmd'), ('l','cmd'), ('d','cmd'), ('left','cmd,opt'), ('right','cmd,opt'),
-               ('left','opt,cmd'), ('right','opt,cmd'), ('space',''), ('delete',''), ('n','cmd,shift'), ('b','cmd,shift')} | {(str(i),'ctrl') for i in range(1,10)}
+               ('left','opt,cmd'), ('right','opt,cmd'), ('space',''), ('delete',''), ('n','cmd,shift'), ('b','cmd,shift'), ('=','cmd'), ('-','cmd'), ('0','cmd'),
+               ('n','ctrl,shift'), ('n','ctrl,opt'), ('e','ctrl,shift')} | {(str(i),'ctrl') for i in range(1,10)}
 
     def point_in(self, n, at=None):
         x,y,w,h = n['frame']
@@ -524,7 +525,8 @@ class Session:
 
     def synthetic_field(self, text=None):
         focused = json.loads(run(self.native, 'focused', self.pid))
-        fields = [focused] if focused.get('focused') and focused.get('role') in ('AXTextField','AXSearchField') else []
+        roles = ('AXTextField', 'AXSearchField', 'AXTextArea') if self.s3_ruling() else ('AXTextField', 'AXSearchField')
+        fields = [focused] if focused.get('focused') and focused.get('role') in roles else []
         predicates = self.script.get('synthetic_input_targets', [])
         if len(fields) != 1 or not any(matches(fields[0], p) for p in predicates):
             raise Stopped('Session2 input requires one freshly focused observed synthetic field')
@@ -679,7 +681,7 @@ class Session:
             base = matched or [w for w in wins if w['layer'] == 0 and w['bounds']['Width'] > 100]
             if not base:
                 raise Stopped('no owned browser window matched the AX geometry')
-            win = next((w for w in wins if w['number'] == self.window), None) or max(base, key=lambda w: w['bounds']['Width'] * w['bounds']['Height'])
+            win = next((w for w in wins if w['number'] == self.window and w.get('onscreen')), None) or max(base, key=lambda w: w['bounds']['Width'] * w['bounds']['Height'])
             self.active_window = win['number']
             self.pixel_run(['/usr/sbin/screencapture', '-x', '-o', '-l', str(win['number']), str(path)])
             before = tree
@@ -1202,7 +1204,12 @@ class Session:
             outline = [min(outline, key=lambda f: abs(f[0] - main[0][0]))]
             edge = outline[0][0] + outline[0][2] - 1
             self.drag_geometry = {'window': main[0], 'sidebar_edge': edge}
-            if step.get('kind', 'tab') == 'divider':
+            if step.get('kind', 'tab') == 'canvas':
+                # Easel canvas drawing: both ends inside the window, right of the sidebar, no rails.
+                if not (edge + 20 <= sx and edge + 20 <= ex <= main[0][0] + main[0][2] - 20
+                        and main[0][1] + 60 <= min(sy, ey) and max(sy, ey) <= main[0][1] + main[0][3] - 60):
+                    raise Stopped('canvas drag must stay inside the page area')
+            elif step.get('kind', 'tab') == 'divider':
                 # Sidebar width drag: start on the divider, end inside the window; no tab drop.
                 if abs(sx - edge) > 6 or not (main[0][0] + 40 <= ex <= main[0][0] + main[0][2] - 200):
                     raise Stopped('divider drag must start on the sidebar edge and stay inside the window')
@@ -1549,7 +1556,7 @@ def main():
                                                                           'movie did not contain', 'expected pointer result not observed',
                                                                           'expected pointer menu not observed', 'expected drag-start result',
                                                                           'drag end is outside', 'divider drag must', 'drop point is within',
-                                                                          'manual accessibility needs')) else 1
+                                                                          'manual accessibility needs', 'Session2 input requires')) else 1
     finally:
         session.cleanup()
     return code if session.cleanup_ok and session.permission_handoff is None else 1  # noqa: cleanup failure always 1
