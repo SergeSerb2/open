@@ -487,6 +487,9 @@
       case "settings-adblock-lifecycle": return try await settingsAdBlockLifecycle(a)
       #endif
       case "settings-adblock-engine": return settingsAdBlockEngine()
+      case "runloop-turns":
+        guard let trace = RunLoopTurnTrace.current else { throw Failure(message: "start with OPEN_AUTOMATION_RUNLOOP_TURNS=1") }
+        return trace.json(minimumMilliseconds: a["minimumMs"] as? Double ?? 8, fromLaunchMilliseconds: a["fromLaunchMs"] as? Double ?? 0)
       case "startup-trace":
         guard let trace = StartupMainThreadTrace.current else { throw Failure(message: "start with OPEN_AUTOMATION_STARTUP_TRACE=1") }
         return trace.json(minimumMilliseconds: a["minimumMs"] as? Double ?? 8)
