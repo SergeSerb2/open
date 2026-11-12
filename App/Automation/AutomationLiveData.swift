@@ -154,6 +154,8 @@ extension AutomationController {
   private func liveSpace(_ a: [String: Any]) throws -> Space {
     if let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }) { return space }
     guard let space = app.frontWindowController?.context.focusedSpace else { throw Failure(message: "no Space") }
+    // After a relaunch the front window can show another Space: use the one with a Live Folder.
+    if app.model.liveFolder(in: space.id) == nil, let owner = app.model.spaces.first(where: { app.model.liveFolder(in: $0.id) != nil }) { return owner }
     return space
   }
 
