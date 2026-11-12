@@ -9565,6 +9565,12 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     bar('t', 'window'); app.call('key', text='netfl')
     typed = wait_until(lambda: (lambda st: st if st.get('final') and st.get('fieldText') == 'netflix.com' else None)(state()), timeout=5, step=.05) or state()
     rows_td = typed.get('rows', [])
+    # Capture PB1-i (C-report-s6 §8): "amaz" lists Amazon first, then Amazon.co.uk, Amazon.es, AWS, Amazon.ca.
+    press('escape'); bar('t', 'window'); app.call('key', text='amaz')
+    amaz = wait_until(lambda: (lambda st: st if st.get('final') and st.get('fieldText') == 'amazon.com' else None)(state()), timeout=5, step=.05) or state()
+    amaz_titles = [r.get('title') for r in amaz.get('rows', []) if r.get('kind') == 'navigate']
+    results['commandbar_top_domain_regional'] = {'ok': amaz_titles[:5] == ['Amazon', 'Amazon.co.uk', 'Amazon.es', 'Amazon Web Services (AWS)', 'Amazon.ca'],
+        'rows': amaz_titles}
     results['commandbar_top_domain_row'] = {'ok': typed.get('fieldText') == 'netflix.com' and bool(rows_td)
         and rows_td[0].get('title') == 'Netflix' and 'netflix.com' in (rows_td[0].get('url') or ''),
         'field': typed.get('fieldText'), 'text': typed.get('text'), 'rows': [r.get('title') for r in rows_td[:4]]}
