@@ -66,9 +66,9 @@ final class ToolbarView: NSView {
     func moreRows() -> [ToolbarMorePopover.Row] {
         let loading = context.pageIsLoading
         return [
-            .init(glyph: loading ? .stopLoading : .reload, title: loading ? "Stop Loading" : "Reload", shortcut: loading ? "⌘." : "⌘R",
+            .init(icon: loading ? .stop : .reload, title: loading ? "Stop Loading" : "Reload", shortcut: loading ? "⌘." : "⌘R",
                   isEnabled: context.hasPage) { [unowned context] in context.send(context.pageIsLoading ? .stopLoading : .reload) },
-            .init(glyph: .sidebarToggle, title: "Toggle Sidebar", shortcut: "⌘S", isEnabled: true) { [unowned context] in
+            .init(icon: .sidebar, title: "Toggle Sidebar", shortcut: "⌘S", isEnabled: true) { [unowned context] in
                 context.send(.toggleSidebar)
             },
         ]

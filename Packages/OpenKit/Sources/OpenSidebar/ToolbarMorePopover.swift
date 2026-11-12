@@ -10,8 +10,12 @@ import OpenDesign
 /// hover tint follows the Space theme.
 @MainActor
 final class ToolbarMorePopover: NSView {
+    /// Row icons, drawn here to Arc's shapes (measured on the capture, 2 pt strokes): `sidebar` is a 20 × 15 pt
+    /// rounded rectangle with one divider at a third and no lines in the left pane; `reload` is an open circle
+    /// with a corner arrow at the top right (about 14.5 × 13 pt). `stop` (Open's Stop Loading row) is a cross.
+    enum Icon { case reload, stop, sidebar }
     struct Row {
-        var glyph: Glyph
+        var icon: Icon
         var title: String
         var shortcut: String
         var isEnabled: Bool
@@ -161,14 +165,10 @@ final class ToolbarMoreRowView: NSView {
     var forcedHover = false { didSet { needsDisplay = true } }
     private var hovered = false { didSet { needsDisplay = true } }
     private var tracking: NSTrackingArea?
-    private let icon = GlyphView()
 
     init(row: ToolbarMorePopover.Row) {
         self.row = row
         super.init(frame: .zero)
-        icon.glyph = row.glyph
-        icon.tint = { [weak self] in self?.ink }
-        addSubview(icon)
         setAccessibilityElement(true); setAccessibilityRole(.menuItem); setAccessibilityLabel(row.title)
         setAccessibilityEnabled(row.isEnabled)
     }
@@ -181,22 +181,49 @@ final class ToolbarMoreRowView: NSView {
         if !row.isEnabled { return dark ? NSColor(white: 1, alpha: 0.30) : NSColor(srgbRed: 0.698, green: 0.698, blue: 0.698, alpha: 1) }
         return dark ? NSColor(white: 1, alpha: 0.92) : .black
     }
-    private var shortcutInk: NSColor { dark ? NSColor(white: 1, alpha: 0.35) : NSColor(srgbRed: 0.698, green: 0.698, blue: 0.698, alpha: 1) }
+    /// Grey at rest; on the hovered row Arc tints the shortcut lavender (#A6AAFB on the #D3D4FD fill, measured).
+    private var shortcutInk: NSColor {
+        if dark { return NSColor(white: 1, alpha: 0.35) }
+        return isHighlighted ? NSColor(srgbRed: 0.651, green: 0.667, blue: 0.984, alpha: 1)
+            : NSColor(srgbRed: 0.698, green: 0.698, blue: 0.698, alpha: 1)
+    }
+    private var isHighlighted: Bool { (hovered || forcedHover) && row.isEnabled }
 
-    override func layout() {
-        super.layout()
-        let m = ToolbarMorePopover.Metrics.self, s = m.iconSize
-        // Row x starts at the card padding.
-        icon.frame = backingAlignedRect(CGRect(x: m.iconCenterX - m.padding - s / 2, y: (bounds.height - s) / 2, width: s, height: s),
-                                        options: .alignAllEdgesNearest)
+    private func drawIcon() {
+        let m = ToolbarMorePopover.Metrics.self
+        // Row x starts at the card padding. Flipped coordinates (y down).
+        let cx = m.iconCenterX - m.padding, cy = bounds.midY
+        ink.setStroke()
+        let path = NSBezierPath()
+        path.lineWidth = 2; path.lineCapStyle = .round; path.lineJoinStyle = .round
+        switch row.icon {
+        case .sidebar:
+            // Stroke centre lines of a 20 × 15 pt outer box.
+            let box = CGRect(x: cx - 9, y: cy - 6.5, width: 18, height: 13)
+            path.appendRoundedRect(box, xRadius: 2.5, yRadius: 2.5)
+            path.move(to: CGPoint(x: box.minX + 6.25, y: box.minY)); path.line(to: CGPoint(x: box.minX + 6.25, y: box.maxY))
+        case .reload:
+            // Open circle, gap at the lower right; corner arrow at the upper right.
+            let c = CGPoint(x: cx - 0.75, y: cy + 0.25), r: CGFloat = 5.5
+            // In flipped coordinates angles grow clockwise on screen: from the upper right, through top, left and
+            // bottom, to the lower right.
+            path.appendArc(withCenter: c, radius: r, startAngle: -18, endAngle: 52, clockwise: true)
+            let corner = CGPoint(x: c.x + 7, y: c.y - 1.25)
+            path.move(to: CGPoint(x: corner.x, y: corner.y - 4.75)); path.line(to: corner); path.line(to: CGPoint(x: corner.x - 4.75, y: corner.y))
+        case .stop:
+            path.move(to: CGPoint(x: cx - 5, y: cy - 5)); path.line(to: CGPoint(x: cx + 5, y: cy + 5))
+            path.move(to: CGPoint(x: cx + 5, y: cy - 5)); path.line(to: CGPoint(x: cx - 5, y: cy + 5))
+        }
+        path.stroke()
     }
 
     override func draw(_ dirtyRect: NSRect) {
         let m = ToolbarMorePopover.Metrics.self
-        if (hovered || forcedHover) && row.isEnabled {
+        if isHighlighted {
             (dark ? NSColor(white: 1, alpha: 0.12) : NSColor(srgbRed: 0.827, green: 0.831, blue: 0.992, alpha: 1)).setFill()
             NSBezierPath(roundedRect: bounds, xRadius: m.rowRadius, yRadius: m.rowRadius).fill()
         }
+        drawIcon()
         let title: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: ink]
         let titleSize = (row.title as NSString).size(withAttributes: title)
         (row.title as NSString).draw(at: CGPoint(x: m.titleX - m.padding, y: (bounds.height - titleSize.height) / 2), withAttributes: title)
