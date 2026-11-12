@@ -370,6 +370,11 @@ def run(factory, results, tmp, api):
             record('E29_live_card', 'Show Live Website' in menu and 'Open Page in New Tab' in menu and sheet.get('shown')
                    and sheet['buttons'][:2] == ['Show Live Website', 'Cancel'] and live.get('live') and live.get('liveAttached'),
                    menu=menu, sheet=sheet, card=live)
+            time.sleep(1.5)
+            snapshot('e29-live-card-light')
+            app.call('appearance', name='dark'); time.sleep(.5)
+            snapshot('e29-live-card-dark')
+            app.call('appearance', name='light')
             # E30: at most three live pages per canvas.
             for _ in range(3):
                 easel(action='menu', at=mid, item='Duplicate', tab=e2)
