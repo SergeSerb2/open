@@ -528,7 +528,10 @@ def run(factory, results, tmp, api):
         def fr():
             return app.call('first-run', action='settings-inspect')
         app.call('first-run', action='settings-import', directory=str(arc))
-        before_pick = next((p for p in app.call('first-run', action='settings-inspect').get('settingsProviders', []) if p['id'] == 'easels'), {})
+        def provider_row():
+            return next((p for p in app.call('first-run', action='settings-inspect').get('settingsProviders', []) if p['id'] == 'easels'), {})
+        # The count is asked again once the wizard has the chosen Arc folder.
+        before_pick = api.wait_until(lambda: (lambda x: x if x.get('count') is not None else None)(provider_row()), timeout=10, step=.2) or provider_row()
         app.call('first-run', action='settings-provider', id='easels', file=str(export))
         chosen = next((p for p in app.call('first-run', action='settings-inspect').get('settingsProviders', []) if p['id'] == 'easels'), {})
         app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
@@ -537,7 +540,7 @@ def run(factory, results, tmp, api):
         app.call('first-run', action='settings-done')
         a_url = 'open://easel/' + app.call('easel', action='document-id', arcID='arc-easel-a')
         def easel_tabs():
-            return [t for t in app.call('tabs') if t['url'].startswith('open://easel/')]
+            return app.call('easel', action='rows')
         imported_tabs = easel_tabs()
         a_tab = next((t for t in imported_tabs if t['url'] == a_url), None)
         a_objects = []
