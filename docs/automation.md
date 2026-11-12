@@ -450,6 +450,9 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `space-profile` | `space`, `profile` name | Production sidebar profile assignment intent; closes old Space hosts |
 | `peek-open`, `peek-expand`, `peek-close`, `peek-state` | `tab`, `url` for open | Production Peek entry, promotion, dismissal and host identity |
 | `sad-tab-state` | model `tab` ID, or `peek: true` | Reads the actual replacement view: `shown`, view ID, default Reload, and button AX labels/IDs. Does not set crash state. |
+| `handoff-state` | — | The web activity Open publishes now (after the 150 ms coalescing delay): `url`, `title`, `published`, `updates`, and the `candidate` page of the front window. |
+| `handoff-continue` | `url` (http/https, optional), `type` (default `NSUserActivityTypeBrowsingWeb`) | Calls the real `NSApplicationDelegate` continue path with that activity, as macOS does for an incoming Handoff. Returns `willContinue`, `accepted`. A non-web `url` is refused (NSUserActivity raises for one). |
+| `deep-link-state` | — | `open-browser://` router evidence: `handled` count, last `route` and `result`, and the App `pid`. Delivery itself is real (`open -a <bundle> open-browser://…`). |
 | `sad-tab-action` | model `tab` ID, or `peek: true`; `action: reload` or `close` | Performs the visible Sad Tab's actual AppKit button action. Refuses healthy/hidden pages. |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `credentials` | optional `profile`: UUID, name, or data directory | Counts only: `logins`, `blockedSites`, local `cards` and `addresses`, `cookies`, saving preferences, `canEnable*`, `supportsSecretsImport`, and `usesMockKeychain`. Uses the existing lazy profile-context factory; no credential values. |
