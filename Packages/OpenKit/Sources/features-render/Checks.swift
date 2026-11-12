@@ -347,6 +347,7 @@ enum FeatureChecks {
         try await CaptureChecks.run { check($0, $1) }
         try await ToastChecks.run { check($0, $1) }
         try await SwipeChecks.run { check($0, $1) }
+        DownloadFlightChecks.run { check($0, $1) }
         try await LittleOpenChecks.run { condition, label in check(condition, label) }
         SaveSheetScenes.check { check($0, $1) }
         SadTabScene.check { check($0, $1) }

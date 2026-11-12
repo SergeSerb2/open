@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import Darwin
 import Observation
 import OpenEngine
@@ -273,7 +274,25 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     if let source, littleOpenTrays[source] == nil, let controller = app.littleOpenCoordinator?.controllers[source] {
       littleOpenTrays[source] = LittleOpenDownloadsTray(controller: controller, center: self)
     }
-    if previous == nil { order.insert(key, at: 0) }
+    if previous == nil {
+      order.insert(key, at: 0)
+      // Download start animation (capture PB1-b): only for a browser window's own page, and only
+      // for a transfer that is starting now (not a history row restored at launch).
+      if source == nil, state == .inProgress, let page = download.webContent,
+         let factory = app.hostFactories.values.first(where: { $0.tabID(for: page) != nil }), let controller = factory.controller {
+        let window = controller.window
+        var start: CGPoint?
+        if let window, window.isKeyWindow {
+          // The click that started it: the pointer, when it is over the page.
+          let p = controller.contentView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+          if controller.container.frame.contains(p) {
+            start = controller.contentView.isFlipped ? p : CGPoint(x: p.x, y: controller.contentView.bounds.height - p.y)
+          }
+        }
+        let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
+        controller.playDownloadFlight(from: start, icon: NSWorkspace.shared.icon(for: type))
+      }
+    }
     if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date()
       if let path = snapshot.filePath {
         completionFiles.insert(DownloadBadgeFile(id:key,name:snapshot.fileName,path:path,completedAt:Date()),at:0)
