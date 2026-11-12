@@ -1,4 +1,6 @@
 import AppKit
+import OpenDesign
+import UniformTypeIdentifiers
 import Darwin
 import Observation
 import OpenEngine
@@ -273,7 +275,12 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     if let source, littleOpenTrays[source] == nil, let controller = app.littleOpenCoordinator?.controllers[source] {
       littleOpenTrays[source] = LittleOpenDownloadsTray(controller: controller, center: self)
     }
-    if previous == nil { order.insert(key, at: 0) }
+    if previous == nil {
+      order.insert(key, at: 0)
+      // Download start animation (capture PB1-b): only for a browser window's own page, and only
+      // for a transfer that is starting now (not a history row restored at launch).
+      playFlight(key: key, name: name, download: download, source: source, state: state)
+    }
     if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date()
       if let path = snapshot.filePath {
         completionFiles.insert(DownloadBadgeFile(id:key,name:snapshot.fileName,path:path,completedAt:Date()),at:0)
@@ -317,6 +324,42 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       tray.update(downloads.filter { entries[$0.id]?.littleOpenSessionID == id })
     }
   }
+  /// Download start animation (capture PB1-b): only for a browser window's own page, and only for a
+  /// transfer that is starting now (not a history row restored at launch).
+  private func playFlight(key: String, name: String, download: OEDownload, source: WindowID?, state: DownloadState) {
+    var reason = ""
+    defer {
+      #if OPEN_AUTOMATION
+      if !reason.isEmpty { flightsForAutomation.append(["id": key, "skipped": reason]); if flightsForAutomation.count > 16 { flightsForAutomation.removeFirst() } }
+      #endif
+    }
+    guard source == nil else { reason = "little-open"; return }
+    guard state == .inProgress else { reason = "state \(state.rawValue)"; return }
+    guard let page = download.webContent else { reason = "no page"; return }
+    guard let factory = app.hostFactories.values.first(where: { $0.tabID(for: page) != nil }), let controller = factory.controller else { reason = "no browser window for the page"; return }
+    var start: CGPoint?
+    if let window = controller.window, window.isKeyWindow {
+      // The click that started it: the pointer, when it is over the page.
+      let p = controller.contentView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+      if controller.container.frame.contains(p) {
+        start = controller.contentView.isFlipped ? p : CGPoint(x: p.x, y: controller.contentView.bounds.height - p.y)
+      }
+    }
+    let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
+    guard let view = controller.playDownloadFlight(from: start, icon: NSWorkspace.shared.icon(for: type)) else {
+      reason = controller.isLibraryOpen ? "Library open" : Motion.reducesMotion ? "Reduce Motion" : "no Library button on screen"; return
+    }
+    #if OPEN_AUTOMATION
+    let f = view.flight
+    flightsForAutomation.append(["id": key, "start": [f.start.x, f.start.y], "target": [f.target.x, f.target.y],
+      "duration": f.duration, "fromPointer": start != nil])
+    if flightsForAutomation.count > 16 { flightsForAutomation.removeFirst() }
+    #endif
+  }
+  #if OPEN_AUTOMATION
+  /// Automation evidence: the download flights started in this run (newest last, at most 16).
+  private(set) var flightsForAutomation: [[String: Any]] = []
+  #endif
   func updateBadges() {
     for controller in app.windowControllers {
       let profileIDs = Set(app.model.spaces.map(\.profileID))

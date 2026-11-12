@@ -721,6 +721,12 @@ extension SidebarView {
     /// The context menu a row (or empty space, for nil) opens, for checks that run its items.
     /// The Library button's right-click menu ("Show media from:"), as a right click builds it.
     public func libraryButtonContextMenu() -> NSMenu? { bottomBar.home.contextMenuProvider?() }
+    /// The Library button's frame in `view` (the download flight's target); nil while it is hidden.
+    public func libraryButtonFrame(in view: NSView) -> CGRect? {
+        let home = bottomBar.home
+        guard !home.isHiddenOrHasHiddenAncestor, home.window != nil else { return nil }
+        return home.convert(home.bounds, to: view)
+    }
 
     public func contextMenu(nodeID: ItemID?) -> NSMenu? {
         // A Favorite tile's menu, as the grid builds it on right-click (Favorites are not outline rows).
