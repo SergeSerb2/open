@@ -58,7 +58,7 @@ enum LibraryIdleWork {
         }
         if let layer = view.layer { collect(layer) }
         for layer in layers where layer is LibraryTextLayer { layer.contentsScale = scale }
-        for layer in layers {
+        for layer in layers where layer.needsDisplay() {
             guard isCurrent(),!Task.isCancelled else { return false }
             var displayed = false
             let completed = await perform(flush:false) {
