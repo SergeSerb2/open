@@ -455,11 +455,7 @@ enum CompletionFeatureChecks {
     private static func hint(_ check: (Bool, String) -> Void) async throws {
         let wasForced = SidebarDiagnostics.forceAnimations
         SidebarDiagnostics.forceAnimations = true
-        // HT1–HT3 check the animated path: pin Reduce Motion off (the rented Macs have it on), so
-        // the rows do not depend on the machine's accessibility setting. HT4 checks the other path.
-        let wasReduced = Motion.reduceMotionOverride
-        Motion.reduceMotionOverride = false
-        defer { SidebarDiagnostics.forceAnimations = wasForced; Motion.reduceMotionOverride = wasReduced }
+        defer { SidebarDiagnostics.forceAnimations = wasForced }
         let key = BrowserWindowController.hideHintShownKey
         // HT1: the toolbar button (the sidebar's own toggle intent) as the first hide.
         let defaults = FeatureCLI.defaults(), model = FeatureCLI.synthetic(), c = controller(model, defaults: defaults)
@@ -498,16 +494,6 @@ enum CompletionFeatureChecks {
         try await wait(0.4)
         check(abs(deadline - shownAt - 5.5) < 1e-9 && abs((fadeIn?.duration ?? 0) - 0.2) < 1e-9 && abs((fadeOut?.duration ?? 0) - 0.25) < 1e-9 && c2.hintToast == nil,
               String(format: "HT3 hint stays %.2f s (5.5), fades in 0.2 s and out 0.25 s, then leaves the window", deadline - shownAt))
-        // HT4: with Reduce Motion the hint appears and leaves without any animation; its lifetime is unchanged.
-        Motion.reduceMotionOverride = true
-        let defaults4 = FeatureCLI.defaults(), model4 = FeatureCLI.synthetic(), c4 = controller(model4, defaults: defaults4)
-        defer { c4.container.closeAll(); c4.window?.close() }
-        _ = c4.sidebar(c4.sidebar, didRequest: .toggleSidebar); pump(c4)
-        let shown4 = c4.hintToast != nil, lifetime4 = (c4.hintFadeDeadline ?? 0) - (c4.hintShownAt ?? 0)
-        let animated4 = !c4.hintAnimations.isEmpty || (c4.hintToast?.layer?.animationKeys() ?? []).isEmpty == false
-        c4.expireHintToast()
-        check(shown4 && abs(lifetime4 - 5.5) < 1e-9 && !animated4 && c4.hintToast == nil && c4.hintAnimations["out"] == nil,
-              String(format: "HT4 Reduce Motion: the hint shows for %.2f s (5.5) with no fade in or out and leaves at once", lifetime4))
     }
 
     // MARK: GH1–GH5

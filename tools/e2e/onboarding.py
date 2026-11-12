@@ -40,10 +40,6 @@ def run(factory, results, tmp, h):
         return app
 
     def state(): return app.call('onboarding', action='state')
-    def delta(a, b):
-        """a - b for two host times; None when either is missing (for example no audio device), so the row
-        fails with its observation instead of a TypeError ending the whole suite."""
-        return a - b if isinstance(a, (int, float)) and isinstance(b, (int, float)) else None
     def until(predicate, timeout=15): return h.wait_until(predicate, timeout=timeout, step=.025)
     def elapsed(t):
         until(lambda: state().get('elapsed', 0) >= t)
@@ -101,9 +97,8 @@ def run(factory, results, tmp, h):
             dim=measured.get('currentDimLayers', {}), musicStarted=measured.get('sound', {}).get('decision')=='played')
         gate('static_before_t0', static_pred, static, running)
         sound = measured.get('sound', {})
-        sync = delta(sound.get('audioStartHostTime'), measured.get('animationStartHostTime'))
-        sync = abs(sync)*1000 if sync is not None else None
-        results['animated_start_audio_sync'] = dict(ok=sound.get('decision')=='played' and sync is not None and sync <= 20,
+        sync = abs(sound.get('audioStartHostTime', 0)-measured['animationStartHostTime'])*1000
+        results['animated_start_audio_sync'] = dict(ok=sound.get('decision')=='played' and sync <= 20,
             ms=sync, load=os.getloadavg())
         timing = sound.get('timing', {})
         clocks = [timing.get(k) for k in ('prepareStart', 'workerReady', 'startRequest', 'decision', 't0')]
@@ -119,7 +114,7 @@ def run(factory, results, tmp, h):
             timestamps=startup, load=os.getloadavg())
         results['launch_to_first_onboarding_frame'] = dict(status='INFO', startup=startup,
             firstLaunchAfterBuild=app.first_launch_after_build,
-            firstFrameAfterAnimationMS=(lambda d: d*1000 if d is not None else None)(delta(measured.get('firstFrameHostTime'), measured.get('animationStartHostTime'))),
+            firstFrameAfterAnimationMS=(measured['firstFrameHostTime']-measured['animationStartHostTime'])*1000,
             reason='first onboarding frame waits for synchronous engine.start and its first native message-loop burst',
             load=os.getloadavg())
         if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
@@ -145,7 +140,7 @@ def run(factory, results, tmp, h):
         phase_pred = lambda rows: [s['phase'] for s in rows] == ['introAnimation', 'sellIntro', 'sellCompleted'] and rows[-1]['buttonEnabled'] and rows[-1]['buttonDefault'] and rows[-1]['buttonLabel']=='Continue'
         gate('phases_reached_in_order', phase_pred, [phase0, phase1, phase2], [phase0, phase1, phase1])
         frame_pred = lambda s: s.get('frameStats', {}).get('count', 0) >= 30 and not s['frameStats']['running']
-        played_pred = lambda s: s.get('sound', {}).get('decision') == 'played' and s['sound']['playerCreated'] and abs(delta(s['sound'].get('audioStartHostTime'), s.get('animationStartHostTime')) or 1) <= .020
+        played_pred = lambda s: s.get('sound', {}).get('decision') == 'played' and s['sound']['playerCreated'] and abs(s['sound']['audioStartHostTime']-s['animationStartHostTime']) <= .020
         invalid = []
         for arguments in (dict(action='x'*33), dict(action='state', unexpected=True), dict(action=7)):
             try: app.call('onboarding', **arguments)
