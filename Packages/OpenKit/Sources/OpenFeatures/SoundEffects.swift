@@ -33,7 +33,9 @@ public final class SoundEffects {
 
     /// Reads the existing app preference at use. Default **on**, as Arc: its key is the inverse
     /// `playUserInterfaceSoundsDisabled` (absent = sounds on). GUESS — capture PB5-e pending (fresh Arc data folder);
-    /// LEAD 11:40, AUDIT-2026-11-12 A8. The general event effect has no production caller until its trigger is captured.
+    /// LEAD 11:40, AUDIT-2026-11-12 A8. Capture C9 (2026-11-12): of thirteen actions tested in Arc, only Capture
+    /// plays a sound (docs/re/features-advanced.md SE-2), so `.capture` on Capture is Open's only UI sound. The
+    /// general `.event` effect keeps no production caller: its Arc trigger is still unknown (untested actions: GUESS).
     /// Returns true when the effect was handed to the audio queue (enabled, resource present, queue free).
     @discardableResult
     public func play(_ effect: Effect) -> Bool {

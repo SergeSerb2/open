@@ -735,7 +735,7 @@ def context_menu_checks(factory, results, tmp, h):
                 rows = {
                     'today': first['items'] == today_expected,
                     'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'],
-                    'share_lists_services': len(share['items']) > 0,
+                    'share_lists_services': len(share['items']) > 0 and 'Add to Reading List' not in share['items'],
                     'move_to_current_checked': (h._try(lambda: app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order')) or {}).get('checked') is True,
                     'today_silent_mute_disabled': 'Mute' in first['disabled'],
                     'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
