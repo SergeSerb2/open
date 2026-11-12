@@ -176,6 +176,9 @@ extension AutomationController {
       "visibleAnchor": visibleAnchor,
       "anchor": rect(scc.view.anchorFrame), "body": rect(scc.view.panelFrame), "tip": [Double(tip.x), Double(tip.y)],
       "urlButtonState": owner.sidebar.siteControlState.rawValue,
+      "availability": ["sidebar": owner.sidebar.siteControlsAvailable,
+        "panes": Dictionary(uniqueKeysWithValues: owner.container.slots.compactMap { slot in
+          slot.paneChrome.map { (slot.tabID.description, ($0.siteControlsAnchor as? NSControl)?.isEnabled ?? false) } })] as [String: Any],
       "security": controls.first(where: { $0["id"] as? String == "security" }) ?? [:],
       "sheet": owner.window?.attachedSheet.map { String(describing: type(of: $0)) } ?? "",
       "focusedControl": (owner.window?.firstResponder as? SiteControlButton)?.controlID ?? "",

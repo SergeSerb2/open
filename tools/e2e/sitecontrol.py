@@ -402,6 +402,17 @@ def run(factory, results, tmp, env, functional_only=False):
             s=opened('pane'); selected=app.call('window-state')['selected']
             bad_anchor=refused(action='open',via='invalid')
             record('S8_split',s['presented'] and s['tab']==selected and s['host']=='127.0.0.1' and s['anchor'][0]>228 and bad_anchor,state=s,negativeRefused=bad_anchor)
+            # S8_availability (F6): one rule for the sidebar and pane-bar buttons. A shown Peek makes
+            # both unavailable (old code: the pane buttons stayed enabled), and closing it restores both.
+            close(); before = state()['availability']
+            app.call('peek-open', tab=selected, url=origin + '/boost.html?peek=1')
+            peeked = wait(lambda: app.call('peek-state').get('shown'), timeout=5)
+            during = wait(lambda: (lambda a: a if not a['sidebar'] and not any(a['panes'].values()) else None)(state()['availability']), timeout=5)
+            app.call('peek-close'); wait(lambda: not app.call('peek-state').get('shown'), timeout=5)
+            after = wait(lambda: (lambda a: a if a['sidebar'] and len(a['panes']) == 2 and all(a['panes'].values()) else None)(state()['availability']), timeout=5)
+            record('S8_availability', before['sidebar'] and len(before['panes']) == 2 and all(before['panes'].values())
+                   and bool(peeked) and bool(during) and bool(after), before=before, during=during or state()['availability'], after=after,
+                   negative='during Peek: no button available')
             close(); app.call('split')
             app.call('menu-perform',id='toggle-toolbar')
             toolbar=opened('pane')
