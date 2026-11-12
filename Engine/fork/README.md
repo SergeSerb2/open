@@ -22,9 +22,7 @@ Engine/fork/scripts/engine-apply --dry-run
 ```
 
 `engine-status` reports a missing overlay as S-4 FAIL until the first real
-apply, and unbuilt outputs as S-6 WARN. `--config release` checks the
-official output (`OUT_DIR_RELEASE`) against dev + release args; S-5 ignores
-`use_remoteexec`, which only selects where compiles run. S-2 runs CEF's own read-only
+apply, and unbuilt outputs as S-6 WARN. S-2 runs CEF's own read-only
 "already applied" check for every `patch.cfg` entry.
 
 Modifying commands (the argument forms also appear in each script's

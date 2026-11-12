@@ -32,7 +32,7 @@ extension AutomationController {
         case "menu", "plus":
             guard let menu = args["op"] as? String == "plus" ? controller.sidebar.plusMenu() : split.menu() else { throw Failure(message: "no split menu") }
             guard let title = args["item"] as? String else {
-                return menu.items.map { ["title": $0.title, "enabled": $0.isEnabled, "separator": $0.isSeparatorItem, "key": $0.keyEquivalent] as [String: Any] }
+                return menu.items.map { ["title": $0.title, "enabled": $0.isEnabled] }
             }
             guard let index = menu.items.firstIndex(where: { $0.title == title }), menu.items[index].isEnabled else {
                 throw Failure(message: "split menu item missing or disabled")

@@ -2,9 +2,9 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
+import OpenSettings
 #if OPEN_AUTOMATION
 import OpenOnboarding
-import OpenSettings
 #endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,

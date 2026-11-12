@@ -4,8 +4,6 @@ import AppKit
 /// No external images, font glyphs, or browser assets are used.
 enum LibraryGlyph: String {
     case media, downloads, easels, spaces, boosts, archive, history, search, filter, back, dots, trash, undo
-    /// Download row hover controls (Open's own vectors, 16-point style of `trash` / `undo`).
-    case pause, resume, cancel, retry
 
     func draw(in rect: CGRect, color: NSColor, selected: Bool = false) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
@@ -31,19 +29,6 @@ enum LibraryGlyph: String {
         case .trash:
             context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.3)
             for values in [[CGFloat(3),4.5,13,4.5],[6.3,4.5,6.3,3,9.7,3,9.7,4.5],[4.3,4.5,4.9,13,11.1,13,11.7,4.5],[6.8,7,6.8,10.8],[9.2,7,9.2,10.8]] { stroke(line(points(values))) }
-        case .pause:
-            context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.5)
-            stroke(line(points([6,4.5,6,11.5])));stroke(line(points([10,4.5,10,11.5])))
-        case .resume:
-            context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.3)
-            stroke(line(points([5.8,4.2,11.6,8,5.8,11.8]),close:true))
-        case .cancel:
-            context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.4)
-            stroke(line(points([5,5,11,11])));stroke(line(points([11,5,5,11])))
-        case .retry:
-            context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.4)
-            let ring=CGMutablePath();ring.addArc(center:CGPoint(x:8,y:8.4),radius:4.2,startAngle:-CGFloat.pi*0.55,endAngle:CGFloat.pi*1.25,clockwise:false);stroke(ring)
-            stroke(line(points([7.2,2.4,8.6,4.2,6.8,5.4])))
         case .undo:
             context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.4)
             stroke(line(points([6,3.5,3,6.5,6,9.5])));stroke(line(points([3.3,6.5,9,6.5])))

@@ -90,14 +90,6 @@ public final class HoverPreviewController {
         guard let tab = context.model.tab(id: id), let kind = context.glanceKind(for: tab) else { return false }
         let content: NSView
         switch kind {
-        case .gmail(let account):
-            let view = MailPreviewView(context: context, tab: tab, account: account)
-            view.onOpen = { [weak self] url in
-                self?.hide(animated: false)
-                self?.openPeek?(url, id)
-            }
-            view.onResize = { [weak self] in self?.layout() }
-            content = view
         case .recents(let site):
             let view = RecentsPreviewView(context: context, tab: tab, site: site)
             view.onOpen = { [weak self] url in

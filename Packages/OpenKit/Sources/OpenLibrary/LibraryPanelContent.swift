@@ -364,31 +364,17 @@ extension LibraryPanelView {
             let progress = item.state == .inProgress || item.state == .paused
             let subtitle = prepared?.subtitle ?? (item.state == .completed ? (available ? "Download" : "File moved or deleted.") : downloadSubtitle(item))
             let actions = viewModel.actions, id = item.id
-            // Arc's download menu (capture session 1 `19c-downloads-more`; Arc's string keys "Open/Copy download menu
-            // item format", "Show in finder", "Hide from Arc", "Move to Trash", "Cancel download"): the first two
-            // titles carry the file extension ("Open txt"). No extension: "Open" / "Copy" (guess, C3 session 8 item 9).
-            // Arc has no pause, resume or retry menu strings: Open keeps them as row hover controls.
-            let ext = URL(fileURLWithPath:item.fileName).pathExtension
-            let named = { (verb: String) in ext.isEmpty ? verb : verb + " " + ext }
-            let done = item.state == .completed && available
             var menu: [LibraryRowAction] = []
-            var hover: [LibraryRowAction] = []
             if progress {
-                menu = [.init(title:named("Open"),enabled:false,run:{}),.init(title:named("Copy"),enabled:false,run:{}),
-                    .init(title:"Show in Finder",enabled:available,run:{ actions.revealDownload(id:id) }),.init(title:"-",run:{}),
-                    .init(title:"Cancel Download",run:{ actions.cancelDownload(id:id) }),.init(title:"-",run:{}),
-                    .init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })]
-                hover = [item.state == .paused ? .init(title:"Resume",glyph:.resume,run:{ actions.resumeDownload(id:id) })
-                                               : .init(title:"Pause",glyph:.pause,run:{ actions.pauseDownload(id:id) }),
-                         .init(title:"Cancel",glyph:.cancel,run:{ actions.cancelDownload(id:id) })]
+                menu.append(.init(title:item.state == .paused ? "Resume" : "Pause",run:{ if item.state == .paused { actions.resumeDownload(id:id) } else { actions.pauseDownload(id:id) } }))
+                menu.append(.init(title:"Cancel",run:{ actions.cancelDownload(id:id) }))
+                menu.append(.init(title:"Show in Finder",enabled:available,run:{ actions.revealDownload(id:id) }))
             } else if item.state == .failed {
-                // Open's own: Arc's failed-download menu is capture pending (C3 session 8 item 10).
-                menu = [.init(title:"Retry",run:{ actions.retryDownload(id:id) }),.init(title:"-",run:{}),
-                    .init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })]
-                hover = [.init(title:"Retry",glyph:.retry,run:{ actions.retryDownload(id:id) })]
+                menu.append(.init(title:"Retry",run:{ actions.retryDownload(id:id) }))
+                menu.append(.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) }))
             } else if item.state == .completed {
-                menu = [.init(title:named("Open"),enabled:done,run:{ actions.openDownload(id:id) }),
-                    .init(title:named("Copy"),enabled:done,run:{ actions.copyDownload(id:id) }),
+                menu = [.init(title:"Open",enabled:available,run:{ actions.openDownload(id:id) }),
+                    .init(title:"Copy",enabled:available,run:{ actions.copyDownload(id:id) }),
                     .init(title:"Show in Finder",enabled:available,run:{ actions.revealDownload(id:id) }),
                     .init(title:"-",run:{}),.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) }),
                     .init(title:"Move to Trash",enabled:available,run:{ actions.trashDownload(id:id) })]
@@ -396,7 +382,7 @@ extension LibraryPanelView {
             return LibraryRowItem(id:id,title:item.fileName,subtitle:subtitle,kind:"download",day:"",
                 fileURL:progress ? nil : URL(fileURLWithPath:item.filePath ?? item.fileName),progress:progress ? item.progress ?? 0 : nil,
                 dragURL:available && item.state == .completed ? item.filePath.map { URL(fileURLWithPath:$0) } : nil,
-                activate:{ if available && item.state == .completed { actions.openDownload(id:id) } },actions:menu,hoverActions:hover)
+                activate:{ if available && item.state == .completed { actions.openDownload(id:id) } },actions:menu)
           }
         }
     }

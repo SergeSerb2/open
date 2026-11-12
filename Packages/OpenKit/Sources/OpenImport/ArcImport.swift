@@ -19,8 +19,6 @@ public struct ImportReport: Sendable {
     public var favorites: Int = 0
     public var collapsedFolders: Int = 0
     public var folders: Int = 0
-    /// Arc Live Folders brought over with their settings (LF L7).
-    public var liveFolders: Int = 0
     public var splits: Int = 0
     public var routingRules: Int = 0
     public var skippedEasels: Int = 0
@@ -614,13 +612,6 @@ public struct ArcImporter {
                     if let child = buildNode(arcID: childID) { children.append(child) }
                 }
                 folder.children = children
-                if let list = payload as? [String: Any], let auto = list["automaticLiveFolderData"] as? [String: Any],
-                   let config = Self.liveFolderConfig(auto) {
-                    // An Arc Live Folder (live-data §2.7): its settings, and its PR rows marked as fetched rows.
-                    folder.live = config
-                    for case .tab(let tab) in children where LiveFolderConfig.repository(of: tab.url) != nil { tab.liveItemURL = tab.url }
-                    report.liveFolders += 1
-                }
                 let node = SidebarNode.folder(folder)
                 nodeByArcID[arcID] = node
                 report.folders += 1

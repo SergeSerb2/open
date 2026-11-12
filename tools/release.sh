@@ -415,8 +415,7 @@ PY
 from pathlib import Path
 import hashlib,re,sys
 args,dist,chromium,cef,fw=sys.argv[1:];s=Path(args).read_text()
-# Widevine option D (#345): support compiled in, CDM never bundled, runtime opt-in only.
-for key,value in [('is_official_build','true'),('chrome_pgo_phase','2'),('use_thin_lto','true'),('enable_widevine','true'),('bundle_widevine_cdm','false')]:
+for key,value in [('is_official_build','true'),('chrome_pgo_phase','2'),('use_thin_lto','true'),('enable_widevine','false')]:
  vals=re.findall(r'^\s*'+key+r'\s*=\s*(\w+)\s*(?:#.*)?$',s,re.M)
  if not vals or vals[-1]!=value:raise SystemExit('official args mismatch: '+key)
 d=Path(dist);readme=(d/'README.txt').read_text()
@@ -430,9 +429,10 @@ f=d/'Release/Chromium Embedded Framework.framework/Chromium Embedded Framework'
 if not f.is_file() or sha(f)!=sha(Path(fw)):raise SystemExit('distrib is not the official output binary; never ship dev output')
 print('Official output/distrib SHA-256:',sha(f))
 PY
-    # Release mode: S-5 compares the official output's args with dev + release args
-    # (build-execution-only use_remoteexec ignored); S-6 probes the official output.
-    "$ROOT/Engine/fork/scripts/engine-status" --config release --strict > "$STAGE/engine-status.txt"
+    # engine-status has no --config flag. Override only its pins file locally so
+    # its S-6 probe targets the official output, without editing the shared tree.
+    { printf '. "%s"\n' "$ROOT/Engine/fork/VERSIONS"; printf 'OUT_DIR_DEV=%s\n' "$OUT_DIR_RELEASE"; } > "$STAGE/official-versions"
+    OPEN_ENGINE_VERSIONS="$STAGE/official-versions" "$ROOT/Engine/fork/scripts/engine-status" --strict > "$STAGE/engine-status.txt"
     if [[ $SKIP_ENGINE == 0 ]]; then "$ROOT/tools/fetch-engine.sh" --run; fi
     [[ -f "$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework" ]] || die 'Vendor/cef has no framework; run tools/fetch-engine.sh --run after Step 10'
     cmp "$official_fw" "$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework" || die 'Vendor/cef does not hold the official framework'

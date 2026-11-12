@@ -124,18 +124,10 @@ struct SidebarMenus {
                 item("Open in Split View", .openInSplitView(tabID: tab.id)),
                 item("Duplicate", .duplicate(nodeID: tab.id)), item("Close Tab", .close(nodeID: tab.id))])
         }
-        // Arc 1.172.2 order (capture session 3 Part D, `s9/15-menus`; docs/re/sidebar-menus-parity.md §1).
-        let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         var items: [NSMenuItem] = [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
-            share(tab),
-            .separator(),
-            item("Change Icon…", .changeIcon(nodeID: tab.id)),
-            rename,
-            mute(tab),
             .separator(),
             item("Open in Split View", .openInSplitView(tabID: tab.id)),
-            item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
             .separator(),
             item("Archive Tab", .close(nodeID: tab.id)),
@@ -143,60 +135,43 @@ struct SidebarMenus {
         if let space = context.model.parent(of: tab.id).flatMap(spaceID(of:)) {
             var keep = Set(context.selection.ids)
             keep.insert(tab.id)
+            let alternate = item("Archive Other Tabs", .clearTodayKeeping(space: space, keep: keep))
+            alternate.isAlternate = true
+            alternate.keyEquivalentModifierMask = .option
+            items.append(alternate)
             let today = context.model.space(id: space)?.today ?? []
-            let index = today.firstIndex(where: { $0.id == tab.id })
-            let below = index.map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
-            let above = index.map { Array(today.prefix($0).map(\.id)) } ?? []
-            // 1.172.2 shows Archive Other Tabs as a plain item (1.170 had it behind ⌥).
-            items.append(item("Archive Other Tabs", enabled: today.contains { !keep.contains($0.id) },
-                              .clearTodayKeeping(space: space, keep: keep)))
+            let below = today.firstIndex(where: { $0.id == tab.id }).map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
             items.append(item("Archive Tabs Below", enabled: !below.isEmpty, .archiveNodes(ids: below)))
-            items.append(item("Archive Tabs Above", enabled: !above.isEmpty, .archiveNodes(ids: above)))
         }
         return menu(items)
-    }
-
-    /// Mute / Unmute; disabled for a silent, unmuted tab (S3D: "Mute (disabled)").
-    private func mute(_ tab: Tab) -> NSMenuItem {
-        item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id))
-    }
-
-    /// "Edit Pinned Page ▸" (pinned tabs and favourites, F0116, S3D).
-    private func editPinnedPage(_ tab: Tab) -> NSMenuItem {
-        let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
-        edit.submenu = menu([
-            item("Replace Pinned URL with Current", enabled: tab.hasLeftPinnedURL, .replacePinnedURL(tabID: tab.id)),
-            item("Edit…", .editPinnedURL(tabID: tab.id)),
-        ])
-        return edit
     }
 
     /// Pinned tab, at the top level or in a folder (F0116).
     func pinnedTab(_ tab: Tab) -> NSMenu {
         if Self.isEasel(tab) { return easel(tab) }
         if Self.isNote(tab) { return note(tab) }
-        return menu(pinnedItems(tab) + [item("Remove Pin", .unpin(tabID: tab.id))])
-    }
-
-    /// The shared pinned / favourite list up to the last separator (S3D: the favourite menu is
-    /// the pinned menu with "Remove Favorite" last). Arc has no "Customize Page…" here; Boosts
-    /// open from Site Controls (C-report-s3 Part G).
-    private func pinnedItems(_ tab: Tab) -> [NSMenuItem] {
+        let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
+        edit.submenu = menu([
+            item("Replace Pinned URL with Current", enabled: tab.hasLeftPinnedURL, .replacePinnedURL(tabID: tab.id)),
+            item("Edit…", .editPinnedURL(tabID: tab.id)),
+        ])
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
-        return [
+        return menu([
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             share(tab),
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
             rename,
-            mute(tab),
-            editPinnedPage(tab),
+            item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id)),
+            item("Customize Page…", .customizePage(tabID: tab.id)),
+            edit,
             .separator(),
-            item("Open in Split View", .openInSplitView(tabID: tab.id)),
+            item("Add Split View", .addSplitView(tabID: tab.id)),
             item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
             .separator(),
-        ]
+            item("Remove Pin", .unpin(tabID: tab.id)),
+        ])
     }
 
     static func isEasel(_ tab: Tab) -> Bool { tab.url.scheme?.lowercased() == "open" && tab.url.host()?.lowercased() == "easel" }
@@ -244,9 +219,18 @@ struct SidebarMenus {
         ])
     }
 
-    /// Favorite tile (S3D): the pinned menu with "Remove Favorite" last.
+    /// Favorite tile. guess: not captured; built from the pinned-tab menu.
     func favorite(_ tab: Tab) -> NSMenu {
-        menu(liveCalendarItems(tab) + pinnedItems(tab) + [item("Remove Favorite", .removeFavorite(tabID: tab.id))])
+        let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
+        return menu(liveCalendarItems(tab) + [
+            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+            share(tab),
+            .separator(),
+            item("Change Icon…", .changeIcon(nodeID: tab.id)),
+            rename,
+            .separator(),
+            item("Remove from Favorites", .removeFavorite(tabID: tab.id)),
+        ])
     }
 
     /// Live Calendar items of a calendar Favorite (LD §4: "Show Meeting Link" with "Copy Link" and "Dismiss",
@@ -330,11 +314,8 @@ struct SidebarMenus {
             .separator(),
             item("New Nested Folder…", .newNestedFolder(parentFolderID: folder.id)),
             item("Turn “\(folder.title)” into Space", .turnFolderIntoSpace(folderID: folder.id)),
-        ] + (folder.children.isEmpty ? [] : [
-            // S3D: an empty folder has no Copy items; their place with tabs is pending (C3 item 4).
             item("Copy All Links", .copyAllLinks(folderID: folder.id, markdown: false)),
             item("Copy All Links as Markdown", .copyAllLinks(folderID: folder.id, markdown: true)),
-        ]) + [
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: folder.id)),
             rename,
@@ -426,22 +407,10 @@ struct SidebarMenus {
         return parent
     }
 
-    /// Right-click on the URL field, Arc 1.172.2 (capture session 3 Part D): Copy URL · Share ▸ ·
-    /// Capture… · Capture Full Page · Capture in Portrait Mode · — · Show as Toolbar ·
-    /// Disable Shared Quotes. Share stays Open's picker until C3 records Arc's submenu.
+    /// Bottom-bar plus button. guess: not captured.
+    /// Right-click on the URL field (CC-36; order guess).
     func urlField() -> NSMenu {
-        let tab = context.currentTab
-        let quotes = UserDefaults.standard.object(forKey: SidebarContext.sharedQuotesKey) as? Bool ?? true
-        return menu([
-            item("Copy URL", enabled: tab != nil, .copyCurrentURL),
-            tab.map(share) ?? ClosureMenuItem("Share…", enabled: false) {},
-            item("Capture…", enabled: tab != nil, .performCommand("capture-page")),
-            item("Capture Full Page", enabled: tab != nil, .performCommand("capture-full-page")),
-            item("Capture in Portrait Mode", enabled: tab != nil, .performCommand("capture-portrait")),
-            .separator(),
-            item("Show as Toolbar", .setToolbarShown(true)),
-            item(quotes ? "Disable Shared Quotes" : "Enable Shared Quotes", .setSharedQuotes(!quotes)),
-        ])
+        menu([item("Show as Toolbar", .setToolbarShown(true)), .separator(), item("Manage Extensions", .manageExtensions)])
     }
 
     /// Right click on the Library button (capture C-report-s3 Part D): a disabled
@@ -459,11 +428,6 @@ struct SidebarMenus {
         return menu(items)
     }
 
-    /// Bottom-bar "+", Arc 1.172.2 items and order (capture session 3 Part D): New Space ·
-    /// New Folder · — · New Easel ⌃⇧E · New Boost · — · New Split ⌃⇧= · New Tab ⌘T.
-    /// Arc draws it as a popover tinted with the Space title colour; its geometry and colours
-    /// are capture pending (C3 session 8 item 7), so Open keeps a native menu until then.
-    /// New Boost and New Split need a page (enabled in S3D with a page loaded).
     func plus() -> NSMenu {
         let space = context.focusedSpace
         let canSplit: Bool = {
@@ -474,18 +438,18 @@ struct SidebarMenus {
             default: return true
             }
         }()
-        func keyed(_ row: NSMenuItem, _ key: String, _ modifiers: NSEvent.ModifierFlags) -> NSMenuItem {
-            row.keyEquivalent = key; row.keyEquivalentModifierMask = modifiers; return row
-        }
         return menu([
-            item("New Space", .newSpace),
-            space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? ClosureMenuItem("New Folder", enabled: false) {},
+            item("New Tab", .newTab),
+            item("New Split View", enabled: canSplit, .newSplitView),
+            space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? .separator(),
+            {
+                // Arc's plus popover row "New Easel ⌃⇧E" (interaction-states.md S2 01).
+                let row = item("New Easel", enabled: !context.isIncognito, .newEasel)
+                row.keyEquivalent = "e"; row.keyEquivalentModifierMask = [.control, .shift]
+                return row
+            }(),
             .separator(),
-            keyed(item("New Easel", enabled: !context.isIncognito, .newEasel), "e", [.control, .shift]),
-            item("New Boost", enabled: !context.isIncognito && context.currentTab != nil, .performCommand("new-boost")),
-            .separator(),
-            keyed(item("New Split", enabled: canSplit, .newSplitView), "=", [.control, .shift]),
-            keyed(item("New Tab", .newTab), "t", .command),
+            item("New Space…", .newSpace),
         ])
     }
 }

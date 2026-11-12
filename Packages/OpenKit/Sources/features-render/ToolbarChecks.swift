@@ -101,11 +101,9 @@ enum ToolbarChecks {
               && c.sidebar.urlFieldVisible && c.sidebar.toolbarNavigationVisible && c.sidebar.chromeGeometry.favorites.minY == FavoritesMetrics.sectionTop,
               "TB10 Hide Toolbar: no bar, full page height, the sidebar URL field and navigation return")
         let fieldMenu = c.sidebar.urlFieldMenu()
-        let fieldTitles = fieldMenu.items.map { $0.isSeparatorItem ? "-" : $0.title }
-        check(fieldTitles == ["Copy URL", "Share…", "Capture…", "Capture Full Page", "Capture in Portrait Mode", "-", "Show as Toolbar",
-                              UserDefaults.standard.object(forKey: SidebarContext.sharedQuotesKey) as? Bool ?? true ? "Disable Shared Quotes" : "Enable Shared Quotes"],
-              "TB11 URL field right-click menu in Arc 1.172.2 order (capture session 3 Part D): \(fieldTitles)")
-        press(fieldMenu.item(withTitle: "Show as Toolbar")); try await settle()
+        check(fieldMenu.items.map { $0.isSeparatorItem ? "-" : $0.title } == ["Show as Toolbar", "-", "Manage Extensions"],
+              "TB11 URL field right-click menu: Show as Toolbar, separator, Manage Extensions")
+        press(fieldMenu.items.first); try await settle()
         check(window.showsToolbar && c.container.slots[0].paneChrome?.role == .toolbar && intents.last == .setToolbarShown(true),
               "TB11 Show as Toolbar shows the toolbar")
         c.performCommand("toggle-toolbar"); try await settle()

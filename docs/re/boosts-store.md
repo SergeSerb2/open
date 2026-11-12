@@ -179,13 +179,16 @@ The following Arc fields have no direct, evidence-backed Open mapping:
 
 - `creatorID`, `author`, `signature`, `type`, and `forkedFromSnapshotID`.
 - Remote snapshot ownership, creator details, and preview image URL.
-- The color scheme's `secondaryHueOffset`, `baseAppearance`, and advanced
-  settings. Open's `BoostColorWheel` uses a different set of inputs.
+- The color scheme's `secondaryHueOffset`, `baseAppearance`, advanced
+  settings, and `themeDriven` schemes. (Mapped since PB4 row 4: the knob
+  fields `primaryHueDegrees` → `hue`, `primarySaturation` → `intensity`,
+  `invertLightness` → `invertLightness`; the equalities are stated in
+  `docs/plans/boost-color-remap.md` §7.2.)
 - Integer text-zoom `level`: the scale conversion is not established here.
 
 The parser counts unmapped fields by fixed field name and unknown keys by count.
-All color leaves and integer zoom levels are dropped pending a proven conversion;
-Open's color wheel is a CSS-filter approximation with different inputs.
+The remaining color leaves and integer zoom levels are dropped pending a proven
+conversion (zoom: capture item C11, the stored `level` per text-size option).
 
 The CLI writes through `OpenBoosts` into the existing per-Profile layout while
 holding `OpenDataRoot.prepare()`'s lock. Existing stable IDs are preserved on

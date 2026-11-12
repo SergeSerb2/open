@@ -4,6 +4,45 @@ import os
 from pathlib import Path
 
 
+def dock_tile_probe(app):
+    """Runs tools/e2e/docktile-probe.swift against the running App's bundle (no Dock, no screen)."""
+    import subprocess
+    root = Path(__file__).resolve().parents[2]
+    source = root / 'tools' / 'e2e' / 'docktile-probe.swift'
+    binary = root / '.re' / 'e2e-tools' / 'docktile-probe'
+    if not binary.exists() or binary.stat().st_mtime < source.stat().st_mtime:
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['nice', '-n', '10', 'xcrun', 'swiftc', '-O', '-swift-version', '6', '-parse-as-library',
+                        str(source), '-o', str(binary)], check=True)
+    proc = subprocess.run([str(binary), app.bundle], capture_output=True, text=True, timeout=30)
+    try:
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {'loaded': False, 'stderr': proc.stderr[-500:]}
+
+
+def dock_tile(factory, results, tmp, wait_until):
+    """PB3 row 4: the real Dock tile plug-in (loaded by the Dock while Open is not running) draws the chosen icon."""
+    app = factory(urls=(), fresh=True)
+    keys = ('open.appIcon.selectedID', 'open.appIcon.dockTileFile')
+    saved = {key: app.call('defaults', key=key, persistent=True) for key in keys}
+    try:
+        app.call('settings-pane', pane='appIcon')
+        dark = app.call('settings-icon', select='openDark')
+        dock_dark = dock_tile_probe(app)
+        reset = app.call('settings-icon', select='openDefault')
+        dock_default = dock_tile_probe(app)
+        results['settings_app_icon_dock_tile'] = {
+            'ok': dark['applied'] == 'openDark' and reset['applied'] == 'openDefault'
+                and dock_dark.get('loaded') is True and dock_dark.get('principal') == 'OpenDockTilePlugIn'
+                and dock_dark.get('infoKey') == 'OpenDockTile.docktileplugin' and dock_dark.get('image') == [1024, 1024]
+                and dock_default.get('loaded') is True and dock_default.get('image') is None,
+            'dark': dock_dark, 'default': dock_default}
+    finally:
+        for key, value in saved.items(): app.call('defaults', key=key, value=value)
+        app.quit()
+
+
 def run(factory, results, tmp, wait_until, restore_defaults):
     fixture = Path(tmp) / 'settings-live.html'
     fixture.write_text('<!doctype html><title>Settings fixture</title><body>Settings fixture</body>')
@@ -80,15 +119,8 @@ def run(factory, results, tmp, wait_until, restore_defaults):
             'advancedStatus': s['advancedStatus'], 'negativeBeforeWindow': before_boosts['library'] == 0,
             'negativeClosed': library_before, 'legacyExpectedError': legacy_error,
             'negativeOldAssertionRejected': not legacy_assertion}
-        # Cmd+W with the in-window Library open closes the Library, not the tab hidden behind it
-        # (#350 regression: the Library stayed and the tab was archived).
-        tabs_before = [t['id'] for t in app.call('tabs')]
         app.call('key', key='w', modifiers=['cmd'], window=s['library'], route='app')
-        library_closed = wait_until(lambda: not app.call('library-section')['visible'], timeout=5, step=.05)
-        tabs_after = [t['id'] for t in app.call('tabs')]
-        results['settings_cmd_w_closes_library_not_tab'] = {'ok': bool(library_closed) and tabs_after == tabs_before,
-            'tabsBefore': tabs_before, 'tabsAfter': tabs_after}
-        assert library_closed
+        assert wait_until(lambda: not app.call('library-section')['visible'], timeout=5, step=.05)
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
 
         # The picker action writes the actual preference and replaces NSApp's actual image.

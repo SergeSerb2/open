@@ -41,14 +41,6 @@ public struct AdBlockUpdateResult: Sendable {
 
 /// Owns list IO off the main actor. The store serializes operations for each Profile.
 actor ListRepository {
-    /// The live generation's verified list files (the same `current.json` + manifest check the
-    /// engine repeats). Empty when there is no committed generation.
-    func liveListFiles(directory: URL, catalog: AdBlockCatalog) throws -> [URL] {
-        guard let pointer = try storage.current(in: directory) else { return [] }
-        let manifest = try storage.verify(pointer.live, directory: directory, catalog: catalog)
-        let base = storage.path(pointer.live, in: directory)
-        return manifest.files.filter { $0.listID != "_resources" }.map { base.appendingPathComponent($0.file) }
-    }
     private struct IntegrityFailure: Error {}
     let policy: AdBlockDownloadPolicy
     let downloader: ListDownloader

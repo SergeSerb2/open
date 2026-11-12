@@ -21,8 +21,6 @@ final class AdBlockEngineAdapter {
   private var startupDirectoryNames: [ProfileID: String] = [:]
   private var startupGenerationMissing: [ProfileID: Bool] = [:]
   private(set) var started = false
-  /// Scriptlets and `:style()` rules (PB2 row 1); the engine applies the rest.
-  private(set) lazy var extras = AdBlockExtrasAdapter(app: app)
 
   init(app: AppDelegate) { self.app = app }
 
@@ -153,7 +151,6 @@ final class AdBlockEngineAdapter {
     if context.originalContext != nil { otrContexts.add(context) }
     guard let profile = app.model.profile(id: profileID) else { return }
     configureBeforeRequests(context, profileID: profileID)
-    if isSupported { extras.contextCreated(context, profileID: profileID) }
     readStartupConfiguration(profile)
     if startupGenerationMissing[profileID] == true { openProfile(profile, beforePaint: true) }
     openAfterPaint(profile)
@@ -255,7 +252,6 @@ final class AdBlockEngineAdapter {
       }
       directories[profile] = nil
     }
-    extras.storeChanged(event, store: store)
   }
 
   func stop() {

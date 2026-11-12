@@ -317,17 +317,15 @@ def legacy_space_fixture(cli, root):
     fixture = root / "Packages/OpenKit/Fixtures/space-schema1"
     original = (fixture / "State/browser.json").read_bytes()
     expected = json.loads(original)
-    # main's later per-Profile settings are additive with fixed defaults: keep-alive
-    # sites (an empty list) and New documents (#360, "note"). Every original semantic
-    # field must remain equal; no other addition is allowed.
+    # main's later keep-alive setting is additive and defaults to an empty list.
+    # Every original semantic field must remain equal; no other addition is allowed.
     for profile in expected["profiles"]:
         profile["settings"].setdefault("keepAliveSites", [])
-        profile["settings"].setdefault("defaultDocumentApp", "note")
     directory = Path("legacy-space").resolve()
     shutil.copytree(fixture, directory)
     matches(r"^roundtrip OK$", run(cli, "roundtrip", str(directory)))
     require(json.loads((directory / "State/browser.json").read_text()) == expected,
-            "legacy Space fixture semantic fields changed (only main's defaults keepAliveSites=[] and defaultDocumentApp='note' may be added)")
+            "legacy Space fixture semantic fields changed (only main's default keepAliveSites=[] may be added)")
     renderer = str(root / "Packages/OpenKit/.build/release/sidebar-render")
     for space in range(3):
         output = Path(f"legacy-space-{space}.png").resolve()

@@ -273,7 +273,7 @@ def live_checks(app, results, wait_until, new_tab, cal):
     app.call('sidebar-menu', node=fav, item='Meeting Reminder/Two Minutes Before')
 
     # Without a calendar Favorite the coordinator stops: no tiles, no timer.
-    app.call('sidebar-menu', node=fav, item='Remove Favorite')
+    app.call('sidebar-menu', node=fav, item='Remove from Favorites')
     stopped = at(0)
     results['cal_live_stops_without_favorite'] = {'ok': stopped.get('active') is False and stopped.get('nextFireIn') is None
         and not stopped.get('tiles'), 'state': stopped}

@@ -681,12 +681,10 @@ public final class BrowserModel {
             let activity: Date
             if case .spaceToday? = section(of: parent) { activity = importedAt }
             else { activity = tab.lastActiveAt }
-            let copy = Tab(id: tab.id, url: tab.url, title: tab.title, customTitle: tab.customTitle,
+            return Tab(id: tab.id, url: tab.url, title: tab.title, customTitle: tab.customTitle,
                 pinnedURL: tab.pinnedURL, customIcon: tab.customIcon, iconOverride: tab.iconOverride,
                 createdAt: tab.createdAt, lastActiveAt: activity, isMuted: tab.isMuted,
                 openerID: tab.openerID, isUnread: tab.isUnread)
-            if case .folder(let id) = parent, index[id]?.folder?.live != nil { copy.liveItemURL = tab.liveItemURL }
-            return copy
         }
         func duplicate(_ id: ItemID, into parent: NodeParent) -> Bool {
             node(id: id) != nil || owner(of: parent).profile.map { archivedIDsByProfile[$0]?.contains(id) == true } == true
@@ -715,8 +713,6 @@ public final class BrowserModel {
                     } else if includeFolders, self.node(id: folder.id) == nil {
                         let copy = Folder(id: folder.id, title: folder.title, isExpanded: folder.isExpanded,
                                           customIcon: folder.customIcon, iconOverride: folder.iconOverride)
-                        // An imported Live Folder stays live unless its Space already has one (LF L7).
-                        if folder.live != nil, case .spacePinned(let space) = parent, liveFolder(in: space) == nil { copy.live = folder.live }
                         add(.folder(copy), to: parent); counts.folders += 1
                         merge(folder.children, into: .folder(copy.id))
                     } else { merge(folder.children, into: parent) }

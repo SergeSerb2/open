@@ -150,9 +150,6 @@ def cef_patch_status(src):
     return len(patches), missing, unapplied, skipped
 
 
-EXECUTION_ONLY_ARGS = ("use_remoteexec",)
-
-
 def gn_args(path):
     result = {}
     for line in path.read_text().splitlines():
@@ -163,12 +160,10 @@ def gn_args(path):
 
 
 def main():
-    parser = argparse.ArgumentParser(usage="engine-status [--config dev|release] [--json <path>] [--strict] [--built]",
+    parser = argparse.ArgumentParser(usage="engine-status [--json <path>] [--strict] [--built]",
                                      epilog="Engine/fork/scripts/engine-status")
     parser.add_argument("--json", type=Path, metavar="PATH")
     parser.add_argument("--strict", action="store_true")
-    parser.add_argument("--config", choices=("dev", "release"), default="dev",
-                        help="output dir and GN args to check (release: OUT_DIR_RELEASE, dev + release args)")
     parser.add_argument("--built", action="store_true",
                         help="check symbols in the dev build instead of the recorded distribution")
     parser.add_argument("--patch-plan", action="store_true", help=argparse.SUPPRESS)
@@ -248,24 +243,13 @@ def main():
             stale += [str(p.relative_to(src)) for p in sorted(folder.rglob("*")) if p.is_file() and not (FORK / "src" / p.relative_to(src)).is_file()]
     add("FAIL" if bad else "WARN" if stale else "PASS", "S-4 Overlay", "; ".join(bad + [f"stale: {p}" for p in stale]) or f"{len(overlay)} files match")
 
-    out = src / pins["OUT_DIR_RELEASE" if args.config == "release" else "OUT_DIR_DEV"]
+    out = src / pins["OUT_DIR_DEV"]
     live = out / "args.gn"
     if live.is_file():
-        # engine-build writes dev.args.gn, then (release) appends release.args.gn; later keys win.
-        expected = gn_args(FORK / "gn/dev.args.gn")
-        if args.config == "release":
-            expected.update(gn_args(FORK / "gn/release.args.gn"))
-        actual = gn_args(live)
-        # Build-execution-only keys: they choose where compiles run, not the compile commands
-        # (use_remoteexec: remote build, Engine/fork/remote/README.md; remote objects are byte-identical).
-        for key in EXECUTION_ONLY_ARGS:
-            expected.pop(key, None)
-            actual.pop(key, None)
+        expected, actual = gn_args(FORK / "gn/dev.args.gn"), gn_args(live)
         changed = sorted(k for k, v in expected.items() if actual.get(k) != v)
         extra = sorted(actual.keys() - expected.keys())
-        add("FAIL" if changed and args.strict else "WARN" if changed or extra else "PASS", "S-5 GN args",
-            f"{out.name}: changed keys: {changed}; extra keys: {extra}" if changed or extra
-            else f"{out.name}: {args.config} keys match (ignored: {', '.join(EXECUTION_ONLY_ARGS)})")
+        add("FAIL" if changed and args.strict else "WARN" if changed or extra else "PASS", "S-5 GN args", f"changed keys: {changed}; extra keys: {extra}" if changed or extra else "dev keys match")
     else:
         add("WARN", "S-5 GN args", f"not generated yet: {live}")
     distrib = state / "distrib.txt"

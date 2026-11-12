@@ -90,18 +90,13 @@ import OpenWeb
         model.setMuted(tabID: tab.id, muted: true)
         pump(0.005)
         symbol?.displayIfNeeded(); symbol?.layer?.displayIfNeeded(); CATransaction.flush()
-        // PB4 row 2: Arc's spring choreography (PP-23) runs in an overlay cut from the same SF glyphs.
-        let spring = button.layer?.sublayers?.first { $0.name == "media.speakerSpring" }
-        let springs = (spring?.sublayers ?? []).flatMap { layer in (layer.animationKeys() ?? []).compactMap { layer.animation(forKey: $0) as? CASpringAnimation } }
-        let muteWaves = springs.filter { $0.keyPath == "transform" && $0.stiffness > 0 }.count
-        let response = springs.first.map { 2 * Double.pi / sqrt($0.stiffness) }
-        Checks.check(symbol?.image !== before && spring != nil && (spring?.sublayers?.count ?? 0) == 5 && muteWaves == 4
-                     && response.map { abs($0 - 0.3) < 0.001 } == true && symbol?.alphaValue == 0,
-                     "RI4 mute runs the spring overlay: body, 3 waves, slash; 4 transform springs (3 waves + slash); response 0.3 (\(springs.count) springs, response \(String(describing: response)), overlay \(spring != nil))")
+        let during = animationKeys(symbol?.layer)
+        let active = during.filter { $0 != "position" && $0 != "bounds" }
+        let path = hasFallback(symbol?.layer) ? "approved finite fallback" : "native symbol effect"
+        Checks.check(symbol?.image !== before && !active.isEmpty, "RI4 image changes and an actual \(path) animation is active: \(active)")
         Checks.check(symbol?.layer?.animationKeys()?.contains(where: { $0 == "position" || $0 == "bounds" }) != true, "RI4 image-view layer has no position or bounds animation")
-        pump(1.0)
-        Checks.check(animationKeys(symbol?.layer).isEmpty && button.layer?.sublayers?.contains { $0.name == "media.speakerSpring" } != true && symbol?.alphaValue == 1,
-                     "RI4 the spring settles: overlay removed, the image view shows the final glyph")
+        pump(0.35)
+        Checks.check(animationKeys(symbol?.layer).isEmpty, "RI4 actual transition finishes with no keys")
         let mutedLeft = symbol?.frame.minX
         Checks.check(audibleLeft != nil && mutedLeft != nil && abs((audibleLeft ?? -100) - (mutedLeft ?? 100)) <= 0.5,
                      "RI image-view left edge stays within 0.5 pt (audible \(String(describing: audibleLeft)), muted \(String(describing: mutedLeft)))")

@@ -91,13 +91,7 @@ public enum ArcPreferenceMapping {
     public static let meetRouteKey = "didSetDefaultGoogleMeetRoute"
     public static let openMeetRouteKey = "open.links.didSetDefaultMeetRoute"
     public static let reminderKey = "liveCalendarNotificationPreferences"
-    /// Live Folders (live-data §2.2, `S:113734–113737`): Arc's "turned off" flag is the inverse of
-    /// Open's automatic-creation switch; "seen education" means the intro card already showed.
-    public static let liveFolderOffKey = "hasTurnedOffGithubLiveFolder"
-    public static let liveFolderIntroKey = "hasSeenGithubLiveFolderEducation"
-    public static let openLiveFolderAutoCreateKey = "open.liveFolders.githubAutoCreate"
-    public static let openLiveFolderIntroKey = "open.liveFolders.introSeen"
-    static var boolKeys: [String] { previews.map(\.arc) + Array(unmapped.keys) + [meetRouteKey, liveFolderOffKey, liveFolderIntroKey] }
+    static var boolKeys: [String] { previews.map(\.arc) + Array(unmapped.keys) + [meetRouteKey] }
 
     /// Open's raw value for an Arc reminder raw value (`LiveCalendar.ReminderInterval`).
     public static func openInterval(_ arc: String) -> String? {
@@ -114,8 +108,6 @@ public enum ArcPreferenceMapping {
         }
         // Arc already made its Meet rule (it comes in with Arc's routing rules): Open must not add a second one.
         if prefs.bools[meetRouteKey] == true { out[openMeetRouteKey] = true }
-        if let off = prefs.bools[liveFolderOffKey] { out[openLiveFolderAutoCreateKey] = !off }
-        if prefs.bools[liveFolderIntroKey] == true { out[openLiveFolderIntroKey] = true }
         return out
     }
 }

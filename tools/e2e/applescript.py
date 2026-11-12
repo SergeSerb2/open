@@ -176,30 +176,6 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
         expected = ['coresetd','corecrel','corecnte','coreclos','CrSelect','CrSuBack','CrSuFwd ','CrSuRlod','CrSustop','CrSuExJa','SpaFocus']
         with open(os.path.join(app.bundle, 'Contents/Info.plist'),'rb') as f: info=plistlib.load(f)
         classes=[(e.get('name'),e.get('code')) for e in root.iter('class')]
-        # H5 (PB4 row 1): the built dictionary declares exactly Arc's terms (names, codes, types,
-        # access, access groups) plus Open's explicit `set`; the consent-relevant keys match.
-        facts = json.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'docs/re/applescript-dictionary-terms.json')))
-        def sdef_terms(node_root):
-            out = set()
-            for suite in node_root.iter('suite'):
-                for node in suite:
-                    tag = node.tag; name = node.get('name') or node.get('extends')
-                    if tag in ('class', 'class-extension', 'command', 'enumeration', 'value-type', 'record-type'):
-                        out.add((tag, name, node.get('code')))
-                        for c in node:
-                            if c.tag in ('property', 'element', 'parameter', 'direct-parameter', 'result', 'responds-to', 'enumerator', 'access-group'):
-                                out.add((tag + ':' + name, c.tag, c.get('name') or c.get('type') or c.get('command') or c.get('identifier'),
-                                         c.get('code'), c.get('type'), c.get('access'), c.get('optional')))
-            return out
-        built = sdef_terms(root)
-        arc_terms = {tuple(t) for t in facts['terms']}
-        open_only = {t for t in built - arc_terms}
-        expected_extra = {tuple(t) for t in facts['openOnlyTerms']}
-        groups = sorted(t[0] for t in built if t[1] == 'access-group' and t[2] == '*')
-        results['H5_consent_declarations'] = {'ok': not (arc_terms - built) and {t[:3] for t in open_only if len(t) == 3} == expected_extra
-            and all(t[0] == 'command:set' for t in open_only if len(t) > 3)
-            and groups == ['command:count', 'command:make'] and info.get('NSAppleScriptEnabled') is True,
-            'missing': sorted(map(str, arc_terms - built)), 'extra': sorted(map(str, open_only)), 'accessGroups': groups}
         results['H3_H4_dictionary'] = {'ok': os.path.isfile(bundle_sdef) and command_codes == expected
             and classes==[('application','capp'),('window','WiND'),('tab','tAbB'),('space','sPaC')]
             and info.get('NSAppleScriptEnabled') is True and info.get('OSAScriptingDefinition')=='Open.sdef'

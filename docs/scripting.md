@@ -313,13 +313,6 @@ These checks remain BLOCKED by macOS Automation consent (-1744) in [#174](https:
    the automated self-scripting receipts. Include A15 and the Little Open checks below.
    Incognito creation remains a 1010 limit.
 
-### Arc hand checks (PB4, 2026-11-12)
-
-Three questions only Arc can answer (execute result and error, `make new space`, `location` ordering).
-The user runs them in Script Editor against Arc; the list is in
-[docs/re/applescript-consent.md](re/applescript-consent.md#arc-hand-checks-for-the-user-do-not-run-as-an-agent).
-Consent parity facts are in the same file; `H5_consent_declarations` keeps Open's declarations equal to Arc's.
-
 ## Little Open tab references (2026-11-07)
 
 `make new tab with properties {URL:"https://example.com/"}` on the application
