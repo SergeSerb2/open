@@ -4,6 +4,12 @@ import OpenDocuments
 import OpenModel
 
 extension AutomationController {
+  static func hex(_ color: CGColor?) -> String {
+    guard let color, let rgb = NSColor(cgColor: color)?.usingColorSpace(.sRGB) else { return "" }
+    let parts: [CGFloat] = [rgb.redComponent, rgb.greenComponent, rgb.blueComponent]
+    return "#" + parts.map { String(format: "%02X", Int(($0 * 255).rounded())) }.joined()
+  }
+
   /// Notes through the real App paths: the registry command (menu action),
   /// the editor's own text views, and the store on disk.
   func note(_ args: [String: Any]) throws -> [String: Any] {
@@ -82,8 +88,7 @@ extension AutomationController {
       "focused": responder === host?.editor.titleView ? "title" : responder === host?.editor.bodyView ? "body" : "other",
       "placeholders": [NoteLook.titlePlaceholder, NoteLook.bodyPlaceholder],
       "dark": host?.editor.isDark ?? false,
-      "background": host.flatMap { $0.editor.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB) }
-        .map { String(format: "#%02X%02X%02X", Int(($0.redComponent * 255).rounded()), Int(($0.greenComponent * 255).rounded()), Int(($0.blueComponent * 255).rounded())) } ?? "",
+      "background": Self.hex(host?.editor.layer?.backgroundColor),
       "editable": host.map { $0.editor.titleView.isEditable && $0.editor.bodyView.isEditable } ?? false,
       "unreadable": host?.unreadable ?? false,
       "favicon": tab?.live.faviconPNG == NoteTab.faviconPNG && tab?.live.faviconPNG != nil,
