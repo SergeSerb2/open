@@ -110,6 +110,16 @@ public enum FavoritesMetrics {
     /// the header's hover fill (F0001, A0413). Fitted: Arc shows a favorites empty-state card
     /// here (`sidebarFavoritesEmptyStateDismissButton`, not captured); its window-only sidebar
     /// (A0361, a different header with no Favorites section) starts its list 1–3 pt lower.
+    /// Favorites empty-state card (audit A3; interaction-states §20.3, S2 07/0001 at width 228): the
+    /// card is 95 pt tall, 7 pt in from the sides and the section top; the Space title then sits
+    /// 50 pt lower than with one tile row (y 204 against 154), so the section is 63 + 50 = 113.
+    /// After Dismiss Arc's section has no content and the Space title sits 17 pt under its top
+    /// (C-report-s10 (a) 4): that is Open's 8 pt empty section (title 9 pt under the section end).
+    public static let emptyStateSectionHeight: CGFloat = 113
+    public static func emptyCardFrame(sidebarWidth: CGFloat) -> CGRect {
+        CGRect(x: 7, y: 7, width: max(0, sidebarWidth - 14), height: 95)
+    }
+
     public static func sectionHeight(count: Int, sidebarWidth: CGFloat) -> CGFloat {
         guard count > 0 else { return inset }
         let cols = columns(count: count, sidebarWidth: sidebarWidth)
@@ -133,9 +143,11 @@ public enum SpaceListMetrics {
     public static let headerTitleBaselineOffset: CGFloat = 14
     /// Header hover fill `[8, 0, W − 16, 36]` (A0413).
     public static let headerFillInsetX: CGFloat = 8
-    /// "…" button, shown on hover at the header's right end. guess size.
+    /// "…" button, shown on hover at the header's right end: 26 × 26 at `[W − 39, 5]` (capture
+    /// session 8 item 8, AX `sidebarSpaceEditButton` [341, 265, 26, 26] in a 360 pt sidebar at
+    /// x 20, header top 260; the title ends 2 pt before it).
     public static let headerMoreSize: CGFloat = 26
-    public static let headerMoreTrailing: CGFloat = 11
+    public static let headerMoreTrailing: CGFloat = 13
     /// First outline row is an empty 3 pt spacer.
     public static let spacerRowHeight: CGFloat = 3
     public static let rowHeight: CGFloat = 41

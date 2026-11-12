@@ -33,8 +33,8 @@
 // Open fork API for page features (docs/plans/page-platform.md §6, fork series
 // 05xx): history swipe events and options (EP-1, 0501), the page selection and
 // its link to highlight (EP-2, EP-3; overlay only), web notification clicks
-// and test hooks (EP-6, EP-7, 0504), and the website color scheme of a
-// request context (EP-9b, 0505). The contents of this file must follow a specific format in order to support the
+// and test hooks (EP-6, EP-7, 0504), the website color scheme of a
+// request context (EP-9b, 0505), and web protocol handlers (0507). The contents of this file must follow a specific format in order to support the
 // CEF translator tool. See the translator.README.txt file in the tools
 // directory for more information.
 //
@@ -240,6 +240,50 @@ bool CefSimulateNotificationClick(CefRefPtr<CefRequestContext> request_context,
 /*--cef(added=experimental)--*/
 bool CefSetWebsiteColorScheme(CefRefPtr<CefRequestContext> request_context,
                               cef_color_variant_t variant);
+
+///
+/// Returns the web protocol handler that a page of |browser| asked to register
+/// (navigator.registerProtocolHandler) and whose permission prompt is pending
+/// (CEF_PERMISSION_TYPE_REGISTER_PROTOCOL_HANDLER in
+/// CefPermissionHandler::OnShowPermissionPrompt): a dictionary with "scheme"
+/// (for example "mailto") and "url" (the handler URL template with "%s").
+/// Returns NULL when no such request is pending. Must be called on the browser
+/// process UI thread.
+///
+/*--cef(added=experimental)--*/
+CefRefPtr<CefDictionaryValue> CefGetPendingProtocolHandlerRequest(
+    CefRefPtr<CefBrowser> browser);
+
+///
+/// Returns the web protocol handlers registered in |request_context|'s
+/// Profile: dictionaries with "scheme", "url" (the template) and "default"
+/// (true for the handler that navigations to the scheme use). Empty when the
+/// context is not initialized. Must be called on the browser process UI thread.
+///
+/*--cef(added=experimental)--*/
+CefRefPtr<CefListValue> CefGetProtocolHandlers(
+    CefRefPtr<CefRequestContext> request_context);
+
+///
+/// Returns the URL that the default web protocol handler of |url|'s scheme
+/// opens for |url| in |request_context| (for example a webmail compose URL for
+/// "mailto:someone@example.com"), or an empty string when the scheme has no
+/// handler. Must be called on the browser process UI thread.
+///
+/*--cef(added=experimental)--*/
+CefString CefTranslateProtocolHandlerURL(
+    CefRefPtr<CefRequestContext> request_context,
+    const CefString& url);
+
+///
+/// Removes the web protocol handler with |scheme| and template |url| from
+/// |request_context|'s Profile. Returns false if there is none. Must be
+/// called on the browser process UI thread.
+///
+/*--cef(added=experimental)--*/
+bool CefRemoveProtocolHandler(CefRefPtr<CefRequestContext> request_context,
+                              const CefString& scheme,
+                              const CefString& url);
 
 #endif  // CEF_API_ADDED(CEF_EXPERIMENTAL)
 
