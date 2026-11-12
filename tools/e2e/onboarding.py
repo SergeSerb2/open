@@ -22,7 +22,7 @@ def run(factory, results, tmp, h):
     runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
     evidence = Path(h.ROOT)/'.re/handoff/sections/s17/c2'
     evidence.mkdir(parents=True, exist_ok=True)
-    exported = h.subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    exported = h.subprocess.run(['defaults', 'export', __import__('prefs_domain').domain(), '-'], capture_output=True)
     domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     keys = ('open.onboarding.introSoundEnabled', 'open.firstRun.completed')
     saved = {key: domain.get(key) for key in keys}

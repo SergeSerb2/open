@@ -60,7 +60,7 @@ def main():
     subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fobjc-arc', '-Wno-deprecated-declarations',
                     str(Path(e.ROOT) / 'tools/verification/littleopen-frame-probe.m'),
                     '-framework', 'AppKit', '-framework', 'QuartzCore', '-o', str(probe)], check=True)
-    domain = 'io.github.sergeserb2.open'
+    domain = __import__('prefs_domain').domain()
     keys = ('open.links.littleOpenNUXSeen', 'open.links.externalInLittleOpen')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}

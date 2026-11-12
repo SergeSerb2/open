@@ -24,7 +24,7 @@ def run(label, bundle, output):
     data = Path.home() / 'Library/Application Support' / name
     cache = Path.home() / 'Library/Caches' / name
     key = 'open.advanced.showToolbar'
-    exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    exported = subprocess.run(['defaults', 'export', __import__('prefs_domain').domain(), '-'], capture_output=True)
     initial = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     report = dict(label=label, bundle=str(bundle), startLoad=os.getloadavg(), rows={},
                   binarySHA256=hashlib.sha256((bundle / 'Contents/MacOS/Open').read_bytes()).hexdigest())
@@ -99,7 +99,7 @@ def run(label, bundle, output):
             app.quit()
             report['cleanup'] = app.quit_report
         e._restore_defaults(None, {key: initial.get(key)})
-        exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+        exported = subprocess.run(['defaults', 'export', __import__('prefs_domain').domain(), '-'], capture_output=True)
         after = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
         report['defaultsRestored'] = after.get(key) == initial.get(key)
         report['focus'] = tracker.loss()
