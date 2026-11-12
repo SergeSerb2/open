@@ -8970,9 +8970,18 @@ def routing_checks(factory, results, tmp):
                 forced.append(pid)
                 try: os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError: pass
-        # This App was closed by the row itself; its cleanup receipt is the row's own process proof.
-        app.quit_report = {'ok': not forced and not any(pid_alive(p) for p in (old_pid, relaunched) if p),
-                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced}
+        # This App was closed by the row itself; its cleanup receipt is the row's own process and
+        # window proof, in the same shape as Open.quit() (gate_evidence checks windows_after_quit).
+        pids = [p for p in (old_pid, relaunched) if p]
+        remaining = [p for p in pids if pid_alive(p)]
+        try:
+            windows_after = json.loads(subprocess.run([app.window_counter] + [str(p) for p in pids],
+                                                      capture_output=True, text=True, timeout=10, check=True).stdout)
+        except Exception as error:
+            windows_after = {'count': None, 'error': str(error)}
+        app.quit_report = {'ok': not forced and not remaining and windows_after.get('count') == 0,
+                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced,
+                           'remaining_processes': remaining, 'windows_after_quit': windows_after, 'owned_pids': pids}
         record('routing_deep_link_restart_quit', sent.returncode == 0 and bool(gone) and bool(relaunched)
                and sent_quit is not None and sent_quit.returncode == 0 and bool(quit_done),
                oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done),
@@ -12721,7 +12730,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -13071,6 +13080,10 @@ def main():
             results["onboarding"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
                 factory, results["onboarding"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-format":
+            results["notes-format"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_format.py"))["run"](
+                factory, results["notes-format"], tmp, sys.modules[__name__])
         elif opts.only == "easel":
             results["easel"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/easel.py"))["run"](
@@ -13342,14 +13355,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

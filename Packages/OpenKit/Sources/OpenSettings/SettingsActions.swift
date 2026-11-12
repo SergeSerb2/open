@@ -21,11 +21,11 @@ public struct ImportPlan: Sendable {
     /// Arc keeps its folder-based path. Other browsers import bookmarks, history and the search engine (IMC I-1).
     public var source: ImportSource = .arc
     public var bookmarks = true
+    /// I-6: the source browser's open tabs from its last session.
+    public var openTabs = true
     /// Firefox and Safari (IMF): saved passwords. The toggle on the Choose step is the user's choice;
     /// Firefox has no Keychain prompt and Safari passwords come from a file the user picked.
     public var passwords = false
-    /// Firefox (I-6): the tabs that were open in the last session.
-    public var openTabs = false
     public var safariFiles = SafariImportFiles()
     /// Typed by the user for a Firefox Primary Password. Used once by the reader, cleared after the run, never stored.
     public var primaryPassword = ""

@@ -7,10 +7,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          89578,
-          89598,
-          89599,
-          89601
+          34435,
+          34715,
+          34716,
+          34717
         ],
         "remaining_processes": [],
         "reply": true,
@@ -25,10 +25,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          89851,
-          89854,
-          89855,
-          89856
+          35213,
+          35262,
+          35263,
+          35277
         ],
         "remaining_processes": [],
         "reply": true,
@@ -42,15 +42,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "5649b0681cb164d0e7851549d618444338066b795ab11f5b2572bae0bd0bcc0e",
-    "distributionSHA256": "a77b13e17bb44acb53c6971012b596fd12448b0934a32b346a1065fe8ecb8ce6",
-    "distributionUUID": "4C4C44AA-5555-3144-A10E-754E49025308",
-    "embeddedCodeSHA256": "5649b0681cb164d0e7851549d618444338066b795ab11f5b2572bae0bd0bcc0e",
-    "embeddedSHA256": "44e598f6929da24d75ce0b8b3240a2d19d09852e7d196238a9f6f7f9ec1e1378",
-    "embeddedUUID": "4C4C44AA-5555-3144-A10E-754E49025308",
+    "distributionCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
+    "distributionSHA256": "cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b",
+    "distributionUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+    "embeddedCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
+    "embeddedSHA256": "4aa5dc9f266a0f3f1a0feae49dc2455fce47258a3fce66bb6d5ea94b9fbaddc7",
+    "embeddedUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794478460"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794470169"
   },
   "import-browsers": {
     "bookmarks_folder_tree": {
@@ -62,9 +62,9 @@
         "Imported from Chrome/Other bookmarks"
       ],
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true,
       "outcome": {
@@ -74,7 +74,8 @@
         "History": 5,
         "History duplicates": 0,
         "Imported History": 5,
-        "Imported items": 4,
+        "Imported items": 6,
+        "Open tabs": 2,
         "Search settings": 1,
         "Skipped bookmarks": 1
       },
@@ -84,9 +85,9 @@
     "bookmarks_size_limit": {
       "atLimit": "Found: 1",
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        10.85107421875,
+        10.48095703125,
+        9.47998046875
       ],
       "ok": true,
       "overLimit": "Could not be read"
@@ -96,14 +97,15 @@
         "Bookmarks": "Found: 4",
         "Cookies": "Found: 2",
         "History": "Found: 6",
+        "Open tabs": "Found: 2",
         "Passwords": "Found: 3",
         "Passwords and cookies": "Found: 5",
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true,
       "title": "Import from Chrome"
@@ -113,38 +115,55 @@
         "aaaabbbbccccddddeeeeffffgggghhhh"
       ],
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true
     },
     "history_imported": {
       "history": 5,
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true,
       "visits": 5
     },
+    "open_tabs": {
+      "imported": 2,
+      "label": "Found: 2",
+      "load": [
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
+      ],
+      "ok": true,
+      "pinned": [
+        "https://pinned.example.com/"
+      ],
+      "today": [
+        "https://tab.example.com/"
+      ]
+    },
     "reimport_idempotent": {
       "load": [
-        13.42529296875,
-        9.5947265625,
-        8.90234375
+        10.85107421875,
+        10.48095703125,
+        9.47998046875
       ],
-      "nodes": 8,
+      "nodes": 9,
       "ok": true,
       "repeat": {
         "Bookmark folders": 0,
         "Bookmarks": 0,
-        "Duplicates": 13,
+        "Duplicates": 15,
         "History": 0,
         "History duplicates": 5,
         "Imported History": 0,
         "Imported items": 0,
+        "Open tabs": 0,
         "Search settings": 0,
         "Skipped bookmarks": 1
       }
@@ -154,9 +173,9 @@
         "duckduckgo"
       ],
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true
     },
@@ -168,9 +187,9 @@
         "imported-ex"
       ],
       "load": [
-        13.42529296875,
-        9.5947265625,
-        8.90234375
+        10.85107421875,
+        10.48095703125,
+        9.47998046875
       ],
       "ok": true,
       "outcome": {
@@ -178,6 +197,7 @@
         "Bookmarks": 1,
         "Duplicates": 0,
         "Imported items": 1,
+        "Open tabs": 0,
         "Search settings": 1,
         "Skipped bookmarks": 0
       }
@@ -193,14 +213,15 @@
         "Bookmarks": "Found: 4",
         "Cookies": "Found: 2",
         "History": "Found: 6",
+        "Open tabs": "Found: 2",
         "Passwords": "Found: 3",
         "Passwords and cookies": "Found: 5",
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true
     },
@@ -213,9 +234,9 @@
         "unmapped": 1
       },
       "load": [
-        13.42529296875,
-        9.5947265625,
-        8.90234375
+        10.85107421875,
+        10.48095703125,
+        9.47998046875
       ],
       "ok": true,
       "restricted": {
@@ -233,12 +254,22 @@
         "unmapped": 0
       }
     },
+    "session_size_limit": {
+      "atLimit": "Found: 1",
+      "load": [
+        10.85107421875,
+        10.48095703125,
+        9.47998046875
+      ],
+      "ok": true,
+      "overLimit": "Could not be read"
+    },
     "sources_detected": {
       "canContinue": false,
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true,
       "selected": "",
@@ -253,9 +284,9 @@
     "sources_hidden_without_profile": {
       "firefox": "No data",
       "load": [
-        13.810546875,
-        9.60498046875,
-        8.90185546875
+        7.5302734375,
+        9.8310546875,
+        9.2470703125
       ],
       "ok": true,
       "sources": [
@@ -275,9 +306,9 @@
     },
     "undo": {
       "load": [
-        13.42529296875,
-        9.5947265625,
-        8.90234375
+        10.85107421875,
+        10.48095703125,
+        9.47998046875
       ],
       "nodes": 0,
       "ok": true,
@@ -288,15 +319,15 @@
   "interrupted_attempts": [],
   "lane": "all",
   "load": [
-    14.142578125,
-    9.5986328125,
-    8.8955078125
+    7.40234375,
+    9.84521484375,
+    9.24853515625
   ],
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "b785f72ceacb593dfc66a4bd4787e7adee22c922"
+    "head": "26c6a726fc1db9779981e7d086de3c7dd7dd6c2a"
   },
-  "started": "2026-11-12 03:36:11",
+  "started": "2026-11-12 03:13:31",
   "style": "chrome"
 }

@@ -349,7 +349,9 @@ A transient failed entry leaves Zap off and enabled while the host is available,
 so the user can retry.
 
 Select mode uses a separate native capability (`enterZap(..., mode: .select)`).
-Its "Use Selector" action sends `picker:selected` with selector and match count.
+Its "Copy selector for this" and "Copy selector for related" actions (Arc BO-20 labels, PB1) send
+`picker:selected` with the chosen or the related selector and its match count; the App copies it to
+the general pasteboard and the editor inserts it at the CSS caret.
 Neither JS nor the coordinator permits commits, hides, undo removals, or store
 writes in this mode. The App host must implement
 `BoostEditorHost.enterSelectorPicker(boostID:tabID:) -> Bool`; there is no default
