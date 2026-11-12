@@ -60,15 +60,18 @@ final class ToolbarView: NSView {
         more.isHidden = true
     }
 
-    /// "More options" (guess: the menu was not opened in the capture; plan §3.16).
+    /// "More options": Arc's two rows are "Reload" ⌘R (dimmed without a page) and "Toggle Sidebar" ⌘S (capture
+    /// session 9, `46-pb5-a6-compact-more`, C-report-s6 §8). Arc shows them in its own popover card; Open still
+    /// uses a system menu (the popover look is a follow-up). "Stop Loading" while a page loads is Open's choice
+    /// (GUESS: not captured; Arc's full-width reload button turns into Stop).
     func makeMoreMenu() -> NSMenu {
         let menu = NSMenu(); menu.autoenablesItems = false
         let loading = context.pageIsLoading
-        let reload = ClosureMenuItem(loading ? "Stop Loading" : "Reload This Page", enabled: context.hasPage) { [unowned context] in
+        let reload = ClosureMenuItem(loading ? "Stop Loading" : "Reload", enabled: context.hasPage) { [unowned context] in
             context.send(context.pageIsLoading ? .stopLoading : .reload)
         }
         reload.keyEquivalent = loading ? "." : "r"; reload.keyEquivalentModifierMask = .command
-        let hide = ClosureMenuItem("Hide Sidebar") { [unowned context] in context.send(.toggleSidebar) }
+        let hide = ClosureMenuItem("Toggle Sidebar") { [unowned context] in context.send(.toggleSidebar) }
         hide.keyEquivalent = "s"; hide.keyEquivalentModifierMask = .command
         menu.addItem(reload); menu.addItem(hide)
         return menu
@@ -125,6 +128,11 @@ public enum SiteControlButtonState: String, Sendable {
 @MainActor
 final class URLFieldView: NSView {
     unowned let context: SidebarContext
+    /// "Search or Enter URL…", or "Search…" while the sidebar is compact (below `CompactToolbarMetrics.switchWidth`).
+    var placeholder: String {
+        ChromeMetrics.isCompact(sidebarWidth: superview?.bounds.width ?? bounds.width + 16) ? "Search…" : "Search or Enter URL…"
+    }
+    private var wasCompact = false
     private let fill = CALayer()
     private let magnifier = GlyphView()
     private let label = TextLabel()
@@ -163,7 +171,8 @@ final class URLFieldView: NSView {
         label.font = Typography.urlField.font
         label.baseline = URLFieldMetrics.textBaselineOffset
         label.inset = SpaceListMetrics.textInset
-        label.text = { [unowned context] in context.pageHost ?? "Search or Enter URL…" }
+        // The compact sidebar shortens the placeholder to "Search…" (capture session 9, C-report-s6 §8).
+        label.text = { [unowned self, unowned context] in context.pageHost ?? self.placeholder }
         label.color = { [unowned context] in
             (context.hasPage ? SidebarRole.urlText : SidebarRole.placeholder).nsColor
         }
@@ -240,6 +249,8 @@ final class URLFieldView: NSView {
 
     override func layout() {
         super.layout()
+        let compact = ChromeMetrics.isCompact(sidebarWidth: superview?.bounds.width ?? bounds.width + 16)
+        if compact != wasCompact { wasCompact = compact; label.needsDisplay = true }
         // Field frame is `[8, 46, W − 16, 36]` in sidebar space; this view is that frame.
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = bounds

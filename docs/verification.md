@@ -221,6 +221,13 @@ at most six minutes for two load1 readings at or below 3.5, ten seconds apart,
 before each launch sample pair (LEAD 06:50). The top five foreign processes and
 all load readings remain recorded, but foreign CPU has no validity threshold.
 After-run load has no validity condition. Do not stop the user's background jobs.
+Power guard (2026-11-12): the same preflight first reads `pmset -g batt` and
+`pmset -g` (read-only). A required timing stage is refused at once, with no
+App launch, unless the Mac is on AC Power with Low Power Mode off; the power
+state is stored in every sample (`power`). On battery with Low Power Mode the
+M1 measured sidebar first draw 329 ms instead of 229 ms, which made the DMG d
+lane look like a launch regression. Informative (non-required) samples still
+run and only record the state.
 While any agent's timing run holds both M1 slots, no other agent runs anything
 on the M1: no builds, decodes, analyses or SSH polling loops. Check `queue.sh`
 before off-slot work. An exclusive holder or a strict-timing
