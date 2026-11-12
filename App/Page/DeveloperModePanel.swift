@@ -2,6 +2,7 @@ import AppKit
 import OpenEngine
 import OpenFeatures
 import OpenModel
+import OpenSidebar
 
 /// Developer Mode's toolbar actions for one browser window (PB3 row 5).
 /// Capture PB3-a (C-report-s6.md:273): Toggle Console, Toggle Network Panel and Inspect Element open the standard
@@ -39,14 +40,33 @@ final class DeveloperModePanel {
     case .copyLink: controller.performCommand("copy-url")
     case .capture: controller.performCommand("capture-page")
     case .captureWindow: showPortraitCapture(anchor: view, hover: false)
-    case .extensionsMenu, .splitMenu:
+    case .extensionsMenu: toggleExtensionsCard(anchor: view)
+    case .splitMenu:
       menu(for: action)?.popUp(positioning: nil, at: CGPoint(x: 0, y: view.bounds.height + 4), in: view)
     case .siteSettings: controller.container.onSiteControls?(id)
     }
   }
 
-  /// The menus of Extensions Menu and Split View Menu (C-report-s10 PB3-a2). Arc shows the extensions rows in a
-  /// small popover card (262 × 114 pt); Open uses a menu (LEAD addendum to the #461 review).
+  /// The Extensions Menu card (C-report-s10 PB3-a2, `m-ext.png`): "Add Extension…" and "Manage Extensions…" in the
+  /// More options card style (`ToolbarMorePopover.Layout.extensions`). A second press on the button closes it.
+  private(set) weak var extensionsCard: ToolbarMorePopover?
+  func toggleExtensionsCard(anchor: NSView) {
+    if let open = extensionsCard { open.dismiss(); return }
+    guard let controller = factory.controller, let host = anchor.window?.contentView else { return }
+    let card = ToolbarMorePopover(rows: [
+      .init(title: "Add Extension…") { [weak controller] in controller?.performCommand("add-extension") },
+      .init(title: "Manage Extensions…") { [weak controller] in controller?.performCommand("manage-extensions") },
+    ], layout: .extensions)
+    card.dark = anchor.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    card.swallowsClick = { [weak anchor] location in
+      guard let anchor else { return false }
+      return anchor.bounds.contains(anchor.convert(location, from: nil))
+    }
+    card.present(in: host, under: anchor)
+    extensionsCard = card
+  }
+
+  /// The Split View Menu (C-report-s10 PB3-a2): Arc's native menu with the four split directions.
   func menu(for action: DeveloperPanelAction) -> NSMenu? {
     guard let controller = factory.controller else { return nil }
     let menu = NSMenu(); menu.autoenablesItems = false
@@ -55,9 +75,6 @@ final class DeveloperModePanel {
       item.handler = run; item.target = item; return item
     }
     switch action {
-    case .extensionsMenu:
-      menu.addItem(item("Add Extension…") { [weak controller] in controller?.performCommand("add-extension") })
-      menu.addItem(item("Manage Extensions…") { [weak controller] in controller?.performCommand("manage-extensions") })
     case .splitMenu:
       let split = controller.splitController
       for (title, edge) in [("Add Right Split", SplitDropOverlayView.Zone.right), ("Add Left Split", .left), ("", .center),

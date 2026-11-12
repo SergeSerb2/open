@@ -23,7 +23,12 @@ extension AutomationController {
       else { throw Failure(message: "no developer bar or unknown button") }
       panel.pointer((a["inside"] as? Bool) ?? true, action)
     }
-    // The Extensions / Split View menus: titles without opening them (a menu blocks), or run one row by title.
+    // The Extensions card: run one row by title, through its press path.
+    if let title = a["cardItem"] as? String {
+      guard let card = factory.developerPanel.extensionsCard, let index = card.rowTitles.firstIndex(of: title) else { throw Failure(message: "no card row") }
+      card.choose(index)
+    }
+    // The Split View menu: titles without opening it (a menu blocks), or run one row by title.
     var menuTitles: [String]?
     if let raw = a["menu"] as? String, let action = DeveloperPanelAction(rawValue: raw) {
       guard let menu = factory.developerPanel.menu(for: action) else { throw Failure(message: "no menu") }
@@ -60,6 +65,13 @@ extension AutomationController {
     state["sidebarToolbar"] = controller.sidebar.developerToolbarState()
     if let tip = TooltipController.shared.visibleOrPendingTooltip { state["tooltip"] = [tip.title] + tip.keys }
     if let menuTitles { state["menu"] = menuTitles }
+    if let card = factory.developerPanel.extensionsCard, let host = card.superview, let anchor = slot?.developerPanel?.button(.extensionsMenu) {
+      let a = host.convert(anchor.bounds, from: anchor), f = card.frame
+      // Gap from the button's bottom edge to the arrow tip, and the tip's x offset from the button's center.
+      let gap = host.isFlipped ? f.minY - a.maxY : a.minY - f.maxY
+      state["extensionsCard"] = ["rows": card.rowTitles, "size": [f.width, f.height], "arrowGap": gap,
+                                 "arrowOffset": f.minX + card.arrowTipX - a.midX, "label": card.accessibilityLabel() ?? ""]
+    }
     state["splitPanes"] = controller.splitController.split?.panes.count ?? 1
     state["splitOrientation"] = controller.splitController.split.map { $0.orientation == .horizontal ? "horizontal" : "vertical" } ?? ""
     if let page = slot?.contentHostView { state["pageFrame"] = [page.frame.minX, page.frame.minY, page.frame.width, page.frame.height] }
