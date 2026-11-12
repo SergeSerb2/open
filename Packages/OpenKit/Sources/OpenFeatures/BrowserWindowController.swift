@@ -226,6 +226,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var observationArmed = false
     private var refreshPending = false
     private var systemAppearanceObservation: NSKeyValueObservation?
+    private var increaseContrastObserver: NSObjectProtocol?
     private let snapshotStore: SnapshotStore?
     /// Toasts over the web panel (page-platform §4.1, D-1): one center per window.
     public let toastOverlay = ToastOverlayView()
@@ -262,6 +263,30 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         return preview
     }()
+    /// Live Folder intro card (capture s5 b3) beside the new folder row; one at a time.
+    public private(set) var liveFolderIntro: LiveFolderIntroView?
+    private var liveFolderIntroMonitor: Any?
+    public func showLiveFolderIntro(folderID: ItemID) {
+        dismissLiveFolderIntro()
+        sidebar.layoutSubtreeIfNeeded()
+        guard let row = sidebar.rowFrame(nodeID: folderID) else { return }
+        let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
+        let view = LiveFolderIntroView(appearance: appearance)
+        let rowInRoot = root.convert(row, from: sidebar)
+        let size = view.fittingSize
+        view.frame = CGRect(x: context.sidebarWidth + HoverPreviewMetrics.folderSidebarGap, y: rowInRoot.midY - size.height / 2, width: size.width, height: size.height)
+        root.addSubview(view, positioned: .below, relativeTo: toastOverlay)
+        liveFolderIntro = view
+        // Any click or key dismisses it (capture s5: Esc closes it); the event still goes on.
+        liveFolderIntroMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+            MainActor.assumeIsolated { if event.window === self?.window { self?.dismissLiveFolderIntro() } }
+            return event
+        }
+    }
+    public func dismissLiveFolderIntro() {
+        if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor); self.liveFolderIntroMonitor = nil }
+        liveFolderIntro?.removeFromSuperview(); liveFolderIntro = nil
+    }
     /// The delete confirmation sheet currently shown on this window (completion §3.3).
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.
@@ -278,6 +303,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.appearance = incognitoTitle == nil ? NSApp.effectiveAppearance : NSAppearance(named: .darkAqua)
         context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
         context.systemAppearance = context.isIncognito ? .dark : ContentAppearance(NSApp.effectiveAppearance)
+        context.increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         WindowSpeedTrace.mark("sidebarInitBegin")
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
         WindowSpeedTrace.mark("sidebarAndContainerCreated")
@@ -314,6 +340,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 let system: ContentAppearance = self.context.isIncognito ? .dark : ContentAppearance(appearance)
                 if self.context.systemAppearance != system { self.context.systemAppearance = system }
                 self.refresh()
+            }
+        }
+        // macOS Increase Contrast (plan D2 §2.8): the sidebar roles follow it live.
+        increaseContrastObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let value = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+                if self.context.increaseContrast != value { self.context.increaseContrast = value; self.refresh() }
             }
         }
         root.addSubview(background)
@@ -1282,6 +1317,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .separateFromPinned(let id): return separateFromPinned(id)
         case .deleteSpace(let id): return confirmDeleteSpace(id)
         case .deleteFolder(let id): return confirmDeleteFolders([id])
+        case .deleteLiveFolder(let id): return confirmDeleteLiveFolder(id)
+        case .setLiveRepository(let id, let repository, let hidden):
+            model.setLiveRepository(folderID: id, repository: repository, hidden: hidden); changed(); return true
         case .deleteFolders(let ids): return confirmDeleteFolders(ids)
         case .clearToday(let space), .clearTodayKeeping(let space, _):
             let before = model.space(id: space)?.today.count ?? 0
@@ -1349,6 +1387,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         siteControl?.dismiss(reason: .sourceUnavailable, animated: false)
         // Tear down this controller's appearance observation once at window close.
         systemAppearanceObservation = nil
+        if let increaseContrastObserver { NSWorkspace.shared.notificationCenter.removeObserver(increaseContrastObserver) }
+        increaseContrastObserver = nil
         boostEditor?.close(returnFocus: false)
         pendingSpaceCreationOptions = nil
         cancelSidebarResize()
@@ -1511,6 +1551,25 @@ extension BrowserWindowController {
             guard archived > 0 else { return }
             self.refresh(); restoreKeyboardFocus(); self.changed()
             self.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
+        }
+        if !shown { pendingConfirmation = nil }
+        return shown
+    }
+
+    /// Live Folder delete: the alert, then the folder and its rows go (no Archive), and automatic
+    /// creation turns off until the user turns it on from the Space menu (live-data §2.1, W2).
+    public static let liveFolderAutoCreateKey = "open.liveFolders.githubAutoCreate"
+    func confirmDeleteLiveFolder(_ id: ItemID) -> Bool {
+        guard let window, pendingConfirmation == nil, model.node(id: id)?.folder?.live != nil else { return false }
+        let alert = SidebarConfirmations.deleteLiveFolderAlert()
+        pendingConfirmation = alert
+        let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
+            guard let self else { return }
+            self.pendingConfirmation = nil
+            guard confirmed else { return }
+            self.keepingSelection { self.model.removeLiveFolder(id: id) }
+            self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey)
+            self.refresh(); self.changed()
         }
         if !shown { pendingConfirmation = nil }
         return shown

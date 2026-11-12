@@ -3,6 +3,7 @@ import AppKit
 import OpenEasel
 import OpenEngine
 import OpenDocuments
+import OpenLiveData
 import OpenModel
 import OpenStore
 import OpenFeatures
@@ -516,6 +517,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         for phrase in phrases { rows += await store.recentURLs(matchingURLPhrase: phrase).map { ($0.url, $0.title, $0.lastVisit) } }
         return rows
       }
+      // Gmail card (LF L6): the Atom feed in one hidden page of the Profile, on hover only.
+      controller.context.mailGlanceSource = { [weak self] profileID, feed, host in
+        guard let self else { return .failed }
+        do {
+          let value = try await self.liveFetch.fetch(profileID: profileID, url: feed, script: GmailGlance.extractionScript(expectedHost: host))
+          switch GmailGlance.decode(value) {
+          case (.ok, let rows): return .mail(rows)
+          case (.signedOut, _): return .signedOut
+          case (.unexpected, _): return .failed
+          }
+        } catch { return .failed }
+      }
       // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
       controller.context.calendarGlance = makeCalendarGlance(factory)
       controller.context.liveCalendar = liveCalendar.actions()
@@ -693,6 +706,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if wasEnabled { undoManager.disableUndoRegistration() }
     defer { if wasEnabled { undoManager.enableUndoRegistration() } }
     return body()
+  }
+
+  /// Live Folder refresh when the app comes to the front (live-data §2.5). Nothing runs (no
+  /// service is made) while no Live Folder exists.
+  func applicationDidBecomeActive(_ notification: Notification) {
+    guard let model, !model.liveFolders.isEmpty else { return }
+    liveFolders.windowForegrounded()
   }
 
   func scheduleSave() {

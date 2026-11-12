@@ -7,10 +7,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          89568,
-          89577,
-          89578,
-          89579
+          49921,
+          50012,
+          50013,
+          50014
         ],
         "remaining_processes": [],
         "reply": true,
@@ -24,15 +24,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
-    "distributionSHA256": "cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b",
-    "distributionUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
-    "embeddedCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
-    "embeddedSHA256": "4aa5dc9f266a0f3f1a0feae49dc2455fce47258a3fce66bb6d5ea94b9fbaddc7",
-    "embeddedUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+    "distributionCodeSHA256": "c217d559481cdd05f82d5387929e1ef325fe66fa1009c13a2839165e17f31055",
+    "distributionSHA256": "b8d6e3363eec07f880bbc1505580480c143b4625a7247d84032753852751259f",
+    "distributionUUID": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+    "embeddedCodeSHA256": "c217d559481cdd05f82d5387929e1ef325fe66fa1009c13a2839165e17f31055",
+    "embeddedSHA256": "562447e801a0a40ebfd65529b1652edf53505f22af7a000a5ffe14dd44cc30c9",
+    "embeddedUUID": "4C4C445D-5555-3144-A19E-A98D4CE75780",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794470169"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794480495"
   },
   "import-other-browsers": {
     "firefox_bookmarks": {
@@ -44,9 +44,9 @@
         "Imported from Firefox/Bookmarks Toolbar/Synthetic Nested 1/Deeper"
       ],
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "ok": true,
       "outcome": {
@@ -59,12 +59,13 @@
       "labels": {
         "Bookmarks": "Found: 6",
         "History": "Found: 7,003",
+        "Open tabs": "Found: 4",
         "Passwords": "Found: 3"
       },
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        20.68701171875,
+        17.83154296875,
+        14.56103515625
       ],
       "ok": true,
       "passwords": true,
@@ -73,21 +74,38 @@
     "firefox_history": {
       "history": 5600,
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "ok": true,
       "visits": 5600
+    },
+    "firefox_open_tabs": {
+      "load": [
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
+      ],
+      "ok": true,
+      "outcome": 4,
+      "pinned": [
+        "https://pinned.session.example.test/s1"
+      ],
+      "today": [
+        "https://current.session.example.test/2",
+        "https://second.session.example.test/w2",
+        "https://third.session.example.test/w2"
+      ]
     },
     "firefox_passwords": {
       "appLog": [],
       "error": "",
       "failures": {},
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "logins": 3,
       "ok": true,
@@ -96,14 +114,15 @@
     },
     "firefox_reimport": {
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "ok": true,
       "repeat": {
         "Bookmarks": 0,
         "History": 0,
+        "Open tabs": 0,
         "Password duplicates": 3,
         "Passwords": 0
       }
@@ -111,9 +130,9 @@
     "firefox_running": {
       "access": "quitBrowser",
       "load": [
-        5.35546875,
-        7.02783203125,
-        7.75537109375
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "ok": true,
       "released": true,
@@ -121,9 +140,9 @@
     },
     "firefox_undo": {
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "ok": true,
       "undoTitle": "Import from Firefox",
@@ -131,9 +150,9 @@
     },
     "primary_password_right": {
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "logins": 3,
       "ok": true,
@@ -145,9 +164,9 @@
         "Passwords": "The Primary Password is not correct"
       },
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        19.4306640625,
+        17.6181640625,
+        14.5048828125
       ],
       "needs": true,
       "ok": true
@@ -160,9 +179,9 @@
         "Passwords": "Found: 3"
       },
       "load": [
-        5.16650390625,
-        6.9609375,
-        7.72705078125
+        18.51513671875,
+        17.4580078125,
+        14.46630859375
       ],
       "logins": 3,
       "ok": true,
@@ -181,9 +200,9 @@
     "safari_full_disk_access": {
       "granted": true,
       "load": [
-        5.35546875,
-        7.02783203125,
-        7.75537109375
+        18.51513671875,
+        17.4580078125,
+        14.46630859375
       ],
       "ok": true,
       "requests": 1,
@@ -203,9 +222,9 @@
         "Passwords": "Choose a passwords file"
       },
       "load": [
-        5.35546875,
-        7.02783203125,
-        7.75537109375
+        18.51513671875,
+        17.4580078125,
+        14.46630859375
       ],
       "ok": true,
       "outcome": {
@@ -223,9 +242,9 @@
         ]
       ],
       "load": [
-        5.21240234375,
-        7.0283203125,
-        7.76025390625
+        20.68701171875,
+        17.83154296875,
+        14.56103515625
       ],
       "ok": true,
       "safari": [
@@ -237,15 +256,15 @@
   "interrupted_attempts": [],
   "lane": "all",
   "load": [
-    5.05712890625,
-    7.02880859375,
-    7.76513671875
+    21.443359375,
+    17.93017578125,
+    14.576171875
   ],
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "213581b250964fd5bdb6fb2aad0b1a4b39018ac6"
+    "head": "be1d6e42814a08b91f7872034aa6d1151c93e8b2"
   },
-  "started": "2026-11-12 02:56:52",
+  "started": "2026-11-12 04:29:43",
   "style": "chrome"
 }

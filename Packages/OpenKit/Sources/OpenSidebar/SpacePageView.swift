@@ -62,6 +62,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     var style: SpaceThemeStyle { context.style(for: space) }
     var contentAppearanceForSpace: ContentAppearance { context.appearance(for: space) }
+    /// This Space's sidebar colours (`SidebarRoles`, cached per theme change).
+    var roles: SidebarRoles { context.roles(for: space) }
     private var animatesChanges: Bool { context.animatesChanges && animatesSidebarChanges }
 
     private func configureOutline() {
@@ -156,6 +158,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             guard let self else { return }
             _ = self.space.theme
             _ = self.context.systemAppearance
+            _ = self.context.increaseContrast
         }) { [weak self] in
             guard let self else { return }
             self.applyAppearance()
@@ -1146,6 +1149,8 @@ final class SidebarOutlineView: NSOutlineView {
 final class SpaceHeaderView: NSView {
     unowned let context: SidebarContext
     let space: Space
+    /// Space title role (`SidebarRoles.spaceTitle`; raised with Increase Contrast).
+    var spaceTitleColor: NSColor { context.roles(for: space).spaceTitle.nsColor }
     weak var page: SpacePageView?
     private let fill = CALayer()
     private let title = TextLabel()
@@ -1174,13 +1179,13 @@ final class SpaceHeaderView: NSView {
         title.baseline = SpaceListMetrics.headerTitleBaselineOffset
         title.inset = SpaceListMetrics.headerTextInset
         title.text = { [unowned context, space] in context.title(of: space) }
-        title.color = { SidebarRole.spaceTitle.nsColor }
+        title.color = { [weak self] in self?.spaceTitleColor ?? SidebarRole.spaceTitle.nsColor }
         chevron.accessibleTitle = { [weak space] in space?.isPinnedCollapsed == true ? "Expand Pinned" : "Collapse Pinned" }
         more.setAccessibilityLabel("Space options")
         chevron.showsHoverPlate = false
-        chevron.glyphTint = { _ in SidebarRole.spaceTitle.nsColor }
+        chevron.glyphTint = { [weak self] _ in self?.spaceTitleColor ?? SidebarRole.spaceTitle.nsColor }
         chevron.action = { [unowned context, space] in context.send(.setPinnedCollapsed(space: space.id, collapsed: !space.isPinnedCollapsed)) }
-        more.glyphTint = { _ in SidebarRole.spaceTitle.nsColor }
+        more.glyphTint = { [weak self] _ in self?.spaceTitleColor ?? SidebarRole.spaceTitle.nsColor }
         more.menuProvider = { [weak self] in self?.page.map { $0.menus.space($0.space) } }
         profileIndicator.menuProvider = { [weak self] in self?.page.map { $0.menus.profile($0.space) } }
         chevron.context = context
@@ -1203,7 +1208,7 @@ final class SpaceHeaderView: NSView {
         let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true; self?.needsLayout = true }
         CATransaction.begin()
         CATransaction.setDisableActions(!context.animatesChanges)
-        fill.backgroundColor = context.style(for: space).rowHoverFill(contentAppearance).cgColor
+        fill.backgroundColor = context.roles(for: space).rowHover.cgColor
         CATransaction.setAnimationDuration(Motion.hoverFade)
         fill.opacity = hovered ? 1 : 0
         CATransaction.commit()
@@ -1252,7 +1257,7 @@ final class SpaceHeaderView: NSView {
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.textColor = SidebarRole.spaceTitle.nsColor
+        field.textColor = self.spaceTitleColor
         let id = space.id
         field.onEnd = { [weak self, weak field] value in
             field?.removeFromSuperview()
@@ -1272,6 +1277,10 @@ final class SpaceHeaderView: NSView {
 final class SpaceIconView: NSView {
     weak var space: Space?
     weak var context: SidebarContext?
+    private var spaceTitleColor: NSColor {
+        guard let context, let space else { return SidebarRole.spaceTitle.nsColor }
+        return context.roles(for: space).spaceTitle.nsColor
+    }
     var emojiSize: CGFloat = Typography.headerEmoji.size
     /// Emoji sit 1 pt above the frame's center (NCC fit on F0001).
     var emojiNudgeY: CGFloat = -1
@@ -1304,18 +1313,18 @@ final class SpaceIconView: NSView {
         case .symbol(let name)? where NSImage(systemSymbolName: name, accessibilityDescription: nil) == nil:
             // Arc's own named icons (for example "planet" on the default Space) have no SF Symbol.
             CustomIcon.planet(in: NSRect(x: bounds.midX - emojiSize / 2, y: bounds.midY - emojiSize / 2, width: emojiSize, height: emojiSize),
-                              color: desaturated ? SidebarRole.spaceTitle.nsColor : SidebarRole.spaceTitle.nsColor)
+                              color: self.spaceTitleColor)
         case .symbol(let name)?:
             if let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: emojiSize * 0.8, weight: .medium)) {
                 let s = img.size
                 img.drawTinted(in: NSRect(x: bounds.midX - s.width / 2, y: bounds.midY - s.height / 2, width: s.width, height: s.height),
-                               color: SidebarRole.spaceTitle.nsColor)
+                               color: self.spaceTitleColor)
             }
         case nil:
             // Arc draws a planet-like mark for Spaces without an icon (F0079); ours is drawn in code.
             CustomIcon.planet(in: NSRect(x: bounds.midX - emojiSize / 2, y: bounds.midY - emojiSize / 2, width: emojiSize, height: emojiSize),
-                              color: SidebarRole.spaceTitle.nsColor)
+                              color: self.spaceTitleColor)
         }
     }
 
@@ -1324,7 +1333,7 @@ final class SpaceIconView: NSView {
             .withSymbolConfiguration(.init(pointSize: emojiSize * 0.8, weight: .medium)) else { return }
         let size = image.size
         image.drawTinted(in: NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
-                                   width: size.width, height: size.height), color: SidebarRole.spaceTitle.nsColor)
+                                   width: size.width, height: size.height), color: self.spaceTitleColor)
     }
 
 }

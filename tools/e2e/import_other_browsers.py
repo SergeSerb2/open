@@ -65,6 +65,12 @@ def run(factory, results, tmp, h):
         return report
     def logins():
         return app.call('credentials', profile='Default')['logins']
+    def today_urls(data):
+        urls = []
+        for space in data['spaces']:
+            for node in space.get('today', []):
+                if 'tab' in node: urls.append(node['tab']['_0'].get('url'))
+        return urls
     def folders_of(nodes, root):
         return sorted('/'.join(n[1][1:]) for n in nodes if n[0] == 'folder' and n[1][1:2] == [root])
 
@@ -83,9 +89,9 @@ def run(factory, results, tmp, h):
     before_visits, before_logins = visit_count(app), logins()
     open_sources(); call('settings-source', id='firefox')
     chosen = settle()
-    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords')}
+    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords', 'Open tabs')}
     row('firefox_choose', chosen.get('settingsStep') == 'Choose' and chosen.get('settingsTitle') == 'Import from Firefox'
-        and labels == {'Bookmarks': 'Found: 6', 'History': 'Found: 7,003', 'Passwords': 'Found: 3'}
+        and labels == {'Bookmarks': 'Found: 6', 'History': 'Found: 7,003', 'Passwords': 'Found: 3', 'Open tabs': 'Found: 4'}
         and chosen.get('settingsPasswords') is True and not chosen.get('settingsNeedsPrimaryPassword'),
         step=chosen.get('settingsStep'), labels=labels, passwords=chosen.get('settingsPasswords'))
     report = finish_import()
@@ -93,18 +99,24 @@ def run(factory, results, tmp, h):
     data, nodes = sidebar(app)
     imported = [n for n in nodes if n not in before_nodes]
     folders = folders_of(imported, 'Imported from Firefox')
-    tabs = sorted(n[2] for n in imported if n[0] == 'tab')
+    tabs = sorted(n[2] for n in imported if n[0] == 'tab' and n[1][1:2] == ['Imported from Firefox'])
     row('firefox_bookmarks', outcome.get('Bookmarks') == 6 and folders == [
             'Imported from Firefox', 'Imported from Firefox/Bookmarks Menu', 'Imported from Firefox/Bookmarks Toolbar',
             'Imported from Firefox/Bookmarks Toolbar/Synthetic Nested 1', 'Imported from Firefox/Bookmarks Toolbar/Synthetic Nested 1/Deeper']
         and len(tabs) == 6 and 'https://menu.example.test/1' in tabs and report.get('settingsReportSummary') == 'Imported 6 bookmarks.',
         outcome={k: outcome.get(k) for k in ('Bookmarks', 'Skipped bookmarks')}, folders=folders, tabs=len(tabs))
+    # I-6: the last session. The pinned tab stays pinned at the top level; the others become Today tabs.
+    pinned_open = sorted(n[2] for n in imported if n[0] == 'tab' and len(n[1]) == 1)
+    new_today = [u for u in today_urls(data) if u not in today_urls(before_data)]
+    row('firefox_open_tabs', outcome.get('Open tabs') == 4 and pinned_open == ['https://pinned.session.example.test/s1']
+        and sorted(new_today) == ['https://current.session.example.test/2', 'https://second.session.example.test/w2', 'https://third.session.example.test/w2'],
+        outcome=outcome.get('Open tabs'), pinned=pinned_open, today=new_today)
     after_visits = visit_count(app)
     row('firefox_history', outcome.get('History') == 5600 and after_visits - before_visits == 5600,
         history=outcome.get('History'), visits=after_visits - before_visits)
     after_logins = logins()
     row('firefox_passwords', outcome.get('Passwords') == 3 and outcome.get('Skipped passwords') == 1 and after_logins - before_logins == 3
-        and report.get('settingsReportCategories') == ['Bookmarks', 'History', 'Passwords'] and not report.get('settingsError'),
+        and report.get('settingsReportCategories') == ['Bookmarks', 'History', 'Passwords', 'Open tabs'] and not report.get('settingsError'),
         passwords=outcome.get('Passwords'), skipped=outcome.get('Skipped passwords'), logins=after_logins - before_logins,
         failures=report.get('settingsFailures'),
         appLog=[l for l in app.log_text().splitlines() if 'browser passwords import failed' in l][:3],
@@ -114,9 +126,9 @@ def run(factory, results, tmp, h):
     open_sources(); call('settings-source', id='firefox'); settle()
     again = finish_import().get('settingsOutcome', {})
     _, nodes2 = sidebar(app)
-    row('firefox_reimport', again.get('Bookmarks') == 0 and again.get('History') == 0 and again.get('Passwords') == 0
+    row('firefox_reimport', again.get('Bookmarks') == 0 and again.get('History') == 0 and again.get('Passwords') == 0 and again.get('Open tabs') == 0
         and again.get('Password duplicates') == 3 and sorted(map(str, nodes2)) == sorted(map(str, nodes)) and visit_count(app) == after_visits
-        and logins() == after_logins, repeat={k: again.get(k) for k in ('Bookmarks', 'History', 'Passwords', 'Password duplicates')})
+        and logins() == after_logins, repeat={k: again.get(k) for k in ('Bookmarks', 'History', 'Passwords', 'Password duplicates', 'Open tabs')})
     undo_title = state().get('undoTitle')
     app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
     for _ in range(2):
@@ -124,13 +136,14 @@ def run(factory, results, tmp, h):
         assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=60, step=.05)
     _, undone = sidebar(app)
     row('firefox_undo', undo_title == 'Import from Firefox' and sorted(map(str, undone)) == sorted(map(str, before_nodes))
-        and visit_count(app) == before_visits, undoTitle=undo_title, visits=visit_count(app) - before_visits)
+        and visit_count(app) == before_visits and today_urls(sidebar(app)[0]) == today_urls(before_data),
+        undoTitle=undo_title, visits=visit_count(app) - before_visits)
 
     # Primary Password (profile "Synthetic Work"): Next stays off without it; a wrong one is reported; the right one imports.
     def work_passwords(password):
         open_sources(); call('settings-source', id='firefox'); settle()
         call('settings-profile', id='syn0002.work'); s = settle()
-        call('settings-browser-select', bookmarks=False, history=False, passwords=True)
+        call('settings-browser-select', bookmarks=False, history=False, passwords=True, openTabs=False)
         blocked = state().get('settingsCanContinue')
         call('settings-browser-select', primaryPassword=password)
         return s, blocked, finish_import()
@@ -183,7 +196,7 @@ def run(factory, results, tmp, h):
     before_visits = visit_count(app)
     open_sources(); call('settings-source', id='safari')
     chosen = settle()
-    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords')}
+    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords', 'Open tabs')}
     report = finish_import()
     outcome = report.get('settingsOutcome', {})
     _, nodes = sidebar(app)
@@ -203,7 +216,7 @@ def run(factory, results, tmp, h):
     call('settings-safari-export', path=str(files/'Safari Export.zip')); settle()
     call('settings-passwords-file', path=str(files/'Passwords.csv'))
     chosen = settle()
-    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords')}
+    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords', 'Open tabs')}
     report = finish_import()
     outcome = report.get('settingsOutcome', {})
     _, nodes = sidebar(app)

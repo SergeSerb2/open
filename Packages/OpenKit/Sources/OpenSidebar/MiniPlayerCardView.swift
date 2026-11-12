@@ -114,7 +114,7 @@ public struct MiniPlayerTitleState {
             if self.source.kind == .recording { _ = self.source.microphoneOn; _ = self.source.cameraOn }
             // Track availability too: an EM-2 publication can add volume support.
             _ = self.source.volume
-            _ = self.context.focusedSpace?.theme; _ = self.context.systemAppearance
+            _ = self.context.focusedSpace?.theme; _ = self.context.systemAppearance; _ = self.context.increaseContrast
             _ = self.context.mediaDrawers; _ = self.context.forcedMediaHover; _ = self.tab?.displayTitle
         }) { [weak self] in self?.sync(); self?.onHeightChange?() }
         sync()

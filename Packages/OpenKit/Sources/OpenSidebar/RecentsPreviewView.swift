@@ -60,7 +60,7 @@ public final class RecentsPreviewView: NSView, NSTableViewDataSource, NSTableVie
         emptyLabel.isHidden = true
         for view in [header, newButton, separator, scroll, emptyLabel] { addSubview(view) }
         loops.append(ObservationLoop(read: { [weak self] in
-            guard let self else { return }; _ = self.context.systemAppearance; _ = self.context.focusedSpace?.theme
+            guard let self else { return }; _ = self.context.systemAppearance; _ = self.context.increaseContrast; _ = self.context.focusedSpace?.theme
         }) { [weak self] in self?.applyAppearance() })
         applyAppearance()
         frame.size = fittingSize

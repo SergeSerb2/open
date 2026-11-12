@@ -945,6 +945,12 @@ public final class BrowserModel {
     /// back and drops the archive rows.
     public func closeTab(id: ItemID) {
         guard let parent = parentByID[id] else { return }
+        // A Live Folder row the user deletes stays hidden on later refreshes (live-data §2.7,
+        // Arc `liveFolderChildItemManuallyDeleted`).
+        if case .folder(let folderID) = parent, let folder = index[folderID]?.folder, folder.live != nil,
+           let url = tab(id: id)?.liveItemURL {
+            folder.live?.hiddenItems.insert(url.absoluteString)
+        }
         if case .splitPane(let splitID) = parent {
             guard let revert = closePane(id, of: splitID) else { return }
             registerUndo(revert, reapply: { $0.closePane(id, of: splitID) ?? Self.noRevert })
@@ -1288,6 +1294,7 @@ public final class BrowserModel {
     /// Returns false, with no change and no event, when the move breaks a placement rule.
     @discardableResult
     public func moveNode(id: ItemID, to destination: NodeParent, at position: Int?) -> Bool {
+        noteLiveRowLeaving(id, to: destination)
         guard let revert = move(id, to: destination, at: position) else { return false }
         registerUndo(revert, reapply: { $0.move(id, to: destination, at: position) ?? Self.noRevert })
         return true
@@ -1454,6 +1461,7 @@ public final class BrowserModel {
 
     @discardableResult
     public func archiveNodes(ids: [ItemID]) -> Int {
+        for id in ids { noteLiveRowLeaving(id) }
         let result = archiveMany(ids)
         if let revert = result.revert { registerUndo(revert, reapply: { $0.archiveMany(ids).revert ?? Self.noRevert }) }
         return result.count
@@ -1747,10 +1755,11 @@ public final class BrowserModel {
         space(id: spaceID)?.pinned.lazy.compactMap(\.folder).first { $0.live != nil }
     }
 
-    /// Creates "Pull Requests" at the top of the Space's Pinned section. Undoable like New Folder.
+    /// Creates "Pull Requests" at the end of the Space's Pinned section (capture s5 b3). Undoable like New Folder.
     @discardableResult
     public func createLiveFolder(in spaceID: SpaceID, config: LiveFolderConfig, title: String = "Pull Requests") -> Folder? {
-        guard liveFolder(in: spaceID) == nil, let folder = createFolder(in: .spacePinned(spaceID), at: 0, title: title) else { return nil }
+        guard liveFolder(in: spaceID) == nil, let space = space(id: spaceID),
+              let folder = createFolder(in: .spacePinned(spaceID), at: space.pinned.count, title: title) else { return nil }
         folder.live = config
         return folder
     }
@@ -1767,6 +1776,29 @@ public final class BrowserModel {
         _ = detach(id)
     }
 
+    /// A fetched row leaves its Live Folder by the user's action (archive, Remove Pin, drag out):
+    /// remember it as hidden so later refreshes do not bring it back, and make it a normal tab.
+    func noteLiveRowLeaving(_ id: ItemID, to destination: NodeParent? = nil) {
+        guard let tab = tab(id: id), let url = tab.liveItemURL, case .folder(let folderID)? = parentByID[id],
+              destination != .folder(folderID), let folder = index[folderID]?.folder, folder.live != nil else { return }
+        folder.live?.hiddenItems.insert(url.absoluteString)
+        if destination != nil { tab.liveItemURL = nil }
+    }
+
+    /// Every Live Folder in the model (any Space).
+    public var liveFolders: [Folder] { spaces.compactMap { liveFolder(in: $0.id) } }
+
+    /// Hides or shows a repository's rows (folder menu ▸ Repositories). The next refresh applies it.
+    public func setLiveRepository(folderID: ItemID, repository: String, hidden: Bool) {
+        guard let folder = index[folderID]?.folder, folder.live != nil else { return }
+        if hidden { folder.live?.hiddenRepositories.insert(repository) } else { folder.live?.hiddenRepositories.remove(repository) }
+        if hidden {
+            for node in folder.children {
+                if case .tab(let tab) = node, let url = tab.liveItemURL, LiveFolderConfig.repository(of: url) == repository { _ = detach(tab.id) }
+            }
+        }
+    }
+
     /// Applies one refresh to a Live Folder: no undo step, no Archive (a merged PR just leaves).
     /// Only rows with `liveItemURL` are removed or retitled. Returns the IDs of added rows.
     @discardableResult
@@ -1781,6 +1813,8 @@ public final class BrowserModel {
             tab.liveItemURL = item.url
             if attach(.tab(tab), to: .folder(folderID), at: 0) != nil { added.append(tab.id) }
         }
+        // A new unread PR peeks out of a collapsed folder (live-data §2.2, W2).
+        if unread, let first = added.first, !folder.isExpanded { folder.applyExpansion(.peeked(first)) }
         return added
     }
 

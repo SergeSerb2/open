@@ -796,6 +796,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller?.existingTabSwitcher?.cancel()
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
     controller?.dismissSidebarReveal(); showSelection(); scheduleSave()
+    // Live Folder refresh on Space focus (live-data §2.5; throttled 10 s in the service).
+    if !isIncognito, model.liveFolder(in: space.id) != nil { app.liveFolders.spaceFocused(space.id) }
   }
 
   /// Only model-only cases fall back to the package. Unsupported later-step
@@ -810,7 +812,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
-           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .newEasel, .exportEasel, .deleteEasel: return false
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState, .newEasel, .exportEasel, .deleteEasel: return false
       case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
@@ -926,6 +928,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
     case .toggleLiveFolder(let id):
       return app.liveFolders.toggle(spaceID: id)
+    case .refreshLiveFolder(let id):
+      Task { await app.liveFolders.refresh(folderID: id, manual: true) }; return true
+    case .openLiveFolderState(let id):
+      guard let url = app.liveFolders.stateURL(folderID: id), let space = focusedSpace else { return false }
+      let tab = model.newTab(in: space.id, url: url); select(nodeID: tab.id); return true
     case .shareSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

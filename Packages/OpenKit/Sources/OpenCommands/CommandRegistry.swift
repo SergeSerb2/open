@@ -393,6 +393,9 @@ public enum CommandRegistry {
     // MARK: - Code-only commands (no menu item; keys live in code, not in the nib)
 
     static let codeOnly: [CommandDefinition] = [
+        // Import from Arc, Notes half: the zip that Arc's Help ▸ Export Arc Notes writes. Command bar only.
+        CommandDefinition(id: "import-arc-notes", title: "Import Arc Notes Export…",
+                          aliases: ["Import Notes", "Arc Notes", "Restore Notes"]),
         CommandDefinition(id: "change-space-icon", title: "Change Space Icon…", aliases: ["Space Icon", "Change Icon", "Emoji"]),
         // Runtime App menus only, like dynamic window rows; the RE menu dump stays static.
         CommandDefinition(id: "show-little-open-windows", title: "Show Little Open Windows"),

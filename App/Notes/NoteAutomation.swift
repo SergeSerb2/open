@@ -50,6 +50,7 @@ extension AutomationController {
     case "type", "paste": allowed = ["action", "text", "field"]
     case "flush", "export-state": allowed = ["action"]
     case "export": allowed = ["action", "path"]
+    case "import-zip": allowed = ["action", "path"]
     case "select": allowed = ["action", "start", "length"]
     case "press": allowed = ["action", "item"]
     case "gutter": allowed = ["action", "item"]
@@ -74,6 +75,13 @@ extension AutomationController {
       return result
     }
     let factory = try window
+    if action == "import-zip" {
+      // The same import as the command-bar action after its open panel.
+      guard let path = args["path"] as? String else { throw Failure(message: "missing path") }
+      let o = NoteImporter.importZip(URL(fileURLWithPath: path), factory: factory)
+      return ["filled": o.filled, "added": o.added, "alreadyPresent": o.alreadyPresent, "unreadable": o.unreadable,
+              "droppedImages": o.droppedImages, "error": o.error ?? ""]
+    }
     switch action {
     case "create":
       let split = args["split"] as? Bool ?? false
@@ -185,6 +193,7 @@ extension AutomationController {
       "gutterVisible": host.map { !$0.editor.gutterButton.isHidden } ?? false,
       "images": host.map { Self.imageCount($0.editor) } ?? 0,
       "imageError": host?.editor.lastImageError ?? "",
+      "importPlaceholder": noteID.flatMap { app.notes.load($0)?.importPlaceholder } ?? false,
       "assets": noteID.map { (try? FileManager.default.contentsOfDirectory(atPath: app.notes.assetDirectory(for: $0).path))?.count ?? 0 } ?? 0,
       "favicon": tab?.live.faviconPNG == NoteTab.faviconPNG && tab?.live.faviconPNG != nil,
       "file": file?.path ?? "", "stored": stored,

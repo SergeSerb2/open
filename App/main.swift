@@ -2,9 +2,9 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
+import OpenSettings  // Import from Arc providers and the wizard model are used in every build.
 #if OPEN_AUTOMATION
 import OpenOnboarding
-import OpenSettings
 #endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
@@ -50,6 +50,8 @@ ImportWizardViewModel.browserLibraryOverride = options.browserImportLibrary
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
+// Import from Arc ▸ Easels (EZ). Cheap: no Easel file is read until the wizard asks.
+ArcImportProviders.all.append(EaselsImportProvider(app: appDelegate))
 #if OPEN_AUTOMATION
 FixtureImportProvider.registerIfRequested(root: directories.root)
 #endif

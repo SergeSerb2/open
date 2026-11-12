@@ -460,7 +460,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
                 guard let tile=tiles[candidate] else { return nil }
                 let point = tile.convert(CGPoint(x:tile.bounds.midX,y:tile.bounds.midY),to:nil)
                 let hit = window?.contentView?.superview?.hitTest(point)
-                return ["id":candidate.rawValue,"frame":rect(tile),"selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile,"focusRing":tile.keyboardFocus,
+                return ["id":candidate.rawValue,"frame":rect(tile),"selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile,"focusRing":tile.keyboardFocus,"drawnLabels":tile.drawnLabelCount,
                     "hitClass":hit.map { String(describing:type(of:$0)) } ?? "", "canDragWindow":tile.mouseDownCanMoveWindow]
             },
             "header":["searchFrame":section == .spaces ? [] : rect(header),"filterFrame":section.hasFilter ? rect(filter) : [],"filterOpen":filterOpen,"chips":filterOpen ? filterEditor.state(in:self) : []] as [String:Any],

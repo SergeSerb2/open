@@ -54,7 +54,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
             for tab in self.collectTabs() { _ = tab.title; _ = tab.customTitle; _ = tab.url }
         }) { [weak self] in self?.rebuild() })
         loops.append(ObservationLoop(read: { [weak self] in
-            guard let self else { return }; _ = self.context.systemAppearance; _ = self.context.focusedSpace?.theme
+            guard let self else { return }; _ = self.context.systemAppearance; _ = self.context.increaseContrast; _ = self.context.focusedSpace?.theme
         }) { [weak self] in self?.applyAppearance() })
         applyAppearance()
         frame.size = fittingSize

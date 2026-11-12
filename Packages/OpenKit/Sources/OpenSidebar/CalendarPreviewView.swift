@@ -74,7 +74,7 @@ public final class CalendarPreviewView: NSView {
         scroll.autohidesScrollers = true; scroll.scrollerStyle = .overlay; scroll.documentView = timeline
         for view in [header, newButton, separator, joinTitle, joinSubtitle, joinButton, message, accessButton, scroll] as [NSView] { addSubview(view) }
         loops.append(ObservationLoop(read: { [weak self] in
-            guard let self else { return }; _ = self.context.systemAppearance; _ = self.context.focusedSpace?.theme
+            guard let self else { return }; _ = self.context.systemAppearance; _ = self.context.increaseContrast; _ = self.context.focusedSpace?.theme
         }) { [weak self] in self?.applyAppearance() })
         applyAppearance()
         start()

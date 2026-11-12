@@ -10,6 +10,8 @@ import time
 # Join links never reach the network: every host except localhost resolves to NOTFOUND.
 ENGINE_SWITCHES = ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1', '--no-proxy-server']
 
+ARC_PREF_KEYS = ('open.general.previewsFolders', 'open.general.previewsRecents', 'open.general.previewsCalendar',
+                 'open.general.previewsGmail', 'open.general.previewsPages')
 ZOOM = 'https://acme.zoom.us/j/81234567890?pwd=e2e'
 MEET = 'https://meet.google.com/abc-defg-hij'
 TEAMS = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_e2e%40thread.v2/0'
@@ -128,10 +130,14 @@ def run(factory, results, tmp, harness):
 
         # 7. Meet route: the first external Meet link adds Arc's default rule and announces it once.
         meet_route_checks(app, results, wait_until, cal)
+
+        # 8. Import from Arc maps Arc's preview switches, Live Calendar reminder and Meet route (synthetic plist).
+        arc_preferences_checks(app, results, wait_until, tmp, harness)
     finally:
         try:
             app.call('defaults', key='open.general.previewsCalendar', value=None)
             app.call('defaults', key='open.links.didSetDefaultMeetRoute', value=None)
+            for key in ARC_PREF_KEYS: app.call('defaults', key=key, value=None)
         finally:
             app.quit()
 
@@ -301,3 +307,58 @@ def meet_route_checks(app, results, wait_until, cal):
         'rules': added, 'toast': toast[:1], 'tab': tab[:1] if tab else tab, 'state': {k: state.get(k) for k in ('meetRouteDone', 'meetRouteAnnounced')}}
     results['cal_meet_route_once'] = {'ok': again.get('meetRouteAnnounced') == 1 and len(meet_rules()) == 1,
         'announced': again.get('meetRouteAnnounced'), 'rules': len(meet_rules())}
+
+
+def arc_preferences_checks(app, results, wait_until, tmp, harness):
+    """Synthetic Arc home: <home>/Library/Application Support/Arc (sidebar) + <home>/Library/Preferences/<domain>.plist."""
+    import plistlib
+    import runpy
+    from pathlib import Path
+    home = Path(tmp) / 'arc-prefs-home'
+    arc = home / 'Library' / 'Application Support' / 'Arc'
+    arc.mkdir(parents=True, exist_ok=True)
+    runpy.run_path(str(Path(harness['ROOT']) / 'tools' / 'e2e' / 'firstrun.py'))['fixture'](arc)
+    prefs_dir = home / 'Library' / 'Preferences'
+    prefs_dir.mkdir(parents=True, exist_ok=True)
+    prefs = {
+        'folderPreviewEnabled': False, 'recentPagesPreviewEnabled': False,
+        'calendarPreviewEnabled': False, 'cronPreviewEnabled': True,      # any calendar switch on -> on
+        'gmailPreviewEnabled': False, 'outlookEmailPreviewEnabled': False,  # Outlook Mail: no Open switch
+        'didSetDefaultGoogleMeetRoute': True,
+        'liveCalendarNotificationPreferences': json.dumps({'default': 'fiveMinutesBefore', 'unknown-profile': 'tenMinutesBefore'}).encode(),
+        'unrelatedArcKey': 'ignored',
+    }
+    with open(prefs_dir / 'company.thebrowser.Browser.plist', 'wb') as f: plistlib.dump(prefs, f, fmt=plistlib.FMT_BINARY)
+    def d(key): return app.call('defaults', key=key)
+    for key in ARC_PREF_KEYS + ('open.links.didSetDefaultMeetRoute',): app.call('defaults', key=key, value=None)
+    with open(app.call('save')) as stream: snapshot = json.load(stream)
+    default_profile = snapshot['profiles'][0]['id'] if snapshot.get('profiles') else ''
+    reminder_key = 'open.calendar.reminder.' + default_profile
+    app.call('defaults', key=reminder_key, value=None)
+    def state(): return app.call('first-run')
+    keys = ARC_PREF_KEYS + ('open.links.didSetDefaultMeetRoute', reminder_key)
+    before = {k: d(k) for k in keys}  # registered defaults read as their default value
+    app.call('first-run', action='settings-import', directory=str(arc))
+    app.call('first-run', action='settings-next')
+    app.call('first-run', action='settings-run')
+    report = wait_until(lambda: (lambda s: s if s.get('settingsStep') == 'report' else None)(state()), timeout=60, step=.05) or state()
+    mapped = report.get('arcPreferences', {})
+    written = {k: d(k) for k in keys}
+    # previewsPages has no Arc key: it keeps its value.
+    expected = {'open.general.previewsFolders': False, 'open.general.previewsRecents': False, 'open.general.previewsCalendar': True,
+                'open.general.previewsGmail': False, 'open.general.previewsPages': before['open.general.previewsPages'],
+                'open.links.didSetDefaultMeetRoute': True, reminder_key: 'fiveMinutes'}
+    results['cal_arc_prefs_import'] = {
+        'ok': bool(default_profile) and written == expected and report.get('lastOutcome', {}).get('Live Calendar reminders') == 1
+            and report.get('lastOutcome', {}).get('Arc settings') == 6 and not report.get('lastFailures', {}).get('Arc settings'),
+        'written': written, 'mapped': mapped, 'outcome': report.get('lastOutcome'), 'failures': report.get('lastFailures')}
+    try:
+        app.call('first-run', action='settings-done')
+    except RuntimeError:
+        pass
+    # Undo the import: Arc's settings go back to Open's previous (absent) values.
+    app.call('sidebar-key', key='z', modifiers=['command'])
+    wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    undone = wait_until(lambda: (lambda w: w if w == before else None)({k: d(k) for k in keys}), timeout=10, step=.1) \
+        or {k: d(k) for k in keys}
+    results['cal_arc_prefs_undo'] = {'ok': undone == before and written != before, 'before': before, 'after': undone}

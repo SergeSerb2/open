@@ -1,6 +1,7 @@
 import AppKit
 import OpenDesign
 import OpenModel
+import OpenSidebar
 
 /// `sidebar-render theme-roles --ref tools/verification/sidebar-theme-roles.json [--table]`:
 /// Open's sidebar role set (`SpaceThemeStyle` → `SidebarRoles`, `ThemeField`) against
@@ -164,6 +165,32 @@ enum ThemeRoleChecks {
               && slateRoles.subtitle == .black(0.75) && slateRoles.separator == .black(0.30) && slateRoles.activePlate == SidebarThemeRules.activePlateLight,
               "Increase Contrast on, slate: light text cannot reach 4.5, the Space takes dark text for all roles (title \(f(slateContrast)) : 1)")
         check(padStyle.increasedContrastAppearance(system: .light) == .dark, "Increase Contrast on, pad 0° Dark: 4.5 is reachable, light text stays")
+        // The real sidebar view stack: Increase Contrast reaches the views through
+        // `SidebarContext` and its role cache (slate: the whole Space takes dark text).
+        let model = Synthetic.model(), window = model.windows[0]
+        var theme = SpaceTheme(); theme.importedArcThemeJSON = nil
+        theme.style = SpaceStyle(keyColor: color("#666786", "p3"))
+        model.spaces[0].theme = theme
+        let context = SidebarContext(model: model, windowID: window.id)
+        context.systemAppearance = .light
+        var options = RenderScene.Options(); options.size = CGSize(width: 900, height: 700)
+        let delegate = RecordingDelegate()
+        let scene = RenderScene(context: context, options: options, delegate: delegate)
+        let host = OffscreenRenderer.host(scene, scale: 1)
+        defer { host.contentView = nil; host.close(); _ = delegate }
+        func settle() { scene.needsLayout = true; OffscreenRenderer.settle(scene, runLoop: 0.02) }
+        let space = model.spaces[0]
+        window.focusedSpaceID = space.id; settle()
+        let before = ContentAppearance(scene.sidebar.effectiveAppearance)
+        context.increaseContrast = true; settle()
+        let after = ContentAppearance(scene.sidebar.effectiveAppearance)
+        let roles = context.roles(for: space)
+        check(before == .dark && after == .light && roles.content == .light && roles.spaceTitle == .black(0.75)
+              && roles.separator == .black(0.30) && context.appearance(for: space) == .light,
+              "Increase Contrast in the real sidebar: slate switches from light to dark text (\(before.rawValue) → \(after.rawValue)), roles raised")
+        context.increaseContrast = false; settle()
+        check(ContentAppearance(scene.sidebar.effectiveAppearance) == .dark && context.roles(for: space).spaceTitle == .white(0.45),
+              "Increase Contrast off again: the sidebar returns to the plain rules")
         print("sidebar-render theme-roles: \(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
     }
