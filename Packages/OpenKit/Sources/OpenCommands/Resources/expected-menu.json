@@ -915,7 +915,7 @@
   "path": "File",
   "title": "New Note",
   "shortcut": "Ctrl+Shift+N",
-  "inScope": false
+  "inScope": true
  },
  {
   "path": "File",
@@ -927,7 +927,7 @@
   "path": "File",
   "title": "New Note (in Split)",
   "shortcut": "Ctrl+Opt+N",
-  "inScope": false
+  "inScope": true
  },
  {
   "path": "File",
