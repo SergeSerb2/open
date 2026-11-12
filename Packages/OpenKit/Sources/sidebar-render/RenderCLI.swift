@@ -270,6 +270,8 @@ enum RenderCLI {
         scene.background.renderScale = scale
         if let hover = value(args, "--more-popover") {
             // Look frames (PB5 A6): the compact toolbar's "More options" card, with row `hover` drawn hovered.
+            // Both modes: with --plain-theme the Space follows --appearance (default theme).
+            if args.contains("--plain-theme") { context.focusedSpace?.theme = SpaceTheme() }
             scene.layoutSubtreeIfNeeded()
             scene.sidebar.toggleToolbarMorePopover()
             if let index = Int(hover) { scene.sidebar.forceToolbarMoreHover(index) }
