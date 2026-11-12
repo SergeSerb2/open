@@ -14,6 +14,7 @@ import threading
 import time
 import tempfile
 import urllib.parse
+from loopback_http import LoopbackHTTPServer
 
 
 # Running Library rows. Known total: "1.2/33.6 MB" or "512 KB/33.6 MB", then " · 12s" with a speed.
@@ -82,7 +83,7 @@ def server():
                 if route == '/fail': self.connection.shutdown(socket.SHUT_RDWR)
             except (OSError, BrokenPipeError): pass
             if unknown or route == '/fail': self.close_connection = True
-    httpd = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    httpd = LoopbackHTTPServer(Handler)
     httpd.daemon_threads = True
     thread = threading.Thread(target=httpd.serve_forever, daemon=True); thread.start()
     try: yield 'http://127.0.0.1:%d' % httpd.server_port

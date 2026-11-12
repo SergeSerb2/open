@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fixtures and assertions for verify-all.sh; invokes real release interfaces only."""
+import ast
 import contextlib
 import fcntl
 import json
@@ -17,6 +18,8 @@ import sys
 import tempfile
 import time
 import zlib
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'e2e'))  # loopback_http; appended, so the stdlib wins
+from loopback_http import LoopbackHTTPServer
 
 
 def require(condition, message):
@@ -271,7 +274,36 @@ def all_passed(text):
             "explicit failure in output")
 
 
+SERVER_CLASSES = {"HTTPServer", "ThreadingHTTPServer", "TCPServer", "ThreadingTCPServer", "ForkingTCPServer",
+                  "UDPServer", "ThreadingUDPServer", "ForkingUDPServer", "UnixStreamServer", "UnixDatagramServer",
+                  "ThreadingUnixStreamServer", "ThreadingUnixDatagramServer"}
+NAME_LOOKUPS = {"getfqdn", "gethostbyaddr"}
+
+
+def loopback_servers(root):
+    """Static guard (LF, LEAD 15:15): no Python file under tools/ may create or subclass a
+    socketserver/http.server class or call getfqdn/gethostbyaddr. HTTPServer.server_bind
+    runs a getfqdn PTR query, and macOS then shows "Allow 'Python' to find devices on
+    local networks?". Use tools/e2e/loopback_http.LoopbackHTTPServer instead."""
+    def name(node):
+        return node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name) else None
+    found = []
+    files = sorted((root / "tools").rglob("*.py"))
+    for path in files:
+        if path.name == "loopback_http.py" and path.parent.name == "e2e":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and name(node.func) in SERVER_CLASSES | NAME_LOOKUPS:
+                found.append("%s:%d calls %s" % (path.relative_to(root), node.lineno, name(node.func)))
+            elif isinstance(node, ast.ClassDef) and any(name(b) in SERVER_CLASSES for b in node.bases):
+                found.append("%s:%d subclasses %s" % (path.relative_to(root), node.lineno, node.name))
+    require(not found, "use tools/e2e/loopback_http.LoopbackHTTPServer (no name lookup):\n  " + "\n  ".join(found))
+    print("loopback-servers: %d Python files under tools/, 0 direct server classes or name lookups" % len(files), flush=True)
+
+
 def build(root):
+    loopback_servers(root)
     run(str(root / "tools/fetch-adblock-lists.sh"))
     # A new session protects the Swift build from an app restart. Stop on diagnostics,
     # drain its pipe, and count warning lines even when Swift would otherwise exit 0.
@@ -610,11 +642,11 @@ def server(kind, location):
 
 
 def serve(kind, location):
-    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+    from http.server import SimpleHTTPRequestHandler
     from functools import partial
     handler = (runpy.run_path(location)["Handler"] if kind == "boosts" else
                partial(SimpleHTTPRequestHandler, directory=location))
-    with ThreadingHTTPServer(("127.0.0.1", 0), handler) as http:
+    with LoopbackHTTPServer(handler) as http:
         print(http.server_port, flush=True)
         http.serve_forever()
 

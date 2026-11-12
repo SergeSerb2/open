@@ -40,6 +40,7 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
+from loopback_http import LoopbackHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import prefs_domain  # this run's private preferences domain; never the user's
@@ -2079,7 +2080,7 @@ def sleep_engine_checks(app, results, strip_ids):
 
         def log_message(self, *args):
             pass
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = "http://127.0.0.1:%d/" % server.server_address[1]
     load = os.getloadavg()
@@ -2361,7 +2362,7 @@ def context_menu_commands(app, results, *, run_all_commands=True):
         def log_message(self, *a):
             pass
 
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     index = "http://127.0.0.1:%d/index.html" % server.server_port
     clipboard = subprocess.run(["pbpaste"], capture_output=True).stdout
@@ -2606,7 +2607,7 @@ def focus_restore_checks(factory, results, tmp):
             body = ('<title>Focus ' + self.path + '</title><p>Focus regression</p>').encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     try:
@@ -4573,7 +4574,7 @@ def page_fixture_server():
         def log_message(self, *a):
             pass
 
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, "http://127.0.0.1:%d" % server.server_port
 
@@ -6442,7 +6443,7 @@ def _fixture_server(prefix):
             body = ("<!doctype html><title>%s %s</title><body style='background:#ffffff;color:#222'>%s %s" % (prefix, self.path, prefix, self.path)).encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, 'http://127.0.0.1:%d' % server.server_address[1]
 
@@ -6458,7 +6459,7 @@ def _media_server():
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=folder, **kw)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1]
 
@@ -7101,7 +7102,7 @@ def _sleep_server():
             self.send_response(200); self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1]
 
@@ -7635,7 +7636,7 @@ def _static_server(folder):
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=folder, **kw)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, 'http://127.0.0.1:%d' % server.server_address[1]
 
@@ -9216,7 +9217,7 @@ def commandbar_checks(factory, results, tmp, config):
                     "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);e.preventDefault()})</script>" % (self.path, self.path)).encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     app = factory(urls=(origin + '/start',), fresh=True)
@@ -10767,10 +10768,10 @@ def sidebar_favicon_checks(app, require, tmp, launch):
             self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
 
-    missing_server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), MissingHandler)
+    missing_server = LoopbackHTTPServer(MissingHandler)
     threading.Thread(target=missing_server.serve_forever, daemon=True).start()
     missing_origin = 'http://127.0.0.1:%d' % missing_server.server_address[1]
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     try:
@@ -11764,7 +11765,7 @@ def page_tools_fixture_server():
             self.send_header("Cache-Control", "no-store")
             super().end_headers()
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1]
 
@@ -12551,7 +12552,7 @@ def page_notification_checks(factory, results, tmp):
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=folder, **kw)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     prompt = os.environ.get('OPEN_E2E_NOTIFICATION_PROMPT') == '1'

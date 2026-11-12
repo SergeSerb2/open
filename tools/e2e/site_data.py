@@ -1,11 +1,12 @@
 """E1/E2/E3 through the real App's OpenWeb API; no desktop input or mocks."""
 import base64
 from collections import Counter
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 import ssl
 import subprocess
 import threading
+from loopback_http import LoopbackHTTPServer
 
 
 def run(factory, results, tmp, new_tab, wait_until):
@@ -42,7 +43,7 @@ def run(factory, results, tmp, new_tab, wait_until):
             try: self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError): pass
 
-    server = ThreadingHTTPServer(('127.0.0.1', 0), Page)
+    server = LoopbackHTTPServer(Page)
     worker = threading.Thread(target=server.serve_forever, daemon=True); worker.start()
     secure_server = None; secure_worker = None; app = None
     a = 'http://127.0.0.1:%d' % server.server_port
@@ -175,7 +176,7 @@ def run(factory, results, tmp, new_tab, wait_until):
         subprocess.run(['/usr/bin/openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1',
                         '-subj','/CN=localhost','-keyout',str(key),'-out',str(cert)],
                        check=True, capture_output=True)
-        secure_server = ThreadingHTTPServer(('127.0.0.1', 0), Page)
+        secure_server = LoopbackHTTPServer(Page)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); context.load_cert_chain(cert,key)
         secure_server.socket = context.wrap_socket(secure_server.socket, server_side=True)
         secure_worker = threading.Thread(target=secure_server.serve_forever,daemon=True); secure_worker.start()

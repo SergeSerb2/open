@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import zipfile
+from loopback_http import LoopbackHTTPServer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine_e2e as harness
@@ -216,7 +217,7 @@ def run(opts, folder, results, apps):
                     pass
             def log_message(self, *_):
                 pass
-        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Canary)
+        server = LoopbackHTTPServer(Canary)
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
         try:
             origin = 'http://127.0.0.1:%d' % server.server_port

@@ -6,7 +6,8 @@ import runpy
 from pathlib import Path
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from loopback_http import LoopbackHTTPServer
 
 
 def run(app, results, tmp, new_tab, wait_until):
@@ -32,7 +33,7 @@ def run(app, results, tmp, new_tab, wait_until):
             self.send_header("Content-Security-Policy", "script-src 'nonce-p7'; frame-src 'self'")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers(); self.wfile.write(body)
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Page)
+    server = LoopbackHTTPServer(Page)
     worker = threading.Thread(target=server.serve_forever, daemon=True); worker.start()
     origin = "http://127.0.0.1:" + str(server.server_port)
     tab = other = None

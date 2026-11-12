@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import time
+from loopback_http import LoopbackHTTPServer
 
 KNOWN = 'ddkjiahejlhfcafbddmgiahcphecmpfh'
 WARNING = 'More than one ad blocker is on. Blocking may break sites.'
@@ -137,7 +138,7 @@ def integrity(factory, results, root, wait):
             try: self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError): pass
         def log_message(self, *_): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     args = ['--host-resolver-rules=MAP open-adblock.test 127.0.0.1:%d, MAP demand.supply 127.0.0.1:%d' %
@@ -487,7 +488,7 @@ def real_engine(factory, results, wait):
             try: self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError): pass
         def log_message(self, *_): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     app, saved = None, {}

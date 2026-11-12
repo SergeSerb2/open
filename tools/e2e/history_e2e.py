@@ -6,6 +6,7 @@ import sqlite3
 import statistics
 import threading
 import time
+from loopback_http import LoopbackHTTPServer
 
 
 def history_checks(factory, results, tmp, wait_until, restore_defaults):
@@ -21,7 +22,7 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
             self.send_response(200); self.send_header('Content-Type', 'text/html')
             self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True); worker.start()
     base = 'http://127.0.0.1:%d' % server.server_address[1]
     app = None; saved = {}

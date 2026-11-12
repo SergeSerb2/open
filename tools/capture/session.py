@@ -21,7 +21,9 @@ import subprocess
 import sys
 import time
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'e2e'))  # loopback_http; appended, so the stdlib wins
+from loopback_http import LoopbackHTTPServer
 
 HERE = Path(__file__).resolve().parent
 SCRIPTS = Path.home() / 'Library/Caches/OpenRE/scripts'
@@ -1094,7 +1096,7 @@ class Session:
                         pass
                 def log_message(handler, *args):
                     pass
-            self.fixture_server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
+            self.fixture_server = LoopbackHTTPServer(Fixture)
             threading.Thread(target=self.fixture_server.serve_forever, daemon=True).start()
             url = 'http://127.0.0.1:%d/%s' % (self.fixture_server.server_port, filename)
             self.log('fixture-download', filename=filename, url=url, bytes=size, transfer_seconds=duration)
