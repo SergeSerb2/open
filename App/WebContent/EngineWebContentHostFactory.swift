@@ -4,6 +4,7 @@ import OpenOnboarding
 import AppKit
 import OpenEngine
 import OpenFeatures
+import OpenDocuments
 import OpenModel
 import OpenStore
 import OpenSidebar
@@ -89,6 +90,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
   var welcomeHosts: [ItemID: WelcomeContentHost] = [:]
+  /// Native Note pages (`open://note/<uuid>`), one per shown Note tab.
+  var noteHosts: [ItemID: NoteContentHost] = [:]
+  var easelHosts: [ItemID: EaselContentHost] = [:]
   func queueWelcomeDestination(_ id: ItemID, url: URL) { queuedNavigations[id] = url }
   private var developerModeObserver: (any NSObjectProtocol)?
   /// The Capture overlay is up in this window: history swipes pause (§4.4.1).
@@ -215,6 +219,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     self.incognitoSession = incognitoSession
     super.init()
     WelcomeTab.restoreIcons(in: self.model)
+    NoteTab.restoreIcons(in: self.model)
+    EaselTab.restoreIcons(in: self.model)
     observerID = self.model.addObserver { [weak self] change in self?.treeChanged(change) }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -341,6 +347,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     controller.onLayout = { [weak self] in self?.findController?.sync() }
     controller.captureLibrary = app.captureLibrary
+    if !isIncognito { controller.captureAddToEasel = { [weak self] result, anchor in self?.showAddToEaselMenu(result, anchor: anchor) } }
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
     controller.onSidebarIntent = { [weak self] intent in guard let self else { return false }; return self.performSidebar(intent) }
@@ -553,6 +560,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       welcomeHosts[tabID] = host
       return host
     }
+    if let noteID = NoteLink.id(from: url ?? model.tab(id: tabID)?.url), !isIncognito {
+      if let host = noteHosts[tabID], !host.closed, host.noteID == noteID { return host }
+      let host = NoteContentHost(tabID: tabID, noteID: noteID, store: app.notes, owner: self)
+      noteHosts[tabID] = host
+      return host
+    }
+    if let document = EaselTab.documentID(url ?? model.tab(id: tabID)?.url) {
+      if let host = easelHosts[tabID], !host.closed { return host }
+      let host = EaselContentHost(tabID: tabID, documentID: document, owner: self)
+      easelHosts[tabID] = host
+      return host
+    }
     // No internal URL (including an unknown open:// route) reaches OpenEngine.
     if let target = url ?? model.tab(id: tabID)?.url, WelcomeTab.isInternal(target) { return nil }
     guard let context = context(for: profileID) else {
@@ -611,6 +630,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool {
     if let native = host as? WelcomeContentHost {
+      return native.owner === self && native.tabID == tabID && !native.closed
+    }
+    if let native = host as? NoteContentHost {
       return native.owner === self && native.tabID == tabID && !native.closed
     }
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
@@ -672,6 +694,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if model.tab(id: id) == nil { controller?.container.closeHost(for: id); host.close() }
       else { host.page.updateColors() }
     }
+    for (id, host) in noteHosts where model.tab(id: id).map({ NoteLink.id(from: $0.url) != host.noteID }) ?? true {
+      controller?.container.closeHost(for: id); host.close()
+    }
+    for (id, host) in easelHosts where model.tab(id: id).map({ EaselTab.documentID($0.url) != host.documentID }) ?? true {
+      controller?.container.closeHost(for: id); host.close()
+    }
     if let id = iconPickerSpaceID, focusedSpace?.id != id || model.space(id: id) == nil { iconPicker?.close() }
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
@@ -698,7 +726,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// from a stored back list), so their wake kind and history are right (memory-fork §9.4).
   func markVisibleTabsLive() {
     for tab in visibleTabs {
-      if WelcomeTab.matches(tab.url) { tab.live.sleepPhase = .live; continue }
+      if WelcomeTab.matches(tab.url) || NoteTab.matches(tab.url) || EaselTab.matches(tab.url) { tab.live.sleepPhase = .live; continue }
       if app.tabSleep.wakesThroughController(tab, hasHost: hosts[tab.id].map { !$0.closed } ?? false) { app.tabSleep.wake(tab.id) }
       else { tab.live.sleepPhase = .live }
     }
@@ -711,6 +739,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
     if focus {
       if let id = selectedTab?.id, let native = welcomeHosts[id] { native.focus() }
+      else if let id = selectedTab?.id, let note = noteHosts[id] { note.updateAppearance(); note.focus() }
+      else if let id = selectedTab?.id, let easel = easelHosts[id] { easel.focus() }
       else { selectedContent?.focusPage() }
     }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
@@ -761,7 +791,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
-           .exportSpaceIntoFolder, .deleteSpace, .moveSpace: return false
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .newEasel: return false
       case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
@@ -788,6 +818,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .switchSpace(let id): guard let space = model.space(id: id) else { return false }; focus(space: space); return true
     case .openCommandBar(let source): if source == .urlField { focusAddressBar(nil) } else { newTab(nil) }; return true
     case .newTab: newTab(nil); return true
+    case .newEasel: return EaselTab.create(in: self) != nil
     case .close(let id), .unloadTab(let id):
       guard model.tab(id: id) != nil else { return nil }; closeTab(id: id); return true
     case .unloadFolder(let id):
@@ -918,6 +949,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !isClosing else { return }
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
+    for host in Array(noteHosts.values) { host.close() }
+    noteHosts.removeAll()
+    for host in Array(easelHosts.values) { host.close() }
+    easelHosts.removeAll()
     controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
     savePrompts?.cancelAll()
@@ -1032,6 +1067,11 @@ extension EngineWebContentHostFactory {
     guard !WelcomeTab.isInternal(url) else { return }
     if current, let tab = selectedTab, WelcomeTab.matches(tab.url) {
       leaveWelcome(tabID: tab.id, for: url); return
+    }
+    if current, NoteTab.matches(selectedTab?.url) { navigateFromCommandBar(url, current: false, background: background); return }
+    // An Easel tab is never replaced by a page: the address opens in a new tab.
+    if current, let tab = selectedTab, EaselTab.matches(tab.url) {
+      _ = openNewTab(url: url, background: background, typed: true); return
     }
     app.noteLaunchWindowNavigation(windowState.id)
     if current, selectedContent != nil || selectedTab != nil {

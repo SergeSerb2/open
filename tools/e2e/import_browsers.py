@@ -65,6 +65,20 @@ def fixture(library):
                                              ('chrome://settings/', 'Settings', 1)])
     (chrome/'Default/Preferences').write_text(json.dumps({'default_search_provider_data': {'template_url_data': {
         'short_name': 'DuckDuckGo', 'keyword': 'duckduckgo.com', 'url': 'https://duckduckgo.com/?q={searchTerms}'}}}))
+    # I-2: secret stores with rows only (no real ciphertext; counts are read without a key).
+    with sqlite3.connect(chrome/'Default/Login Data') as db:
+        db.executescript("""CREATE TABLE logins(origin_url VARCHAR NOT NULL, username_value VARCHAR, password_value BLOB,
+            signon_realm VARCHAR NOT NULL, blacklisted_by_user INTEGER NOT NULL DEFAULT 0);""")
+        db.executemany('INSERT INTO logins VALUES(?,?,?,?,0)', [('https://%s.example.com/' % n, 'example', b'v10', 'https://%s.example.com/' % n) for n in ('a', 'b', 'c')])
+    with sqlite3.connect(chrome/'Default/Cookies') as db:
+        db.executescript("CREATE TABLE cookies(host_key TEXT NOT NULL, name TEXT NOT NULL, encrypted_value BLOB);")
+        db.executemany('INSERT INTO cookies VALUES(?,?,?)', [('.example.com', 'a', b'v10'), ('.example.com', 'b', b'v10')])
+    # Extensions: one Web Store extension (a reinstall candidate) and one component (internal, excluded).
+    (chrome/'Default/Secure Preferences').write_text(json.dumps({'extensions': {'settings': {
+        'aaaabbbbccccddddeeeeffffgggghhhh': {'path': 'aaaabbbbccccddddeeeeffffgggghhhh/1.0', 'from_webstore': True,
+                                             'manifest': {'name': 'Example Extension', 'version': '1.0'}},
+        'iiiijjjjkkkkllllmmmmnnnnoooopppp': {'path': '/Applications/Example.app/Contents/Resources/component',
+                                             'manifest': {'name': 'Example Component', 'version': '1.0'}}}}}))
     work = {'version': 1, 'checksum': '0', 'roots': {
         'bookmark_bar': {'type': 'folder', 'guid': '00000000-0000-4000-b000-000000000001', 'name': 'Bookmarks bar', 'children': [
             url('20000000-0000-4000-a000-000000000001', 'Example Work', 'https://work.example.com/')]},
@@ -83,6 +97,7 @@ def fixture(library):
     vivaldi = library/'Application Support/Vivaldi/Default'; vivaldi.mkdir(parents=True)
     (vivaldi/'Bookmarks').write_text(body + ' ' * (limit + 1 - len(body)))
     (library/'Application Support/BraveSoftware/Brave-Browser').mkdir(parents=True)
+    (library/'Application Support/Arc').mkdir(parents=True)
     (library/'Application Support/Firefox/Profiles').mkdir(parents=True)
 
 
@@ -142,14 +157,18 @@ def run(factory, results, tmp, h):
 
     s = open_sources()
     sources = {item['id']: item for item in s.get('settingsSources', [])}
-    row('sources_detected', s.get('settingsStep') == 'Source' and s.get('settingsTitle') == 'Import from another browser'
-        and sources.get('chrome', {}).get('selectable') and [p['name'] for p in sources['chrome']['profiles']] == ['Example Person', 'Example Work']
-        and s.get('settingsSelectedSource') == 'chrome',
-        step=s.get('settingsStep'), title=s.get('settingsTitle'), selected=s.get('settingsSelectedSource'),
-        sources={k: (v['selectable'], v['status'], len(v['profiles'])) for k, v in sources.items()})
-    row('sources_unselectable', sources.get('brave', {}).get('selectable') is False and sources['brave']['status'] == 'No data'
-        and sources.get('firefox', {}).get('selectable') is False and 'opera' not in sources,
-        brave=sources.get('brave', {}).get('status'), firefox=sources.get('firefox', {}).get('status'))
+    visible = [item['id'] for item in s.get('settingsSources', []) if item.get('visible')]
+    # Capture s5: Arc lists detected browsers only, preselects nothing, and keeps Next disabled until a pick.
+    row('sources_detected', s.get('settingsStep') == 'Source' and visible == ['arc', 'chrome', 'firefox', 'edge', 'vivaldi']
+        and sources['chrome']['selectable'] and sources['arc']['selectable']
+        and [p['name'] for p in sources['chrome']['profiles']] == ['Example Person', 'Example Work']
+        and s.get('settingsSelectedSource') == '' and s.get('settingsCanContinueFromSource') is False,
+        step=s.get('settingsStep'), visible=visible, selected=s.get('settingsSelectedSource'),
+        canContinue=s.get('settingsCanContinueFromSource'))
+    # Capture s5 hides a detected browser without an importable profile; lead 01:55 keeps Firefox as "Coming soon".
+    row('sources_hidden_without_profile', 'brave' in sources and 'brave' not in visible and 'opera' not in sources
+        and sources.get('firefox', {}).get('selectable') is False and sources['firefox']['status'] == 'Coming soon',
+        sources=sorted(sources), visible=visible, firefox=sources.get('firefox', {}).get('status'))
     app.call('first-run', action='settings-cancel-passwords')
 
     before_data, before_nodes = sidebar(app)
@@ -160,6 +179,15 @@ def run(factory, results, tmp, h):
         and labels.get('History') == 'Found: 6' and labels.get('Search settings') == 'DuckDuckGo',
         title=chosen.get('settingsTitle'), labels=labels)
     outcome = report.get('settingsOutcome', {})
+    secrets_state = app.call('import-secrets-state')
+    row('secrets_counts_only', labels.get('Passwords and cookies') == 'Found: 5' and labels.get('Passwords') == 'Found: 3'
+        and labels.get('Cookies') == 'Found: 2' and chosen.get('settingsBrowserSecretsEnabled') is False
+        and chosen.get('settingsSecretsTitle') == "Passwords and cookies can't be imported yet."
+        and all(secrets_state[k] == 0 for k in ('consentAdapterCalls', 'keychainProbeCalls', 'keychainReadCalls')),
+        labels=labels, enabled=chosen.get('settingsBrowserSecretsEnabled'),
+        keychain={k: secrets_state[k] for k in ('consentAdapterCalls', 'keychainProbeCalls', 'keychainReadCalls')})
+    row('extensions_list', report.get('settingsExtensions') == ['aaaabbbbccccddddeeeeffffgggghhhh'],
+        extensions=report.get('settingsExtensions'))
     data, nodes = sidebar(app)
     imported = [n for n in nodes if n not in before_nodes]
     folders = sorted('/'.join(n[1][1:]) for n in imported if n[0] == 'folder')
@@ -212,3 +240,24 @@ def run(factory, results, tmp, h):
         and chosen.get('settingsBrowserLabels', {}).get('Search settings') == 'Example Search'
         and 'imported-ex' in engines and any(e['id'] == 'imported-ex' and e['searchURLTemplate'] == 'https://search.example.com/find?q=%s&ie=UTF-8' for e in custom),
         outcome=outcome, engines=sorted(engines), custom=[e['id'] for e in custom])
+
+    # I-2: one chosen profile only. The synthetic secrets fixture (generated key, no Keychain) runs through the
+    # real engine sinks with the same restriction the Chromium import uses.
+    app.quit()
+    app = factory(urls=(), fresh=True, extra_args=['--open-allow-mock-keychain-secrets', '--open-e2e',
+                                                   '--host-resolver-rules=MAP * ~NOTFOUND'])
+    def fixture_import(**args):
+        deadline = time.time() + 30
+        while True:
+            try: return app.call('import-secrets-fixture', **args)
+            except RuntimeError as error:
+                if 'ready mock-key engine' not in str(error) or time.time() > deadline: raise
+                time.sleep(.2)
+    restricted = fixture_import(map={'Default': 'Default'}, only=['Default'])
+    control = fixture_import(map={'Default': 'Default'})
+    rr, cr = restricted.get('report', {}), control.get('report', {})
+    row('secrets_one_profile', restricted.get('stage') == 'finished' and sorted(rr.get('profiles', {})) == ['Default']
+        and rr.get('unmappedProfiles') == 0 and rr['total']['logins']['added'] > 0
+        and cr.get('unmappedProfiles') == 1 and cr['total']['logins']['added'] == 0,
+        restricted=dict(profiles=sorted(rr.get('profiles', {})), unmapped=rr.get('unmappedProfiles'), logins=rr.get('total', {}).get('logins')),
+        control=dict(profiles=sorted(cr.get('profiles', {})), unmapped=cr.get('unmappedProfiles')))

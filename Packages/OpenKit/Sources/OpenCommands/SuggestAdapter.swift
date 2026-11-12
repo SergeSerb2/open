@@ -122,7 +122,7 @@ public extension CommandRegistry {
 
     private static let symbols: [String: String] = [
         "open-extensions-picker": "puzzlepiece.extension", "extension-shortcuts": "command",
-        "new-tab": "plus", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
+        "new-tab": "plus", "new-note": "note.text", "new-note-in-split": "rectangle.split.2x1", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
         "new-little-open-window": "macwindow.on.rectangle", "archive-tab": "archivebox",
         "restore-last-closed-tab": "arrow.uturn.backward", "print": "printer", "save-page-as": "square.and.arrow.down",
         "new-profile": "person.crop.circle.badge.plus", "new-boost": "paintbrush", "edit-boost": "paintbrush",
@@ -137,7 +137,7 @@ public extension CommandRegistry {
         "new-space": "plus.rectangle.on.rectangle", "next-space": "arrow.right", "previous-space": "arrow.left",
         "manage-spaces": "square.grid.2x2", "rename-space": "pencil", "edit-theme": "paintpalette", "change-space-icon": "face.smiling", "change-profile": "person.crop.circle",
         "next-tab": "arrow.down", "previous-tab": "arrow.up", "clear-unpinned-tabs": "xmark.circle",
-        "new-folder": "folder.badge.plus", "duplicate-tab": "plus.square.on.square", "rename-tab": "pencil",
+        "new-folder": "folder.badge.plus", "new-easel": "scribble.variable", "duplicate-tab": "plus.square.on.square", "rename-tab": "pencil",
         "expand-all-folders": "folder", "collapse-all-folders": "folder.fill", "reset-tab": "arrow.counterclockwise",
         "reset-all-tabs-in-space": "arrow.counterclockwise.circle", "open-in-current-space": "macwindow.on.rectangle",
         "go-back": "chevron.left", "go-forward": "chevron.right", "view-archive": "archivebox", "view-history": "clock",

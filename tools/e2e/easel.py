@@ -1,0 +1,382 @@
+"""Real App Easels (milestone E1): New Easel entry points, canvas tools, colours, text,
+move/resize, undo/redo, context menus, zoom, title, persistence across a relaunch.
+
+Only the automation socket is used. The `easel` command dispatches real NSEvents through the
+window and presses the real toolbar buttons. No global input, no real user data.
+"""
+import json
+import os
+import plistlib
+import subprocess
+import time
+from pathlib import Path
+
+
+def make_png(path, width, height, rgb):
+    """A synthetic solid-colour PNG (no image library needed)."""
+    import struct, zlib
+    raw = b''.join(b'\x00' + bytes(rgb) * width for _ in range(height))
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) \
+        + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+    Path(path).write_bytes(png)
+    return path
+
+
+def fixture_server(root):
+    """Serves a synthetic page with Open Graph tags and its picture."""
+    import http.server, threading
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=str(root), **kw)
+        def log_message(self, *a):
+            pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def run(factory, results, tmp, api):
+    root = Path(api.ROOT)
+    frames_dir = Path(os.environ.get('OPEN_E2E_EASEL_FRAMES', str(root / '.re/ez/frames')))
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    app = None
+
+    def record(name, ok, **details):
+        results[name] = dict(ok=bool(ok), **details)
+
+    def easel(**kw):
+        return app.call('easel', **kw)
+
+    def canvas(state=None):
+        return (state or easel())['canvas']
+
+    def objects(state=None):
+        return canvas(state)['objects']
+
+    def close(a, b, eps=0.01):
+        return all(abs(x - y) <= eps for x, y in zip(a, b))
+
+    def snapshot(name):
+        path = str(frames_dir / (name + '.png'))
+        app.call('snapshot', path=path)
+        return path
+
+    # Per-tool colours are a user preference (Arc's rectangleColor & co.): start from the defaults.
+    domain = 'io.github.sergeserb2.open'
+    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')]
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    saved_prefs = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    for key in color_keys:
+        subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+    try:
+        app = factory(urls=('about:blank',), fresh=True)
+        blank = app.call('tabs')[0]['id']
+        app.call('wait', tab=blank)
+        app.call('window-frame', frame=[60, 60, 1280, 800])
+
+        # E01: File ▸ New Easel (menu item) adds a selected Easel row at the top of Today.
+        before = app.call('tabs')
+        app.call('menu-perform', id='new-easel')
+        s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel()), timeout=5, step=.1)
+        tabs = app.call('tabs')
+        tab = app.call('tab-state', tab=s['tab']) if s else {}
+        c = canvas(s) if s else {}
+        labels = [b['label'] for b in c.get('toolbarButtons', [])]
+        record('E01_new_easel_menu', s and len(tabs) == len(before) + 1 and tabs[0]['id'] == s['tab']
+               and s['url'].startswith('open://easel/') and s['tabTitle'] == 'Untitled Easel' and s['favicon']
+               and tab.get('selected') and tab.get('section') == 'today' and s['fileExists']
+               and c['titleFieldText'] == '' and c['titlePlaceholder'] == 'Untitled Easel'
+               and labels == ['Pointer', 'Image', 'Text', 'Ellipse', 'Rectangle', 'Arrow', 'Freehand']
+               and c['tool'] == 'pointer' and c['toolbarButtons'][0]['selected'] and c['objects'] == [],
+               state=s, tab=tab)
+        record('E02_never_engine', s and s['engineContentCreationCount'] == easel()['engineContentCreationCount']
+               and 'page' not in tab and not tab.get('loaded'), tab=tab)
+        first = s['tab']
+        # Toolbar geometry (C-measurements-s4): 36-pt buttons at a 38-pt pitch, 10 pt from the page's left.
+        frames = [b['frame'] for b in c['toolbarButtons']]
+        record('E03_toolbar_geometry', all(f[2] == 36 and f[3] == 36 for f in frames)
+               and all(abs((frames[i + 1][0] - frames[i][0]) - 38) < 0.01 for i in range(6))
+               and abs(frames[0][0] - 10) < 0.01, frames=frames, toolbar=c['toolbarFrame'])
+
+        # E04: ⌃⇧E (the real key path) and the "+" menu row both make another Easel.
+        count = len(app.call('tabs'))
+        app.call('key', key='e', modifiers=['ctrl', 'shift'], route='app')
+        by_key = api.wait_until(lambda: len(app.call('tabs')) == count + 1 or None, timeout=5, step=.1)
+        plus_items = [i['title'] for i in app.call('split', op='plus')]
+        app.call('split', op='plus', item='New Easel')
+        by_plus = api.wait_until(lambda: len(app.call('tabs')) == count + 2 or None, timeout=5, step=.1)
+        tabs = app.call('tabs')
+        record('E04_shortcut_and_plus_menu', by_key and by_plus and 'New Easel' in plus_items
+               and all(t['url'].startswith('open://easel/') for t in tabs[:2]), plusItems=plus_items, tabs=tabs[:3])
+        for t in tabs[:2]:
+            app.call('close', tab=t['id'])
+        app.call('select', tab=first)
+        api.wait_until(lambda: easel(tab=first).get('shown') or None, timeout=5, step=.1)
+
+        # E05: Rectangle tool: drag draws, the shape stays selected with the colour popover,
+        # default colour lightGreen, tool returns to Pointer.
+        easel(action='tool', tool='rectangle')
+        s = easel(action='drag', **{'from': [100, 200], 'to': [360, 400]})
+        o = objects(s)
+        rect = o[-1] if o else {}
+        record('E05_rectangle', len(o) == 1 and rect['kind'] == 'rectangle' and rect['color'] == 'lightGreen'
+               and close(rect['frame'], [100, 200, 260, 200]) and canvas(s)['selection'] == [rect['id']]
+               and canvas(s)['popoverShown'] and canvas(s)['popoverColor'] == 'lightGreen' and canvas(s)['tool'] == 'pointer',
+               state=canvas(s))
+        snapshot('e05-rect-selected-light')
+
+        # E06: a swatch recolours the selected shape.
+        s = easel(action='swatch', color='purple')
+        record('E06_swatch', objects(s)[-1]['color'] == 'purple' and canvas(s)['popoverColor'] == 'purple', state=canvas(s))
+
+        # E07: Ellipse, Arrow, Freehand with their default colours.
+        easel(action='tool', tool='ellipse'); easel(action='drag', **{'from': [450, 200], 'to': [650, 400]})
+        easel(action='tool', tool='arrow'); easel(action='drag', **{'from': [700, 420], 'to': [900, 220]})
+        easel(action='tool', tool='freehand'); s = easel(action='drag', wave=True, steps=24, **{'from': [100, 500], 'to': [400, 500]})
+        kinds = [(x['kind'], x.get('color')) for x in objects(s)]
+        record('E07_shapes', kinds == [('rectangle', 'purple'), ('circle', 'red'), ('arrow', 'lightBlue'), ('freehand', 'black')]
+               and objects(s)[3].get('pointCount', 0) >= 10, kinds=kinds, objects=objects(s))
+
+        # E08: Text tool: a click places a box in edit mode with the placeholder; typing and a
+        # click on the empty canvas commit it.
+        easel(action='tool', tool='text')
+        s = easel(action='click', at=[520, 560])
+        editing = canvas(s)['editingText']
+        s = easel(action='type', text='Trip ideas')
+        typed = canvas(s)['editorText']
+        # "Aa" moves the box to the next face and keeps editing (C-report-s6 §1).
+        s = easel(action='size', button='family')
+        still_editing = canvas(s)['editingText'] == editing
+        s = easel(action='click', at=[960, 150])
+        texts = [x for x in objects(s) if x['kind'] == 'text']
+        record('E08_text', editing and typed == 'Trip ideas' and len(texts) == 1 and texts[0]['text'] == 'Trip ideas'
+               and texts[0]['paragraphStyle'] == 'body' and texts[0]['fontFamily'] == 'fancy' and still_editing
+               and canvas(s)['editingText'] is None
+               and canvas(s)['undoName'] == 'Add Text', state=canvas(s))
+        # An empty text box leaves nothing behind and no undo step.
+        undo_before = canvas(s)['undoName']
+        easel(action='tool', tool='text'); easel(action='click', at=[700, 600])
+        s = easel(action='click', at=[960, 150])
+        record('E09_empty_text_discarded', len([x for x in objects(s) if x['kind'] == 'text']) == 1
+               and canvas(s)['undoName'] == undo_before, state=canvas(s))
+
+        # E10: move by drag, then resize from the bottom-right handle.
+        rect_id = objects(s)[0]['id']
+        easel(action='click', at=[200, 300])
+        s = easel(action='drag', **{'from': [200, 300], 'to': [250, 340]})
+        moved = next(x for x in objects(s) if x['id'] == rect_id)
+        record('E10_move', close(moved['frame'], [150, 240, 260, 200]) and canvas(s)['undoName'] == 'Move', frame=moved['frame'])
+        s = easel(action='drag', **{'from': [410, 440], 'to': [450, 480]})
+        resized = next(x for x in objects(s) if x['id'] == rect_id)
+        record('E11_resize', close(resized['frame'], [150, 240, 300, 240]) and canvas(s)['undoName'] == 'Resize', frame=resized['frame'])
+
+        # E12: undo/redo through the Edit menu action on the canvas undo stack.
+        s = easel(action='undo')
+        after_undo = next(x for x in objects(s) if x['id'] == rect_id)['frame']
+        s = easel(action='redo')
+        after_redo = next(x for x in objects(s) if x['id'] == rect_id)['frame']
+        record('E12_undo_redo', close(after_undo, [150, 240, 260, 200]) and close(after_redo, [150, 240, 300, 240]),
+               undo=after_undo, redo=after_redo)
+
+        # E13: context menus (C-measurements-s4) and their actions.
+        object_menu = easel(action='menu', at=[200, 300])
+        canvas_menu = easel(action='menu', at=[960, 150])
+        record('E13_menus', object_menu == ['Bring to Front', 'Send to Back', 'Delete', '—', 'Cut', 'Copy', 'Paste', '—', 'Duplicate']
+               and canvas_menu[:3] == ['Paste', '—', 'Color Palette ▸'], objectMenu=object_menu, canvasMenu=canvas_menu)
+        z_before = {x['id']: x['zIndex'] for x in objects()}
+        s = easel(action='menu', at=[200, 300], item='Bring to Front')
+        top = max(objects(s), key=lambda x: x['zIndex'])
+        s = easel(action='menu', at=[200, 300], item='Duplicate')
+        dup_count = len(objects(s))
+        s = easel(action='key', key='delete')
+        record('E14_menu_actions', top['id'] == rect_id and top['zIndex'] > max(z_before.values())
+               and dup_count == 6 and len(objects(s)) == 5, top=top, count=len(objects(s)))
+        s = easel(action='menu', at=[960, 150], item='Color Palette', submenu='Chill')
+        record('E15_palette', canvas(s)['palette'] == 'chill', state=canvas(s)['palette'])
+
+        # E16: the title edits the sidebar row too.
+        s = easel(action='title', text='Trip board')
+        record('E16_title', canvas(s)['title'] == 'Trip board' and s['tabTitle'] == 'Trip board'
+               and app.call('tab-state', tab=first)['title'] == 'Trip board', state=s)
+
+        # E17: View ▸ Zoom Out/In/Actual Size zoom the canvas in steps (min ≈ 33 %).
+        zooms = []
+        for _ in range(4):
+            app.call('menu-perform', id='zoom-out'); zooms.append(canvas()['zoom'])
+        app.call('menu-perform', id='zoom-actual-size'); reset = canvas()['zoom']
+        app.call('menu-perform', id='zoom-in'); zin = canvas()['zoom']
+        app.call('menu-perform', id='zoom-actual-size')
+        zins = []
+        for _ in range(4):
+            app.call('menu-perform', id='zoom-in'); zins.append(canvas()['zoom'])
+        app.call('menu-perform', id='zoom-actual-size')
+        record('E17_zoom', [round(z, 2) for z in zooms] == [0.75, 0.5, 0.33, 0.33] and reset == 1 and zin == 1.75
+               and zins == [1.75, 2.5, 4, 4], zooms=zooms, reset=reset, zoomIn=zin, zoomIns=zins)
+
+        # E17b: a click without a drag makes a 200 × 200 shape centred on the click (C-report-s6 §1).
+        easel(action='tool', tool='ellipse')
+        s = easel(action='click', at=[880, 560])
+        clicked = objects(s)[-1]
+        record('E17b_click_without_drag', clicked['kind'] == 'circle' and close(clicked['frame'], [780, 460, 200, 200])
+               and canvas(s)['tool'] == 'pointer' and canvas(s)['selection'] == [clicked['id']], frame=clicked['frame'])
+
+        # Frames for the look review: light and dark, with a selected shape.
+        easel(action='click', at=[500, 300])
+        snapshot('e18-canvas-light')
+        app.call('appearance', name='dark')
+        time.sleep(.5)
+        snapshot('e18-canvas-dark')
+        app.call('appearance', name='light')
+        easel(action='tool', tool='text'); easel(action='click', at=[520, 760])
+        snapshot('e18-text-editing-light')
+        easel(action='key', key='escape')
+
+        # E19: persistence. Quit, relaunch on the same data: every frame, colour, z, title and
+        # the palette come back exactly; nothing loads until the Easel is selected.
+        final = easel(action='flush')
+        # Leave a web tab selected, so the relaunch shows that nothing Easel loads until selected.
+        app.call('select', tab=blank)
+        stored = app.call('easel', action='store', document=final['document'])
+        saved = sorted((x['id'], x['kind'], x.get('color'), tuple(x['frame']), x['zIndex'], x.get('text')) for x in objects(final))
+        record('E19_file', stored['exists'] and len(stored['json']['objects']) == len(saved)
+               and stored['json']['title'] == 'Trip board' and stored['json']['palette'] == 'chill', path=stored.get('path'))
+        app.quit(); app = None
+        app = factory(urls=(), fresh=False)
+        restored_tab = next((t for t in app.call('tabs') if t['id'] == first), None)
+        unshown = easel(tab=first) if restored_tab else {}
+        app.call('select', tab=first)
+        s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=first)), timeout=8, step=.1)
+        again = sorted((x['id'], x['kind'], x.get('color'), tuple(x['frame']), x['zIndex'], x.get('text')) for x in objects(s)) if s else []
+        record('E19_relaunch_restores', restored_tab and not unshown.get('shown') and unshown.get('hostCount') == 0
+               and s and again == saved and s['tabTitle'] == 'Trip board' and canvas(s)['palette'] == 'chill'
+               and not s['recreated'] and s['favicon'], saved=saved, restored=again, unshown=unshown,
+               state={k: v for k, v in (s or {}).items() if k != 'canvas'})
+
+        # E20: a corrupt document file is refused, kept aside, and the row opens a fresh Easel.
+        created = easel(action='create')
+        bad = easel(tab=created['tab'])
+        path = Path(app.call('easel', action='store', document=bad['document'])['path'])
+        app.call('select', tab=blank)
+        app.quit(); app = None
+        path.write_text('{"formatVersion": 1, "objects": [')
+        app = factory(urls=(), fresh=False)
+        app.call('select', tab=created['tab'])
+        s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=created['tab'])), timeout=8, step=.1)
+        aside = sorted(p.name for p in path.parent.glob('document.refused-*.json'))
+        # E28: an Easel row whose canvas is not loaded (restored, not selected) shows the Easel mark.
+        unloaded = app.call('tab-state', tab=first)
+        record('E28_unloaded_row_icon', unloaded.get('rowFaviconSource') == 'provider' and not unloaded.get('selected'),
+               tab={k: unloaded.get(k) for k in ('rowFaviconSource', 'selected', 'title')})
+        record('E20_corrupt_file_set_aside', s and s['recreated'] and objects(s) == [] and len(aside) == 1
+               and (path.parent / aside[0]).read_text().startswith('{"formatVersion": 1'), aside=aside,
+               state={k: v for k, v in (s or {}).items() if k != 'canvas'})
+
+        # ---- E2: pictures, link cards, alignment guides, Capture → Easel ----
+        site = Path(tmp) / 'easel-site'
+        site.mkdir(exist_ok=True)
+        make_png(site / 'og.png', 600, 315, (40, 120, 200))
+        (site / 'page.html').write_text(
+            '<!doctype html><html><head><title>Fallback title</title>'
+            '<meta property="og:title" content="Easel Fixture &amp; Friends">'
+            '<meta content="A synthetic page for link cards." property="og:description">'
+            '<meta property="og:image" content="/og.png"></head>'
+            '<body style="margin:0;background:#3a7"><h1>Easel fixture</h1></body></html>')
+        server = fixture_server(site)
+        origin = 'http://127.0.0.1:%d' % server.server_address[1]
+        try:
+            e2 = created['tab']
+
+            # E21: the Image tool opens a picture panel; Cancel adds nothing.
+            easel(action='tool', tool='image')
+            panel = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(action='image-panel', cancel=False, tab=e2)), timeout=5, step=.1)
+            easel(action='image-panel', tab=e2)
+            s = easel(tab=e2)
+            record('E21_image_panel', panel and panel['message'] == 'Choose pictures to add to this Easel.'
+                   and objects(s) == [] and canvas(s)['tool'] == 'pointer', panel=panel)
+
+            # E22: a pasted picture file lands at most 400 pt wide, stored once by its hash.
+            picture = make_png(Path(tmp) / 'picture.png', 800, 400, (220, 90, 60))
+            app.call('easel', action='pasteboard', file=str(picture))
+            s = easel(action='edit', op='paste', tab=e2)
+            imgs = [x for x in objects(s) if x['kind'] == 'image']
+            record('E22_paste_image_file', len(imgs) == 1 and imgs[0]['pixelSize'] == [800, 400]
+                   and abs(imgs[0]['frame'][2] - 400) < .01 and abs(imgs[0]['frame'][3] - 200) < .01
+                   and s['imageFiles'] == [imgs[0]['file']] and canvas(s)['selection'] == [imgs[0]['id']], state=canvas(s), files=s['imageFiles'])
+            # E23: the same bytes as picture data reuse the stored file.
+            app.call('easel', action='pasteboard', imageData=str(picture))
+            s = easel(action='edit', op='paste', tab=e2)
+            record('E23_image_dedup', len([x for x in objects(s) if x['kind'] == 'image']) == 2 and len(s['imageFiles']) == 1,
+                   files=s['imageFiles'])
+
+            # E24: a pasted address makes a link card at once; its metadata and picture follow.
+            app.call('easel', action='pasteboard', url=origin + '/page.html')
+            s = easel(action='edit', op='paste', tab=e2)
+            first_link = [x for x in objects(s) if x['kind'] == 'link']
+            done = api.wait_until(lambda: (lambda x: x if x['pendingLinks'] == 0 else None)(easel(tab=e2)), timeout=15, step=.2)
+            link = [x for x in objects(done) if x['kind'] == 'link'] if done else []
+            record('E24_link_card', len(first_link) == 1 and first_link[0]['url'] == origin + '/page.html'
+                   and link and link[0]['title'] == 'Easel Fixture & Friends' and link[0]['summary'] == 'A synthetic page for link cards.'
+                   and link[0]['file'] and link[0]['file'] in done['imageFiles'] and abs(link[0]['frame'][3] - 250) < .01,
+                   link=link, first=first_link)
+
+            snapshot('e24-link-image-light')
+            app.call('appearance', name='dark'); time.sleep(.5)
+            snapshot('e24-link-image-dark')
+            app.call('appearance', name='light')
+            # E25: alignment guides snap a moved shape to another's edge; the canvas menu turns them off.
+            menu = easel(action='menu', at=[960, 150], tab=e2)
+            easel(action='edit', op='selectAll', tab=e2); easel(action='key', key='delete', tab=e2)
+            easel(action='tool', tool='rectangle'); a = easel(action='drag', **{'from': [100, 250], 'to': [300, 350]})
+            easel(action='tool', tool='rectangle'); b = easel(action='drag', **{'from': [500, 420], 'to': [650, 500]})
+            b_id = objects(b)[-1]['id']
+            # Move B up by 167: its top lands 3 pt below A's top (250) and snaps to 250.
+            s = easel(action='drag', **{'from': [575, 460], 'to': [575, 293]}, tab=e2)
+            snapped = next(x for x in objects(s) if x['id'] == b_id)['frame']
+            easel(action='menu', at=[960, 150], item='Use Alignment Guides', tab=e2)
+            off_menu = easel(action='menu', at=[960, 150], tab=e2)
+            s = easel(action='drag', **{'from': [575, 300], 'to': [575, 305]}, tab=e2)
+            unsnapped = next(x for x in objects(s) if x['id'] == b_id)['frame']
+            easel(action='menu', at=[960, 150], item='Use Alignment Guides', tab=e2)
+            record('E25_alignment_guides', 'Use Alignment Guides' in menu and abs(snapped[1] - 250) < .01
+                   and abs(unsnapped[1] - 255) < .01, menu=menu, snapped=snapped, unsnapped=unsnapped, offMenu=off_menu)
+
+            # E26: Capture → Easel. The card offers Add to Easel; its menu lists New Easel and
+            # each Easel; a row adds the capture as a web card and selects that Easel.
+            page = api.new_tab(app, origin + '/page.html')
+            r = app.call('capture', mode='area', rect=[40, 40, 200, 120])
+            actions = r['state'].get('card', {}).get('actions', [])
+            rows = app.call('easel', action='capture-menu')
+            target_title = easel(tab=e2)['tabTitle']
+            app.call('easel', action='capture-menu', item=target_title)
+            s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=e2)), timeout=8, step=.1)
+            cards = [x for x in objects(s) if x['kind'] == 'webCard'] if s else []
+            card_state = app.call('capture-state')
+            record('E26_capture_to_easel', 'easel' in actions and rows[0] == 'New Easel' and rows[1] == '—'
+                   and target_title in rows and s and s['selected'] and len(cards) == 1
+                   and cards[0]['url'] == origin + '/page.html' and cards[0]['title'] == 'Fallback title'
+                   and cards[0]['file'] in s['imageFiles'] and 'card' not in card_state,
+                   actions=actions, rows=rows, cards=cards)
+            snapshot('e26-cards-light')
+            app.call('appearance', name='dark'); time.sleep(.5)
+            snapshot('e26-cards-dark')
+            app.call('appearance', name='light')
+            # E27: New Easel from the capture menu.
+            app.call('select', tab=page)
+            app.call('capture', mode='area', rect=[40, 40, 120, 80])
+            count = len(app.call('tabs'))
+            app.call('easel', action='capture-menu', item='New Easel')
+            fresh = easel()
+            record('E27_capture_new_easel', len(app.call('tabs')) == count + 1 and fresh['tabTitle'] == 'Untitled Easel'
+                   and [x['kind'] for x in objects(fresh)] == ['webCard'], state={k: v for k, v in fresh.items() if k != 'canvas'})
+        finally:
+            server.shutdown()
+    finally:
+        if app:
+            app.quit()
+        for key in color_keys:
+            if saved_prefs.get(key) is None:
+                subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+            else:
+                subprocess.run(['defaults', 'write', domain, key, '-string', saved_prefs[key]], capture_output=True)

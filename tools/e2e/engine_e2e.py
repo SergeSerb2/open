@@ -6525,6 +6525,24 @@ def media_checks(factory, results, tmp):
         still = app.eval(video, "document.getElementById('main').paused") is False
         results["media_auto_pip_return"] = {"ok": bool(closed) and still and closed.get("reason") == "sourceShown", "pip": pip(), "playing": still}
 
+        # PB1 / D-4 revised: a minimized window is a leave for the tab it shows (Arc:
+        # `presentPipForOccludedWindow`); restoring it closes the automatic PiP like a tab return.
+        app.call("window-miniaturize")
+        mini_pip = wait_until(lambda: (lambda p: p if p["state"] == "active" and p.get("tab") == video else None)(pip()), timeout=3, step=.02)
+        mini_decision = m(video)["decision"]
+        app.call("window-deminiaturize")
+        # A Dock click also activates Open. Without that, the restored window is an inactive,
+        # covered window: by the same rule an occlusion (leave), so PiP would stay open.
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+        restored = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
+        restored_playing = app.eval(video, "document.getElementById('main').paused") is False
+        results["media_auto_pip_window_hidden"] = {"ok": bool(mini_pip) and bool(mini_pip and mini_pip.get("automatic"))
+            and bool(restored) and restored.get("reason") == "sourceShown" and restored_playing,
+            "minimized": mini_pip, "decision": mini_decision, "restored": restored, "playing": restored_playing}
+        # Like the tab-return row: the page itself leaves PiP when the close animation ends.
+        settled = wait_until(lambda: pip()["state"] == "closed" and not m(video)["pictureInPicture"], timeout=3, step=.05)
+        results["media_auto_pip_window_hidden"]["settledClosed"] = bool(settled)
+
         # E-M7: Close pauses and snoozes until the tab shows again.
         select(home); wait_pip("active")
         app.call("pip-action", action="close")
@@ -7728,7 +7746,7 @@ def capture_checks(factory, results, tmp):
             and overlay.get('frame') == overlay.get('pageFrame') and overlay.get('firstResponder') is True
             and overlay.get('hint') == 'Drag to capture. Press Esc to cancel.' and not overlay.get('hintHidden')
             and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
-            and card.get('actions') == ['copy', 'save', 'share', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
+            and card.get('actions') == ['copy', 'save', 'share', 'easel', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
             'scale': scale, 'row': new, 'steps': steps, 'state': st}
         # Real-window look of the card (no Arc capture exists yet, C-C1): kept for review in .re/.
         os.makedirs(os.path.join(ROOT, '.re', 'page-capture'), exist_ok=True)
@@ -7785,7 +7803,7 @@ def capture_checks(factory, results, tmp):
         scroll_after = app.eval(tab, 'scrollY')
         results['capture_c2_full_page'] = {'ok': row['kind'] == 'fullPage' and row['height'] == round(12000 * scale)
             and bands == list(range(12)) and r['state']['result']['truncated'] is False
-            and r['state'].get('card', {}).get('actions') == ['copy', 'save', 'share', 'library', 'delete'],
+            and r['state'].get('card', {}).get('actions') == ['copy', 'save', 'share', 'easel', 'library', 'delete'],
             'row': row, 'bands': bands, 'probe': probe, 'scrollAfter': scroll_after, 'state': r['state']}
         # Delete on the card removes the file and the row in one step.
         app.call('capture-action', action='delete')
@@ -8709,6 +8727,21 @@ def routing_checks(factory, results, tmp):
                and tabs[1]['url'] == existing_url
                and len(entries(warm)) == 1, tabs=tabs, log=log())
 
+        # PB1 Handoff: the key window's page is the published web activity; a
+        # continued activity enters the same intake as a LaunchServices URL.
+        published = wait_until(lambda: (lambda h: h if h['url'] == warm else None)(app.call('handoff-state')), timeout=5, step=.1)
+        handoff_seen = app.call('handoff-state')
+        resumed_url = origin + '/handoff-resume'
+        continued = app.call('handoff-continue', url=resumed_url)
+        resumed = landed(resumed_url)
+        refused = app.call('handoff-continue')  # an activity with no page URL
+        refused_type = app.call('handoff-continue', url=origin + '/other-type', type='com.example.other')
+        followed = wait_until(lambda: (lambda h: h if h['url'] == resumed_url else None)(app.call('handoff-state')), timeout=5, step=.1)
+        record('routing_handoff', bool(published) and continued == {'willContinue': True, 'accepted': True} and resumed
+               and refused['accepted'] is False and refused_type == {'willContinue': False, 'accepted': False}
+               and len(entries(resumed_url)) == 1 and bool(followed),
+               published=published, seen=handoff_seen, continued=continued, refused=refused, refusedType=refused_type, followed=followed)
+        app.call('space', space=target['id'])
         warm_tab = next(t['id'] for t in tabs if t['url'] == warm)
         app.call('wait', tab=warm_tab)
         work_cookies = app.eval(warm_tab, 'document.cookie')
@@ -8869,6 +8902,85 @@ def routing_checks(factory, results, tmp):
         record('routing_default_browser_read_only', state_before == state_after
                and state_after['isDefaultBrowser'] == (state_after['http']['isDefault'] and state_after['https']['isDefault']),
                before=state_before, after=state_after)
+
+        # PB1 deep links: open-browser://<route> through real LaunchServices delivery.
+        def deep(url, handled):
+            sent = deliver(url)
+            state = wait_until(lambda: (lambda d: d if d['handled'] >= handled else None)(app.call('deep-link-state')), timeout=8, step=.05)
+            return sent.returncode == 0, state
+        def focused_space(): return next(s for s in app.call('spaces') if s['focused'])['id']
+        base_handled = app.call('deep-link-state')['handled']
+        spaces = app.call('spaces')
+        app.call('space', space=spaces[0]['id'])
+        ok_index, by_index = deep('open-browser://space/2', base_handled + 1)
+        index_focus = wait_until(lambda: focused_space() == spaces[1]['id'], timeout=3, step=.05)
+        app.call('space', space=spaces[0]['id'])
+        # The seeded target Space is titled "Routing target"; the name match ignores case.
+        ok_name, by_name = deep('open-browser://space/routing%20TARGET', base_handled + 2)
+        name_focus = wait_until(lambda: focused_space() == target['id'], timeout=3, step=.05)
+        record('routing_deep_link_space', ok_index and ok_name and bool(index_focus) and bool(name_focus)
+               and (by_index or {}).get('result') == 'space' and (by_name or {}).get('result') == 'space', index=by_index, byName=by_name,
+               titles=[s['title'] for s in spaces])
+        tabs_before = len(app.call('tabs'))
+        ok_bad, missing = deep('open-browser://space/99', base_handled + 3)
+        ok_unknown, unknown = deep('open-browser://no-such-route/x', base_handled + 4)
+        record('routing_deep_link_unknown_noop', ok_bad and ok_unknown and (missing or {}).get('result') == 'no-space'
+               and (unknown or {}).get('result') == 'unknown' and focused_space() == target['id'] and len(app.call('tabs')) == tabs_before,
+               missing=missing, unknown=unknown)
+        ok_welcome, welcome = deep('open-browser://welcome', base_handled + 5)
+        welcome_tab = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == 'open://welcome' and t['selected']), None), timeout=5, step=.05)
+        record('routing_deep_link_welcome', ok_welcome and (welcome or {}).get('result') == 'welcome' and bool(welcome_tab), state=welcome, tab=welcome_tab)
+
+        # restart: the same executable and options come back after this process exits.
+        # The harness stops talking to the old App (it exits on purpose); the relaunched
+        # instance answers on the same automation socket and is driven with short raw calls.
+        def raw_call(cmd, timeout=2, **args):
+            try:
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); sock.settimeout(timeout)
+                sock.connect(app.sock)
+                sock.sendall((json.dumps({"id": 1, "cmd": cmd, "args": args}) + "\n").encode())
+                buf = b""
+                while not buf.endswith(b"\n"):
+                    chunk = sock.recv(1 << 20)
+                    if not chunk: break
+                    buf += chunk
+                sock.close()
+                reply = json.loads(buf)
+                return reply.get("result") if reply.get("ok") else None
+            except Exception:
+                return None
+        def pid_alive(pid):
+            try: os.kill(pid, 0); return True
+            except ProcessLookupError: return False
+        old_pid = app.call('deep-link-state')['pid']
+        # Restart keeps the normal quit prompts; answer "Quit Open?" with Quit if it shows.
+        app.call('quit-warning', button='quit')
+        app.activation_trace = app.call('activation-events')
+        app.quitting = True; app.closed = True  # an intended exit: not an App death
+        sent = deliver('open-browser://restart')
+        gone = wait_until(lambda: not pid_alive(old_pid), timeout=30, step=.1)
+        def new_pid():
+            state = raw_call('deep-link-state')
+            return state['pid'] if state and state.get('pid') not in (None, old_pid) else None
+        relaunched = wait_until(new_pid, timeout=45, step=.25) if gone else None
+        if relaunched: raw_call('quit-warning', button='quit')
+        sent_quit = deliver('open-browser://quit') if relaunched else None
+        quit_done = wait_until(lambda: not pid_alive(relaunched), timeout=30, step=.1) if relaunched else False
+        app_log = ([line for line in Path(app.launch_log_path).read_text(errors='replace').splitlines() if line.startswith('Open:')][-20:]
+                   if os.path.exists(app.launch_log_path) else None)
+        forced = []
+        for pid in (old_pid, relaunched):
+            if pid and pid_alive(pid):
+                forced.append(pid)
+                try: os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+        # This App was closed by the row itself; its cleanup receipt is the row's own process proof.
+        app.quit_report = {'ok': not forced and not any(pid_alive(p) for p in (old_pid, relaunched) if p),
+                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced}
+        record('routing_deep_link_restart_quit', sent.returncode == 0 and bool(gone) and bool(relaunched)
+               and sent_quit is not None and sent_quit.returncode == 0 and bool(quit_done),
+               oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done),
+               sent=[sent.returncode, sent.stderr[-300:]], appLog=app_log)
     finally:
         _restore_defaults(app, saved)
         if app: app.quit()
@@ -12613,9 +12725,9 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "import-other-browsers"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -12963,6 +13075,14 @@ def main():
             results["onboarding"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
                 factory, results["onboarding"], tmp, sys.modules[__name__])
+        elif opts.only == "easel":
+            results["easel"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/easel.py"))["run"](
+                factory, results["easel"], tmp, sys.modules[__name__])
+        elif opts.only == "notes":
+            results["notes"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes.py"))["run"](
+                factory, results["notes"], tmp, sys.modules[__name__])
         elif opts.only == "welcome":
             results["welcome"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/welcome.py"))["run"](
@@ -13226,14 +13346,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "import-other-browsers"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "import-other-browsers")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

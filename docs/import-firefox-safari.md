@@ -10,7 +10,7 @@ Settings ▸ Import ▸ Firefox (or Zen, LibreWolf, Floorp) or Safari. The sourc
 | History | `moz_historyvisits` (embeds and framed links skipped, as Chromium subframes) | Live `History.db`, or `History.json` in the export ZIP |
 | Passwords | `logins.json` + `key4.db`. Primary Password: the user types it on the Choose step; it is used once and never stored | The `Passwords.csv` in the export ZIP, or a CSV that the user picks (Safari or Passwords app ▸ File ▸ Export All Passwords) |
 | Search engine | not imported | not imported |
-| Form data | read and counted by `FirefoxFormHistoryReader`; not written (no engine write path, IMF question 1) | — |
+| Form data | not offered in 1.0 (lead 03:30). Firefox form history is free field/value autocomplete; the engine writes only structured addresses (`importAddresses`), so it would need a new engine patch. `FirefoxFormHistoryReader` exists for a later release | — |
 | Cookies | no (lead ruling 2) | no (not readable) |
 
 Bookmarks become one pinned folder "Imported from <Browser>" in the focused Space (Arc parity, F3 §5), built by `BrowserBookmarksImport.sourceModel`. History goes to that Space's Profile. Passwords go to the same Profile through the engine login sink. Undo (Edit ▸ Undo "Import from <Browser>") removes the bookmarks and the history; imported passwords stay, as for the Arc import.

@@ -152,6 +152,8 @@ targets:
       - package: OpenKit
         product: OpenStore
       - package: OpenKit
+        product: OpenDocuments
+      - package: OpenKit
         product: OpenWeb
       - package: OpenKit
         product: OpenExtensionsUI
@@ -187,6 +189,8 @@ targets:
         product: OpenDesign
       - package: OpenKit
         product: OpenTranslate
+      - package: OpenKit
+        product: OpenEasel
       - target: OpenHelper
         embed: false
         link: false

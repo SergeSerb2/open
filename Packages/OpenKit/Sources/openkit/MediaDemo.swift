@@ -57,8 +57,11 @@ import OpenWeb
     var enginePiP = video; enginePiP.isPictureInPicture = true
     check("engine PiP policy blocks", decision("https://example.com", enginePiP) == .alreadyInPictureInPicture)
     check("AP9 disablePictureInPicture", decision(disabled: true) == .videoDisabled)
-    for event: AutoPiPPolicy.LeaveEvent in [.minimize, .occlusion, .appHide, .appSwitch, .close, .splitFocus, .peek] {
+    for event: AutoPiPPolicy.LeaveEvent in [.appSwitch, .close, .splitFocus, .peek] {
         check("AP10 no leave \(event)", decision(event: event) == .notLeave)
+    }
+    for event: AutoPiPPolicy.LeaveEvent in [.minimize, .occlusion, .appHide] {
+        check("AP10 window hidden is a leave \(event)", decision(event: event) == .open)
     }
     for automatic in [true, false] {
         for reason: PiPSession.Reason in [.userClosed, .minimized, .backToTab, .sourceGone, .failed, .replaced] {

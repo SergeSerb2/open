@@ -16,14 +16,16 @@ import OpenImport
     }
     let wizard = ImportWizardViewModel(root: environment.settings, startsWithSource: true)
     await wizard.loadSources()
-    try require(wizard.step == .source && wizard.selectedSourceID == "chrome", "source picker selects the detected Chrome")
+    try require(wizard.step == .source && wizard.selectedSourceID.isEmpty && !wizard.canContinueFromSource, "no preselection")
+    try await frames("source")
+    wizard.selectedSourceID = "chrome"
     func frames(_ name: String) async throws {
         for dark in [false, true] { for scale in scales {
             try await render(ImportWizard(model: wizard).buttonStyle(SettingsButtonStyle()), size: CGSize(width: 640, height: 520), scale: scale,
                              dark: dark, to: output.appendingPathComponent("import-\(name)-\(dark ? "dark" : "light")@\(scale)x.png"))
         } }
     }
-    try await frames("source")
+    try await frames("source-selected")
     await wizard.continueFromSource()
     try require(wizard.step == .choose && wizard.readable, "Chrome Choose step is readable")
     try await frames("browser-choose")
@@ -39,6 +41,7 @@ private func writeSyntheticBrowserLibrary(_ library: URL) throws {
     for directory in ["Default", "Profile 1"] { try fm.createDirectory(at: chrome.appendingPathComponent(directory), withIntermediateDirectories: true) }
     try fm.createDirectory(at: library.appendingPathComponent("Application Support/BraveSoftware/Brave-Browser"), withIntermediateDirectories: true)
     try fm.createDirectory(at: library.appendingPathComponent("Application Support/Firefox/Profiles"), withIntermediateDirectories: true)
+    try fm.createDirectory(at: library.appendingPathComponent("Application Support/Arc"), withIntermediateDirectories: true)
     try fm.createDirectory(at: library.appendingPathComponent("Application Support/Microsoft Edge/Default"), withIntermediateDirectories: true)
     func json(_ value: Any, _ path: String, in root: URL = chrome) throws {
         try JSONSerialization.data(withJSONObject: value).write(to: root.appendingPathComponent(path))
