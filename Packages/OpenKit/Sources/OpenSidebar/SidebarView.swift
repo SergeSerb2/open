@@ -714,6 +714,8 @@ extension SidebarView {
                 "chevronFrame": [menu.frame.minX, menu.frame.minY, menu.frame.width, menu.frame.height],
                 "reloadFrame": [reload.frame.minX, reload.frame.minY, reload.frame.width, reload.frame.height],
                 "sidebarWidth": toolbar.bounds.width,
+                "navigationShown": !toolbar.back.isHidden && !toolbar.forward.isHidden && !toolbar.reload.isHidden,
+                "urlFieldShown": !urlField.isHidden,
                 "menu": toolbar.makeReloadMenu().items.map(\.title)]
     }
     /// Runs one item of the Developer Mode reload menu by title, as a click on it would.

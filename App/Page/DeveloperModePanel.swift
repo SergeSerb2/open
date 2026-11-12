@@ -39,10 +39,36 @@ final class DeveloperModePanel {
     case .copyLink: controller.performCommand("copy-url")
     case .capture: controller.performCommand("capture-page")
     case .captureWindow: showPortraitCapture(anchor: view, hover: false)
-    case .extensionsMenu: controller.performCommand("manage-extensions")
+    case .extensionsMenu, .splitMenu:
+      menu(for: action)?.popUp(positioning: nil, at: CGPoint(x: 0, y: view.bounds.height + 4), in: view)
     case .siteSettings: controller.container.onSiteControls?(id)
-    case .splitMenu: controller.container.onPaneMenu?(id, view)
     }
+  }
+
+  /// The menus of Extensions Menu and Split View Menu (C-report-s10 PB3-a2). Arc shows the extensions rows in a
+  /// small popover card (262 × 114 pt); Open uses a menu (LEAD addendum to the #461 review).
+  func menu(for action: DeveloperPanelAction) -> NSMenu? {
+    guard let controller = factory.controller else { return nil }
+    let menu = NSMenu(); menu.autoenablesItems = false
+    func item(_ title: String, _ run: @escaping @MainActor () -> Void) -> NSMenuItem {
+      let item = DeveloperMenuItem(title: title, action: #selector(DeveloperMenuItem.run), keyEquivalent: "")
+      item.handler = run; item.target = item; return item
+    }
+    switch action {
+    case .extensionsMenu:
+      menu.addItem(item("Add Extension…") { [weak controller] in controller?.performCommand("add-extension") })
+      menu.addItem(item("Manage Extensions…") { [weak controller] in controller?.performCommand("manage-extensions") })
+    case .splitMenu:
+      let split = controller.splitController
+      for (title, edge) in [("Add Right Split", SplitDropOverlayView.Zone.right), ("Add Left Split", .left), ("", .center),
+                            ("Add Top Split", .top), ("Add Bottom Split", .bottom)] {
+        if title.isEmpty { menu.addItem(.separator()); continue }
+        let row = item(title) { [weak split] in split?.addEmptyPane(edge: edge) }
+        row.isEnabled = split.canAddPane; menu.addItem(row)
+      }
+    default: return nil
+    }
+    return menu
   }
 
   /// The same button closes the DevTools it opened; another toggle moves the open DevTools to its panel.
@@ -71,7 +97,7 @@ final class DeveloperModePanel {
   /// Requests that reached `showPortraitCapture` (verification).
   private(set) var portraitCaptureRequests = 0
 
-  /// A tab's host closed.
+  /// A tab's host closed (below: the menu item type).
   func forget(_ id: ItemID) { opened[id] = nil }
 
   #if OPEN_AUTOMATION
@@ -81,4 +107,11 @@ final class DeveloperModePanel {
             "portraitCaptureRequests": portraitCaptureRequests]
   }
   #endif
+}
+
+/// A menu row that runs a closure.
+@MainActor
+final class DeveloperMenuItem: NSMenuItem {
+  var handler: (@MainActor () -> Void)?
+  @objc func run() { handler?() }
 }

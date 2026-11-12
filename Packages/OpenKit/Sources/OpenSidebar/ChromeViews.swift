@@ -150,7 +150,9 @@ final class ToolbarView: NSView {
         // A selected split moves back, forward, and reload into each pane's bar: the
         // sidebar toolbar keeps only the toggle (F0081, F0082: AX and pixels).
         // The content toolbar holds them too (§4.6.3, derived from CC-36 "Show as Toolbar").
-        let split = tracked({ context.isSplitSelected || context.isToolbarShown }) { [weak self] in self?.needsLayout = true }
+        // On a Developer Mode page the developer bar is the toolbar (capture s10 `v11/d2…/t-1-toolbar-on`): it has no
+        // navigation, so back, forward and reload stay in the sidebar; only the URL field goes away.
+        let split = tracked({ context.isSplitSelected || (context.isToolbarShown && !context.pageIsDeveloperMode) }) { [weak self] in self?.needsLayout = true }
         let developer = tracked({ context.pageIsDeveloperMode }) { [weak self] in self?.needsLayout = true }
         let compact = isCompact
         if compact != lastCompact { lastCompact = compact; SidebarDiagnostics.compactToolbarSwaps += 1 }

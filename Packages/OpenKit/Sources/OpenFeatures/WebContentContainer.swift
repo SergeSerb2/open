@@ -50,6 +50,7 @@ public final class PaneSlotView: NSView {
             developerPanel?.urlString = tab.url.absoluteString
             developerPanel?.onAction = developerAction
             developerPanel?.onHover = developerHover
+            developerPanel?.tooltipStyle = style
             developerPanel?.activePanel = developerActivePanel
         } else { developerPanel?.removeFromSuperview(); developerPanel = nil }
         if split || (toolbar && !developer) {

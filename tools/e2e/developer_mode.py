@@ -3,7 +3,9 @@
 A synthetic loopback server serves every page. Rows: the bar shows only for a Developer Mode site and replaces the
 page area's top 40 pt; Arc's nine controls in order with Arc's names; its light and dark colours; the sidebar
 outline and host subtitle; Console / Network / Inspect toggle the standard DevTools on that panel; the sidebar
-toolbar's reload chevron (capture PB3-a) and its menu; Arc's tooltip text (capture s10); the Capture Window hover entry.
+toolbar's reload chevron (capture PB3-a) and its menu; capture s10 (C-report-s10 PB3-a1…a3): hover plate and tooltip pill
+with key caps, the Capture Window hover entry, the Extensions and Split View menus (and one split), and with View ▸ Show
+Toolbar on, the developer bar is the toolbar and only the sidebar URL field goes away.
 """
 import http.server
 import os
@@ -78,14 +80,37 @@ def run(factory, results, tmp, h):
         row('toolbar_reload_menu_force_refresh', bool(reloaded), loads=[loads, Handler.page_loads])
         tips = {b['id']: b.get('tooltip') for b in buttons.values()}
         row('bar_tooltips_from_capture', tips == {
-            'siteSettings': 'Site Settings', 'copyLink': 'Copy Link ⇧⌘C', 'captureWindow': '',
-            'capture': 'Capture a portion of this page ⇧⌘2', 'console': 'Toggle Console ⌥⌘J', 'network': 'Toggle Network Panel',
-            'inspect': 'Inspect Element ⌥⌘C', 'extensionsMenu': 'Extensions', 'splitMenu': 'Split View Options'}, tooltips=tips)
+            'siteSettings': [], 'copyLink': ['Copy Link', '⇧', '⌘', 'C'], 'captureWindow': [],
+            'capture': ['Capture a portion of this page', '⇧', '⌘', '2'], 'console': ['Toggle Console', '⌥', '⌘', 'J'],
+            'network': ['Toggle Network Panel'], 'inspect': ['Inspect Element', '⌥', '⌘', 'C'], 'extensionsMenu': ['Extensions'],
+            'splitMenu': ['Split View Options']}, tooltips=tips)
+        # Hover (h-copy, h-site): a grey plate (light: black 9 %) and the tooltip pill with key caps; Site Settings: plate only.
+        app.call('appearance', name='light'); time.sleep(.3)
+        app.call('developer-panel', action='hover', button='copyLink')
+        copy = state()
+        app.call('developer-panel', action='hover', button='copyLink', inside=False)
+        left = state()
+        app.call('developer-panel', action='hover', button='siteSettings')
+        site = state()
+        app.call('developer-panel', action='hover', button='siteSettings', inside=False)
+        app.call('appearance', name='system')
+        row('hover_plate_and_tooltip_pill', copy.get('hovered') == 'copyLink' and copy.get('hoverPlate') == '#000000/0.09'
+            and copy.get('tooltip') == ['Copy Link', '⇧', '⌘', 'C'] and left.get('hovered') == '' and 'tooltip' not in left
+            and site.get('hovered') == 'siteSettings' and site.get('hoverPlate') == '#000000/0.09' and 'tooltip' not in site,
+            copy={k: copy.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')}, left={k: left.get(k) for k in ('hovered', 'tooltip')},
+            site={k: site.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')})
+        # PB3-a2: the puzzle button and the split button open menus.
+        ext_menu = app.call('developer-panel', menu='extensionsMenu').get('menu')
+        split_menu = app.call('developer-panel', menu='splitMenu').get('menu')
+        row('extensions_and_split_menus', ext_menu == ['Add Extension…', 'Manage Extensions…']
+            and split_menu == ['Add Right Split', 'Add Left Split', '-', 'Add Top Split', 'Add Bottom Split'],
+            extensions=ext_menu, split=split_menu)
         # Capture s10: resting on Capture Window opens the Portrait Mode popover. Hover reaches the one entry; until
         # EZ's popover lands it does nothing else (a click still runs the portrait capture).
         before = state()['devtools'].get('portraitCaptureRequests', 0)
         app.call('developer-panel', action='hover', button='captureWindow')
         after = state()['devtools'].get('portraitCaptureRequests', 0)
+        app.call('developer-panel', action='hover', button='captureWindow', inside=False)
         row('capture_window_hover_reaches_portrait_entry', after == before + 1, requests=[before, after])
 
         # Pane 2: the sidebar marks a Developer Mode site. A second tab on "localhost" (another site) stays plain.
@@ -141,6 +166,36 @@ def run(factory, results, tmp, h):
         app.call('appearance', name='system')
         row('bar_palette_light_dark', palettes['light'] == {'stripeA': '#EFF1F5', 'stripeB': '#F4F5F8', 'glyph': '#212AFB', 'text': '#242526', 'line': '#D8D9DD'}
             and palettes['dark'] == {'stripeA': '#3E43CA', 'stripeB': '#4247CB', 'glyph': '#ECEDFE', 'text': '#D8D9F4', 'line': '#5155CF'}, palettes=palettes)
+
+        # PB3-a3 (`v11/d2…/t-1-toolbar-on`): with View ▸ Show Toolbar on, the developer bar is the toolbar; the sidebar
+        # keeps back / forward / reload ▾ and only its URL field goes away. Another site gets the normal toolbar.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('command', id='toggle-toolbar')
+        h.wait_until(lambda: state().get('sidebarToolbar', {}).get('urlFieldShown') is False, timeout=10, step=.05)
+        dev_tb = state()
+        app.call('select', tab=other)
+        h.wait_until(lambda: state().get('toolbar') is True, timeout=10, step=.05)
+        plain_tb = state()
+        app.call('select', tab=tab)
+        h.wait_until(lambda: state().get('shown') is True, timeout=10, step=.05)
+        app.call('command', id='toggle-toolbar')
+        h.wait_until(lambda: state().get('sidebarToolbar', {}).get('urlFieldShown') is True, timeout=10, step=.05)
+        st, pt = dev_tb.get('sidebarToolbar', {}), plain_tb.get('sidebarToolbar', {})
+        row('show_toolbar_developer_bar_is_toolbar', dev_tb.get('shown') is True and dev_tb.get('toolbar') is False
+            and st.get('urlFieldShown') is False and st.get('navigationShown') is True and st.get('chevronShown') is True
+            and plain_tb.get('shown') is False and plain_tb.get('toolbar') is True and pt.get('navigationShown') is False,
+            developer={k: dev_tb.get(k) for k in ('shown', 'toolbar', 'sidebarToolbar')},
+            other={k: plain_tb.get(k) for k in ('shown', 'toolbar', 'sidebarToolbar')})
+
+        # PB3-a2: "Add Bottom Split" splits the page top / bottom with an empty pane; the developer bar leaves a split.
+        app.call('developer-panel', menu='splitMenu', item='Add Bottom Split')
+        split_state = h.wait_until(lambda: (lambda s: s if s.get('splitPanes') == 2 else None)(state()), timeout=10, step=.05) or state()
+        row('split_menu_adds_bottom_split', split_state.get('splitPanes') == 2 and split_state.get('splitOrientation') == 'vertical',
+            panes=split_state.get('splitPanes'), orientation=split_state.get('splitOrientation'))
+        app.call('command', id='close-split-pane')
+        h.wait_until(lambda: state().get('splitPanes') == 1, timeout=10, step=.05)
+        app.call('select', tab=tab)
+        h.wait_until(lambda: state().get('shown') is True, timeout=10, step=.05)
 
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         app.call('command', id='toggle-developer-mode')

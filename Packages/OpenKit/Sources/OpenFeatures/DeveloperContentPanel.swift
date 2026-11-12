@@ -15,8 +15,11 @@ import OpenDesign
 ///   Inspect Element | Extensions Menu · Split View Menu, with thin dividers between the groups.
 /// A themed Space tints the bar (capture s3 `s7/12-devoff/d-devmode-on`: #76859C on a blue-grey Space). The tint
 /// rule is a GUESS (LEAD 12:18): the Space's accent colour, with the ink chosen by its brightness.
-/// Hover (capture s10 `v10/d1-devbar-hover-menus`, C-report-s10 PB3-a1): tooltips use Arc's tooltip text; the
-/// Capture Window button shows no tooltip, because resting on it opens the "Capture in Portrait Mode" popover.
+/// Hover (capture s10 `v10/d1-devbar-hover-menus`, C-report-s10 PB3-a1): a grey rounded plate fills the hovered
+/// 28 pt button (light: black 9 % over the stripes, `h-copy-95895.png` #F4F5F8 → #DEE0E4), and after the usual delay
+/// the Space's tooltip pill shows below it, with key caps where a shortcut exists. Site Settings shows the plate
+/// only (`h-site`); Capture Window shows no tooltip, because resting on it opens the Portrait Mode popover.
+/// Extensions Menu and Split View Menu open menus (PB3-a2); the App builds them.
 public enum DeveloperPanelAction: String, CaseIterable, Sendable {
     case siteSettings, copyLink, captureWindow, capture, console, network, inspect, extensionsMenu, splitMenu
 
@@ -34,19 +37,18 @@ public enum DeveloperPanelAction: String, CaseIterable, Sendable {
         case .splitMenu: "Split View Menu"
         }
     }
-    /// Arc's tooltip text (C-report-s10 PB3-a1); nil for Capture Window, whose hover opens a popover.
-    /// Arc's tooltip pill also shows the key caps; Open uses the system tooltip with the keys as text.
-    public var tooltip: String? {
+    /// Arc's tooltip pill: title and key caps (C-report-s10 PB3-a1). Nil for Site Settings (plate only) and for
+    /// Capture Window, whose hover opens a popover.
+    public var tooltip: (title: String, keys: [String])? {
         switch self {
-        case .siteSettings: "Site Settings"
-        case .copyLink: "Copy Link ⇧⌘C"
-        case .captureWindow: nil
-        case .capture: "Capture a portion of this page ⇧⌘2"
-        case .console: "Toggle Console ⌥⌘J"
-        case .network: "Toggle Network Panel"
-        case .inspect: "Inspect Element ⌥⌘C"
-        case .extensionsMenu: "Extensions"
-        case .splitMenu: "Split View Options"
+        case .siteSettings, .captureWindow: nil
+        case .copyLink: ("Copy Link", ["⇧", "⌘", "C"])
+        case .capture: ("Capture a portion of this page", ["⇧", "⌘", "2"])
+        case .console: ("Toggle Console", ["⌥", "⌘", "J"])
+        case .network: ("Toggle Network Panel", [])
+        case .inspect: ("Inspect Element", ["⌥", "⌘", "C"])
+        case .extensionsMenu: ("Extensions", [])
+        case .splitMenu: ("Split View Options", [])
         }
     }
     /// Our own glyphs (SF Symbols, and a puzzle outline drawn in code); no Arc asset.
@@ -125,9 +127,9 @@ enum DeveloperPanelGlyphs {
     }()
 }
 
-/// The Capture Window button reports the pointer entering it (C-report-s10: hover opens the Portrait Mode popover).
+/// A bar button that reports the pointer entering and leaving it (hover plate, tooltip, Capture Window popover).
 final class DeveloperHoverButton: NSButton {
-    var onHover: (() -> Void)?
+    var onHover: ((Bool) -> Void)?
     private var area: NSTrackingArea?
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -135,24 +137,30 @@ final class DeveloperHoverButton: NSButton {
         let next = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(next); area = next
     }
-    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); onHover?() }
+    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); onHover?(true) }
+    override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); onHover?(false) }
+    override func mouseDown(with event: NSEvent) { onHover?(false); super.mouseDown(with: event) }
 }
 
 /// The bar's colours for one appearance.
 struct DeveloperPanelPalette {
     var stripeA: NSColor, stripeB: NSColor, glyph: NSColor, text: NSColor, line: NSColor
+    /// The hover plate. Light: black 9 % (measured, `h-copy-95895.png`). Dark and tinted: GUESS (no dark hover frame).
+    var plate: NSColor = NSColor(white: 0, alpha: 0.09)
     static func hex(_ value: UInt32) -> NSColor {
         NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255, blue: CGFloat(value & 0xFF) / 255, alpha: 1)
     }
     static let light = DeveloperPanelPalette(stripeA: hex(0xEFF1F5), stripeB: hex(0xF4F5F8), glyph: hex(0x212AFB), text: hex(0x242526), line: hex(0xD8D9DD))
-    static let dark = DeveloperPanelPalette(stripeA: hex(0x3E43CA), stripeB: hex(0x4247CB), glyph: hex(0xECEDFE), text: hex(0xD8D9F4), line: hex(0x5155CF))
+    static let dark = DeveloperPanelPalette(stripeA: hex(0x3E43CA), stripeB: hex(0x4247CB), glyph: hex(0xECEDFE), text: hex(0xD8D9F4), line: hex(0x5155CF),
+                                            plate: NSColor(white: 1, alpha: 0.14))
     /// GUESS: a themed Space's bar. The second stripe is the fill moved 3 % toward white, as in the capture.
     static func tinted(_ fill: NSColor) -> DeveloperPanelPalette {
         let rgb = fill.usingColorSpace(.sRGB) ?? fill
         let bright = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent >= 0.62
         let ink = bright ? NSColor(white: 0, alpha: 0.72) : NSColor(white: 1, alpha: 0.92)
         return DeveloperPanelPalette(stripeA: rgb, stripeB: rgb.blended(withFraction: 0.03, of: .white) ?? rgb, glyph: ink, text: ink,
-                                     line: (bright ? rgb.blended(withFraction: 0.10, of: .black) : rgb.blended(withFraction: 0.10, of: .white)) ?? rgb)
+                                     line: (bright ? rgb.blended(withFraction: 0.10, of: .black) : rgb.blended(withFraction: 0.10, of: .white)) ?? rgb,
+                                     plate: bright ? NSColor(white: 0, alpha: 0.09) : NSColor(white: 1, alpha: 0.14))
     }
 }
 
@@ -166,6 +174,10 @@ public final class DeveloperContentPanelView: NSView {
     public var themeFills: (light: NSColor, dark: NSColor)? { didSet { applyColors() } }
     /// The DevTools toggle whose panel is open; its button is drawn pressed (capture `d-network-w`).
     public var activePanel: DeveloperPanelAction? { didSet { if activePanel != oldValue { applyColors() } } }
+    /// The button under the pointer: it shows the hover plate.
+    public private(set) var hovered: DeveloperPanelAction? { didSet { if hovered != oldValue { applyColors() } } }
+    /// The Space style for the tooltip pill (the sidebar's tooltip colours).
+    public var tooltipStyle: SpaceThemeStyle = .defaultTheme(system: .light)
     private let urlLabel = NSTextField(labelWithString: "")
     private var buttons: [DeveloperPanelAction: NSButton] = [:]
 
@@ -176,16 +188,13 @@ public final class DeveloperContentPanelView: NSView {
         urlLabel.setAccessibilityLabel("Page URL")
         addSubview(urlLabel)
         for action in DeveloperPanelAction.allCases {
-            let button = action == .captureWindow ? DeveloperHoverButton() : NSButton()
+            let button = DeveloperHoverButton()
             button.image = action.image; button.target = self; button.action = #selector(press(_:))
-            (button as? DeveloperHoverButton)?.onHover = { [weak self, weak button] in
-                guard let self, let button else { return }
-                self.onHover?(action, button)
-            }
+            button.onHover = { [weak self] inside in self?.pointer(inside, action) }
             button.isBordered = false; button.bezelStyle = .regularSquare; button.imagePosition = .imageOnly; button.wantsLayer = true
             button.setButtonType(.momentaryChange); button.layer?.cornerRadius = 6
             button.symbolConfiguration = .init(pointSize: action == .siteSettings ? 13 : 15, weight: .regular)
-            button.toolTip = action.tooltip; button.setAccessibilityLabel(action.title); button.identifier = .init("developer-" + action.rawValue)
+            button.setAccessibilityLabel(action.title); button.identifier = .init("developer-" + action.rawValue)
             addSubview(button); buttons[action] = button
         }
         setAccessibilityElement(true); setAccessibilityRole(.toolbar); setAccessibilityLabel("Developer Mode")
@@ -198,6 +207,26 @@ public final class DeveloperContentPanelView: NSView {
         onAction?(action, sender)
     }
     public func button(_ action: DeveloperPanelAction) -> NSView? { buttons[action] }
+
+    /// The pointer entered or left a button: plate, tooltip pill and the hover hook.
+    /// Automation calls this as the button's tracking area does.
+    public func pointer(_ inside: Bool, _ action: DeveloperPanelAction) {
+        guard let button = buttons[action] else { return }
+        if inside {
+            hovered = action
+            if let tip = action.tooltip {
+                TooltipController.shared.schedule(Tooltip(title: tip.title, keys: tip.keys, style: tooltipStyle), for: button)
+            }
+            onHover?(action, button)
+        } else {
+            if hovered == action { hovered = nil }
+            TooltipController.shared.cancel(for: button)
+        }
+    }
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { if let hovered, let button = buttons[hovered] { TooltipController.shared.cancel(for: button) }; hovered = nil }
+        super.viewWillMove(toWindow: newWindow)
+    }
 
     private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
     private var palette: DeveloperPanelPalette {
@@ -213,6 +242,11 @@ public final class DeveloperContentPanelView: NSView {
         let p = palette
         return ["stripeA": hex(p.stripeA), "stripeB": hex(p.stripeB), "glyph": hex(p.glyph), "text": hex(p.text), "line": hex(p.line)]
     }
+    /// The hovered button's plate as sRGB hex with alpha (verification), or nil.
+    public var hoverPlateDescription: String? {
+        guard hovered != nil, let c = palette.plate.usingColorSpace(.sRGB) else { return nil }
+        return String(format: "#%02X%02X%02X/%.2f", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()), Int((c.blueComponent * 255).rounded()), c.alphaComponent)
+    }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
 
     private func applyColors() {
@@ -220,7 +254,8 @@ public final class DeveloperContentPanelView: NSView {
         urlLabel.textColor = p.text
         for (action, button) in buttons {
             button.contentTintColor = p.glyph
-            button.layer?.backgroundColor = action == activePanel ? p.glyph.withAlphaComponent(0.14).cgColor : nil
+            button.layer?.backgroundColor = action == hovered ? p.plate.cgColor
+                : action == activePanel ? p.glyph.withAlphaComponent(0.14).cgColor : nil
         }
         needsDisplay = true
     }
