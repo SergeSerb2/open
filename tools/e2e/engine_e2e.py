@@ -12826,6 +12826,13 @@ def page_translate_checks(factory, results, tmp):
         copied = app.call('translate', action='selection-copy')
         pasted = subprocess.run(['/usr/bin/pbpaste'], capture_output=True, text=True).stdout
         app.call('translate', action='selection-close')
+        # LEAD 10:45: the whole bubble stays inside the web content area (8 pt inset) and its
+        # arrow points at the middle of the selection (a short text at the page's left edge).
+        pf, ca = sel.get('panelFrame', [0, 0, 0, 0]), sel.get('contentArea', [0, 0, 0, 0])
+        inside = (pf[2] > 0 and pf[0] >= ca[0] + 8 - .5 and pf[0] + pf[2] <= ca[0] + ca[2] - 8 + .5
+                  and pf[1] >= ca[1] + 8 - .5 and pf[1] + pf[3] <= ca[1] + ca[3] - 8 + .5)
+        results['X8_bubble_inside_content'] = {'ok': inside and abs(sel.get('arrowTipX', -99) - sel.get('selectionMidX', 99)) <= 1
+            and abs(pf[0] - (ca[0] + 8)) <= .5, 'panel': pf, 'content': ca, 'arrowTipX': sel.get('arrowTipX'), 'selectionMidX': sel.get('selectionMidX')}
         results['X8_translate_selection'] = {'ok': title in sel_items and sel.get('state') == 'translated' and sel.get('source') == 'fr'
             and sel.get('shown') and sel.get('result') and sel.get('result') != sel.get('text') and sel.get('shownText') == sel.get('result') and sel.get('anchorInPage')
             and copied.get('pressed') and pasted == sel.get('result'),
