@@ -222,9 +222,12 @@ extension EngineWebContentHostFactory {
       return !isIncognito && (UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true)
     }
     if id == "peek-email" { return controller != nil && peekEmailTab != nil }
-    // Join Meeting reads the calendar only when it runs; validation stays free (no store, no TCC check).
-    // GUESS — capture pending (F2 capture 8): Arc's enabled state with no calendar or no meeting.
-    if id == "join-meeting" { return controller != nil && !isIncognito }
+    // Arc enables Join Meeting only when its Live Calendar has an active event with a join link, else the item
+    // is disabled: menu validation `FUN_100314424` (Arc 1.170.0), branch `joinLiveMeeting:`, ends in
+    // `setEnabled:` with "the event's join URL is not nil" (docs/re/live-data.md §5). Open reads the same fact
+    // from memory (`CalendarService.lastEvents`, filled by Live Calendar and the calendar card): no fetch, no
+    // store and no Calendar prompt at validation.
+    if id == "join-meeting" { return controller != nil && !isIncognito && app.loadedCalendar?.joinableMeetingInMemory != nil }
     if id == "exit-modal" {
       return window === NSApp.keyWindow && windowState.style == .standard && controller?.canExitModal == true
     }
