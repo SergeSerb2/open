@@ -11112,87 +11112,119 @@ def library_capture_checks(app, require, root, evidence):
         rows.append(dict(id=ident, fileName=name, createdAt=1800000000-number, kind=kind, sourceHost='example.com'))
     with open(index, 'w') as stream: json.dump(rows, stream)
     app.call('library-close')
-    recovered = open_section('captures')
-    require('library_capture_reopen_recovers', recovered and not recovered['loadFailed'] and len(recovered['items']) == 6
-            and not any(error_copy[0] in t for t in recovered['text']), state=recovered)
+    # The native Library (#350) shows captures in Media: one list row per capture, newest first, screenshots
+    # included (Media's "All" kind). Title "Capture of <host>", subtitle "Capture · <host> · <date>".
+    media_error = 'Could not load media'
+    opened_media = open_section('media')
+    recovered = wait_until(lambda: (lambda s: s if s.get('section') == 'media' and not s['loadFailed'] and len(s['items']) == 7 else None)(state()),
+                           timeout=10, step=.05) if opened_media else None
+    require('library_capture_reopen_recovers', recovered and not recovered['loadFailed'] and len(recovered['items']) == 7
+            and [i['name'] for i in recovered['items']] == [r['fileName'] for r in rows]
+            and not any(media_error in t for t in recovered['text']), state=recovered or state())
 
-    for section in ('captures', 'media'):
-        current = open_section(section)
-        current = state(focus='sidebar', recordFileActions=True)
-        tab_path = []
-        for _ in range(16):
-            tab_path.append(key('tab'))
-            current = state()
-            if current['gridFocused']: break
-        require('library_' + section + '_tab_focus', current['gridFocused'] and len(current['selected']) == 1, state=current, tabPath=tab_path)
-        items, columns = current['items'], current['columns']
-        first_png = os.path.join(evidence, section + '-selection-first.png')
-        next_png = os.path.join(evidence, section + '-selection-next.png')
-        app.call('snapshot', path=first_png, window=current['window'])
-        key('right'); right = state()
-        app.call('snapshot', path=next_png, window=current['window'])
-        width, _, first_pixel = read_image(first_png)
-        _, _, next_pixel = read_image(next_png)
-        scale = width / 960
-        x, y, grid_width, _ = current['gridFrame']
-        card_width = (grid_width - 18 * (columns - 1)) / columns
-        points = [(x + 5, y + 30), (x + card_width + 23, y + 30)]
-        before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
-        after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
-        distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
-        require('library_' + section + '_selection_pixels', distance(before_pixels[0], before_pixels[1]) >= 5
-                and distance(before_pixels[0], after_pixels[1]) <= 3 and distance(before_pixels[1], after_pixels[0]) <= 3,
-                before=before_pixels, after=after_pixels, firstPNG=first_png, nextPNG=next_png)
-        key('left'); left = state()
-        key('down'); down = state(); key('up'); up = state()
-        require('library_' + section + '_arrows', right['selected'] == [items[1]['id']] and left['selected'] == [items[0]['id']]
-                and down['selected'] == [items[min(columns, len(items)-1)]['id']] and up['selected'] == [items[0]['id']], columns=columns, right=right, left=left, down=down, up=up)
-        require('library_' + section + '_metadata_ax', any('Example Capture 0.png' in t and 'Capture' in t and 'bytes' in t and 'example.com' in t for t in up['text']), text=up['text'])
-        before_open = len(up['opened']); key('return'); opened = state()
-        require('library_' + section + '_return', len(opened['opened']) == before_open+1 and opened['opened'][-1] == items[0]['name'], state=opened)
-        app.call('pasteboard-write', text='capture-copy-sentinel'); key('c', ['cmd']); copied = state()
-        require('library_' + section + '_copy', copied['pasteboardHasImage'], state=copied)
-        key('space'); idle = state()
-        require('library_' + section + '_space_unchanged', idle['selected'] == up['selected'] and idle['opened'] == opened['opened']
-                and not idle['pendingDelete'] and idle['pasteboardHasImage'], state=idle)
-        path = os.path.join(evidence, section + '-keyboard-selection.png')
-        app.call('snapshot', path=path, window=current['window'])
-        key('delete')
-        confirmation = wait_until(lambda: state()['pendingDelete'] == items[0]['id'], timeout=5, step=.05)
-        require('library_' + section + '_delete_confirms', confirmation and os.path.exists(os.path.join(directory, items[0]['name']))
-                and len(index_rows()) == 7, state=state(), png=path)
-        alert = app.call('alert', window='library')
-        require('library_' + section + '_delete_specific_dialog', 'Delete Capture' in alert['buttons'], alert=alert)
-        if os.environ.get('OPEN_LIBRARY_DIALOG_EARLY_FAILURE') == '1':
-            raise AssertionError('deliberate failure with capture confirmation open')
-        app.call('alert', window='library', button='Cancel')
-        require('library_' + section + '_delete_cancel', wait_until(lambda: not state()['pendingDelete'], timeout=5)
-                and len(index_rows()) == 7, state=state())
-        # Exercise the actual destructive button once, then restore the fixture
-        # for the second section without changing its independent selection.
-        key('delete'); app.call('alert', window='library', button='Delete Capture')
-        deleted = wait_until(lambda: not os.path.exists(os.path.join(directory, items[0]['name'])), timeout=5, step=.05)
-        require('library_' + section + '_delete_file_and_index', deleted and len(index_rows()) == 6 and not state()['selected'], state=state())
-        with open(os.path.join(directory, rows[0]['fileName']), 'wb') as stream: stream.write(png)
-        with open(index, 'w') as stream: json.dump(rows, stream)
-        app.call('library-close')
-    # Browser shortcuts must keep their existing owners in this new focus context.
-    current = open_section('captures'); state(focus='sidebar')
+    def panel(): return app.call('library')
+    def media_rows(): return [r for r in panel().get('rows', []) if r.get('kind') == 'capture']
+    capture_ids = [r['id'] for r in rows]
+    current = state(focus='sidebar', recordFileActions=True)
+    tab_path = []
     for _ in range(16):
-        key('tab')
-        if state()['gridFocused']: break
+        tab_path.append(key('tab'))
+        current = state()
+        if current['gridFocused']: break
+    # Focus alone selects nothing; Down selects the first row (LibraryTableView.keyDown).
+    if not current['selected']: key('down'); current = state()
+    require('library_media_tab_focus', current['gridFocused'] and current['selected'] == [capture_ids[0]], state=current, tabPath=tab_path)
+    listed = media_rows()
+    require('library_media_rows_ax', [r['id'] for r in listed] == capture_ids
+            and all(r['title'] == 'Capture of example.com' and r['subtitle'].startswith('Capture · example.com · ') for r in listed)
+            and any('Capture of example.com' in t for t in current['text']), rows=listed)
+    # Selection is drawn: the first two rows' pixels swap when Down moves the selection.
+    window_width = app.call('window-state')['frame'][2]
+    panel_frame = panel()['panelFrame']
+    first_png = os.path.join(evidence, 'media-selection-first.png')
+    next_png = os.path.join(evidence, 'media-selection-next.png')
+    app.call('snapshot', path=first_png, window=current['window'])
+    key('down'); down = state()
+    app.call('snapshot', path=next_png, window=current['window'])
+    width, _, first_pixel = read_image(first_png)
+    _, _, next_pixel = read_image(next_png)
+    scale = width / window_width
+    points = [(panel_frame[0] + r['frame'][0] + 6, panel_frame[1] + r['frame'][1] + r['frame'][3] / 2) for r in listed[:2]]
+    before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
+    after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
+    distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
+    require('library_media_selection_pixels', distance(before_pixels[0], before_pixels[1]) >= 5
+            and distance(before_pixels[0], after_pixels[1]) <= 3 and distance(before_pixels[1], after_pixels[0]) <= 3,
+            before=before_pixels, after=after_pixels, points=points, scale=scale, firstPNG=first_png, nextPNG=next_png)
+    key('up'); up = state()
+    for _ in range(10): key('down')
+    bottom = state()
+    require('library_media_arrows', down['selected'] == [capture_ids[1]] and up['selected'] == [capture_ids[0]]
+            and bottom['selected'] == [capture_ids[-1]], down=down['selected'], up=up['selected'], bottom=bottom['selected'])
+    for _ in range(10): key('up')
+    top = state()
+    before_open = len(top['opened']); key('return'); opened = state()
+    require('library_media_return', top['selected'] == [capture_ids[0]] and len(opened['opened']) == before_open + 1
+            and opened['opened'][-1] == rows[0]['fileName'], state=opened)
+    # The list has no Cmd+C; the row's "Copy Image" action copies the file's image.
+    app.call('pasteboard-write', text='capture-copy-sentinel')
+    menu = app.call('library', action='row-menu', id=capture_ids[0]).get('items', [])
+    app.call('library', action='row-action', id=capture_ids[0], name='Copy Image'); copied = state()
+    require('library_media_copy', copied['pasteboardHasImage'] and any('Copy Image' in str(m) for m in menu), state=copied, menu=menu)
+    key('space'); idle = state()
+    require('library_media_space_unchanged', idle['selected'] == top['selected'] and idle['opened'] == opened['opened']
+            and idle['pasteboardHasImage'] and idle['visible'], state=idle)
+    # Cmd+Delete asks first ("Delete this capture?"); Cancel keeps the file; Delete removes the file and its index row.
+    path = os.path.join(evidence, 'media-keyboard-selection.png')
+    app.call('snapshot', path=path, window=current['window'])
+    first_file = os.path.join(directory, rows[0]['fileName'])
+    key('delete', ['cmd'])
+    alert = wait_until(lambda: (lambda a: a if a and 'Delete' in a.get('buttons', []) else None)(_safe_alert(app)), timeout=5, step=.05)
+    require('library_media_delete_confirms', alert and 'Delete this capture?' in json.dumps(alert) and os.path.exists(first_file)
+            and len(index_rows()) == 7, alert=alert, png=path)
+    if os.environ.get('OPEN_LIBRARY_DIALOG_EARLY_FAILURE') == '1':
+        raise AssertionError('deliberate failure with capture confirmation open')
+    app.call('alert', window='library', button='Cancel')
+    require('library_media_delete_cancel', wait_until(lambda: _safe_alert(app) is None, timeout=5, step=.05)
+            and os.path.exists(first_file) and len(index_rows()) == 7, state=state())
+    key('delete', ['cmd'])
+    wait_until(lambda: _safe_alert(app) is not None, timeout=5, step=.05)
+    app.call('alert', window='library', button='Delete')
+    deleted = wait_until(lambda: not os.path.exists(first_file), timeout=5, step=.05)
+    gone = wait_until(lambda: (lambda s: s if capture_ids[0] not in [i['id'] for i in s['items']] else None)(state()), timeout=5, step=.05) or state()
+    require('library_media_delete_file_and_index', deleted and len(index_rows()) == 6 and capture_ids[0] not in gone['selected']
+            and capture_ids[0] not in [r['id'] for r in media_rows()], state=gone)
+    with open(first_file, 'wb') as stream: stream.write(png)
+    with open(index, 'w') as stream: json.dump(rows, stream)
+    app.call('library-close')
+
+    # Browser shortcuts keep their owners while the list has focus: Escape closes the Library (native panel:
+    # no search or filter to clear), Cmd+W closes the Library and keeps every tab (#350).
+    def focus_list():
+        open_section('media'); state(focus='sidebar')
+        for _ in range(16):
+            key('tab')
+            if state()['gridFocused']: return True
+        return False
+    focused = focus_list()
+    key('escape')
+    escaped = wait_until(lambda: (lambda s: s if not s.get('visible', True) or 'error' in s else None)(state()), timeout=5, step=.05)
+    require('library_list_escape_closes', focused and bool(escaped), state=state())
     tabs_before = sorted(t['id'] for t in app.call('tabs'))
-    key('escape'); escaped = state()
-    require('library_grid_escape', escaped['visible'] and escaped['gridFocused'] and not escaped['pendingDelete'], state=escaped)
-    shortcuts = []
-    for letter in ('l', 't'):
-        shortcuts.append(key(letter, ['cmd']))
-        app.call('key', key='escape', route='app')
-        open_section('captures')
+    focused = focus_list()
     key('w', ['cmd'])
-    require('library_grid_browser_shortcut_ownership', not state()['visible']
-            and sorted(t['id'] for t in app.call('tabs')) == tabs_before
-            and not app.call('commandbar-state')['presented'], keys=shortcuts, state=state())
+    closed = wait_until(lambda: (lambda s: s if not s.get('visible', True) or 'error' in s else None)(state()), timeout=5, step=.05)
+    require('library_list_cmd_w_closes_library', focused and bool(closed) and sorted(t['id'] for t in app.call('tabs')) == tabs_before
+            and not app.call('commandbar-state')['presented'], state=state())
+
+
+def _safe_alert(app):
+    """The alert sheet on the Library's window, or None."""
+    try:
+        alert = app.call('alert', window='library')
+        return alert if alert and alert.get('buttons') else None
+    except RuntimeError:
+        return None
 
 
 def space_manager_checks(results, tmp, config, style):
