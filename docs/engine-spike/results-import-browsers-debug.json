@@ -7,10 +7,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          94285,
-          94295,
-          94296,
-          94297
+          89578,
+          89598,
+          89599,
+          89601
         ],
         "remaining_processes": [],
         "reply": true,
@@ -25,10 +25,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          94377,
-          94382,
-          94383,
-          94386
+          89851,
+          89854,
+          89855,
+          89856
         ],
         "remaining_processes": [],
         "reply": true,
@@ -42,15 +42,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
-    "distributionSHA256": "cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b",
-    "distributionUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
-    "embeddedCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
-    "embeddedSHA256": "4aa5dc9f266a0f3f1a0feae49dc2455fce47258a3fce66bb6d5ea94b9fbaddc7",
-    "embeddedUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+    "distributionCodeSHA256": "5649b0681cb164d0e7851549d618444338066b795ab11f5b2572bae0bd0bcc0e",
+    "distributionSHA256": "a77b13e17bb44acb53c6971012b596fd12448b0934a32b346a1065fe8ecb8ce6",
+    "distributionUUID": "4C4C44AA-5555-3144-A10E-754E49025308",
+    "embeddedCodeSHA256": "5649b0681cb164d0e7851549d618444338066b795ab11f5b2572bae0bd0bcc0e",
+    "embeddedSHA256": "44e598f6929da24d75ce0b8b3240a2d19d09852e7d196238a9f6f7f9ec1e1378",
+    "embeddedUUID": "4C4C44AA-5555-3144-A10E-754E49025308",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794470169"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794478460"
   },
   "import-browsers": {
     "bookmarks_folder_tree": {
@@ -62,9 +62,9 @@
         "Imported from Chrome/Other bookmarks"
       ],
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true,
       "outcome": {
@@ -84,9 +84,9 @@
     "bookmarks_size_limit": {
       "atLimit": "Found: 1",
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true,
       "overLimit": "Could not be read"
@@ -101,9 +101,9 @@
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true,
       "title": "Import from Chrome"
@@ -113,27 +113,27 @@
         "aaaabbbbccccddddeeeeffffgggghhhh"
       ],
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true
     },
     "history_imported": {
       "history": 5,
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true,
       "visits": 5
     },
     "reimport_idempotent": {
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.42529296875,
+        9.5947265625,
+        8.90234375
       ],
       "nodes": 8,
       "ok": true,
@@ -154,9 +154,9 @@
         "duckduckgo"
       ],
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true
     },
@@ -168,9 +168,9 @@
         "imported-ex"
       ],
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.42529296875,
+        9.5947265625,
+        8.90234375
       ],
       "ok": true,
       "outcome": {
@@ -198,9 +198,9 @@
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true
     },
@@ -213,9 +213,9 @@
         "unmapped": 1
       },
       "load": [
-        7.25439453125,
-        7.271484375,
-        7.73046875
+        13.42529296875,
+        9.5947265625,
+        8.90234375
       ],
       "ok": true,
       "restricted": {
@@ -236,9 +236,9 @@
     "sources_detected": {
       "canContinue": false,
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true,
       "selected": "",
@@ -253,9 +253,9 @@
     "sources_hidden_without_profile": {
       "firefox": "No data",
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.810546875,
+        9.60498046875,
+        8.90185546875
       ],
       "ok": true,
       "sources": [
@@ -275,9 +275,9 @@
     },
     "undo": {
       "load": [
-        7.1025390625,
-        7.24267578125,
-        7.72314453125
+        13.42529296875,
+        9.5947265625,
+        8.90234375
       ],
       "nodes": 0,
       "ok": true,
@@ -288,15 +288,15 @@
   "interrupted_attempts": [],
   "lane": "all",
   "load": [
-    7.373046875,
-    7.2978515625,
-    7.7451171875
+    14.142578125,
+    9.5986328125,
+    8.8955078125
   ],
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "213581b250964fd5bdb6fb2aad0b1a4b39018ac6"
+    "head": "b785f72ceacb593dfc66a4bd4787e7adee22c922"
   },
-  "started": "2026-11-12 02:59:26",
+  "started": "2026-11-12 03:36:11",
   "style": "chrome"
 }
