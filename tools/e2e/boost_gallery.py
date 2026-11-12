@@ -294,7 +294,7 @@ def run(factory, results, tmp, env):
                 assert wait(lambda: not font(tab_b).startswith('Avenir'), timeout=5)
                 delete_card(first); app.call('alert', window='library', button='Delete')
                 assert wait(lambda: not items(), timeout=5)
-                assert 'Nothing Boosted Yet!' in ' '.join(c['label'] + c['value'] for c in ui()['controls'])
+                assert wait(lambda: 'No Boosts yet' in ' '.join(c['label'] + c['value'] for c in ui()['controls']), timeout=5), ui()
                 ui('layout', name='List'); assert state()['boostsPresentation'] == 'list'
                 return {'cancelInert': True, 'confirmedDeleteLive': True, 'empty': True, 'existingUndo': 'none'}
             row('BG3_delete_empty', delete)

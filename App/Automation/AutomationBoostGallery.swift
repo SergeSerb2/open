@@ -127,9 +127,11 @@ extension AutomationController {
         try press(target)
       }
     case "search":
-      guard let text = args["text"] as? String,
-        let field = nodes.compactMap({ $0 as? NSTextField }).first(where: { $0.placeholderString?.hasPrefix("Search Boosts") == true })
-      else { throw Failure(message: "Boost search field not found") }
+      let fields = nodes.compactMap { $0 as? NSTextField }.filter {
+        identifier($0) == "library.search" || $0.placeholderString?.hasPrefix("Search Boosts") == true
+      }
+      guard let text = args["text"] as? String, fields.count == 1, let field = fields.first
+      else { throw Failure(message: "expected one Boost search field; found \(fields.count)") }
       owner.makeFirstResponder(field); field.selectText(nil)
       _ = try await sendKey(["window": owner.windowNumber, "text": text.isEmpty ? "\u{7f}" : text, "route": "app"], try? window)
     case "press":
