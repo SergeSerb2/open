@@ -43,6 +43,11 @@ struct SidebarMenus {
     /// "Move to ▸": every other Space, a separator, "New Space…".
     private func moveTo(_ nodeID: ItemID) -> NSMenuItem {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
+        if context.isWindowOnly {
+            // A Blank Window's tab moves into one of the browser's Spaces (the App handles the intent).
+            parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, .moveToSpace(nodeID: nodeID, space: $0.id)) })
+            return parent
+        }
         let current = context.model.parent(of: nodeID).flatMap(spaceID(of:))
         // One row per Space in dock order, the current one checked (capture session 8 item 2).
         var items: [NSMenuItem] = context.model.spaces.map { space in

@@ -1248,8 +1248,19 @@ purpose.
    **New Little Arc Window** (other agent), **Close Window**,
    **New Profile** (creates a Profile, §5). "Creates a new window, blank
    window, or incognito window." is the combined shortcut description.
-   Difference New Window vs. Blank Window: **Guess** — New Window opens with
-   the command bar focused (§3.5); Blank Window opens empty without it.
+   Difference New Window vs. Blank Window (capture C10, 2026-11-12, Arc 1.172.2,
+   replaces the earlier guess): **New Window** is a normal window on the current
+   Space, with Favorites and Space dots. **Blank Window** is its own window kind
+   (AX id prefix `standaloneBrowserWindow-`, normal windows `bigBrowserWindow-`):
+   the same size as the source window, offset +29 / +29 pt; title "Space 1";
+   sidebar header "This Window" over this window's tabs only (newest first), no
+   Favorites grid, no Space dots, bottom bar with Library and "+" only; default
+   theme colours. Both open with the command bar open. In a Blank Window the row
+   menu is the ordinary Today-tab menu (with Move to ▸), ⌘W on the last tab
+   closes the window with no prompt, and it was not restored at relaunch (with
+   "restore windows" off). ⇧⌘T reopens a closed tab in that window and does not
+   bring a closed Blank Window back. Not captured: tab drag between windows, the
+   Archive entry of a closed tab.
    Verify.
 3. **New Incognito Window** opens a window on the hidden incognito context
    (§5.2 rule 6): distinct sidebar header for its Today list, no history/

@@ -596,3 +596,12 @@ change a user's live preferences. Today the real-App suites (for example
 in the shared `io.github.sergeserb2.open` domain and restore them in `finally`.
 A user's running Open session can see those values while a suite runs.
 - **Favorites empty-state card in older e2e suites (A3, 2026-11-12).** The e2e harness launches with `--favorites-empty-state=hidden` (automation builds only), so suites and visual references written before the card keep their sidebar geometry; only `favorites-empty` runs with the card shown. At the next reference refresh, move the suites to the product default (card shown on a fresh Profile) and drop the launch option.
+
+## Library Downloads shows "No matches" in the corrupt-index flow (IMC, 2026-11-12)
+
+In `sidebar-completion`, the Downloads section of the corrupt capture-index
+flow shows "No matches" instead of "No downloads yet". "No matches" means
+that a search query or a Profile filter is active (`LibraryPanelView.updateEmptyCopy`).
+Why one is active at that step is not known. It may be a leftover from an
+earlier step of the suite. The row `library_corrupt_index_downloads` accepts
+both titles until this is settled. Owner: D2 (lead routes).
