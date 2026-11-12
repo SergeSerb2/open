@@ -97,7 +97,7 @@ func runImportSafari(args: [String]) async throws {
         } catch { print("passwords: error \(error)"); ok = false }
     }
     let destination = URL(fileURLWithPath: dbPath)
-    let dataRoot = try await OpenDataRoot.prepare(storeFileURL: destination)
+    let dataRoot = try OpenDataRoot.prepare(storeFileURL: destination)
     defer { withExtendedLifetime(dataRoot) {} }
 
     if let path = values["--passwords"] {

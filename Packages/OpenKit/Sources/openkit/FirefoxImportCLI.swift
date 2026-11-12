@@ -85,7 +85,7 @@ func runImportFirefox(args: [String]) async throws {
         primary = text.trimmingCharacters(in: .newlines)
     }
     let destination = URL(fileURLWithPath: dbPath)
-    let dataRoot = try await OpenDataRoot.prepare(storeFileURL: destination)
+    let dataRoot = try OpenDataRoot.prepare(storeFileURL: destination)
     defer { withExtendedLifetime(dataRoot) {} }
     var ok = true
     func check(_ label: String, _ actual: Int, _ expected: Int?) {
