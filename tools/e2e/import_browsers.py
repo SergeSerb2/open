@@ -8,6 +8,7 @@ unselectable sources (no data / not yet supported).
 """
 import json
 import os
+import shutil
 from pathlib import Path
 import sqlite3
 import time
@@ -179,7 +180,7 @@ def visit_count(app):
 def run(factory, results, tmp, h):
     library = Path(tmp)/'import-browsers'/'Library'
     if library.exists():
-        import shutil; shutil.rmtree(library)
+        shutil.rmtree(library)
     fixture(library)
     def row(name, ok, **detail):
         results[name] = dict(ok=bool(ok), **detail)
@@ -320,3 +321,45 @@ def run(factory, results, tmp, h):
         and cr.get('unmappedProfiles') == 1 and cr['total']['logins']['added'] == 0,
         restricted=dict(profiles=sorted(rr.get('profiles', {})), unmapped=rr.get('unmappedProfiles'), logins=rr.get('total', {}).get('logins')),
         control=dict(profiles=sorted(cr.get('profiles', {})), unmapped=cr.get('unmappedProfiles')))
+
+    # Extra Arc data types (ArcImportProviders, for EZ's Easels): the automation-only fixture provider runs through
+    # the real Import from Arc wizard, runner, report and the single Undo/Redo.
+    app.quit()
+    import runpy as _runpy
+    arc = Path(tmp)/'import-browsers'/'ArcSource'
+    if arc.exists(): shutil.rmtree(arc)
+    _runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['fixture'](arc, h)
+    picked = Path(tmp)/'import-browsers'/'ProviderPick'
+    if picked.exists(): shutil.rmtree(picked)
+    picked.mkdir()
+    for name in ('a', 'b', 'c'): (picked/name).write_text('x')
+    app = factory(urls=(), fresh=True, extra_args=['--host-resolver-rules=MAP * ~NOTFOUND'],
+                  extra_env={'OPEN_AUTOMATION_FIXTURE_IMPORT_PROVIDER': '1'})
+    marker = Path(app.user_data)/'ImportProviderFixture'
+    def provider_import():
+        app.call('first-run', action='settings-import', directory=str(arc))
+        app.call('first-run', action='settings-provider', id='fixture', file=str(picked))
+        chosen = app.call('first-run', action='settings-inspect')
+        app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+        assert h.wait_until(lambda: state().get('settingsStep') == 'Report' and not state().get('settingsBusy'), timeout=120, step=.05), state()
+        report = state(); app.call('first-run', action='settings-done')
+        return chosen, report
+    chosen, first = provider_import()
+    first_files = sorted(p.name for p in marker.glob('*')) if marker.exists() else []
+    provider = (chosen.get('settingsProviders') or [{}])[0]
+    reported = (first.get('settingsProviders') or [{}])[0]
+    _, again = provider_import()
+    repeat = again.get('settingsOutcome', {})
+    app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+    for _ in range(2):
+        app.call('sidebar-key', key='z', modifiers=['command'])
+        assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    undone = sorted(p.name for p in marker.glob('*')) if marker.exists() else []
+    app.call('sidebar-key', key='z', modifiers=['command', 'shift'])
+    assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    redone = sorted(p.name for p in marker.glob('*')) if marker.exists() else []
+    row('arc_provider_import', provider.get('count') == 3 and provider.get('selected') is True
+        and first.get('settingsOutcome', {}).get('Example items') == 3 and reported.get('report') == '3'
+        and first_files == ['a', 'b', 'c'] and repeat.get('Example items') == 0 and undone == [] and redone == ['a', 'b', 'c'],
+        chosen=provider, report=reported.get('report'), files=first_files, repeat=repeat.get('Example items'),
+        undone=undone, redone=redone)

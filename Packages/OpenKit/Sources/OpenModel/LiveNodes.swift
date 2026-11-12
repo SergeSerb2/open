@@ -47,6 +47,9 @@ public final class Tab {
     public var isMuted: Bool
     public var openerID: ItemID?
     public var isUnread: Bool
+    /// The pull request a Live Folder row stands for (LF L2); nil for normal tabs. A refresh
+    /// matches, adds and removes only rows that carry it, never a user's own tab.
+    public var liveItemURL: URL?
 
     public let live = TabLiveState()
 
@@ -99,6 +102,8 @@ public final class Folder {
     public var customIcon: String?
     public var iconOverride: SpaceIcon?
     public var children: [SidebarNode]
+    /// Set on a Live Folder (LF L2, live-data §2.7); nil for every normal folder.
+    public var live: LiveFolderConfig?
 
     public init(id: ItemID = ItemID(), title: String = "Folder", isExpanded: Bool = true, customIcon: String? = nil, iconOverride: SpaceIcon? = nil, children: [SidebarNode] = [], peekedChildID: ItemID? = nil) {
         self.id = id; self.title = title; self.isExpanded = isExpanded

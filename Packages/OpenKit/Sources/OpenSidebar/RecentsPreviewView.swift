@@ -124,7 +124,7 @@ public final class RecentsPreviewView: NSView, NSTableViewDataSource, NSTableVie
 
     public func numberOfRows(in tableView: NSTableView) -> Int { pages.count }
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let cell = tableView.makeView(withIdentifier: .init("recents-page"), owner: self) as? FolderPreviewCell ?? FolderPreviewCell()
+        let cell = tableView.makeView(withIdentifier: .init("recents-page"), owner: self) as? FolderPreviewCell ?? FolderPreviewCell(titleWeight: .regular)
         cell.identifier = .init("recents-page"); cell.favicon.context = context; cell.favicon.tab = tab
         let page = pages[row]
         cell.title.text = { page.title }

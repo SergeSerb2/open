@@ -319,6 +319,9 @@ public enum CommandRegistry {
     ]
 
     static let helpMenu: [CommandDefinition] = [
+        // Arc Help ▸ Export Arc Notes (NIB `exportArcNotes:`; aliases from the NIB search titles).
+        CommandDefinition(id: "export-notes", title: "Export Notes…", menuPath: ["Help"],
+                          aliases: ["Export Notes", "Backup Notes", "Download Notes"]),
         CommandDefinition(id: "help-center", title: "Open Help Center", menuPath: ["Help"], aliases: ["Visit Help Center"]),
         CommandDefinition(id: "keyboard-shortcuts-edu", title: "Essential Keyboard Shortcuts", menuPath: ["Help"],
                           aliases: ["Keyboard Shortcuts", "Keyboard", "Shortcuts"]),
@@ -444,7 +447,6 @@ public enum CommandRegistry {
                           defaultShortcuts: [KeyboardShortcut(key: "g", modifiers: [.command, .option])], isReserved: true),
         CommandDefinition(id: "reserved-send-to-dia", title: "Send to Dia (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-view-easels-notes", title: "View Easels & Notes (reserved)", isReserved: true),
-        CommandDefinition(id: "reserved-export-arc-notes", title: "Export Notes (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-share-arc", title: "Share App (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-sign-out", title: "Sign Out (reserved)", isReserved: true),
     ]

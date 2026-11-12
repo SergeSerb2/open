@@ -810,7 +810,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
-           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .newEasel, .exportEasel, .deleteEasel: return false
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .newEasel, .exportEasel, .deleteEasel: return false
       case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
@@ -903,6 +903,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
+    case .toggleLibraryMediaSource(let id): return app.settingsPresenter.toggleLibraryMediaSource(id)
     case .showLibrary:
       app.settingsPresenter.toggleLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
     // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
@@ -923,6 +924,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
+    case .toggleLiveFolder(let id):
+      return app.liveFolders.toggle(spaceID: id)
     case .shareSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

@@ -54,12 +54,13 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('window-frame',frame=[min(40,sx+sw-1280),min(50,sy+sh-800),1280,800],unconstrained=True)
             app.call('window-focus',id=owner,activate=True)
             state(action='open',section='media')
-            check('media_truthful_empty',wait(lambda:state().get('emptyVisible')) and state()['emptyState']['title']=='No media yet' and not state()['emptyState']['buttonVisible'],state=state()['emptyState'])
+            # Folder sources exist (PB1): before Choose Folders, Media shows the first-use card with a live button.
+            check('media_truthful_empty',wait(lambda:state().get('emptyVisible')) and state()['emptyState']['title']=='Show your media here' and state()['emptyState']['buttonVisible'] and state()['emptyState']['buttonEnabled'],state=state()['emptyState'])
             index_file=Path(data)/'State/captures.json';index_file.parent.mkdir(exist_ok=True)
             index_file.write_text('broken capture index');state(action='select',section='media')
             check('media_corrupt_index_error',wait(lambda:state()['emptyState']['title']=='Could not load media'))
             index_file.unlink();state(action='select',section='media')
-            check('media_missing_index_recovers',wait(lambda:state()['emptyState']['title']=='No media yet'))
+            check('media_missing_index_recovers',wait(lambda:state()['emptyState']['title']=='Show your media here'))
             # Reopen cancels the old release; the next close releases the actual view.
             state(action='release-delay',seconds=.6);generation=state()['panelGeneration'];state(action='close');time.sleep(.3)
             state(action='open',section='media');time.sleep(.4)
