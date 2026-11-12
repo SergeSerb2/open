@@ -3,12 +3,13 @@ import SQLite3
 
 extension HistoryStore {
     /// Library's empty query is chronological; command-bar frecency is unchanged.
-    public func recent(limit: Int = 100) -> [HistoryMatch] {
+    public func recent(limit: Int = 100, offset: Int = 0) -> [HistoryMatch] {
         open()
         guard let db else { return [] }
-        let statement = db.prepare("SELECT url,title,visit_count,typed_count,last_visit FROM urls ORDER BY last_visit DESC, id DESC LIMIT ?")
+        let statement = db.prepare("SELECT url,title,visit_count,typed_count,last_visit FROM urls ORDER BY last_visit DESC, id DESC LIMIT ? OFFSET ?")
         defer { sqlite3_finalize(statement) }
         db.bindInt(statement, 1, Int64(max(0, min(limit, 1_000))))
+        db.bindInt(statement, 2, Int64(max(0, offset)))
         var rows: [HistoryMatch] = []
         while sqlite3_step(statement) == SQLITE_ROW {
             guard let text = db.columnText(statement, 0), let url = URL(string: text) else { continue }

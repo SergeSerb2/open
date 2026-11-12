@@ -117,6 +117,15 @@ final class AppImportRunner: ProfileDataOwner {
       lastOutcome = outcome; return outcome
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
+    if case .browser(let source, let profile) = plan.source {
+      guard !firstRun else { return result("First run imports from Arc only.") }
+      let browser = await importBrowser(source: source, profile: profile, plan: plan, undo: undo, wizard: wizard,
+                                        progress: { progress($0, $1, landed: $2) })
+      counts = browser.counts; failures = browser.failures
+      extensions = browser.extensions; extensionProfileCount = 1
+      secretsReportLines = browser.secretsReportLines
+      return result(browser.errorText)
+    }
     var imported: ArcImportResult
     do {
       // File decoding is already a Sendable seam in OpenImport. Build the live
@@ -376,6 +385,18 @@ final class AppImportRunner: ProfileDataOwner {
     #endif
     app.importInProgress = false
     if plan.directory != ArcImporter().arcDirectory { UserDefaults.standard.set(plan.directory.path, forKey: "open.import.lastArcDir") }
+    // Extra Arc data types from other modules (ArcImportProviders; EZ: Easels). Settings only.
+    if !firstRun, let profileID = app.model.defaultProfile?.id {
+      for provider in ArcImportProviders.all where plan.providers.contains(provider.id) {
+        guard !undo.cancelled else { break }
+        progress("Importing your \(provider.title.lowercased())…")
+        let done = await provider.run(arcDirectory: plan.directory, file: plan.providerFiles[provider.id], profileID: profileID)
+        counts[provider.title, default: 0] += done.imported
+        counts["Duplicates", default: 0] += done.duplicates
+        if let failure = done.failure { failures[provider.title] = failure }
+        undo.append(provider: done.undo, redo: done.redo)
+      }
+    }
     #if OPEN_AUTOMATION
     watchdog.beginPhase("writeHistory")
     #endif
@@ -467,6 +488,12 @@ final class AppImportRunner: ProfileDataOwner {
       return result("Your Spaces and tabs are in. \(counts["History failed", default: 0].formatted()) history visits could not be read. You can import history later from Settings.")
     }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
+  }
+
+  func historyProgress(_ count: Int, estimate: Int, wizard: ImportWizardViewModel) {
+    historyInProgress = true
+    historyProcessed += count
+    wizard.progress = estimate > 0 ? min(1, Double(historyProcessed) / Double(estimate)) : 0
   }
 
   /// Source Profiles are DTOs. Live Profiles use the same allocator and

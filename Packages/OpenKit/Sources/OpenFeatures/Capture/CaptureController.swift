@@ -7,7 +7,7 @@ import OpenWeb
 @MainActor
 public protocol CaptureLibrary: AnyObject {
     /// Writes the PNG and appends its index row; returns the row id.
-    func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String) async throws -> UUID
+    func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String, title: String) async throws -> UUID
     /// Removes the file and its row in one step.
     func delete(id: UUID) throws
     /// Library ▸ Captures.
@@ -63,6 +63,8 @@ public final class CaptureController {
         public var sourceHost: String
         public var title: String
         public var createdAt: Date
+        /// The captured page's address (nil for a page without one).
+        public var sourceURL: URL? = nil
     }
 
     public static let dragToCaptureKey = "open.capture.dragToCaptureEnabled"
@@ -85,6 +87,8 @@ public final class CaptureController {
     public var library: (any CaptureLibrary)?
     public var toasts = CaptureToastHooks()
     public var playSound: () -> Void = { SoundEffects.shared.play(.capture) }
+    /// Capture → Easel: the App shows its Easel menu at the button. Nil hides the action.
+    public var addToEasel: ((Result, NSView) -> Void)?
     /// After every finished, failed, or cancelled flow (automation waits on this).
     public var onChange: (() -> Void)?
 
@@ -189,7 +193,7 @@ public final class CaptureController {
         phase = .capturing
         let token = generation, content = target.content
         let viewSize = target.view.bounds.size
-        let host = target.url?.host ?? target.url?.scheme ?? "", title = target.title
+        let host = target.url?.host ?? target.url?.scheme ?? "", title = target.title, sourceURL = target.url
         let background = CaptureComposer.PortraitBackground(defaultsValue: defaults.string(forKey: Self.portraitBackgroundKey))
         let theme = style(), library = target.isPrivate ? nil : library
         if kind == .fullPage { dismissProgress = toasts.progress() }
@@ -206,13 +210,14 @@ public final class CaptureController {
                 let output = try await CaptureComposer.render(.init(kind: kind, png: png, selection: selection, viewSize: viewSize,
                                                                     portraitBackground: background, themeStyle: theme))
                 guard self.generation == token else { return }
-                let savedID = try await library?.save(png: output.png, kind: kind, sourceHost: host)
+                let savedID = try await library?.save(png: output.png, kind: kind, sourceHost: host, title: String(title.prefix(4096)))
                 guard self.generation == token else {
                     // The window or the flow ended while the file was written: keep the Library row.
                     return
                 }
                 self.finish(Result(kind: kind, png: output.png, pixelWidth: output.pixelWidth, pixelHeight: output.pixelHeight,
-                                   truncated: truncated, savedID: savedID, sourceHost: host, title: title, createdAt: Date()),
+                                   truncated: truncated, savedID: savedID, sourceHost: host, title: title, createdAt: Date(),
+                                   sourceURL: sourceURL),
                             thumbnail: output.thumbnailPNG)
             } catch {
                 guard let self, self.generation == token else { return }
@@ -255,7 +260,8 @@ public final class CaptureController {
         toasts.dismissAll()
         let note = result.truncated ? "Page cut at \(Self.grouped(CaptureMetrics.fullPageMaxDevicePixels)) px." : nil
         let view = CaptureResultView(image: thumbnail, imageSize: CGSize(width: result.pixelWidth, height: result.pixelHeight),
-                                     actions: CaptureResultView.actions(area: result.kind == .area, saved: result.savedID != nil),
+                                     actions: CaptureResultView.actions(area: result.kind == .area, saved: result.savedID != nil,
+                                                                        easel: addToEasel != nil),
                                      savedToLibrary: result.savedID != nil, note: note)
         view.onAction = { [weak self] action, sender in self?.perform(action, sender: sender) }
         view.onHover = { [weak self] hovered in self?.cardHover(hovered) }
@@ -331,6 +337,9 @@ public final class CaptureController {
             let url = result.savedID.flatMap { library?.fileURL(id: $0) } ?? temporaryFile(result)
             guard let url, let anchorView = sender ?? card else { return }
             NSSharingServicePicker(items: [url]).show(relativeTo: anchorView.bounds, of: anchorView, preferredEdge: .minY)
+        case .easel:
+            guard let anchorView = sender ?? card else { return }
+            addToEasel?(result, anchorView)
         case .library:
             if let id = result.savedID { library?.showInLibrary(id: id) }
             closeCard()

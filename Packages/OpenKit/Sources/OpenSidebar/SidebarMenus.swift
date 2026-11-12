@@ -1,4 +1,5 @@
 import AppKit
+import OpenLiveData
 import OpenModel
 
 /// A menu item that runs a closure.
@@ -116,6 +117,7 @@ struct SidebarMenus {
     /// Today (unpinned) tab: capture session 2, 08-folder-preview frame 0050.
     /// Archive Other Tabs remains a guessed Option alternate.
     func todayTab(_ tab: Tab) -> NSMenu {
+        if Self.isEasel(tab) { return easel(tab) }
         if context.isIncognito {
             return menu([item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
                 item("Open in Split View", .openInSplitView(tabID: tab.id)),
@@ -145,6 +147,7 @@ struct SidebarMenus {
 
     /// Pinned tab, at the top level or in a folder (F0116).
     func pinnedTab(_ tab: Tab) -> NSMenu {
+        if Self.isEasel(tab) { return easel(tab) }
         let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
         edit.submenu = menu([
             item("Replace Pinned URL with Current", enabled: tab.hasLeftPinnedURL, .replacePinnedURL(tabID: tab.id)),
@@ -169,10 +172,33 @@ struct SidebarMenus {
         ])
     }
 
+    static func isEasel(_ tab: Tab) -> Bool { tab.url.scheme?.lowercased() == "open" && tab.url.host()?.lowercased() == "easel" }
+
+    /// Easel row in Arc's order (C-measurements-s4 `e7-row-menu-ax`, LEAD 04:05): Copy Link · — ·
+    /// Change Icon… · Rename… · — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar ·
+    /// Delete Easel. Copy Link copies the Easel's own address (`open://easel/…`, opens it from
+    /// the command bar); Arc's per-Easel "save as a web page" row sits with it.
+    func easel(_ tab: Tab) -> NSMenu {
+        let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
+        return menu([
+            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+            item("Save as Web Page…", .exportEasel(tabID: tab.id)),
+            .separator(),
+            item("Change Icon…", .changeIcon(nodeID: tab.id)),
+            rename,
+            .separator(),
+            item("Add Split View", .addSplitView(tabID: tab.id)),
+            moveTo(tab.id),
+            .separator(),
+            item("Remove Easel from Sidebar", .close(nodeID: tab.id)),
+            item("Delete Easel", .deleteEasel(tabID: tab.id)),
+        ])
+    }
+
     /// Favorite tile. guess: not captured; built from the pinned-tab menu.
     func favorite(_ tab: Tab) -> NSMenu {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
-        return menu([
+        return menu(liveCalendarItems(tab) + [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             share(tab),
             .separator(),
@@ -181,6 +207,35 @@ struct SidebarMenus {
             .separator(),
             item("Remove from Favorites", .removeFavorite(tabID: tab.id)),
         ])
+    }
+
+    /// Live Calendar items of a calendar Favorite (LD §4: "Show Meeting Link" with "Copy Link" and "Dismiss",
+    /// `G:FUN_101d28c10`; the reminder times of `LiveCalendarInterval`). Placement first, then a separator:
+    /// GUESS — capture pending (F2 item 7). Arc picks the reminder time in the reminder card; Open also lists it here.
+    func liveCalendarItems(_ tab: Tab) -> [NSMenuItem] {
+        guard let actions = context.liveCalendar, CalendarProvider.match(url: tab.url) != nil else { return [] }
+        var items: [NSMenuItem] = []
+        if let state = context.liveCalendarTiles[tab.id] {
+            let show = NSMenuItem(title: "Show Meeting Link", action: nil, keyEquivalent: "")
+            let link = NSMenuItem(title: state.link.url.absoluteString, action: nil, keyEquivalent: "")
+            link.isEnabled = false
+            show.submenu = menu([
+                link, .separator(),
+                ClosureMenuItem("Copy Link") { actions.copyLink(state) },
+                ClosureMenuItem("Dismiss") { actions.dismiss(state) },
+            ])
+            items.append(show)
+        }
+        let remind = NSMenuItem(title: "Meeting Reminder", action: nil, keyEquivalent: "")
+        let current = actions.interval()
+        remind.submenu = menu(LiveCalendar.ReminderInterval.allCases.map { interval in
+            let item = ClosureMenuItem(interval.title) { actions.setInterval(interval) }
+            item.state = interval == current ? .on : .off
+            return item
+        })
+        items.append(remind)
+        items.append(.separator())
+        return items
     }
 
     /// Split row. Not captured; the items and their order follow Arc's split-row
@@ -276,6 +331,7 @@ struct SidebarMenus {
             profile,
             .separator(),
             item("New Folder", .newFolder(in: .spacePinned(space.id))),
+            liveFolders(space),
             .separator(),
             item("Share Space…", enabled: false, .shareSpace(space.id)),
             export,
@@ -286,10 +342,35 @@ struct SidebarMenus {
         ])
     }
 
+    /// "Live Folders ▸ GitHub" (live-data §2.2: G:FUN_102ed863c / FUN_102edaf50); GitHub is a
+    /// checkmark toggle. Incognito windows have no Live Folders.
+    private func liveFolders(_ space: Space) -> NSMenuItem {
+        let github = item("GitHub", enabled: context.incognitoTitle == nil, .toggleLiveFolder(space.id))
+        github.state = context.model.liveFolder(in: space.id) == nil ? .off : .on
+        let parent = NSMenuItem(title: "Live Folders", action: nil, keyEquivalent: "")
+        parent.submenu = menu([github])
+        return parent
+    }
+
     /// Bottom-bar plus button. guess: not captured.
     /// Right-click on the URL field (CC-36; order guess).
     func urlField() -> NSMenu {
         menu([item("Show as Toolbar", .setToolbarShown(true)), .separator(), item("Manage Extensions", .manageExtensions)])
+    }
+
+    /// Right click on the Library button (capture C-report-s3 Part D): a disabled
+    /// "Show media from:" header, then Documents · Desktop · Screenshots · Captures · Downloads.
+    func libraryMediaSources() -> NSMenu? {
+        let sources = context.libraryMediaSources
+        guard !sources.isEmpty else { return nil }
+        var items: [NSMenuItem] = [ClosureMenuItem("Show media from:", enabled: false) {}]
+        for source in sources {
+            let entry = item(source.title, .toggleLibraryMediaSource(source.id))
+            entry.state = source.enabled ? .on : .off
+            entry.identifier = NSUserInterfaceItemIdentifier("library-media-source-" + source.id)
+            items.append(entry)
+        }
+        return menu(items)
     }
 
     func plus() -> NSMenu {
@@ -306,6 +387,12 @@ struct SidebarMenus {
             item("New Tab", .newTab),
             item("New Split View", enabled: canSplit, .newSplitView),
             space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? .separator(),
+            {
+                // Arc's plus popover row "New Easel ⌃⇧E" (interaction-states.md S2 01).
+                let row = item("New Easel", enabled: !context.isIncognito, .newEasel)
+                row.keyEquivalent = "e"; row.keyEquivalentModifierMask = [.control, .shift]
+                return row
+            }(),
             .separator(),
             item("New Space…", .newSpace),
         ])

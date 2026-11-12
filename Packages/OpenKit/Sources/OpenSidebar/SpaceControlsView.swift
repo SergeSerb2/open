@@ -2,9 +2,12 @@ import AppKit
 import OpenDesign
 import OpenModel
 
-/// Compact header for a Space Manager column; all geometry is plan §3.2 guess.
+/// Shared Space card controls; the Library layout follows D1 card geometry.
 @MainActor
 public final class SpaceControlsView: NSView {
+    public var libraryLayout = false { didSet { needsLayout = true } }
+    private let edit = SpaceCardButton(pen:true)
+    private let libraryMore = SpaceCardButton(pen:false)
     let context: SidebarContext
     let space: Space
     public let grabber: NSView
@@ -43,7 +46,14 @@ public final class SpaceControlsView: NSView {
             guard let self else {return nil}
             return SidebarMenus(context:self.context,beginRename:{_ in}).profile(self.space)
         }
-        for view in [grip, icon, title, profile, more, profileIndicator] { addSubview(view) }
+        edit.isBordered = false
+        edit.tint = { [unowned context,space] in context.style(for:space).titleColor(context.appearance(for:space)).nsColor.withAlphaComponent(0.55) }
+        libraryMore.tint = edit.tint
+        libraryMore.target = self; libraryMore.action = #selector(moreSpace)
+        libraryMore.setAccessibilityLabel("More options"); libraryMore.toolTip = "More options"
+        edit.target = self; edit.action = #selector(editSpace)
+        edit.setAccessibilityLabel("Edit Space"); edit.toolTip = "Edit Space"
+        for view in [grip, icon, title, profile, more, profileIndicator, edit, libraryMore] { addSubview(view) }
         setAccessibilityElement(true); setAccessibilityRole(.group)
         setAccessibilityLabel(context.title(of: space))
     }
@@ -56,6 +66,19 @@ public final class SpaceControlsView: NSView {
             _ = context.appearance(for: space)
             return context.model.profiles.count > 1
         }) { [weak self] in self?.needsLayout = true }
+        edit.isHidden = !libraryLayout; libraryMore.isHidden = !libraryLayout
+        grip.libraryLayout = libraryLayout; more.isHidden = libraryLayout
+        if libraryLayout {
+            icon.frame = CGRect(x:13,y:12,width:26,height:26)
+            title.frame = CGRect(x:44,y:12,width:max(0,bounds.width-86),height:26); title.baseline = 18
+            title.color = { [unowned context, space] in context.style(for:space).titleColor(context.appearance(for:space)).nsColor.withAlphaComponent(0.66) }
+            edit.frame = CGRect(x:bounds.width-39,y:9,width:30,height:30)
+            edit.contentTintColor = context.style(for:space).titleColor(context.appearance(for:space)).nsColor.withAlphaComponent(0.66)
+            grip.frame = CGRect(x:9,y:bounds.height-39,width:30,height:30)
+            libraryMore.frame = CGRect(x:bounds.width-39,y:bounds.height-39,width:30,height:30)
+            profile.isHidden = true; profileIndicator.isHidden = true
+            return
+        }
         grip.frame = CGRect(x: bounds.width - 58, y: 10, width: 24, height: 24)
         icon.frame = CGRect(x: 13, y: 9, width: 26, height: 26)
         more.frame = CGRect(x: bounds.width - 32, y: 10, width: 24, height: 24)
@@ -72,14 +95,37 @@ public final class SpaceControlsView: NSView {
         profile.frame = CGRect(x: 41, y: 23, width: min(max(0, bounds.width - 103), profile.textWidth + 6), height: 18)
         profile.layer?.backgroundColor = GrayScale.a(4).cgColor(context.appearance(for: space))
     }
+    @objc private func moreSpace() { makeMenu().popUp(positioning:nil,at:CGPoint(x:libraryMore.frame.minX,y:libraryMore.frame.maxY),in:self) }
+    @objc private func editSpace() {
+        let menu = SidebarMenus(context:context,beginRename:{ [weak self] _ in self?.beginRename() }).space(space)
+        menu.popUp(positioning:nil,at:CGPoint(x:edit.frame.minX,y:edit.frame.maxY),in:self)
+    }
+    public func beginRename() {
+        guard !context.isIncognito else { return }
+        context.suppressPreviews(.rename,true)
+        let field = RenameField(frame:title.frame.insetBy(dx:-2,dy:-1))
+        field.stringValue = context.title(of:space); field.font = title.font
+        field.isBordered = false; field.drawsBackground = false; field.focusRingType = .none
+        field.textColor = context.style(for:space).titleColor(context.appearance(for:space)).nsColor
+        let id = space.id
+        field.onEnd = { [weak self,weak field] value in
+            let owner = field?.window
+            field?.removeFromSuperview(); self?.title.isHidden = false
+            self?.context.suppressPreviews(.rename,false)
+            if let value { self?.context.send(.renameSpace(id,title:value)) }
+            if let outline = self?.context.manager?.outline(spaceID:id) { owner?.makeFirstResponder(outline) }
+        }
+        title.isHidden = true; addSubview(field); window?.makeFirstResponder(field); field.currentEditor()?.selectAll(nil)
+    }
     /// Laid-out header parts in this view's flipped coordinates (automation and spec checks).
     public var partFrames: [String: CGRect] {
-        ["grabber": grip.frame, "icon": icon.frame, "title": title.frame, "more": more.frame]
+        ["grabber": grip.frame, "icon": icon.frame, "title": title.frame, "more": libraryLayout ? libraryMore.frame : more.frame, "edit": edit.frame]
     }
     public var showsProfileChip: Bool { !profile.isHidden }
     public var displayedTitle: String { title.text() }
     public var displayedProfile: String? { showsProfileChip ? profile.text() : nil }
     public func makeMenu() -> NSMenu {
+        if libraryLayout { return SidebarMenus(context:context,beginRename:{ [weak self] _ in self?.beginRename() }).space(space) }
         let menu = NSMenu(); menu.autoenablesItems = false
         let turn = NSMenuItem(title: "Turn into Folder", action: nil, keyEquivalent: "")
         let destinations = NSMenu(); destinations.autoenablesItems = false
@@ -97,6 +143,7 @@ public final class SpaceControlsView: NSView {
 
 @MainActor
 private final class SpaceGrabber: NSView {
+    var libraryLayout = false
     var onGrab: (@MainActor (NSEvent) -> Void)?
     var tooltip: (@MainActor () -> Tooltip)?
     private var tracking: NSTrackingArea?
@@ -123,10 +170,42 @@ private final class SpaceGrabber: NSView {
     override func mouseDown(with event: NSEvent) { TooltipController.shared.cancel(for: self); onGrab?(event) }
     override func draw(_ dirtyRect: NSRect) {
         let color = tracked({ tint() }) { [weak self] in self?.needsDisplay = true }
+        if libraryLayout {
+            let path = NSBezierPath(); path.lineWidth = 1.4; path.lineCapStyle = .round; path.lineJoinStyle = .round
+            let offset = CGPoint(x:(bounds.width-16)/2,y:(bounds.height-16)/2)
+            for values in [[CGFloat(8),2,8,14],[2,8,14,8],[6,4,8,2,10,4],[6,12,8,14,10,12],[4,6,2,8,4,10],[12,6,14,8,12,10]] {
+                path.move(to:CGPoint(x:values[0]+offset.x,y:values[1]+offset.y))
+                for i in stride(from:2,to:values.count,by:2) { path.line(to:CGPoint(x:values[i]+offset.x,y:values[i+1]+offset.y)) }
+            }
+            color.withAlphaComponent(0.55).setStroke(); path.stroke(); return
+        }
         guard let image = NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular)) else { return }
         let size = image.size
         let rect = CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
         image.draw(in: rect)
         color.setFill(); rect.fill(using: .sourceAtop)
+    }
+}
+
+
+/// Original 16-point pen and dots from D1-design-mockup.html.
+@MainActor private final class SpaceCardButton: NSButton {
+    let pen: Bool
+    var tint: @MainActor () -> NSColor = { .labelColor }
+    init(pen:Bool) { self.pen = pen; super.init(frame:.zero); isBordered = false }
+    required init?(coder:NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func draw(_ dirtyRect:NSRect) {
+        let color = tint(); let x = (bounds.width-16)/2, y = (bounds.height-16)/2
+        if isHighlighted { color.withAlphaComponent(0.10).setFill(); NSBezierPath(roundedRect:bounds,xRadius:7,yRadius:7).fill() }
+        if pen {
+            let path = NSBezierPath(); path.lineWidth = 1.4; path.lineCapStyle = .round; path.lineJoinStyle = .round
+            let points: [CGPoint] = [.init(x:10.8,y:2.7),.init(x:13.3,y:5.2),.init(x:5.7,y:12.8),.init(x:2.5,y:13.5),.init(x:3.2,y:10.3)]
+            path.move(to:CGPoint(x:points[0].x+x,y:points[0].y+y))
+            for point in points.dropFirst() { path.line(to:CGPoint(x:point.x+x,y:point.y+y)) }; path.close(); color.setStroke(); path.stroke()
+        } else {
+            color.setFill(); for dx in [CGFloat(3.5),8,12.5] { NSBezierPath(ovalIn:CGRect(x:x+dx-0.9,y:y+7.1,width:1.8,height:1.8)).fill() }
+        }
     }
 }

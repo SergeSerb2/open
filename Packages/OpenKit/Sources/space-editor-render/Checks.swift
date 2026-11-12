@@ -178,12 +178,16 @@ enum Checks {
         var random = Random(), forced = true
         for _ in 0..<500 {
             let key = RGBAColor(red: random.next(), green: random.next(), blue: random.next())
-            forced = forced && SpaceThemeStyle(style: SpaceStyle(keyColor: key, appearance: .light), system: .dark).contentAppearance == .light
-                && SpaceThemeStyle(style: SpaceStyle(keyColor: key, appearance: .dark), system: .light).contentAppearance == .dark
+            // Arc 1.172.2: the sun / moon set the window scheme; polarity stays the §6.5 result.
+            let auto = SpaceThemeStyle(style: SpaceStyle(keyColor: key), system: .light)
+            let light = SpaceThemeStyle(style: SpaceStyle(keyColor: key, appearance: .light), system: .dark)
+            let dark = SpaceThemeStyle(style: SpaceStyle(keyColor: key, appearance: .dark), system: .light)
+            forced = forced && light.contentAppearance == auto.contentAppearance && dark.contentAppearance == auto.contentAppearance
+                && light.windowColorScheme == .light && dark.windowColorScheme == .dark && auto.windowColorScheme == .light
         }
         let samples: [(UInt32, ContentAppearance)] = [(0xFF8558, .light), (0x2F83E4, .light), (0xF8D558, .light), (0x926400, .dark)]
         let automatic = samples.allSatisfy { SpaceThemeStyle(style: SpaceStyle(keyColor: color($0.0).modelColor), system: .light).contentAppearance == $0.1 }
-        check(forced && automatic, "M4 500 forced keys and four Automatic samples")
+        check(forced && automatic, "M4 500 keys keep polarity in every mode, the mode sets the window scheme, four Automatic samples")
     }
 
     static func textures() {
@@ -240,6 +244,11 @@ enum Checks {
             let file = directory.appendingPathComponent("window-\(space).png")
             OffscreenRenderer.writePNG(image, to: file)
             let name = "window-\(space).png"
+            // `tools/verification/rerecord-display-baselines.py` keeps this exact render as the
+            // new reference when the lead approves a re-record (never in a gate run).
+            if let keep = ProcessInfo.processInfo.environment["OPEN_P1_RECORD_DIR"] {
+                try? FileManager.default.copyItem(at: file, to: URL(fileURLWithPath: keep).appendingPathComponent(name))
+            }
             let reference = try Data(contentsOf: RenderCLI.fixtureURL(baseline.directory + name))
             guard reference.count <= 16_777_216 else { throw CLIError(description: "oversized P1 PNG") }
             if let hashes = baseline.digests {

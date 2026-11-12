@@ -91,7 +91,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.general, "warn-before-quitting", "Warn before quitting", help: "Ask before quitting with downloads in progress.", key: "open.general.warnBeforeQuitting"),
             .init(.general, "automatic-updates", "Update Open automatically", help: "Keep Open up to date.", key: "open.general.automaticallyUpdate"),
             .init(.general, "check-updates", "Check for Updates"),
-            .init(.general, "import", "Import from Arc", help: "Bring your Spaces, tabs, bookmarks, and passwords into Open.", synonyms: "import from another browser"),
+            .init(.general, "import", "Import from another browser", help: "Bring your bookmarks, history, Spaces, and passwords from Arc, Chrome, and other browsers.", synonyms: "import from arc chrome brave edge vivaldi opera bookmarks history"),
             .init(.general, "export", "Export your Open data", help: "Export your snapshot and Archive index."),
             .init(.appearance, "website-appearance", "Website appearance", help: "Choose Light, Dark, or Match System for websites.", key: "open.web.colorScheme"),
             .init(.appearance, "toolbar", "Show the toolbar", help: "The address and page controls above each page. Applies to the focused browser window."),
@@ -108,6 +108,8 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.previews, "enabled", "Show Open Previews", key: "open.general.previewsEnabled"),
             .init(.previews, "folders", "Folders", help: "Preview folders on hover.", key: "open.general.previewsFolders"),
             .init(.previews, "pages", "Pinned tabs and Favorites", help: "Preview pages on hover.", key: "open.general.previewsPages"),
+            .init(.previews, "recents", "Recent pages on Linear, Notion, Figma, and Confluence", help: "Preview recent pages of these sites on hover.", key: "open.general.previewsRecents"),
+            .init(.previews, "calendar", "Upcoming meetings on Google, Outlook, and Notion Calendar", help: "Preview today's meetings and join calls on hover.", key: "open.general.previewsCalendar"),
             .init(.links, "little-open-hotkey", "Open Little Open in any app", key: "open.links.littleOpenHotkeyEnabled"),
             .init(.links, "option-command-click", "Open Little Open with Option-Command-click", key: "open.links.optionCommandClickLittleOpen"),
             .init(.links, "external-links", "Links from other apps open in Little Open", key: "open.links.externalInLittleOpen"),
@@ -125,6 +127,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.passwordsCards, "passwords", "Passwords"),
             .init(.passwordsCards, "cards", "Credit Cards"),
             .init(.browsingData, "clear", "Clear Browsing Data", help: "History, cookies, cache, and download history for this Profile."),
+            .init(.profiles, "new-documents", "New documents", help: "What New Note creates: a Note, or a Google Doc, Notion, Word, or Confluence page.", synonyms: "default document app note google doc notion word confluence"),
             .init(.profiles, "manage", "Your Profiles", help: "Create, rename, change an icon, assign Spaces, or delete an unused Profile."),
             .init(.profiles, "name", "Profile name"),
             .init(.profiles, "delete", "Delete Profile"),
@@ -202,6 +205,7 @@ extension SettingsViewModel {
         case "ad-blocking/lists": return adBlock.map { $0.isReady && Set($0.enabledIDs) != Set($0.store.catalog.defaultIDs) } ?? false
         case "ad-blocking/allowed-sites": return adBlock.map { !$0.domains.isEmpty } ?? false
         case "search/suggestions": return !profiles.suggestions
+        case "profiles/new-documents": return profiles.defaultDocumentApp != DocumentApp.note.id
         case "downloads/ask": return profiles.askWhereToSave
         case "downloads/location": return !["", "~/Downloads"].contains(profiles.downloadDirectory)
         case "appearance/toolbar": return appearanceToolbar

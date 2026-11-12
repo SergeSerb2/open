@@ -54,7 +54,9 @@ struct SettingsPreviewsSection: View {
         OpenSettingsGroup("On hover") {
             OpenPreferenceRow(root: root, id: "previews/enabled", title: "Show Open Previews", key: "open.general.previewsEnabled", help: "Take a quick look without leaving your current page.")
             OpenPreferenceRow(root: root, id: "previews/folders", title: "Folders", key: "open.general.previewsFolders", help: root.bool("open.general.previewsEnabled") ? "Preview the tabs in a folder." : "Turn on Open Previews to preview folders.").disabled(!root.bool("open.general.previewsEnabled"))
-            OpenPreferenceRow(root: root, id: "previews/pages", title: "Pinned tabs and Favorites", key: "open.general.previewsPages", help: root.bool("open.general.previewsEnabled") ? "Preview a page from the sidebar." : "Turn on Open Previews to preview pages.", last: true).disabled(!root.bool("open.general.previewsEnabled"))
+            OpenPreferenceRow(root: root, id: "previews/pages", title: "Pinned tabs and Favorites", key: "open.general.previewsPages", help: root.bool("open.general.previewsEnabled") ? "Preview a page from the sidebar." : "Turn on Open Previews to preview pages.").disabled(!root.bool("open.general.previewsEnabled"))
+            OpenPreferenceRow(root: root, id: "previews/recents", title: "Recent pages on Linear, Notion, Figma, and Confluence", key: "open.general.previewsRecents", help: root.bool("open.general.previewsEnabled") ? "Show the pages you visited last when you hover a pinned tab of these sites." : "Turn on Open Previews to see recent pages.").disabled(!root.bool("open.general.previewsEnabled"))
+            OpenPreferenceRow(root: root, id: "previews/calendar", title: "Upcoming meetings on Google, Outlook, and Notion Calendar", key: "open.general.previewsCalendar", help: root.bool("open.general.previewsEnabled") ? "Show today's meetings and a Join button when you hover a pinned calendar tab." : "Turn on Open Previews to see upcoming meetings.", last: true).disabled(!root.bool("open.general.previewsEnabled"))
         }
     }
 }

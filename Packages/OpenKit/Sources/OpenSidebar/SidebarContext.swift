@@ -5,6 +5,7 @@ import OpenModel
 import OpenMedia
 import OpenStore
 import OpenExtensionsUI
+import OpenLiveData
 
 /// Shared state for every sidebar view: the model, the window it shows, and
 /// view-only state that is not part of the model (window active, command bar
@@ -21,6 +22,9 @@ public final class SidebarContext {
     public var media: MediaSourceStore?
     /// Session download progress supplied by the App; no sidebar polling.
     public var downloadBadge: DownloadBadgeState?
+    /// Library media sources for the Library button's "Show media from:" menu (PB1): id, title, on.
+    /// Empty hides the menu (render fixtures, windows without a Library).
+    public var libraryMediaSources: [SidebarMediaSourceItem] = []
     public var displayedTabIDs: Set<ItemID> = []
     /// Render-only forced states, analogous to forcedHover.
     public var forcedMediaHover: SidebarMediaHover?
@@ -66,7 +70,8 @@ public final class SidebarContext {
     /// Forced hover for offscreen rendering and checks. Nil follows the pointer.
     public var forcedHover: SidebarHoverTarget?
     /// The pointer is over the sidebar (or a hover is forced).
-    var pointerInSidebar = false
+    /// The pointer is inside the sidebar (tracking area). Public so renders can set the state they show.
+    public var pointerInSidebar = false
     /// Open Peeks by source tab. The source row shows the Peek page's favicon in a
     /// plate at its right end, also while another tab is selected (F0090, F0101).
     /// Transient: the window controller sets it; the model never stores it.
@@ -103,6 +108,30 @@ public final class SidebarContext {
     public var folderIconOverrideProvider: (@MainActor (Folder) -> String?)?
 
     public var storedFavicons: StoredFaviconCache?
+
+    /// Recents hover card data (live-data §3.4): history rows of a Profile whose URLs contain one
+    /// of the given phrases (`RecentsSite.historyPhrases`), newest first. The App sets it for normal windows; nil (incognito, render scenes) keeps the page card.
+    @ObservationIgnored public var recentPagesSource: (@MainActor (ProfileID, [String]) async -> [(url: URL, title: String, lastVisit: Date)])?
+    /// Automation fixtures only: extra hosts that count as a Recents site. Empty in normal use.
+    @ObservationIgnored public var glanceHostAliases: [String: RecentsSite] = [:]
+    /// The live-data card a sidebar tab gets on hover, or nil for the page card.
+    /// Calendar card data (live-data §3.2, plan NS §2 CAL). The App sets it for normal windows;
+    /// nil (incognito, render scenes) keeps the page card on calendar tabs.
+    @ObservationIgnored public var calendarGlance: CalendarGlanceSource?
+    /// Live Calendar (LD §4): the countdown state of each calendar Favorite tile, set by the App's
+    /// coordinator. Observed: a change redraws only the tiles that read it.
+    public var liveCalendarTiles: [ItemID: LiveCalendar.TileState] = [:]
+    /// Live Calendar actions for the tile menu and the reminder; nil keeps tiles plain.
+    @ObservationIgnored public var liveCalendar: LiveCalendarActions?
+    public func glanceKind(for tab: Tab) -> GlanceKind? {
+        guard let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases) else { return nil }
+        switch kind {
+        case .recents: guard recentPagesSource != nil else { return nil }
+        case .calendar: guard calendarGlance != nil else { return nil }
+        }
+        let key = kind.preferenceKey
+        return previewPreferences.object(forKey: key) == nil || previewPreferences.bool(forKey: key) ? kind : nil
+    }
 
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
@@ -209,6 +238,10 @@ public final class SidebarContext {
     /// (host, port, path, query).
     static func fieldText(_ url: URL, _ developerHosts: Set<String>) -> String {
         if url.absoluteString == "open://welcome" { return "Welcome to Open" }
+        // Arc shows a lock and "Share" for an Easel; Open has no sharing, so it names the page kind.
+        if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "easel" { return "Easel" }
+        // GUESS — capture pending (Arc 1.172 cannot create Notes): a Note's URL field names the kind.
+        if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "note" { return "Note" }
         let scheme = url.scheme?.lowercased()
         let key = scheme == "file" ? "file" : url.host()?.lowercased()
         guard let key, developerHosts.contains(key) else { return URL.displayHost(url) }
@@ -483,4 +516,10 @@ extension Tab {
 
 public enum SidebarMediaHover: Equatable, Sendable {
     case expanded, title(ItemID)
+}
+
+/// One row of the Library button's "Show media from:" menu.
+public struct SidebarMediaSourceItem: Equatable, Sendable {
+    public var id: String, title: String, enabled: Bool
+    public init(id: String, title: String, enabled: Bool) { self.id = id; self.title = title; self.enabled = enabled }
 }

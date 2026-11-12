@@ -1,5 +1,6 @@
 import AppKit
 import OpenDesign
+import OpenLiveData
 import OpenModel
 import OpenSidebar
 
@@ -16,6 +17,8 @@ public final class HoverPreviewController {
     private let factory: any WebContentHostFactory
     private let context: SidebarContext
     private let select: @MainActor (ItemID) -> Void
+    /// Opens a live-data card link as a Peek of the hovered tab (LD §3.3 "Links").
+    public var openPeek: (@MainActor (URL, ItemID) -> Void)?
     public private(set) var request: SidebarHoverPreviewRequest?
     public private(set) var card: PreviewCardView?
     public private(set) var host: (any WebContentHost)?
@@ -39,6 +42,7 @@ public final class HoverPreviewController {
         switch next.kind {
         case .page(let id): guard showPage(id) else { return }
         case .folder(let id): guard showFolder(id) else { return }
+        case .glance(let id): guard showGlance(id) else { return }
         }
         request = next; shows += 1
         layout()
@@ -81,6 +85,40 @@ public final class HoverPreviewController {
         return true
     }
 
+    /// The native live-data card (Recents, LD §3.4). Owns no web host.
+    private func showGlance(_ id: ItemID) -> Bool {
+        guard let tab = context.model.tab(id: id), let kind = context.glanceKind(for: tab) else { return false }
+        let content: NSView
+        switch kind {
+        case .recents(let site):
+            let view = RecentsPreviewView(context: context, tab: tab, site: site)
+            view.onOpen = { [weak self] url in
+                self?.hide(animated: false)
+                self?.openPeek?(url, id)
+            }
+            view.onResize = { [weak self] in self?.layout() }
+            content = view
+        case .calendar(let provider):
+            guard let source = context.calendarGlance else { return false }
+            let view = CalendarPreviewView(context: context, tab: tab, provider: provider, source: source)
+            view.onOpen = { [weak self] url in
+                self?.hide(animated: false)
+                self?.openPeek?(url, id)
+            }
+            view.onSelectTab = { [weak self] in
+                self?.hide(animated: false)
+                self?.select(id)
+            }
+            view.onResize = { [weak self] in self?.layout() }
+            content = view
+        }
+        let card = PreviewCardView(content: content, appearance: appearance, clicksSelect: false)
+        card.onPointer = { [weak self] inside in self?.context.hoverPreviews.setPointerInsidePreview(inside) }
+        root.addSubview(card)
+        self.card = card
+        return true
+    }
+
     private var appearance: ContentAppearance { context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance }
 
     /// Places the card next to the sidebar (window coordinates of the root, top-left origin).
@@ -96,6 +134,11 @@ public final class HoverPreviewController {
             preferredY = anchor.minY - m.windowInset
         case .folder:
             preferredWidth = m.folderWidth; preferredHeight = (card.content as? FolderPreviewView)?.fittingSize.height ?? 200
+            gap = m.folderSidebarGap
+            preferredY = anchor.midY - min(preferredHeight, availableHeight) / 2
+        case .glance:
+            // Placed like the folder card (GUESS — capture pending, F2 item 10).
+            preferredWidth = m.folderWidth; preferredHeight = card.content.fittingSize.height
             gap = m.folderSidebarGap
             preferredY = anchor.midY - min(preferredHeight, availableHeight) / 2
         }

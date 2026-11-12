@@ -59,6 +59,11 @@ import OpenDesign
     }
     public func paneDidAppear() { refresh(); if !showsCreate { presentSuggestNotice() } }
     public func dismissSuggestNotice() { root.set(true, for: "open.general.searchSuggestNoticeDismissed"); showsSuggestNotice = false }
+    /// New documents (Arc "Default Document App"): what New Note creates in this Profile.
+    public var defaultDocumentApp: String {
+        get { DocumentApp.resolve(profile?.settings.defaultDocumentApp).id }
+        set { update { $0.defaultDocumentApp = newValue } }
+    }
     public var downloadDirectory: String { get { profile?.settings.downloadDirectory ?? "~/Downloads" } set { update { $0.downloadDirectory = newValue } } }
     public var askWhereToSave: Bool { get { profile?.settings.askWhereToSaveEachFile ?? false } set { update { $0.askWhereToSaveEachFile = newValue } } }
     public func nextDownloadSettings() -> (directory: String, ask: Bool) { (downloadDirectory.isEmpty ? "~/Downloads" : downloadDirectory, askWhereToSave) }
@@ -198,6 +203,14 @@ public struct ProfilesPane: View {
             Button("Delete unused Profiles…") { model.beginDelete(unused: true) }.disabled(model.unusedIDs.isEmpty)
         }.padding(.top, 12)
         SettingsInlineMessage(text: model.errorText).padding(.top, model.errorText.isEmpty ? 0 : 12)
+        OpenSettingsGroup("New documents") {
+            OpenSettingsRow(root: model.root, id: "profiles/new-documents", title: "New documents",
+                            help: "What New Note (⌃⇧N) creates in \(model.profile?.name ?? "this Profile").",
+                            changed: model.defaultDocumentApp != DocumentApp.note.id, last: true,
+                            reset: { model.defaultDocumentApp = DocumentApp.note.id }) {
+                OpenSettingsPop(title: "New documents", value: $model.defaultDocumentApp, options: DocumentApp.all.map { ($0.title, $0.id) })
+            }
+        }.padding(.top, 24).id("profiles/new-documents")
         .onAppear { model.refresh() }
     }
 }

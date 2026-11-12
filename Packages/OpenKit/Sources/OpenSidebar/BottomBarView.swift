@@ -35,14 +35,15 @@ final class BottomBarView: NSView {
         home.glyphTint = { _ in SidebarRole.homeGlyph.nsColor }
         home.inactiveTint = SidebarRole.homeGlyphInactive
         home.action = { [unowned context] in context.send(.showLibrary) }
-        home.tooltip = { Tooltip(title: "Library", placement: .above, style: style()) }
+        home.contextMenuProvider = { [weak self] in self?.menus.libraryMediaSources() }
+        home.tooltip = { [weak home] in Tooltip(title: home?.latestName ?? "Library", placement: .above, style: style()) }
         if context.isIncognito {
             home.isHidden = true; strip.isHidden = true
             plus.action = { [unowned context] in context.send(.newTab) }
             plus.setAccessibilityLabel("New Tab")
         } else { plus.menuProvider = { [weak self] in self?.menus.plus() } }
         plus.tooltip = { Tooltip(title: "New…", placement: .above, style: style()) }
-        loop = ObservationLoop(read: { [weak self] in _ = self?.context.model.spaces.map(\.id) }) { [weak self] in self?.needsLayout = true }
+        loop = ObservationLoop(read: { [weak self] in _ = self?.context.model.spaces.map(\.id); _ = self?.context.downloadBadge }) { [weak self] in self?.needsLayout = true }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -53,7 +54,8 @@ final class BottomBarView: NSView {
         super.layout()
         let m = BottomBarMetrics.self
         let w = bounds.width
-        home.frame = CGRect(origin: CGPoint(x: m.homeX, y: m.buttonY), size: m.buttonSize)
+        let badge = context.downloadBadge?.files.isEmpty == false
+        home.frame = CGRect(x:m.homeX-(badge ? 3.5 : 0),y:m.buttonY-(badge ? 3.5 : 0),width:badge ? 39 : 32,height:badge ? 39 : 32)
         plus.frame = CGRect(origin: CGPoint(x: w - m.plusTrailingInset - m.buttonSize.width, y: m.buttonY), size: m.buttonSize)
         let stripRect = CGRect(x: m.switcherLeading, y: 0, width: max(0, w - m.switcherLeading - m.switcherTrailing), height: m.height)
         strip.frame = stripRect

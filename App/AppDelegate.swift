@@ -1,12 +1,15 @@
 import OpenOnboarding
 import AppKit
+import OpenEasel
 import OpenEngine
+import OpenDocuments
 import OpenModel
 import OpenStore
 import OpenFeatures
 import QuartzCore
 import OpenCommands
 import OpenSettings
+import OpenLibrary
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -40,6 +43,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var snapshotStore: SnapshotStore!
   private(set) var archiveSink: ProfileArchiveSink!
   private(set) var directories: ProfileDirectories!
+  /// Easel documents (`<data root>/Easels`); made on the first Easel open, never at launch.
+  private var easelStore: EaselStore?
+  var easels: EaselStore {
+    if let easelStore { return easelStore }
+    let store = EaselStore(root: directories.root); easelStore = store; return store
+  }
+  /// Notes (`<data root>/Notes`). Nothing is read until a Note shows.
+  private(set) lazy var notes = NoteStore(root: directories.root)
   /// The engine layout step's outcome (and the data root lock).
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
@@ -72,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
   /// Tab sleep (app-shell §4.7, Step G): one SleepController, started after first paint.
   lazy var tabSleep = AppSleepCoordinator(app: self)
+  lazy var handoff = HandoffPublisher(app: self)
   /// Quit order step 1 (app-shell §5.3) runs once, before the snapshot save.
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
@@ -82,7 +94,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var downloadsCenter = DownloadsCenter(app: self)
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
-  lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+  lazy var deepLinks = DeepLinkRouter(app: self)
+  lazy var linkIntake: ExternalLinkIntake = {
+    let intake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+    let meet = MeetRoute(app: self)
+    intake.willRoute = { meet.prepare($0) }
+    intake.didRoute = { meet.announce($0) }
+    return intake
+  }()
   var lastLittleOpenRequest: LittleOpenRequest?
   var executedExternalLink = false
   /// Only a fresh launch fallback is eligible for removal by its first Little Open link.
@@ -91,6 +110,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var initialWindowInputMonitor: Any?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
+  /// Live Folder / glance fetches (LF L2): made on first use only.
+  lazy var liveFetch = LiveFetchHost(app: self)
+  lazy var liveFolders = LiveFolderService(app: self)
+  /// Calendar data for Join Meeting, the calendar card and Live Calendar; first use only (plan NS §2 CAL).
+  lazy var calendar = CalendarService()
+  /// Live Calendar Favorite tiles (LD §4); idle until a calendar Favorite tile appears.
+  lazy var liveCalendar = LiveCalendarCoordinator(app: self)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false
@@ -213,6 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     let icons = wasEngineReady && !windowControllers.isEmpty ? stores.sidebarFavicons : nil
     terminationRequested = true
+    deepLinks.relaunchIfRequested()
     preparedOnboardingSound?.stop(); preparedOnboardingSound = nil
     if let onboardingStartObserver { CFRunLoopObserverInvalidate(onboardingStartObserver); self.onboardingStartObserver = nil }
     onboardingWindowController?.stop()
@@ -372,6 +399,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("windowShown")
   }
 
+  var libraryPrebuildTask: Task<Void,Never>?
+  var libraryPrebuildGeneration = 0
+  var libraryFirstSidebarDraw: Double?
+  var libraryFirstSidebarDraws: [WindowID:Double] = [:]
+  var libraryLastInput = 0.0
+  var libraryPrebuiltAt: Double?
+  func scheduleLibraryPrebuildAfterFirstDraw() {
+    guard libraryFirstSidebarDraw == nil else { return }
+    libraryFirstSidebarDraw = ProcessInfo.processInfo.systemUptime
+    for controller in windowControllers { libraryFirstSidebarDraws[controller.windowID] = libraryFirstSidebarDraw }
+    scheduleLibraryPrebuild()
+  }
+  func noteLibraryInput() {
+    LibraryPanelView.noteUserInput()
+    libraryLastInput = ProcessInfo.processInfo.systemUptime
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
+    settingsPresenter.cancelLibraryIdleWork()
+    if libraryFirstSidebarDraw != nil { scheduleLibraryPrebuild() }
+  }
+  func scheduleLibraryPrebuild() {
+    #if OPEN_AUTOMATION
+    if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREBUILD_DISABLED"] == "1" { return }
+    #endif
+    guard let controller = frontStandardWindowController,let first = libraryFirstSidebarDraws[controller.windowID],!shutdownPrepared,!terminationRequested else { return }
+    libraryPrebuildTask?.cancel()
+    libraryPrebuildGeneration += 1
+    let generation = libraryPrebuildGeneration
+    let deadline = max(first+3,libraryLastInput+3)
+    libraryPrebuildTask = Task { @MainActor [weak self,weak controller] in
+      try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
+      guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
+      defer { if self.libraryPrebuildGeneration == generation { self.libraryPrebuildTask = nil } }
+      guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller,self.frontStandardWindowController === controller,
+        controller.window?.isVisible == true else { return }
+      self.libraryPrebuiltAt = ProcessInfo.processInfo.systemUptime
+      controller.onLibraryIdleRefresh = { [weak self] in self?.scheduleLibraryPrebuild() }
+      await self.settingsPresenter.makeLibrarySession(controller).prebuild()
+    }
+  }
+
   func drawWindowsBeforeEngine() {
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("browser.drawWindowsBeforeEngine")
@@ -440,11 +507,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       controller.allowsWindowActivation = false
       controller.window?.alphaValue = 0
     }
-    if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
+    if session == nil {
+      controller.context.storedFavicons = stores.sidebarFavicons
+      // Recents hover card (live-data §3.4): read on first hover only, never at launch.
+      controller.context.recentPagesSource = { [weak self] profileID, phrases in
+        guard let store = self?.stores.history(for: profileID) else { return [] }
+        var rows: [(url: URL, title: String, lastVisit: Date)] = []
+        for phrase in phrases { rows += await store.recentURLs(matchingURLPhrase: phrase).map { ($0.url, $0.title, $0.lastVisit) } }
+        return rows
+      }
+      // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
+      controller.context.calendarGlance = makeCalendarGlance(factory)
+      controller.context.liveCalendar = liveCalendar.actions()
+    }
+    // Native Note and Easel rows have no page or stored icon: draw their marks even before they show.
+    controller.context.faviconProvider = { tab in
+      NoteTab.matches(tab.url) ? NoteTab.faviconImage : EaselTab.matches(tab.url) ? EaselIcon.image : nil
+    }
     factory.attach(controller)
     windowControllers.append(controller)
     updater?.userDriver.attach(controller)
     if session == nil { media.attach(factory); tabSleep.attach(factory) }
+    // Off the first-paint path: the media source menu reads one small state file.
+    DispatchQueue.main.async { [weak self] in self?.settingsPresenter.syncLibraryMediaSources() }
     activeWindowID = state.id
     LaunchTiming.shared.phase("windowServicesAttached")
     MainMenu.targetWindowCommands(factory)
@@ -456,6 +541,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       let window = controller.window { onboarding.hidePreparedBrowser(window) }
     if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }
+    if session == nil, libraryFirstSidebarDraw != nil {
+      DispatchQueue.main.async { [weak self,weak controller] in
+        guard let self,let controller,controller.window?.isVisible == true else { return }
+        controller.window?.displayIfNeeded()
+        self.libraryFirstSidebarDraws[controller.windowID] = ProcessInfo.processInfo.systemUptime
+        self.scheduleLibraryPrebuild()
+      }
+    }
     return controller
   }
 
@@ -548,6 +641,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    libraryFirstSidebarDraws.removeValue(forKey:id)
+    settingsPresenter.libraryWindowClosed(id)
     guard let factory = hostFactories[id] else { return }
     if let session = factory.incognitoSession {
       windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
@@ -607,6 +702,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   /// Called after the message loop returns, before the engine shuts down.
   func saveState() {
+    // Easel edits in progress (a title or a text box) are written before quit.
+    for factory in hostFactories.values { for host in factory.easelHosts.values { host.canvas.commitPendingEdits() } }
+    easelStore?.flush()
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     for controller in windowControllers { controller.saveWindowState() }
     do {
@@ -615,6 +713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       FileHandle.standardError.write(Data("Open: saving the snapshot failed: \(error)\n".utf8))
     }
     archiveSink.flushAll()
+    notes.flush()
   }
 
   /// Used after import (including an E-5 save error) so the imported items are
@@ -757,6 +856,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     stores.boosts.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     littleOpenCoordinator?.closeAll()
@@ -765,6 +865,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
     incognitoSessions.closeAll()
+    if directories != nil { notes.flush() }
     recordShutdownPhase("hostsClosed")
   }
 
@@ -848,6 +949,8 @@ extension AppDelegate: CommandDispatcher {
       defer { region?.end() }
       #endif
       self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
+      // Menu rebuilds follow tab, Space and window changes: the same moments Handoff must follow.
+      self.handoff.setNeedsUpdate()
     }
   }
   /// No suggestion index, history, hotkey or settings work before first paint.
@@ -1054,7 +1157,8 @@ extension AppDelegate: CommandDispatcher {
     // Media grid (Captures + Screenshots), not playback.
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
-    case "view-history": settingsPresenter.showLibrary(section: .history)
+    case "view-history":
+      settingsPresenter.showLibrary(section: .history)
     case "view-boosts": settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .list, boostsProfileID: boostLibraryInvokingProfileID)
     case "boost-gallery": if boostGalleryEnabled { settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .gallery, boostsProfileID: boostLibraryInvokingProfileID) }
     case "keyboard-shortcuts-edu":

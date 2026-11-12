@@ -27,7 +27,49 @@ enum URLStatusChecks {
         return (context, scene, model)
     }
 
+    /// URL-field controls (LEAD 12:12, Arc 1.172 session 3): not drawn and not in the accessibility tree at rest; shown with
+    /// the pointer anywhere inside the sidebar, or while the Site Control panel is open; 30×30 at [W − 70, 49] and [W − 42, 49].
+    static func controls() {
+        let check = Checks.check
+        let delegate = RecordingDelegate()
+        let (context, scene, _) = makeScene(width: 366, delegate: delegate)
+        let host = OffscreenRenderer.host(scene, scale: 1)
+        defer { host.contentView = nil; host.close() }
+        let sidebar = scene.sidebar
+        func settle() { scene.needsLayout = true; OffscreenRenderer.settle(scene, runLoop: 0.01) }
+        context.forcedHover = nil; context.pointerInSidebar = false; sidebar.siteControlState = .rest; settle()
+        let rest = sidebar.urlFieldControls
+        check(rest.copy == nil && rest.site == nil && !rest.accessibilityLabels.contains("Copy Link") && !rest.accessibilityLabels.contains("Site Controls"),
+              "URL controls at rest: not drawn, not in the accessibility tree (\(rest))")
+        context.pointerInSidebar = true; settle()
+        let inside = sidebar.urlFieldControls
+        check(inside.copy == CGRect(x: 296, y: 49, width: 30, height: 30) && inside.site == CGRect(x: 324, y: 49, width: 30, height: 30)
+              && inside.accessibilityLabels.contains("Copy Link") && inside.accessibilityLabels.contains("Site Controls"),
+              "URL controls with the pointer inside the sidebar: [W − 70, 49] and [W − 42, 49], 30×30, exposed (\(inside))")
+        context.pointerInSidebar = false; sidebar.siteControlState = .open; settle()
+        let open = sidebar.urlFieldControls
+        check(open.copy != nil && open.site != nil, "URL controls stay while the Site Control panel is open, pointer outside (\(open))")
+        sidebar.siteControlState = .rest; settle()
+        check(sidebar.urlFieldControls.copy == nil, "URL controls hide again after the panel closes with the pointer outside")
+        // Long host (plan D3 §2.4, LEAD 11:45): never a trailing ellipsis; the end stays visible, the leading 34 pt fade,
+        // and the text stops 8 pt before the first shown control. A short host: no fade, leading aligned.
+        let short = sidebar.urlFieldHost
+        check(!short.faded && !short.rightAligned, "Short host: no fade, leading aligned (\(short))")
+        if let tab = context.currentTab {
+            tab.url = URL(string: "http://long-synthetic-host-name-for-url-truncation.localhost/article")!
+            context.pointerInSidebar = true; settle()
+            let long = sidebar.urlFieldHost
+            check(long.faded && long.rightAligned && long.firstControlX.map { long.frame.maxX <= $0 - URLFieldMetrics.controlsTextGap + 0.5 } == true,
+                  "Long host: faded, right-aligned, 8 pt before the first control (\(long))")
+            context.pointerInSidebar = false; settle()
+            let rest = sidebar.urlFieldHost
+            // At rest the label is wider; the host fades only if it still does not fit, and fade and alignment go together.
+            check(rest.faded == rest.rightAligned && rest.frame.width > long.frame.width, "Long host at rest: wider label, fade only when it does not fit (\(rest))")
+        } else { check(false, "Long host: no current tab in the synthetic model") }
+    }
+
     static func run() {
+        controls()
         let check = Checks.check
         let delegate = RecordingDelegate()
         let (context, scene, model) = makeScene(width: 228, delegate: delegate)
@@ -72,8 +114,12 @@ enum URLStatusChecks {
         let image = OffscreenRenderer().render(scene, scale: 1)
         let button = sidebar.urlStatusState.frame
         let field = sidebar.chromeGeometry.urlField
+        // The default theme is a gradient (capture session 3): compare each fill's step
+        // against the background 2 pt to its left, not raw pixels at two heights.
         let a = pixel(image, x: Int(button.minX + 4), y: Int(button.midY)), b = pixel(image, x: Int(field.minX + 4), y: Int(field.midY))
-        check(!a.isEmpty && zip(a, b).allSatisfy { abs($0 - $1) <= 2 }, "S-US1 fill equals the URL field fill (\(a) vs \(b))")
+        let aBG = pixel(image, x: Int(button.minX - 2), y: Int(button.midY)), bBG = pixel(image, x: Int(field.minX - 2), y: Int(field.midY))
+        let steps = (a.isEmpty || aBG.isEmpty || b.isEmpty || bBG.isEmpty) ? [] : (0..<3).map { (a[$0] - aBG[$0]) - (b[$0] - bBG[$0]) }
+        check(!steps.isEmpty && steps.allSatisfy { abs($0) <= 2 }, "S-US1 fill equals the URL field fill (\(a) on \(aBG) vs \(b) on \(bBG))")
 
         // Hidden rules: the content toolbar replaces the URL field.
         model.windows[0].showsToolbar = true; settle()

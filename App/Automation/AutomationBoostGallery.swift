@@ -2,6 +2,7 @@
 import AppKit
 import OpenModel
 import OpenSettings
+import OpenLibrary
 
 extension AutomationController {
   /// Exercise hosted controls in Open's own Library/Settings window. This
@@ -12,7 +13,7 @@ extension AutomationController {
       args.values.compactMap({ $0 as? String }).allSatisfy({ $0.utf8.count <= 1024 })
     else { throw Failure(message: "invalid Gallery UI request") }
     let settings = args["window"] as? String == "settings"
-    guard let owner = settings ? app.settingsPresenter.settingsPresenter.window : app.settingsPresenter.libraryPresenter?.window,
+    guard let owner = settings ? app.settingsPresenter.settingsPresenter.window : app.settingsPresenter.libraryWindow,
       owner.isVisible else { throw Failure(message: "requested window is not visible") }
     if action != "state" { try await activateForInput(owner) }
     // SwiftUI lazily materializes its AX tree for enhanced clients. Use the
@@ -26,6 +27,13 @@ extension AutomationController {
       let value = object.perform(selector)?.takeUnretainedValue()
       if let value = value as? String { return String(value.prefix(1024)) }
       return (value as? NSNumber)?.stringValue ?? ""
+    }
+    func identifier(_ object: NSObject) -> String {
+      let accessible = string(object, "accessibilityIdentifier")
+      if !accessible.isEmpty { return accessible }
+      // Native Library controls keep their identifiers on NSView. Read the
+      // actual rendered view, just as the legacy path reads hosted AX nodes.
+      return (object as? NSView)?.identifier?.rawValue ?? ""
     }
     var seen: Set<ObjectIdentifier> = [], nodes: [NSObject] = []
     func walk(_ object: NSObject, _ depth: Int) {
@@ -47,12 +55,21 @@ extension AutomationController {
       if target.responds(to: enabled), !unsafeBitCast(target.method(for: enabled), to: BooleanAction.self)(target, enabled) {
         throw Failure(message: "Gallery control is disabled")
       }
+      if let button = target as? NSButton, button.target != nil, button.action != nil {
+        // Native Library controls use NSButton's target/action path. Their
+        // layer-backed cells do not implement the hosted AX press method.
+        guard button.isEnabled else { throw Failure(message: "Gallery control is disabled") }
+        button.performClick(nil); return
+      }
       let selector = NSSelectorFromString("accessibilityPerformPress")
       guard target.responds(to: selector), unsafeBitCast(target.method(for: selector), to: BooleanAction.self)(target, selector)
       else { throw Failure(message: "Gallery control refused press") }
     }
     switch action {
     case "profile":
+      if !settings, let panel=app.settingsPresenter.activeLibrarySession?.panel, let name=args["name"] as? String {
+        guard panel.setBoostProfile(name) else { throw Failure(message:"unknown Profile") }; break
+      }
       guard !settings, let name = args["name"] as? String,
         let profile = app.model.profiles.first(where: { $0.name == name }) else { throw Failure(message: "Profile picker item not found") }
       if let popup = nodes.compactMap({ $0 as? NSPopUpButton }).first(where: { $0.itemTitles.contains(name) }),
@@ -89,12 +106,17 @@ extension AutomationController {
         guard app.settingsPresenter.library?.historyProfileID == profile.id else { throw Failure(message: "Profile menu selection did not apply") }
       }
     case "section":
+      if !settings, let panel = app.settingsPresenter.activeLibrarySession?.panel, let raw = args["section"] as? String,
+        let section = LibraryPanelSection(rawValue:raw == "captures" ? "media" : raw) {
+        panel.select(section); break
+      }
       guard !settings, let raw = args["section"] as? String, let section = LibrarySection(rawValue: raw),
         let index = LibrarySection.allCases.firstIndex(of: section),
         let table = nodes.compactMap({ $0 as? NSTableView }).first(where: { $0.numberOfRows == LibrarySection.allCases.count })
       else { throw Failure(message: "Library sidebar not found") }
       table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
     case "layout":
+      if !settings, let panel=app.settingsPresenter.activeLibrarySession?.panel, let name=args["name"] as? String { panel.setBoostLayout(name); break }
       guard let name = args["name"] as? String, ["List", "Gallery"].contains(name) else { throw Failure(message: "unknown layout") }
       if let control = nodes.compactMap({ $0 as? NSSegmentedControl }).first(where: { $0.segmentCount == 2 && $0.label(forSegment: 0) == "List" }) {
         control.selectedSegment = name == "List" ? 0 : 1
@@ -105,18 +127,28 @@ extension AutomationController {
         try press(target)
       }
     case "search":
-      guard let text = args["text"] as? String,
-        let field = nodes.compactMap({ $0 as? NSTextField }).first(where: { $0.placeholderString == "Search Boosts" })
-      else { throw Failure(message: "Boost search field not found") }
+      let fields = nodes.compactMap { $0 as? NSTextField }.filter {
+        identifier($0) == "library.search" || $0.placeholderString?.hasPrefix("Search Boosts") == true
+      }
+      guard let text = args["text"] as? String, fields.count == 1, let field = fields.first
+      else { throw Failure(message: "expected one Boost search field; found \(fields.count)") }
       owner.makeFirstResponder(field); field.selectText(nil)
       _ = try await sendKey(["window": owner.windowNumber, "text": text.isEmpty ? "\u{7f}" : text, "route": "app"], try? window)
     case "press":
-      let matches = nodes.filter {
-        if let id = args["id"] as? String { return string($0, "accessibilityIdentifier") == id }
+      // Native AppKit buttons can report AXUnknown in process while a hosted
+      // proxy reports AXButton. Prefer the actual rendered button; keep the
+      // same unique-target and enabled checks before sending target/action.
+      let nativeMatches = nodes.filter { object in
+        guard args["id"] == nil, let label = args["label"] as? String,
+          let button = object as? NSButton else { return false }
+        return [button.title, string(button, "accessibilityLabel"), string(button, "accessibilityTitle")].contains(label)
+      }
+      let matches = nativeMatches.isEmpty ? nodes.filter {
+        if let id = args["id"] as? String { return identifier($0) == id }
         guard let label = args["label"] as? String else { return false }
         return [string($0, "accessibilityLabel"), string($0, "accessibilityTitle")].contains(label)
           && [NSAccessibility.Role.button.rawValue, NSAccessibility.Role.checkBox.rawValue].contains(string($0, "accessibilityRole"))
-      }
+      } : nativeMatches
       guard matches.count == 1, let target = matches.first else { throw Failure(message: "expected one Gallery control; found \(matches.count)") }
       if let raw = args["profileBeforePress"] as? String {
         guard !settings, let uuid = UUID(uuidString: raw), app.model.profile(id: ProfileID(rawValue: uuid)) != nil else { throw Failure(message: "unknown queued Profile") }
@@ -129,8 +161,16 @@ extension AutomationController {
     }
     if action != "state" { await Task.yield() }
     return ["window": owner.windowNumber, "key": owner.isKeyWindow,
-      "controls": nodes.map { ["class": String(describing: type(of: $0)), "id": string($0, "accessibilityIdentifier"), "label": string($0, "accessibilityLabel"),
-        "title": string($0, "accessibilityTitle"), "role": string($0, "accessibilityRole"), "value": string($0, "accessibilityValue")] },
+      "controls": nodes.map { object -> [String:Any] in
+        var state: [String:Any] = ["class": String(describing: type(of: object)), "id": identifier(object), "label": string(object, "accessibilityLabel"),
+          "title": string(object, "accessibilityTitle"), "role": string(object, "accessibilityRole"), "value": string(object, "accessibilityValue")]
+        if let button = object as? NSButton { state["nativeTitle"] = button.title }
+        if let view = object as? NSView, let root = owner.contentView {
+          let rect = root.convert(view.bounds, from: view)
+          state["frame"] = [rect.minX, root.isFlipped ? rect.minY : root.bounds.height-rect.maxY, rect.width, rect.height]
+        }
+        return state
+      },
       "popupItems": nodes.compactMap { ($0 as? NSPopUpButton)?.itemTitles }] as [String: Any]
   }
 }

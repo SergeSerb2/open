@@ -45,8 +45,16 @@
 	<true/>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>banner</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Open shows your upcoming meetings and joins their video calls.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Websites you visit can ask to use your camera.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>The Library can show images and videos from your Desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>The Library can show images and videos from your Documents folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>The Library can show images and videos from your Downloads folder.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Websites you visit can ask to use your microphone.</string>
 	<key>NSLocationUsageDescription</key>
@@ -55,6 +63,10 @@
 	<string>Websites you visit can ask for your location.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Websites you visit can ask to connect to Bluetooth devices.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>NSUserActivityTypeBrowsingWeb</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -69,6 +81,16 @@
 			</array>
 			<key>LSHandlerRank</key>
 			<string>Default</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Open Browser</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>open-browser</string>
+			</array>
 		</dict>
 	</array>
 	<key>SUFeedURL</key>

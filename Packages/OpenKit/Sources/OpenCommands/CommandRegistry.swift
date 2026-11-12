@@ -2,7 +2,7 @@ import Foundation
 
 /// Every Arc command Open v1 needs, plus reserved out-of-scope commands.
 /// Source: `docs/re/menus-and-hotkeys.md` (Arc 1.170.0, build 89123).
-/// Dropped from menus but reserved: Easels, Notes, Arc Max/ChatGPT, Send to Dia,
+/// Dropped from menus but reserved: Easels, Export Notes, Arc Max/ChatGPT, Send to Dia,
 /// and account items. Their shortcuts stay in `reservedShortcuts`.
 public enum CommandRegistry {
     public static let all: [CommandDefinition] = appMenu + fileMenu + editMenu + viewMenu
@@ -65,6 +65,17 @@ public enum CommandRegistry {
                           isCustomizable: true, aliases: ["Little Open", "Little Arc", "Quick Lookup", "Mini Window"]),
         CommandDefinition(id: "blank-window", title: "Blank Window", menuPath: ["File"],
                           defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.command, .control])]),
+        // Arc 1.170 File menu (NIB `newNote:`, `newNoteInSplitView:`); aliases from the NIB search titles.
+        CommandDefinition(id: "new-note", title: "New Note", menuPath: ["File"],
+                          defaultShortcuts: [.ctrlShift("n")], isCustomizable: true,
+                          aliases: ["Create Note", "Note", "Scratchpad"]),
+        CommandDefinition(id: "new-note-in-split", title: "New Note (in Split)", menuPath: ["File"],
+                          defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.control, .option])], isCustomizable: true,
+                          aliases: ["Create Note in Split View", "Note Split", "Scratchpad Split", "New Note in Split"]),
+        // docs/re/easels.md: File › New Easel ⌃⇧E (`newEasel:`); also the "+" menu.
+        CommandDefinition(id: "new-easel", title: "New Easel", menuPath: ["File"],
+                          defaultShortcuts: [.ctrlShift("e")],
+                          aliases: ["Easel", "Create Easel", "Canvas", "Scrapbook"]),
         CommandDefinition(id: "close-window", title: "Close Window", menuPath: ["File"],
                           defaultShortcuts: [.cmdShift("w")]),
         CommandDefinition(id: "archive-tab", title: "Archive Tab", menuPath: ["File"],
@@ -308,6 +319,9 @@ public enum CommandRegistry {
     ]
 
     static let helpMenu: [CommandDefinition] = [
+        // Arc Help ▸ Export Arc Notes (NIB `exportArcNotes:`; aliases from the NIB search titles).
+        CommandDefinition(id: "export-notes", title: "Export Notes…", menuPath: ["Help"],
+                          aliases: ["Export Notes", "Backup Notes", "Download Notes"]),
         CommandDefinition(id: "help-center", title: "Open Help Center", menuPath: ["Help"], aliases: ["Visit Help Center"]),
         CommandDefinition(id: "keyboard-shortcuts-edu", title: "Essential Keyboard Shortcuts", menuPath: ["Help"],
                           aliases: ["Keyboard Shortcuts", "Keyboard", "Shortcuts"]),
@@ -429,17 +443,10 @@ public enum CommandRegistry {
     /// They never appear in menus. The conflict checker rejects any active
     /// command that tries to take these keys.
     static let reserved: [CommandDefinition] = [
-        CommandDefinition(id: "reserved-new-note", title: "New Note (reserved)",
-                          defaultShortcuts: [.ctrlShift("n")], isReserved: true),
-        CommandDefinition(id: "reserved-new-note-in-split", title: "New Note in Split (reserved)",
-                          defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.control, .option])], isReserved: true),
-        CommandDefinition(id: "reserved-new-easel", title: "New Easel (reserved)",
-                          defaultShortcuts: [.ctrlShift("e")], isReserved: true),
         CommandDefinition(id: "reserved-new-chatgpt-message", title: "New ChatGPT Message (reserved)",
                           defaultShortcuts: [KeyboardShortcut(key: "g", modifiers: [.command, .option])], isReserved: true),
         CommandDefinition(id: "reserved-send-to-dia", title: "Send to Dia (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-view-easels-notes", title: "View Easels & Notes (reserved)", isReserved: true),
-        CommandDefinition(id: "reserved-export-arc-notes", title: "Export Notes (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-share-arc", title: "Share App (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-sign-out", title: "Sign Out (reserved)", isReserved: true),
     ]

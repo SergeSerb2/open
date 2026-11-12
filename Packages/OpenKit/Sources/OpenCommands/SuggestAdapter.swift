@@ -26,6 +26,22 @@ public extension CommandRegistry {
                 ))
                 continue
             }
+            // Join Meeting is two command-bar actions in Arc (docs/re/live-data.md §5, `S:129097–129192`):
+            // "Join next meeting" and "Join next video conference"; the app maps both ids to `join-meeting`.
+            if command.id == "join-meeting" {
+                let shortcut = command.defaultShortcuts.first?.symbolDisplay
+                actions.append(BrowserAction(
+                    id: "join-next-meeting", title: "Join next meeting",
+                    aliases: ["Join Meeting", "Meeting", "Join Call", "Calendar"],
+                    shortcut: shortcut, symbol: "video"
+                ))
+                actions.append(BrowserAction(
+                    id: "join-next-video-conference", title: "Join next video conference",
+                    aliases: ["Join Zoom Call", "Video Call", "Zoom", "Google Meet", "Teams Meeting"],
+                    shortcut: shortcut, symbol: "video"
+                ))
+                continue
+            }
             // Numbered go-to commands are menu carriers; the command bar uses
             // the dynamic focus-space action instead.
             if command.id.hasPrefix("go-to-") || command.id.hasPrefix("focus-split-pane") { continue }
@@ -100,13 +116,13 @@ public extension CommandRegistry {
         "view-media", "record-trace", "cancel-trace", "copy-open-info", "reveal-open-data",
         "network-inspector", "allow-js-apple-events", "toggle-developer-mode",
         "tab-switcher-forward", "tab-switcher-backward", "cycle-tab-forward", "cycle-tab-backward",
-        "peek-email", "join-meeting", "next-split-pane", "previous-split-pane", "show-shortcuts-overlay",
+        "peek-email", "next-split-pane", "previous-split-pane", "show-shortcuts-overlay",
         "little-open-global", "getting-started", "release-notes", "help-center",
     ]
 
     private static let symbols: [String: String] = [
         "open-extensions-picker": "puzzlepiece.extension", "extension-shortcuts": "command",
-        "new-tab": "plus", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
+        "new-tab": "plus", "new-note": "note.text", "new-note-in-split": "rectangle.split.2x1", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
         "new-little-open-window": "macwindow.on.rectangle", "archive-tab": "archivebox",
         "restore-last-closed-tab": "arrow.uturn.backward", "print": "printer", "save-page-as": "square.and.arrow.down",
         "new-profile": "person.crop.circle.badge.plus", "new-boost": "paintbrush", "edit-boost": "paintbrush",
@@ -121,7 +137,7 @@ public extension CommandRegistry {
         "new-space": "plus.rectangle.on.rectangle", "next-space": "arrow.right", "previous-space": "arrow.left",
         "manage-spaces": "square.grid.2x2", "rename-space": "pencil", "edit-theme": "paintpalette", "change-space-icon": "face.smiling", "change-profile": "person.crop.circle",
         "next-tab": "arrow.down", "previous-tab": "arrow.up", "clear-unpinned-tabs": "xmark.circle",
-        "new-folder": "folder.badge.plus", "duplicate-tab": "plus.square.on.square", "rename-tab": "pencil",
+        "new-folder": "folder.badge.plus", "new-easel": "scribble.variable", "duplicate-tab": "plus.square.on.square", "rename-tab": "pencil",
         "expand-all-folders": "folder", "collapse-all-folders": "folder.fill", "reset-tab": "arrow.counterclockwise",
         "reset-all-tabs-in-space": "arrow.counterclockwise.circle", "open-in-current-space": "macwindow.on.rectangle",
         "go-back": "chevron.left", "go-forward": "chevron.right", "view-archive": "archivebox", "view-history": "clock",

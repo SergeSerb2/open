@@ -152,6 +152,8 @@ targets:
       - package: OpenKit
         product: OpenStore
       - package: OpenKit
+        product: OpenDocuments
+      - package: OpenKit
         product: OpenWeb
       - package: OpenKit
         product: OpenExtensionsUI
@@ -163,6 +165,8 @@ targets:
         product: OpenFeatures
       - package: OpenKit
         product: OpenSettings
+      - package: OpenKit
+        product: OpenLibrary
       - package: OpenKit
         product: OpenOnboarding
       - package: OpenKit
@@ -176,6 +180,8 @@ targets:
       - package: OpenKit
         product: OpenSidebar
       - package: OpenKit
+        product: OpenLiveData
+      - package: OpenKit
         product: OpenSpaceEditor
       - package: OpenKit
         product: OpenMedia
@@ -185,6 +191,8 @@ targets:
         product: OpenDesign
       - package: OpenKit
         product: OpenTranslate
+      - package: OpenKit
+        product: OpenEasel
       - target: OpenHelper
         embed: false
         link: false

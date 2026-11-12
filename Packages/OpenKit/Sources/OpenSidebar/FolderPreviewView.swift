@@ -193,7 +193,7 @@ public final class FolderPreviewTable: NSTableView {
 }
 
 @MainActor
-private final class FolderPreviewRow: NSTableRowView {
+final class FolderPreviewRow: NSTableRowView {
     private var hovered = false
     private var tracking: NSTrackingArea?
     override var isSelected: Bool { didSet { needsDisplay = true } }
@@ -212,12 +212,13 @@ private final class FolderPreviewRow: NSTableRowView {
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
 }
 @MainActor
-private final class FolderPreviewCell: NSTableCellView {
+final class FolderPreviewCell: NSTableCellView {
     let favicon = FaviconView(), title = TextLabel(), subtitle = TextLabel()
-    init() {
+    /// Folder rows use medium titles (measured); Recents rows use regular (lead look ruling 2026-11-12 01:55).
+    init(titleWeight: NSFont.Weight = .medium) {
         super.init(frame: .zero); wantsLayer = true; addSubview(favicon); addSubview(title); addSubview(subtitle)
         favicon.inkSize = 16
-        title.font = .systemFont(ofSize: 13, weight: .medium); title.baseline = 19; title.color = { Core.foregroundPrimary.nsColor }
+        title.font = .systemFont(ofSize: 13, weight: titleWeight); title.baseline = 19; title.color = { Core.foregroundPrimary.nsColor }
         subtitle.font = .systemFont(ofSize: 11); subtitle.baseline = 15; subtitle.color = { Core.foregroundSecondary.nsColor }
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }

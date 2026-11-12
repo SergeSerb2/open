@@ -62,8 +62,8 @@ enum SymbolCache {
     /// of the symbol at full strength, then the token color (palette configurations dim
     /// secondary layers). One bitmap per scale: an image that also held a 2x bitmap would be
     /// downsampled into a 1x context. Drawing the vector each time cost ≈ 0.6 ms per keystroke.
-    static func image(_ name: String, size: CGFloat, weight: NSFont.Weight = .regular, color: RGBA) -> NSImage? {
-        let scale = currentScale
+    static func image(_ name: String, size: CGFloat, weight: NSFont.Weight = .regular, color: RGBA, scale explicitScale: CGFloat? = nil) -> NSImage? {
+        let scale = explicitScale ?? currentScale
         let key = Key(name: name, size: size, weight: weight.rawValue, color: color, scale: scale)
         if let i = cache[key] { return i }
         guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage(systemSymbolName: "questionmark", accessibilityDescription: nil) else { return nil }
@@ -92,14 +92,17 @@ enum SymbolCache {
 /// Glyph specs for the bar. Sizes are tuned so the 1x ink matches Arc's (measured boxes).
 enum BarGlyph {
     /// Input magnifier: ink 12×12 in the 18 pt frame (F0063 751…762 × 554…565).
-    static let inputSymbolSize: CGFloat = 12
+    static let inputSymbolSize: CGFloat = 15
     static let inputSymbolWeight: NSFont.Weight = .medium
     /// fitted: ink centered in the 18 pt frame (F0063 magnifier at 751…762 × 554…565).
     static let inputSymbolOffsetY: CGFloat = 0
     /// Row symbols (magnifier, globe): ink 11–12 pt (F0052 rows). fitted.
     /// fitted on Arc's ink: magnifier 12×12, globe 12×13 (F0052, F0048). SF Symbol art can change
     /// with the OS (sizes were re-fitted on macOS 27.2, build 26B5112a).
-    static func rowSymbolSize(_ name: String) -> CGFloat { 12 }
+    /// D3 card: the search glyph 14 pt (16 pt box in the mock-up). Action glyphs on a plate 13.
+    static func rowSymbolSize(_ name: String) -> CGFloat { 14 }
+    /// Arrow in the selected row's 20 pt key cap (13 pt box in the mock-up).
+    static let keyCapArrowSize: CGFloat = 11
     /// Arc draws the magnifier and the globe in one color (core #AEAEAF / #B3B3B3); our symbols'
     /// stroke widths differ, so the tint is fitted per symbol to match the core pixels.
     static func rowSymbolAlpha(_ name: String) -> Double { name == "magnifyingglass" ? 0.68 : 0.72 }
@@ -122,13 +125,18 @@ enum BarGlyph {
     static let infoWeight: NSFont.Weight = .regular
 }
 
-/// Fonts. Input 18 Medium, rows 13 Medium (interaction-states §9.2); hint and keycaps fitted.
+/// Fonts. D3 card (plan §2.1): input 19 Regular (inline 15), rows 15 Medium, selected title 15 Semibold,
+/// subtitle 15 Regular, the selected row's hint 13 Semibold. Hint and keycaps fitted (older captures).
 enum BarFont {
-    @MainActor static var input: NSFont { Typography.commandBarInput.font }
+    @MainActor static func input(_ size: CGFloat) -> NSFont { FontToken(size, .regular).font }
+    @MainActor static func row(_ size: CGFloat) -> NSFont { FontToken(size, .medium).font }
+    @MainActor static func rowSelected(_ size: CGFloat) -> NSFont { FontToken(size, .semibold).font }
+    @MainActor static func rowSubtitle(_ size: CGFloat) -> NSFont { FontToken(size, .regular).font }
+    @MainActor static var hintLabel: NSFont { FontToken(CommandCard.hintFontSize, .semibold).font }
+    @MainActor static var input: NSFont { input(19) }
     /// The field inside a scope: 18 Regular (fitted on two ink widths: "Search…" 68 px in S2 18/0016,
     /// "bird" 28 px in 0018; 18 Medium gives 70 and 30).
     @MainActor static var inputScoped: NSFont { FontToken(18, .regular).font }
-    @MainActor static var row: NSFont { Typography.commandBarRow.font }
     /// Hint label: 12.75 Medium, fitted on two ink widths ("Search Google" 88 px in F0061, "Search Wikipedia"
     /// 105 px in S2 18/0009); 12.75 Regular was 2 px narrow on the longer one.
     @MainActor static var hint: NSFont { FontToken(12.75, .medium).font }

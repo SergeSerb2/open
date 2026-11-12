@@ -15,11 +15,15 @@ final class AppImportUndo {
   /// Undo permanently stops this import, even if Redo is pressed before a
   /// pending store batch returns. Store inverses wait for its final receipt.
   private(set) var cancelled = false
+  /// Menu title of the Undo item, per import source.
+  var actionName = "Import from Arc"
   private var importing = true
   private var importWaiters: [CheckedContinuation<Void, Never>] = []
   private var archives: [(ArchiveStore, [ArchivedTabRecord])] = []
   private var histories: [(HistoryStore, HistoryImportUndo)] = []
   private var boosts: [(ProfileID, BoostStore, [Boost])] = []
+  /// Extra Arc data types (ArcImportProviders): their own undo and redo actions.
+  private var providers: [(undo: @MainActor @Sendable () async throws -> Void, redo: (@MainActor @Sendable () async throws -> Void)?)] = []
   private(set) var task: Task<Void, Never>?
   private(set) var pendingOperations = 0
   private(set) var errorText = ""
@@ -50,6 +54,11 @@ final class AppImportUndo {
     boosts.append((profileID, store, values)); registerIfNeeded()
   }
 
+  func append(provider undo: (@MainActor @Sendable () async throws -> Void)?, redo: (@MainActor @Sendable () async throws -> Void)?) {
+    guard let undo else { return }
+    providers.append((undo, redo)); registerIfNeeded()
+  }
+
   func finishImport() {
     importing = false
     let waiters = importWaiters; importWaiters.removeAll()
@@ -70,7 +79,7 @@ final class AppImportUndo {
     manager.registerUndo(withTarget: self) { [self] _ in
       MainActor.assumeIsolated { apply(undoing: undoing) }
     }
-    manager.setActionName("Import from Arc")
+    manager.setActionName(actionName)
     if group { manager.endUndoGrouping() }
   }
 
@@ -95,6 +104,7 @@ final class AppImportUndo {
           guard await store.removeImportedHistory(receipt) else { throw UndoFailure.store }
         }
         for (store, records) in archives.reversed() { try await store.delete(ids: records.map(\.id)) }
+        for provider in providers.reversed() { try await provider.undo() }
       } else {
         applyModel(undoing: false)
         var replacedBoosts: [(ProfileID, BoostStore, [Boost])] = []
@@ -122,6 +132,7 @@ final class AppImportUndo {
           if !result.undo.isEmpty { replacedArchives.append((store, result.undo)) }
         }
         archives = replacedArchives
+        for provider in providers { try await provider.redo?() }
       }
     }
   }

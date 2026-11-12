@@ -1,0 +1,251 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          89568,
+          89577,
+          89578,
+          89579
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
+    "distributionSHA256": "cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b",
+    "distributionUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+    "embeddedCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
+    "embeddedSHA256": "4aa5dc9f266a0f3f1a0feae49dc2455fce47258a3fce66bb6d5ea94b9fbaddc7",
+    "embeddedUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794470169"
+  },
+  "import-other-browsers": {
+    "firefox_bookmarks": {
+      "folders": [
+        "Imported from Firefox",
+        "Imported from Firefox/Bookmarks Menu",
+        "Imported from Firefox/Bookmarks Toolbar",
+        "Imported from Firefox/Bookmarks Toolbar/Synthetic Nested 1",
+        "Imported from Firefox/Bookmarks Toolbar/Synthetic Nested 1/Deeper"
+      ],
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "ok": true,
+      "outcome": {
+        "Bookmarks": 6,
+        "Skipped bookmarks": 9
+      },
+      "tabs": 6
+    },
+    "firefox_choose": {
+      "labels": {
+        "Bookmarks": "Found: 6",
+        "History": "Found: 7,003",
+        "Passwords": "Found: 3"
+      },
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "ok": true,
+      "passwords": true,
+      "step": "Choose"
+    },
+    "firefox_history": {
+      "history": 5600,
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "ok": true,
+      "visits": 5600
+    },
+    "firefox_passwords": {
+      "appLog": [],
+      "error": "",
+      "failures": {},
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "logins": 3,
+      "ok": true,
+      "passwords": 3,
+      "skipped": 1
+    },
+    "firefox_reimport": {
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "ok": true,
+      "repeat": {
+        "Bookmarks": 0,
+        "History": 0,
+        "Password duplicates": 3,
+        "Passwords": 0
+      }
+    },
+    "firefox_running": {
+      "access": "quitBrowser",
+      "load": [
+        5.35546875,
+        7.02783203125,
+        7.75537109375
+      ],
+      "ok": true,
+      "released": true,
+      "step": "Access"
+    },
+    "firefox_undo": {
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "ok": true,
+      "undoTitle": "Import from Firefox",
+      "visits": 0
+    },
+    "primary_password_right": {
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "logins": 3,
+      "ok": true,
+      "outcome": 3
+    },
+    "primary_password_wrong": {
+      "blockedWithout": false,
+      "failures": {
+        "Passwords": "The Primary Password is not correct"
+      },
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "needs": true,
+      "ok": true
+    },
+    "safari_export_csv": {
+      "failures": {},
+      "labels": {
+        "Bookmarks": "Found: 5",
+        "History": "Found: 6,002",
+        "Passwords": "Found: 3"
+      },
+      "load": [
+        5.16650390625,
+        6.9609375,
+        7.72705078125
+      ],
+      "logins": 3,
+      "ok": true,
+      "outcome": {
+        "Bookmarks": 5,
+        "History": 6000,
+        "Password duplicates": 3,
+        "Passwords": 3
+      },
+      "refused": "The file you chose doesn't look like a passwords file. Expor",
+      "safariFolders": [
+        1,
+        2
+      ]
+    },
+    "safari_full_disk_access": {
+      "granted": true,
+      "load": [
+        5.35546875,
+        7.02783203125,
+        7.75537109375
+      ],
+      "ok": true,
+      "requests": 1,
+      "selectable": true,
+      "step": "Access"
+    },
+    "safari_live": {
+      "folders": [
+        "Imported from Safari",
+        "Imported from Safari/Favorites",
+        "Imported from Safari/Favorites/Synthetic Live Folder",
+        "Imported from Safari/Reading List"
+      ],
+      "labels": {
+        "Bookmarks": "Found: 3",
+        "History": "Found: 5",
+        "Passwords": "Choose a passwords file"
+      },
+      "load": [
+        5.35546875,
+        7.02783203125,
+        7.75537109375
+      ],
+      "ok": true,
+      "outcome": {
+        "Bookmarks": 3,
+        "History": 4
+      }
+    },
+    "sources_detected": {
+      "firefox": [
+        true,
+        "",
+        [
+          "Synthetic Default",
+          "Synthetic Work"
+        ]
+      ],
+      "load": [
+        5.21240234375,
+        7.0283203125,
+        7.76025390625
+      ],
+      "ok": true,
+      "safari": [
+        true,
+        ""
+      ]
+    }
+  },
+  "interrupted_attempts": [],
+  "lane": "all",
+  "load": [
+    5.05712890625,
+    7.02880859375,
+    7.76513671875
+  ],
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "213581b250964fd5bdb6fb2aad0b1a4b39018ac6"
+  },
+  "started": "2026-11-12 02:56:52",
+  "style": "chrome"
+}

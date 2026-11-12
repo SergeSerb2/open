@@ -1,5 +1,12 @@
 # Settings and Library — implementation plan for Open
 
+Library update (2026-11-11): the Library portions of this historical plan are
+superseded by [Library](../library.md). Library now uses a native AppKit panel
+inside each browser window, with six sections and History always enabled.
+Settings retains its own window and design. Easels and filesystem sources are
+in scope under the current project rules; their Library entry points remain
+default-off until implemented.
+
 Status: plan (2026-10-25). Implementer: a coding agent with no other
 context. Follow this file literally. Where this file says "Open choice",
 the choice is final for v1. Do not re-derive it. Where this file cites
@@ -71,7 +78,7 @@ SwiftUI for them.
 | D-6 | The Links pane owns no second rule list. It binds the existing `LinksSettingsModel`. Saves go through `currentRouting()` into `BrowserModel`, then the normal snapshot save. | `docs/routing.md` "Settings data". Reuse beats rewrite. |
 | D-7 | The Shortcuts pane owns no second key map. It reads and writes `KeyBindingStore` (`OpenCommands`) and uses `ConflictChecker` as the only conflict rule. | `docs/commands.md` "Key binding overrides". |
 | D-8 | Search stays per-profile. The picker lives in the Profiles pane. Advanced only links to it and hosts the custom-engine editor sheet. | `docs/re/features-core.md` sections 4.5 and 7.2: search engine, suggestions, and custom engines are per Profile. |
-| D-9 | Library v1 = Archive + Downloads + Captures (app-owned items only). Filesystem folder sources (Documents, Desktop, Downloads folders, Screenshots permission) are deferred to v1.1. Easels and Notes sources never ship. | Section 6.3 gives the justification. |
+| D-9 | Library v1 = Archive + Downloads + Captures (app-owned items only). Filesystem folder sources (Documents, Desktop, Downloads folders, Screenshots permission) are deferred to v1.1. Easels and Notes sources never ship. **Superseded (scope 2026-11-10; PB1 2026-11-12): folder sources ship in v1, see `docs/status.md`.** | Section 6.3 gives the justification. |
 | D-10 | Fresh-profile search default is Google. Stored values never change. | `docs/suggest.md`: "Google is the default (Arc section 4.5 rule 11)." `ProfileSettings.init` now defaults to `duckduckgo`. That is a bug for fresh profiles. Fix the default only (Step 2). Do not migrate stored snapshots. |
 | D-11 | Names: "Little Open" in all UI text. "Import from Arc" is the one allowed brand string. Command ids never change (`settings`, `view-library`, `view-downloads`, `view-archive`, `view-history`, `import-from-browser`). | `AGENTS.md` naming; `docs/commands.md` registry. |
 | D-12 | No new third-party dependency. PNG rendering uses AppKit (`NSBitmapImageRep`, `cacheDisplay`). | `AGENTS.md` code conventions. |

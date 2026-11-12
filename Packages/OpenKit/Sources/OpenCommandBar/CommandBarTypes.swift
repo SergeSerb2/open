@@ -144,30 +144,42 @@ extension CommandBarDelegate {
     public func commandBarDidDismissPrivacyNotice(_ commandBar: CommandBarController) {}
 }
 
-/// Theme colors the bar takes from the Space (`semanticColorPalette.appearanceBased.dark`).
+/// Theme colors the bar takes from the Space and the window appearance (plan D3 §2.1, §2.6).
 public struct CommandBarTheme: Sendable, Hashable {
-    /// Selected row fill, drawn over the panel: `dark.focus` with its alpha (#B85727 a 0.8075 → #9A4B26, F0063).
-    public var focus: RGBA
-    /// Input text selection: `dark.subtitle` (#807571 exact, F0048).
-    public var textSelection: RGBA
-    /// Info (i) circle: `dark.backgroundExtra` (#190700 exact, F0063).
-    public var infoFill: RGBA
+    /// The Space accent (one function, `SpaceAccent`).
+    public var accent: SpaceAccent
+    /// The window's effective appearance: Light `#F9F9F9` / Dark `#30302E` card.
+    public var isDark: Bool
+    private var focusOverride: RGBA?
 
-    public init(focus: RGBA, textSelection: RGBA, infoFill: RGBA) {
-        self.focus = focus; self.textSelection = textSelection; self.infoFill = infoFill
+    public init(accent: SpaceAccent, isDark: Bool = false) { self.accent = accent; self.isDark = isDark }
+
+    public init(style: SpaceThemeStyle?, isDark: Bool = false) {
+        self.init(accent: SpaceAccent(style: style), isDark: isDark)
     }
 
-    public init(style: SpaceThemeStyle?) {
-        if let p = style?.darkPalette {
-            self.init(focus: p.focus, textSelection: p.subtitle.withAlpha(1), infoFill: p.backgroundExtra.withAlpha(1))
-        } else {
-            self = .default
-        }
+    /// Selected row fill: the accent (Light) or the dark accent (Dark). A scope sets the chip color.
+    public var focus: RGBA {
+        get { focusOverride ?? accent.selection(dark: isDark) }
+        set { focusOverride = newValue }
     }
+    /// Input text selection: the accent at 55 %.
+    public var textSelection: RGBA { accent.accent.withAlpha(CommandCard.textSelectionAlpha) }
+    /// The (i) circle.
+    public var infoFill: RGBA { CommandCard.infoFill.resolved(appearance) }
+    /// The key cap glyph on the selected row.
+    public var keyCapGlyph: RGBA { accent.darkAccent }
+    public var tint: RGBA { accent.tint(dark: isDark) }
+    public var appearance: ContentAppearance { isDark ? .dark : .light }
+    public var body: RGBA { CommandCard.body.resolved(appearance) }
+    public var text: RGBA { CommandCard.text.resolved(appearance) }
+    public var secondaryText: RGBA { CommandCard.secondaryText.resolved(appearance) }
+    public var separator: RGBA { CommandCard.separator.resolved(appearance) }
+    /// Plates for keycaps and action glyphs on unselected rows. guess (not in the mock-up): the text at 7 %.
+    public var plate: RGBA { text.withAlpha(0.07) }
 
-    /// Spaces without a theme (A0327, A0359).
-    public static let `default` = CommandBarTheme(focus: CommandBarRole.defaultFocus, textSelection: CommandBarRole.defaultTextSelection,
-                                                  infoFill: CommandBarRole.defaultInfoFill)
+    /// Open's default theme in Light.
+    public static let `default` = CommandBarTheme(accent: .night)
 }
 
 /// What lies behind the panel. The panel is translucent (docs/commandbar.md §3), so its
