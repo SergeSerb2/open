@@ -43,6 +43,31 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
     return true
   }
 
+  /// "Share N Items…" on a selection (capture session 8 item 6): the share picker at the first
+  /// selected row with every selected link (folders and splits give their tabs'), without trackers.
+  @discardableResult
+  func shareSidebarNodes(_ ids: [ItemID]) -> Bool {
+    func urls(_ node: SidebarNode) -> [URL] {
+      switch node {
+      case .tab(let tab): [URLCleaner.clean(tab.url).url]
+      case .split(let split): split.panes.map { URLCleaner.clean($0.url).url }
+      case .folder(let folder): folder.children.flatMap(urls)
+      }
+    }
+    let links = ids.compactMap { model.node(id: $0) }.flatMap(urls)
+    guard !isClosing, !links.isEmpty, let sidebar = controller?.sidebar, sidebar.window != nil,
+          let rect = ids.lazy.compactMap({ sidebar.rowFrame(nodeID: $0) }).first else { return false }
+    sidebarSharePicker?.close()
+    let picker = NSSharingServicePicker(items: links)
+    sidebarSharePicker = picker; picker.delegate = self
+    #if OPEN_AUTOMATION
+    sidebarShareRequest = ["url": links[0].absoluteString, "node": ids[0].description,
+      "anchor": [rect.minX, rect.minY, rect.width, rect.height], "requested": true, "servicesRequested": false, "closed": false]
+    #endif
+    picker.show(relativeTo: rect, of: sidebar, preferredEdge: .maxX)
+    return true
+  }
+
   /// "Share ▸ ‹service›" (capture session 8 item 1): performs the system service with the link
   /// without trackers. Automation with `sidebar-share dismiss` records the request instead of
   /// opening a foreign app.

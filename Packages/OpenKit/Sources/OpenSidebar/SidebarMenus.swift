@@ -87,20 +87,57 @@ struct SidebarMenus {
             }
         }
         let canCopy = ids.contains { context.model.node(id: $0).map(hasLinks) ?? false }
+        // Capture session 8 item 6 (AX of the open menu, `i6a-two-today`, `i6b-pinned-today`, `i6c-tab-folder`):
+        // tabs: Copy Links · Share N Items… · — · Change Icon… (disabled) · Mute · — · Open in Split View ·
+        // Duplicate · Move to ▸ · New Folder with N Items · — · Archive Tabs (+ the ⌥ group when all are Today tabs);
+        // with a folder: Copy Links · Share N Items… · — · Open in Split View (disabled) · Move to ▸ ·
+        // New Folder with N Items · — · Delete.
+        // Open's own, behind ⌥ so the drawn menu is Arc's: "Copy links as Markdown" (guess: Arc has the
+        // plural string but does not list it here) and "Pin Tabs" / "Unpin Tabs".
+        let c = context
+        let tabObjects = tabs.compactMap { context.model.tab(id: $0) }
+        let onlyTabs = folders.isEmpty && tabObjects.count == ids.count
+        let canSplit = onlyTabs && (2...4).contains(ids.count) && !ids.contains { if case .favorites? = context.model.parent(of: $0) { true } else { false } }
         var items: [NSMenuItem] = [
             item("Copy Links", enabled: canCopy, .copyLinks(ids: ids, markdown: false)),
-            item("Copy links as Markdown", enabled: canCopy, .copyLinks(ids: ids, markdown: true)),
-            .separator(),
-            item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)),
-            moveTo(ids),
+            alternate(item("Copy links as Markdown", enabled: canCopy, .copyLinks(ids: ids, markdown: true))),
+            item("Share \(ids.count) Items…", enabled: canCopy, .shareNodes(ids: ids)),
             .separator(),
         ]
         if folders.isEmpty {
-            let unpin = ids.allSatisfy { context.model.isPinned(tabID: $0) }
-            items.append(item(unpin ? "Unpin Tabs" : "Pin Tabs", .setPinned(ids: ids, pinned: !unpin)))
+            let canMute = tabObjects.contains { $0.live.isAudible || $0.isMuted }
+            let unmute = !tabObjects.contains { $0.live.isAudible && !$0.isMuted } && tabObjects.contains(where: \.isMuted)
+            items += [
+                ClosureMenuItem("Change Icon…", enabled: false) {},
+                ClosureMenuItem(unmute ? "Unmute" : "Mute", enabled: canMute) {
+                    for tab in tabObjects where (tab.live.isAudible || tab.isMuted) && tab.isMuted == unmute { c.send(.toggleMute(tabID: tab.id)) }
+                },
+                .separator(),
+            ]
         }
-        items += [item("Duplicate", .duplicateNodes(ids: ids)), .separator()]
-        if !tabs.isEmpty { items.append(item("Archive Items", .archiveNodes(ids: tabs))) }
+        items.append(item("Open in Split View", enabled: canSplit, .splitNodes(ids: ids)))
+        if folders.isEmpty {
+            let unpin = ids.allSatisfy { context.model.isPinned(tabID: $0) }
+            items += [item("Duplicate", .duplicateNodes(ids: ids)),
+                      alternate(item(unpin ? "Unpin Tabs" : "Pin Tabs", .setPinned(ids: ids, pinned: !unpin)))]
+        }
+        items += [moveTo(ids), item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)), .separator()]
+        if !tabs.isEmpty {
+            // With a folder Arc draws only "Delete" (nothing was executed in the capture); Open keeps the
+            // tabs' archive item beside it until a capture shows what Delete does to the tabs.
+            items.append(item("Archive Tabs", .archiveNodes(ids: tabs)))
+            let spaces = Set(ids.map { context.model.parent(of: $0) }.map { parent -> SpaceID? in
+                if case .spaceToday(let id)? = parent { id } else { nil }
+            })
+            if folders.isEmpty, spaces.count == 1, let space = spaces.first ?? nil {
+                let today = context.model.space(id: space)?.today ?? []
+                items += [
+                    alternate(item("Archive Other Tabs", enabled: today.contains { !ids.contains($0.id) }, .clearTodayKeeping(space: space, keep: Set(ids)))),
+                    ClosureMenuItem("Archive Tabs Below", enabled: false) {},
+                    alternate(ClosureMenuItem("Archive Tabs Above", enabled: false) {}),
+                ]
+            }
+        }
         if !folders.isEmpty { items.append(item("Delete", .deleteFolders(ids: folders))) }
         return menu(items)
     }

@@ -11,7 +11,8 @@ def checks(app, results, origin, h):
     def copy(name, node, menu, expected, title):
         shown = app.call('toasts')['shown']
         app.call('pasteboard', text='clean-links-copy-sentinel')
-        app.call('sidebar-menu', node=node, item=menu)
+        # Open's "Copy links as Markdown" on a selection is an ⌥ alternate (drawn menu = Arc's, session 8 item 6).
+        app.call('sidebar-menu', node=node, item=menu, **({'alternate': True} if menu == 'Copy links as Markdown' else {}))
         actual = app.call('pasteboard')
         toast_state = app.call('toasts')
         toast = h.page_newest_toast(app, title) if title else None

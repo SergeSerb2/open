@@ -101,6 +101,10 @@ public enum SidebarIntent: Equatable, Sendable {
     case archiveNodes(ids: [ItemID])
     case deleteFolders(ids: [ItemID])
     case newFolderFromSelection(ids: [ItemID])
+    /// Selection menu "Open in Split View": the selected tabs become one split (2…4 tabs).
+    case splitNodes(ids: [ItemID])
+    /// Selection menu "Share N Items…": the share picker with the selection's links. App.
+    case shareNodes(ids: [ItemID])
     case setPinned(ids: [ItemID], pinned: Bool)
     case duplicateNodes(ids: [ItemID])
     case copyLinks(ids: [ItemID], markdown: Bool)

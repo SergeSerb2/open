@@ -373,8 +373,13 @@ extension CompletionChecks {
         } else { check(false, "MS7 selected row exposes its accessory control") }
         context.forcedHover = nil; select(ids)
         let menu = sidebar.contextMenu(nodeID: ids[1])!
-        check(titles(menu) == ["Copy Links", "Copy links as Markdown", "—", "New Folder with 3 Items", "Move to", "—", "Pin Tabs", "Duplicate", "—", "Archive Items"],
-              "MS7 tabs selection menu order and titles")
+        // Drawn menu (capture session 8 item 6); "Copy links as Markdown" and "Pin Tabs" are Open's ⌥ alternates.
+        let drawn = titles(menu)
+        check(drawn == ["Copy Links", "Share 3 Items…", "—", "Change Icon…", "Mute", "—", "Open in Split View", "Duplicate", "Move to", "New Folder with 3 Items", "—", "Archive Tabs"]
+              || drawn == ["Copy Links", "Share 3 Items…", "—", "Change Icon…", "Mute", "—", "Open in Split View", "Duplicate", "Move to", "New Folder with 3 Items", "—", "Archive Tabs", "Archive Tabs Below"],
+              "MS7 tabs selection menu order and titles: \(drawn.joined(separator: " · "))")
+        check(menu.item(withTitle: "Copy links as Markdown")?.isAlternate == true && menu.item(withTitle: "Pin Tabs")?.isAlternate == true
+              && menu.item(withTitle: "Change Icon…")?.isEnabled == false, "MS7 Open's Markdown and Pin items are ⌥ alternates; Change Icon… is disabled")
         delegate.log = []
         perform(menu, "Copy links as Markdown")
         check(delegate.log == [.copyLinks(ids: ids, markdown: true)] && context.selection.ids == ids,
@@ -404,7 +409,8 @@ extension CompletionChecks {
         model.moveNode(id: nested.id, to: .folder(group.id), at: nil); pump()
         select([ids[0], group.id])
         let mixed = sidebar.contextMenu(nodeID: group.id)!
-        check(titles(mixed) == ["Copy Links", "Copy links as Markdown", "—", "New Folder with 2 Items", "Move to", "—", "Duplicate", "—", "Archive Items", "Delete"] &&
+        check(titles(mixed) == ["Copy Links", "Share 2 Items…", "—", "Open in Split View", "Move to", "New Folder with 2 Items", "—", "Archive Tabs", "Delete"] &&
+              mixed.item(withTitle: "Open in Split View")?.isEnabled == false &&
               !titles(mixed).contains(where: { $0.contains("Archive Folder") }), "MS7 mixed menu has Delete only and no pin action")
         delegate.log = []
         perform(mixed, "Delete")
@@ -413,7 +419,7 @@ extension CompletionChecks {
         delegate.log = []; key(51)
         check(delegate.log == [.deleteFolders(ids: [ids[0], group.id])], "Delete on a mixed selection requests one confirmation for one eventual bulk archive")
         select([ids[0], group.id])
-        perform(sidebar.contextMenu(nodeID: group.id)!, "Archive Items")
+        perform(sidebar.contextMenu(nodeID: group.id)!, "Archive Tabs")
         check(model.node(id: ids[0]) == nil && context.selection.ids == [group.id], "MS9 mixed Archive Items preserves its untouched selected folder")
         undo.undo(); pump()
         let secondFolder = model.createFolder(in: .spacePinned(space.id), title: "Other folder")!
@@ -434,7 +440,7 @@ extension CompletionChecks {
         let ordered = space.today.filter { n in tabs.contains { $0.id == n.id } }.map(\.id)
         select(ordered); changes = []
         let archiveBatches = archive.batches
-        perform(sidebar.contextMenu(nodeID: ordered[0])!, "Archive Items")
+        perform(sidebar.contextMenu(nodeID: ordered[0])!, "Archive Tabs")
         check(changes.filter { if case .remove = $0 { true } else { false } }.count == 3 && archive.batches == archiveBatches + 1 &&
               Set(records().map(\.id)) == Set(ordered), "MS9 three removes, one sink batch, three persisted SQLite rows")
         check(sidebar.displayedRows == Checks.expectedRows(context: context) && context.selection.isEmpty, "MS9 outline follows archive and selection clears")
