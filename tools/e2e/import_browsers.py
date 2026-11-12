@@ -83,6 +83,7 @@ def fixture(library):
     vivaldi = library/'Application Support/Vivaldi/Default'; vivaldi.mkdir(parents=True)
     (vivaldi/'Bookmarks').write_text(body + ' ' * (limit + 1 - len(body)))
     (library/'Application Support/BraveSoftware/Brave-Browser').mkdir(parents=True)
+    (library/'Application Support/Arc').mkdir(parents=True)
     (library/'Application Support/Firefox/Profiles').mkdir(parents=True)
 
 
@@ -142,14 +143,18 @@ def run(factory, results, tmp, h):
 
     s = open_sources()
     sources = {item['id']: item for item in s.get('settingsSources', [])}
-    row('sources_detected', s.get('settingsStep') == 'Source' and s.get('settingsTitle') == 'Import from another browser'
-        and sources.get('chrome', {}).get('selectable') and [p['name'] for p in sources['chrome']['profiles']] == ['Example Person', 'Example Work']
-        and s.get('settingsSelectedSource') == 'chrome',
-        step=s.get('settingsStep'), title=s.get('settingsTitle'), selected=s.get('settingsSelectedSource'),
-        sources={k: (v['selectable'], v['status'], len(v['profiles'])) for k, v in sources.items()})
-    row('sources_unselectable', sources.get('brave', {}).get('selectable') is False and sources['brave']['status'] == 'No data'
-        and sources.get('firefox', {}).get('selectable') is False and 'opera' not in sources,
-        brave=sources.get('brave', {}).get('status'), firefox=sources.get('firefox', {}).get('status'))
+    visible = [item['id'] for item in s.get('settingsSources', []) if item.get('visible')]
+    # Capture s5: Arc lists detected browsers only, preselects nothing, and keeps Next disabled until a pick.
+    row('sources_detected', s.get('settingsStep') == 'Source' and visible == ['arc', 'chrome', 'firefox', 'edge', 'vivaldi']
+        and sources['chrome']['selectable'] and sources['arc']['selectable']
+        and [p['name'] for p in sources['chrome']['profiles']] == ['Example Person', 'Example Work']
+        and s.get('settingsSelectedSource') == '' and s.get('settingsCanContinueFromSource') is False,
+        step=s.get('settingsStep'), visible=visible, selected=s.get('settingsSelectedSource'),
+        canContinue=s.get('settingsCanContinueFromSource'))
+    # Capture s5 hides a detected browser without an importable profile; lead 01:55 keeps Firefox as "Coming soon".
+    row('sources_hidden_without_profile', 'brave' in sources and 'brave' not in visible and 'opera' not in sources
+        and sources.get('firefox', {}).get('selectable') is False and sources['firefox']['status'] == 'Coming soon',
+        sources=sorted(sources), visible=visible, firefox=sources.get('firefox', {}).get('status'))
     app.call('first-run', action='settings-cancel-passwords')
 
     before_data, before_nodes = sidebar(app)
