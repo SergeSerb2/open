@@ -2,9 +2,10 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
+// Outside OPEN_AUTOMATION: the shipping build uses ImportWizardViewModel and ArcImportProviders below.
+import OpenSettings
 #if OPEN_AUTOMATION
 import OpenOnboarding
-import OpenSettings
 #endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
