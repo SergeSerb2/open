@@ -210,8 +210,11 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         // The fill clamps the key's lightness; palettes and polarity use the key as is.
         let hsl = ThemeColorMath.hsl(key)
         let range = SidebarThemeRules.fillLightness
+        // Near 0 or 1 lightness, sub-level channel noise makes HSL saturation explode:
+        // a key within one level of gray is gray.
+        let isGray = max(key.r, key.g, key.b) - min(key.r, key.g, key.b) < 1.0 / 255
         let fillKey = range.contains(hsl.l) ? key
-            : ThemeColorMath.rgb(h: hsl.h, s: hsl.s, l: min(range.upperBound, max(range.lowerBound, hsl.l)))
+            : ThemeColorMath.rgb(h: hsl.h, s: isGray ? 0 : hsl.s, l: min(range.upperBound, max(range.lowerBound, hsl.l)))
         let colors = ThemeColorMath.harmony(key: fillKey, count: style.colorCount, wheel: style.wheel)
             .map { RGBA(rgba: ThemeColorMath.toExtendedSRGB($0)) }
         // Arc 1.172.2: the Space mode picks the window scheme (drawn lightness, popovers,

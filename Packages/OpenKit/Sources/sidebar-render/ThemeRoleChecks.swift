@@ -92,6 +92,11 @@ enum ThemeRoleChecks {
             let titleDE = ColorMath.deltaE2000(hex(c.arc.title), title)
             let polarity = content == .dark ? "lightText" : "darkText"
             check(worstBG <= t.backgroundDeltaE00, "\(c.id) background ΔE00 \(f(worstBG)) ≤ \(f(t.backgroundDeltaE00))")
+            if let key = c.key, Set(hex(key)).count == 1 {
+                // A gray key draws a gray field (a hue tint passed ΔE00 3 once: Greyscale1 cyan).
+                let spread = (middle.max() ?? 0) - (middle.min() ?? 0)
+                check(spread <= 2, "\(c.id) gray key draws gray (channel spread \(f(spread)) ≤ 2)")
+            }
             check(titleDE <= t.titleDeltaE00, "\(c.id) title \(hexString(title)) vs Arc \(c.arc.title) ΔE00 \(f(titleDE))")
             check(polarity == c.arc.polarity, "\(c.id) polarity \(polarity) vs Arc \(c.arc.polarity)")
             var plateText = "—"
