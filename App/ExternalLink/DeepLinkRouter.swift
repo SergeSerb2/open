@@ -46,10 +46,11 @@ final class DeepLinkRouter {
     let name = parts.first?.lowercased() ?? ""
     let result: String
     switch name {
+    // Quit after the Apple event handler returns, so LaunchServices gets its reply first.
     case "quit":
-      result = "quit"; NSApp.terminate(nil)
+      result = "quit"; DispatchQueue.main.async { NSApp.terminate(nil) }
     case "restart":
-      result = "restart"; restartRequested = true; NSApp.terminate(nil)
+      result = "restart"; restartRequested = true; DispatchQueue.main.async { NSApp.terminate(nil) }
     case "welcome":
       if let factory = frontFactory() { factory.openBasics(nil); result = "welcome" } else { result = "no-window" }
     case "space":

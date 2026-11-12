@@ -35,7 +35,7 @@ final class HandoffPublisher {
     if page === currentPage() || activity != nil { setNeedsUpdate() }
   }
 
-  private func currentPage() -> OEWebContent? {
+  func currentPage() -> OEWebContent? {
     guard let controller = app.frontWindowController else { return nil }
     return app.hostFactories[controller.windowID]?.selectedContent
   }

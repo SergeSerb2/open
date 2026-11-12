@@ -8730,6 +8730,7 @@ def routing_checks(factory, results, tmp):
         # PB1 Handoff: the key window's page is the published web activity; a
         # continued activity enters the same intake as a LaunchServices URL.
         published = wait_until(lambda: (lambda h: h if h['url'] == warm else None)(app.call('handoff-state')), timeout=5, step=.1)
+        handoff_seen = app.call('handoff-state')
         resumed_url = origin + '/handoff-resume'
         continued = app.call('handoff-continue', url=resumed_url)
         resumed = landed(resumed_url)
@@ -8739,7 +8740,7 @@ def routing_checks(factory, results, tmp):
         record('routing_handoff', bool(published) and continued == {'willContinue': True, 'accepted': True} and resumed
                and refused['accepted'] is False and refused_type == {'willContinue': False, 'accepted': False}
                and len(entries(resumed_url)) == 1 and bool(followed),
-               published=published, continued=continued, refused=refused, refusedType=refused_type, followed=followed)
+               published=published, seen=handoff_seen, continued=continued, refused=refused, refusedType=refused_type, followed=followed)
         app.call('space', space=target['id'])
         warm_tab = next(t['id'] for t in tabs if t['url'] == warm)
         app.call('wait', tab=warm_tab)
@@ -8918,7 +8919,7 @@ def routing_checks(factory, results, tmp):
         ok_name, by_name = deep('open-browser://space/routing%20TARGET', base_handled + 2)
         name_focus = wait_until(lambda: focused_space() == target['id'], timeout=3, step=.05)
         record('routing_deep_link_space', ok_index and ok_name and bool(index_focus) and bool(name_focus)
-               and by_index['result'] == 'space' and by_name['result'] == 'space', index=by_index, name=by_name,
+               and by_index['result'] == 'space' and by_name['result'] == 'space', index=by_index, byName=by_name,
                titles=[s['title'] for s in spaces])
         tabs_before = len(app.call('tabs'))
         ok_bad, missing = deep('open-browser://space/99', base_handled + 3)
@@ -8953,7 +8954,9 @@ def routing_checks(factory, results, tmp):
             except ProcessLookupError: pass
         record('routing_deep_link_restart_quit', sent.returncode == 0 and bool(gone) and bool(relaunched)
                and sent_quit is not None and sent_quit.returncode == 0 and bool(quit_done),
-               oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done))
+               oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done),
+               sent=[sent.returncode, sent.stderr[-300:]], appLog=[line for line in Path(app.launch_log_path).read_text(errors='replace').splitlines()
+                       if line.startswith('Open:')][-20:] if os.path.exists(app.launch_log_path) else None)
     finally:
         _restore_defaults(app, saved)
         if app: app.quit()

@@ -26,7 +26,10 @@ extension AutomationController {
     // Let a pending coalesced update run first.
     try? await Task.sleep(for: .milliseconds(250))
     return ["url": app.handoff.publishedURL?.absoluteString ?? "", "title": app.handoff.publishedTitle ?? "",
-      "published": app.handoff.publishedURL != nil, "updates": app.handoff.updateCount] as [String: Any]
+      "published": app.handoff.publishedURL != nil, "updates": app.handoff.updateCount,
+      "candidate": app.handoff.currentPage()?.url?.absoluteString ?? "",
+      "candidateEphemeral": app.handoff.currentPage()?.context.isEphemeral ?? false,
+      "frontWindow": app.frontWindowController?.windowID.description ?? ""] as [String: Any]
   }
 }
 #endif
