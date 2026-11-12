@@ -6,6 +6,7 @@
   import OpenWeb
   import OpenFeatures
   import OpenSidebar
+  import OpenLiveData
   import OpenCommands
   import OpenSettings
   import OpenLibrary
@@ -568,6 +569,7 @@
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
           app.settingsPresenter.refreshPreferencesIfLoaded()
           if key == "open.advanced.tabSleepMode" { app.tabSleep.reconcileSettingsPolicy() }
+          if key.hasPrefix("open.favorites.") { NotificationCenter.default.post(name: FavoriteTileSettings.didChange, object: UserDefaults.standard) }
           app.scheduleMenuRebuild()
         }
         if a["persistent"] as? Bool == true {
@@ -608,6 +610,7 @@
         return result
       case "sidebar-click": return try await sidebarClick(a)
       case "favorite-click": return try await favoriteClick(a)
+      case "favorite-badge": return try favoriteBadge(a)
       case "sidebar-key": return try await sidebarKey(a)
       case "hover": return try await sidebarHover(a)
       case "selection": return try sidebarController(a).context.selection.ids.map(\.description)
@@ -2153,6 +2156,28 @@
         let outline = controller.sidebar.focusedOutline, favorite || !outline.visibleRect.isEmpty else { throw Failure(message: "no visible sidebar target") }
       let root = controller.contentView.convert(frame, from: controller.sidebar)
       return NSPoint(x: root.midX, y: root.midY)
+    }
+
+    /// The unread badge drawn on one Favorite tile (audit A2): its text, whether it shows, and its
+    /// frame in the tile. Read from the real view tree (AX identifier `favoriteUnreadBadge`).
+    private func favoriteBadge(_ args: [String: Any]) throws -> Any {
+      let controller = try sidebarController(args)
+      let point = try sidebarPoint(args, controller: controller, favorite: true)
+      controller.contentView.layoutSubtreeIfNeeded()
+      controller.contentView.displayIfNeeded()
+      func badges(in view: NSView) -> [NSView] {
+        (view.accessibilityIdentifier() == "favoriteUnreadBadge" ? [view] : []) + view.subviews.flatMap(badges)
+      }
+      guard let badge = badges(in: controller.contentView).first(where: { view in
+        guard let tile = view.superview else { return false }
+        return controller.contentView.convert(tile.bounds, from: tile).contains(point)
+      }), let tile = badge.superview else { throw Failure(message: "no Favorite tile at that node") }
+      let subtitle = tile.subviews.first { $0.accessibilityIdentifier() == "favoriteMeetingSubtitle" }
+      return ["shown": !badge.isHidden && !(badge.accessibilityValue() as? String ?? "").isEmpty,
+        "subtitleShown": subtitle.map { !$0.isHidden } ?? false,
+        "text": badge.accessibilityValue() as? String ?? "",
+        "frame": [badge.frame.minX, badge.frame.minY, badge.frame.width, badge.frame.height],
+        "tile": [tile.bounds.width, tile.bounds.height]] as [String: Any]
     }
 
     /// A real NSEvent click on a Favorites tile (through NSApp.sendEvent and hit testing),
