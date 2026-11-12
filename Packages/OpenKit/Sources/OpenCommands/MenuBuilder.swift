@@ -185,7 +185,7 @@ public enum MenuBuilder {
         "view-archive": "View Archive…",
         "minimize-window": "Minimize Window",
         "view-library": "Open Library…", "view-downloads": "View Downloads…",
-        "view-media": "View Media…", "view-boosts": "View Boosts…",
+        "view-media": "View Media…", "view-boosts": "View Boosts…", "view-easels-notes": "View Easels & Notes…",
         "help-center": "Visit Help Center", "export-notes": "Export Notes",
     ]
 
@@ -417,10 +417,10 @@ public enum MenuBuilder {
     private static func buildWindowMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "Window")
         // Arc 1.172.2 order (runtime AX). macOS adds its own items (Fill, Center, Move & Resize…).
-        // View Easels… waits for capture C-NT1 (its target).
+        // Arc 1.172.2 says "View Easels…"; Open keeps Notes, so EZ's #504 title with the 1.172 ellipsis.
         add(menu, ["stay-on-top", "minimize-window", "zoom-window"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["view-library", "view-downloads", "view-media", "view-boosts"], target: target, overrides: overrides)
+        add(menu, ["view-library", "view-downloads", "view-easels-notes", "view-media", "view-boosts"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["bring-all-to-front"], target: target, overrides: overrides)
         NSApp?.windowsMenu = menu

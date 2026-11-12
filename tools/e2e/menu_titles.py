@@ -34,7 +34,7 @@ EXPECTED = {
              'Clear Today', 'Reset all tabs in this Space'],
     'Archive': ['Go Back', 'Go Forward', '---', 'View History', 'View Archive…', 'Clear Archive'],
     'Extensions': ['Add Extension…', 'Manage Extensions…'],
-    'Window': ['Stay On Top', 'Minimize Window', 'Zoom', '---', 'Open Library…', 'View Downloads…', 'View Media…',
+    'Window': ['Stay On Top', 'Minimize Window', 'Zoom', '---', 'Open Library…', 'View Downloads…', 'View Easels & Notes…', 'View Media…',
                'View Boosts…', '---', 'Bring All to Front'],
     'Help': ['Getting Started', 'Essential Keyboard Shortcuts', 'Contact the Team', 'Visit Help Center', 'Export Notes',
              '---', 'Troubleshooting'],

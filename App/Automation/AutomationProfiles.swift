@@ -131,7 +131,7 @@ extension AutomationController {
       ["id":profile.id.description,"name":profile.name,"directory":profile.dataDirectoryName,"spaces":app.model.spaces(using:profile.id).count,
        "icon":String(describing:profile.icon),"loaded":app.profileTeardown.wasLoaded(profile.id)]
     },"rows":vm.dataModel.rows.map(\.name),"unused":vm.unusedIDs.map(\.description),
-      "deleting":vm.deleting,"deleteEnabled":vm.canConfirmDelete,"deleteAXEnabled":enabled as Any? ?? NSNull(),
+      "deleting":vm.deleting,"deleteEnabled":vm.canConfirmDelete,"teardownStage":app.profileTeardown.stage,"errorText":vm.errorText,"deleteAXEnabled":enabled as Any? ?? NSNull(),
       "deleteAXClass":delete.map {String(reflecting:type(of:$0))} ?? "",
       "deleteText":vm.deleteConfirmation,"deleteNames":vm.deletionProfiles.map(\.name),
       "sheet":sheet?.windowNumber ?? 0,"sheetText":sheet.map(windowText) ?? [],"settings":owner?.windowNumber ?? 0,

@@ -949,9 +949,9 @@
  },
  {
   "path": "Window",
-  "title": "View Easels & Notes",
+  "title": "View Easels & Notes…",
   "shortcut": "",
-  "inScope": false
+  "inScope": true
  },
  {
   "path": "Help",

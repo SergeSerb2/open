@@ -10,6 +10,8 @@
 
 - Public settings link scheme: not registered; decide name and consent model before adding (lead)
 
+- Split suite rows `snapshot_two_panes` and `speed_idle_after_drag` (LEAD 12:18, 2026-11-12): rented-Mac display/timing rows, judge on M1. On the rented Mac 1 (2026-11-12, #446 proof runs), `snapshot_two_panes` failed with and without the change (a rented Mac has no reference for its display key), and `speed_idle_after_drag` failed in one run and passed in the next (a timing row; INFO only on a rented Mac). Neither row was investigated.
+
 - First onboarding frame waits for engine.start, 0.1–2.4 s observed on the same binary; final cold/repeat proof measured 2.552/2.498/2.416 s for engine.start and 3.435/3.295/3.230 s from launch to the first onboarding frame (INFO). Owner: launch budget (Section 8 item 13 / Section 16). Dyld/signature checks are a hypothesis; the attributed work is synchronous engine.start.
 - Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
   `onboarding` measures main-thread display-link intervals, not render-server

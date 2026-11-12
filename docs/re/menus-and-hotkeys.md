@@ -429,8 +429,8 @@ Notes; Cancel Trace (no trace was running). The Tabs menu's ⌘1…⌘9 group sh
 empty "Item 1…3" rows.
 
 Open follows this table (PB4 menu PR), except: the Note items stay visible (LEAD 01:25),
-Share Arc, Privacy Policy, Sign Out, Restore Data and View Easels… are not built (View
-Easels… waits for capture C-NT1), Cast stays hidden (out of v1), and the state titles
+Share Arc, Privacy Policy, Sign Out and Restore Data are not built, View Easels… is
+Open's "View Easels & Notes…" (#504; Open keeps Notes), Cast stays hidden (out of v1), and the state titles
 that need behaviour Open lacks (Copy URLs, Archive Tabs, Close Tab, Close Easel, Hide
 ‹section›, Close Library, Undo ‹action›, Open in ‹Space›) are listed as gaps.
 
