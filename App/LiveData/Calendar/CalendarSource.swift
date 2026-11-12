@@ -34,7 +34,7 @@ final class EventKitCalendarSource: CalendarSource {
     let store = EKEventStore()
   }
   private var box: StoreBox?
-  private var changeObserver: NSObjectProtocol?
+  private var changeObserver: (any NSObjectProtocol)?
   /// Called on the main actor when the store reports a change (new, edited or deleted events, account sync).
   var onChange: (() -> Void)?
 
