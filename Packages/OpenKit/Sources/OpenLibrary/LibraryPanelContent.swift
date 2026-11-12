@@ -538,7 +538,8 @@ extension LibraryPanelView {
                         guard let self, self.viewModel.historyProfileID == profile else { return }
                         self.viewModel.actions.deleteBoost(id:id,profileID:profile); self.renderRows()
                     }
-                })])
+                // Arc: a right-click on a Boost card opens no menu (capture session 8 item 14, `v13/33-boost-menu-delete`).
+                })],contextMenu:false)
           }
         }
     }
