@@ -52,18 +52,18 @@
     "scale-1-icc-header-v1-f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56-mode-2560x1440-pixels-2560x1440-mhz-240000": {
       "original": true,
       "renderScale": 1,
-      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "trustedMainCommit": "d926d500c09f046faece1827252bafccec769b3d",
       "reason": "Original references on trusted main. No PNG is regenerated. Exact original byte comparisons and render scale 1 remain in force.",
       "pngSHA256": {
         "legacy": {
-          "window-0.png": "2631803ef7ccacd9992a211dd3ebf60a0ea807486f65340e8d7ffcb21253819c",
-          "window-1.png": "c75aa5197edcc3f463d104b1778cf8f922635858b4bf72469fbf60716c172dfa",
-          "window-2.png": "288e647edeeb792c28534a92492282401d0858209837abe28d2c568c0084a94b"
+          "window-0.png": "d01d2a666b551e970aa2930db1b095af2805736d550b2f577c3deebc081aa9dc",
+          "window-1.png": "8788b7a4ba89ce4dd082815a1fc14f4cc56cf7415cd5a72ada99c55727f00a82",
+          "window-2.png": "cf3458610d9915d731763d8c9468ee5483bf2e331bc5e444d5c2741590d31099"
         },
         "editor": {
-          "window-0.png": "4a275632fc96d590060566c3cf47aadd5dacf31ec81b111d4f43ac192808d7a9",
-          "window-1.png": "e5756cd9be3da70fc31561f7a4e2dfb2891ce43a054f30b96a3b7f85999c6754",
-          "window-2.png": "bea8d9f21317991961b89de98ef4af4356999fa42d3101f3dbb175d1f295e7d9"
+          "window-0.png": "4b367f903df1a577d35b2e22c8f254cd586295d04be503f373228123b2e83191",
+          "window-1.png": "219384a3cfc3fabddc0b56f9bbc5dc5f17c78dda792c8d719843824fd711491a",
+          "window-2.png": "31701b592a279bdd899349c2608d7e4f79cb09e39c25b3876d279ec985cdbd9e"
         }
       },
       "mode": {
@@ -77,6 +77,15 @@
         "previousKey": "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43-mode-2560x1440-pixels-2560x1440-mhz-240000",
         "rawSHA256": "b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43",
         "normalizedSHA256": "f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56"
+      },
+      "rerecord": {
+        "commit": "d926d500c09f046faece1827252bafccec769b3d",
+        "reason": "D2 sidebar colour roles follow Arc 1.172.2 (capture session 3); LEAD 2026-11-12 01:25 Q1 (a) and 02:10 drift ruling (a)",
+        "binarySHA256": {
+          "openkit": "5b9a2ad479dc7795185c9f94536a305c8507d4ae1809ec732190f64e26269dd0",
+          "sidebar-render": "c2234d37be9370b26ccf1139dfd2a0c918a95616e084d23cf3c0a4d60c3bfa03",
+          "space-editor-render": "4308889b388c1c52c13c97ea1958dd00440ad5501d5fa46b94ed37c800d2910f"
+        }
       }
     }
   }
