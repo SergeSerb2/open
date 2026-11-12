@@ -83,8 +83,8 @@ def run(factory, results, tmp, env):
     def gallery(expect_cards=True):
         browser(); app.call('menu-perform', id='boost-gallery')
         assert wait(lambda: state()['boostsPresentation'] == 'gallery', timeout=5)
-        surface = 'boosts.gallery' if expect_cards else 'boosts.layout'
-        assert wait(lambda: surface in ids(), timeout=5), ui()
+        surfaces = {'boosts.gallery'} if expect_cards else {'boosts.layout.list', 'boosts.layout.gallery'}
+        assert wait(lambda: surfaces <= ids(), timeout=5), ui()
     def ids():
         return {c['id'] for c in ui()['controls'] if c['id']}
     def font(tab):
@@ -95,6 +95,12 @@ def run(factory, results, tmp, env):
         assert wait(lambda: state()['boostsProfile'] == (profile_a if name == name_a else profile_b), timeout=5)
     def enabled():
         return next(m['enabled'] for m in app.call('menu-state') if m['id'] == 'boost-gallery')
+    def delete_card(boost):
+        # The native card exposes Delete through its More options menu.
+        assert 'boosts.' + boost + '.more' in ids(), ui()
+        menu = app.call('library-ui', action='row-menu', id=boost)
+        assert any(item['title'] == 'Delete' and item['enabled'] for item in menu['items']), menu
+        app.call('library-ui', action='row-menu', id=boost, select='Delete')
     def bar():
         return app.call('commandbar-state')
     def type_gallery():
@@ -259,16 +265,16 @@ def run(factory, results, tmp, env):
                 return {'privateMenuAndBarRefused': True}
             row('BG_private', private)
             def delete():
-                gallery(); ui('press', id='boosts.' + second + '.delete')
+                gallery(); delete_card(second)
                 alert=wait(lambda: app.call('alert', window='library'), timeout=5)
                 assert 'Delete this Boost?' in alert['texts'], alert
                 if os.environ.get('OPEN_BG_FAIL_IN_SHEET') == '1': raise AssertionError('forced Gallery failure with Delete sheet open')
                 app.call('key', key='escape', route='app', window=next(w['number'] for w in app.call('windows') if w['sheet']))
                 assert len(items()) == 2
-                ui('press', id='boosts.' + second + '.delete'); app.call('alert', window='library', button='Delete')
+                delete_card(second); app.call('alert', window='library', button='Delete')
                 assert wait(lambda: all(b['id'] != second for b in items()), timeout=5)
                 assert wait(lambda: not font(tab_b).startswith('Avenir'), timeout=5)
-                ui('press', id='boosts.' + first + '.delete'); app.call('alert', window='library', button='Delete')
+                delete_card(first); app.call('alert', window='library', button='Delete')
                 assert wait(lambda: not items(), timeout=5)
                 assert 'Nothing Boosted Yet!' in ' '.join(c['label'] + c['value'] for c in ui()['controls'])
                 ui('layout', name='List'); assert state()['boostsPresentation'] == 'list'

@@ -61,6 +61,10 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         return tab
     def history_hits(state):
         return [r for r in state.get('rows', []) if r.get('url') == base + '/link' and r.get('kind') == 'history']
+    def select_history_profile(profile):
+        app.call('library-ui', action='chip', id='profile:' + profile)
+        assert wait_until(lambda: app.call('library-history-state')['profile'] == profile,
+                          timeout=3, step=.05), app.call('library-history-state')
     try:
         app = factory(urls=(base + '/start',), fresh=True)
         saved = {key: app.call('defaults', key=key, persistent=True) for key in keys}
@@ -123,13 +127,18 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         # A second Profile/Space must own a different on-disk HistoryStore.
         space2 = app.call('space-create', profile='History Second', title='History Second')
         profile2 = history()['profile']
-        app.call('library-history-state', profile=profile2, selectProfile=True)
+        select_history_profile(profile2)
         second = app.call('open', url=base + '/second'); second = second['id'] if isinstance(second, dict) else second
         loaded(second, '/second'); state2 = settle(); profile2 = state2['profile']
         wait_until(lambda: any(r['url'] == base + '/second' for r in app.call('library-history-state')['rows']), timeout=3, step=.05)
         app.call('navigate', tab=second, url=base + '/second-live'); loaded(second, '/second-live'); settle()
         late_profile_live = wait_until(lambda: any(r['url'] == base + '/second-live' for r in app.call('library-history-state')['rows']), timeout=3, step=.05)
-        check('history_library_new_profile_live', bool(late_profile_live) and bool(page('/second-live')))
+        stored_second_live = page('/second-live')
+        live_second_state = app.call('library-history-state')
+        native_second_live = wait_until(lambda: (lambda s: s if any(r['id'] == base + '/second-live' for r in s['rows']) else None)(app.call('library-state')),
+                                       timeout=3, step=.05)
+        check('history_library_new_profile_live', bool(late_profile_live) and bool(stored_second_live) and bool(native_second_live),
+              state=live_second_state, stored=stored_second_live, native=native_second_live)
         rows1, rows2 = dbrows(profile1), dbrows(profile2)
         check('history_profile_isolation', profile1 != profile2 and any(r['url'] == base + '/second' for r in rows2)
               and not any(r['url'] == base + '/second' for r in rows1) and not any(r['url'] == base + '/link' for r in rows2),
@@ -138,7 +147,7 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         # while the front window has Profile 2: model order cannot pass this gate.
         first_window = app.call('shell-windows')[0]['id']
         space1 = next(s['id'] for s in app.call('spaces') if s['profile'] == profile1)
-        app.call('library-history-state', profile=profile1, selectProfile=True)
+        select_history_profile(profile1)
         app.call('download-library-close')
         app.call('space', space=space1)
         app.call('command', id='new-window'); dismiss_bar()
@@ -148,18 +157,18 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         picked = app.call('library-history-state')['profile']
         check('history_front_profile_cmd_y', first_window != second_window and picked == profile2 and picked != profile1,
               profile=picked, expected=profile2)
-        app.call('library-history-state', profile=profile1, selectProfile=True)
+        select_history_profile(profile1)
         app.call('window-focus', id=second_window, activate=True)
         app.call('menu-perform', id='view-history')
         kept = app.call('library-history-state')['profile']
         check('history_manual_profile_while_open', kept == profile1 and kept != profile2, profile=kept)
-        app.call('library-history-state', profile=profile1, selectProfile=True)
+        select_history_profile(profile1)
         app.call('download-library-close')
         app.call('window-focus', id=second_window, activate=True)
         app.call('menu-perform', id='view-history')
         picked = app.call('library-history-state')['profile']
         check('history_front_profile_menu_reopen', picked == profile2 and picked != kept, profile=picked)
-        app.call('library-history-state', profile=profile1, selectProfile=True)
+        select_history_profile(profile1)
         app.call('download-library-close')
         app.call('window-focus', id=second_window, activate=True)
         command = bar('View History')
@@ -188,7 +197,7 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         after_clear = bar('HistoryNeedle')
         check('history_clear_removes_suggestions', bool(hit) and not history_hits(after_clear), state=after_clear); dismiss_bar()
         app.call('key', key='y', modifiers=['cmd'], route='app')
-        app.call('library-history-state', profile=profile2, selectProfile=True)
+        select_history_profile(profile2)
         untouched_first = dbrows(profile1)
         deleted = app.call('library-history-delete', urls=[base + '/second', base + '/second-live'])
         check('history_library_delete_profile', bool(rows2) and not dbrows(profile2) and dbrows(profile1) == untouched_first, status=deleted)
@@ -232,10 +241,10 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
               and len(before_idle['enqueueMilliseconds']) == len(after_idle['enqueueMilliseconds']),
               before=before_idle['writes'], after=after_idle['writes'], seconds=2, loadAverage=list(os.getloadavg()),
               scope='history writer and callback counters; features-idle separately checks native idle resources')
-        app.call('library-history-state', profile=profile1, selectProfile=True)
+        select_history_profile(profile1)
         before_all = dbrows(profile1); app.call('library-history-delete', all=True)
         check('history_library_clear_all', bool(before_all) and not dbrows(profile1), beforeCount=len(before_all))
-        app.call('library-history-state', profile=profile2, selectProfile=True)
+        select_history_profile(profile2)
         app.call('download-library-close')
         for window in app.call('shell-windows'):
             app.call('window-focus', id=window['id'], activate=True)

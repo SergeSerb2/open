@@ -28,6 +28,13 @@ extension AutomationController {
       if let value = value as? String { return String(value.prefix(1024)) }
       return (value as? NSNumber)?.stringValue ?? ""
     }
+    func identifier(_ object: NSObject) -> String {
+      let accessible = string(object, "accessibilityIdentifier")
+      if !accessible.isEmpty { return accessible }
+      // Native Library controls keep their identifiers on NSView. Read the
+      // actual rendered view, just as the legacy path reads hosted AX nodes.
+      return (object as? NSView)?.identifier?.rawValue ?? ""
+    }
     var seen: Set<ObjectIdentifier> = [], nodes: [NSObject] = []
     func walk(_ object: NSObject, _ depth: Int) {
       guard depth <= 32, seen.count < 2048, seen.insert(ObjectIdentifier(object)).inserted else { return }
@@ -121,7 +128,7 @@ extension AutomationController {
       _ = try await sendKey(["window": owner.windowNumber, "text": text.isEmpty ? "\u{7f}" : text, "route": "app"], try? window)
     case "press":
       let matches = nodes.filter {
-        if let id = args["id"] as? String { return string($0, "accessibilityIdentifier") == id }
+        if let id = args["id"] as? String { return identifier($0) == id }
         guard let label = args["label"] as? String else { return false }
         return [string($0, "accessibilityLabel"), string($0, "accessibilityTitle")].contains(label)
           && [NSAccessibility.Role.button.rawValue, NSAccessibility.Role.checkBox.rawValue].contains(string($0, "accessibilityRole"))
@@ -138,7 +145,7 @@ extension AutomationController {
     }
     if action != "state" { await Task.yield() }
     return ["window": owner.windowNumber, "key": owner.isKeyWindow,
-      "controls": nodes.map { ["class": String(describing: type(of: $0)), "id": string($0, "accessibilityIdentifier"), "label": string($0, "accessibilityLabel"),
+      "controls": nodes.map { ["class": String(describing: type(of: $0)), "id": identifier($0), "label": string($0, "accessibilityLabel"),
         "title": string($0, "accessibilityTitle"), "role": string($0, "accessibilityRole"), "value": string($0, "accessibilityValue")] },
       "popupItems": nodes.compactMap { ($0 as? NSPopUpButton)?.itemTitles }] as [String: Any]
   }

@@ -184,11 +184,12 @@ extension LibraryPanelView {
     func observeContent() {
         for target in [LibraryPanelSection.downloads,.archive,.history,.media,.boosts] where !sourceObservationArmed.contains(target) {
             sourceObservationArmed.insert(target)
+            let historyProfile = target == .history ? viewModel.historyProfileID : nil
             withObservationTracking {
                 switch target {
                 case .downloads: _ = viewModel.downloads.downloads; _ = context.downloadBadge?.completedAt
                 case .archive: _ = viewModel.archiveRows; _ = viewModel.archives.values.map(\.contentVersion)
-                case .history: _ = viewModel.historyRows
+                case .history: _ = viewModel.historyRows; _ = viewModel.historyProfileID
                 case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages
                 case .boosts: _ = viewModel.boostsProvider?.libraryBoostsVersion
                 default: break
@@ -198,6 +199,16 @@ extension LibraryPanelView {
                     guard let self else { return }
                     self.sourceObservationArmed.remove(target)
                     var storeChanged = false
+                    if target == .history, historyProfile != self.viewModel.historyProfileID {
+                        // Profile changes alone retire the old subscription and
+                        // provider. Ordinary opens and list updates keep both.
+                        if let host = self.hosts[target] {
+                            host.storeWatch?.cancel(); host.storeWatch = nil
+                            host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1
+                            host.loaded = false; host.wasWarmed = false
+                        }
+                        storeChanged = true
+                    }
                     if target == .archive, let host = self.hosts[target] {
                         let version = self.viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(self.viewModel.archives[$0]!.contentVersion) }.joined(separator:",")
                         if version != host.storeVersion { host.storeVersion = version; host.loaded = false; storeChanged = true }
