@@ -107,6 +107,7 @@ public final class SidebarView: NSView {
         }) { [weak self] in self?.syncTheme() })
         loops.append(ObservationLoop(read: { [weak self] in
             _ = self?.context.favoritesProfile?.favorites.count
+            _ = self?.context.favoritesEmptyStateVisible
             _ = self?.context.sidebarWidth
         }) { [weak self] in self?.needsLayout = true })
         loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.peekSourceNodeID }) { [weak self] in self?.syncPeekDim() })
@@ -149,9 +150,12 @@ public final class SidebarView: NSView {
         if let resigned = notification.object as? NSWindow, resigned === window { context.isOptionHeld = false }
     }
 
+    /// The Favorites empty-state card while it shows (A3; checks and automation).
+    public var favoritesEmptyCard: FavoritesEmptyStateView? { favorites.emptyCard }
+
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
-        context.isIncognito ? 0 : FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
+        context.favoritesSectionHeight(width: bounds.width)
     }
 
     public override func layout() {

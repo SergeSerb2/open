@@ -15,6 +15,10 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     private(set) var tabs: [Tab] = []
     private var profileID: ProfileID?
     private var loop: ObservationLoop?
+    private var emptyLoop: ObservationLoop?
+    /// The empty-state card (A3), made only while it shows. A child of the collection view, so a
+    /// drag over it still reaches the collection's drop handling.
+    private(set) var emptyCard: FavoritesEmptyStateView?
     var menus: SidebarMenus?
 
     init(context: SidebarContext) {
@@ -38,15 +42,37 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         loop = ObservationLoop(read: { [weak self] in _ = self?.context.favoritesProfile?.id }) { [weak self] in
             self?.reloadProfile()
         }
+        emptyLoop = ObservationLoop(read: { [weak self] in
+            guard let self else { return }
+            _ = self.context.favoritesEmptyStateVisible
+            if let space = self.context.focusedSpace { _ = self.context.roles(for: space) }
+        }) { [weak self] in self?.syncEmptyCard() }
+        syncEmptyCard()
     }
 
+    /// Shows or removes the empty-state card and keeps its colours on the Space's theme.
+    private func syncEmptyCard() {
+        guard context.favoritesEmptyStateVisible, let profile = context.favoritesProfile else {
+            emptyCard?.removeFromSuperview(); emptyCard = nil; return
+        }
+        let card = emptyCard ?? FavoritesEmptyStateView()
+        if emptyCard == nil { collection.addSubview(card); emptyCard = card }
+        let id = profile.id
+        card.onDismiss = { [weak self] in self?.context.send(.dismissFavoritesEmptyState(id)) }
+        if let space = context.focusedSpace { card.apply(roles: context.roles(for: space), appearance: context.appearance(for: space)) }
+        needsLayout = true
+    }
+    /// A tab or link is dragged over the Favorites section: the card dims (interaction-states §20.3).
+    func setDropTarget(_ value: Bool) { emptyCard?.isDropTarget = value }
+
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { loop?.cancel() }
+    isolated deinit { loop?.cancel(); emptyLoop?.cancel() }
     override var isFlipped: Bool { true }
 
     override func layout() {
         super.layout()
         collection.frame = bounds
+        emptyCard?.frame = FavoritesMetrics.emptyCardFrame(sidebarWidth: bounds.width)
         gridLayout.invalidateLayout()
     }
 
@@ -129,14 +155,17 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
             guard let profileID else { return [] }
             let allowed = ids.contains { context.model.canMoveNode(id: $0, to: .favorites(profileID)) }
             if allowed { context.haptics.insertionChanged(parent: .favorites(profileID), index: proposedIndexPath.pointee.item) }
+            setDropTarget(allowed)
             return allowed ? .move : []
         }
-        return SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).isEmpty ? [] : .copy
+        let hasURL = !SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).isEmpty
+        setDropTarget(hasURL)
+        return hasURL ? .copy : []
     }
 
     func collectionView(_ collectionView: NSCollectionView, acceptDrop draggingInfo: any NSDraggingInfo,
                         indexPath: IndexPath, dropOperation: NSCollectionView.DropOperation) -> Bool {
-        defer { context.suppressPreviews(.drag, false) }
+        defer { context.suppressPreviews(.drag, false); setDropTarget(false) }
         let index = indexPath.item
         if let ids = SidebarPasteboard.nodeIDs(from: draggingInfo.draggingPasteboard) {
             guard !ids.isEmpty, let profileID else { return false }
@@ -158,6 +187,7 @@ final class FavoritesCollectionView: NSCollectionView {
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
         owner?.context.haptics.endDrag()
         owner?.context.suppressPreviews(.drag, false)
+        owner?.setDropTarget(false)
         super.draggingExited(sender)
     }
 

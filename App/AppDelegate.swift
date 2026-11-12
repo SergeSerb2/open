@@ -520,6 +520,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     if session == nil {
       controller.context.storedFavicons = stores.sidebarFavicons
+      // Favorites empty-state card (A3): on in the product; a launch option turns it off for older suites.
+      controller.context.showsFavoritesEmptyState = !options.hideFavoritesEmptyState
       // Recents hover card (live-data §3.4): read on first hover only, never at launch.
       controller.context.recentPagesSource = { [weak self] profileID, phrases in
         guard let store = self?.stores.history(for: profileID) else { return [] }

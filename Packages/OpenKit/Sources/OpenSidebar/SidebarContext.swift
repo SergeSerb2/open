@@ -303,6 +303,21 @@ public final class SidebarContext {
     var pageIsLoading: Bool { shownPeek?.isLoading ?? currentTab?.live.isLoading ?? false }
 
     /// Favorites shown in this window: the focused Space's profile.
+    /// The App turns the Favorites empty-state card on for normal windows (A3). Off by default,
+    /// so render scenes, the onboarding miniature and the Space Manager keep the 8 pt section.
+    public var showsFavoritesEmptyState = false
+    /// The card shows: no Favorites in the window's Profile, and not dismissed for it.
+    public var favoritesEmptyStateVisible: Bool {
+        guard showsFavoritesEmptyState, !isIncognito, let profile = favoritesProfile else { return false }
+        return profile.favorites.isEmpty && !profile.favoritesEmptyStateDismissed
+    }
+    /// Height of the Favorites section for this window at `width`.
+    public func favoritesSectionHeight(width: CGFloat) -> CGFloat {
+        if isIncognito { return 0 }
+        if favoritesEmptyStateVisible { return FavoritesMetrics.emptyStateSectionHeight }
+        return FavoritesMetrics.sectionHeight(count: favoritesProfile?.favorites.count ?? 0, sidebarWidth: width)
+    }
+
     public var favoritesProfile: Profile? {
         guard let space = focusedSpace else { return model.profiles.first }
         return model.profile(id: space.profileID) ?? model.profiles.first

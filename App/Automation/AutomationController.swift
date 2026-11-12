@@ -379,6 +379,7 @@
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
       case _ where Self.liveDataCommands.contains(cmd): return try await runLiveDataCommand(cmd, a)
+      case "favorites-empty-state": return try runFavoritesEmptyCommand(a)
       case "history-state", "history-clear", "library-history-state", "library-history-delete":
         return try await runHistoryCommand(cmd, a)
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
@@ -626,6 +627,7 @@
         case "today": destination = .spaceToday(SpaceID(rawValue: uuid))
         case "pinned": destination = .spacePinned(SpaceID(rawValue: uuid))
         case "folder": destination = .folder(ItemID(rawValue: uuid))
+        case "favorites": destination = .favorites(ProfileID(rawValue: uuid))
         default: throw Failure(message: "invalid drop parent")
         }
         return controller.context.performNodeDrop(ids: ids, to: destination, index: index)

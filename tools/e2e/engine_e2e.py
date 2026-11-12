@@ -12947,7 +12947,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -13173,6 +13173,11 @@ def main():
             # Every first-run helper uses this factory, including F12 and the
             # multi-Profile importer. Exercise the real player at zero volume.
             launch_args += ["--intro-sound=silent"]
+        # The Favorites empty-state card (A3) adds 105 pt above the Space title on a fresh Profile. Suites
+        # written before it keep the old geometry; a suite that checks the card passes
+        # extra_args=["--favorites-empty-state=shown"].
+        if not any(a.startswith("--favorites-empty-state=") for a in (extra_args or [])):
+            launch_args += ["--favorites-empty-state=hidden"]
         app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=first_run if first_run is not None else opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
@@ -13466,6 +13471,9 @@ def main():
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
+        elif opts.only == "favorites-empty":
+            results["favorites-empty"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "favorites_empty.py"))["run"](factory, results["favorites-empty"], tmp, globals())
         elif opts.only == "live-data":
             results["live-data"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
@@ -13607,14 +13615,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

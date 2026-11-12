@@ -136,6 +136,12 @@ enum RenderCLI {
             context.autoArchiveBannerRequested = true
         }
         if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
+        if args.contains("--favorites-empty") {
+            // A3 look frames: no Favorites, the empty-state card on; --plain-theme uses the default theme.
+            context.favoritesProfile?.favorites = []; model.rebuildIndex()
+            context.showsFavoritesEmptyState = true
+            if args.contains("--plain-theme"), let s = context.focusedSpace { s.theme = SpaceTheme() }
+        }
         // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
         if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }
         if let spec = value(args, "--insert-folder-tab"), let s = context.focusedSpace {
