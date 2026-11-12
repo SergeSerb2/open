@@ -106,6 +106,10 @@ def run(factory, results, tmp, h):
         # the button 10.5 pt below it); a second press closes it. The split button opens the split menu.
         press('extensionsMenu')
         card = h.wait_until(lambda: state().get('extensionsCard'), timeout=5, step=.05) or {}
+        if os.environ.get('OPEN_E2E_DEVMODE_FRAMES'):  # look frame for the lead, not asserted
+            time.sleep(4); app.call('appearance', name='light'); time.sleep(.5)
+            app.call('snapshot', path=os.path.join(os.environ['OPEN_E2E_DEVMODE_FRAMES'], 'extensions-card-light.png'))
+            app.call('appearance', name='system')
         press('extensionsMenu')
         closed_card = h.wait_until(lambda: 'extensionsCard' not in state(), timeout=5, step=.05)
         row('extensions_card', card.get('rows') == ['Add Extension…', 'Manage Extensions…'] and card.get('size') == [250, 102]
