@@ -30,6 +30,8 @@ final class TranslateAdapter {
   /// Sessions whose next event comes from an undo or redo: that path registers its inverse itself.
   private var undoDriven: Set<ObjectIdentifier> = []
   private(set) var toastsShown: [String] = []
+  /// Translate Selection (context menu, PB4 row 5).
+  private(set) lazy var selection = TranslateSelectionController(adapter: self)
 
   init(factory: EngineWebContentHostFactory) {
     self.factory = factory

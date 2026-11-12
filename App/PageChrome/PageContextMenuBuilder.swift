@@ -230,6 +230,13 @@ final class PageContextMenuBuilder {
     guard let target = url ?? engine.searchURL(for: text) else { return }
     let index = menu.items.firstIndex { chromeModel ? engineItem($0, in: [ChromeCommand.copy]) : $0.title == "Copy" }.map { $0 + 1 } ?? menu.items.count
     menu.insertItem(openItem("selection-search", title) { [weak owner] in _ = owner?.openNewTab(url: target, background: false) }, at: index)
+    // PB4 row 5: Open's on-device Translate Selection, right after the search item.
+    if owner.translate.preferences.isEnabled {
+      let location = request.location
+      menu.insertItem(openItem("translate-selection", TranslateSelectionController.menuTitle) { [weak owner, weak page] in
+        owner?.translate.selection.translate(text, at: location, in: page?.view)
+      }, at: index + 1)
+    }
   }
 
   private static func selectionURL(_ text: String) -> URL? {

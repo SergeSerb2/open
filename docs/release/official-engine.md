@@ -643,5 +643,6 @@ calls it and releases the Profile only after the bookmark backend sequence has f
 storage's final save ran after the deletion completed and recreated `Bookmarks` / `EncryptedBookmarks2` in the
 deleted Profile folder (e2e-profiles failed 6/6 on rented Macs, 2026-11-12). The patch also runs the bookmark
 storage's backend sequence at USER_VISIBLE: Chrome fences BEST_EFFORT tasks until it sees startup complete, which
-Open's hosted pages reach only by the 3-minute failsafe, so fenced saves ran late and the barrier waited on them.
-Other BEST_EFFORT work in Open is also deferred until that failsafe (follow-up for the lead).
+an Open launch without a loaded web page reached only by the 3-minute failsafe, so fenced saves ran late and the
+barrier waited on them. Since 2026-11-12 OpenEngine turns on `ImprovedStartupBestEffortDelay`, so startup completes
+within about 5 s in that case too (`docs/engine-fork.md`, "Startup complete").

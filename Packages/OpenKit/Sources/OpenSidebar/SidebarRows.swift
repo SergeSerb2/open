@@ -107,6 +107,7 @@ final class SidebarRowView: NSTableRowView {
         keyboardRing?.path = CGPath(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerWidth: m.rowFillCornerRadius,
                                   cornerHeight: m.rowFillCornerRadius, transform: nil)
         fill.frame = rect
+        if !developerOutline.isEmpty { updateDeveloperOutline() }
         fill.cornerRadius = m.rowFillCornerRadius
         fill.shadowPath = CGPath(roundedRect: CGRect(origin: .zero, size: rect.size), cornerWidth: m.rowFillCornerRadius,
                                  cornerHeight: m.rowFillCornerRadius, transform: nil)
@@ -168,8 +169,36 @@ final class SidebarRowView: NSTableRowView {
             fill.opacity = 0
             fill.shadowOpacity = 0
         }
+        updateDeveloperOutline()
         CATransaction.commit()
     }
+
+    /// Developer Mode (PB3 row 5): a yellow-black dashed outline around the current row of a Developer Mode site.
+    /// Capture s3 `s7/12-devoff/d-devmode-on`: 2 pt line on the active plate, 7 pt #F8D849 dashes over a
+    /// 7 pt #322B0F ground (measured at 2x).
+    private var developerOutline: [CAShapeLayer] = []
+    private func updateDeveloperOutline() {
+        let shown = allowsHighlight && isCurrent && tracked({ [weak self] () -> Bool in
+            guard let self, let tab = self.representedItem as? Tab, let context = self.page?.context else { return false }
+            return SidebarDeveloperMode.key(tab.url).map { context.developerModeHosts.contains($0) } ?? false
+        }) { [weak self] in self?.invalidateFill() }
+        if !shown { for ring in developerOutline { ring.isHidden = true }; return }
+        if developerOutline.isEmpty {
+            for (color, dash) in [(NSColor(srgbRed: 0x32 / 255, green: 0x2B / 255, blue: 0x0F / 255, alpha: 1), nil as [NSNumber]?),
+                                  (NSColor(srgbRed: 0xF8 / 255, green: 0xD8 / 255, blue: 0x49 / 255, alpha: 1), [7, 7] as [NSNumber]?)] {
+                let ring = CAShapeLayer(); ring.name = "developer-outline"; ring.fillColor = nil; ring.lineWidth = 2
+                ring.strokeColor = color.cgColor; ring.lineDashPattern = dash; ring.zPosition = 5
+                layer?.addSublayer(ring); developerOutline.append(ring)
+            }
+        }
+        let m = SpaceListMetrics.self
+        let rect = CGRect(x: m.rowFillInsetX + fillIndent, y: m.rowFillInsetTop,
+                          width: bounds.width - 2 * m.rowFillInsetX - fillIndent, height: m.rowFillHeight)
+        let path = CGPath(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerWidth: m.rowFillCornerRadius - 1,
+                          cornerHeight: m.rowFillCornerRadius - 1, transform: nil)
+        for ring in developerOutline { ring.frame = bounds; ring.path = path; ring.isHidden = false }
+    }
+    var showsDeveloperOutline: Bool { developerOutline.first.map { !$0.isHidden } ?? false }
 
     override func isAccessibilityElement() -> Bool { itemID(of: representedItem) != nil || representedItem is NewTabItem }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
@@ -393,6 +422,9 @@ final class TabCellView: SidebarCellView {
     private var slash: CALayer?
     private var unread: SidebarUnreadDot?
     private(set) var resetButton: PlateButton?
+    /// Developer Mode (PB3 row 5): "host:port" under the title; the title moves up 7 pt (capture s3: title at
+    /// y + 3.5 instead of y + 10.5, a 16 pt subtitle line; baselines measured 13.5 pt apart at 2x).
+    private(set) var hostSubtitle: TextLabel?
     private var faviconHovered = false
     private var resetShown = false
     private var resetSeparate = false
@@ -608,6 +640,27 @@ final class TabCellView: SidebarCellView {
             CATransaction.commit()
         }
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
+        let subtitle = tracked({ [weak self] () -> String? in
+            guard let self, let currentTab, let context = self.context,
+                  let key = SidebarDeveloperMode.key(currentTab.url), key != "file", context.developerModeHosts.contains(key) else { return nil }
+            return SidebarDeveloperMode.hostAndPort(currentTab.url)
+        }) { [weak self] in self?.needsLayout = true }
+        if let subtitle {
+            let label = hostSubtitle ?? {
+                let label = TextLabel(); label.font = .systemFont(ofSize: 11)
+                label.inset = SpaceListMetrics.textInset; label.trailingInset = SpaceListMetrics.textTrailingInset
+                addSubview(label); hostSubtitle = label; return label
+            }()
+            title.baseline = SpaceListMetrics.titleBaselineOffset - 7
+            label.isHidden = false
+            label.baseline = title.baseline + 13.5
+            label.text = { subtitle }
+            label.color = { [weak self] in self?.page?.roles.subtitle.nsColor ?? .secondaryLabelColor }
+            label.frame = title.frame
+        } else if let label = hostSubtitle, !label.isHidden {
+            label.isHidden = true
+            title.baseline = SpaceListMetrics.titleBaselineOffset
+        }
         if pendingAudioReveal { pendingAudioReveal = false; animateAudioReveal() }
     }
 
@@ -1314,4 +1367,17 @@ extension SidebarDiagnostics {
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityLabel() -> String? { Self.label }
     override func accessibilityHelp() -> String? { Self.label }
+}
+
+/// The Developer Mode site key of a URL (as App `DeveloperMode.host(for:)` and `SidebarContext.fieldText`).
+enum SidebarDeveloperMode {
+    static func key(_ url: URL) -> String? {
+        guard let scheme = url.scheme?.lowercased() else { return nil }
+        if scheme == "file" { return "file" }
+        guard scheme == "http" || scheme == "https", let host = url.host()?.lowercased(), !host.isEmpty, host.count <= 253 else { return nil }
+        return host
+    }
+    static func hostAndPort(_ url: URL) -> String {
+        (url.host() ?? "") + (url.port.map { ":\($0)" } ?? "")
+    }
 }

@@ -37,7 +37,7 @@ public enum PageLanguageDetector {
     /// guess (§4.7.2 step 3): below this the `lang` attribute decides.
     public static let minimumConfidence = 0.80
 
-    /// Runs in the page's main world. A text walk, not `innerText`: it stops after
+    /// Runs in Open's isolated world (the DOM is shared). A text walk, not `innerText`: it stops after
     /// `maxProbeCharacters` and forces no layout, so a huge page costs the same as a small one.
     public static let probeScript = """
     (() => {

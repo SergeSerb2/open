@@ -4,6 +4,7 @@ import OpenImport
 import OpenDocuments
 import OpenModel
 import OpenSettings
+import OpenSidebar
 import OpenStore
 import OpenBoosts
 
@@ -66,6 +67,8 @@ final class AppImportRunner: ProfileDataOwner {
     await undoTask?.value
     let undo = AppImportUndo(app: app)
     undoReceipt = undo
+    // Audit A7: remember which Profiles this run creates (every return path, before finishImport).
+    let profilesBefore = Set(app.model.profiles.map(\.id))
     let importStarted = CACurrentMediaTime()
     historyMilliseconds = 0
     #if OPEN_AUTOMATION
@@ -86,6 +89,7 @@ final class AppImportRunner: ProfileDataOwner {
     app.importInProgress = true
     historyProcessed = 0
     defer {
+      undo.noteCreatedProfiles(app.model.profiles.filter { !profilesBefore.contains($0.id) }.map { ($0.id, $0.dataDirectoryName) })
       undo.finishImport()
       app.importInProgress = false; historyInProgress = false; running = false
       let waiters = undoQuitWaiters; undoQuitWaiters.removeAll()
@@ -539,6 +543,7 @@ final class AppImportRunner: ProfileDataOwner {
     let defaults = UserDefaults.standard
     let previous = Dictionary(uniqueKeysWithValues: writes.keys.map { ($0, defaults.object(forKey: $0)) })
     for (key, value) in writes { defaults.set(value, forKey: key) }
+    SpaceHeaderPreference.shared.reload()
     undo.append(defaults: previous, applied: writes)
     counts["Arc settings"] = writes.count
     counts["Live Calendar reminders"] = reminders
