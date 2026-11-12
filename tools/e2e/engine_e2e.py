@@ -9468,6 +9468,13 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
         and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
         'rows': rows[:4], 'tab': doc}
+    # Top Domains (PB1, Open's own list): "netfl" offers a "Netflix" row (subtitle netflix.com); no inline completion.
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    bar('t', 'window'); typed = type_query('netfl')
+    site = next((r for r in typed.get('rows', []) if r.get('title') == 'Netflix'), None)
+    results['commandbar_top_domain_row'] = {'ok': bool(site) and 'netflix.com' in (site.get('url') or '')
+        and typed.get('fieldText', typed.get('text')) == 'netfl', 'row': site, 'field': typed.get('fieldText')}
+    press('escape')
     # "Undo <name>": archive a fresh Today tab, then the bar offers the named Undo and running it restores the tab.
     fresh = new_tab(app, 'about:blank#pb1-undo')
     app.call('select', tab=fresh); app.call('focus', tab=fresh)
