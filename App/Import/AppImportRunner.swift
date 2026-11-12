@@ -4,6 +4,7 @@ import OpenImport
 import OpenDocuments
 import OpenModel
 import OpenSettings
+import OpenSidebar
 import OpenStore
 import OpenBoosts
 
@@ -539,6 +540,7 @@ final class AppImportRunner: ProfileDataOwner {
     let defaults = UserDefaults.standard
     let previous = Dictionary(uniqueKeysWithValues: writes.keys.map { ($0, defaults.object(forKey: $0)) })
     for (key, value) in writes { defaults.set(value, forKey: key) }
+    SpaceHeaderPreference.shared.reload()
     undo.append(defaults: previous, applied: writes)
     counts["Arc settings"] = writes.count
     counts["Live Calendar reminders"] = reminders
