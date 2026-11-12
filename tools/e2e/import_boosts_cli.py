@@ -58,7 +58,11 @@ def initial_checks(process, output, ids):
         'boost_cli_disabled': disabled.get('isEnabled') is False,
         'boost_cli_malformed': counts.get('malformed') == 1,
         'boost_cli_unknown': counts.get('unknownFields') == 1,
-        'boost_cli_dropped': counts.get('droppedFields') == 20 and counts.get('mappedFields') == 21,
+        # PB4 row 4: hue, saturation and invert map (3 leaves per Boost); the rest stays counted.
+        'boost_cli_dropped': counts.get('droppedFields') == 14 and counts.get('mappedFields') == 23,
+        'boost_cli_color': enabled.get('colorWheel', {}).get('hue') == 90 and enabled.get('colorWheel', {}).get('intensity') == .4
+            and enabled.get('colorWheel', {}).get('invertLightness') is False and disabled.get('colorWheel', {}).get('hue') == 90
+            and enabled.get('textZoom') is None,
         'boost_cli_tombstones': counts.get('deleted') == 1 and counts.get('unknownDocuments') == 1 and counts.get('otherCollections') == 1
             and not any(value in by_id for key, value in ids.items() if key in ('deleted', 'unknown', 'obsolete', 'wal-deleted')),
         'boost_cli_privacy': all(value not in process.stdout + process.stderr for value in
