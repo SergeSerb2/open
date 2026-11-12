@@ -446,9 +446,12 @@ def run(factory, results, tmp, h):
             onboarding = app.call('onboarding')
             startup = onboarding.get('startup', {})
             sound = onboarding.get('sound', {})
+            # The first frame waits for the intro sound: 'played' starts at the scheduled sound start,
+            # 'failed'/'timeout' starts at the sound deadline (seen on virtual Macs without working audio).
             timings.append(dict(marks=t, startup=startup, load=os.getloadavg(),
                                 soundScheduledHostTime=sound.get('scheduleReturnedHostTime'),
-                                audioStartHostTime=sound.get('audioStartHostTime')))
+                                audioStartHostTime=sound.get('audioStartHostTime'),
+                                soundDecision='%s/%s' % (sound.get('decision'), sound.get('reason'))))
             app.quit()
         # First run now creates its window after engine startup. sidebarDrawn
         # still belongs to returning launches; do not invent that mark here.
@@ -468,18 +471,20 @@ def run(factory, results, tmp, h):
             values = [(read(s) - s['startup']['launchHostTime']) * 1000 for s in timings
                       if isinstance(read(s), (int, float)) and isinstance(s['startup'].get('launchHostTime'), (int, float))]
             return round(statistics.median(values), 1) if values else None
-        phases = {name: phase_median(read) for name, read in [
+        phases = {name: value for name, value in [(name, phase_median(read)) for name, read in [
             ('engineStartBegin', lambda s: s['startup'].get('engineStartBeginHostTime')),
             ('engineStartEnd', lambda s: s['startup'].get('engineStartEndHostTime')),
             ('engineSettled', lambda s: s['startup'].get('engineSettledHostTime')),
             ('windowCreation', lambda s: s['startup'].get('windowCreationHostTime')),
             ('soundScheduled', lambda s: s.get('soundScheduledHostTime')),
             ('audioStart', lambda s: s.get('audioStartHostTime')),
-            ('firstOnboardingFrame', lambda s: s['startup'].get('firstOnboardingFrameHostTime'))]}
+            ('firstOnboardingFrame', lambda s: s['startup'].get('firstOnboardingFrameHostTime'))]] if value is not None}
         results['F12_first_content'] = dict(status='INFO', medianMs=med, phasesAfterLaunchMs=phases,
+            soundDecisions=[s['soundDecision'] for s in timings],
             reason='first-run first content has no 250 ms budget (lead ruling 2026-11-12): that budget is for a normal '
                    'launch. First run is engine-first and starts with the intro sound by design (S17). Measured on main '
-                   '4cbb93f5 on a rented Mac: 354-636 ms; these five launches report their actual values and phase split',
+                   '4cbb93f5 on a rented Mac: 354-377 ms when the sound starts in time, 571-636 ms when its preparation '
+                   'reaches the deadline; these five launches report their actual values, phase split and sound decision',
             samples=timings, load=os.getloadavg())
         binary_strings = subprocess.check_output(['strings', app.executable], text=True, errors='replace')
         import re
