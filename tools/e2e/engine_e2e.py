@@ -1088,18 +1088,23 @@ def feature_checks(app, style, results, tmp):
         return {"ok": bool(ev), "items": ev[0]["items"] if ev else []}
 
     def audio():
-        app.eval(t, 'window.__oeAudio = new Audio(%s); __oeAudio.loop = true; __oeAudio.play().then(() => "playing")'
-                 % json.dumps(wav_data_uri()))
-        # The audible state follows Chromium's audio stream monitor, about 1 s after play() resolves on a
-        # rented Mac (0.5 s: not yet; 1 s: audible). Wait for the state with a deadline, not a fixed sleep.
+        # Its own local tab (the media fixture tone), so the row does not depend on the shared Wikipedia
+        # tab having loaded. The audible state follows Chromium's audio stream monitor, about 1 s after
+        # play() resolves on a rented Mac: wait for the state with a deadline, not a fixed sleep.
+        media_server, media_port = _media_server()
+        a = new_tab(app, "http://127.0.0.1:%d/audio.html" % media_port)
+        played = app.eval(a, 'start().catch(e => "error: " + e.message)')
         started = time.monotonic()
-        st = wait_until(lambda: (lambda s: s if s["audible"] else None)(app.tab(t)), timeout=5, step=.1) or app.tab(t)
+        st = wait_until(lambda: (lambda s: s if s["audible"] else None)(app.tab(a)), timeout=5, step=.1) or app.tab(a)
         audible_after = round(time.monotonic() - started, 2)
-        m = app.call("mute", tab=t, muted=True)
-        app.call("mute", tab=t, muted=False)
-        app.eval(t, '__oeAudio.pause()')
-        after = wait_until(lambda: (lambda s: s if not s["audible"] else None)(app.tab(t)), timeout=5, step=.1) or app.tab(t)
-        return {"ok": st["audible"] and m["muted"] and not after["audible"], "audible_while_playing": st["audible"],
+        m = app.call("mute", tab=a, muted=True)
+        app.call("mute", tab=a, muted=False)
+        app.eval(a, 'document.getElementById("tone").pause()')
+        after = wait_until(lambda: (lambda s: s if not s["audible"] else None)(app.tab(a)), timeout=5, step=.1) or app.tab(a)
+        app.call("close", tab=a)
+        app.call("select", tab=t)
+        media_server.shutdown()
+        return {"ok": st["audible"] and m["muted"] and not after["audible"], "played": played, "audible_while_playing": st["audible"],
                 "audible_after_seconds": audible_after, "muted": m, "audible_after_pause": after["audible"]}
 
     def fullscreen():
