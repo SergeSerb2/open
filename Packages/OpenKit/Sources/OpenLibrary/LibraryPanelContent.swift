@@ -157,6 +157,7 @@ extension LibraryPanelView {
     }
     func startProvider(_ target:LibraryPanelSection) {
         let host = host(for:target)
+        if target == .easels { if !host.loaded, host.provider == nil { startEaselsProvider(host) }; return }
         guard !host.loaded,host.provider == nil,let mapped = target.modelSection else { return }
         if target == .archive { host.storeVersion = viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(viewModel.archives[$0]!.contentVersion) }.joined(separator:",") }
         host.providerGeneration += 1
@@ -266,6 +267,7 @@ extension LibraryPanelView {
             case .history: host.sources = historySources()
             case .media: host.sources = captureSources()
             case .boosts: host.sources = boostSources()
+            case .easels: host.sources = easelSources()
             default: host.sources = []
             }
             host.sourceVersion += 1
@@ -339,11 +341,12 @@ extension LibraryPanelView {
         boostList.isHidden = section != .boosts; boostGallery.isHidden = section != .boosts; boostsProfile.isHidden = section != .boosts
         let boostsOff = section == .boosts && !viewModel.defaults.bool(forKey:"open.advanced.enableBoosts")
         boostDisabledText.isHidden = !boostsOff; boostTurnOn.isHidden = !boostsOff
+        easelsCard.isHidden = section != .easels || filterOpen
         listView.identifier = .init(section == .boosts ? (viewModel.boostsPresentation == .gallery ? "boosts.gallery" : "boosts.list") : "library.rows")
         boostList.selected = viewModel.boostsPresentation == .list; boostGallery.selected = viewModel.boostsPresentation == .gallery
         boostsProfile.title = viewModel.model.profile(id:viewModel.historyProfileID)?.name ?? "Profile"
         if filterOpen { configureFilter() }
-        let layoutKey = "\(section == .spaces)|\(section.hasFilter)|\(filterOpen)|\(section == .boosts)|\(boostsOff)|\(statusLabel.isHidden)"
+        let layoutKey = "\(section == .easels)|\(section == .spaces)|\(section.hasFilter)|\(filterOpen)|\(section == .boosts)|\(boostsOff)|\(statusLabel.isHidden)"
         if lastHeaderLayoutKey != layoutKey { lastHeaderLayoutKey = layoutKey; needsLayout = true }
     }
     func symbol(_ name:String) -> NSImage? {

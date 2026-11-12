@@ -1532,7 +1532,7 @@ close the card, and Cancel closes without committing (Open choice, lead,
 | `zap:replaced` | `{ boostID, oldSelector, newSelector, label, matches }` | Compatibility message; the current related action sends one direct `zap:committed` | swap zap |
 | `zap:removed` | `{ boostID, selector, via }` via ∈ `"undo" \| "native"` | Undo pops a zap (`"undo"`), or picker echoes a native-initiated removal (`"native"`) | undo → persist removal; native → no-op |
 | `zap:revealRequested` | `{ boostID, sessionNonce, selector }` | Click a "Click to reveal" chip | coordinator removes the stored Zap and emits `.removed`; adapter sends `zap:remove` and refreshes the plan |
-| `picker:selected` | `{ boostID, sessionNonce, selector, matches }` | "Use Selector" in select mode | coordinator emits `.selected` only for a select capability; editor inserts at CSS caret and exits; no store change |
+| `picker:selected` | `{ boostID, sessionNonce, selector, matches }` | "Copy selector for this" / "Copy selector for related" in select mode (PB1) | coordinator emits `.selected` only for a select capability; editor inserts at CSS caret and exits; no store change |
 | `zap:list-result` | `{ boostID, entries: [{ selector, label, matchCount, truncated }] }` | Reply to `zap:list` (§7.6) | cache for editor |
 | `boost:applied` | `{ planID }` | Applier finishes `apply` (including no-op same-plan applies? No — only when CSS actually changed or first apply). Fire once per distinct planID per page. | log only |
 | `boost:error` | `{ kind, selector? }` kind ∈ `"invalid-zap-selector"` | Applier skips a bad zap selector (§6.3) | log only |
@@ -1557,7 +1557,7 @@ Else label = `"<tag>"` (for example `div`). Native stores it as `ZappedElement.l
 | `zap:undo` | `{ boostID, sessionNonce }` | picker `undo()` | Same as Cmd/Ctrl+Z. For editor Undo buttons that live natively. |
 
 `mode` defaults to `"zap"`. Select mode keeps the frame and tint, replaces Zap
-actions with "Use Selector" and Cancel, and never commits, hides, or writes data.
+actions with "Copy selector for this", "Copy selector for related" and Cancel (PB1), and never commits, hides, or writes data.
 `zap:list` supplies labels for persisted reveal chips; older senders may omit labels
 and the picker falls back to the selector. The coordinator's `lastEvent` is cleared
 on each `handle` call and contains only an authenticated, mode-appropriate event.

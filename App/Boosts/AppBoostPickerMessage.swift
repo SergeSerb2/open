@@ -7,7 +7,30 @@ import OpenBoosts
 enum AppBoostPickerMessage {
   static let maxEntries = 1_024
   static func validSelector(_ value: String) -> Bool {
-    !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.utf8.count <= 4_096 && !value.contains("\0")
+    guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, value.utf8.count <= 4_096,
+      !value.contains("\0") else { return false }
+    // Quote- and escape-aware scan (#277 review F6). Outside a quoted string, CSS structure
+    // (`{`, `}`, `;`), a comment start (`/*`) and raw line breaks would let a stored selector
+    // swallow or end the rule it is placed in. Quoted attribute values keep any of them; a
+    // backslash escapes the next byte. A raw line break is invalid CSS even inside a string.
+    var quote: UInt8?, escaped = false, previous: UInt8 = 0
+    for byte in value.utf8 {
+      if escaped { escaped = false; previous = 0; continue }
+      if byte == 0x5C { escaped = true; continue }
+      if byte == 0x0A || byte == 0x0D || byte == 0x0C { return false }
+      if let open = quote {
+        if byte == open { quote = nil }
+        continue
+      }
+      switch byte {
+      case 0x22, 0x27: quote = byte
+      case 0x7B, 0x7D, 0x3B: return false
+      case 0x2A where previous == 0x2F: return false
+      default: break
+      }
+      previous = byte
+    }
+    return quote == nil && !escaped
   }
   static func validLabel(_ value: String) -> Bool { value.utf8.count <= 1_024 && !value.contains("\0") }
   static func supports(_ boost: Boost) -> Bool {

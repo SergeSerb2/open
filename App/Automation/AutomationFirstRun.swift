@@ -70,6 +70,7 @@ extension AutomationController {
         case "settings-browser-select":
           guard wizard.step == .choose, !wizard.plan.isArc, !wizard.busy else { throw Failure(message: "wizard is not on a browser Choose step") }
           if let on = args["bookmarks"] as? Bool { wizard.plan.bookmarks = on }
+          if let on = args["openTabs"] as? Bool { wizard.plan.openTabs = on }
           if let on = args["history"] as? Bool { wizard.plan.history = on }
           if let on = args["search"] as? Bool { wizard.plan.searchSettings = on }
           if let on = args["passwords"] as? Bool { wizard.plan.passwords = on }
