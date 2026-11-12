@@ -211,6 +211,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('menu-perform',id='new-boost');check('boost_real_editor',wait(lambda:app.call('boost-editor').get('colorsReady')))
             app.call('boost-editor',action='tap',id='font.Avenir');boost=app.call('boost-editor')['boost']['id'];app.call('boost-editor',action='close')
             state(action='open',section='boosts');check('boost_real_row',wait(lambda:row(boost)),rows=rows())
+            check('boost_card_name_over_host',row(boost).get('title')=='My Boost' and row(boost).get('subtitle')=='alpha.example.test',row=row(boost))  # Arc: i14-boosts.png (C3 s8 item 14)
             check('boost_no_right_click_menu',row(boost).get('contextMenu') is False,row=row(boost))  # Arc: no card menu (C3 s8 item 14)
             state(action='hover-row',id=boost);check('boost_menu',[m['title'] for m in menu(boost)]==['Edit Boost','Turn Off','separator','Delete']);capture('boosts-list-hover')
             menu(boost,'Turn Off');check('boost_toggle_live',wait(lambda:not app.eval(boost_tab,'getComputedStyle(document.querySelector("h1")).fontFamily').startswith('Avenir')))
