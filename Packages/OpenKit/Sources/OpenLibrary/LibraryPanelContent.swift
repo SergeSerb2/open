@@ -184,14 +184,14 @@ extension LibraryPanelView {
     func observeContent() {
         for target in [LibraryPanelSection.downloads,.archive,.history,.media,.boosts] where !sourceObservationArmed.contains(target) {
             sourceObservationArmed.insert(target)
-            let historyProfile = target == .history ? viewModel.historyProfileID : nil
+            let historyProfile = (target == .history || target == .boosts) ? viewModel.historyProfileID : nil
             withObservationTracking {
                 switch target {
-                case .downloads: _ = viewModel.downloads.downloads; _ = context.downloadBadge?.completedAt
+                case .downloads: _ = viewModel.downloads.downloads; _ = viewModel.downloadProfileFilter; _ = context.downloadBadge?.completedAt
                 case .archive: _ = viewModel.archiveRows; _ = viewModel.archives.values.map(\.contentVersion)
                 case .history: _ = viewModel.historyRows; _ = viewModel.historyProfileID
                 case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages
-                case .boosts: _ = viewModel.boostsProvider?.libraryBoostsVersion
+                case .boosts: _ = viewModel.boostsProvider?.libraryBoostsVersion; _ = viewModel.historyProfileID
                 default: break
                 }
             } onChange: { [weak self] in
@@ -199,7 +199,7 @@ extension LibraryPanelView {
                     guard let self else { return }
                     self.sourceObservationArmed.remove(target)
                     var storeChanged = false
-                    if target == .history, historyProfile != self.viewModel.historyProfileID {
+                    if (target == .history || target == .boosts), historyProfile != self.viewModel.historyProfileID {
                         // Profile changes alone retire the old subscription and
                         // provider. Ordinary opens and list updates keep both.
                         if let host = self.hosts[target] {

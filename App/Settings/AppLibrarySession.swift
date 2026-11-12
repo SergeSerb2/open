@@ -30,7 +30,9 @@ final class AppLibrarySession {
     let started = ProcessInfo.processInfo.systemUptime
     releaseTask?.cancel(); releaseTask = nil
     let panel = prepareShell()
-    if let section { panel.select(LibraryPanelSection(section), animated: false) }
+    if let section, !controller.isLibraryOpen || panel.section != LibraryPanelSection(section) {
+      panel.select(LibraryPanelSection(section), animated: false)
+    }
     panel.isPresented = true
     // Attach before asking the panel for its Spaces width.
     controller.presentLibraryPanel(panel, width: panel.section == .spaces ? (controller.contentView.bounds.width-56) : 417)

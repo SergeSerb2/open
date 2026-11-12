@@ -129,11 +129,16 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
     let session = makeLibrarySession(controller)
     session.model.registerStores(archives: archives, histories: histories)
-    if section == .boosts {
-      if let boostsPresentation { session.model.boostsPresentation = boostsPresentation }
-      if let profileID = boostsProfileID ?? controller.context.focusedSpace?.profileID { session.model.historyProfileID = profileID }
+    let target = section ?? session.model.section
+    if target == .boosts, let boostsPresentation, session.model.boostsPresentation != boostsPresentation {
+      session.model.boostsPresentation = boostsPresentation
     }
-    if section == .history, !controller.isLibraryOpen, let profileID = controller.context.focusedSpace?.profileID { session.model.historyProfileID = profileID }
+    // Outside entry points use the browser owner. Internal panel navigation
+    // never calls this method and keeps the user's filter selection.
+    if let profileID = (target == .boosts ? boostsProfileID : nil) ?? controller.context.focusedSpace?.profileID {
+      if target == .downloads, session.model.downloadProfileFilter != profileID { session.model.downloadProfileFilter = profileID }
+      if (target == .history || target == .boosts), session.model.historyProfileID != profileID { session.model.historyProfileID = profileID }
+    }
     session.show(section: section)
     window.makeKeyAndOrderFront(nil); NSApp.activate(); app.scheduleMenuRebuild()
   }

@@ -943,3 +943,31 @@ windows and no leaked group. The ticket released before receipt copying.
 Raw receipt: `.re/l3/preview-native-1730/ns2/d1-preview-1730-r3-out/gate/gate.json`;
 SHA-256 `228abaffec82b040f28c3486627435a27d1f973bc6c8e1c29dae7b8624ed6da8`.
 This touched-suite result is separate from the required final full M5 gate.
+
+
+## LEAD 20:45 / 21:15 — live History and browser owner
+
+The Library is part of its browser window. Menu, hotkey and command-bar
+entry points (Boost Gallery, Downloads and History) use that window's owner
+Profile and reset the Library filter to it. Navigation within the open
+Library, including sidebar sections and filters, keeps the chosen filter.
+Boost Gallery F1 covers a B filter, internal navigation retaining B, then
+menu entry resetting to owner A. Profile isolation assertions remain.
+
+History now cancels the previous store subscription and stale provider
+generation only when the selected Profile changes. The NS1 before case
+stored Profile2 visits but never published them into the open Library,
+even after native filter selection and reopen. After commit87fe8b76,
+`history_library_new_profile_live` passes with separate SQLite/model/native
+row evidence; Profile isolation and front-window cases also pass. The full
+History suite still needs completion after adapting its closed-panel and
+no-window setup. Library open and list-scroll timing require one fresh
+quiet-M1 ticket under LEAD20:45. Other unchanged receipts carry by ruling.
+
+LEAD21:40 applies the owner reset to all three entry points, even while the
+Library is open. Equality checks leave an existing owner filter unchanged.
+Same-section entry into an open panel keeps its prepared provider. Native
+automation reports each provider generation, so the History flow checks that
+repeated owner entry causes no provider reload. Internal section navigation
+has its own assertion that the selected Profile stays unchanged. These entry
+changes share the single LEAD20:45 open/list-scroll qualification.

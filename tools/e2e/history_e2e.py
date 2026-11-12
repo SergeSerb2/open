@@ -62,6 +62,9 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
     def history_hits(state):
         return [r for r in state.get('rows', []) if r.get('url') == base + '/link' and r.get('kind') == 'history']
     def select_history_profile(profile):
+        if not app.call('library-state').get('open'):
+            app.call('menu-perform', id='view-history')
+            assert wait_until(lambda: app.call('library-state').get('open'), timeout=3, step=.05)
         app.call('library-ui', action='chip', id='profile:' + profile)
         assert wait_until(lambda: app.call('library-history-state')['profile'] == profile,
                           timeout=3, step=.05), app.call('library-history-state')
@@ -158,16 +161,25 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         check('history_front_profile_cmd_y', first_window != second_window and picked == profile2 and picked != profile1,
               profile=picked, expected=profile2)
         select_history_profile(profile1)
+        app.call('library-ui', action='select', section='downloads')
+        app.call('library-ui', action='select', section='history')
+        internal_profile = app.call('library-history-state')['profile']
+        check('history_internal_navigation_keeps_filter', internal_profile == profile1 and internal_profile != profile2, profile=internal_profile)
         app.call('window-focus', id=second_window, activate=True)
         app.call('menu-perform', id='view-history')
         kept = app.call('library-history-state')['profile']
-        check('history_manual_profile_while_open', kept == profile1 and kept != profile2, profile=kept)
+        check('history_manual_profile_while_open', kept == profile2 and kept != profile1, profile=kept, expectedOwner=profile2, rule='outside entry resets the filter')
+        settled_provider = wait_until(lambda: (lambda s: s if s.get('loaded') and not s.get('running') else None)(app.call('library-state')['providers'].get('history', {})), timeout=3, step=.05)
+        assert settled_provider, app.call('library-state')
+        app.call('menu-perform', id='view-history')
+        same_provider = app.call('library-state')['providers']['history']
+        check('history_owner_entry_no_reload', same_provider['generation'] == settled_provider['generation'] and same_provider['loaded'], before=settled_provider, after=same_provider)
         select_history_profile(profile1)
         app.call('download-library-close')
         app.call('window-focus', id=second_window, activate=True)
         app.call('menu-perform', id='view-history')
         picked = app.call('library-history-state')['profile']
-        check('history_front_profile_menu_reopen', picked == profile2 and picked != kept, profile=picked)
+        check('history_front_profile_menu_reopen', picked == profile2 and picked != profile1, profile=picked, previousOwner=kept)
         select_history_profile(profile1)
         app.call('download-library-close')
         app.call('window-focus', id=second_window, activate=True)
@@ -249,10 +261,15 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         for window in app.call('shell-windows'):
             app.call('window-focus', id=window['id'], activate=True)
             app.call('window-close')
+        without_windows = app.call('shell-windows')
+        assert not without_windows, without_windows
         app.call('menu-perform', id='view-history')
         fallback = app.call('library-history-state')['profile']
-        check('history_default_profile_without_window', not app.call('shell-windows') and fallback == profile1
-              and fallback != profile2, profile=fallback)
+        owners = app.call('shell-windows')
+        owner_profile = next((s['profile'] for s in app.call('spaces') if s['focused']), None)
+        check('history_default_profile_without_window', len(owners) == 1 and fallback == profile1
+              and fallback != profile2 and owner_profile == profile1, profile=fallback,
+              windowsBefore=without_windows, windowsAfter=owners, ownerProfile=owner_profile)
     finally:
         if app:
             restore_defaults(app, saved)
