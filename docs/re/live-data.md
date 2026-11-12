@@ -261,7 +261,8 @@ separate host list for "this tab is a meeting" (`S:270109–270116`): `meet.goog
 |---|---|---|
 | Menu | Tabs ▸ "Join Meeting", ⌘⌃J, selector `joinLiveMeeting:` | `menus-and-hotkeys.md` |
 | Command bar | "Join next meeting", "Join next video conference"; trigger phrases include "Join Zoom Call", "Video Call", "Meeting" | `G:FUN_101d9bffc`; `S:129097–129192`; `T:ASE2.TypeTravelCandidate…JoinNextMeeting` |
-| Target | Guess: the active or next eligible Live Calendar event's `joinLink`. **Needs capture** for the no-calendar and no-meeting cases |
+| Target | The Live Calendar's active event `joinLink` (see the next row). ⌃⌘J with no calendar and no meeting gives no visible feedback (capture session 6, `v1/01-cal-dl-pip`) | saved decompile `.re/sidebar-completion/ghidra1.txt` lines 3488–3580 |
+| Menu enabled state | The menu validation function `FUN_100314424` (Arc 1.170.0) has a branch for `joinLiveMeeting:`. It reads the Live Calendar state, takes the active event's join URL as an optional (nil when there is no Live Calendar or no event), compares it with nil (`Foundation.URL` `==`), and calls `setEnabled:` with "not nil". So the item is **disabled** unless an active event has a join link; it is never hidden | same decompile: `setEnabled_` at `LAB_100319dec`, reached from the branch through `LAB_100319de4` |
 | Meet routing | Air Traffic Control default route for `meet.google.com` (pref `didSetDefaultGoogleMeetRoute`), toast "Meet links now open in your current Space!" with action "Choose where they open" | `S:125771`, `S:125836`; `runtime-observations.md` |
 | Meet PiP | Flag `google-meet-auto-picture-in-picture-enabled`; `PictureInPicture.MeetingControls` | `S:123562`, `T:` |
 

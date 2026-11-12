@@ -23,7 +23,8 @@ public enum TopDomains {
     private static let list: [(String, String)] = [
         ("google.com", "Google"), ("youtube.com", "YouTube"), ("facebook.com", "Facebook"), ("instagram.com", "Instagram"),
         ("wikipedia.org", "Wikipedia"), ("x.com", "X"), ("twitter.com", "Twitter"), ("reddit.com", "Reddit"),
-        ("amazon.com", "Amazon"), ("whatsapp.com", "WhatsApp"), ("linkedin.com", "LinkedIn"), ("chatgpt.com", "ChatGPT"),
+        ("amazon.com", "Amazon"), ("amazon.co.uk", "Amazon.co.uk"), ("amazon.es", "Amazon.es"),
+        ("amazonaws.com", "Amazon Web Services (AWS)"), ("amazon.ca", "Amazon.ca"), ("whatsapp.com", "WhatsApp"), ("linkedin.com", "LinkedIn"), ("chatgpt.com", "ChatGPT"),
         ("netflix.com", "Netflix"), ("bing.com", "Bing"), ("yahoo.com", "Yahoo"), ("tiktok.com", "TikTok"),
         ("microsoft.com", "Microsoft"), ("live.com", "Outlook"), ("office.com", "Microsoft 365"), ("apple.com", "Apple"),
         ("icloud.com", "iCloud"), ("github.com", "GitHub"), ("gmail.com", "Gmail"), ("mail.google.com", "Gmail"),
@@ -72,7 +73,7 @@ public enum TopDomains {
 /// hit and complete inline (`InlineCompletion.canComplete`); history and tabs still rank above it.
 public struct TopDomainsProvider: SuggestProvider {
     public let id = "topDomains"
-    public var maxRows = 4
+    public var maxRows = 5
     public init() {}
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {

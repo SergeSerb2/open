@@ -177,6 +177,12 @@ configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 // The engine's test hooks run only with this switch; normal Release builds
 // never pass it. E2E launchers separately suppress macOS notification setup.
 configuration.additionalSwitches = configuration.additionalSwitches + ["--open-automation"]
+// No automation launch touches a real camera or microphone, so no suite can raise "Allow 'Open' to
+// access your microphone?" (on a rented Mac that prompt blocked every on-screen run). Fake devices make
+// Chromium skip the macOS permission check (system_media_capture_permissions_mac.mm) and give pages a
+// fake camera; audio still asked macOS on a rented Mac until audio input was disabled too, which also
+// gives pages the "Fake Default Audio Input" device. Both switches reach the audio and video services.
+configuration.additionalSwitches.append(contentsOf: ["--use-fake-device-for-media-stream", "--disable-audio-input"])
 // Fixtures may exercise save prompts under the public mock key. This switch
 // never permits imported real secrets under that key.
 if CommandLine.arguments.contains("--open-allow-mock-keychain-secrets") {

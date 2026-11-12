@@ -34,6 +34,8 @@ public enum Ranking {
     public static let absorbedFrecencyShare: Double = 0.5
 
     /// Per-kind row limits after the top hit.
+    /// Rows from the built-in top-domain list (capture PB1-i).
+    public static let topDomainCap = 5
     public static func cap(_ kind: SuggestionKind, mode: SuggestMode) -> Int {
         switch kind {
         case .switchToTab: return mode == .searchTabs ? .max : 6
@@ -232,12 +234,20 @@ public enum Ranking {
         }
         var final: [Suggestion] = []
         var counts: [SuggestionKind: Int] = [:]
+        // Built-in top domains have their own cap: Arc lists up to five ("amaz": Amazon, Amazon.co.uk,
+        // Amazon.es, AWS, Amazon.ca; capture PB1-i) while other navigate rows keep theirs.
+        var topDomains = 0
+        func isTopDomain(_ row: Suggestion) -> Bool { row.providers.contains("topDomains") }
         if let topIndex {
             let top = rows.remove(at: topIndex)
             final.append(top)
-            counts[top.kind] = 1
+            if isTopDomain(top) { topDomains = 1 } else { counts[top.kind] = 1 }
         }
         for row in rows where final.count < maxResults {
+            if isTopDomain(row) {
+                if topDomains >= Self.topDomainCap { continue }
+                topDomains += 1; final.append(row); continue
+            }
             let n = counts[row.kind, default: 0]
             if n >= cap(row.kind, mode: mode) { continue }
             counts[row.kind] = n + 1
