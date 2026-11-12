@@ -319,3 +319,50 @@ def run(factory, results, tmp, h):
         and cr.get('unmappedProfiles') == 1 and cr['total']['logins']['added'] == 0,
         restricted=dict(profiles=sorted(rr.get('profiles', {})), unmapped=rr.get('unmappedProfiles'), logins=rr.get('total', {}).get('logins')),
         control=dict(profiles=sorted(cr.get('profiles', {})), unmapped=cr.get('unmappedProfiles')))
+
+    # I-5: first run with no Arc data and a detected Chrome. Onboarding offers Chrome; the import lands in the
+    # first-run browser; the Favorites step preselects the most visited sites from the imported history.
+    app.quit()
+    import shutil
+    first_library = Path(tmp)/'import-browsers'/'FirstRunLibrary'
+    shutil.rmtree(first_library, ignore_errors=True)
+    shutil.copytree(library, first_library, ignore=shutil.ignore_patterns('Vivaldi', 'Microsoft Edge', 'Arc'))
+    history = first_library/'Application Support/Google/Chrome/Default/History'
+    history.unlink()
+    write_history(history, [('https://github.com/example', 'Example Repo', 5), ('https://www.youtube.com/watch', 'Example Video', 4),
+                            ('https://rare.example.com/', 'Example Rare', 1)])
+    empty_arc = Path(tmp)/'import-browsers'/'NoArc'; empty_arc.mkdir(exist_ok=True)
+    app = factory(urls=(), fresh=True, first_run=True, extra_args=['--browser-import-library=' + str(first_library),
+                  '--arc-dir=' + str(empty_arc), '--host-resolver-rules=MAP * ~NOTFOUND', '--intro-sound=silent'])
+    if app.call('onboarding').get('active'):
+        app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+    assert h.wait_until(lambda: app.call('onboarding').get('screen') == 'name', timeout=20, step=.1), app.call('onboarding')
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: app.call('onboarding').get('screen') == 'import' and app.call('first-run').get('step') == 'importChoices'
+                        and app.call('first-run').get('browserSource') == 'chrome', timeout=30, step=.1), app.call('onboarding')
+    offered = app.call('first-run')
+    frames = Path(h.OUT)/'import-browsers-frames'; frames.mkdir(exist_ok=True)
+    def capture(name):
+        # Look frames for the lead (not asserted): the real onboarding window, light and dark.
+        for mode in ('light', 'dark'):
+            app.call('onboarding', action='set-appearance', appearance=mode); time.sleep(.6)
+            app.call('snapshot', path=str(frames/('onboarding-%s-%s.png' % (name, mode))))
+    capture('import-browser')
+    app.call('first-run', action='select', history=True)
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: app.call('first-run').get('step') in ('report', 'failed'), timeout=120, step=.1), app.call('first-run')
+    done = app.call('first-run')
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: app.call('onboarding').get('screen') == 'favorites', timeout=20, step=.1), app.call('onboarding')
+    favorites = app.call('onboarding').get('favorites')
+    capture('favorites-suggested')
+    data, nodes = sidebar(app)
+    folder = [n for n in nodes if n[0] == 'folder' and n[1][1:] == ['Imported from Chrome']]
+    row('onboarding_browser_import', offered.get('browserSource') == 'chrome' and offered.get('browserSources') == ['chrome']
+        and done.get('step') == 'report' and done.get('outcome', {}).get('Bookmarks') == 4 and done.get('outcome', {}).get('Open tabs') == 2
+        and done.get('outcome', {}).get('History') == 10 and len(folder) == 1,
+        source=offered.get('browserSource'), sources=offered.get('browserSources'), step=done.get('step'),
+        outcome={k: done.get('outcome', {}).get(k) for k in ('Bookmarks', 'Open tabs', 'History')}, folder=len(folder))
+    # Sites: index 2 = YouTube, 6 = GitHub (OnboardingStepsController.sites).
+    row('onboarding_favorite_suggestions', done.get('suggestedHosts') == ['github.com', 'youtube.com'] and favorites == [2, 6],
+        suggested=done.get('suggestedHosts'), favorites=favorites)

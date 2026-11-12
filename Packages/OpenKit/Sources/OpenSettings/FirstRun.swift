@@ -78,7 +78,8 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         await wizard.loadSources()
         browserSources=wizard.visibleSources.filter {$0.family != .arc && wizard.canSelect($0)}
         browserSourcesLoaded=true
-        if probe?.sidebarFound != true, let first=browserSources.first {await selectBrowser(first.id)}
+        // History is on in browser mode: the Favorites step uses it for suggestions.
+        if probe?.sidebarFound != true, let first=browserSources.first {includeHistory=true;await selectBrowser(first.id)}
     }
     public func selectBrowser(_ id:String) async {
         guard !busy,let source=browserSources.first(where:{$0.id == id}),let profile=source.profiles.first else {return}

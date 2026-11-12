@@ -150,6 +150,9 @@ extension AutomationController {
     if let current {
       state["welcome"] = current.welcomeStatus
       state["probeReady"] = current.probe != nil
+      state["browserSource"] = current.browserSourceID ?? ""
+      state["browserSources"] = current.browserSources.map(\.id)
+      state["suggestedHosts"] = current.suggestedHosts
       state["counts"] = current.probe?.settingsCounts ?? [:]
       state["sidebarFound"] = current.probe?.sidebarFound ?? false
       state["secretsEnabled"] = current.wizard.canImportPasswordsAndCookies

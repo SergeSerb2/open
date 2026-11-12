@@ -96,7 +96,7 @@ public struct ChromiumProfileReader: Sendable {
         } catch { throw ReadError.unreadable }
     }
 
-    /// The most visited hosts in `History` (`urls.visit_count`), without "www.". For the onboarding Favorites
+    /// The most visited hosts in `History` (rows in `visits`), without "www.". For the onboarding Favorites
     /// step (I-5). Arc ranks by visits and site engagement above a threshold that strings do not show (F3 §1);
     /// GUESS — capture pending: Open takes the top `limit` hosts with at least 3 visits.
     public func topHosts(limit: Int) throws -> [String] {
@@ -105,7 +105,8 @@ public struct ChromiumProfileReader: Sendable {
         var totals: [String: Int] = [:]
         do {
             let copy = try ArcSQLiteCopy(fileURL: file)
-            try copy.rows("SELECT url, visit_count FROM urls ORDER BY visit_count DESC LIMIT 2000") { row in
+            // Count rows in `visits`; `urls.visit_count` can lag behind.
+            try copy.rows("SELECT u.url, COUNT(v.id) AS n FROM urls u JOIN visits v ON v.url = u.id GROUP BY u.id ORDER BY n DESC LIMIT 2000") { row in
                 guard let url = URL(string: copy.text(row, 0)), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
                       var host = url.host?.lowercased() else { return }
                 if host.hasPrefix("www.") { host.removeFirst(4) }

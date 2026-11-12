@@ -7,10 +7,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          61172,
-          61326,
-          61327,
-          61329
+          95045,
+          95112,
+          95113,
+          95114
         ],
         "remaining_processes": [],
         "reply": true,
@@ -25,10 +25,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          61574,
-          61591,
-          61592,
-          61593
+          95203,
+          95207,
+          95208,
+          95210
         ],
         "remaining_processes": [],
         "reply": true,
@@ -37,6 +37,24 @@
           "windows": []
         },
         "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          95230,
+          95250,
+          95251,
+          95252
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 3
       }
     ]
   },
@@ -62,9 +80,9 @@
         "Imported from Chrome/Other bookmarks"
       ],
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "outcome": {
@@ -85,9 +103,9 @@
     "bookmarks_size_limit": {
       "atLimit": "Found: 1",
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "overLimit": "Could not be read"
@@ -103,9 +121,9 @@
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "title": "Import from Chrome"
@@ -115,29 +133,64 @@
         "aaaabbbbccccddddeeeeffffgggghhhh"
       ],
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true
     },
     "history_imported": {
       "history": 5,
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "visits": 5
+    },
+    "onboarding_browser_import": {
+      "folder": 1,
+      "load": [
+        6.52978515625,
+        7.08984375,
+        7.650390625
+      ],
+      "ok": true,
+      "outcome": {
+        "Bookmarks": 4,
+        "History": 10,
+        "Open tabs": 2
+      },
+      "source": "chrome",
+      "sources": [
+        "chrome"
+      ],
+      "step": "report"
+    },
+    "onboarding_favorite_suggestions": {
+      "favorites": [
+        2,
+        6
+      ],
+      "load": [
+        6.52978515625,
+        7.08984375,
+        7.650390625
+      ],
+      "ok": true,
+      "suggested": [
+        "github.com",
+        "youtube.com"
+      ]
     },
     "open_tabs": {
       "imported": 2,
       "label": "Found: 2",
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "pinned": [
@@ -149,9 +202,9 @@
     },
     "reimport_idempotent": {
       "load": [
-        6.90185546875,
-        7.3408203125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "nodes": 9,
       "ok": true,
@@ -173,9 +226,9 @@
         "duckduckgo"
       ],
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true
     },
@@ -187,9 +240,9 @@
         "imported-ex"
       ],
       "load": [
-        6.90185546875,
-        7.3408203125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "outcome": {
@@ -219,9 +272,9 @@
         "Search settings": "DuckDuckGo"
       },
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true
     },
@@ -234,9 +287,9 @@
         "unmapped": 1
       },
       "load": [
-        6.90185546875,
-        7.3408203125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "restricted": {
@@ -257,9 +310,9 @@
     "session_size_limit": {
       "atLimit": "Found: 1",
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "ok": true,
       "overLimit": "Could not be read"
@@ -267,9 +320,9 @@
     "sources_detected": {
       "canContinue": false,
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.7060546875,
+        7.14404296875,
+        7.67626953125
       ],
       "ok": true,
       "selected": "",
@@ -285,9 +338,9 @@
     "sources_hidden_without_profile": {
       "firefox": "Coming soon",
       "load": [
-        6.806640625,
-        7.330078125,
-        7.93603515625
+        6.7060546875,
+        7.14404296875,
+        7.67626953125
       ],
       "ok": true,
       "sources": [
@@ -308,9 +361,9 @@
     },
     "undo": {
       "load": [
-        6.90185546875,
-        7.3408203125,
-        7.93603515625
+        6.4892578125,
+        7.091796875,
+        7.654296875
       ],
       "nodes": 0,
       "ok": true,
@@ -321,15 +374,15 @@
   "interrupted_attempts": [],
   "lane": "all",
   "load": [
-    6.703125,
-    7.31884765625,
-    7.93603515625
+    6.7060546875,
+    7.14404296875,
+    7.67626953125
   ],
   "source": {
-    "clean": true,
-    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "60025f2c189560185aebbcacf984f79f1a9d7701"
+    "clean": false,
+    "diffSHA256": "1f982b90a0c9ce7c33f894fa10a6a57a99416833280dff17a28684924f9f8b24",
+    "head": "4db6bdeef976234f188a066d1f027dc392367f76"
   },
-  "started": "2026-11-12 02:45:41",
+  "started": "2026-11-12 02:59:50",
   "style": "chrome"
 }
