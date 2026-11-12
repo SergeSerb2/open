@@ -395,6 +395,45 @@ Arc's extension picker, not a Find command.
 | Item 3 |  |  |
 | Websites, Easels, and Notes will use: |  |  |
 
+## Arc 1.172.2 runtime menu bar (what the running app shows)
+
+Evidence (2026-11-12): the menu-bar nodes of every Arc AX capture under
+`.re/capture/**/arc/**/*.ax*.json` (448 trees from capture sessions 6, 8 and 9 on the
+M1, Arc 1.172.2). The ordered lists below come from the tree with the most items for
+each menu; titles marked "state" appear only in some trees. `MainMenu.nib` of 1.172.2
+decodes to the same 219 items as 1.170 (`rea decode-interface-builder`, extractor
+`.re/hotkeys/extract_menus.py`; zero differences). So every runtime difference from the
+nib table above is made in code: titles, order and the items Arc hides. AX lists only
+visible items. A nib item that no tree shows is therefore hidden at run time; its key
+still works (the nib keeps its key equivalent).
+
+| Menu | Visible order in 1.172.2 (separators as —) | State titles |
+|---|---|---|
+| App | About · — · Settings… · Share Arc · Set as Default Browser · — · Import from Another Browser… · Check for Updates… · — · Services · Privacy Policy · — · Hide Arc · Hide Other Windows · Show All · — · Sign Out · — · Quit | |
+| File | New Tab… · New Window · Blank Window · New Incognito Window · New Little Arc Window · Restore Last Closed Tab · — · Open Command Bar · — · New Profile · New Easel · — · Close Window · Archive Tab · — · Share… · Capture… · Capture Full Page · Capture in Portrait Mode · Save Page As · Print | Close Tab, Close Easel, Archive Tabs |
+| Edit | Undo · Redo · — · Cut · Copy · Copy URL · Copy URL as Markdown · Copy URL as Quote · Paste · Paste and Match Style · Delete · Select All · — · Find ▸ (Find… · Find and Replace · Find Next · Find Previous · Use Selection to Find · Jump to Selection) · macOS items · Emoji & Symbols | Undo ‹action›, Copy URLs, Copy URLs as Markdown |
+| View | Appearance ▸ ("Websites, Easels, and Notes will use:" · Automatic · Light · Dark) · — · Hide Sidebar · Show Toolbar · Collapse Pinned Tabs · — · Stop Loading · Refresh the Page · Force Refresh the Page · Clear Cookies and Refresh · Clear Cache and Refresh · — · Add Split View · Close this Split Pane · Separate Page from Split View · Expand Current Split · — · Zoom to Actual Size · Zoom In · Zoom Out · — · Cast · — · Developer ▸ (View Source · Developer Tools · Inspect Elements · JavaScript Console · Network Inspector · Allow JavaScript from Apple Events · Turn on Developer Mode for this site) · — · Enter Full Screen | Show Sidebar, Hide Toolbar, Turn off Developer Mode for this site |
+| Spaces | New Space… · Edit Theme… · Rename Space · Change Profile · — · Next Space · Previous Space · — · ‹Spaces› · — · Manage Spaces… | |
+| Tabs | New Tab… · Pin/Unpin Tab · New Folder… · — · Next Tab · Previous Tab · Reveal Tab in Sidebar · — · Clear Today · Reset all tabs in this Space | Pin Tab, Unpin Tab, Pin Tabs, New Folder from Selection…, Open in ‹Space› |
+| Archive | Go Back · Go Forward · — · View History · View Archive… · Clear Archive | Hide Archive |
+| Extensions | Add Extension… · Manage Extensions… | |
+| Window | Stay On Top · Minimize Window · Zoom · macOS items · — · Open Library… · View Downloads… · View Easels… · View Media… · View Boosts… · — · Bring All to Front · macOS items · ‹windows› | View Library (no window), Close Library, Hide Downloads / Easels / Media / Boosts |
+| Help | Getting Started · Essential Keyboard Shortcuts · Contact the Team · Visit Help Center · Restore Data · Export Arc Notes · — · Troubleshooting ▸ (Record Trace · Open Task Manager · — · Reveal Arc Data · Copy Arc Info) | |
+
+Hidden at run time (in the nib, in no tree): New Boost, Edit Boost, New Legacy Boost
+(Advanced), Boost Gallery, New Note, New Note (in Split), Send to Dia; Reveal Current Tab,
+Expand Pinned Section, Exit; Duplicate, Rename Current Item, Reset Tab to Original URL,
+Cycle Tab Forward/Backward, Tab Switcher (forward/backward), Expand/Collapse All Folders,
+Peek Email…, Join Meeting, Open Little Arc or Peek in…, New ChatGPT Message…; Release
+Notes; Cancel Trace (no trace was running). The Tabs menu's ⌘1…⌘9 group shows only as
+empty "Item 1…3" rows.
+
+Open follows this table (PB4 menu PR), except: the Note items stay visible (LEAD 01:25),
+Share Arc, Privacy Policy, Sign Out, Restore Data and View Easels… are not built (View
+Easels… waits for capture C-NT1), Cast stays hidden (out of v1), and the state titles
+that need behaviour Open lacks (Copy URLs, Archive Tabs, Close Tab, Close Easel, Hide
+‹section›, Close Library, Undo ‹action›, Open in ‹Space›) are listed as gaps.
+
 ## Enabled and hidden rules (what static data can prove)
 
 Code holds 58 outlets to menu items (`MainMenuOutlets`, object 1532 in the
