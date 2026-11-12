@@ -443,8 +443,12 @@ def run(factory, results, tmp, h):
         for _ in range(5):
             app = launch(fresh=True)
             t = app.call('timing')
-            startup = app.call('onboarding').get('startup', {})
-            timings.append(dict(marks=t, startup=startup, load=os.getloadavg()))
+            onboarding = app.call('onboarding')
+            startup = onboarding.get('startup', {})
+            sound = onboarding.get('sound', {})
+            timings.append(dict(marks=t, startup=startup, load=os.getloadavg(),
+                                soundScheduledHostTime=sound.get('scheduleReturnedHostTime'),
+                                audioStartHostTime=sound.get('audioStartHostTime')))
             app.quit()
         # First run now creates its window after engine startup. sidebarDrawn
         # still belongs to returning launches; do not invent that mark here.
@@ -457,8 +461,25 @@ def run(factory, results, tmp, h):
                 and startup.get('launchToFirstOnboardingFrameMS', 0) > 0
         row('F12_engine_before_first_frame', all(first_frame_receipt(t) for t in timings), samples=timings)
         med = statistics.median(t['startup']['launchToFirstOnboardingFrameMS'] for t in timings)
-        results['F12_first_content'] = dict(status='INFO', medianMs=med,
-            reason='first-run first content moved from about 0.37 s (old static room/window) to 3.2–3.4 s in the quiet proof by design: engine-first order; these five measured launches report their actual values',
+        # INFO: where first-run first content goes, in milliseconds after launch (medians of the five launches).
+        # The order is the S17 design: engine first, then the window, scene and dim fade together at the
+        # scheduled start of the intro sound. A missing host time leaves its phase out.
+        def phase_median(read):
+            values = [(read(s) - s['startup']['launchHostTime']) * 1000 for s in timings
+                      if isinstance(read(s), (int, float)) and isinstance(s['startup'].get('launchHostTime'), (int, float))]
+            return round(statistics.median(values), 1) if values else None
+        phases = {name: phase_median(read) for name, read in [
+            ('engineStartBegin', lambda s: s['startup'].get('engineStartBeginHostTime')),
+            ('engineStartEnd', lambda s: s['startup'].get('engineStartEndHostTime')),
+            ('engineSettled', lambda s: s['startup'].get('engineSettledHostTime')),
+            ('windowCreation', lambda s: s['startup'].get('windowCreationHostTime')),
+            ('soundScheduled', lambda s: s.get('soundScheduledHostTime')),
+            ('audioStart', lambda s: s.get('audioStartHostTime')),
+            ('firstOnboardingFrame', lambda s: s['startup'].get('firstOnboardingFrameHostTime'))]}
+        results['F12_first_content'] = dict(status='INFO', medianMs=med, phasesAfterLaunchMs=phases,
+            reason='first-run first content has no 250 ms budget (lead ruling 2026-11-12): that budget is for a normal '
+                   'launch. First run is engine-first and starts with the intro sound by design (S17). Measured on main '
+                   '4cbb93f5 on a rented Mac: 354-636 ms; these five launches report their actual values and phase split',
             samples=timings, load=os.getloadavg())
         binary_strings = subprocess.check_output(['strings', app.executable], text=True, errors='replace')
         import re
