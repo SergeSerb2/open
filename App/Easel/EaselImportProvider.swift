@@ -119,6 +119,8 @@ extension AppDelegate {
       if let row = anyEaselRow(documentID: id) { row.title = doc.displayTitle; continue }
       let space = profileID.flatMap { p in model.spaces.first { $0.profileID == p } } ?? model.spaces.first
       guard let space else { continue }
+      // The import's own Undo removes this row: no separate model undo step.
+      let undo = model.undoManager; undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }
       let tab = model.newTab(in: space.id, url: EaselTab.url(for: id), title: doc.displayTitle, at: 0)
       tab.live.faviconPNG = EaselIcon.faviconPNG
       change.rows.append((id, tab.id, space.id))
@@ -165,6 +167,7 @@ extension AppDelegate {
   func redoEaselImport(_ change: EaselImportChange) {
     writeEaselFiles(change.after.mapValues { Optional($0) })
     for (id, _, spaceID) in change.rows where anyEaselRow(documentID: id) == nil && model.space(id: spaceID) != nil {
+      let undo = model.undoManager; undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }
       let tab = model.newTab(in: spaceID, url: EaselTab.url(for: id), title: change.titles[id] ?? EaselDocument.untitled, at: 0)
       tab.live.faviconPNG = EaselIcon.faviconPNG
     }
