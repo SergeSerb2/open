@@ -163,6 +163,13 @@ public final class AdBlockStore {
     }
 
     public func isRetired(_ profile: ProfileID) -> Bool { retired.contains(profile) }
+
+    /// The enabled lists' text files of the Profile's live generation (verified), for readers
+    /// that need rules the engine does not apply (AdBlockExtras: `:style()`, scriptlets).
+    public func liveListFiles(for profile: ProfileID) async -> [URL] {
+        guard let lists = try? listDirectory(for: profile) else { return [] }
+        return (try? await repository.liveListFiles(directory: lists, catalog: catalog)) ?? []
+    }
     public func isProfileOpen(_ profile: ProfileID) -> Bool { states[profile] != nil && !retired.contains(profile) }
     public func isUpdating(_ profile: ProfileID) -> Bool { busy.contains(profile) }
 

@@ -131,6 +131,7 @@ extension AutomationController {
           "storeReady": store?.isProfileOpen(profile.id) ?? false,
           "storeEnabled": store?.isEnabled ?? false,
           "storeExcludedDomains": store?.excludedDomains(for: profile.id) ?? [],
+          "extras": app.adBlockEngineAdapter.extras.snapshot(profile: profile.id),
           "contexts": contexts.map { context -> [String: Any] in
             ["identifier": context.identifier, "offTheRecord": context.originalContext != nil,
               "storePrivateSessionOpen": store?.isPrivateSessionOpen(context.identifier, profile: profile.id) ?? false,

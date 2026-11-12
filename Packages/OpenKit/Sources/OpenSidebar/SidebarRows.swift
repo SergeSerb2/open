@@ -1201,7 +1201,13 @@ extension SidebarDiagnostics {
     private var representedID: ItemID?
     private var lastMuted: Bool?
     private var lastReduceMotion: Bool?
+    /// The running spring overlay (SpeakerSpring); the image view hides under it.
+    private(set) var springLayer: CALayer?
     override init(glyph: Glyph?) { super.init(glyph: glyph); glyphView.removeFromSuperview() }
+    private func stopSpring() {
+        springLayer?.removeFromSuperlayer(); springLayer = nil
+        symbol?.alphaValue = 1
+    }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func layout() {
         super.layout()
@@ -1213,11 +1219,12 @@ extension SidebarDiagnostics {
     func update(tabID: ItemID?, muted: Bool, animate: Bool = true) {
         let reduceMotion = SidebarDiagnostics.mediaReducesMotion
         if representedID == tabID && lastMuted == muted && lastReduceMotion == reduceMotion {
-            if !animate { removeAnimations(symbol?.layer) }
+            if !animate { removeAnimations(symbol?.layer); stopSpring() }
             return
         }
         let glyph: Glyph = muted ? .audioMuted : .audioPlaying
         guard let image = glyph.image else { return }
+        stopSpring()
         let changed = representedID == tabID && lastMuted != nil && lastMuted != muted
         let needsImage = lastMuted != muted || representedID != tabID
         if reduceMotion {
@@ -1236,7 +1243,17 @@ extension SidebarDiagnostics {
                 addSubview(view); symbol = view; created = true
             }
             view.contentTintColor = SidebarRole.rowAccessory.nsColor
-            if changed && animate && !isHiddenOrHasHiddenAncestor && (window?.isVisible == true || SidebarDiagnostics.forceAnimations) {
+            let springing = changed && animate && !isHiddenOrHasHiddenAncestor && (window?.isVisible == true || SidebarDiagnostics.forceAnimations)
+            if springing, let host = layer, let audible = Glyph.audioPlaying.image, let mutedImage = Glyph.audioMuted.image,
+               let overlay = SpeakerSpring.run(in: host, bounds: bounds, scale: window?.backingScaleFactor ?? 2, audible: audible, muted: mutedImage,
+                                               tint: SidebarRole.rowAccessory.nsColor, toMuted: muted, completion: { [weak self] in
+                                                   self?.springLayer = nil; self?.symbol?.alphaValue = 1 }) {
+                // Arc's spring choreography (PP-23); the image view holds the final glyph underneath.
+                CATransaction.begin(); CATransaction.setDisableActions(true)
+                view.image = image; view.alphaValue = 0
+                CATransaction.commit()
+                springLayer = overlay
+            } else if springing {
                 view.setSymbolImage(image, contentTransition: .replace.magic(fallback: .replace))
                 // Lead clarification, 2026-10-26: the unwrapped native call changes the
                 // symbol but starts no effect in the real offscreen harness. Use a finite
@@ -1251,7 +1268,7 @@ extension SidebarDiagnostics {
                 view.image = image
                 CATransaction.commit()
             }
-            if !animate { removeAnimations(view.layer) }
+            if !animate { removeAnimations(view.layer); stopSpring() }
         }
         representedID = tabID; lastMuted = muted; lastReduceMotion = reduceMotion; needsLayout = true
     }

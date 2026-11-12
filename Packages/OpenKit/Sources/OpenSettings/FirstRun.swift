@@ -76,8 +76,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func loadBrowserSources() async {
         if !browserSourcesLoaded {
             await wizard.loadSources()
-            // Safari without Full Disk Access stays in Settings ▸ Import (its Access step); onboarding never opens System Settings.
-            browserSources=wizard.visibleSources.filter {$0.family != .arc && wizard.canSelect($0) && !$0.accessDenied}
+            browserSources=wizard.visibleSources.filter {$0.family != .arc && wizard.canSelect($0)}
             browserSourcesLoaded=true
         }
         // History is on in browser mode: the Favorites step uses it for suggestions.
@@ -89,7 +88,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         await wizard.refreshCounts()
     }
     public func browserFound(_ key:String,singular:String,plural:String)->String {
-        if wizard.browserCounts == nil && wizard.familyCounts == nil {return "Counting…"}
+        if wizard.browserCounts == nil {return "Counting…"}
         return wizard.counts[key].map {"Found: "+ImportCountCopy.phrase($0,singular:singular,plural:plural)} ?? "Not found"
     }
     public var hasSelection:Bool {
@@ -126,10 +125,6 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func continueImport() async {
         guard [.importChoices,.failed].contains(step),hasSelection,!wizard.isImporting else {return}
         if isBrowserMode,let source=browserSource,case .browser(_,let profile)=wizard.plan.source {
-            // IMF: a running Firefox keeps its files locked (Arc: "Quit Firefox to continue importing").
-            if source.family == .firefox, FirefoxProfileCatalog.isLocked(profile.directory) || NSWorkspace.shared.runningApplications.contains(where: {BrowserSourceCatalog.runningBundleIDs(for:source.descriptor).contains($0.bundleIdentifier ?? "")}) {
-                errorText="Quit \(source.name) to continue importing.";return
-            }
             var plan=ImportPlan(directory:wizard.plan.directory);plan.source = .browser(source,profile:profile)
             plan.spaces=false;plan.tabs=false;plan.favorites=false;plan.folders=false;plan.archive=false;plan.boosts=false
             plan.bookmarks=includeBookmarks;plan.openTabs=includeOpenTabs;plan.history=includeHistory;plan.searchSettings=true
@@ -138,8 +133,8 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
             await wizard.beginImport(plan:plan)
             synchronizeImportState()
             if includeHistory && imported {
-                let files=wizard.plan.safariFiles
-                suggestedHosts=await Task.detached(priority:.utility) {BrowserSiteSuggestions.topHosts(source:source,profile:profile,safari:files,limit:8)}.value
+                let directory=profile.directory
+                suggestedHosts=await Task.detached(priority:.utility) {(try? ChromiumProfileReader(directory:directory).topHosts(limit:8)) ?? []}.value
             }
             return
         }

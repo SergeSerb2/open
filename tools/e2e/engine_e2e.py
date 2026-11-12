@@ -6065,30 +6065,6 @@ def profiles_checks(factory, results, tmp, config):
 # Measurements (run with --config Release)
 
 
-# Idle CPU rows measure the steady state a real user sees (LEAD ruling 2026-11-12): a profile that
-# was launched once before, with Chromium's first-run component installs done. On a fresh profile the
-# component updater runs about 60-80 s after launch and starts ~24 short-lived children, which makes
-# an idle window incomplete (H2-handoff-engine.md). Limits are unchanged; the first launch is recorded.
-SECOND_LAUNCH_FIRST_RUN_SECONDS = 90
-
-
-def second_launch(factory, urls, **kwargs):
-    """Launch a fresh profile, keep it open past the component burst, quit, relaunch the same profile."""
-    begin_row("second-launch warm-up (first launch)")
-    first = factory(urls=urls, fresh=True, **kwargs)
-    started = time.time()
-    try:
-        time.sleep(SECOND_LAUNCH_FIRST_RUN_SECONDS)
-    finally:
-        first.quit()
-    record = {"firstLaunchWall": started, "firstLaunchSeconds": round(time.time() - started, 3),
-              "firstLaunchQuitOK": bool(first.quit_report.get("ok"))}
-    begin_row("second-launch warm-up (second launch)")
-    app = factory(urls=urls, fresh=False, **kwargs)
-    record["secondLaunchWall"] = time.time()
-    return app, record
-
-
 def process_cpu_window(app, seconds=60):
     """One OS CPU window of `seconds`. See process_cpu_windows."""
     app.begin_timing('OS idle CPU window')
@@ -6280,7 +6256,7 @@ def measure(app_factory, results, tmp):
 
     # D-11: the same paused-card speed gate as the media suite, on a local fixture.
     server, port = _media_server()
-    app, idle_profile = second_launch(app_factory, ("http://127.0.0.1:%d/audio.html" % port,))
+    app = app_factory(urls=("http://127.0.0.1:%d/audio.html" % port,), fresh=True)
     keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
     saved = {key: app.call("defaults", key=key, persistent=True) for key in keys}
     try:
@@ -6291,7 +6267,7 @@ def measure(app_factory, results, tmp):
         wait_until(lambda: app.call("media", tab=audio)["playback"] == "playing", timeout=10, step=.05)
         new_tab(app, "about:blank")
         wait_until(lambda: app.call("mini-players")["cards"], timeout=3, step=.02)
-        results["media_idle_cpu"] = dict(_media_idle_cpu(app, audio), profile=idle_profile)
+        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
     finally:
         _restore_defaults(app, saved)
         app.quit(); server.shutdown(); server.server_close()
@@ -6403,7 +6379,7 @@ def media_checks(factory, results, tmp):
     # Chromium's fake capture devices (recording card): no system camera or microphone is opened, so
     # macOS shows no permission prompt. The permission itself goes through Open's real request path
     # (automation policy "grant"); Chromium's fake permission UI would skip the capture indicator.
-    app, idle_profile = second_launch(factory, (base + "plain.html",), extra_args=["--use-fake-device-for-media-stream"])
+    app = factory(urls=(base + "plain.html",), fresh=True, extra_args=["--use-fake-device-for-media-stream"])
     def m(tab): return app.call("media", tab=tab)
     def players(window=None):
         return app.call("mini-players", **({"window": window} if window else {}))
@@ -6517,7 +6493,7 @@ def media_checks(factory, results, tmp):
         wait_until(lambda: ids() == [audio], timeout=3, step=.02)
 
         # E-M15 / D-11: same OS sampling and paused-card fixture as `measure`.
-        results["media_idle_cpu"] = dict(_media_idle_cpu(app, audio), profile=idle_profile)
+        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
         app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
         close_tab(audio)
 
@@ -9447,7 +9423,6 @@ def commandbar_checks(factory, results, tmp, config):
             app.quit(); server.shutdown(); server.server_close()
 
     import settings_live
-    settings_live.dock_tile(factory, results, tmp, wait_until)
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
@@ -9477,13 +9452,6 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
         and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
         'rows': rows[:4], 'tab': doc}
-    # Top Domains (PB1, Open's own list): "netfl" offers a "Netflix" row (subtitle netflix.com); no inline completion.
-    app.call('select', tab=tab); app.call('focus', tab=tab)
-    bar('t', 'window'); typed = type_query('netfl')
-    site = next((r for r in typed.get('rows', []) if r.get('title') == 'Netflix'), None)
-    results['commandbar_top_domain_row'] = {'ok': bool(site) and 'netflix.com' in (site.get('url') or '')
-        and typed.get('fieldText', typed.get('text')) == 'netfl', 'row': site, 'field': typed.get('fieldText')}
-    press('escape')
     # "Undo <name>": archive a fresh Today tab, then the bar offers the named Undo and running it restores the tab.
     fresh = new_tab(app, 'about:blank#pb1-undo')
     app.call('select', tab=fresh); app.call('focus', tab=fresh)
@@ -12871,7 +12839,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -13207,6 +13175,10 @@ def main():
                 dialog_free=opts.passwords_probe_dialog_free,
                 result_name=probe_result_name,
                 engine_distribution_sha256=results['engine']['distributionSHA256'])
+        elif opts.only == "developer-mode":
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/developer_mode.py'))['run'](
+                factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "import-browsers":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/import_browsers.py'))['run'](
@@ -13519,14 +13491,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

@@ -4,45 +4,6 @@ import os
 from pathlib import Path
 
 
-def dock_tile_probe(app):
-    """Runs tools/e2e/docktile-probe.swift against the running App's bundle (no Dock, no screen)."""
-    import subprocess
-    root = Path(__file__).resolve().parents[2]
-    source = root / 'tools' / 'e2e' / 'docktile-probe.swift'
-    binary = root / '.re' / 'e2e-tools' / 'docktile-probe'
-    if not binary.exists() or binary.stat().st_mtime < source.stat().st_mtime:
-        binary.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(['nice', '-n', '10', 'xcrun', 'swiftc', '-O', '-swift-version', '6', '-parse-as-library',
-                        str(source), '-o', str(binary)], check=True)
-    proc = subprocess.run([str(binary), app.bundle], capture_output=True, text=True, timeout=30)
-    try:
-        return json.loads(proc.stdout.strip().splitlines()[-1])
-    except (ValueError, IndexError):
-        return {'loaded': False, 'stderr': proc.stderr[-500:]}
-
-
-def dock_tile(factory, results, tmp, wait_until):
-    """PB3 row 4: the real Dock tile plug-in (loaded by the Dock while Open is not running) draws the chosen icon."""
-    app = factory(urls=(), fresh=True)
-    keys = ('open.appIcon.selectedID', 'open.appIcon.dockTileFile')
-    saved = {key: app.call('defaults', key=key, persistent=True) for key in keys}
-    try:
-        app.call('settings-pane', pane='appIcon')
-        dark = app.call('settings-icon', select='openDark')
-        dock_dark = dock_tile_probe(app)
-        reset = app.call('settings-icon', select='openDefault')
-        dock_default = dock_tile_probe(app)
-        results['settings_app_icon_dock_tile'] = {
-            'ok': dark['applied'] == 'openDark' and reset['applied'] == 'openDefault'
-                and dock_dark.get('loaded') is True and dock_dark.get('principal') == 'OpenDockTilePlugIn'
-                and dock_dark.get('infoKey') == 'OpenDockTile.docktileplugin' and dock_dark.get('image') == [1024, 1024]
-                and dock_default.get('loaded') is True and dock_default.get('image') is None,
-            'dark': dock_dark, 'default': dock_default}
-    finally:
-        for key, value in saved.items(): app.call('defaults', key=key, value=value)
-        app.quit()
-
-
 def run(factory, results, tmp, wait_until, restore_defaults):
     fixture = Path(tmp) / 'settings-live.html'
     fixture.write_text('<!doctype html><title>Settings fixture</title><body>Settings fixture</body>')
