@@ -39,8 +39,9 @@ final class EaselContentHost: WebContentHost {
       // The file is gone (deleted outside Open or never written): start an empty Easel with
       // the row's title so the row and the page agree.
       let rowTitle = owner.model.tab(id: tabID)?.title
+      // Nothing is written until the first edit: showing a row whose file is gone (an Undo,
+      // a deletion outside Open) must not bring back a file.
       document = EaselDocument(id: documentID, title: rowTitle == EaselDocument.untitled ? nil : rowTitle)
-      store.save(document!)
     }
     canvas = EaselCanvasView(document: document!)
     canvas.onChange = { [weak self] doc in
