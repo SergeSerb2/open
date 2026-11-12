@@ -23,6 +23,10 @@ def run(factory, results, tmp, root, wait):
     if os.environ.get('OPEN_E2E_ADBLOCK_INTEGRITY_ONLY') == '1':
         integrity(factory, results, root, wait)
         return
+    if os.environ.get('OPEN_E2E_ADBLOCK_EXTRAS_ONLY') == '1':
+        from adblock_extras import run as extras
+        extras(factory, results, wait)
+        return
     if os.environ.get('OPEN_E2E_ADBLOCK_REAL_ONLY') == '1':
         real_engine(factory, results, wait)
         return
@@ -30,6 +34,8 @@ def run(factory, results, tmp, root, wait):
     if os.environ.get('OPEN_E2E_ADBLOCK_BINDING_ONLY') == '1':
         return
     real_engine(factory, results, wait)
+    from adblock_extras import run as extras
+    extras(factory, results, wait)
     integrity(factory, results, root, wait)
     from engine_e2e import _restore_defaults
     app = factory(fresh=True)

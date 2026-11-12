@@ -54,6 +54,12 @@ existing shutdown path. A confirmed close does not show the alert again when
 sleep capture asks to terminate a second time. The generic Warn before quitting
 preference has no guessed UI; see [static evidence](re/downloads-s11.md).
 
+The generic "Quit Open?" alert (`QuitWarningCoordinator`) answers only the user's own ⌘Q or
+Quit menu item. A quit Apple event from another process (a script, the Dock, the release
+smoke) skips it, because a modal alert can sit behind other apps and hold the quit forever
+(DMG c smoke, 2026-11-12). The Downloads alert still applies to that quit. Row:
+`downloads` `OPEN_DOWNLOADS_CASE=generic-quit` → `generic_quit_apple_event` (gone within 5 s).
+
 ## Original session-download verification (2026-11-05)
 
 Builds use `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`, through

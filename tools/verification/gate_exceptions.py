@@ -30,7 +30,14 @@ def read_bounded(path, limit=1024 * 1024):
 
 
 def assert_shrink_only(root, entries):
-    prior = subprocess.run(['git', 'show', 'origin/main:tools/verification/gate-exceptions.json'],
+    # Compare with the main this source is based on: the merge base of HEAD and
+    # origin/main. A pinned main commit is its own base, so a pinned DMG run keeps
+    # passing while origin/main moves on (DMG c, 2026-11-12); a PR still cannot
+    # add entries relative to the main it merged.
+    base = subprocess.run(['git', 'merge-base', 'HEAD', 'origin/main'], cwd=root, capture_output=True, text=True)
+    if base.returncode:
+        raise ValueError('no merge base with origin/main for the exceptions check')
+    prior = subprocess.run(['git', 'show', base.stdout.strip() + ':tools/verification/gate-exceptions.json'],
                            cwd=root, capture_output=True, text=True)
     if prior.returncode:
         # First introduction is reviewed against the lead's explicit rulings.
@@ -39,7 +46,7 @@ def assert_shrink_only(root, entries):
         raise ValueError('origin/main exceptions exceed 1 MiB')
     old = json.loads(prior.stdout)
     if not isinstance(old, list) or any(entry not in old for entry in entries):
-        raise ValueError('gate exceptions can only shrink relative to origin/main')
+        raise ValueError('gate exceptions can only shrink relative to the merge base with origin/main')
 
 
 def panel_ready(path):

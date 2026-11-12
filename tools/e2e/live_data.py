@@ -216,6 +216,138 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         server.shutdown()
 
 
+def gmail_fixture():
+    """Loopback stand-in for mail.google.com's Atom feed (synthetic mail only).
+    state: {'signed_in': bool, 'mail': [(subject, author, iso time)]}."""
+    import http.server, threading, html
+    state = {'signed_in': True, 'mail': [], 'requests': []}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = self.path.split('?')[0]; host = (self.headers.get('Host') or '').split(':')[0]
+            state['requests'].append((host, path))
+            port = self.server.server_address[1]
+            if host == 'mail.localhost' and path.endswith('/feed/atom'):
+                if not state['signed_in']:
+                    self.send_response(302); self.send_header('Location', 'http://accounts.localhost:%d/signin' % port)
+                    self.send_header('Content-Length', '0'); self.end_headers(); return
+                entries = ''.join('<entry><title>%s</title><link rel="alternate" href="http://mail.localhost:%d/mail/u/0/?msg=%d" type="text/html"/>'
+                                  '<issued>%s</issued><author><name>%s</name><email>x@example.com</email></author></entry>'
+                                  % (html.escape(t), port, i, d, html.escape(a)) for i, (t, a, d) in enumerate(state['mail']))
+                body = ('<?xml version="1.0" encoding="UTF-8"?><feed version="0.3" xmlns="http://purl.org/atom/ns#">'
+                        '<title>Inbox</title><fullcount>%d</fullcount>%s</feed>' % (len(state['mail']), entries)).encode()
+                kind = 'application/atom+xml; charset=utf-8'
+            else:
+                body = b'<!doctype html><title>Mail fixture</title><p>Mail fixture'
+                kind = 'text/html; charset=utf-8'
+            self.send_response(200); self.send_header('Content-Type', kind); self.send_header('Content-Length', str(len(body)))
+            self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1], state
+
+
+def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
+    server, port, mail = gmail_fixture()
+    def hover(node, ms=800):
+        app.call('hover', leave=True, ms=300)
+        return app.call('hover', node=node, ms=ms)
+    try:
+        cases = {'https://mail.google.com/mail/u/1/#inbox': 1, 'https://mail.google.com/mail/#inbox': 0, 'https://accounts.google.com/': None,
+                 'https://mail.google.com/chat/': None}
+        got = {u: app.call('glance-match', url=u).get('account') for u in cases}
+        results['live_gmail_host_match'] = {'ok': got == cases, 'got': got}
+        app.call('glance-alias', aliases=recents_aliases, mail=['mail.localhost'])
+        mail['mail'] = [('Quarterly numbers', 'Ada', '2026-11-12T09:00:00Z'), ('Lunch?', 'Grace', '2026-11-12T08:00:00Z')]
+        inbox = new_tab(app, 'http://mail.localhost:%d/mail/u/0/#inbox' % port)
+        app.call('pin', tab=inbox)
+        other = new_tab(app, 'http://plain.localhost:%d/elsewhere' % port)
+        app.call('select', tab=other)
+        shown = hover(inbox)
+        state = app.call('glance-state')
+        results['live_gmail_card_rows'] = {'ok': shown['kind'] == 'glance' and state.get('kind') == 'gmail' and state.get('phase') == 'mail'
+            and [r['title'] for r in state.get('rows', [])] == ['Quarterly numbers', 'Lunch?'] and state['rows'][0]['author'] == 'Ada'
+            and state.get('header') == 'Unread' and state.get('newLabel') == 'New Email'
+            and state.get('newURL') == 'http://mail.localhost:%d/mail/u/0/#compose' % port, 'state': state, 'hover': shown}
+        app.call('glance-open', row=1)
+        peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] and s['stack'][-1]['content'] > 0 else None)(app.call('peek-state')), timeout=5, step=.05)
+        href = ''
+        if peek:
+            app.call('wait', tab=peek['stack'][-1]['content']); href = app.eval(peek['stack'][-1]['content'], 'location.href')
+        results['live_gmail_row_opens_peek'] = {'ok': href == 'http://mail.localhost:%d/mail/u/0/?msg=1' % port, 'href': href}
+        app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        app.call('select', tab=other)
+        mail['mail'] = []
+        hover(inbox); empty = app.call('glance-state')
+        results['live_gmail_empty'] = {'ok': empty.get('phase') == 'empty' and empty.get('message') == 'No unread emails, you can exhale! 🍃'
+            and empty.get('rows') == [], 'state': empty}
+        mail['signed_in'] = False
+        hover(inbox); out = app.call('glance-state')
+        results['live_gmail_signed_out'] = {'ok': out.get('phase') == 'signedOut'
+            and out.get('message') == 'Sign in to your Email to see messages at a glance.', 'state': out}
+        mail['signed_in'] = True
+        app.call('defaults', key='open.general.previewsGmail', value=False)
+        off = hover(inbox)
+        app.call('defaults', key='open.general.previewsGmail', value=None)
+        results['live_gmail_switch_off_gives_page_card'] = {'ok': off['kind'] == 'page', 'hover': off}
+        app.call('hover', leave=True, ms=300)
+    finally:
+        server.shutdown()
+
+
+def live_folder_import_checks(app, results, wait_until, tmp, harness):
+    """L7: Import from Arc brings an Arc Live Folder (settings + PR rows) and Arc's two Live Folder
+    preferences. Synthetic Arc home: <home>/Library/Application Support/Arc + Preferences plist."""
+    import json, plistlib, runpy, uuid
+    from pathlib import Path
+    home = Path(tmp) / 'arc-live-home'
+    arc = home / 'Library' / 'Application Support' / 'Arc'
+    arc.mkdir(parents=True, exist_ok=True)
+    ids = runpy.run_path(str(Path(harness['ROOT']) / 'tools' / 'e2e' / 'firstrun.py'))['fixture'](arc)
+    sidebar = json.loads((arc / 'StorableSidebar.json').read_text())
+    items = sidebar['sidebar']['containers'][1]['items']
+    def new_id(name): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/lf-l7/' + name)).upper()
+    live_id, pr1, pr2 = new_id('live'), new_id('pr1'), new_id('pr2')
+    for key, url, title in ((pr1, 'https://github.com/acme/app/pull/12', 'Fix sidebar drag'), (pr2, 'https://github.com/acme/web/pull/7', 'New header')):
+        items.extend([key, dict(id=key, data={'tab': dict(savedURL=url, savedTitle=title)}, childrenIds=[], title=title)])
+    items.extend([live_id, dict(id=live_id, title='Pull Requests', childrenIds=[pr1, pr2], data={'list': {'automaticLiveFolderData': {
+        'dataSource': {'github': {}}, 'hiddenItems': [{'url': {'_0': 'https://github.com/acme/app/pull/3'}}],
+        'filter': {'github': {'attributes': 15, 'hiddenRepositories': [{'owner': 'acme', 'name': 'old'}]}},
+        'lastFetch': {'timestamp': 0, 'status': {'success': {}}}}}})])
+    for i in range(0, len(items), 2):
+        if items[i] == ids['beta'] or (isinstance(items[i + 1], dict) and items[i + 1].get('id') == ids['pb']):
+            items[i + 1]['childrenIds'].append(live_id)
+    (arc / 'StorableSidebar.json').write_text(json.dumps(sidebar))
+    prefs_dir = home / 'Library' / 'Preferences'; prefs_dir.mkdir(parents=True, exist_ok=True)
+    with open(prefs_dir / 'company.thebrowser.Browser.plist', 'wb') as f:
+        plistlib.dump({'hasTurnedOffGithubLiveFolder': True, 'hasSeenGithubLiveFolderEducation': True}, f, fmt=plistlib.FMT_BINARY)
+    keys = ('open.liveFolders.githubAutoCreate', 'open.liveFolders.introSeen')
+    for key in keys: app.call('defaults', key=key, value=None)
+    state = lambda: app.call('first-run')
+    app.call('first-run', action='settings-import', directory=str(arc))
+    app.call('first-run', action='settings-next')
+    app.call('first-run', action='settings-run')
+    report = wait_until(lambda: (lambda s: s if s.get('settingsStep') == 'report' else None)(state()), timeout=60, step=.05) or state()
+    try: app.call('first-run', action='settings-done')
+    except RuntimeError: pass
+    beta = next((s for s in app.call('spaces') if s['title'] == 'Beta'), None)
+    folder = app.call('live-folder-state', space=beta['id']) if beta else {}
+    rows = {r['url']: r['live'] for r in folder.get('rows', [])}
+    prefs = {k: app.call('defaults', key=k) for k in keys}
+    results['live_folder_arc_import'] = {'ok': bool(beta) and folder.get('exists') and folder.get('title') == 'Pull Requests'
+        and rows == {'https://github.com/acme/app/pull/12': 'https://github.com/acme/app/pull/12', 'https://github.com/acme/web/pull/7': 'https://github.com/acme/web/pull/7'}
+        and folder.get('hiddenItems') == ['https://github.com/acme/app/pull/3'] and folder.get('hiddenRepositories') == ['acme/old']
+        and prefs == {'open.liveFolders.githubAutoCreate': False, 'open.liveFolders.introSeen': True},
+        'folder': folder, 'prefs': prefs, 'report': {k: report.get(k) for k in ('lastOutcome', 'lastFailures', 'arcPreferences')}}
+    # Undo the import: the folder and the two settings go back.
+    app.call('sidebar-key', key='z', modifiers=['command'])
+    wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    undone = wait_until(lambda: (lambda v: v if v == {k: None for k in keys} else None)({k: app.call('defaults', key=k, persistent=True) for k in keys}), timeout=10, step=.1)
+    results['live_folder_arc_import_undo'] = {'ok': undone is not None and not any(s['title'] == 'Beta' and app.call('live-folder-state', space=s['id']).get('exists') for s in app.call('spaces')),
+        'prefs': {k: app.call('defaults', key=k, persistent=True) for k in keys}}
+
+
 def run(factory, results, tmp, harness):
     new_tab, wait_until = harness['new_tab'], harness['wait_until']
     server, port = harness['_sleep_server']()
@@ -287,14 +419,6 @@ def run(factory, results, tmp, harness):
         if os.environ.get('OPEN_LIVE_DATA_FRAMES'):  # optional copy for look reviews
             import shutil; shutil.copy(shot, os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-recents-card-window.png'))
         results['live_recents_card_shadow'] = {'ok': far - near >= 6, 'near': near, 'far': far, 'scale': scale, 'card': state['card'], 'png': shot}
-        # The snapshot above re-lays out the window; on a real screen AppKit then recomputes the
-        # row's tracking areas from the REAL pointer (not over the row on the M1), which ends the
-        # hover and hides the card. That is correct for a user; the Peek check hovers again.
-        survived = app.call('glance-state', wait=False).get('shown') is True
-        if not survived:
-            hover(linear)
-            app.call('glance-state')
-        results['live_recents_card_after_snapshot'] = {'ok': True, 'info': 'card survived the window snapshot: %s' % survived}
         opened = app.call('glance-open', row=0)
         first_state = app.call('peek-state')
         peek = wait_until(lambda: (lambda s: s if s.get('shown') and s['stack'] and s['stack'][-1]['content'] > 0 else None)(app.call('peek-state')), timeout=5, step=.05)
@@ -328,6 +452,8 @@ def run(factory, results, tmp, harness):
         app.call('defaults', key='open.general.previewsPages', value=None)
         app.call('hover', leave=True, ms=400)
         results['live_recents_hides_on_leave'] = {'ok': app.call('glance-state').get('shown') is False}
+        gmail_checks(app, results, wait_until, new_tab, {'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
+        live_folder_import_checks(app, results, wait_until, tmp, harness)
         holder['app'] = app
         app = live_folder_checks(holder, results, wait_until, factory, new_tab)
     finally:

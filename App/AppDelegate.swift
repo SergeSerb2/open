@@ -3,6 +3,7 @@ import AppKit
 import OpenEasel
 import OpenEngine
 import OpenDocuments
+import OpenLiveData
 import OpenModel
 import OpenStore
 import OpenFeatures
@@ -516,6 +517,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         for phrase in phrases { rows += await store.recentURLs(matchingURLPhrase: phrase).map { ($0.url, $0.title, $0.lastVisit) } }
         return rows
       }
+      // Gmail card (LF L6): the Atom feed in one hidden page of the Profile, on hover only.
+      controller.context.mailGlanceSource = { [weak self] profileID, feed, host in
+        guard let self else { return .failed }
+        do {
+          let value = try await self.liveFetch.fetch(profileID: profileID, url: feed, script: GmailGlance.extractionScript(expectedHost: host))
+          switch GmailGlance.decode(value) {
+          case (.ok, let rows): return .mail(rows)
+          case (.signedOut, _): return .signedOut
+          case (.unexpected, _): return .failed
+          }
+        } catch { return .failed }
+      }
       // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
       controller.context.calendarGlance = makeCalendarGlance(factory)
       controller.context.liveCalendar = liveCalendar.actions()
@@ -956,6 +969,7 @@ extension AppDelegate: CommandDispatcher {
       defer { region?.end() }
       #endif
       self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
+      ThemeData.refreshVisible(app: self)
       // Menu rebuilds follow tab, Space and window changes: the same moments Handoff must follow.
       self.handoff.setNeedsUpdate()
     }
@@ -1041,6 +1055,7 @@ extension AppDelegate: CommandDispatcher {
       MainActor.assumeIsolated {
         guard let self else { return }
         self.applyToolbarSettings()
+        ThemeData.settingMaybeChanged(app: self)
         let options = self.currentNumberedShortcutOptions
         guard options != self.numberedShortcutOptions else { return }
         self.numberedShortcutOptions = options; self.scheduleMenuRebuild()

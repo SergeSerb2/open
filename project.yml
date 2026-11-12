@@ -130,23 +130,6 @@ targets:
       base:
         INFOPLIST_FILE: Helper/Info-Alerts.plist
 
-  # Dock tile while Open is not running (Arc: Contents/PlugIns/DockTilePlugIn.plugin).
-  OpenDockTile:
-    type: bundle
-    platform: macOS
-    sources:
-      - path: DockTile
-        excludes: [Info.plist]
-    settings:
-      base:
-        PRODUCT_NAME: OpenDockTile
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.sergeserb2.open.docktile
-        WRAPPER_EXTENSION: docktileplugin
-        INFOPLIST_FILE: DockTile/Info.plist
-        SWIFT_VERSION: "6.0"
-        SWIFT_STRICT_CONCURRENCY: complete
-        SKIP_INSTALL: YES
-
   Open:
     type: application
     platform: macOS
@@ -210,12 +193,6 @@ targets:
         product: OpenTranslate
       - package: OpenKit
         product: OpenEasel
-      - target: OpenDockTile
-        embed: true
-        link: false
-        codeSign: true
-        copy:
-          destination: plugins
       - target: OpenHelper
         embed: false
         link: false

@@ -16,6 +16,35 @@ import tempfile
 import urllib.parse
 
 
+QUIT_EVENT_SOURCE = r"""
+#import <Carbon/Carbon.h>
+#include <stdlib.h>
+int main(int argc, char **argv) {
+  if (argc != 2) return 2;
+  pid_t pid = (pid_t)strtol(argv[1], 0, 10);
+  if (pid <= 1) return 2;
+  AEAddressDesc target = {typeNull, NULL}; AppleEvent event = {typeNull, NULL};
+  OSStatus status = AECreateDesc(typeKernelProcessID, &pid, sizeof(pid), &target);
+  if (!status) status = AECreateAppleEvent(kCoreEventClass, kAEQuitApplication, &target, kAutoGenerateReturnID, kAnyTransactionID, &event);
+  if (!status) status = AESendMessage(&event, NULL, kAENoReply | kAENeverInteract, kAEDefaultTimeout);
+  AEDisposeDesc(&event); AEDisposeDesc(&target);
+  return status ? 1 : 0;
+}
+"""
+
+
+def quit_event_sender():
+    """A pid-targeted kAEQuitApplication sender, as tools/release.sh's smoke uses (no osascript,
+    no desktop input; the core quit event needs no Automation consent)."""
+    folder = Path(tempfile.gettempdir()) / 'open-e2e-quit-event'
+    folder.mkdir(exist_ok=True)
+    binary = folder / 'quit-pid'
+    if not binary.exists():
+        (folder / 'quit-pid.m').write_text(QUIT_EVENT_SOURCE)
+        subprocess.run(['clang', '-framework', 'Carbon', str(folder / 'quit-pid.m'), '-o', str(binary)], check=True)
+    return str(binary)
+
+
 @contextlib.contextmanager
 def server():
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -735,6 +764,20 @@ def checks(factory, results, tmp, config, harness):
         alerts = generic_alerts()
         app.quit()
         check('generic_quit_off', immediate and alerts == 0 and not app.quit_report['forced'], alerts=alerts, quit=app.quit_report)
+
+        # A quit Apple event from another process (a script, the Dock, the release smoke) does
+        # not get the generic alert, even with the setting on: the process is gone within 5 s.
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        sender = quit_event_sender()
+        sent = time.monotonic()
+        delivered = subprocess.run([sender, str(app.pid)]).returncode == 0
+        gone = wait(lambda: not app.process_path(app.pid), 5)
+        seconds = round(time.monotonic() - sent, 2)
+        alerts = generic_alerts()
+        app.quit()
+        check('generic_quit_apple_event', delivered and bool(gone) and seconds <= 5 and alerts == 0
+              and not app.quit_report['forced'], seconds=seconds, alerts=alerts, quit=app.quit_report)
 
         relaunch()
         app.call('defaults', key=key, value=True)

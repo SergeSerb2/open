@@ -2,6 +2,7 @@ import AppKit
 import OpenEngine
 import OpenFeatures
 import OpenModel
+import OpenSidebar
 
 /// Page commands of the page-platform plan (§4.2, §4.3, §7.1): the Copy URL family with its toasts
 /// and Share, the Shared Quotes offer, and the zoom toast. Runs on the key window's factory.
@@ -72,7 +73,7 @@ extension EngineWebContentHostFactory {
   }
 
   /// Settings ▸ Advanced "Enable Shared Quotes" (default on, §5).
-  static var sharedQuotesEnabled: Bool { UserDefaults.standard.object(forKey: "open.advanced.enableSharedQuotes") as? Bool ?? true }
+  static var sharedQuotesEnabled: Bool { UserDefaults.standard.object(forKey: SidebarContext.sharedQuotesKey) as? Bool ?? true }
 
   // MARK: copy-url-quote (Cmd+Ctrl+Shift+C)
 
