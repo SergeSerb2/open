@@ -136,7 +136,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='row-action',id=slow,name='Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
             menu(slow,'Cancel Download');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
             failed=start('/fail');check('failed_real_transfer',wait(lambda:item(failed).get('state')=='failed'))
-            check('failed_menu',[m['title'] for m in menu(failed)]==['Retry','Hide from Open']);capture('downloads-failed')
+            check('failed_menu',[m['title'] for m in menu(failed)]==['Retry','separator','Hide from Open']);capture('downloads-failed')
             # History is populated by real engine navigation.
             state(action='close');app.call('navigate',tab=tab,url=base+'/arm');app.call('wait',tab=tab);app.call('history-state')
             key('y',['cmd']);check('cmd_y_history',state()['open'] and state()['section']=='history')
