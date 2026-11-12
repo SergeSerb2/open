@@ -8919,17 +8919,17 @@ def routing_checks(factory, results, tmp):
         ok_name, by_name = deep('open-browser://space/routing%20TARGET', base_handled + 2)
         name_focus = wait_until(lambda: focused_space() == target['id'], timeout=3, step=.05)
         record('routing_deep_link_space', ok_index and ok_name and bool(index_focus) and bool(name_focus)
-               and by_index['result'] == 'space' and by_name['result'] == 'space', index=by_index, byName=by_name,
+               and (by_index or {}).get('result') == 'space' and (by_name or {}).get('result') == 'space', index=by_index, byName=by_name,
                titles=[s['title'] for s in spaces])
         tabs_before = len(app.call('tabs'))
         ok_bad, missing = deep('open-browser://space/99', base_handled + 3)
         ok_unknown, unknown = deep('open-browser://no-such-route/x', base_handled + 4)
-        record('routing_deep_link_unknown_noop', ok_bad and ok_unknown and missing['result'] == 'no-space'
-               and unknown['result'] == 'unknown' and focused_space() == target['id'] and len(app.call('tabs')) == tabs_before,
+        record('routing_deep_link_unknown_noop', ok_bad and ok_unknown and (missing or {}).get('result') == 'no-space'
+               and (unknown or {}).get('result') == 'unknown' and focused_space() == target['id'] and len(app.call('tabs')) == tabs_before,
                missing=missing, unknown=unknown)
         ok_welcome, welcome = deep('open-browser://welcome', base_handled + 5)
         welcome_tab = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == 'open://welcome' and t['selected']), None), timeout=5, step=.05)
-        record('routing_deep_link_welcome', ok_welcome and welcome['result'] == 'welcome' and bool(welcome_tab), state=welcome, tab=welcome_tab)
+        record('routing_deep_link_welcome', ok_welcome and (welcome or {}).get('result') == 'welcome' and bool(welcome_tab), state=welcome, tab=welcome_tab)
 
         # restart: the same executable and options come back after this process exits.
         # The harness stops talking to the old App (it exits on purpose); the relaunched
