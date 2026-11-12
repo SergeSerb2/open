@@ -230,7 +230,7 @@ public final class SiteControlPanelView: NSView {
         setAccessibilityChildren(actions + [scroll] + [security,more].filter { !$0.isHidden }); needsLayout = true
     }
     public override func layout() {
-        super.layout(); let m = SiteControlMetrics.self, body = bodyRect, scale = window?.backingScaleFactor ?? 1, path = shape
+        super.layout(); let m = SiteControlMetrics.self, body = bodyRect, path = shape
         CATransaction.begin(); CATransaction.setDisableActions(true)
         material.frame = bounds; fallback.frame = bounds; chrome.frame = bounds
         let dark = contentAppearance == .dark
@@ -271,10 +271,11 @@ public final class SiteControlPanelView: NSView {
         scroll.frame = CGRect(x: 0,y: body.minY+m.padding+m.actionButton.height,width: body.width,height: max(0,footerY-m.gapAfterSeparator-m.separatorHeight-(body.minY+m.padding+m.actionButton.height)))
         security.frame = CGRect(x: m.padding,y: footerY,width: security.intrinsicContentSize.width,height: m.footerHeight)
         more.frame = CGRect(x: body.maxX-m.padding-m.moreButton,y: footerY,width: m.moreButton,height: m.moreButton)
-        let line = CGMutablePath(), y = footerY-m.gapAfterSeparator-1/scale/2
+        // A 1 pt line at every scale (Arc's 1x reference; at 2x one device pixel read as half the lift).
+        let line = CGMutablePath(), y = footerY-m.gapAfterSeparator-0.5
         line.move(to: CGPoint(x: m.padding,y: y)); line.addLine(to: CGPoint(x: body.maxX-m.padding,y: y))
         separator.compositingFilter = dark ? "plusL" : nil
-        separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = dark ? 1/scale : 1
+        separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = 1
         CATransaction.commit()
     }
 }
