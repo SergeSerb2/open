@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Settings ▸ Advanced "Allow websites to get your theme data" (PB1, LEAD 10:00 (2)).
 
-Real App, loopback page. Off (default): the page sees none of the variables. On: the page's
+Real App, loopback page. Default ON (as in Arc). Off: the page sees none of the variables. On: the page's
 computed `--arc-*` and `--open-*` values equal what the App reports for the tab's Space. A new
 navigation keeps them. Off again: they are gone. Run:
 python3 tools/e2e/theme_data.py --output DIR [--config Release]
@@ -51,14 +51,22 @@ def run(output, config='Release'):
                 'background-gradient-overlay-color', 'background-simple-color')]
             def page(): return app.eval(tab, READ % json.dumps(all_names))
             try:
-                app.call('defaults', key=KEY, value=False); time.sleep(.5)
-                check('off_by_default_page_sees_nothing', page() == {}, page=page())
+                # Registered default is ON (as in Arc): with no stored value, the page already has the variables.
+                app.call('defaults', key=KEY, value=None)
+                default_on = wait_until(lambda: (lambda p: p if p.get('--arc-palette-title') else None)(page()), timeout=5, step=.1)
+                check('on_by_default', bool(default_on) and app.call('theme-data-state', tab=tab)['enabled'], page=page())
+                app.call('defaults', key=KEY, value=False)
+                off = wait_until(lambda: page() == {}, timeout=5, step=.1)
+                check('off_page_sees_nothing', bool(off), page=page())
                 app.call('defaults', key=KEY, value=True)
                 expected = wait_until(lambda: (lambda s: s['variables'] if s['enabled'] and s['variables'] else None)(app.call('theme-data-state', tab=tab)), timeout=5, step=.1) or {}
                 got = wait_until(lambda: (lambda p: p if p and p == expected else None)(page()), timeout=5, step=.1)
                 pairs = all(expected.get('--arc-' + n[len('--open-'):]) == v for n, v in expected.items() if n.startswith('--open-'))
-                check('on_page_reads_both_prefixes', bool(got) and pairs and any(n.startswith('--arc-') for n in expected)
-                      and any(n.startswith('--open-') for n in expected), expected=expected, page=page())
+                # Capture PB1-d: uppercase #RRGGBBAA; Arc's default theme has the full palette, no background values.
+                fmt = all(__import__('re').fullmatch(r'#[0-9A-F]{8}', v) for v in expected.values())
+                check('on_page_reads_both_prefixes', bool(got) and pairs and fmt and len(expected) == 24
+                      and expected.get('--arc-palette-title') == '#0A0D4BFF' and '--arc-background-simple-color' not in expected,
+                      expected=expected, page=page())
                 app.call('navigate', tab=tab, url=origin + '/two'); app.call('wait', tab=tab)
                 kept = wait_until(lambda: page() == expected, timeout=5, step=.1)
                 check('navigation_keeps_variables', bool(kept), page=page())
@@ -69,7 +77,8 @@ def run(output, config='Release'):
                 themed = wait_until(lambda: (lambda v: v if v and v != expected and '--arc-palette-title' in v else None)(
                     app.call('theme-data-state', tab=tab)['variables']), timeout=5, step=.1) or {}
                 live = wait_until(lambda: (lambda p: p if p and p == themed else None)(page()), timeout=5, step=.1)
-                check('themed_space_palette_live', bool(themed) and len(themed) >= 26 and bool(live), expected=themed, page=page())
+                check('themed_space_palette_live', bool(themed) and len(themed) == 26 and bool(live)
+                      and themed.get('--arc-background-simple-color') == themed.get('--arc-palette-foregroundPrimary'), expected=themed, page=page())
                 app.call('defaults', key=KEY, value=False)
                 gone = wait_until(lambda: page() == {}, timeout=5, step=.1)
                 check('off_removes_variables', bool(gone), page=page())
