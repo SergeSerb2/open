@@ -95,7 +95,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var deepLinks = DeepLinkRouter(app: self)
-  lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+  lazy var linkIntake: ExternalLinkIntake = {
+    let intake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+    let meet = MeetRoute(app: self)
+    intake.willRoute = { meet.prepare($0) }
+    intake.didRoute = { meet.announce($0) }
+    return intake
+  }()
   var lastLittleOpenRequest: LittleOpenRequest?
   var executedExternalLink = false
   /// Only a fresh launch fallback is eligible for removal by its first Little Open link.
