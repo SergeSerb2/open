@@ -4,6 +4,8 @@ Calendar data comes from the `calendar` fixture source (no macOS Calendar prompt
 link resolves to nothing (host-resolver rules), so no run touches a real meeting service.
 """
 import json
+import os
+import runpy
 import subprocess
 import time
 
@@ -19,6 +21,10 @@ TEAMS = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_e2e%40thread.v2/
 
 def run(factory, results, tmp, harness):
     wait_until, new_tab = harness['wait_until'], harness['new_tab']
+    badges = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'favorite_badges.py'))['run']
+    if os.environ.get('OPEN_E2E_FAVORITE_BADGES_ONLY') == '1':
+        badges(factory, results, harness)
+        return
     # The denied card's button must not open System Settings on the test machine.
     app = factory(urls=('about:blank',), fresh=True, extra_args=ENGINE_SWITCHES, extra_env={'OPEN_E2E_NO_SYSTEM_SETTINGS': '1'})
 
@@ -138,8 +144,11 @@ def run(factory, results, tmp, harness):
             app.call('defaults', key='open.general.previewsCalendar', value=None)
             app.call('defaults', key='open.links.didSetDefaultMeetRoute', value=None)
             for key in ARC_PREF_KEYS: app.call('defaults', key=key, value=None)
+            app.call('defaults', key='open.favorites.subtitleDisabledHosts', value=None)
         finally:
             app.quit()
+    # Audit A2: Favorite unread badges (own launch: app hosts map to a local server).
+    badges(factory, results, harness)
 
 
 def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
@@ -271,6 +280,24 @@ def live_checks(app, results, wait_until, new_tab, cal):
             and five.get('interval') == 'fiveMinutes' and 'f' not in [r['event'] for r in early.get('reminders', [])] and 'f' in reminded,
         'never': never.get('reminders'), 'five': five.get('reminders')}
     app.call('sidebar-menu', node=fav, item='Meeting Reminder/Two Minutes Before')
+
+    # Audit A2: "Show Time to Next Meeting" (Arc's Top App subtitle switch) hides and shows the plate per host.
+    cal(action='fixture', access='granted', events=[{'id': 's', 'title': 'Subtitle sync', 'start': 10, 'end': 40, 'url': MEET}])
+    cal(action='clock', minutes=0)
+    wait_until(lambda: live().get('tiles'), timeout=5, step=.05)
+    def plate(): return app.call('favorite-badge', favorite=fav).get('subtitleShown')
+    item = lambda: app.call('sidebar-menu-state', node=fav, item='Show Time to Next Meeting')
+    shown_before, checked_before = wait_until(plate, timeout=3, step=.05), item().get('checked')
+    app.call('sidebar-menu', node=fav, item='Show Time to Next Meeting')
+    hidden = wait_until(lambda: plate() is False, timeout=3, step=.05)
+    stored = app.call('defaults', key='open.favorites.subtitleDisabledHosts', persistent=True)
+    checked_off, still_live = item().get('checked'), bool(live().get('tiles'))
+    app.call('sidebar-menu', node=fav, item='Show Time to Next Meeting')
+    back = wait_until(plate, timeout=3, step=.05)
+    results['cal_live_subtitle_switch'] = {'ok': bool(shown_before) and checked_before is True and bool(hidden)
+        and stored == ['calendar.google.com'] and checked_off is False and still_live and bool(back)
+        and item().get('checked') is True and app.call('defaults', key='open.favorites.subtitleDisabledHosts', persistent=True) == [],
+        'stored': stored, 'checked': [checked_before, checked_off]}
 
     # Without a calendar Favorite the coordinator stops: no tiles, no timer.
     app.call('sidebar-menu', node=fav, item='Remove Favorite')

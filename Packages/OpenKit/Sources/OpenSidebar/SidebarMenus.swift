@@ -287,7 +287,30 @@ struct SidebarMenus {
 
     /// Favorite tile (S3D): the pinned menu with "Remove Favorite" last.
     func favorite(_ tab: Tab) -> NSMenu {
-        menu(liveCalendarItems(tab) + pinnedItems(tab) + [item("Remove Favorite", .removeFavorite(tabID: tab.id))])
+        menu(liveCalendarItems(tab) + tileItems(tab) + pinnedItems(tab) + [item("Remove Favorite", .removeFavorite(tabID: tab.id))])
+    }
+
+    /// Arc's Top App switches (audit A2; `ContextMenus/SidebarMenu+PlatformSpecificItems.swift`,
+    /// `FUN_102ee07bc`): checkmark items "Show Unread Badge" (an unread-count app) and "Show Time to
+    /// Next Meeting" (a Live Calendar tile). Placement before the pinned items: GUESS — capture pending.
+    func tileItems(_ tab: Tab) -> [NSMenuItem] {
+        let context = self.context
+        let url = tab.url
+        var items: [NSMenuItem] = []
+        if context.favoriteBadgesEnabled, FavoriteApp.match(url: url)?.hasUnreadBadge == true {
+            let on = context.favoriteTileSettings.showsBadge(url: url)
+            let badge = ClosureMenuItem("Show Unread Badge") { context.updateFavoriteTileSettings { $0.setShowsBadge(!on, url: url) } }
+            badge.state = on ? .on : .off
+            items.append(badge)
+        }
+        if context.liveCalendar != nil, CalendarProvider.match(url: url) != nil {
+            let on = context.favoriteTileSettings.showsSubtitle(url: url)
+            let subtitle = ClosureMenuItem("Show Time to Next Meeting") { context.updateFavoriteTileSettings { $0.setShowsSubtitle(!on, url: url) } }
+            subtitle.state = on ? .on : .off
+            items.append(subtitle)
+        }
+        if !items.isEmpty { items.append(.separator()) }
+        return items
     }
 
     /// Live Calendar items of a calendar Favorite (LD §4: "Show Meeting Link" with "Copy Link" and "Dismiss",

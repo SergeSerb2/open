@@ -700,7 +700,9 @@ def context_menu_checks(factory, results, tmp, h):
         for identifier, path in [('help-center', '/blob/main/docs/commands.md'), ('getting-started', '#readme'),
                                  ('release-notes', '/releases'), ('contact-team', '/issues/new')]:
             run('cm_help_' + identifier, lambda i=identifier, p=path: help_item(i, 'https://github.com/SergeSerb2/open' + p))
-        run('cm_join_meeting_disabled', lambda: {'ok': row_enabled('join-meeting') is False})
+        # Join Meeting is live (CAL #331): enabled in a normal window. Menu validation never reads the calendar
+        # (no store, no Calendar prompt); with no meeting the command does nothing, as Arc (e2e `calendar`).
+        run('cm_join_meeting_enabled', lambda: {'ok': row_enabled('join-meeting') is True})
 
         # D2c menu order (docs/re/sidebar-menus-parity.md §1): Arc 1.172.2, capture session 3 Part D.
         # Share ▸ lists the system share services (capture session 8 item 1).
@@ -722,10 +724,12 @@ def context_menu_checks(factory, results, tmp, h):
                 pinned_head = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
                                'Open in Split View', 'Duplicate', 'Move to ▸', '—']
                 first, last = items(today_ids[0]), items(today_ids[-1])
+                try: share = items(today_ids[0], path='Share')
+                except RuntimeError as error: share = {'items': [], 'error': str(error), 'menu': first, 'tab': app.tab(today_ids[0])}
                 rows = {
                     'today': first['items'] == today_expected,
                     'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'],
-                    'share_lists_services': len(items(today_ids[0], path='Share')['items']) > 0,
+                    'share_lists_services': len(share['items']) > 0,
                     'move_to_current_checked': app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order').get('checked') is True,
                     'today_silent_mute_disabled': 'Mute' in first['disabled'],
                     'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
@@ -745,7 +749,7 @@ def context_menu_checks(factory, results, tmp, h):
                     rows['archive_above_acts'] = target in after and len(after) < len(before)
                     app.call('key', key='z', modifiers=['command'], route='app')
                     rows['archive_above_undo'] = wait(lambda: [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab'] == before, timeout=3) is True
-                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target,
+                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target, 'share': share,
                         'menus': {'todayFirst': first, 'todayLast': last, 'pinned': items(pinned), 'favorite': items(favorite)}}
             finally:
                 for tab_id in made:
