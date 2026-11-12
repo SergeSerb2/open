@@ -12,3 +12,41 @@ index cb50181f8d4e8383b14df7edc4ce4c6a4c1ffaf3..8f212319d760376c2e31f9b7f4d65c65
   private:
    // permissions::PermissionRequest:
    bool IsDuplicateOf(
+diff --git a/chrome/browser/custom_handlers/chrome_protocol_handler_registry_delegate.cc b/chrome/browser/custom_handlers/chrome_protocol_handler_registry_delegate.cc
+index 8dde29abf7894b79d26c4f82110de6a28ff42ea3..e89050bcda2e4e0cb212aba3055c7502d7846871 100644
+--- a/chrome/browser/custom_handlers/chrome_protocol_handler_registry_delegate.cc
++++ b/chrome/browser/custom_handlers/chrome_protocol_handler_registry_delegate.cc
+@@ -46,12 +46,13 @@ bool ChromeProtocolHandlerRegistryDelegate::IsExternalHandlerRegistered(
+ void ChromeProtocolHandlerRegistryDelegate::RegisterWithOSAsDefaultClient(
+     const std::string& protocol,
+     DefaultClientCallback callback) {
+-  // The worker pointer is reference counted. While it is running, the
+-  // sequence it runs on will hold references it will be automatically freed
+-  // once all its tasks have finished.
+-  base::MakeRefCounted<shell_integration::DefaultSchemeClientWorker>(protocol)
+-      ->StartSetAsDefault(
+-          GetDefaultWebClientCallback(protocol, std::move(callback)));
++  // Open: the engine never changes the system's default app for a scheme.
++  // Chrome would ask macOS here to make this app the default client for
++  // `protocol` (for example the default mail app) as a side effect of the
++  // user accepting a web protocol handler. In Open that is the App's own,
++  // explicit decision; the handler works for links inside the browser either
++  // way (see ShouldRemoveHandlersNotInOS below).
++  std::move(callback).Run(true);
+ }
+ 
+ void ChromeProtocolHandlerRegistryDelegate::CheckDefaultClientWithOS(
+@@ -68,7 +69,12 @@ void ChromeProtocolHandlerRegistryDelegate::CheckDefaultClientWithOS(
+ // If true default protocol handlers will be removed if the OS level
+ // registration for a protocol is no longer Chrome.
+ bool ChromeProtocolHandlerRegistryDelegate::ShouldRemoveHandlersNotInOS() {
+-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++#if BUILDFLAG(IS_MAC)
++  // Open: a web protocol handler stays the default inside the browser even
++  // when another app is the system default for the scheme. Chrome would drop
++  // it (right after the grant, and again at every launch).
++  return false;
++#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+   // We don't do this on Linux as the OS registration there is not reliable,
+   // and Chrome OS doesn't have any notion of OS registration.
+   // TODO(benwells): When Linux support is more reliable remove this
