@@ -8041,7 +8041,10 @@ def toolbar_checks(factory, results, tmp):
         field_menu = app.call('url-field-menu')
         app.call('url-field-menu', item='Show as Toolbar')
         again = wait_until(lambda: (lambda s: s if s['toolbar']['drawn'] else None)(ws()), timeout=3, step=.05)
-        results['toolbar_url_field_show_as_toolbar'] = {'ok': field_menu == ['Show as Toolbar', '-', 'Manage Extensions'] and bool(again), 'menu': field_menu}
+        # Arc 1.172.2's URL-field menu (capture session 3 Part D, D2c #392). Share is "Share…" today and
+        # becomes the "Share" submenu with capture session 8; Shared Quotes is on by default.
+        results['toolbar_url_field_show_as_toolbar'] = {'ok': field_menu[:1] + field_menu[2:] == ['Copy URL', 'Capture…', 'Capture Full Page',
+            'Capture in Portrait Mode', '-', 'Show as Toolbar', 'Disable Shared Quotes'] and field_menu[1:2] in (['Share…'], ['Share']) and bool(again), 'menu': field_menu}
         windows_before = len(app.call('shell-windows'))
         app.call('key', key='n', modifiers=['cmd'])
         second = wait_until(lambda: (lambda s: s if len(app.call('shell-windows')) > windows_before and s['id'] != before['id'] else None)(ws()), timeout=5, step=.1)
@@ -11775,7 +11778,7 @@ def space_editor_creation_checks(factory, results, tmp):
                 and app.call('theme-get')['style'] == draft and created['icon'] == {'type': 'emoji', 'value': '😀'}, spaces=spaces())
         undo()
         require('A5_create_one_undo_restores_previous_focus', spaces() == before and focused()['id'] == source, spaces=spaces())
-        app.call('split', op='plus', item='New Space…')
+        app.call('split', op='plus', item='New Space')  # Arc's plus title (capture session 3 Part D, D2c #393)
         require('A5_plus_menu_opens_form', state()['open'] and state()['nameFocused'])
         key('escape'); require('A5_plus_cancel_no_change', spaces() == before)
         cancel_icon_generation = state()['modelUndoGeneration']
