@@ -13089,7 +13089,6 @@ def main():
             peek_checks(factory, results["peek"], tmp)
         elif opts.only == "live-data":
             results["live-data"] = CheckedResults(tracker)
-            import runpy
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
         elif opts.only in ("profiles", "profiles-engine"):
             results[opts.only] = CheckedResults(tracker)
