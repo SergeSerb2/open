@@ -1,4 +1,5 @@
 import Foundation
+import OpenEasel
 import OpenModel
 import OpenRouting
 import OpenBoosts
@@ -20,6 +21,9 @@ public struct ImportReport: Sendable {
     public var splits: Int = 0
     public var routingRules: Int = 0
     public var skippedEasels: Int = 0
+    /// Arc sidebar Easels with an `easelID`: Open Easel rows (content comes from Arc's export).
+    /// They are also counted in `importedTabNodes`.
+    public var importedEasels: Int = 0
     public var skippedNotes: Int = 0
     public var importedWelcome: Int = 0
     public var namedSpaceIcons: [String: Int] = [:]
@@ -68,6 +72,7 @@ public struct ImportReport: Sendable {
     public var extensionProfilesUnreadable: Int = 0
 
     public var accounted: Int {
+        // Easel rows are tab nodes too: `importedEasels` is a subset of `importedTabNodes`.
         importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedUnknown
     }
     /// Every sidebar item object: imported + skipped + structural containers.
@@ -626,8 +631,24 @@ public struct ArcImporter {
             case "itemContainer":
                 return nil // structural, not a sidebar node
             case "easel":
-                countSkip(arcID) { report.skippedEasels += 1 }
-                return nil
+                // An Arc Easel row becomes an Open Easel row: `open://easel/<stable id>`, the same id
+                // the Easel export import (`EaselImporter`) gives its content. Rows without an
+                // `easelID` cannot meet their content and stay skipped.
+                guard let ed = payload as? [String: Any],
+                      let easelID = ed["easelID"] as? String, !easelID.isEmpty, easelID.utf8.count <= 256 else {
+                    countSkip(arcID) { report.skippedEasels += 1 }; return nil
+                }
+                let documentID = EaselImporter.documentID(forArcEaselID: easelID).uuidString.lowercased()
+                let rawTitle = (ed["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let tab = Tab(id: Self.itemID(forArcID: arcID), url: URL(string: "open://easel/\(documentID)")!,
+                              title: rawTitle.isEmpty ? "Untitled Easel" : String(rawTitle.prefix(1_000)),
+                              createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
+                              lastActiveAt: Self.date(from2001: (ed["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
+                              isUnread: item["isUnread"] as? Bool ?? false)
+                let node = SidebarNode.tab(tab)
+                nodeByArcID[arcID] = node
+                report.importedEasels += 1
+                return node
             case "note":
                 countSkip(arcID) { report.skippedNotes += 1 }
                 return nil
