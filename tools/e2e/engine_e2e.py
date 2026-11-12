@@ -9408,6 +9408,7 @@ def commandbar_checks(factory, results, tmp, config):
         results['edit_pinned_url'] = {'ok': bool(editing) and editing['mode'] == 'editCurrentURL' and editing['text'] == origin + '/pinned'
             and editing['range'] == [0, len(origin + '/pinned')] and bool(changed) and bool(moved) and not state().get('pinnedEdit'),
             'editing': {k: (editing or {}).get(k) for k in ('mode', 'text', 'range', 'pinnedEdit')}, 'pinnedURL': (changed or {}).get('pinnedURL')}
+        commandbar_pb1_checks(app, results, bar, press, type_query, state)
         time.sleep(.25)
         app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
         app.call('settings-toggle', name='external'); app.call('save'); app.quit()
@@ -9423,6 +9424,47 @@ def commandbar_checks(factory, results, tmp, config):
 
     import settings_live
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
+
+
+def commandbar_pb1_checks(app, results, bar, press, type_query, state):
+    """PB1 command-bar rows: the privacy footer link, Arc's new-document actions, Undo <name>."""
+    def top_rows(): return [(r.get('action'), r.get('title')) for r in state().get('rows', [])]
+    tab = app.call('tabs')[0]['id']
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    # Privacy footer: (i) shows the footer with its link; the link opens docs/privacy.md in a new tab.
+    bar('t', 'window')
+    app.call('commandbar-press', control='info')
+    before = {t['id'] for t in app.call('tabs')}
+    link = app.call('commandbar-press', control='privacyLink')
+    privacy = 'https://github.com/SergeSerb2/open/blob/main/docs/privacy.md'
+    opened = wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in before), None), timeout=8, step=.1)
+    results['commandbar_privacy_link'] = {'ok': link['pressed'] and bool(opened) and (opened or {}).get('url', '').startswith(privacy.split('/blob')[0])
+        and not app.call('commandbar-state').get('presented'), 'tab': opened}
+    if opened: app.call('select', tab=opened['id']); app.call('menu-perform', id='archive-tab')
+    # "New Google Doc": Arc's new-document table; a new foreground tab at doc.new.
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    bar('t', 'window'); type_query('new google doc')
+    rows = top_rows()
+    before = {t['id'] for t in app.call('tabs')}
+    press('return')
+    doc = wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in before), None), timeout=8, step=.1)
+    hosts = ('doc.new', 'docs.google.com', 'accounts.google.com')
+    results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
+        and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
+        'rows': rows[:4], 'tab': doc}
+    # "Undo <name>": archive a fresh Today tab, then the bar offers the named Undo and running it restores the tab.
+    fresh = new_tab(app, 'about:blank#pb1-undo')
+    app.call('select', tab=fresh); app.call('focus', tab=fresh)
+    count = len(app.call('tabs'))
+    app.call('menu-perform', id='archive-tab')
+    wait_until(lambda: len(app.call('tabs')) == count - 1, timeout=5, step=.05)
+    bar('t', 'window'); type_query('undo')
+    undo_rows = [r for r in state().get('rows', []) if r.get('action') == 'undo-by-name']
+    press('return')
+    restored = wait_until(lambda: len(app.call('tabs')) == count, timeout=5, step=.05)
+    # Archive registers no undo name in Open's model, so the row reads plain "Undo"; named steps read "Undo <name>".
+    results['commandbar_undo_by_name'] = {'ok': len(undo_rows) == 1 and (undo_rows[0]['title'] == 'Undo' or undo_rows[0]['title'].startswith('Undo '))
+        and bool(restored), 'row': undo_rows[0] if undo_rows else None, 'tabs': len(app.call('tabs')), 'expected': count}
 
 
 def commandbar_footer_checks(app, results, tmp, bar, press, tab):
@@ -12795,7 +12837,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -12945,6 +12987,10 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.only == "features":
+        # The widevine row needs DRM playback turned on (off by default): pass the
+        # real Settings key in the launch-argument domain (nothing is persisted).
+        extra += ["-open.advanced.enableWidevine", "YES"]
     if opts.features_passwords_engine_safety:
         extra.append('--open-allow-mock-keychain-secrets')
     if opts.only == "extensions-e2":
@@ -13002,7 +13048,7 @@ def main():
     tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True, first_run=None):
         tracker.check_alive()
         if opts.lane == "merge" and ((extra_env or {}).get("DYLD_INSERT_LIBRARIES") or os.environ.get("DYLD_INSERT_LIBRARIES")):
             raise RuntimeError("merge lane refuses injected libraries; use --lane observers on the M1")
@@ -13017,7 +13063,7 @@ def main():
             # Every first-run helper uses this factory, including F12 and the
             # multi-Profile importer. Exercise the real player at zero volume.
             launch_args += ["--intro-sound=silent"]
-        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only in ("firstrun", "onboarding", "import-robust"))
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=first_run if first_run is not None else opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
         if opts.only in ("firstrun", "import-robust") and app.call("onboarding").get("active"):
@@ -13145,6 +13191,18 @@ def main():
             results["onboarding"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
                 factory, results["onboarding"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-peek":
+            results["notes-peek"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_peek.py"))["run"](
+                factory, results["notes-peek"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-library":
+            results["notes-library"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_library.py"))["run"](
+                factory, results["notes-library"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-rowmenu":
+            results["notes-rowmenu"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_rowmenu.py"))["run"](
+                factory, results["notes-rowmenu"], tmp, sys.modules[__name__])
         elif opts.only == "notes-import":
             results["notes-import"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_import.py"))["run"](
@@ -13332,6 +13390,7 @@ def main():
                 elif opts.only == "extensions-p3":
                     import extensions_p3
                     extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
+                    extensions_p3.global_commands(app, results["extensions-p3"], tmp, ROOT, wait_until)
                 elif opts.only == "extensions-e2":
                     import extensions_e2
                     extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
@@ -13428,14 +13487,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

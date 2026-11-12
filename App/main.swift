@@ -46,7 +46,10 @@ app.keyEquivalentHandler = { event in
 let options = LaunchOptions(arguments: CommandLine.arguments)
 LaunchTiming.shared.phase("optionsParsed")
 appDelegate.options = options
+// A fixture launch (--arc-dir) never scans the real ~/Library for other browsers unless it names a
+// synthetic one with --browser-import-library.
 ImportWizardViewModel.browserLibraryOverride = options.browserImportLibrary
+  ?? options.arcDirectory.map { $0.appendingPathComponent(".no-browser-library", isDirectory: true) }
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
@@ -144,6 +147,12 @@ configuration.verboseLogging = options.verboseLogging
 // our unbranded Release build (thread_profiler_configuration.cc treats it as
 // local). Open does not use its startup or periodic sampling collections.
 configuration.additionalSwitches.append("--disable-stack-profiler")
+// Widevine DRM (F3 option D): off by default; Open has no Widevine licence or
+// VMP signature. With the Advanced setting on, the engine registers Google's CDM
+// component (patch 0012) and the component updater downloads it.
+if UserDefaults.standard.bool(forKey: "open.advanced.enableWidevine") {
+  configuration.additionalSwitches.append("--open-enable-widevine")
+}
 // No userAgentProduct: Chrome's own User-Agent, as Arc does. A non-Chrome
 // product token replaces "Chrome/156", and sites and extensions then take
 // their Safari path (Bitwarden never finished loading).

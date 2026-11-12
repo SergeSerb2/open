@@ -366,9 +366,11 @@ public final class CommandBarController: NSObject {
         case .tabs?: mode = .searchTabs
         case .site?, .extension?, nil: if mode.isScoped { mode = .newTab }
         }
-        return SuggestContext(mode: mode, profileID: r.profileID, spaceID: r.spaceID, currentTabID: r.currentTabID,
+        var context = SuggestContext(mode: mode, profileID: r.profileID, spaceID: r.spaceID, currentTabID: r.currentTabID,
                               currentTabURL: r.currentTabURL, allowsRemoteSuggestions: r.allowsRemoteSuggestions,
                               searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id, extensionScopeID: extensionScope?.id, allowsInlineCompletion: queryAllowsCompletion)
+        context.undoActionName = r.undoActionName; context.redoActionName = r.redoActionName
+        return context
     }
 
     /// Opening applies ready local rows before cold focus work. Text edits

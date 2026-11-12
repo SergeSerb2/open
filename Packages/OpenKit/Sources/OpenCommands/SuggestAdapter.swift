@@ -47,6 +47,8 @@ public extension CommandRegistry {
             if command.id.hasPrefix("go-to-") || command.id.hasPrefix("focus-split-pane") { continue }
             actions.append(browserAction(for: command))
         }
+        // Command-bar only: "New Google Doc" and siblings (no menu item in Arc either).
+        actions.append(contentsOf: NewDocumentActions.actions)
         return actions
     }
 
