@@ -689,6 +689,27 @@
         }
         let fresh = controller.sidebar.libraryButtonContextMenu() ?? menu
         return ["items": fresh.items.map { ["title": $0.title, "enabled": $0.isEnabled, "on": $0.state == .on] as [String: Any] }]
+      case "sidebar-menu-items":
+        // The right-click menu of a row (or the Space with no node) in Arc's notation:
+        // "—" for a separator, "Title ▸" for a submenu; `disabled` lists disabled titles.
+        // `path` ("Move to") lists a submenu instead.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no window") }
+        var nodeID: ItemID?
+        if let raw = a["node"] {
+          guard let text = raw as? String, let uuid = UUID(uuidString: text), app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+          nodeID = ItemID(rawValue: uuid)
+        }
+        // `surface=url-field`: the URL field's right-click menu instead of a row's.
+        guard var level = a["surface"] as? String == "url-field" ? controller.sidebar.urlFieldMenu() : controller.sidebar.contextMenu(nodeID: nodeID) else { throw Failure(message: "no sidebar menu") }
+        if let path = a["path"] as? String {
+          for part in path.split(separator: "/") {
+            guard let sub = level.items.first(where: { $0.title == part && !$0.isAlternate })?.submenu else { throw Failure(message: "\(part) has no submenu") }
+            level = sub
+          }
+        }
+        let visible = level.items.filter { !$0.isHidden && !$0.isAlternate }
+        return ["items": visible.map { $0.isSeparatorItem ? "—" : ($0.submenu != nil ? $0.title + " ▸" : $0.title) },
+                "disabled": visible.filter { !$0.isSeparatorItem && !$0.isEnabled }.map(\.title)]
       case "sidebar-menu", "sidebar-menu-state":
         // Builds the same NSMenu a right-click shows (a row, or the Space with no node)
         // and performs the item at a "/" path; `alternate` picks the ⌥ alternate title.
@@ -701,7 +722,7 @@
         } else { node = nil }
         let separator: Character = a["items"] != nil ? "\u{1F}" : "/"
         guard !path.isEmpty, !path.split(separator: separator, omittingEmptySubsequences: false).contains(where: { $0.isEmpty }) else { throw Failure(message: "empty sidebar menu path") }
-        guard var level = controller.sidebar.contextMenu(nodeID: node) else { throw Failure(message: "no sidebar menu") }
+        guard var level = a["surface"] as? String == "url-field" ? controller.sidebar.urlFieldMenu() : controller.sidebar.contextMenu(nodeID: node) else { throw Failure(message: "no sidebar menu") }
         let parts = path.split(separator: separator).map(String.init)
         for (depth, part) in parts.enumerated() {
           let matches = level.items.indices.filter { index in

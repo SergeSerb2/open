@@ -19,7 +19,11 @@ extension AutomationController {
     guard let panel = app.settingsPresenter.activeLibrarySession?.panel, panel.isPresented, panel.section == .downloads else { return nil }
     return (panel.automationState()["rows"] as? [[String:Any]] ?? []).map { row in
       let id = row["id"] as? String ?? ""
-      return ["id":id,"subtitle":row["subtitle"] ?? "","buttons":panel.rowMenu(id)?.filter { $0["enabled"] as? Bool == true }.compactMap { $0["title"] as? String } ?? []]
+      // Everything a user can press on the row: the hover controls (Pause / Resume / Cancel /
+      // Retry) and the enabled menu items.
+      let hover = row["actions"] as? [String] ?? []
+      let menu = panel.rowMenu(id)?.filter { $0["enabled"] as? Bool == true }.compactMap { $0["title"] as? String } ?? []
+      return ["id":id,"subtitle":row["subtitle"] ?? "","buttons":hover + menu.filter { !hover.contains($0) }]
     }
   }
   func runDownloadCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {

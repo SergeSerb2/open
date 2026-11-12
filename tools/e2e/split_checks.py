@@ -77,7 +77,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             app.call('split', op='observe')
         app.call('window-frame', frame=[60, 60, 1360, 860])
         empty_menu = app.call('split', op='plus')
-        row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split View'), menu=empty_menu)
+        row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split'), menu=empty_menu)
         a = opened('a'); original_page = app.page(a)['identifier']; app.call('focus', tab=a)
         key('='); s = settled(2)
         b = next(p['id'] for p in s['panes'] if p['id'] != a)
@@ -151,7 +151,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         row('C4_context_add', len(s['panes']) == 3 and s['focused'] == c, state=s)
 
         unsplit(); select(a)
-        app.call('split', op='plus', item='New Split View'); s = settled(2)
+        app.call('split', op='plus', item='New Split'); s = settled(2)
         plus_ok = s['focused'] != a and s['panes'][0]['id'] == a
         unsplit(); select(a)
         key('t', ('cmd',)); app.call('key', text='Add Split View')
@@ -172,7 +172,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         app.call('focus', tab=s['focused']); key('='); after = settled(4)
         outsider = opened('fifth-refused', background=True); refused = drop(outsider, edge(after, 'right'))
         row('fifth_drop_refused', not refused['accepted'] and len(state()['panes']) == 4, transport=refused)
-        plus_enabled = next(r['enabled'] for r in app.call('split', op='plus') if r['title'] == 'New Split View')
+        plus_enabled = next(r['enabled'] for r in app.call('split', op='plus') if r['title'] == 'New Split')
         row('add_up_to_four', not disabled['enabled'] and not enabled and not plus_enabled and [p['id'] for p in after['panes']] == ids, state=after, plusEnabled=plus_enabled)
         for i, tid in enumerate(ids): app.call('navigate', tab=tid, url=origin.replace('127.0.0.1', 'pane%d.localhost' % (i+1))+'/four-'+str(i))
         ok, pages = live(ids); row('E1_four_live_pages', ok, pages=pages)
@@ -313,7 +313,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         unsplit(); favorite = opened('favorite'); app.call('favorite', tab=favorite); settled(1)
         favorite_menu = app.call('split', op='plus'); before = len(app.call('tabs'))
         app.call('focus', tab=favorite); key('='); s = settled(1)
-        row('favorite_split_disabled_no_orphan', not next(r['enabled'] for r in favorite_menu if r['title'] == 'New Split View')
+        row('favorite_split_disabled_no_orphan', not next(r['enabled'] for r in favorite_menu if r['title'] == 'New Split')
             and len(app.call('tabs')) == before and not s['id'], menu=favorite_menu, state=s)
         retained = []
         for i in range(12):

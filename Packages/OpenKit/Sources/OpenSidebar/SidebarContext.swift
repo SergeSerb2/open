@@ -67,6 +67,9 @@ public final class SidebarContext {
     /// macOS Increase Contrast (plan D2 §2.8, lead Q2 b). The window controller keeps it
     /// current; `sidebar-render --increase-contrast` forces it offscreen.
     public var increaseContrast = false
+    /// Settings ▸ Advanced "Enable Shared Quotes" (default on): the URL field menu toggles it,
+    /// the App's page commands read it.
+    public static let sharedQuotesKey = "open.advanced.enableSharedQuotes"
     /// True while the command bar is open for a new tab (Cmd+T). The "New Tab"
     /// row then shows the selected fill (F0040, F0063; not with Cmd+L).
     public var isNewTabCommandBarOpen: Bool = false
@@ -117,6 +120,11 @@ public final class SidebarContext {
     @ObservationIgnored public var recentPagesSource: (@MainActor (ProfileID, [String]) async -> [(url: URL, title: String, lastVisit: Date)])?
     /// Automation fixtures only: extra hosts that count as a Recents site. Empty in normal use.
     @ObservationIgnored public var glanceHostAliases: [String: RecentsSite] = [:]
+    /// Gmail card data (LF L6): the App reads the feed `URL` in a hidden page of the Profile;
+    /// the `String` is the mail host the page must stay on (else signed out). Nil keeps the page card.
+    @ObservationIgnored public var mailGlanceSource: (@MainActor (ProfileID, URL, String) async -> MailGlanceResult)?
+    /// Automation fixtures only: extra hosts that count as Gmail.
+    @ObservationIgnored public var glanceMailHosts: Set<String> = []
     /// The live-data card a sidebar tab gets on hover, or nil for the page card.
     /// Calendar card data (live-data §3.2, plan NS §2 CAL). The App sets it for normal windows;
     /// nil (incognito, render scenes) keeps the page card on calendar tabs.
@@ -127,10 +135,11 @@ public final class SidebarContext {
     /// Live Calendar actions for the tile menu and the reminder; nil keeps tiles plain.
     @ObservationIgnored public var liveCalendar: LiveCalendarActions?
     public func glanceKind(for tab: Tab) -> GlanceKind? {
-        guard let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases) else { return nil }
+        guard let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases, mailHosts: glanceMailHosts) else { return nil }
         switch kind {
         case .recents: guard recentPagesSource != nil else { return nil }
         case .calendar: guard calendarGlance != nil else { return nil }
+        case .gmail: guard mailGlanceSource != nil else { return nil }
         }
         let key = kind.preferenceKey
         return previewPreferences.object(forKey: key) == nil || previewPreferences.bool(forKey: key) ? kind : nil
