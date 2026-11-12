@@ -57,6 +57,7 @@ def run(factory, results, tmp, h):
     def open_sources():
         call('settings-open-sources'); return settle()
     def cancel():
+        settle()  # counting after an access grant can still be running (slower rented Macs)
         if state().get('settingsStep') not in ('Report', ''):
             call('settings-cancel-passwords')
     def finish_import():
