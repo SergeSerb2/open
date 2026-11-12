@@ -176,7 +176,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             # Closing an ordinary real tab archives it through the existing path.
             other=app.call('tabs')[-1]['id'];app.call('select',tab=other);app.call('command',id='archive-tab')
             state(action='open',section='archive');check('archive_real_rows',wait(lambda:bool(rows())),rows=rows())
-            archived=rows()[0];state(action='hover-row',id=archived['id']);check('archive_hover_actions',row(archived['id'])['actions']==['Delete','Restore']);capture('archive-hover')
+            archived=rows()[0];state(action='hover-row',id=archived['id']);check('archive_hover_actions',row(archived['id'])['actions']==['Delete','Restore']);check('archive_tooltip_and_url',row(archived['id'])['toolTip']==archived['title'] and '://' not in archived['subtitle'],row=row(archived['id']));capture('archive-hover')
             state(action='filter',open=True);check('archive_filters',len(state()['header']['chips'])>=4);capture('archive-filters')
             state(action='chip',id='reason:auto');check('archive_reason_empty',wait(lambda:not rows()))
             state(action='chip',id='reason:auto');state(action='chip',id='reason:manual');check('archive_manual_filter',wait(lambda:bool(row(archived['id']))))
