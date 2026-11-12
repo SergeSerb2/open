@@ -316,6 +316,8 @@ guessing.
 - `pointer_ax` — `modifiers` (`cmd`, `opt`, `shift`) for ⌘-click selection, and `expect: "observe"` for a right-click
   that may open no menu (the result is recorded, the block continues).
 - `modkey` — Option down/up while an owned menu is open; released again in cleanup.
+- `arc_store_grep` — before `launch`, a read-only extract of Boost zoom/colour numbers from Arc's store files (fixed pattern).
+- `arc_defaults` — a read-only `defaults read` of allowlisted Arc preference keys, saved in the run folder.
 - `arc_log` — a read-only `log stream` of the owned Arc process with `mark` labels (sound mapping).
 - A guard stop on a dialog now saves the owned app's AX windows and CG window list (passive reads).
 - Fixture: `/video` (muted canvas stream), `/download.pdf`, `/large.bin` (8 MiB over about 60 s) and `/fail.bin`
