@@ -106,7 +106,8 @@ extension AppDelegate {
       let id = item.document.id
       let (doc, _) = EaselImporter.resolvePictures(item) { data in store.addImage(data, document: id) }
       guard doc.isValid, let encoded = try? EaselStore.encoder.encode(doc) else { continue }
-      change.before[id] = try? Data(contentsOf: store.fileURL(for: id))
+      // `updateValue` keeps a nil entry ("no file before"); a subscript nil assignment would drop the key.
+      change.before.updateValue(try? Data(contentsOf: store.fileURL(for: id)), forKey: id)
       for factory in hostFactories.values {
         if let row = factory.easelRow(documentID: id), let host = factory.easelHosts[row.id] {
           factory.controller?.container.closeHost(for: row.id); host.close()
