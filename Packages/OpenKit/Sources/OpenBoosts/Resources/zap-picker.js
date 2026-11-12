@@ -269,25 +269,20 @@
       .reveals { ${REVEAL_CHIP_LAYOUT};max-width:55%;margin-right:70px; } .reveal { border-radius:8px;background:#EDEEFF;padding:8px;color:#333;white-space:nowrap; }
       .popup { z-index:3;position:fixed;width:428px;max-width:calc(100vw - 12px);height:90px;border-radius:12px;background:white;box-shadow:0 4px 20px #0003;pointer-events:auto;overflow:hidden;color:#333; }
       .actions { display:flex;gap:6px;padding:8px; } .actions button { height:38px;border-radius:7px;color:white;padding:0 10px;white-space:nowrap; }
-      .this { background:#FF453A; } .related { background:#FF9500;flex:1; } .cancel { background:#999; } .select { background:#3139FF;flex:1; }
+      .this { background:#FF453A; } .related { background:#FF9500;flex:1; } .cancel { background:#999; } .popup.select-mode .this, .popup.select-mode .related { background:#3139FF; }
       .band { background:#F0F0F2;padding:8px;font:11px monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
     </style><div class="content-frame"></div><div class="hl" hidden></div><div class="tag" hidden></div>
     <div class="bar"><button class="undo">Undo</button><span class="instruction">Click elements on the page to <span class="accent">Zap</span> them</span><div class="reveals" hidden></div><button class="done">Done</button></div>
-    <div class="popup" hidden><div class="actions"><button class="this">Zap this</button><button class="related">Zap all related elements</button><button class="select" hidden>Use Selector</button><button class="cancel">Cancel</button></div><div class="band"></div></div>`;
+    <div class="popup" hidden><div class="actions"><button class="this">Zap this</button><button class="related">Zap all related elements</button><button class="cancel">Cancel</button></div><div class="band"></div></div>`;
     highlight = query(overlay, ".hl"); chip = query(overlay, ".tag"); bar = query(overlay, ".bar");
     popup = query(overlay, ".popup"); band = query(overlay, ".band"); relatedButton = query(overlay, ".related");
     query(overlay, ".undo").addEventListener("click", undo);
     query(overlay, ".done").addEventListener("click", () => exitWithReason("done"));
-    query(overlay, ".this").addEventListener("click", commitPick);
+    query(overlay, ".this").addEventListener("click", () => mode === "select" ? copySelector(false) : commitPick());
     query(overlay, ".cancel").addEventListener("click", closePopup);
-    query(overlay, ".select").addEventListener("click", () => {
-      if (mode !== "select" || !lastPick) return;
-      post("picker:selected", { selector: lastPick.entry.selector, matches: lastPick.chosen.matches });
-      closePopup();
-    });
     relatedButton.addEventListener("mouseenter", showRelated);
     relatedButton.addEventListener("mouseleave", () => { clearMulti(); updateBand(); });
-    relatedButton.addEventListener("click", commitRelated);
+    relatedButton.addEventListener("click", () => mode === "select" ? copySelector(true) : commitRelated());
     document.documentElement.appendChild(host);
   }
   function position(box, r) { Object.assign(box.style, { left: r.x + "px", top: r.y + "px", width: r.width + "px", height: r.height + "px" }); }
@@ -368,10 +363,12 @@
     const wide = arrayFind(list, c => c.matches > 1 && arrayEvery(c.nodes, n => n.tagName === e.tagName && n.parentElement === e.parentElement));
     const entry = { boostID, selector: chosen.selector, label: label(e, chosen.selector), root };
     lastPick = { entry, chosen, wide };
-    relatedButton.hidden = mode === "select";
+    // Arc builds each pair in one function (BO-20): "Zap this" / "Copy selector for this",
+    // "Zap all related elements" / "Copy selector for related". Pick Selector uses the copy labels.
     relatedButton.disabled = !wide || wide.selector === chosen.selector;
-    query(overlay, ".this").hidden = mode === "select";
-    query(overlay, ".select").hidden = mode !== "select";
+    query(overlay, ".this").textContent = mode === "select" ? "Copy selector for this" : "Zap this";
+    relatedButton.textContent = mode === "select" ? "Copy selector for related" : "Zap all related elements";
+    popup.classList.toggle("select-mode", mode === "select");
     updateBand(); popup.hidden = false; bar.classList.add("popup-open");
     popup.style.left = Math.max(6, Math.min(event.clientX, window.innerWidth - 434)) + "px";
     popup.style.top = Math.max(6, Math.min(event.clientY + 12, window.innerHeight - 152)) + "px";
@@ -412,6 +409,12 @@
     highlight.style.borderColor = "red";
     clearTimeout(flashTimer); flashTimer = setTimeout(() => { highlight.style.borderColor = "#3139FF"; }, 200);
     post("picker:error", { kind: "no-candidate" });
+  }
+  function copySelector(related) {
+    if (mode !== "select" || !lastPick || (related && !lastPick.wide)) return;
+    const picked = related ? lastPick.wide : lastPick.chosen;
+    post("picker:selected", { selector: picked.selector, matches: picked.matches });
+    closePopup();
   }
   function commitRelated() {
     if (mode !== "zap" || !lastPick?.wide) return;
