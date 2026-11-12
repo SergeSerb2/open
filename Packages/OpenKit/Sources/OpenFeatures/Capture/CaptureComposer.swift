@@ -9,12 +9,6 @@ import OpenDesign
 /// it runs off the main actor (`render(_:)`); nothing here touches AppKit views.
 public enum CaptureComposer {
     public enum Kind: String, Sendable, CaseIterable { case area, fullPage, portrait }
-    public enum PortraitBackground: String, Sendable, CaseIterable {
-        case theme, white, black
-        /// `open.capture.portraitBackground` (§5): unknown values fall back to `theme`.
-        public init(defaultsValue: String?) { self = defaultsValue.flatMap(Self.init(rawValue:)) ?? .theme }
-    }
-
     /// One capture's image job. `png` is the engine's PNG (visible page or full page).
     public struct Job: Sendable {
         public var kind: Kind
@@ -23,12 +17,15 @@ public enum CaptureComposer {
         public var selection: CGRect?
         /// The page view's size in points (the PNG covers it at device scale).
         public var viewSize: CGSize
-        public var portraitBackground: PortraitBackground
-        public var themeStyle: SpaceThemeStyle
+        /// Portrait only: background, colour and watermark.
+        public var portrait: PortraitStyle
+        /// Portrait with the wallpaper source: the wallpaper file's bytes (read by the App only when
+        /// the user picks that swatch). Nil or unreadable bytes fall back to the website colour.
+        public var wallpaper: Data?
         public init(kind: Kind, png: Data, selection: CGRect? = nil, viewSize: CGSize,
-                    portraitBackground: PortraitBackground = .theme, themeStyle: SpaceThemeStyle = .defaultTheme(system: .dark)) {
+                    portrait: PortraitStyle = .standard, wallpaper: Data? = nil) {
             self.kind = kind; self.png = png; self.selection = selection; self.viewSize = viewSize
-            self.portraitBackground = portraitBackground; self.themeStyle = themeStyle
+            self.portrait = portrait; self.wallpaper = wallpaper
         }
     }
 
@@ -85,7 +82,7 @@ public enum CaptureComposer {
             image = cropped
         case .fullPage: image = page
         case .portrait:
-            guard let canvas = portrait(page, background: job.portraitBackground, style: job.themeStyle) else { throw Failure.compose }
+            guard let canvas = portrait(page, style: job.portrait, wallpaper: job.wallpaper) else { throw Failure.compose }
             image = canvas
         }
         guard let png = encodePNG(image), let thumb = thumbnail(png) else { throw Failure.encode }
@@ -137,20 +134,34 @@ public enum CaptureComposer {
         return image.cropping(to: rect)
     }
 
-    /// Portrait canvas (§4.6.4, guess pending C-C2): 4:5, canvas width = image width ÷ 0.86, the
-    /// image centered. A page taller than the 4:5 frame allows grows the canvas from its height
-    /// instead, so the image always keeps the 86 % margin rule on its longer fit.
+    /// Portrait canvas: the proportions of Arc's popover preview (239 × 127 pt; the page card
+    /// 96 pt tall, about 0.756 of it; PB2 capture `43-pb2-probe`). Output size and margins of the
+    /// saved image: GUESS (not captured). The page keeps its own aspect, centred; a page wider than
+    /// 86 % of that frame sets the canvas from its width instead.
     public static func portraitLayout(imageSize: CGSize) -> (canvas: CGSize, image: CGRect) {
-        let f = CaptureMetrics.portraitImageFraction, aspect = CaptureMetrics.portraitAspect
-        var width = (imageSize.width / f).rounded(), height = (width / aspect).rounded()
-        if imageSize.height > height * f {
-            height = (imageSize.height / f).rounded(); width = (height * aspect).rounded()
+        let aspect = CaptureMetrics.portraitAspect, heightFraction = CaptureMetrics.portraitImageHeightFraction
+        var height = (imageSize.height / heightFraction).rounded(), width = (height * aspect).rounded()
+        if imageSize.width > width * CaptureMetrics.portraitImageFraction {
+            width = (imageSize.width / CaptureMetrics.portraitImageFraction).rounded(); height = (width / aspect).rounded()
         }
         let origin = CGPoint(x: ((width - imageSize.width) / 2).rounded(), y: ((height - imageSize.height) / 2).rounded())
         return (CGSize(width: width, height: height), CGRect(origin: origin, size: imageSize))
     }
 
-    public static func portrait(_ image: CGImage, background: PortraitBackground, style: SpaceThemeStyle) -> CGImage? {
+    /// Wallpaper bytes over this size are refused (a 6K HEIC still is about 10 MB).
+    public static let maxWallpaperBytes = 64 << 20
+
+    /// The wallpaper as an image no larger than the canvas's long side (ImageIO subsampling: the
+    /// full file is never decoded at full size). Nil for a folder, an unreadable file or a set.
+    public static func wallpaperImage(_ data: Data, longSide: Int) -> CGImage? {
+        guard data.count <= maxWallpaperBytes, let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) >= 1 else { return nil }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: max(64, min(longSide, 8_192)),
+            kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+    }
+
+    public static func portrait(_ image: CGImage, style: PortraitStyle, wallpaper: Data? = nil) -> CGImage? {
         let size = CGSize(width: image.width, height: image.height)
         let layout = portraitLayout(imageSize: size)
         let canvasWidth = Int(layout.canvas.width), canvasHeight = Int(layout.canvas.height)
@@ -159,27 +170,65 @@ public enum CaptureComposer {
               let context = CGContext(data: nil, width: canvasWidth, height: canvasHeight, bitsPerComponent: 8, bytesPerRow: 0, space: space,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         let canvas = CGRect(origin: .zero, size: layout.canvas)
-        switch background {
-        case .white: context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)); context.fill(canvas)
-        case .black: context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)); context.fill(canvas)
-        case .theme:
-            // The Space's theme field (`ThemeField`, the window background's own math), stretched smooth.
-            if let field = ThemeField.makeImage(style: style, windowSize: layout.canvas, isActive: true, resolution: CaptureMetrics.portraitThemeResolution) {
-                context.interpolationQuality = .high; context.draw(field, in: canvas)
-            } else { context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)); context.fill(canvas) }
-        }
+        drawBackground(in: context, canvas: canvas, page: image, style: style, wallpaper: wallpaper, space: space)
         // Core Graphics is bottom-up: flip the image rect's y.
         let rect = CGRect(x: layout.image.minX, y: layout.canvas.height - layout.image.maxY, width: size.width, height: size.height)
-        let radius = size.width * CaptureMetrics.portraitCornerFraction
+        let radius = layout.canvas.width * CaptureMetrics.portraitCornerFraction
         let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
         context.saveGState()
-        context.setShadow(offset: CGSize(width: 0, height: -size.width * CaptureMetrics.portraitShadowOffsetFraction),
-                          blur: size.width * CaptureMetrics.portraitShadowBlurFraction,
+        context.setShadow(offset: CGSize(width: 0, height: -layout.canvas.width * CaptureMetrics.portraitShadowOffsetFraction),
+                          blur: layout.canvas.width * CaptureMetrics.portraitShadowBlurFraction,
                           color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: CaptureMetrics.portraitShadowAlpha))
         context.addPath(path); context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)); context.fillPath()
         context.restoreGState()
         context.saveGState(); context.addPath(path); context.clip(); context.draw(image, in: rect); context.restoreGState()
+        // A light frame around the page card (the capture's pale rim; GUESS width).
+        context.saveGState(); context.addPath(path)
+        context.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.35)); context.setLineWidth(max(1, layout.canvas.width * 0.006)); context.strokePath()
+        context.restoreGState()
+        if !style.hidesWatermark { drawWatermark(in: context, canvas: canvas) }
         return context.makeImage()
+    }
+
+    static func drawBackground(in context: CGContext, canvas: CGRect, page: CGImage, style: PortraitStyle, wallpaper: Data?, space: CGColorSpace) {
+        if style.source == .wallpaper, let data = wallpaper,
+           let image = wallpaperImage(data, longSide: Int(max(canvas.width, canvas.height))) {
+            // Aspect fill, centred.
+            let scale = max(canvas.width / CGFloat(image.width), canvas.height / CGFloat(image.height))
+            let w = CGFloat(image.width) * scale, h = CGFloat(image.height) * scale
+            context.interpolationQuality = .high
+            context.draw(image, in: CGRect(x: (canvas.width - w) / 2, y: (canvas.height - h) / 2, width: w, height: h))
+            return
+        }
+        let base = style.source == .color ? PortraitStyle.sliderColor(at: style.colorPercentage) : PortraitStyle.websiteColor(of: page)
+        let (a, b) = PortraitStyle.gradient(for: base)
+        guard let gradient = CGGradient(colorsSpace: space, colors: [
+            CGColor(srgbRed: a.red, green: a.green, blue: a.blue, alpha: 1), CGColor(srgbRed: b.red, green: b.green, blue: b.blue, alpha: 1)] as CFArray,
+            locations: [0, 1]) else { return }
+        // Top left to bottom right (Core Graphics y is up).
+        context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: canvas.height), end: CGPoint(x: canvas.width, y: 0), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    }
+
+    /// Open's watermark: our doorway-and-sun mark on a translucent rounded tile at the bottom left
+    /// (Arc's tile: 32 pt in a 239 pt preview, inset 3.5 pt; its mark is Arc's own and not used).
+    static func drawWatermark(in context: CGContext, canvas: CGRect) {
+        let side = canvas.width * CaptureMetrics.portraitWatermarkFraction, inset = canvas.width * CaptureMetrics.portraitWatermarkInsetFraction
+        let tile = CGRect(x: inset, y: inset, width: side, height: side)
+        context.saveGState()
+        context.addPath(CGPath(roundedRect: tile, cornerWidth: side * 0.25, cornerHeight: side * 0.25, transform: nil))
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.22)); context.fillPath()
+        // The doorway: 168 × 248 proportions, centred in the tile.
+        let h = side * 0.62, w = h * 168 / 248
+        let door = CGRect(x: tile.midX - w / 2, y: tile.midY - h / 2, width: w, height: h)
+        let path = OpenMarkPath.doorway(in: door)
+        context.addPath(path); context.setFillColor(CGColor(srgbRed: 1, green: 0.773, blue: 0.431, alpha: 0.95)); context.fillPath()
+        context.addPath(path); context.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.95))
+        context.setLineWidth(max(1, w * 0.06)); context.strokePath()
+        // The sun: a pale disc at the upper right of the doorway.
+        let r = w * 0.17
+        context.setFillColor(CGColor(srgbRed: 1, green: 0.945, blue: 0.839, alpha: 1))
+        context.fillEllipse(in: CGRect(x: door.maxX - w * 0.29 - r, y: door.maxY - h * 0.30 - r, width: r * 2, height: r * 2))
+        context.restoreGState()
     }
 
     public static func encodePNG(_ image: CGImage) -> Data? {

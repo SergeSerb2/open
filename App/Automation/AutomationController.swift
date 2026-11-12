@@ -649,7 +649,7 @@
       case "page-selection", "swipe", "swipe-indicator":
         // Engine page API (EP-1, EP-2, EP-3); App/Automation/AutomationPageEngine.swift.
         return try await runPageEngineCommand(cmd, try content(a, try window), a)
-      case "capture", "capture-state", "capture-action", "captures":
+      case "capture", "capture-state", "capture-action", "captures", "capture-portrait":
         // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
         return try await runCaptureCommand(cmd, a)
       case "toast-undo":

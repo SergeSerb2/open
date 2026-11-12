@@ -370,6 +370,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     controller.onLayout = { [weak self] in self?.findController?.sync() }
     controller.captureLibrary = app.captureLibrary
+    controller.captureWallpaperData = { [weak controller] in await PortraitWallpaper.read(screen: controller?.window?.screen) }
     if !isIncognito { controller.captureAddToEasel = { [weak self] result, anchor in self?.showAddToEaselMenu(result, anchor: anchor) } }
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
