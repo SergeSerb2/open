@@ -176,6 +176,8 @@ targets:
       - package: OpenKit
         product: OpenSidebar
       - package: OpenKit
+        product: OpenLiveData
+      - package: OpenKit
         product: OpenSpaceEditor
       - package: OpenKit
         product: OpenMedia
