@@ -973,7 +973,8 @@ def main():
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
         matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
-        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
+        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 absent (default on) and enabled" in text
+                and "SE4 a request during an in-flight one is dropped" in text, "missing sound flow receipts")
     elif name == "features-idle":
         require(subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'), 'features-idle requires the M1')
         idle = run(sys.executable, str(root / "tools/verification/features-idle.py"))
