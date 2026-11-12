@@ -143,6 +143,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.advanced, "picture-in-picture", "Enable Picture in Picture when you leave a video tab", key: "open.advanced.enablePictureInPictureOnLeave"),
             .init(.advanced, "theme-data", "Allow websites to get your theme data", key: "open.advanced.allowSitesThemeData"),
             .init(.advanced, "boosts", "Enable Boosts on websites you visit", key: "open.advanced.enableBoosts"),
+            .init(.advanced, "widevine", "Play DRM-protected video", help: "Downloads Google's Widevine module. Takes effect after you quit and reopen Open.", synonyms: "DRM Widevine streaming protected content", key: "open.advanced.enableWidevine"),
             .init(.advanced, "more", "More browser settings"),
             .init(.advanced, "translate", "Reset Translated-site Prompts"),
             .init(.advanced, "data-folder", "Show Data Folder"),

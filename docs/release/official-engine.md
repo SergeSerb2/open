@@ -615,3 +615,34 @@ Local historical receipts: `.re/handoff/sections/08-engine-basics-done.md`,
 `06-extensions-done.md`, `s8/E-engine.md`, and the build-check log named
 above. Current tree facts use only narrow file reads and directory/size
 checks in s8 and its main distribution view. Section 3's root was not read.
+
+## Built and adopted (2026-11-11)
+
+The official engine was built remotely (see `docs/engine-fork.md`, "Remote official build") and
+packaged as `cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal`.
+Record with hashes and inputs: `Engine/fork/official-distrib.json` (no binaries in git). Framework
+SHA-256 `b8d6e3363eec07f880bbc1505580480c143b4625a7247d84032753852751259f`, UUID
+`4C4C445D-5555-3144-A19E-A98D4CE75780` (after patches 0012 and 0013; earlier builds `6b6c8d5c…` and `cd76f997…` are superseded). The dSYM and receipts are archived on the M5 in
+`~/Developer/open-engine/symbols/<distribution name>/`. The App build fetches it through the engine
+root's `distrib.txt`; adoption also applies the download-handler lifetime companion change in
+`Engine/OpenEngine/src/OEClient.{h,mm}`.
+
+### Widevine (option D with a switch)
+
+Release args keep the CEF-required plumbing: `enable_widevine = true`, `bundle_widevine_cdm = false`,
+`ignore_missing_widevine_signing_cert = true` (no CDM is bundled). Patch `chromium/0012-open-widevine-opt-in.patch`
+registers Chromium's Widevine CDM component only when the browser process has `--open-enable-widevine`.
+The App passes it when Settings → Advanced → "Play DRM-protected video" is on (`open.advanced.enableWidevine`,
+off by default; takes effect at the next launch). Then the component updater downloads Google's CDM. Open has no
+Widevine licence or VMP signature, so services that enforce VMP may still refuse playback.
+
+### Profile deletion barrier (patch 0013)
+
+`chromium/0013-open-bookmark-deletion-barrier.patch` adds `BookmarkModel::FlushAndStopWritesForProfileDeletion`
+(and `BookmarkStorage::SaveNowAndStop`). `ProfileDeletion::Wiped` in `open/browser/profiles/open_profile_context.cc`
+calls it and releases the Profile only after the bookmark backend sequence has finished its writes. Before, the
+storage's final save ran after the deletion completed and recreated `Bookmarks` / `EncryptedBookmarks2` in the
+deleted Profile folder (e2e-profiles failed 6/6 on rented Macs, 2026-11-12). The patch also runs the bookmark
+storage's backend sequence at USER_VISIBLE: Chrome fences BEST_EFFORT tasks until it sees startup complete, which
+Open's hosted pages reach only by the 3-minute failsafe, so fenced saves ran late and the barrier waited on them.
+Other BEST_EFFORT work in Open is also deferred until that failsafe (follow-up for the lead).

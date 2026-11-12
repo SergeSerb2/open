@@ -202,7 +202,8 @@ struct SettingsAdvancedSection: View {
             row("shared-quotes", "Enable Shared Quotes when highlighting text", key: "enableSharedQuotes", help: "You can always use Copy URL as Quote from the menu.")
             row("picture-in-picture", "Enable Picture in Picture when you leave a video tab", key: "enablePictureInPictureOnLeave")
             row("theme-data", "Allow websites to get your theme data", key: "allowSitesThemeData")
-            row("boosts", "Enable Boosts on websites you visit", key: "enableBoosts", last: true)
+            row("boosts", "Enable Boosts on websites you visit", key: "enableBoosts")
+            row("widevine", "Play DRM-protected video", key: "enableWidevine", help: "Downloads Google's Widevine module. Some services may still refuse. Applies after you quit and reopen Open.", last: true)
         }
         OpenSettingsGroup("Tools") {
             OpenSettingsRow(root: root, id: "advanced/translate", title: "Translated-site prompts", help: "Show translation prompts again for this Profile.") { Button("Reset prompts") { root.advanced.resetTranslate() } }

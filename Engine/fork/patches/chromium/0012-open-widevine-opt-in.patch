@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/component_updater/registration.cc b/chrome/browser/component_updater/registration.cc
+index 9cf5a226c7f7482430f92df85b149c551f18a690..7e7d3af27a05a9cd3ce327878a3df4b4a009ab84 100644
+--- a/chrome/browser/component_updater/registration.cc
++++ b/chrome/browser/component_updater/registration.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/component_updater/registration.h"
+ 
++#include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+@@ -149,7 +150,13 @@
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+ 
+ #if BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
+-  RegisterWidevineCdmComponent(cus);
++  // Open: Widevine is off by default (no licence or VMP signature). The App
++  // passes --open-enable-widevine only when the user turns on DRM playback;
++  // then the component updater downloads and registers Google's CDM.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "open-enable-widevine")) {
++    RegisterWidevineCdmComponent(cus);
++  }
+ #endif  // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
+ 
+   RegisterSubresourceFilterComponent(cus);
