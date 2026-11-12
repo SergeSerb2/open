@@ -128,6 +128,8 @@ public enum SidebarIntent: Equatable, Sendable {
     /// Bottom-bar plus menu.
     case newTab
     case newSplitView
+    /// New Easel (plus menu, ⌃⇧E): handled by the App.
+    case newEasel
 }
 
 

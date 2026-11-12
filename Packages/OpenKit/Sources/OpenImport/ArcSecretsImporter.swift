@@ -87,7 +87,11 @@ public struct ArcSecretsImportReport: Sendable {
 @MainActor public final class ArcSecretsImporter {
     private let arcUserData: URL
     private let ledger: SecretsImportLedger
-    public init(arcUserData: URL, ledger: SecretsImportLedger) { self.arcUserData = arcUserData; self.ledger = ledger }
+    /// Other Chromium browsers import one chosen profile; Arc imports every mapped profile (nil).
+    private let onlyProfiles: Set<String>?
+    public init(arcUserData: URL, ledger: SecretsImportLedger, onlyProfiles: Set<String>? = nil) {
+        self.arcUserData = arcUserData; self.ledger = ledger; self.onlyProfiles = onlyProfiles
+    }
 
     public func run(key: [UInt8], consent: SecretsImportConsent, sinks: [String: SecretsImportSink]) async throws -> ArcSecretsImportReport {
         try await run(key: key, access: .user(consent), sinks: sinks)
@@ -101,13 +105,14 @@ public struct ArcSecretsImportReport: Sendable {
     /// Recovery verification only. Still accepts no source path, key or ciphertext.
     /// A ledger is a destination for counts, never a source of secret records.
     public static func runSyntheticFixture(sinks: [String: SecretsImportSink], ledger: SecretsImportLedger,
-                                           stopAfter: SecretsImportStep?, scenario: SyntheticSecretsScenario = .standard) async throws -> ArcSecretsImportReport {
-        try await runSyntheticFixture(SyntheticSecretsFixture(), sinks: sinks, ledger: ledger, stopAfter: stopAfter, scenario: scenario)
+                                           stopAfter: SecretsImportStep?, scenario: SyntheticSecretsScenario = .standard,
+                                           onlyProfiles: Set<String>? = nil) async throws -> ArcSecretsImportReport {
+        try await runSyntheticFixture(SyntheticSecretsFixture(), sinks: sinks, ledger: ledger, stopAfter: stopAfter, scenario: scenario, onlyProfiles: onlyProfiles)
     }
 
     private static func runSyntheticFixture(_ fixture: SyntheticSecretsFixture, sinks: [String: SecretsImportSink],
                                             ledger: SecretsImportLedger, stopAfter: SecretsImportStep? = nil,
-                                            scenario: SyntheticSecretsScenario = .standard) async throws -> ArcSecretsImportReport {
+                                            scenario: SyntheticSecretsScenario = .standard, onlyProfiles: Set<String>? = nil) async throws -> ArcSecretsImportReport {
         var password = Array("mock_password".utf8)
         defer { zeroSecretBytes(&password) }
         var key = deriveChromiumKey(passwordBytes: password)
@@ -115,13 +120,13 @@ public struct ArcSecretsImportReport: Sendable {
         defer { zeroSecretBytes(&key) }
         try fixture.createImportProfiles(key: key)
         try fixture.apply(scenario)
-        return try await ArcSecretsImporter(arcUserData: fixture.directory, ledger: ledger).run(
+        return try await ArcSecretsImporter(arcUserData: fixture.directory, ledger: ledger, onlyProfiles: onlyProfiles).run(
             key: key, access: .synthetic(fixture), sinks: sinks, stopAfter: stopAfter)
     }
 
     private func run(key: [UInt8], access: SecretsReadAccess, sinks: [String: SecretsImportSink],
                      stopAfter: SecretsImportStep? = nil) async throws -> ArcSecretsImportReport {
-        let directories = try profileDirectories()
+        let directories = try profileDirectories().filter { onlyProfiles?.contains($0) ?? true }
         var report = ArcSecretsImportReport()
         report.previousRunUnfinished = try ledger.unfinished != nil
         let mapped = directories.filter { sinks[$0] != nil }

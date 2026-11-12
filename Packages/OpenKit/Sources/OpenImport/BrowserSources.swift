@@ -17,6 +17,23 @@ public struct BrowserSourceDescriptor: Sendable, Hashable, Identifiable {
     /// Opera keeps its single profile at the data root, not in `Default`.
     public let profileAtRoot: Bool
 
+    /// The Keychain item that holds this browser's "Safe Storage" secret ("<Product> Safe Storage" / "<Product>").
+    /// Evidence: ArcCore "%s Safe Storage" (CS), Open's `probeChromiumKeychainPair`. Brave, Edge, Vivaldi, Opera and
+    /// Canary names are a GUESS from common importer tools (F3 §4.1); only the user's Keychain can confirm them.
+    public var keychainItem: (service: String, account: String)? {
+        let product: String
+        switch id {
+        case "chrome", "chrome-canary": product = "Chrome"
+        case "brave": product = "Brave"
+        case "edge": product = "Microsoft Edge"
+        case "vivaldi": product = "Vivaldi"
+        case "opera", "opera-gx": product = "Opera"
+        case "chromium": product = "Chromium"
+        default: return nil
+        }
+        return (product + " Safe Storage", product)
+    }
+
     public init(id: String, name: String, bundleID: String, family: BrowserFamily, dataRoot: String, profileAtRoot: Bool = false) {
         self.id = id; self.name = name; self.bundleID = bundleID; self.family = family
         self.dataRoot = dataRoot; self.profileAtRoot = profileAtRoot

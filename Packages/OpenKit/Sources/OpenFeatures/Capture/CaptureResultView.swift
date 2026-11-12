@@ -7,25 +7,28 @@ import OpenDesign
 @MainActor
 public final class CaptureResultView: NSView {
     public enum Action: String, CaseIterable, Sendable {
-        case copy, save, share, library, retake, delete
+        case copy, save, share, easel, library, retake, delete
         public var symbol: String {
             switch self {
             case .copy: "doc.on.doc"; case .save: "square.and.arrow.down"; case .share: "square.and.arrow.up"
+            case .easel: "scribble.variable"
             case .library: "photo.on.rectangle"; case .retake: "arrow.counterclockwise"; case .delete: "trash"
             }
         }
         public var title: String {
             switch self {
-            case .copy: "Copy"; case .save: "Save…"; case .share: "Share"
+            case .copy: "Copy"; case .save: "Save…"; case .share: "Share"; case .easel: "Add to Easel"
             case .library: "Show in Library"; case .retake: "Retake"; case .delete: "Delete"
             }
         }
     }
     /// The buttons a capture gets: Retake only for area captures (PG-6.5 "Action to retake
     /// capture."); an unsaved (incognito) capture offers Copy, Save…, and Share only (§4.6.1).
-    public static func actions(area: Bool, saved: Bool) -> [Action] {
+    /// `easel`: the App offers Capture → Easel (docs/re/easels.md; not for unsaved captures).
+    public static func actions(area: Bool, saved: Bool, easel: Bool = false) -> [Action] {
         Action.allCases.filter { action in
             switch action {
+            case .easel: easel && saved
             case .retake: area && saved
             case .library, .delete: saved
             default: true

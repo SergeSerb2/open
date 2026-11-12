@@ -30,7 +30,7 @@ Each command holds: a stable `id` (never rename a shipped id), `title`,
 the rest are alternate carriers, for example Go Back is Cmd+[ and Cmd+Left,
 Zoom In is Cmd++ and Cmd+=, Developer Tools is F12 and Cmd+Opt+I), `scope`,
 `isCustomizable`, `enabledKey`, and `aliases` (command-bar search phrases).
-Out-of-scope Arc commands (Easels, Notes, Arc Max/ChatGPT, Send to Dia,
+Out-of-scope Arc commands (Notes, Arc Max/ChatGPT, Send to Dia,
 account items) stay in the registry with `isReserved = true`. They get no menu
 item, and the conflict checker rejects any active command that takes their keys.
 
@@ -180,6 +180,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `blank-window` | Blank Window | Cmd+Ctrl+N | window | File |
 | `new-note` | New Note | Ctrl+Shift+N | window | File |
 | `new-note-in-split` | New Note (in Split) | Ctrl+Opt+N | window | File |
+| `new-easel` | New Easel | Ctrl+Shift+E | window | File |
 | `close-window` | Close Window | Cmd+Shift+W | window | File |
 | `archive-tab` | Archive Tab | Cmd+W | window | File |
 | `restore-last-closed-tab` | Restore Last Closed Tab | Cmd+Shift+T | window | File |
@@ -357,7 +358,6 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 Go to Tab 1–9 targets come from one model query, `BrowserModel.goToItemTargets(windowID:includeFavorites:ninthSelectsLast:)` (commandbar-completion §4.4.1): the focused Space's Profile Favorites (when "Include Favorites in ordering" is on, the default), then pinned, then Today in sidebar order; expanded folders give their visible children, a peeked folder its one visible child, collapsed folders and a collapsed pinned section nothing; a split counts once. Cmd+9 is the last item unless "Switch to ninth tab" is on (default off). The Tabs menu's numbered section and Go to Last Tab use the same list. `show-shortcuts-overlay` stays registered, disabled, with no handler: Arc shows no hints while Command is held (CC-39).
 
 Reserved (out-of-scope keys):
-- `reserved-new-easel` New Easel (reserved): Ctrl+Shift+E
 - `reserved-new-chatgpt-message` New ChatGPT Message (reserved): Cmd+Opt+G
 - `reserved-send-to-dia` Send to Dia (reserved): —
 - `reserved-view-easels-notes` View Easels & Notes (reserved): —
