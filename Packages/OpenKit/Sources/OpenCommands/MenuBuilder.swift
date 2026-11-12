@@ -377,7 +377,7 @@ public enum MenuBuilder {
         let menu = NSMenu(title: "Window")
         add(menu, ["minimize-window", "zoom-window"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["view-downloads", "view-library", "view-media", "view-boosts"], target: target, overrides: overrides)
+        add(menu, ["view-downloads", "view-library", "view-media", "view-boosts", "view-easels-notes"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["bring-all-to-front"], target: target, overrides: overrides)
         NSApp?.windowsMenu = menu
