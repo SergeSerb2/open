@@ -723,6 +723,12 @@ def context_menu_checks(factory, results, tmp, h):
                                   'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Tabs Below']
                 pinned_head = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
                                'Open in Split View', 'Duplicate', 'Move to ▸', '—']
+                # Pin, favourite and folder moves animate the outline; a row's menu is found by its
+                # on-screen position, so wait until the first row answers with a tab menu twice in a row.
+                def settled():
+                    one = items(today_ids[0])['items']
+                    return one[:1] == ['Copy Link'] and one == items(today_ids[0])['items']
+                wait(settled, timeout=5)
                 first, last = items(today_ids[0]), items(today_ids[-1])
                 try: share = items(today_ids[0], path='Share')
                 except RuntimeError as error: share = {'items': [], 'error': str(error), 'menu': first, 'tab': app.tab(today_ids[0])}
@@ -730,7 +736,7 @@ def context_menu_checks(factory, results, tmp, h):
                     'today': first['items'] == today_expected,
                     'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'],
                     'share_lists_services': len(share['items']) > 0,
-                    'move_to_current_checked': app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order').get('checked') is True,
+                    'move_to_current_checked': (h._try(lambda: app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order')) or {}).get('checked') is True,
                     'today_silent_mute_disabled': 'Mute' in first['disabled'],
                     'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
                     'favorite': items(favorite)['items'] == pinned_head + ['Remove Favorite'],
