@@ -58,6 +58,22 @@ def run(factory, results, tmp, h):
             and buttons['network']['label'] == 'Toggle Network Panel',
             url=on.get('url'), frame=frame, page=page, buttons=sorted(buttons))
 
+        # Pane 2: the sidebar marks a Developer Mode site. A second tab on "localhost" (another site) stays plain.
+        other = h.new_tab(app, base.replace('127.0.0.1', 'localhost') + '/b')
+        app.call('select', tab=tab)
+        def rows(): return {r['url']: r for r in state().get('rows', [])}
+        assert h.wait_until(lambda: rows().get(base + '/a', {}).get('outline') is True, timeout=10, step=.05), state().get('rows')
+        marked = rows(); dev, plain = marked[base + '/a'], marked[base.replace('127.0.0.1', 'localhost') + '/b']
+        port = base.rsplit(':', 1)[1]
+        row('sidebar_marks_developer_site', dev['subtitle'] == '127.0.0.1:' + port and dev['titleBaseline'] == 18 and dev['outline'] is True
+            and plain['subtitle'] == '' and plain['titleBaseline'] == 25 and plain['outline'] is False, dev=dev, plain=plain)
+        app.call('select', tab=other)
+        assert h.wait_until(lambda: rows().get(base + '/a', {}).get('outline') is False, timeout=10, step=.05), state().get('rows')
+        moved = rows()
+        row('outline_only_on_current_row', moved[base + '/a']['subtitle'] == '127.0.0.1:' + port
+            and moved[base.replace('127.0.0.1', 'localhost') + '/b']['outline'] is False, rows=moved)
+        app.call('select', tab=tab)
+
         app.call('developer-panel', action='press', button='network')
         assert h.wait_until(lambda: state().get('networkPressed'), timeout=10, step=.05), state()
         app.call('navigate', tab=tab, url=base + '/a')
@@ -96,6 +112,9 @@ def run(factory, results, tmp, h):
         app.call('command', id='toggle-developer-mode')
         assert h.wait_until(lambda: not state().get('shown'), timeout=10, step=.05), state()
         gone = state()
+        unmarked = {r['url']: r for r in gone.get('rows', [])}.get(base + '/b', {})
+        row('sidebar_unmarks_after_off', unmarked.get('subtitle') == '' and unmarked.get('titleBaseline') == 25 and unmarked.get('outline') is False,
+            row=unmarked)
         row('developer_mode_off_removes_bar_and_list', gone.get('shown') is False and 'networkRows' not in gone
             and gone.get('logs', {}).get('shown') == [], state={k: gone.get(k) for k in ('shown', 'logs')})
     finally:
