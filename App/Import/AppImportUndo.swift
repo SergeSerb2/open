@@ -157,8 +157,10 @@ final class AppImportUndo {
   private func applyModel(undoing: Bool) {
     if let model = targetModel {
       captureModel(model) {
-        if undoing { if modelUndo.canUndo { modelUndo.undo() } }
-        else if modelUndo.canRedo { modelUndo.redo() }
+        // One import is one Undo step, even when it merged the sidebar more than once
+        // (Firefox: bookmarks, then open tabs). This manager belongs to this import only.
+        if undoing { while modelUndo.canUndo { modelUndo.undo() } }
+        else { while modelUndo.canRedo { modelUndo.redo() } }
       }
     }
     app?.scheduleSave()

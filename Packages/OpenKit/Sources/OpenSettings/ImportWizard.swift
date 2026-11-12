@@ -228,6 +228,8 @@ import OpenImport
         if let count = result.bookmarks { values["Bookmarks"] = count }
         if let count = result.historyVisits { values["History"] = count }
         if let count = result.passwords { values["Passwords"] = count }
+        if let count = result.openTabs { values["Open tabs"] = count }
+        plan.openTabs = (result.openTabs ?? 0) > 0
         counts = values
         if (result.passwords ?? 0) == 0 || !canImportBrowserPasswords { plan.passwords = false }
         else if family == .firefox && !plan.passwords && plan.primaryPassword.isEmpty && !result.needsPrimaryPassword { plan.passwords = true }
@@ -293,7 +295,13 @@ import OpenImport
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public static let browserReportCategories=["Bookmarks","Open tabs","History","Search settings"]
     public static let otherBrowserReportCategories=["Bookmarks","History","Passwords"]
-    public var browserCategories: [String] { browserFamily == .firefox || browserFamily == .safari ? Self.otherBrowserReportCategories : Self.browserReportCategories }
+    public var browserCategories: [String] {
+        switch browserFamily {
+        case .firefox: Self.otherBrowserReportCategories + ["Open tabs"]
+        case .safari: Self.otherBrowserReportCategories
+        default: Self.browserReportCategories
+        }
+    }
     // MARK: Extra Arc data types (ArcImportProviders; EZ adds Easels)
     public private(set) var providerCounts: [String: Int] = [:]
     public var providers: [any ArcImportDataProvider] { ArcImportProviders.all }
@@ -428,6 +436,7 @@ public struct ImportWizard: View {
                         browserOption("Search settings", \.searchSettings)
                         browserOption("Passwords and cookies", \.secretsRequested).disabled(!model.canImportBrowserSecrets)
                     } else { browserOption("Passwords", \.passwords).disabled(!model.canImportBrowserPasswords || (model.familyCounts?.passwords ?? 0) == 0) }
+                    if model.browserFamily == .firefox { browserOption("Open tabs", \.openTabs).disabled((model.familyCounts?.openTabs ?? 0) == 0) }
                     if model.needsPrimaryPassword && model.plan.passwords {
                         SecureField("Firefox Primary Password", text: Binding(get: { model.plan.primaryPassword }, set: { model.plan.primaryPassword = $0 }))
                             .frame(maxWidth: 320).accessibilityIdentifier("import-primary-password")

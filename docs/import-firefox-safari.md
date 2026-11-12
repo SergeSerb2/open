@@ -12,8 +12,9 @@ Settings ▸ Import ▸ Firefox (or Zen, LibreWolf, Floorp) or Safari. The sourc
 | Search engine | not imported | not imported |
 | Form data | not offered in 1.0 (lead 03:30). Firefox form history is free field/value autocomplete; the engine writes only structured addresses (`importAddresses`), so it would need a new engine patch. `FirefoxFormHistoryReader` exists for a later release | — |
 | Cookies | no (lead ruling 2) | no (not readable) |
+| Open tabs (I-6) | the last session, `sessionstore-backups/recovery.jsonlz4` (or `sessionstore.jsonlz4`, the newer of the two): the current entry of each tab. Tabs pinned in Firefox stay pinned; the others become Today tabs in the target Space (GUESS — capture pending; Arc names `onboarding_imported_pinned_tabs`). `about:` and other non-web tabs are skipped | no (Safari's session is in its container; `CloudTabs.db` needs Full Disk Access) |
 
-Bookmarks become one pinned folder "Imported from <Browser>" in the focused Space (Arc parity, F3 §5), built by `BrowserBookmarksImport.sourceModel`. History goes to that Space's Profile. Passwords go to the same Profile through the engine login sink. Undo (Edit ▸ Undo "Import from <Browser>") removes the bookmarks and the history; imported passwords stay, as for the Arc import.
+Bookmarks become one pinned folder "Imported from <Browser>" in the focused Space (Arc parity, F3 §5), built by `BrowserBookmarksImport.sourceModel`. History goes to that Space's Profile. Passwords go to the same Profile through the engine login sink. Undo (Edit ▸ Undo "Import from <Browser>") removes the bookmarks, the open tabs and the history in one step; imported passwords stay, as for the Arc import.
 
 ## Access
 
