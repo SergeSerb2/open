@@ -1,0 +1,35 @@
+diff --git a/cef/tools/make_distrib.py b/cef/tools/make_distrib.py
+--- a/cef/tools/make_distrib.py
++++ b/cef/tools/make_distrib.py
+@@ -613,6 +613,11 @@
+       metavar='DIR',
+       help='output directory [required]')
+   parser.add_option(
++      '--release-build-dir',
++      dest='releasebuilddir',
++      metavar='DIR',
++      help='release input directory (defaults to out/Release plus architecture)')
++  parser.add_option(
+       '--distrib-subdir',
+       dest='distribsubdir',
+       help='name of the subdirectory for the distribution',
+@@ -753,6 +758,8 @@
+ def validate_options(options, platform):
+   if options.outputdir is None:
+     return '--output-dir is required.'
++  if options.releasebuilddir and not os.path.isdir(options.releasebuilddir):
++    return '--release-build-dir must name an existing directory.'
+   if options.minimal and options.client:
+     return 'Cannot specify both --minimal and --client.'
+   if options.x64build + options.armbuild + options.arm64build > 1:
+@@ -920,7 +927,9 @@
+   # Determine the build directory paths.
+   out_dir = os.path.join(src_dir, 'out')
+   build_dir_debug = os.path.join(out_dir, 'Debug' + build_dir_suffix)
+-  build_dir_release = os.path.join(out_dir, 'Release' + build_dir_suffix)
++  build_dir_release = (os.path.abspath(options.releasebuilddir)
++                       if options.releasebuilddir else
++                       os.path.join(out_dir, 'Release' + build_dir_suffix))
+ 
+   if not mode.endswith('symbols'):
+     # Transfer the about_credits.html file.

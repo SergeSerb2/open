@@ -92,6 +92,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var welcomeHosts: [ItemID: WelcomeContentHost] = [:]
   /// Native Note pages (`open://note/<uuid>`), one per shown Note tab.
   var noteHosts: [ItemID: NoteContentHost] = [:]
+  /// The last Export Note… destination (automation reads it).
+  var lastNoteExport: String?
   var easelHosts: [ItemID: EaselContentHost] = [:]
   /// Easel row sheets (save as web page, delete) and the last export path (automation).
   var easelSavePanel: NSSavePanel?
@@ -812,7 +814,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
-           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState, .newEasel, .exportEasel, .deleteEasel: return false
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState, .newEasel, .exportEasel, .deleteEasel, .exportNote, .deleteNote: return false
       case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
@@ -842,6 +844,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .newEasel: return EaselTab.create(in: self) != nil
     case .exportEasel(let id): return exportEasel(tabID: id)
     case .deleteEasel(let id): return confirmDeleteEasel(tabID: id)
+    case .exportNote(let id): return exportNote(tabID: id)
+    case .deleteNote(let id): return confirmDeleteNote(tabID: id)
+    case .rename(let id, let title) where model.tab(id: id).map({ NoteTab.matches($0.url) }) == true:
+      return renameNote(tabID: id, title: title)
+    case .copyLink(let id, _) where model.tab(id: id).map({ NoteTab.matches($0.url) }) == true:
+      return false   // a Note has no shareable address (the row item is disabled)
     case .rename(let id, let title) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
       return renameEasel(tabID: id, title: title)
     case .close(let id), .unloadTab(let id):

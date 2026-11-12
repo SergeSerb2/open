@@ -17,6 +17,14 @@ enum NoteTab {
   /// `split`: New Note (in Split) (⌃⌥N) puts it beside the current page.
   @discardableResult
   static func create(in factory: EngineWebContentHostFactory, split: Bool) -> ItemID? {
+    // A Little Open window has no sidebar: the Note goes to the front browser window
+    // (GUESS: Arc's Little Arc behaviour for New Note is not captured).
+    if factory.littleOpenController != nil || factory.standaloneSurface != nil {
+      guard let main = factory.app.frontStandardWindowController, let target = factory.app.hostFactories[main.windowID],
+        target !== factory else { return nil }
+      main.window?.makeKeyAndOrderFront(nil)
+      return create(in: target, split: split)
+    }
     guard !factory.isIncognito, let space = factory.focusedSpace else { return nil }
     let model = factory.model
     let current = factory.selectedTab

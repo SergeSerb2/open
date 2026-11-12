@@ -62,6 +62,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       controller?.view.removeFromSuperview()
       let bar = CommandBarController(engine: engine)
       bar.delegate = self
+      // Footer "Learn more about your data on Open" (LEAD 07:15): the repo page until a public site exists.
+      bar.privacyURL = AppCommand.privacyURL
       extensionSource.onRowsChanged = { [weak bar] id in bar?.refreshExtensionSuggestions(extensionID: id) }
       bar.extensionIcon = { [weak self] id in
         self?.factory.focusedBrowser?.extensionActions.first { $0.extensionIdentifier == id }?.icon
@@ -112,12 +114,17 @@ final class AppCommandBarSession: CommandBarDelegate {
     openedByUser = userInitiated; bar.closesOnModeKey = userInitiated
     bar.view.sidebarMaxX = factory.windowState.sidebarMode == .anchored && !windowController.sidebar.isHidden
       ? windowController.sidebar.convert(windowController.sidebar.bounds, to: bar.view).maxX : nil
-    bar.present(CommandBarRequest(mode: mode, profileID: profile.id, spaceID: factory.focusedSpace?.id,
+    var request = CommandBarRequest(mode: mode, profileID: profile.id, spaceID: factory.focusedSpace?.id,
       currentTabID: pinned?.id ?? (peek ? nil : factory.selectedTab?.id),
       currentTabURL: pinned?.pinnedURL ?? (peek ? factory.selectedContent?.url : factory.selectedTab?.url),
       currentTabTitle: pinned?.displayTitle ?? (peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle),
-      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID),
-      presentation: presentation)
+      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID)
+    // "Undo <name>" / "Redo <name>" (Arc "Action to undo/redo an action by name"): the App's model undo stack.
+    let undo = factory.app.undoManager
+    // An unnamed step ("" — most model edits register no name) still offers plain "Undo"/"Redo".
+    request.undoActionName = undo.canUndo ? undo.undoActionName : nil
+    request.redoActionName = undo.canRedo ? undo.redoActionName : nil
+    bar.present(request, presentation: presentation)
   }
   func contextDidChange() {
     guard isPresented else { return }
@@ -150,7 +157,17 @@ final class AppCommandBarSession: CommandBarDelegate {
       if modifiers.contains(.option), !modifiers.contains(.command), factory.openFromCommandBarInSplit(url) { break }
       factory.navigateFromCommandBar(url, current: destination == .currentTab, background: modifiers.contains(.command))
     case .switchToTab(let id, let space): factory.selectTabForCommand(id, spaceID: space)
-    case .runAction(let id, let space): factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)
+    case .runAction(let id, let space):
+      if let url = NewDocumentActions.url(for: id) {
+        // "New Google Doc" and siblings (Arc's new-document table): a new foreground tab.
+        factory.navigateFromCommandBar(url, current: false, background: false)
+      } else if id == NewDocumentActions.undoByNameID {
+        factory.app.undoManager.undo()
+      } else if id == NewDocumentActions.redoByNameID {
+        factory.app.undoManager.redo()
+      } else {
+        factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)
+      }
     case .copy(let value):
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
       factory.controller?.toasts.show(ToastContent(title: "Copied"))
