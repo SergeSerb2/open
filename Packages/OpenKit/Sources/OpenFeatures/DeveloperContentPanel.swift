@@ -2,14 +2,52 @@ import AppKit
 import OpenModel
 import OpenDesign
 
-/// Developer Mode's content panel (Arc `ContentPanel`): a bar over the page for a Developer Mode site.
-/// Evidence: capture session 3 `s7/12-devoff/d-devmode-on` (a 40 pt bar at the top of the content card; an "i" at
-/// x 22, the full URL in a monospaced face from x 41.5; four right groups at 28 pt pitch: link | window screenshot,
-/// camera | console, network, inspect | extensions, split view), and Arc strings `ContentPanel/ContentPanelView.swift`
-/// "Developer console button", "Toggle Network Panel", "Inspect element button", "Extensions button",
-/// "Site settings button" / "View Site Settings". Hover, pressed and light-theme looks: GUESS — capture PB3-a.
+/// Developer Mode's toolbar (Arc `ContentPanel`): a bar over the page of a Developer Mode site.
+/// Arc adds only this toolbar, the sidebar row outline and the host subtitle; Console, Network and Inspect open
+/// the standard Chromium DevTools (capture PB3-a, C-report-s6.md:247 and :273).
+///
+/// Measured from `s9-queue/m1/arc/v2/44-pb3a-probe/d-0.png` (light) and `d-2-dark.png` (dark), 2x:
+/// - 40 pt high, with a 1 pt line at its bottom edge; 45° stripes of two close tones, 22.5 pt wide each.
+/// - Light: stripes #EFF1F5 / #F4F5F8, glyphs #212AFB, URL text #242526, bottom line #D8D9DD.
+/// - Dark: stripes #3E43CA / #4247CB, glyphs #ECEDFE, URL text #D8D9F4, bottom line #5155CF.
+/// - Controls, left to right (Arc's AX descriptions, 28 × 28 pt): Site Settings ("i") · the full URL in a
+///   monospaced face · Copy Link | Capture Window · Capture | Toggle Console · Toggle Network Panel ·
+///   Inspect Element | Extensions Menu · Split View Menu, with thin dividers between the groups.
+/// A themed Space tints the bar (capture s3 `s7/12-devoff/d-devmode-on`: #76859C on a blue-grey Space); the
+/// tint rule is a GUESS: the Space palette's background, with the ink chosen by its brightness.
 public enum DeveloperPanelAction: String, CaseIterable, Sendable {
-    case siteSettings, copyURL, windowScreenshot, capture, console, network, inspect, extensions, splitMenu
+    case siteSettings, copyLink, captureWindow, capture, console, network, inspect, extensionsMenu, splitMenu
+
+    /// Arc's accessibility description of the control.
+    public var title: String {
+        switch self {
+        case .siteSettings: "Site Settings"
+        case .copyLink: "Copy Link"
+        case .captureWindow: "Capture Window"
+        case .capture: "Capture"
+        case .console: "Toggle Console"
+        case .network: "Toggle Network Panel"
+        case .inspect: "Inspect Element"
+        case .extensionsMenu: "Extensions Menu"
+        case .splitMenu: "Split View Menu"
+        }
+    }
+    /// Our own glyphs (SF Symbols); no Arc asset.
+    var symbol: String {
+        switch self {
+        case .siteSettings: "info"
+        case .copyLink: "link"
+        case .captureWindow: "photo.on.rectangle"
+        case .capture: "camera"
+        case .console: "apple.terminal"
+        case .network: "globe"
+        case .inspect: "scope"
+        case .extensionsMenu: "puzzlepiece.extension"
+        case .splitMenu: "square.split.2x1"
+        }
+    }
+    /// The three controls that toggle DevTools on a panel.
+    public var isDevToolsToggle: Bool { self == .console || self == .network || self == .inspect }
 }
 
 public enum DeveloperPanelMetrics {
@@ -19,49 +57,58 @@ public enum DeveloperPanelMetrics {
     static let buttonSize: CGFloat = 28
     /// Button centers measured from the card's right edge, in group order.
     static let rightCenters: [(DeveloperPanelAction, CGFloat)] = [
-        (.splitMenu, 19), (.extensions, 46.7), (.inspect, 91.5), (.network, 119.3), (.console, 147.3),
-        (.capture, 191.7), (.windowScreenshot, 219.7), (.copyURL, 275.5),
+        (.splitMenu, 19), (.extensionsMenu, 46.7), (.inspect, 91.5), (.network, 119.3), (.console, 147.3),
+        (.capture, 191.7), (.captureWindow, 219.7), (.copyLink, 275.5),
     ]
-    /// Thin separators between the groups (midpoints of the measured gaps).
+    /// Thin dividers between the groups (midpoints of the measured gaps).
     static let separators: [CGFloat] = [69.1, 169.5, 247.6]
+    /// Horizontal width of one stripe band; the stripes run at 45°.
+    static let stripeBand: CGFloat = 22.5
+}
+
+/// The bar's colours for one appearance.
+struct DeveloperPanelPalette {
+    var stripeA: NSColor, stripeB: NSColor, glyph: NSColor, text: NSColor, line: NSColor
+    static func hex(_ value: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255, blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
+    static let light = DeveloperPanelPalette(stripeA: hex(0xEFF1F5), stripeB: hex(0xF4F5F8), glyph: hex(0x212AFB), text: hex(0x242526), line: hex(0xD8D9DD))
+    static let dark = DeveloperPanelPalette(stripeA: hex(0x3E43CA), stripeB: hex(0x4247CB), glyph: hex(0xECEDFE), text: hex(0xD8D9F4), line: hex(0x5155CF))
+    /// GUESS: a themed Space's bar. The second stripe is the fill moved 3 % toward white, as in the capture.
+    static func tinted(_ fill: NSColor) -> DeveloperPanelPalette {
+        let rgb = fill.usingColorSpace(.sRGB) ?? fill
+        let bright = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent >= 0.62
+        let ink = bright ? NSColor(white: 0, alpha: 0.72) : NSColor(white: 1, alpha: 0.92)
+        return DeveloperPanelPalette(stripeA: rgb, stripeB: rgb.blended(withFraction: 0.03, of: .white) ?? rgb, glyph: ink, text: ink,
+                                     line: (bright ? rgb.blended(withFraction: 0.10, of: .black) : rgb.blended(withFraction: 0.10, of: .white)) ?? rgb)
+    }
 }
 
 @MainActor
 public final class DeveloperContentPanelView: NSView {
     public var onAction: ((DeveloperPanelAction, NSView) -> Void)?
     public var urlString = "" { didSet { if urlString != oldValue { urlLabel.stringValue = urlString; needsLayout = true } } }
-    /// The bar's fill in light and dark appearance (the Space's palette); the ink follows its brightness.
-    public var fills: (light: NSColor, dark: NSColor) = (.white, NSColor(white: 0.16, alpha: 1)) { didSet { applyColors() } }
-    private var fill: NSColor { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? fills.dark : fills.light }
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
-    /// The network button shows its pressed state while the list is open.
-    public var networkShown = false { didSet { if networkShown != oldValue { buttons[.network]?.state = networkShown ? .on : .off; applyColors() } } }
+    /// A themed Space's fills (light, dark); nil = the default theme, drawn with Arc's measured colours.
+    public var themeFills: (light: NSColor, dark: NSColor)? { didSet { applyColors() } }
+    /// The DevTools toggle whose panel is open; its button is drawn pressed (capture `d-network-w`).
+    public var activePanel: DeveloperPanelAction? { didSet { if activePanel != oldValue { applyColors() } } }
     private let urlLabel = NSTextField(labelWithString: "")
     private var buttons: [DeveloperPanelAction: NSButton] = [:]
-    private var separatorLayers: [CALayer] = []
 
     public override init(frame: NSRect) {
-        super.init(frame: frame); wantsLayer = true
+        super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay
         urlLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         urlLabel.lineBreakMode = .byTruncatingMiddle; urlLabel.cell?.usesSingleLineMode = true
         urlLabel.setAccessibilityLabel("Page URL")
         addSubview(urlLabel)
-        let specs: [(DeveloperPanelAction, String, String)] = [
-            (.siteSettings, "info", "View Site Settings"), (.copyURL, "link", "Copy Current URL"),
-            (.windowScreenshot, "photo.on.rectangle", "Capture Window Screenshot"), (.capture, "camera", "Capture"),
-            (.console, "apple.terminal", "Developer Console"), (.network, "globe", "Toggle Network Panel"),
-            (.inspect, "scope", "Inspect Element"), (.extensions, "puzzlepiece.extension", "Extensions"),
-            (.splitMenu, "square.split.2x1", "Split View Menu"),
-        ]
-        for (action, symbol, title) in specs {
-            let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: title) ?? NSImage(), target: self, action: #selector(press(_:)))
-            button.isBordered = false; button.bezelStyle = .regularSquare; button.imagePosition = .imageOnly
-            button.setButtonType(action == .network ? .pushOnPushOff : .momentaryChange)
+        for action in DeveloperPanelAction.allCases {
+            let button = NSButton(image: NSImage(systemSymbolName: action.symbol, accessibilityDescription: action.title) ?? NSImage(), target: self, action: #selector(press(_:)))
+            button.isBordered = false; button.bezelStyle = .regularSquare; button.imagePosition = .imageOnly; button.wantsLayer = true
+            button.setButtonType(.momentaryChange); button.layer?.cornerRadius = 6
             button.symbolConfiguration = .init(pointSize: action == .siteSettings ? 13 : 15, weight: .regular)
-            button.toolTip = title; button.setAccessibilityLabel(title); button.identifier = .init("developer-" + action.rawValue)
+            button.toolTip = action.title; button.setAccessibilityLabel(action.title); button.identifier = .init("developer-" + action.rawValue)
             addSubview(button); buttons[action] = button
         }
-        for _ in DeveloperPanelMetrics.separators { let line = CALayer(); layer?.addSublayer(line); separatorLayers.append(line) }
         setAccessibilityElement(true); setAccessibilityRole(.toolbar); setAccessibilityLabel("Developer Mode")
         applyColors()
     }
@@ -73,204 +120,66 @@ public final class DeveloperContentPanelView: NSView {
     }
     public func button(_ action: DeveloperPanelAction) -> NSView? { buttons[action] }
 
-    private var ink: NSColor {
-        let rgb = fill.usingColorSpace(.sRGB) ?? fill
-        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-        return luminance < 0.62 ? NSColor(white: 1, alpha: 0.92) : NSColor(white: 0, alpha: 0.62)
+    private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
+    private var palette: DeveloperPanelPalette {
+        if let themeFills { return .tinted(isDark ? themeFills.dark : themeFills.light) }
+        return isDark ? .dark : .light
     }
+    /// The colours in use, as sRGB hex strings (verification).
+    public var paletteDescription: [String: String] {
+        func hex(_ color: NSColor) -> String {
+            let c = color.usingColorSpace(.sRGB) ?? color
+            return String(format: "#%02X%02X%02X", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()), Int((c.blueComponent * 255).rounded()))
+        }
+        let p = palette
+        return ["stripeA": hex(p.stripeA), "stripeB": hex(p.stripeB), "glyph": hex(p.glyph), "text": hex(p.text), "line": hex(p.line)]
+    }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
+
     private func applyColors() {
-        layer?.backgroundColor = fill.cgColor
-        let ink = ink
-        urlLabel.textColor = ink
-        for (action, button) in buttons { button.contentTintColor = action == .network && networkShown ? ink : ink.withAlphaComponent(ink.alphaComponent * 0.95) }
-        buttons[.network]?.layer?.backgroundColor = networkShown ? ink.withAlphaComponent(0.16).cgColor : nil
-        buttons[.network]?.layer?.cornerRadius = 6
-        for line in separatorLayers { line.backgroundColor = ink.withAlphaComponent(0.14).cgColor }
+        let p = palette
+        urlLabel.textColor = p.text
+        for (action, button) in buttons {
+            button.contentTintColor = p.glyph
+            button.layer?.backgroundColor = action == activePanel ? p.glyph.withAlphaComponent(0.14).cgColor : nil
+        }
+        needsDisplay = true
+    }
+
+    public override var isFlipped: Bool { true }
+    /// The fill and its 45° stripes (down to the right), one band every 22.5 pt along x.
+    public override func draw(_ dirtyRect: NSRect) {
+        let p = palette
+        p.stripeA.setFill(); bounds.fill()
+        p.stripeB.setFill()
+        let band = DeveloperPanelMetrics.stripeBand, h = bounds.height
+        var x = -h - band
+        while x < bounds.width {
+            let stripe = NSBezierPath()
+            stripe.move(to: CGPoint(x: x, y: 0)); stripe.line(to: CGPoint(x: x + band, y: 0))
+            stripe.line(to: CGPoint(x: x + band + h, y: h)); stripe.line(to: CGPoint(x: x + h, y: h)); stripe.close()
+            stripe.fill()
+            x += 2 * band
+        }
+        // Group dividers and the 1 pt line at the bottom edge (the view is flipped: maxY is the bottom).
+        p.glyph.withAlphaComponent(0.16).setFill()
+        for fromRight in DeveloperPanelMetrics.separators {
+            CGRect(x: bounds.width - fromRight, y: h / 2 - 10, width: 1, height: 20).fill(using: .sourceOver)
+        }
+        p.line.setFill(); CGRect(x: 0, y: h - 1, width: bounds.width, height: 1).fill()
     }
 
     public override func layout() {
         super.layout()
         let w = bounds.width, mid = bounds.height / 2, size = DeveloperPanelMetrics.buttonSize
-        buttons[.network]?.wantsLayer = true
         buttons[.siteSettings]?.frame = CGRect(x: DeveloperPanelMetrics.infoCenterX - size / 2, y: mid - size / 2, width: size, height: size)
         var leftmostRight = w
         for (action, fromRight) in DeveloperPanelMetrics.rightCenters {
             let frame = CGRect(x: w - fromRight - size / 2, y: mid - size / 2, width: size, height: size)
             buttons[action]?.frame = frame; leftmostRight = min(leftmostRight, frame.minX)
         }
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        for (line, fromRight) in zip(separatorLayers, DeveloperPanelMetrics.separators) {
-            line.frame = CGRect(x: w - fromRight, y: mid - 10, width: 1, height: 20)
-        }
-        CATransaction.commit()
+        needsDisplay = true
         let urlWidth = max(0, leftmostRight - 12 - DeveloperPanelMetrics.urlX)
         urlLabel.frame = CGRect(x: DeveloperPanelMetrics.urlX, y: mid - 8, width: urlWidth, height: 16)
     }
 }
-
-// MARK: - Network list
-
-/// Requests of one page, from DevTools protocol `Network.*` events. Bounded; the oldest entries drop first.
-@MainActor
-public final class NetworkLog {
-    public struct Entry: Equatable, Sendable {
-        public var id: String
-        public var url: String
-        public var method: String
-        public var type: String
-        public var status: Int?
-        public var size: Int?
-        public var start: Double
-        public var end: Double?
-        public var failed: String?
-        public var name: String { URL(string: url).map { $0.lastPathComponent.isEmpty || $0.path == "/" ? ($0.host() ?? url) : $0.lastPathComponent } ?? url }
-        public var durationMS: Double? { end.map { max(0, ($0 - start) * 1000) } }
-    }
-    /// At most this many requests per page; a URL is cut at 2,048 characters.
-    public static let maxEntries = 1_000
-    public static let maxURLLength = 2_048
-    public private(set) var entries: [Entry] = []
-    private var index: [String: Int] = [:]
-    /// The top frame's ID, learnt from `Page.frameNavigated` without a parent.
-    private var mainFrameID: String?
-    public var onChange: (() -> Void)?
-    public init() {}
-
-    public func clear() { entries.removeAll(); index.removeAll(); onChange?() }
-
-    /// One DevTools protocol event. Unknown methods are ignored.
-    public func handle(_ method: String, _ p: [String: Any]) {
-        switch method {
-        case "Page.frameNavigated":
-            if let frame = p["frame"] as? [String: Any], frame["parentId"] == nil { mainFrameID = frame["id"] as? String }
-        case "Network.requestWillBeSent":
-            guard let id = p["requestId"] as? String, let request = p["request"] as? [String: Any],
-                  let url = request["url"] as? String else { return }
-            // A new top-level document starts a new list (DevTools' default, "Preserve log" off). Chromium sends the
-            // document request before `Page.frameNavigated`, so the clear happens here: a navigation request
-            // (requestId == loaderId) of type Document in the top frame, not a redirect hop of the same request.
-            if (p["type"] as? String) == "Document", id == (p["loaderId"] as? String), p["redirectResponse"] == nil,
-               mainFrameID == nil || (p["frameId"] as? String) == mainFrameID {
-                entries.removeAll(); index.removeAll()
-            }
-            let entry = Entry(id: id, url: String(url.prefix(Self.maxURLLength)), method: (request["method"] as? String) ?? "GET",
-                              type: (p["type"] as? String) ?? "Other", start: (p["timestamp"] as? Double) ?? 0)
-            if let i = index[id] { entries[i] = entry } // a redirect reuses the request ID
-            else {
-                if entries.count >= Self.maxEntries {
-                    entries.removeFirst(entries.count - Self.maxEntries + 1)
-                    index = Dictionary(uniqueKeysWithValues: entries.enumerated().map { ($1.id, $0) })
-                }
-                index[id] = entries.count; entries.append(entry)
-            }
-            onChange?()
-        case "Network.responseReceived":
-            guard let id = p["requestId"] as? String, let i = index[id], let response = p["response"] as? [String: Any] else { return }
-            entries[i].status = (response["status"] as? NSNumber)?.intValue
-            if let type = p["type"] as? String { entries[i].type = type }
-            onChange?()
-        case "Network.loadingFinished":
-            guard let id = p["requestId"] as? String, let i = index[id] else { return }
-            entries[i].size = (p["encodedDataLength"] as? NSNumber)?.intValue
-            entries[i].end = p["timestamp"] as? Double
-            onChange?()
-        case "Network.loadingFailed":
-            guard let id = p["requestId"] as? String, let i = index[id] else { return }
-            entries[i].failed = (p["canceled"] as? Bool) == true ? "(canceled)" : String(((p["errorText"] as? String) ?? "(failed)").prefix(120))
-            entries[i].end = p["timestamp"] as? Double
-            onChange?()
-        default: return
-        }
-    }
-
-    public var summary: String {
-        let bytes = entries.compactMap(\.size).reduce(0, +)
-        let count = entries.count == 1 ? "1 request" : "\(entries.count) requests"
-        return count + " · " + ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) + " transferred"
-    }
-}
-
-/// The network list docked under the page (GUESS — capture PB3-a: placement, height and columns).
-@MainActor
-public final class NetworkListView: NSView, NSTableViewDataSource, NSTableViewDelegate {
-    public static let height: CGFloat = 220
-    public var log: NetworkLog? { didSet { oldValue?.onChange = nil; log?.onChange = { [weak self] in self?.reload() }; reload() } }
-    public var onClose: (() -> Void)?
-    private let table = NSTableView()
-    private let scroll = NSScrollView()
-    private let title = NSTextField(labelWithString: "Network")
-    private let summary = NSTextField(labelWithString: "")
-    private let clearButton = NSButton(title: "Clear", target: nil, action: nil)
-    private let closeButton = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Network Panel") ?? NSImage(), target: nil, action: nil)
-    private let divider = NSBox()
-    static let columns: [(String, String, CGFloat)] = [("name", "Name", 260), ("status", "Status", 60), ("method", "Method", 60),
-                                                       ("type", "Type", 90), ("size", "Size", 80), ("time", "Time", 70)]
-
-    public override init(frame: NSRect) {
-        super.init(frame: frame); wantsLayer = true
-        divider.boxType = .separator; addSubview(divider)
-        title.font = .systemFont(ofSize: 12, weight: .semibold); addSubview(title)
-        summary.font = .systemFont(ofSize: 11); summary.textColor = .secondaryLabelColor; addSubview(summary)
-        clearButton.bezelStyle = .accessoryBarAction; clearButton.controlSize = .small; clearButton.target = self; clearButton.action = #selector(clearList)
-        clearButton.identifier = .init("developer-network-clear"); addSubview(clearButton)
-        closeButton.isBordered = false; closeButton.target = self; closeButton.action = #selector(close)
-        closeButton.identifier = .init("developer-network-close"); addSubview(closeButton)
-        for (id, name, width) in Self.columns {
-            let column = NSTableColumn(identifier: .init(id)); column.title = name; column.width = width; column.minWidth = 40
-            table.addTableColumn(column)
-        }
-        table.style = .plain; table.usesAlternatingRowBackgroundColors = true; table.rowHeight = 20
-        table.dataSource = self; table.delegate = self; table.allowsColumnReordering = false
-        table.setAccessibilityLabel("Network requests")
-        scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true; scroll.borderType = .noBorder
-        addSubview(scroll)
-        setAccessibilityElement(true); setAccessibilityRole(.group); setAccessibilityLabel("Network Panel")
-    }
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    public override var wantsUpdateLayer: Bool { true }
-    /// Dynamic colours resolve for the current appearance (a CGColor taken once stays light).
-    public override func updateLayer() { layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor }
-    @objc private func clearList() { log?.clear() }
-    @objc private func close() { onClose?() }
-    private func reload() {
-        summary.stringValue = log?.summary ?? ""
-        table.reloadData()
-        if let count = log?.entries.count, count > 0 { table.scrollRowToVisible(count - 1) }
-    }
-    public var rowCount: Int { log?.entries.count ?? 0 }
-
-    public override func layout() {
-        super.layout()
-        let w = bounds.width, h = bounds.height
-        divider.frame = CGRect(x: 0, y: h - 1, width: w, height: 1)
-        title.frame = CGRect(x: 12, y: h - 26, width: 70, height: 16)
-        summary.frame = CGRect(x: 84, y: h - 26, width: max(0, w - 84 - 110), height: 16)
-        clearButton.frame = CGRect(x: w - 96, y: h - 28, width: 56, height: 20)
-        closeButton.frame = CGRect(x: w - 32, y: h - 28, width: 20, height: 20)
-        scroll.frame = CGRect(x: 0, y: 0, width: w, height: max(0, h - 34))
-    }
-
-    public func numberOfRows(in tableView: NSTableView) -> Int { log?.entries.count ?? 0 }
-    public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard let entry = log?.entries[safe: row], let id = tableColumn?.identifier.rawValue else { return nil }
-        let cell = (tableView.makeView(withIdentifier: .init("cell-" + id), owner: nil) as? NSTextField) ?? {
-            let field = NSTextField(labelWithString: ""); field.identifier = .init("cell-" + id)
-            field.font = id == "name" ? .systemFont(ofSize: 11) : .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-            field.lineBreakMode = .byTruncatingTail; return field
-        }()
-        let failed = entry.failed != nil || (entry.status ?? 0) >= 400
-        cell.textColor = failed ? .systemRed : .labelColor
-        switch id {
-        case "name": cell.stringValue = entry.name; cell.toolTip = entry.url
-        case "status": cell.stringValue = entry.failed ?? entry.status.map(String.init) ?? "Pending"
-        case "method": cell.stringValue = entry.method
-        case "type": cell.stringValue = entry.type
-        case "size": cell.stringValue = entry.size.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "—"
-        default: cell.stringValue = entry.durationMS.map { String(format: "%.0f ms", $0) } ?? "—"
-        }
-        return cell
-    }
-}
-
-private extension Array { subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil } }

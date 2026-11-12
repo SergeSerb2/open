@@ -16,17 +16,17 @@ extension AutomationController {
             let button = slot?.developerPanel?.button(action) as? NSButton else { throw Failure(message: "no developer bar or unknown button") }
       button.performClick(nil)
     }
-    var state: [String: Any] = ["shown": slot?.developerPanel != nil, "toolbar": slot?.paneChrome != nil, "logs": factory.developerPanel.state]
+    var state: [String: Any] = ["shown": slot?.developerPanel != nil, "toolbar": slot?.paneChrome != nil, "devtools": factory.developerPanel.state(slot?.tabID)]
     if let panel = slot?.developerPanel {
       state["frame"] = [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height]
       state["url"] = panel.urlString
-      state["networkPressed"] = panel.networkShown
+      state["activePanel"] = panel.activePanel?.rawValue ?? ""
+      state["palette"] = panel.paletteDescription
       state["buttons"] = DeveloperPanelAction.allCases.compactMap { action -> [String: Any]? in
         guard let view = panel.button(action) else { return nil }
         return ["id": action.rawValue, "frame": [view.frame.minX, view.frame.minY, view.frame.width, view.frame.height], "label": view.accessibilityLabel() ?? ""]
       }
     }
-    if let list = slot?.networkList { state["networkRows"] = list.rowCount; state["networkFrame"] = [list.frame.minX, list.frame.minY, list.frame.width, list.frame.height] }
     // Sidebar rows of the focused Space: host subtitle, title baseline and the dashed outline (pane 2).
     if let space = controller.context.focusedSpace {
       state["rows"] = space.today.compactMap { node -> [String: Any]? in

@@ -1608,7 +1608,6 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 
   func webContent(_ webContent: OEWebContent, didReceiveDevToolsEvent method: String, parameters: [String: Any]) {
     pageChrome.event(method, parameters: parameters, page: webContent)
-    developerPanel.event(method, parameters: parameters, page: webContent)
     record("devtools", webContent, ["method": method, "params": parameters])
   }
 
