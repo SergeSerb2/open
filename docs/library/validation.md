@@ -1109,3 +1109,24 @@ including Profile2 live rows, owner resets and internal filter navigation.
 Its original receipt is copied after release and hash-checked. The single M1
 replacement is pending; no new M1 measurement or final gate has run. No
 permission, assertion, timeout or receipt was changed.
+
+
+### LEAD22:35 replacement M1 — open PASS; STOP at valid wheel-settling preparation failure
+
+At clean merged head `cf17375af7ecb76aace3ce66ab1e6677067e028c`, the sole authorised replacement ticket acquired after12seconds. All3078tracked files, exact final-artifact hashes and codesign verified inside its exclusive slot. Release executable SHA256 `42a1caceba9bdb1d478b90f1e093b2d4463df6a7e072b56e6ce2d145ea6d8f87`; Library module `dcdffeff8b08fa29e61ce699f168814d2bb2e17066f69f5dcbc8259f8952e93f`. The initial high-load pairs and every quiet preflight are retained. The earlier local build/source refusal ran no M1 command or ticket; this was the only replacement qualification.
+
+| Open sample | Quiet load1 pair, ten seconds apart | Ready-open ms | Later-row slice max ms | Library overlap max ms | Result |
+|---|---|---:|---:|---:|---|
+| 1 | 3.130859 / 2.870117 | 15.440792 | 7.372708 | 7.373208 | valid PASS |
+| 2 | 2.800293 / 2.664063 | 12.895083 | 8.209708 | 8.210208 | valid PASS |
+| 3 | 2.555176 / 2.481934 | 16.136333 | 7.416458 | 7.416917 | valid PASS |
+
+Open median15.440792<=16ms and maximum16.136333<=24ms PASS. First-row maxima and preparation coverage/labels/counts pass. Earlier failed open/preparation sets stay intact.
+
+Wheel starts at launch age160907.539ms after quiet loads2.140625/2.413086, ten seconds apart; valid. All600real wheel callbacks and216settling frames were collected. Callback p95 **0.728125ms<=4**, maximum **2.389792ms<=8.3**, created0 and Library-attributed missed intervals0 PASS. Full main-busy p95/max3.858875/5.078750ms are retained separately. Physical capture changes528; raw47missed intervals retain their classification (1App-attributed,0Library-attributed,46outsideApp).
+
+The required **after-wheel idle preparation** check FAILS. Largest slice **8.676791622ms** at launch age166188.754958–166197.433542ms; largest overlapping busy interval **9.312333306ms** at166188.541542–166197.853875ms (settling callback635). The existing scroll analyzer requires slice<=8ms and busy<=8.3ms; this slice also exceeds the lead's8.3ms preparation ceiling. The scroll result contains no finer per-row/body phase marks, so no cause is claimed from this trace. No limit/assertion/receipt was changed.
+
+The assertion stopped before scroller. No final M5 gate/imports or PR ran. Every open App and the scroll App quit normally: reply=true, forced=false, zero owned windows/processes. Ticket released, launcher exited1, no surviving local owned launcher/SSH. Original result copied after release unchanged at`.re/l3/l3-slice-replacement-cf17375a/result.json`, SHA256 `015a69185da6ed9ba33ea7dc630ddb9a994c842253f204d2fe73becc19e9edcc`. Source/artifact chain`.re/l3/slice-replacement-transport-2235.json`; concise derived evidence`.re/l3/library-qualification-stop-cf17375a.json`.
+
+STOP under LEAD15:30 at a new valid measured Library failure. No further diagnosis, source repair, measurement, gate or PR is queued. A ruling is needed for M5/rented diagnosis of the after-wheel preparation failure and qualification of that failed row plus the missing scroller. Keep the three passing opens and all failed records; no repeat or qualification scope is assumed.
