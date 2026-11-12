@@ -66,7 +66,7 @@ def run(factory, results, tmp, api):
     # Per-tool colours are a user preference (Arc's rectangleColor & co.): start from the defaults.
     domain = 'io.github.sergeserb2.open'
     color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')] \
-        + ['open.easel.liveWebCardEduSeen', 'open.easel.useAlignmentGuides']
+        + ['open.easel.liveWebCardEduSeen', 'open.easel.useAlignmentGuides', 'libraryShowsEasels']
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved_prefs = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     for key in color_keys:
@@ -419,8 +419,11 @@ def run(factory, results, tmp, api):
 
             # ---- E4: row menu, rename, export, delete ----
             rows = easel(action='row-menu', tab=e2)
-            record('E34_row_menu', rows == ['Save as Web Page…', '—', 'Change Icon…', 'Rename…', '—', 'Add Split View',
+            record('E34_row_menu', rows == ['Copy Link', 'Save as Web Page…', '—', 'Change Icon…', 'Rename…', '—', 'Add Split View',
                                             'Move to ▸', '—', 'Remove Easel from Sidebar', 'Delete Easel'], rows=rows)
+            app.call('sidebar-menu', node=e2, item='Copy Link')
+            copied = subprocess.run(['/usr/bin/pbpaste'], capture_output=True, text=True).stdout
+            record('E34b_copy_link', copied == easel(tab=e2)['url'], copied=copied)
             s = easel(action='rename', text='Board two', tab=e2)
             record('E35_rename_syncs_title', s['tabTitle'] == 'Board two' and canvas(s)['title'] == 'Board two'
                    and canvas(s)['titleFieldText'] == 'Board two', state={k: v for k, v in s.items() if k != 'canvas'})
@@ -445,7 +448,8 @@ def run(factory, results, tmp, api):
             result = app.call('easel', action='export-all', path=str(all_out))
             easel_tabs = [t for t in app.call('tabs') if t['url'].startswith('open://easel/')]
             index = (all_out / 'index.html').read_text() if (all_out / 'index.html').exists() else ''
-            record('E37_export_all', result['count'] == len(easel_tabs) and not result['failures']
+            # Export All covers every Easel document, also those whose row was archived (E04).
+            record('E37_export_all', result['count'] >= len(easel_tabs) and not result['failures']
                    and 'Board%20two/index.html' in index and (all_out / 'Board two' / 'easel.json').exists(), result=result,
                    tabs=len(easel_tabs))
             folder = Path(app.call('easel', action='store', document=easel(tab=e2)['document'])['path']).parent
@@ -511,8 +515,58 @@ def run(factory, results, tmp, api):
             zipped = app.call('easel', action='import-arc-export', path=str(archive))
             record('I03_reimport_and_zip', again['imported'] == 3 and again['newRows'] == 0 and zipped['imported'] == 3
                    and zipped['newRows'] == 0 and len(app.call('tabs')) == count + 3, again=again, zipped=zipped)
+
+            # ---- Library › Easels ----
+            def library(**kw):
+                return app.call('library', **kw)
+            board_b = next(t for t in app.call('tabs') if t['url'] == 'open://easel/' + app.call('easel', action='document-id', arcID='arc-easel-b'))
+            app.call('close', tab=board_b['id'])   # archived row: the Easel stays in the Library
+            library(action='open', section='easels')
+            lib = api.wait_until(lambda: (lambda x: x if x.get('section') == 'easels' and x['easels']['items'] and x.get('rows') else None)(library()), timeout=8, step=.2)
+            rows = {r.get('title'): r for r in (lib or {}).get('rows', [])}
+            record('L01_library_easels_page', lib and 'easels' in [t['id'] for t in lib['rail']] and lib['easels']['cardVisible']
+                   and lib['easels']['cardTitle'] == 'Your Easels are yours to keep' and lib['easels']['exportTitle'] == 'Export All Easels →'
+                   and {'Board A', 'Board B'} <= set(rows) and lib['easels']['items'] == len(lib['rows']),
+                   easels=(lib or {}).get('easels'), titles=sorted(rows))
+            b_row = rows.get('Board B', {}).get('id', '')
+            menu = library(action='row-menu', id=b_row)['items'] if b_row else []
+            library(action='row-action', id=b_row, name='open')
+            opened = api.wait_until(lambda: (lambda x: x if x.get('shown') and x['tabTitle'] == 'Board B' else None)(easel()), timeout=8, step=.2)
+            record('L02_open_easel_without_row', [m['title'] for m in menu] == ['Delete'] and opened and not library()['open'],
+                   menu=menu, opened={k: v for k, v in (opened or {}).items() if k != 'canvas'})
+            library(action='open', section='easels')
+            api.wait_until(lambda: library().get('easels', {}).get('items') or None, timeout=8, step=.2)
+            library(action='easels-export')
+            sheet = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            archive_out = Path(tmp) / 'library-export.zip'
+            library(action='save-panel', path=str(archive_out))
+            exported = api.wait_until(lambda: archive_out.exists() and archive_out.stat().st_size > 0 or None, timeout=20, step=.2)
+            listing = subprocess.run(['/usr/bin/zipinfo', '-1', str(archive_out)], capture_output=True, text=True).stdout if exported else ''
+            record('L03_export_all_archive', sheet and sheet['isSavePanel']
+                   and sheet['message'] == 'Save an archive of all your Easels as web pages you can open anywhere.'
+                   and exported and '/Board A/index.html' in listing and '/index.html' in listing, sheet=sheet, entries=listing.count('\n'))
+            lib = library()
+            before = lib['easels']['items']
+            a_row = next(r['id'] for r in lib['rows'] if r.get('title') == 'Board A')
+            a_folder = Path(app.call('easel', action='store', document=a_row)['path']).parent
+            library(action='row-menu', id=a_row, select='Delete')
+            alert = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', press='Delete')
+            after = api.wait_until(lambda: (lambda x: x if x['easels']['items'] == before - 1 else None)(library()), timeout=8, step=.2)
+            record('L04_library_delete', alert and 'Are you sure you want to delete this Easel?' in alert['texts'] and after
+                   and not a_folder.exists() and all(t['url'] != 'open://easel/' + a_row for t in app.call('tabs')),
+                   before=before, after=(after or {}).get('easels'))
+            library(action='close')
         finally:
             server.shutdown()
+        # L05: a profile with no Easels shows the empty state (docs/re/easels.md copy).
+        app.quit(); app = None
+        app = factory(urls=('about:blank',), fresh=True)
+        app.call('library', action='open', section='easels')
+        empty = api.wait_until(lambda: (lambda x: x if x.get('section') == 'easels' and x.get('emptyVisible') else None)(app.call('library')), timeout=8, step=.2)
+        record('L05_library_empty', empty and empty['emptyState']['title'] == 'No Easels yet'
+               and empty['emptyState']['body'] == 'Click the + sign in the Sidebar to create a new Easel.' and empty['easels']['cardVisible'],
+               state=(empty or {}).get('emptyState'))
     finally:
         if app:
             app.quit()

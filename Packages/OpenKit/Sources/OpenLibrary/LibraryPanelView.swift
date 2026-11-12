@@ -98,6 +98,10 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var archivePageLoading = false
     var historyPageLoading = false
     let statusLabel = LibraryField(wrappingLabelWithString:"")
+    /// Library › Easels (EZ): the App's provider, its last list, and the header card.
+    public weak var easelsProvider: (any LibraryEaselsProvider)? { didSet { if oldValue !== easelsProvider { reloadEasels() } } }
+    var easelItems: [LibraryEaselItem] = []
+    let easelsCard = LibraryEaselsCard()
 
     public init(viewModel: LibraryViewModel, context: SidebarContext) {
         self.viewModel = viewModel; self.context = context
@@ -139,6 +143,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         boostDisabledText.font = .systemFont(ofSize:13)
         boostTurnOn.onPress = { [weak self] in self?.viewModel.defaults.set(true,forKey:"open.advanced.enableBoosts"); self?.renderRows() }
         addSubview(boostDisabledText); addSubview(boostTurnOn)
+        easelsCard.isHidden = true; easelsCard.onExport = { [weak self] in self?.exportAllEasels() }; addSubview(easelsCard)
         statusLabel.font = .systemFont(ofSize:12); addSubview(statusLabel)
         listView.onEnd = { [weak self] in self?.loadNextPage() }
         for button in [boostList,boostGallery,boostsProfile] {
@@ -309,6 +314,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         overlay = appearance == .dark ? .white : foreground
         for control in Array(tiles.values)+[back,filter,emptyButton,boostList,boostGallery,boostsProfile] { control.foreground=foreground;control.overlay=overlay }
         boostDisabledText.textColor = foreground.withAlphaComponent(0.68); boostTurnOn.foreground = foreground; boostTurnOn.overlay = overlay
+        easelsCard.tint(foreground:foreground,overlay:overlay)
         statusLabel.textColor = foreground.withAlphaComponent(0.68)
         searchField.textColor = foreground
         for host in hosts.values { host.list.foreground = foreground; host.list.overlay = overlay }
@@ -366,6 +372,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         statusLabel.frame = CGRect(x:124,y:height-38,width:281,height:34)
         boostDisabledText.frame = CGRect(x:124,y:99,width:190,height:20)
         boostTurnOn.frame = CGRect(x:327,y:94,width:78,height:30)
+        easelsCard.frame = CGRect(x:124,y:56,width:281,height:easelsCardHeight)
         filterEditor.frame = CGRect(x:112,y:0,width:305,height:filterEditor.contentHeight)
         boostList.frame = CGRect(x:120,y:54,width:52,height:28)
         boostGallery.frame = CGRect(x:178,y:54,width:72,height:28)
@@ -383,7 +390,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyButton.frame=frame(centerX-buttonWidth/2,top+92+max(17,lines)+14,buttonWidth,28)
     }
     func layoutActiveList() {
-        let top:CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132) : 56
+        let top:CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132)
+            : section == .easels ? 56 + easelsCardHeight + 8 : 56
         let rect = CGRect(x:112,y:top,width:304,height:max(0,bounds.height-top-(statusLabel.isHidden ? 0 : 42)))
         if listView.frame != rect { listView.frame = rect; listView.layoutSubtreeIfNeeded() }
     }
@@ -450,6 +458,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             "providers":Dictionary(uniqueKeysWithValues:hosts.map { ($0.key.rawValue,["generation":$0.value.providerGeneration,"loaded":$0.value.loaded,"running":$0.value.provider != nil] as [String:Any]) }),
             "profiles":["history":viewModel.historyProfileID.description,"downloads":viewModel.downloadProfileFilter?.description ?? "all"],
             "dragSession":listView.dragSession,"search":viewModel.query,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden],
+            "easels":easelsState,
             "menuOpen":listView.activeMenu != nil,"menuLifecycle":listView.menuLifecycle,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? ""]
     }
     public func hoverTile(_ section: LibraryPanelSection, hovered: Bool) { tiles[section]?.hovered=hovered }
