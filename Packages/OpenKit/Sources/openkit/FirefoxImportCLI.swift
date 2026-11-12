@@ -45,7 +45,7 @@ func runFirefoxFixtureLock(args: [String]) {
     _ = FileHandle.standardInput.readDataToEndOfFile()
 }
 
-private actor FirefoxHistoryWriter {
+actor ImportHistoryWriter {
     let store: HistoryStore, key: String
     var inserted = 0, duplicates = 0, failed = false
     init(destination: URL, key: String) { store = HistoryStore(fileURL: destination); self.key = key }
@@ -131,7 +131,7 @@ func runImportFirefox(args: [String]) async throws {
     }
 
     // History → the Profile history store, through the same batch API as Import from Arc.
-    let writer = FirefoxHistoryWriter(destination: destination, key: profile.sourceKey)
+    let writer = ImportHistoryWriter(destination: destination, key: profile.sourceKey)
     let history = try await Task.detached(priority: .utility) {
         try await reader.readHistory { batch in await writer.write(batch) }
     }.value
