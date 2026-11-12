@@ -51,11 +51,15 @@ extension AutomationController {
     case "flush", "export-state": allowed = ["action"]
     case "export": allowed = ["action", "path"]
     case "import-zip": allowed = ["action", "path"]
+    case "row-menu": allowed = ["action", "tab"]
+    case "rename": allowed = ["action", "tab", "text"]
+    case "export-one": allowed = ["action", "tab", "path"]
+    case "sheet": allowed = ["action", "press", "cancel"]
     case "select": allowed = ["action", "start", "length"]
     case "press": allowed = ["action", "item"]
     case "gutter": allowed = ["action", "item"]
     case "paste-file": allowed = ["action", "path"]
-    case "click-link": allowed = ["action", "at"]
+    case "click-link": allowed = ["action", "at", "modifiers"]
     default: throw Failure(message: "unknown note action")
     }
     guard Set(args.keys).isSubset(of: allowed) else { throw Failure(message: "unknown note argument") }
@@ -75,6 +79,38 @@ extension AutomationController {
       return result
     }
     let factory = try window
+    if action == "sheet" {
+      // The window's sheet (Delete Note alert, Export Note… panel): its texts and buttons; press one.
+      guard let sheet = factory.window?.attachedSheet else { return ["shown": false] }
+      func walk(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(walk) }
+      let views = sheet.contentView.map(walk) ?? []
+      let buttons = views.compactMap { $0 as? NSButton }.filter { !$0.title.isEmpty && !$0.isHidden }
+      if let title = args["press"] as? String {
+        guard let button = buttons.first(where: { $0.title == title }) else { throw Failure(message: "no sheet button \(title)") }
+        button.performClick(nil); return ["shown": true, "pressed": title]
+      }
+      if args["cancel"] as? Bool == true { factory.window?.endSheet(sheet, returnCode: .cancel); return ["shown": false] }
+      return ["shown": true, "isSavePanel": sheet is NSSavePanel, "message": (sheet as? NSSavePanel)?.message ?? "",
+              "name": (sheet as? NSSavePanel)?.nameFieldStringValue ?? "",
+              "texts": views.compactMap { ($0 as? NSTextField)?.stringValue }.filter { !$0.isEmpty },
+              "buttons": buttons.map(\.title)]
+    }
+    if ["row-menu", "rename", "export-one"].contains(action) {
+      guard let raw = args["tab"] as? String, let uuid = UUID(uuidString: raw), let tab = factory.model.tab(id: ItemID(rawValue: uuid)),
+        NoteTab.matches(tab.url) else { throw Failure(message: "not a Note row") }
+      switch action {
+      case "row-menu":
+        guard let menu = factory.controller?.sidebar.contextMenu(nodeID: tab.id) else { throw Failure(message: "no row menu") }
+        return ["items": menu.items.map { $0.isSeparatorItem ? "—" : ($0.submenu != nil ? $0.title + " ▸" : $0.title) },
+                "enabled": menu.items.filter { !$0.isSeparatorItem }.map { [$0.title, $0.isEnabled] as [Any] }]
+      case "rename":
+        // The intent the row's inline rename sends when it commits.
+        guard let text = args["text"] as? String, factory.performSidebar(.rename(nodeID: tab.id, title: text)) == true else { throw Failure(message: "rename refused") }
+      default:
+        guard let path = args["path"] as? String, factory.exportNote(tabID: tab.id, to: URL(fileURLWithPath: path)) else { throw Failure(message: "export refused") }
+        return ["path": factory.lastNoteExport as Any? ?? NSNull()]
+      }
+    }
     if action == "import-zip" {
       // The same import as the command-bar action after its open panel.
       guard let path = args["path"] as? String else { throw Failure(message: "missing path") }
@@ -148,6 +184,17 @@ extension AutomationController {
       default:
         guard let at = args["at"] as? Int, let storage = editor.bodyView.textStorage, at >= 0, at < storage.length,
           let link = storage.attribute(.link, at: at, effectiveRange: nil) else { throw Failure(message: "no link there") }
+        var flags: NSEvent.ModifierFlags = []
+        for name in args["modifiers"] as? [String] ?? [] {
+          switch name {
+          case "command": flags.insert(.command)
+          case "shift": flags.insert(.shift)
+          case "option": flags.insert(.option)
+          case "control": flags.insert(.control)
+          default: throw Failure(message: "unknown modifier \(name)")
+          }
+        }
+        editor.linkFlagsForNextClick = flags
         editor.bodyView.clicked(onLink: link, at: at)
       }
     default: break

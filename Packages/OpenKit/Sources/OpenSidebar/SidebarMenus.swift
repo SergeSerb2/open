@@ -118,6 +118,7 @@ struct SidebarMenus {
     /// Archive Other Tabs remains a guessed Option alternate.
     func todayTab(_ tab: Tab) -> NSMenu {
         if Self.isEasel(tab) { return easel(tab) }
+        if Self.isNote(tab) { return note(tab) }
         if context.isIncognito {
             return menu([item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
                 item("Open in Split View", .openInSplitView(tabID: tab.id)),
@@ -173,6 +174,7 @@ struct SidebarMenus {
     /// Pinned tab, at the top level or in a folder (F0116).
     func pinnedTab(_ tab: Tab) -> NSMenu {
         if Self.isEasel(tab) { return easel(tab) }
+        if Self.isNote(tab) { return note(tab) }
         return menu(pinnedItems(tab) + [item("Remove Pin", .unpin(tabID: tab.id))])
     }
 
@@ -217,6 +219,28 @@ struct SidebarMenus {
             .separator(),
             item("Remove Easel from Sidebar", .close(nodeID: tab.id)),
             item("Delete Easel", .deleteEasel(tabID: tab.id)),
+        ])
+    }
+
+    static func isNote(_ tab: Tab) -> Bool { tab.url.scheme?.lowercased() == "open" && tab.url.host()?.lowercased() == "note" }
+
+    /// Note row, in the Easel row's order (LEAD 07:50). Arc STR: "Remove Note from Sidebar";
+    /// "Delete Note" and "Export Note…" are GUESS (Arc 1.172 cannot show a Note row). Copy Link
+    /// stays disabled: a Note has no shareable address in Open.
+    func note(_ tab: Tab) -> NSMenu {
+        let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
+        return menu([
+            item("Copy Link", enabled: false, .copyLink(nodeID: tab.id, markdown: false)),
+            item("Export Note…", .exportNote(tabID: tab.id)),
+            .separator(),
+            item("Change Icon…", .changeIcon(nodeID: tab.id)),
+            rename,
+            .separator(),
+            item("Add Split View", .addSplitView(tabID: tab.id)),
+            moveTo(tab.id),
+            .separator(),
+            item("Remove Note from Sidebar", .close(nodeID: tab.id)),
+            item("Delete Note", .deleteNote(tabID: tab.id)),
         ])
     }
 

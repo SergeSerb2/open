@@ -1,0 +1,65 @@
+// Open remote build: remote worker (NativeLink 1.8.3). E3_SCHED is the scheduler's sandbox-network address.
+{
+  stores: [
+    {
+      name: "SCHED_CAS",
+      grpc: {
+        instance_name: "default_instance",
+        endpoints: [{ address: "grpc://${E3_SCHED}:50051", concurrency_limit: 64 }],
+        store_type: "cas",
+        connections_per_endpoint: 4,
+      },
+    },
+    {
+      name: "SCHED_AC",
+      grpc: {
+        instance_name: "default_instance",
+        endpoints: [{ address: "grpc://${E3_SCHED}:50051" }],
+        store_type: "ac",
+      },
+    },
+    {
+      name: "WORKER_FAST_SLOW",
+      fast_slow: {
+        fast: {
+          filesystem: {
+            content_path: "/opt/e3/data/cas",
+            temp_path: "/opt/e3/data/cas-tmp",
+            eviction_policy: { max_bytes: "${E3_CAS_BYTES:-40000000000}" },
+          },
+        },
+        slow: { ref_store: { name: "SCHED_CAS" } },
+      },
+    },
+  ],
+  workers: [
+    {
+      local: {
+        name: "${E3_NAME:-worker}",
+        worker_api_endpoint: { uri: "grpc://${E3_SCHED}:50061" },
+        cas_fast_slow_store: "WORKER_FAST_SLOW",
+        upload_action_result: { ac_store: "SCHED_AC" },
+        work_directory: "/opt/e3/work",
+        max_action_timeout_s: 1800,
+        max_inflight_tasks: "${E3_SLOTS:-8}",
+        platform_properties: {},
+        // Every Chromium compile carries the same large header trees (the 12k-file macOS SDK,
+        // libc++, the host clang). Bind-mount them read-only per action instead of linking
+        // each file. Edit the SDK path when the output dir or the Xcode SDK changes.
+        // Measured 2026-11-11: worker time per action 7.2 s -> 1.2 s, system CPU ~50% -> ~14%.
+        // Do not enable directory_cache.experimental_subtree_caching / get_tree_prefetch:
+        // with them, input fetches stalled (seen together with one slow host; not isolated).
+        use_namespaces: true,
+        use_mount_namespace: true,
+        directory_cache: { max_entries: 2000, max_size_bytes: 20000000000 },
+        experimental_readonly_input_mounts: [
+          "out/Release_Official_arm64/sdk/xcode_links/MacOSX27.2.sdk",
+          "third_party/libc++/src/include",
+          "third_party/llvm-build/Release+Asserts",
+        ],
+      },
+    },
+  ],
+  servers: [],
+  global: { max_open_files: 65536 },
+}

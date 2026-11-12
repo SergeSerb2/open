@@ -40,11 +40,13 @@ final class ExtensionShortcutTable {
     }
     return browser.executeExtensionCommand(command.name, forExtension: command.extensionIdentifier)
   }
-  static func shortcut(_ key: String?, flags: NSEvent.ModifierFlags) -> KeyboardShortcut? {
-    guard let key, !key.isEmpty, key.utf8.count <= 32 else { return nil }
+  static func shortcut(_ rawKey: String?, flags: NSEvent.ModifierFlags) -> KeyboardShortcut? {
+    guard var key = rawKey, !key.isEmpty, key.utf8.count <= 32 else { return nil }
     var modifiers = ShortcutModifiers.from(eventFlags: flags)
-    // Cocoa encodes Shift in an uppercase letter, with no Shift bit in its flags.
-    if key != key.lowercased() { modifiers.insert(.shift) }
+    // Cocoa encodes Shift in the shifted character, with no Shift bit in its flags: an uppercase letter, or for
+    // digits and punctuation the US-layout shifted symbol (Chromium gives "&" for Command+Shift+7).
+    if let base = Self.unshifted[key] { key = base; modifiers.insert(.shift) }
+    else if key != key.lowercased() { modifiers.insert(.shift) }
     let names = [" ": "space", "\t": "tab", "\r": "return", "\n": "return", "\u{1B}": "escape",
       "\u{7F}": "delete", "\u{F702}": "left", "\u{F703}": "right", "\u{F700}": "up", "\u{F701}": "down"]
     let normalized: String
@@ -53,6 +55,11 @@ final class ExtensionShortcutTable {
     else { normalized = key.lowercased() }
     return KeyboardShortcut(key: normalized, modifiers: modifiers)
   }
+  /// US-layout shifted symbol → its key (Chromium's suggested keys use US key names).
+  static let unshifted: [String: String] = [
+    "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+    "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/", "~": "`",
+  ]
   static func keycaps(_ key: String?, flags: NSEvent.ModifierFlags) -> [String] {
     guard let shortcut = shortcut(key, flags: flags) else { return [] }
     var result: [String] = []

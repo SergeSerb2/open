@@ -23,15 +23,6 @@ public final class CaptureOverlayView: NSView {
     /// Redraw count, for the idle check (no drawing without input).
     public private(set) var drawCount = 0
     public var onFinish: ((Outcome) -> Void)?
-    /// Hover element capture (Arc FA CA-4, capture s4 `e6-capture-ui`): asks the page for the
-    /// element block under a point (overlay points); nil when there is none. One request runs
-    /// at a time; the newest point waits behind it.
-    public var elementAt: ((CGPoint, @escaping @MainActor (CGRect?) -> Void) -> Void)?
-    /// The hovered element's rectangle (overlay points) while no drag runs.
-    public private(set) var hoveredElement: CGRect?
-    private var elementRequestInFlight = false
-    private var pendingHoverPoint: CGPoint?
-    private var hoverTracking: NSTrackingArea?
     public let hint = CaptureHintCapsule(text: CaptureMetrics.hintText)
 
     public init(frame: CGRect, hintFill: NSColor) {
@@ -51,35 +42,11 @@ public final class CaptureOverlayView: NSView {
         hint.frame = CGRect(x: ((bounds.width - size.width) / 2).rounded(), y: CaptureMetrics.hintTop, width: size.width, height: size.height)
     }
     public override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
-    public override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTracking { removeTrackingArea(hoverTracking) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
-        addTrackingArea(area); hoverTracking = area
-    }
-    public override func mouseMoved(with event: NSEvent) { hover(at: convert(event.locationInWindow, from: nil)) }
-
-    /// Highlights the element under `point` (no drag running). Also the automation entry.
-    public func hover(at point: CGPoint) {
-        guard !isFinished, anchor == nil, let elementAt else { return }
-        guard !elementRequestInFlight else { pendingHoverPoint = point; return }
-        elementRequestInFlight = true
-        elementAt(clamp(point)) { [weak self] rect in
-            guard let self else { return }
-            self.elementRequestInFlight = false
-            if !self.isFinished, self.anchor == nil {
-                let clipped = rect.map { $0.intersection(self.bounds) }.flatMap { $0.isNull || $0.width < 4 || $0.height < 4 ? nil : $0 }
-                if clipped != self.hoveredElement { self.hoveredElement = clipped; self.needsDisplay = true }
-            }
-            if let next = self.pendingHoverPoint { self.pendingHoverPoint = nil; self.hover(at: next) }
-        }
-    }
 
     // MARK: Input (the view's own mouse events, and the Cmd+Shift drag that the window forwards)
 
     public func begin(at point: CGPoint) {
         guard !isFinished else { return }
-        pressedElement = hoveredElement
         anchor = clamp(point); selection = CGRect(origin: anchor!, size: .zero)
         hideHint(); needsDisplay = true
     }
@@ -90,19 +57,10 @@ public final class CaptureOverlayView: NSView {
         guard rect != selection else { return }
         selection = rect; needsDisplay = true
     }
-    /// The element under the press: a click (no drag) captures it.
-    private var pressedElement: CGRect?
-    /// Mouse-up: a drag captures its area; a click captures the hovered element (Arc's
-    /// "Click or drag…"); a click with no element under it, or a tiny drag, cancels (§4.6.3).
+    /// Mouse-up: a selection under the minimum cancels (§4.6.3).
     public func end() {
         guard !isFinished else { return }
-        guard let selection, selection.width >= CaptureMetrics.minimumSelection, selection.height >= CaptureMetrics.minimumSelection else {
-            if let element = pressedElement, (selection?.width ?? 0) < CaptureMetrics.minimumSelection,
-               (selection?.height ?? 0) < CaptureMetrics.minimumSelection {
-                finish(.selected(element.integral.intersection(bounds)))
-            } else { finish(.cancelled) }
-            return
-        }
+        guard let selection, selection.width >= CaptureMetrics.minimumSelection, selection.height >= CaptureMetrics.minimumSelection else { finish(.cancelled); return }
         finish(.selected(selection))
     }
     public func cancel() { finish(.cancelled) }
@@ -159,18 +117,7 @@ public final class CaptureOverlayView: NSView {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         let dim = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: CaptureMetrics.dimAlpha)
         context.setFillColor(dim)
-        guard let selection, selection.width > 0, selection.height > 0 else {
-            guard let element = hoveredElement else { context.fill(bounds); return }
-            // The hovered element stays bright inside a white rounded outline (s4 `e6-capture-ui`).
-            let r = CaptureMetrics.elementOutlineRadius
-            let hole = CGPath(roundedRect: element, cornerWidth: r, cornerHeight: r, transform: nil)
-            context.addRect(bounds); context.addPath(hole); context.fillPath(using: .evenOdd)
-            let w = CaptureMetrics.elementOutlineWidth
-            context.setStrokeColor(CGColor(gray: 1, alpha: 1)); context.setLineWidth(w)
-            context.addPath(CGPath(roundedRect: element.insetBy(dx: -w / 2, dy: -w / 2), cornerWidth: r + w / 2, cornerHeight: r + w / 2, transform: nil))
-            context.strokePath()
-            return
-        }
+        guard let selection, selection.width > 0, selection.height > 0 else { context.fill(bounds); return }
         // Everything outside the selection, as one even-odd path (no double dimming at the seams).
         context.addRect(bounds); context.addRect(selection); context.fillPath(using: .evenOdd)
         let w = CaptureMetrics.edgeWidth

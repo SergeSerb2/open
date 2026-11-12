@@ -17,7 +17,6 @@ default open.general.previewsFolders = true
 default open.general.previewsPages = true
 default open.general.previewsRecents = true
 default open.general.previewsCalendar = true
-default open.general.previewsGmail = true
 default open.general.searchSuggestNoticeDismissed = false
 default open.general.warnBeforeQuitting = false
 default open.library.lastSection = archive
