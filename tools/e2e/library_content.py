@@ -47,7 +47,11 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                 saved[name]=app.call('defaults',key=name,persistent=True);app.call('defaults',key=name,value=value)
             owner=app.call('shell-windows')[0]['id'];tab=app.call('tabs')[0]['id'];app.call('wait',tab=tab)
             space=next(s for s in app.call('spaces') if s['focused']);profile=space['profile']
-            app.call('window-frame',frame=[40,50,1280,800],unconstrained=True)
+            # Keep the exact viewport, with its right edge on a real screen.
+            # The rented display is 1280 points wide; x=40 put that edge offscreen
+            # and prevented the native Boost editor from choosing its screen.
+            sx,sy,sw,sh=app.call('window-state')['screenFrame']
+            app.call('window-frame',frame=[min(40,sx+sw-1280),min(50,sy+sh-800),1280,800],unconstrained=True)
             app.call('window-focus',id=owner,activate=True)
             state(action='open',section='media')
             check('media_truthful_empty',wait(lambda:state().get('emptyVisible')) and state()['emptyState']['title']=='No media yet' and not state()['emptyState']['buttonVisible'],state=state()['emptyState'])
