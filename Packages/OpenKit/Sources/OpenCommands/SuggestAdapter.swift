@@ -122,7 +122,7 @@ public extension CommandRegistry {
 
     private static let symbols: [String: String] = [
         "open-extensions-picker": "puzzlepiece.extension", "extension-shortcuts": "command",
-        "new-tab": "plus", "new-note": "note.text", "new-note-in-split": "rectangle.split.2x1", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
+        "new-tab": "plus", "new-note": "note.text", "import-arc-notes": "square.and.arrow.down", "export-notes": "square.and.arrow.up", "new-note-in-split": "rectangle.split.2x1", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
         "new-little-open-window": "macwindow.on.rectangle", "archive-tab": "archivebox",
         "restore-last-closed-tab": "arrow.uturn.backward", "print": "printer", "save-page-as": "square.and.arrow.down",
         "new-profile": "person.crop.circle.badge.plus", "new-boost": "paintbrush", "edit-boost": "paintbrush",

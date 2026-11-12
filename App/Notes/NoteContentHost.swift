@@ -59,6 +59,7 @@ final class NoteContentHost: WebContentHost {
     guard !closed, !unreadable else { return }
     let titleChanged = title != note.title
     note.title = title; note.text = body.string
+    note.importPlaceholder = nil
     note.formats = NoteRichText.formats(of: body)
     store.update(note)
     note = store.document(noteID)

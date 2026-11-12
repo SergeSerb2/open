@@ -1,6 +1,7 @@
 import AppKit
 import QuartzCore
 import OpenImport
+import OpenDocuments
 import OpenModel
 import OpenSettings
 import OpenStore
@@ -304,6 +305,15 @@ final class AppImportRunner: ProfileDataOwner {
         for kind in ["Spaces", "Pinned and Today tabs", "Favorites", "Folders", "Search settings"] { failures[kind] = "Could not be saved" }
         return result("Open could not save your data. The previous browser state was kept. Try again.")
       }
+    }
+    // Arc Notes: write the document of every Note tab that landed. An existing Note
+    // file (an earlier import the user may have edited) is never replaced.
+    if plan.spaces && plan.tabs && !imported.notes.isEmpty {
+      let landed = Set(app.model.allTabsForNotes().compactMap { NoteLink.id(from: $0.url) })
+      var written = 0
+      for note in imported.notes where landed.contains(note.id) { if app.notes.importIfAbsent(note) { written += 1 } }
+      counts["Notes"] = report.importedNotes; counts["Note placeholders"] = report.notePlaceholders
+      counts["Notes written"] = written
     }
     // Resolve metadata only after the live model has landed. Destination
     // directory collision suffixes must never be used to read the Arc source.
