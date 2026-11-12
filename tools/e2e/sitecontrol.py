@@ -8,6 +8,7 @@ import json
 import os
 import statistics
 import time
+import uuid
 
 
 from sitecontrol_fixtures import fixture_server
@@ -380,9 +381,13 @@ def run(factory, results, tmp, env, functional_only=False):
             record('S5_cookies', cookie_before == 'f=1' and cookie_gone and app.eval(tab,'document.cookie') == '' and cache_available,
                    before=cookie_before,after=app.eval(tab,'document.cookie'),cacheAvailable=cache_available)
             s=opened(); app.call('pasteboard',text='scc-negative-sentinel')
+            # F8: the product's own copy toast must be new, not just any toast state.
+            copy_titles=('Copied Current URL','Copied a clean link without trackers')
+            toasts_before=[t['title'] for t in app.call('toasts')['toasts'] if t['title'] in copy_titles and not t['exiting']]
             app.call('key',key='c',modifiers=['cmd','shift'],route='app')
-            copied=app.call('pasteboard'); toasts=app.call('toasts')
-            record('S6_copy', len([c for c in s['controls'] if c['id'].startswith('action.')]) == 4 and not any('copy' in c['id'].lower() for c in s['controls']) and copied == origin+'/boost.html' and bool(toasts), pasteboard=copied,toasts=toasts,negative='sentinel replaced; no SCC Copy control')
+            copied=app.call('pasteboard')
+            toasts=wait(lambda:(lambda t:t if len([x for x in t['toasts'] if x['title']=='Copied Current URL' and not x['exiting']])>toasts_before.count('Copied Current URL') else None)(app.call('toasts')),timeout=3)
+            record('S6_copy', len([c for c in s['controls'] if c['id'].startswith('action.')]) == 4 and not any('copy' in c['id'].lower() for c in s['controls']) and copied == origin+'/boost.html' and bool(toasts), pasteboard=copied,toasts=toasts or app.call('toasts'),toastsBefore=toasts_before,negative='sentinel replaced; no SCC Copy control; no copy toast before the key')
             close(); app.call('navigate',tab=tab,url=origin+'/ads.html'); app.call('wait',tab=tab)
             opened(); app.call('key',key='escape',route='app'); escaped = not state()['presented']
             opened(); count=app.eval(tab,'window.clicks'); app.call('mouse',action='click',x=700,y=500,queued=True)
@@ -400,7 +405,10 @@ def run(factory, results, tmp, env, functional_only=False):
             app.call('select',tab=tab)
             second=new_tab(app,origin+'/boost.html'); app.call('split'); time.sleep(.2)
             s=opened('pane'); selected=app.call('window-state')['selected']
-            bad_anchor=refused(action='open',via='invalid')
+            # F8: the product refuses an anchor for a tab with no page (unknown tab ID): no panel, focus kept.
+            bad=app.call('site-controls',action='deliver',what='anchor',anchor='paneBar',tab=str(uuid.uuid4()))
+            bad_anchor=not bad['presented'] and app.call('window-state')['selected']==selected
+            s=opened('pane')
             record('S8_split',s['presented'] and s['tab']==selected and s['host']=='127.0.0.1' and s['anchor'][0]>228 and bad_anchor,state=s,negativeRefused=bad_anchor)
             # S8_availability (F6): one rule for the sidebar and pane-bar buttons. A shown Peek makes
             # both unavailable (old code: the pane buttons stayed enabled), and closing it restores both.
@@ -416,8 +424,10 @@ def run(factory, results, tmp, env, functional_only=False):
             close(); app.call('split')
             app.call('menu-perform',id='toggle-toolbar')
             toolbar=opened('pane')
+            # F8: with the toolbar shown the URL field is hidden; the product refuses that anchor itself.
+            url_anchor=app.call('site-controls',action='deliver',what='anchor',anchor='urlField',tab=app.call('window-state')['selected'])
             record('S8_toolbar',toolbar['presented'] and toolbar['tab']==app.call('window-state')['selected']
-                   and refused(action='open',via='urlField'),state=toolbar)
+                   and not url_anchor['presented'],state=toolbar,urlAnchorRefused=not url_anchor['presented'])
             close(); app.call('menu-perform',id='toggle-toolbar')
             app.call('menu-perform',id='toggle-sidebar')
             app.call('mouse',action='move',x=600,y=300)
@@ -485,6 +495,18 @@ def run(factory, results, tmp, env, functional_only=False):
                     negativeNormalContext=normal_context['isIncognito'],negativeDisabledTap=True,
                     customizeRefused=private_customize_refused,editorRefused=private_editor_refused)
                 row_refusals={c['id']:refused(action='tap',id=c['id']) for c in boost_controls}
+                # F8: deliver the same actions to the product past the disabled buttons. Its guards
+                # must refuse them: no editor, no new Boost, the stored Boost unchanged.
+                def boost_count(): return len(app.call('boosts',action='list',profile=boost_profile))
+                count_before=boost_count()
+                opened(); app.call('site-controls',action='deliver',what='action',id='newBoost')
+                delivered_new=not editor().get('open') and boost_count()==count_before
+                opened(); app.call('site-controls',action='deliver',what='boostEnabled',boost=boost_id,enabled=not normal_boost['isEnabled'])
+                delivered_toggle=stored_boost()==normal_boost
+                opened(); app.call('site-controls',action='deliver',what='boostEdit',boost=boost_id)
+                delivered_edit=not editor().get('open')
+                row_refusals.update(productNewBoost=delivered_new,productToggle=delivered_toggle,productEdit=delivered_edit)
+                close()
                 unchanged_boost=stored_boost()
                 record('S10_boost_rows',private_context.get('parent')==boost_profile
                        and {c['id'] for c in boost_controls}=={circle,edit_row}
