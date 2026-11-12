@@ -20,6 +20,10 @@ public enum LiveCalendar {
         public var subtitle: String
         /// The reminder is due (and not dismissed for this event).
         public var remind: Bool
+
+        public init(event: CalendarEvent, link: MeetingLink, phase: Phase, subtitle: String, remind: Bool) {
+            self.event = event; self.link = link; self.phase = phase; self.subtitle = subtitle; self.remind = remind
+        }
     }
 
     /// The tile state at `now`, or nil when no eligible meeting is close (the tile is a plain Favorite).

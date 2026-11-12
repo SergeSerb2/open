@@ -153,6 +153,14 @@ enum RenderCLI {
             func walk(_ nodes: [SidebarNode]) { for case .folder(let f) in nodes { f.applyExpansion(.collapsed); walk(f.children) } }
             for s in model.spaces { walk(s.pinned); walk(s.today) }
         }
+        if let spec = value(args, "--live-tile") {
+            // Look frames only (CAL L5): the first Favorite becomes a Google Calendar tile with this countdown text.
+            guard let tab = context.favoritesProfile?.favorites.first else { throw CLIError(description: "live-tile needs a Favorite") }
+            tab.url = URL(string: "https://calendar.google.com/calendar/u/0/r")!
+            let event = CalendarEvent(id: "e", title: "Design review", start: Date(), end: Date().addingTimeInterval(1800))
+            let link = MeetingLink(service: .meet, url: URL(string: "https://meet.google.com/abc-defg-hij")!)
+            context.liveCalendarTiles = [tab.id: LiveCalendar.TileState(event: event, link: link, phase: .before, subtitle: spec, remind: false)]
+        }
         if let sel = value(args, "--select") {
             guard let id = resolve(sel, context: context), let space = context.focusedSpace else { throw CLIError(description: "no row \(sel)") }
             window.selectedNodeBySpace[space.id] = id
