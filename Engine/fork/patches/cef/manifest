@@ -2,6 +2,8 @@
 # One block per active series entry:
 # <file>.patch
 # paths: <space-separated pathspecs>
+# 0001-open-distrib-build-dir.patch
+paths: cef/tools/make_distrib.py
 # 0101-mem-visibility.patch
 paths: cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 # 0104-mem-navigation-history.patch
@@ -36,3 +38,5 @@ paths: cef/libcef/browser/browser_info.cc cef/libcef/browser/browser_info.h
 
 # 0901-open-adblock-renderer-agent.patch
 paths: cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc
+# 1001-download-handler-lifetime.patch
+paths: cef/include/cef_download_handler.h cef/libcef/browser/download_manager_delegate_impl.h cef/libcef/browser/download_manager_delegate_impl.cc

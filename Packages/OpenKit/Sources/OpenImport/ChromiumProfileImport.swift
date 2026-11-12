@@ -96,6 +96,26 @@ public struct ChromiumProfileReader: Sendable {
         } catch { throw ReadError.unreadable }
     }
 
+    /// The most visited hosts in `History` (rows in `visits`), without "www.". For the onboarding Favorites
+    /// step (I-5). Arc ranks by visits and site engagement above a threshold that strings do not show (F3 §1);
+    /// GUESS — capture pending: Open takes the top `limit` hosts with at least 3 visits.
+    public func topHosts(limit: Int) throws -> [String] {
+        let file = directory.appendingPathComponent("History")
+        guard FileManager.default.fileExists(atPath: file.path) else { throw ReadError.missing }
+        var totals: [String: Int] = [:]
+        do {
+            let copy = try ArcSQLiteCopy(fileURL: file)
+            // Count rows in `visits`; `urls.visit_count` can lag behind.
+            try copy.rows("SELECT u.url, COUNT(v.id) AS n FROM urls u JOIN visits v ON v.url = u.id GROUP BY u.id ORDER BY n DESC LIMIT 2000") { row in
+                guard let url = URL(string: copy.text(row, 0)), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+                      var host = url.host?.lowercased() else { return }
+                if host.hasPrefix("www.") { host.removeFirst(4) }
+                totals[host, default: 0] += Int(sqlite3_column_int64(row, 1))
+            }
+        } catch { throw ReadError.unreadable }
+        return totals.filter { $0.value >= 3 }.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(max(0, limit)).map(\.key)
+    }
+
     /// `Preferences` → `default_search_provider_data.template_url_data`; else the
     /// `default_search_provider.guid` row in `Web Data` `keywords`. Nil: the browser default.
     public func defaultSearchEngine() -> ChromiumSearchEngine? {

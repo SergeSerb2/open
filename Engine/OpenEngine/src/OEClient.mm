@@ -579,7 +579,11 @@ bool OEClient::OnBeforeDownload(CefRefPtr<CefBrowser> browser,
                                 const CefString& suggested_name,
                                 CefRefPtr<CefBeforeDownloadCallback> callback) {
   OEWebContent* view = view_;
-  OEBrowserContext* context = view.context ?: OEEngine.shared.defaultContext;
+  OEBrowserContext* context = download_context_;
+  if (!context || context.oe_closing ||
+      context.state == OEBrowserContextStateClosed) {
+    return true;  // Not executing the destination callback cancels the download.
+  }
   [context oe_handleBeforeDownload:download_item
                      suggestedName:OEString(suggested_name)
                         webContent:view
@@ -590,7 +594,12 @@ bool OEClient::OnBeforeDownload(CefRefPtr<CefBrowser> browser,
 void OEClient::OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefDownloadItem> download_item,
                                  CefRefPtr<CefDownloadItemCallback> callback) {
-  OEBrowserContext* context = view_.context ?: OEEngine.shared.defaultContext;
+  OEBrowserContext* context = download_context_;
+  if (!context || context.oe_closing ||
+      context.state == OEBrowserContextStateClosed) {
+    if (callback && download_item->IsInProgress()) callback->Cancel();
+    return;
+  }
   [context oe_handleDownloadUpdated:download_item webContent:view_ callback:callback];
 }
 

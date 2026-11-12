@@ -1,5 +1,8 @@
 # Open patches for Chromium. One patch per line: <file>.patch  # rationale
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
+0011-open-thinlto-link-jobs.patch  # E3: ThinLTO link uses 6 threads, not all 18 (M5 overload); output does not depend on thread count
+0012-open-widevine-opt-in.patch  # Widevine component registers only with --open-enable-widevine (off by default; F3 option D)
+0013-open-bookmark-deletion-barrier.patch  # Profile deletion: flush and stop bookmark writes before release (late Bookmarks write recreated the deleted dir)
 0106-open-code-sign-clone-reuse.patch  # S16: reuse the signed hard-link clone without advancing executable ctime on warm launches
 0301-open-headless-browser-window.patch  # P1: Browser features without a BrowserView (hidden tab-strip Browsers)
 0302-open-hidden-browser-ui.patch  # P1: Chrome UI code that assumes "no BrowserView => unit test" accepts hidden tab-strip Browsers

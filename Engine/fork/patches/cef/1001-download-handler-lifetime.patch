@@ -1,0 +1,96 @@
+diff --git a/cef/include/cef_download_handler.h b/cef/include/cef_download_handler.h
+--- a/cef/include/cef_download_handler.h
++++ b/cef/include/cef_download_handler.h
+@@ -129,9 +129,12 @@
+   /// This may be called multiple times before and after OnBeforeDownload().
+   /// Execute |callback| either asynchronously or in this method to cancel the
+   /// download if desired. Do not keep a reference to |download_item| outside of
+-  /// this method.
++  /// this method. After the originating browser is destroyed, |browser| is
++  /// nullptr and the original handler continues receiving updates until the
++  /// download or its browser context is destroyed. The handler must not retain
++  /// the originating browser and must preserve the original context attribution.
+   ///
+-  /*--cef()--*/
++  /*--cef(optional_param=browser)--*/
+   virtual void OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefDownloadItem> download_item,
+                                  CefRefPtr<CefDownloadItemCallback> callback) {}
+diff --git a/cef/libcef/browser/download_manager_delegate_impl.h b/cef/libcef/browser/download_manager_delegate_impl.h
+--- a/cef/libcef/browser/download_manager_delegate_impl.h
++++ b/cef/libcef/browser/download_manager_delegate_impl.h
+@@ -10,6 +10,7 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
++#include "cef/include/cef_download_handler.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/download_manager_delegate.h"
+ #include "components/download/public/common/download_item.h"
+@@ -66,6 +67,14 @@
+   using ItemBrowserMap =
+       std::map<raw_ptr<download::DownloadItem>, raw_ptr<CefBrowserHostBase>>;
+   ItemBrowserMap item_browser_map_;
++
++  // The DownloadManager belongs to the browser context. Retain only the
++  // originating handler while its item exists, never the browser or context.
++  // OnBrowserDestroyed clears the browser association but keeps this delivery
++  // route. ResetManager drops every route before context teardown completes.
++  using ItemHandlerMap =
++      std::map<raw_ptr<download::DownloadItem>, CefRefPtr<CefDownloadHandler>>;
++  ItemHandlerMap item_handler_map_;
+ };
+ 
+ #endif  // CEF_LIBCEF_BROWSER_DOWNLOAD_MANAGER_DELEGATE_IMPL_H_
+diff --git a/cef/libcef/browser/download_manager_delegate_impl.cc b/cef/libcef/browser/download_manager_delegate_impl.cc
+--- a/cef/libcef/browser/download_manager_delegate_impl.cc
++++ b/cef/libcef/browser/download_manager_delegate_impl.cc
+@@ -333,6 +333,11 @@
+   CefRefPtr<CefDownloadHandler> handler;
+   if (browser.get()) {
+     handler = GetDownloadHandler(browser);
++  } else {
++    auto found = item_handler_map_.find(download);
++    if (found != item_handler_map_.end()) {
++      handler = found->second;
++    }
+   }
+ 
+   if (handler.get()) {
+@@ -349,6 +354,7 @@
+ 
+ void CefDownloadManagerDelegateImpl::OnDownloadDestroyed(DownloadItem* item) {
+   item->RemoveObserver(this);
++  item_handler_map_.erase(item);
+ 
+   CefBrowserHostBase* browser = nullptr;
+ 
+@@ -483,9 +489,9 @@
+     CefBrowserHostBase* browser) {
+   for (auto& [item, item_browser] : item_browser_map_) {
+     if (item_browser == browser) {
+-      // Don't call back into browsers that have been destroyed. We're not
+-      // canceling the download so it will continue silently until it completes
+-      // or until the associated browser context is destroyed.
++      // Never retain or call a destroyed browser. The context-owned manager
++      // keeps the original handler, which receives a null browser until this
++      // item or the browser context is destroyed.
+       item_browser = nullptr;
+     }
+   }
+@@ -513,9 +519,12 @@
+   item->AddObserver(this);
+ 
+   item_browser_map_.insert(std::make_pair(item, browser.get()));
+-
+-  // Register as an observer so that we can cancel associated DownloadItems when
+-  // the browser is destroyed.
++  if (auto handler = GetDownloadHandler(browser)) {
++    item_handler_map_.emplace(item, handler);
++  }
++
++  // Observe destruction to clear the raw browser pointer. Downloads and their
++  // original handlers remain owned by this context's DownloadManager.
+   if (!browser->HasObserver(this)) {
+     browser->AddObserver(this);
+   }

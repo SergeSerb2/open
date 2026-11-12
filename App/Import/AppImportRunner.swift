@@ -123,9 +123,13 @@ final class AppImportRunner: ProfileDataOwner {
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if case .browser(let source, let profile) = plan.source {
-      guard !firstRun else { return result("First run imports from Arc only.") }
       let browser = await importBrowser(source: source, profile: profile, plan: plan, undo: undo, wizard: wizard,
                                         progress: { progress($0, $1, landed: $2) })
+      if firstRun {
+        // I-5: the import merged into the first-run model. Land the browser behind onboarding, as Arc does.
+        app.showFirstRunBrowser()
+        do { try app.snapshotStore.saveNow(model: app.model) } catch { return result(FirstRunViewModel.importedSaveError) }
+      }
       counts = browser.counts; failures = browser.failures
       extensions = browser.extensions; extensionProfileCount = 1
       secretsReportLines = browser.secretsReportLines

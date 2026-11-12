@@ -59,3 +59,54 @@ attribution, and stop delivery after Profile destruction. Run the unchanged Retr
 predicate against the repaired engine, as well as close-during-transfer and
 Profile-retirement flows. Remove the exact `downloads/history_retry` deferral
 when that engine patch lands. Other Downloads failures remain gate failures.
+
+## Source preparation, 2026-11-11
+
+At the E1–E3 audit checkpoint,
+`Engine/fork/patches/cef/1001-download-handler-lifetime.patch` was prepared
+but disabled in the CEF series. The lead's E4 ruling on 2026-11-11 enables it
+for source application and CEF API generation in the same official engine
+build. Compilation still needs the explicit build-window approval. Source
+preparation does not establish end-to-end acceptance; the
+`downloads/history_retry` deferral remains.
+
+The proposed route retains each associated download's original handler in
+`CefDownloadManagerDelegateImpl`, whose owner is the Profile's DownloadManager.
+Browser destruction clears the raw browser pointer, as before. Later updates
+use the retained handler with a null browser. Item destruction releases the
+handler; `ResetManager` invalidates callback handles and removes every item.
+The existing manager-owned Web Store exception in patch 0305 stays unchanged.
+
+The public `OnDownloadUpdated` annotation must permit a null browser. This is
+part of patch 1001. Both generated wrapper directions currently reject a null
+browser (`cef/libcef_dll/cpptoc/download_handler_cpptoc.cc`,
+`cef/libcef_dll/ctocpp/download_handler_ctocpp.cc`). After build approval,
+`engine-apply` detects the public-header patch and regenerates the CEF API;
+do not edit generated wrappers by hand.
+
+The OpenEngine companion must also preserve the original context with a weak
+reference in `OEClient`. Its existing `OnDownloadUpdated` fallback chooses
+Default when the page is gone, which would misattribute a named Profile's
+terminal update. Capture `content.context` when creating the client, retain no
+page or Profile, and reject delivery when that context is absent or closing.
+The prepared companion is delivered with the private engine audit as
+`E-download-openengine-companion.patch`; it is not applied to the App sources.
+Enabling only the CEF patch is not a complete fix.
+
+The source-only checks pass against pinned Chromium `d0c02bfad08` and CEF
+`4fa4ab516da`: `git -C <src>/cef apply -p2 --check <patch-1001>` and
+`git apply --check <OpenEngine-companion>`. Raw receipts are in the engine
+lane's `.re/engine-audit/13-patch-check.txt` and
+`.re/engine-audit/15-companion-check.txt`. No tree writer ran.
+
+After approval, run the unchanged `downloads/history_retry` predicate, normal
+and close-during-transfer downloads, named-Profile attribution, Profile
+retirement, and the Web Store download flow. No fix or performance gain is
+claimed from source preparation alone.
+
+## Accepted on the official engine (2026-11-12)
+
+The official remote-built engine (`Engine/fork/official-distrib.json`) includes CEF patch 1001 and the
+OEClient companion. On the M5 (Release, `tools/verify-all.sh --only e2e-downloads`), the unchanged
+`downloads/history_retry` row passed, and the gate reported its deferral as STALE. The deferral is
+removed from `tools/verification/gate-exceptions.json`.

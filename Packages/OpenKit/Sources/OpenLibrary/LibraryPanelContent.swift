@@ -269,7 +269,7 @@ extension LibraryPanelView {
             case .media: host.sources = ((viewModel.mediaFolders?.isEnabled(.capture) ?? true ? captureSources() : []) + mediaFileSources())
                 .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
             case .boosts: host.sources = boostSources()
-            case .easels: host.sources = easelSources()
+            case .easels: host.sources = easelAndNoteSources()
             default: host.sources = []
             }
             host.sourceVersion += 1

@@ -25,12 +25,7 @@ public enum CaptureMetrics {
     public static let sizeLabelPadding: CGFloat = 7
     public static let sizeLabelGap: CGFloat = 6
     /// "Drag to capture. Press Esc to cancel." on the toast fill, centered 16 pt from the page top.
-    /// Arc's overlay pill (capture s4 `t6/07-library-capture/e6-capture-ui`): a click captures the
-    /// hovered element, a drag captures an area.
-    public static let hintText = "Click or drag to capture a portion of this page"
-    /// The hovered element's outline (s4 `e6-capture-ui`: white, rounded). Width and radius GUESS — capture pending.
-    public static let elementOutlineWidth: CGFloat = 2
-    public static let elementOutlineRadius: CGFloat = 8
+    public static let hintText = "Drag to capture. Press Esc to cancel."
     public static let hintFont = FontToken(13, .medium)
     public static let hintHeight: CGFloat = 28
     public static let hintRadius: CGFloat = 14

@@ -155,7 +155,9 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
   var onChange: ((_ title: String, _ body: NSAttributedString) -> Void)?
   /// Saves image bytes for this Note; returns the asset name, nil when refused.
   var onImage: ((_ data: Data, _ ext: String) -> String?)?
-  var onOpenLink: ((URL) -> Void)?
+  var onOpenLink: ((URL, NSEvent.ModifierFlags) -> Void)?
+  /// Automation: the modifier keys of the next link click (a socket call has no mouse event).
+  var linkFlagsForNextClick: NSEvent.ModifierFlags?
   private(set) var isDark = false
   /// The Note's own undo history, grouped per event (the App's model undo manager
   /// groups by command, not by event, and must not mix with typing).
@@ -379,7 +381,9 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
   func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
     let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
     guard let url, ["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "") else { return true }
-    onOpenLink?(url); return true
+    let flags = (linkFlagsForNextClick ?? NSApp.currentEvent?.modifierFlags ?? []).intersection(.deviceIndependentFlagsMask)
+    linkFlagsForNextClick = nil
+    onOpenLink?(url, flags); return true
   }
 
   /// Clicks below the body text land in the body.
