@@ -209,6 +209,8 @@ public final class SidebarContext {
     /// (host, port, path, query).
     static func fieldText(_ url: URL, _ developerHosts: Set<String>) -> String {
         if url.absoluteString == "open://welcome" { return "Welcome to Open" }
+        // Arc shows a lock and "Share" for an Easel; Open has no sharing, so it names the page kind.
+        if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "easel" { return "Easel" }
         let scheme = url.scheme?.lowercased()
         let key = scheme == "file" ? "file" : url.host()?.lowercased()
         guard let key, developerHosts.contains(key) else { return URL.displayHost(url) }

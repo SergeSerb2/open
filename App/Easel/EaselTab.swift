@@ -5,6 +5,7 @@ import OpenModel
 /// An Easel is a sidebar tab whose URL is `open://easel/<uuid>` (like the Welcome page): it
 /// pins, sits in folders, splits and archives like any tab, and never reaches OpenEngine.
 /// Its content lives in `<data root>/Easels/<uuid>/document.json` (`EaselStore`).
+@MainActor
 enum EaselTab {
   static func url(for id: UUID) -> URL { URL(string: "open://easel/\(id.uuidString.lowercased())")! }
   static func documentID(_ url: URL?) -> UUID? {

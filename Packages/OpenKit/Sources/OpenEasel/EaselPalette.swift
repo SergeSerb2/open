@@ -59,7 +59,7 @@ enum EaselStyle {
     static func toolPlate(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x4A4FC8) : EaselPalette.srgb(0x9095FB) }
     static func toolHover(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.10) : NSColor(white: 0, alpha: 0.05) }
     /// `FloatingElementBackground` #FFFFFF / #000000.
-    static func floating(dark: Bool) -> NSColor { dark ? NSColor(white: 0.11, alpha: 1) : NSColor(white: 1, alpha: 1) }
+    static func floating(dark: Bool) -> NSColor { dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 1, alpha: 1) }  // dark: GUESS — capture pending
     /// Divider in the toolbar: capture #E4E4E6.
     static func divider(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.14) : EaselPalette.srgb(0xE4E4E6) }
     /// `EaselBackground` white 85 % / black 50 % over the window; capture page #FDFBFC.
