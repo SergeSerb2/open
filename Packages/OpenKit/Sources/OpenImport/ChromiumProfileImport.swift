@@ -15,6 +15,8 @@ public struct ChromiumProfileCounts: Sendable {
     public var historyVisits: Int?
     public var searchEngine: String?
     public var skippedBookmarks = 0
+    /// Row counts only (no decryption, no Keychain): saved passwords, cookies, cards, addresses.
+    public var secrets: ArcSecretsReadReport?
     /// Categories whose file exists but was refused or could not be parsed.
     public var unreadable: Set<String> = []
 }
@@ -126,6 +128,8 @@ public struct ChromiumProfileReader: Sendable {
         catch ReadError.missing {} catch { counts.unreadable.insert("Bookmarks") }
         do { counts.historyVisits = try historyVisitCount() } catch ReadError.missing {} catch { counts.unreadable.insert("History") }
         counts.searchEngine = defaultSearchEngine().map { ChromiumSearchMapping.map($0).name }
+        do { counts.secrets = try ArcSecretsReader(profileDirectory: directory).countOnly() }
+        catch ArcSecretsImportError.missingFiles {} catch { counts.unreadable.insert("Passwords and cookies") }
         return counts
     }
 }

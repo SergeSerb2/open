@@ -8,11 +8,16 @@ import OpenImport
 public struct PasswordsImportCopy: Sendable {
     public let canImport: Bool
     public let savedItems: Int?
-    public init(canImport:Bool,savedItems:Int?) {self.canImport=canImport;self.savedItems=savedItems}
-    public var title:String {canImport ? "Import passwords and cookies from Arc?":"Passwords and cookies can't be imported yet."}
+    /// The source browser's display name ("Arc", "Chrome", …).
+    public let source: String
+    public init(canImport:Bool,savedItems:Int?,source:String="Arc") {self.canImport=canImport;self.savedItems=savedItems;self.source=source}
+    public var title:String {canImport ? "Import passwords and cookies from \(source)?":"Passwords and cookies can't be imported yet."}
     public var body:String {
-        if canImport {return "Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else. " + ArcSecretsImportReport.passkeyMessage}
-        if let savedItems {return "Open found \(ImportCountCopy.phrase(savedItems,singular:"saved item",plural:"saved items")) in Arc. Open didn't read or copy \(savedItems == 1 ? "it":"them")."}
+        if canImport {
+            let passkeys = source == "Arc" ? ArcSecretsImportReport.passkeyMessage : "Passkeys saved only in \(source) stay in \(source)."
+            return "Open will read the passwords, cookies, addresses, and cards \(source) saved on this Mac. To unlock them, Open needs \(source)'s key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else. " + passkeys
+        }
+        if let savedItems {return "Open found \(ImportCountCopy.phrase(savedItems,singular:"saved item",plural:"saved items")) in \(source). Open didn't read or copy \(savedItems == 1 ? "it":"them")."}
         return "Open didn't read or copy passwords or cookies. You can continue without them."
     }
     public static let later="You can skip this step and do it later from Settings."
