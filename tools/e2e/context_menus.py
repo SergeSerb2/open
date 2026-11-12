@@ -712,7 +712,7 @@ def context_menu_checks(factory, results, tmp, h):
                 app.call('favorite', tab=favorite)
                 empty = app.call('folder', tabs=[], title='Menu Empty', section='pinned')
                 today_ids = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
-                items = lambda node, **kw: app.call('sidebar-menu-items', node=node, **kw)
+                items = lambda node, **kw: app.call('sidebar-menu-items', **({'node': node} if node else {}), **kw)
                 today_expected = ['Copy Link', 'Share…', '—', 'Change Icon…', 'Rename…', 'Mute', '—', 'Open in Split View',
                                   'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Other Tabs', 'Archive Tabs Below',
                                   'Archive Tabs Above']
