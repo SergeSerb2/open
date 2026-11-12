@@ -299,3 +299,27 @@ small comparison thumbnails. These are capture-tool limits, not product limits.
 - Key allowlist adds ⌘= / ⌘− / ⌘0 (canvas zoom) and the Note shortcuts ⌃⇧N / ⌃⌥N / ⌃⇧E.
 - `shot()` reuses a remembered window only while it is on screen (capture overlays close mid-block).
 - An unfocused synthetic field is a script-level stop (exit 3), so the next independent block still runs.
+
+## Sessions 5–9 additions
+
+All of these need `"capture_scope": "session3"` and the lead rulings named in the code. Each one stops instead of
+guessing.
+
+- `deep_link` — runs `/usr/bin/open URL` for a URL on the `DEEP_LINKS` allowlist only.
+- `open_cover` / `open_uncover` — start an owned capture build of Open on a **new, empty** data folder, place its
+  window over Arc's window through the automation socket (`window-frame`, `activate`), and end it with SIGTERM to
+  that exact PID. No input event goes to Open.
+- `arc_windows` — window list plus one frame for every visible Arc window (menus, popovers, PiP).
+- `pip_window_exception` + `pip_title_re` (script keys) — record, never click, one Arc-owned `AXSystemDialog` window
+  that has an empty or matching title, no text field or sign-in/allow/OK button, a layer above 0, and less than half
+  the screen. Every other dialog still stops the block.
+- `pointer_ax` — `modifiers` (`cmd`, `opt`, `shift`) for ⌘-click selection, and `expect: "observe"` for a right-click
+  that may open no menu (the result is recorded, the block continues).
+- `modkey` — Option down/up while an owned menu is open; released again in cleanup.
+- `arc_log` — a read-only `log stream` of the owned Arc process with `mark` labels (sound mapping).
+- A guard stop on a dialog now saves the owned app's AX windows and CG window list (passive reads).
+- Fixture: `/video` (muted canvas stream), `/download.pdf`, `/large.bin` (8 MiB over about 60 s) and `/fail.bin`
+  (announces 4 MiB, closes after 512 KiB). All content is synthetic filler.
+
+Menus of the Library sections have no AX items. Read their titles from the `*-window-<id>.png` frames.
+Keep Arc 1080 pt wide (right edge at x 1100) when a target is near the macOS alert at the screen's top right.

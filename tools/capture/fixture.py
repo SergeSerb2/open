@@ -32,8 +32,30 @@ class SyntheticSite:
                 elif path == '/download.txt':
                     payload = b'Open-capture synthetic attachment. No personal data.\n'
                     kind = 'application/octet-stream'
+                elif path == '/download.pdf':
+                    payload = owner.pdf()
+                    kind = 'application/pdf'
+                elif path in ('/large.bin', '/fail.bin'):
+                    # Synthetic filler only. /large.bin: 8 MiB over about 60 s (stays in
+                    # progress). /fail.bin: announces 4 MiB, then closes after 512 KiB.
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/octet-stream')
+                    self.send_header('Content-Length', str((8 if path == '/large.bin' else 4) << 20))
+                    self.send_header('Content-Disposition', 'attachment; filename="Open-capture-%s"' % path[1:])
+                    self.send_header('Cache-Control', 'no-store')
+                    self.end_headers()
+                    chunk = (b'Open-capture synthetic filler. No personal data.\n' * 1400)[:65536]
+                    try:
+                        for i in range(128 if path == '/large.bin' else 8):
+                            self.wfile.write(chunk); self.wfile.flush(); time.sleep(.47 if path == '/large.bin' else .25)
+                        if path == '/fail.bin':
+                            self.close_connection = True
+                            self.connection.shutdown(2)
+                    except (BrokenPipeError, ConnectionResetError, OSError):
+                        pass
+                    return
                 else:
-                    titles = {'/audio': 'Open-capture audio', '/media': 'Open-capture media', '/': 'Open-capture index', '/article': 'Open-capture long article', '/form': 'Open-capture form', '/slow': 'Open-capture slow page', '/lisbon': 'Lisbon weather', '/lemon': 'Lemon pasta', '/long': 'Open-capture ' + 'very long title ' * 16}
+                    titles = {'/video': 'Open-capture video', '/audio': 'Open-capture audio', '/media': 'Open-capture media', '/': 'Open-capture index', '/article': 'Open-capture long article', '/form': 'Open-capture form', '/slow': 'Open-capture slow page', '/lisbon': 'Lisbon weather', '/lemon': 'Lemon pasta', '/long': 'Open-capture ' + 'very long title ' * 16}
                     title = titles.get('/long' if path.startswith('/long') else path, 'Open-capture page ' + path[:80])
                     links = [('/article', 'Long article'), ('/form', 'Form'), ('/download.txt', 'Download synthetic text'), ('/slow', 'Slow page'), ('/lisbon', 'Lisbon weather'), ('/lemon', 'Lemon pasta'), ('/long/' + 'synthetic-path-' * 18, 'Very long URL')] + [(f'/page-{i}', f'Open-capture page {i}') for i in range(5)]
                     body = '<nav>' + ''.join(f'<p><a href="{html.escape(p)}">{label}</a></p>' for p, label in links) + '</nav>'
@@ -44,6 +66,12 @@ class SyntheticSite:
                         body += ''.join(f'<p>Open-capture paragraph {i}. Lemon pasta and Lisbon weather are synthetic search terms. This page has no personal content.</p>' for i in range(60))
                     if path == '/audio':
                         body = '<p>Open-capture quiet looping tone.</p><audio id="a" src="/tone.wav" loop autoplay controls></audio><p><button onclick="document.getElementById(\'a\').play()">Play synthetic tone</button></p>'
+                    if path == '/video':
+                        body = ('<p>Open-capture synthetic video (canvas stream).</p><video id="v" width="480" height="270" muted autoplay playsinline controls></video>'
+                                '<canvas id="c" width="480" height="270" style="display:none"></canvas><script>'
+                                'const c=document.getElementById("c"),x=c.getContext("2d"),v=document.getElementById("v");let t=0;'
+                                'setInterval(()=>{t++;x.fillStyle="hsl("+(t*3%360)+",60%,45%)";x.fillRect(0,0,480,270);x.fillStyle="#fff";x.font="40px system-ui";x.fillText("Open-capture "+t,40,150)},40);'
+                                'v.srcObject=c.captureStream(25);v.play();</script>')
                     if path == '/media':
                         body = '<p>Open-capture <a href="/lisbon">link to Lisbon weather</a> and an image:</p><p><img src="/favicon.svg" width="160" height="160" alt="Open-capture synthetic image"></p><p>Synthetic selectable paragraph about Lemon pasta.</p>'
                     if path == '/form':
@@ -56,6 +84,8 @@ class SyntheticSite:
                 self.send_header('Cache-Control', 'no-store')
                 if path == '/download.txt':
                     self.send_header('Content-Disposition', 'attachment; filename="Open-capture-synthetic-s2.txt"')
+                if path == '/download.pdf':
+                    self.send_header('Content-Disposition', 'attachment; filename="Open-capture-synthetic.pdf"')
                 self.end_headers()
                 try:
                     if path == '/slow':
@@ -78,6 +108,20 @@ class SyntheticSite:
         except Exception:
             self.close()
             raise
+
+    @staticmethod
+    def pdf():
+        # A one-page synthetic PDF with the text "Open-capture synthetic PDF".
+        text = b'BT /F1 24 Tf 72 720 Td (Open-capture synthetic PDF) Tj ET'
+        objs = [b'<< /Type /Catalog /Pages 2 0 R >>', b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+                b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+                b'<< /Length %d >>\nstream\n' % len(text) + text + b'\nendstream', b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+        out, offsets = b'%PDF-1.4\n', []
+        for i, o in enumerate(objs, 1):
+            offsets.append(len(out)); out += b'%d 0 obj\n' % i + o + b'\nendobj\n'
+        xref = len(out)
+        out += b'xref\n0 %d\n0000000000 65535 f \n' % (len(objs) + 1) + b''.join(b'%010d 00000 n \n' % o for o in offsets)
+        return out + b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n' % (len(objs) + 1, xref)
 
     @staticmethod
     def tone():
