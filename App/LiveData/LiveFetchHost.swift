@@ -52,7 +52,6 @@ final class LiveFetchHost {
       try await Task.sleep(for: .milliseconds(100))
     }
     if content.crashState != .none { throw Failure.loadFailed("crashed") }
-    guard content.url?.host == url.host else { throw Failure.loadFailed(content.url?.absoluteString ?? "") }
     return try await content.evaluateJavaScript(script, in: .open)
   }
 }
