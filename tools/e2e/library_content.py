@@ -87,6 +87,11 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                 if open_after:
                     state(action='open',section='downloads');assert wait(lambda:row(value['id']))
                 return value['id']
+            # An outside entry scopes Downloads to the owner Profile; with no downloads that is "No downloads yet",
+            # not "No matches" (no search or filter of the user's; IMC 12:35).
+            state(action='open',section='downloads')
+            check('downloads_empty_copy',wait(lambda:not rows() and state()['emptyState']['title']=='No downloads yet'),empty=state().get('emptyState'),header=state().get('header'))
+            state(action='close')
             complete=start('/file');check('completed_download_row',wait(lambda:item(complete).get('state')=='completed') and wait(lambda:row(complete)['subtitle']=='Download'),row=row(complete))
             # Arc's download menu (D2c #394): "Open ‹ext›", "Copy ‹ext›", then the fixed items.
             titles=[m['title'] for m in menu(complete)]
@@ -176,7 +181,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             # Closing an ordinary real tab archives it through the existing path.
             other=app.call('tabs')[-1]['id'];app.call('select',tab=other);app.call('command',id='archive-tab')
             state(action='open',section='archive');check('archive_real_rows',wait(lambda:bool(rows())),rows=rows())
-            archived=rows()[0];state(action='hover-row',id=archived['id']);check('archive_hover_actions',row(archived['id'])['actions']==['Delete','Restore']);capture('archive-hover')
+            archived=rows()[0];state(action='hover-row',id=archived['id']);check('archive_hover_actions',row(archived['id'])['actions']==['Delete','Restore']);check('archive_tooltip_and_url',row(archived['id'])['toolTip']==archived['title'] and '://' not in archived['subtitle'],row=row(archived['id']));capture('archive-hover')
             state(action='filter',open=True);check('archive_filters',len(state()['header']['chips'])>=4);capture('archive-filters')
             state(action='chip',id='reason:auto');check('archive_reason_empty',wait(lambda:not rows()))
             state(action='chip',id='reason:auto');state(action='chip',id='reason:manual');check('archive_manual_filter',wait(lambda:bool(row(archived['id']))))
@@ -223,6 +228,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('boost-gallery-ui',action='profile',name=profile_name);check('boost_profile_restored',wait(lambda:bool(row(boost))))
             state(action='select',section='spaces');manager=app.call('space-manager-state')
             check('spaces_second_card',len(manager['columns'])==2)
+            # Capture session 8 item 13: the card header right-click and the footer "…" show the Space menu without Manage Spaces….
+            footer_menu=app.call('space-manager-menu',space=second_space,item='?');header_menu=app.call('space-manager-menu',space=second_space,item='?',header=True)
+            check('space_card_menu_order',footer_menu==header_menu and 'Manage Spaces…' not in footer_menu and footer_menu[-2:]==['separator','Delete Space'] and footer_menu[-3].startswith('Export ') and footer_menu[0]=='Change Space Icon…',footer=footer_menu,header=header_menu)
             app.call('space-manager-menu',space=second_space,item='Rename Space…');key('a',['cmd']);app.call('key',text='Reading List',route='app');key('return')
             check('space_visible_rename',wait(lambda:any(s['id']==second_space and s['title']=='Reading List' for s in app.call('spaces'))))
             check('space_rename_returns_focus',state()['firstResponder']!='NSTextView',responder=state()['firstResponder'])

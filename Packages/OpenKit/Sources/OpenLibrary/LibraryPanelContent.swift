@@ -421,9 +421,14 @@ extension LibraryPanelView {
                     Task { @MainActor in await self.viewModel.deleteArchiveConfirmed(); self.renderRows() }
                 }
             }
-            return LibraryRowItem(id:id.description,title:viewModel.archivedDisplayTitle(row),subtitle:row.url.absoluteString,kind:"archive",day:"",
+            // Arc (capture session 8 item 11): no right-click menu, the title as hover tooltip, the URL without its scheme.
+            let title = viewModel.archivedDisplayTitle(row), url = row.url.absoluteString
+            let scheme = (row.url.scheme ?? "") + "://"
+            var item = LibraryRowItem(id:id.description,title:title,subtitle:url.hasPrefix(scheme) && scheme != "://" ? String(url.dropFirst(scheme.count)) : url,kind:"archive",day:"",
                 image:symbol(row.kind == .folder ? "folder" : "globe"),loadImage:row.kind == .folder ? nil : { [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.kind == .folder ? nil : row.url,activate:restore,
                 hoverActions:[.init(title:"Delete",glyph:.trash,run:remove),.init(title:"Restore",glyph:.undo,run:restore)])
+            item.toolTip = title
+            return item
           }
         }
     }
