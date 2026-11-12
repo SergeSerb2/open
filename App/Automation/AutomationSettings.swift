@@ -208,21 +208,25 @@ extension AutomationController {
   }
 
   private func iconPixels(_ image: CGImage, matching actual: CGImage) -> Data? {
-    // AppKit can copy the icon as float16 in the monitor's profile. That
-    // extended color space cannot make an 8-bit context. Preserve its format.
-    guard image.width == 1024, image.height == 1024,
-      actual.width == 1024, actual.height == 1024, let space = actual.colorSpace,
-      space.model == .rgb, [8, 16, 32].contains(actual.bitsPerComponent) else { return nil }
-    let bytesPerRow = 1024 * 4 * (actual.bitsPerComponent / 8)
+    // AppKit returns a 2048 px copy on the 2x panel, even for the 1024 px
+    // picker image. Compare both in that native raster size and output format;
+    // rejecting the copy's size would bypass pixel comparison altogether.
+    guard [1024, 2048].contains(image.width), image.height == image.width,
+      [1024, 2048].contains(actual.width), actual.height == actual.width,
+      let space = actual.colorSpace, space.model == .rgb,
+      [8, 16, 32].contains(actual.bitsPerComponent) else { return nil }
+    let side = actual.width
+    let bytesPerRow = side * 4 * (actual.bitsPerComponent / 8)
     let format = actual.bitmapInfo.intersection([.floatComponents, .byteOrderMask]).rawValue
       | CGImageAlphaInfo.premultipliedLast.rawValue
-    // Fixed 1024 px RGBA; the largest permitted read-back allocation is 16 MiB.
-    guard let context = CGContext(data: nil, width: 1024, height: 1024,
+    // At most 2048 px RGBA float32: 64 MiB for one context/read-back buffer.
+    // Preserve the display profile and precision; no pixel tolerance is added.
+    guard let context = CGContext(data: nil, width: side, height: side,
       bitsPerComponent: actual.bitsPerComponent, bytesPerRow: bytesPerRow,
       space: space, bitmapInfo: format) else { return nil }
-    context.draw(image, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
     guard let pixels = context.data else { return nil }
-    return Data(bytes: pixels, count: bytesPerRow * 1024)
+    return Data(bytes: pixels, count: bytesPerRow * side)
   }
 }
 #endif

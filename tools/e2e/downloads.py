@@ -57,16 +57,18 @@ def server():
 
 def checks(factory, results, tmp, config, harness):
     E = harness
-    if os.environ.get('OPEN_DOWNLOADS_CASE', '') in ('', 'littleopen'):
+    lane = getattr(harness, 'E2E_LANE', 'all')
+    if lane != 'observers' and os.environ.get('OPEN_DOWNLOADS_CASE', '') in ('', 'littleopen'):
         import littleopen_downloads
         littleopen_downloads.checks(factory, results, tmp, E, server)
         if os.environ.get('OPEN_DOWNLOADS_CASE') == 'littleopen':
             return
     root = Path(tempfile.mkdtemp(prefix="downloads-attempt-", dir=tmp))
     probe = root / 'idle-probe.dylib'
-    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
-                    str(Path(E.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
-                    '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', str(probe)], check=True)
+    if lane != "merge":
+        subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
+                        str(Path(E.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
+                        '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', str(probe)], check=True)
     bundle = root / 'Open.app'
     source_app = os.environ.get('OPEN_DOWNLOADS_SOURCE_APP') or str(Path(E.ROOT) / 'build' / config / 'Open.app')
     subprocess.run(['cp', '-cR', source_app, str(bundle)], check=True)
@@ -87,6 +89,9 @@ def checks(factory, results, tmp, config, harness):
     subprocess.run(['codesign', '--force', '--sign', '-', str(opener)], check=True, capture_output=True)
     opened_file = root / 'opened-file.json'
     launch_env = {'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_IDLE_DOWNLOADS': '1', 'OPEN_E2E_APP_BUNDLE': str(bundle), 'OPEN_DOWNLOADS_DEFAULT_DIRECTORY': str(root / 'DefaultDownloads')}
+    if lane == 'merge':
+        launch_env.pop('DYLD_INSERT_LIBRARIES')
+        launch_env.pop('OPEN_IDLE_DOWNLOADS')
     app = factory(urls=(), extra_env=launch_env, extra_args=['-open.general.warnBeforeQuitting', 'YES'])
     app.exclusive_bundle = True  # This suite alone owns the disposable clone.
     app.preferences_domain = domain
@@ -275,14 +280,16 @@ def checks(factory, results, tmp, config, harness):
         # S8's native observer: real timer canary, then a settled interval
         # with zero Home draw/layout/display/invalidations/queue work and no
         # owned timers/display links or CA animation keys.
-        app.call('download-idle', action='begin')
-        canary = app.call('download-idle', action='canary')
-        check('idle_observer_canary', canary['live'] > 0 and canary['after'] == 0, canary=canary)
-        time.sleep(.4); app.call('download-idle', action='reset')
-        before = state(); t0 = time.monotonic(); time.sleep(2)
-        counts = app.call('download-idle'); after = state()
-        check('idle_zero', counts == [0] * 10 and before['publishes'] == after['publishes'] and after['badge']['animations'] == 0 and after['badge']['trackOpacity'] == 0 and after['badge']['ringOpacity'] == 0 and after['badge']['checkOpacity'] == 0 and after['badge']['homeOpacity'] == 1 and not after['queued'], counts=counts, elapsed=time.monotonic()-t0, load=os.getloadavg(), publishes=[before['publishes'], after['publishes']])
-        app.call('download-idle', action='end')
+        if lane != "merge":
+            app.call('download-idle', action='begin')
+            canary = app.call('download-idle', action='canary')
+            check('idle_observer_canary', canary['live'] > 0 and canary['after'] == 0, canary=canary)
+            time.sleep(.4); app.call('download-idle', action='reset')
+            before = state(); t0 = time.monotonic(); time.sleep(2)
+            counts = app.call('download-idle'); after = state()
+            check('idle_zero', counts == [0] * 10 and before['publishes'] == after['publishes'] and after['badge']['animations'] == 0 and after['badge']['trackOpacity'] == 0 and after['badge']['ringOpacity'] == 0 and after['badge']['checkOpacity'] == 0 and after['badge']['homeOpacity'] == 1 and not after['queued'], counts=counts, elapsed=time.monotonic()-t0, load=os.getloadavg(), publishes=[before['publishes'], after['publishes']])
+            app.call('download-idle', action='end')
+
 
 
     def history_flow():
@@ -867,7 +874,7 @@ def checks(factory, results, tmp, config, harness):
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
-            selected = set(selection.split(',')) if selection else set(flows)
+            selected = {'badge'} if lane == 'observers' else set(selection.split(',')) if selection else set(flows)
             flows['cancel-sheet'] = cancel_sheet_flow
             if selected - set(flows):
                 raise RuntimeError('unknown Downloads diagnostic case: ' + selection)

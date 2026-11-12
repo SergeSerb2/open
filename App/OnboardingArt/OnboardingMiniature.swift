@@ -219,10 +219,18 @@ final class OnboardingMiniature: NSView {
         return own+(layer.sublayers ?? []).flatMap { animationDetails($0) }
     }
     func demoLabelFrames(in layer: CALayer?) -> [(String,CGRect)] {
-        let tab = demoKind == 0 ? demoTab : (demoKind == 2 ? context.focusedSpace?.pinned.compactMap(\.tab).first:movingTab)
-        guard let tab, let label = sidebar.drawnTitle(tabID: tab.id),
-              let frame = sidebar.drawnTitleFrame(tabID: tab.id),let source = sidebar.layer else { return [] }
-        return [(label,source.convert(frame,to: layer))]
+        let tabs: [Tab]
+        if demoKind == 2, let focused = context.focusedSpace {
+            tabs = (focused.pinned + focused.today).compactMap(\.tab)
+        } else {
+            tabs = [demoKind == 0 ? demoTab:movingTab].compactMap { $0 }
+        }
+        guard let source = sidebar.layer else { return [] }
+        return tabs.compactMap { tab in
+            guard let label = sidebar.drawnTitle(tabID: tab.id),
+                  let frame = sidebar.drawnTitleFrame(tabID: tab.id) else { return nil }
+            return (label,source.convert(frame,to: layer))
+        }
     }
     #endif
     private func prepareDemo() {
@@ -244,7 +252,7 @@ final class OnboardingMiniature: NSView {
         let surface = WelcomeTextColors.opaque(selected,over: background)
         // Tiny glyphs need headroom after scaling. Change only ink lightness,
         // retaining the actual Space field, row fill, layout and native text.
-        return WelcomeTextColors.text(seed,on: surface,minimum: 6)
+        return WelcomeTextColors.text(seed,on: surface,minimum: demoKind == 2 ? 6.5:6)
     }
     func playNewTab(duration: Double) {
         freezeDemo(); context.animatesChanges = true; demoRunning = true; prepareDemo()

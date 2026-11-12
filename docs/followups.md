@@ -1,5 +1,13 @@
 # Follow-ups
 
+- Paused media CPU ([#316](https://github.com/SergeSerb2/open/issues/316)): resolved by the lead's window rule (2026-11-11). Chromium's `AudioRendererMixer` keeps its empty sink running for `kPauseDelay` = 10 s after pause; the rows now sample 12–20 s after pause with the unchanged 0.5-point limit and pass on valid quiet M1 Measure and Media stages. The 6–14 s window stays as INFO `<stage>/media_idle_cpu_early`. Both exceptions are removed. An optional engine change (shorter delay for an empty mixer) is in the engine hand-over list, not required.
+
+- Arc import main-thread lag ([#314](https://github.com/SergeSerb2/open/issues/314), performance lane, LEAD 08:20): move the archive write (`writeArchive`) and the sidebar landing work off the main thread or split them into slices ≤ 8 ms; target maximum main-thread lag ≤ 50 ms on the M1 timing lane. A valid sample at `39922990` recorded 78.070 ms; `writeArchive` 66.249 ms, `readArchive` 49.690 ms, `landSidebar` 44.655 ms. History passed at 1,069.096 ms and idle at 0.399%. Earlier valid samples measured 26–51 ms, so the row is unstable around the limit. Both slots were held; pre-load1 3.460/3.161 ten seconds apart. Keep the raw FAIL at `.re/step4-m1-39922990/timing/` and its unchanged 50 ms limit. At unchanged product inputs on `b9531ac3`, a later valid sample passed: lag 46.919 ms, writeArchive 33.828 ms, landSidebar 13.090 ms, History 1,027.408 ms and idle 0.398%, pre-load1 3.294/3.348. The active exception was removed because it became stale; no fix or stable performance improvement is claimed. Phase values do not prove a sole cause.
+
+- Document PiP first-session crash (Step 4): the M5 Swift 6.4 optimizer hoisted a resilient field-offset read before class metadata initialization. The App prevents initializer inlining; [finding and stack](verification-step4-findings.md#document-picture-in-picture-first-session-object-corruption). Recheck the workaround when upgrading the M5 compiler; remove it only with a cold first-session real-App open/close negative and positive on the affected toolchain.
+
+- Profiles `shell_delete_never_loaded` intermittent (Step 4, LEAD 04:00, 2026-11-11): exact-head M1 `60918f9d` merge receipt `.re/step4-m1-60918f9d/merge/` recorded `cacheGone=true, engineGone=false` once (load1 6.674). The unchanged complete public confirmation `.re/step4-m1-60918f9d/profiles-confirm/` passed 77 rows, with both directories absent (load1 11.635). Both cleanups were safe. Cause is unresolved; load does not excuse the failure and the confirmation does not establish a fix. Follow up by distinguishing deletion errors from directory recreation; the row now records the Settings error and profile/model removal alongside the original predicate and deadline. The lead ruled this written finding nonblocking for Step 4, without an exception that hides the raw failure.
+
 - Public settings link scheme: not registered; decide name and consent model before adding (lead)
 
 - First onboarding frame waits for engine.start, 0.1–2.4 s observed on the same binary; final cold/repeat proof measured 2.552/2.498/2.416 s for engine.start and 3.435/3.295/3.230 s from launch to the first onboarding frame (INFO). Owner: launch budget (Section 8 item 13 / Section 16). Dyld/signature checks are a hypothesis; the attributed work is synchronous engine.start.
@@ -64,7 +72,7 @@ Small items found during review and verification. Each line: area — issue — 
 
 - **POST-V1: Site Control E1, remaining E2 and certificate viewer.** E1 includes the changed site settings list and All Site Settings page. Remaining E2 includes zoom-reset UI consumption and other settings bindings. The certificate viewer stays disabled. E3 live security state and the scoped cache/cookie menu are implemented in `s12/scc-final`; these completed paths are no longer follow-ups. — S12 lead item39, 2026-11-10.
 
-- **POST-V1: S12-V Site Control visuals** — **FAIL, known: material and element colors, follow-up S12-V (lead 22:20)**. S11 retains interim `.hudWindow` + #686881 at 0.32: lead ruling describes 2 of 4 probe misses, ΔE 4.1 and 7.1; exact measured ΔE00 values are 2.176 / 4.142 / 3.363 / 7.092. Keep the existing fit predicates (first two probes ±3 sRGB levels) and validation predicates (last two probes ΔE00 ≤3), with no threshold change. S12 elements: arrow rows ΔE 12–17, rims ΔE 17–20, separator ΔE 14, rings ΔE 3–5.6; pre-#249 exact table is 22/40 PASS, 18 FAIL, with arrow-tip position error 9 pt. The enabled New Boost action adds six existing probes after #249 (27/46 PASS, 19 FAIL on the fresh engine619324d3 receipt). Arrows, rims and separator are probably wrong tokens, not only the material. Accepted as known FAIL for this PR only, not visual parity. — Section 12 lead, 2026-11-07 22:20.
+- **POST-V1: S12-V Site Control visuals** — **FAIL, known: material and element colors, follow-up S12-V (lead 22:20)**. S11 retains interim `.hudWindow` + #686881 at 0.32: lead ruling describes 2 of 4 probe misses, ΔE 4.1 and 7.1; exact measured ΔE00 values are 2.176 / 4.142 / 3.363 / 7.092. Keep the existing fit predicates (first two probes ±3 sRGB levels) and validation predicates (last two probes ΔE00 ≤3), with no threshold change. S12 elements: arrow rows ΔE 12–17, rims ΔE 17–20, separator ΔE 14, rings ΔE 3–5.6; pre-#249 exact table is 22/40 PASS, 18 FAIL, with arrow-tip position error 9 pt. The enabled New Boost action adds six existing probes after #249 (27/46 PASS, 19 FAIL on the fresh engine619324d3 receipt). Arrows, rims and separator are probably wrong tokens, not only the material. Accepted as known FAIL for this PR only, not visual parity. — Section 12 lead, 2026-11-07 22:20. Step 4 retains exactly `sitecontrol/S11_material` and `sitecontrol/S12_elements` as DEFERRED under LEAD 02:35 (2026-11-11), with raw failures and limits unchanged. This deferral ends when the lead's design pass on the Site Control Center material lands, as part of D3: command bar, URL field, Site Control.
 
 - Site Control live material — **open: material, R-7 follow-up (lead ruling)**. Keep `.hudWindow` and SCC Dark #686881 at 0.32 as **interim (lead 2026-11-06)**. S11/S12 retain FAIL gates at unchanged limits. The retained pre-#249 M5 S11 probes have ΔE00 2.176/4.142/3.363/7.092; S12 passes 22/40 element checks and fails 18. The R-7 white/black response is ΔE00 25.430 at (300,140) and 19.392 at (260,250). This response does not establish parity. Older receipts do not qualify the current head. S11 includes an INFO-only white/black-page diagnostic at (300,140) and (260,250): ΔE00 <3 at both points indicates that the within-window material does not sample the engine remote layer. A larger response does not establish parity. Plan §11.1 sets the fallback: a borderless child window with `.behindWindow` blending. The lead owns that separate PR after this integration merges. These are new-suite rows, not regressions; the lead permits their interim merge without accepting them. — Section 12 child A, lead ruling 2026-11-06 14:49.
 
@@ -553,3 +561,28 @@ live Open Default; named Profiles still match stable import IDs only.
 | Post-hand-off idle CPU remains above near-zero target | Performance lane; no art regression. Separate 30 s first-run samples: baseline 2.23118%, M2 2.23073%, both with zero animation keys. Returning Welcome idle measured 0.133 → 0.400%; these are distinct scenarios. | Local receipts: `.re/handoff/plans/B-frames/m2/first-run-idle/receipt.json` and `perf/receipt.json`. |
 | Returning Welcome idle with the final native miniature kit | Performance lane; needs attribution. The separate M3 30 s returning sample measured 0.13320 → 0.83238% App CPU, with zero animation keys at both ends; load1 was 3.60 / 2.63. This is not the first-run idle pair above and is not near-zero acceptance. | Local receipt: `.re/handoff/plans/B-frames/m3/perf-final/receipt.json`; baseline and M3 each use a copy of the same frozen synthetic profile. |
 | One setup-close process-exit failure | Unresolved one-off; track recurrence. The window closed but the App did not exit and required forced cleanup. A focused retry exited within 6 s; the complete final suite passed both setup-close gates without forced cleanup. No predicate or product fix was used. | Local receipts: `.re/handoff/plans/B-frames/m2/onboarding-m5-attempt1.json` and `.log`; successful `close-focused.json` and `onboarding.json`. |
+
+## Step 4 activation identity intermittent (LEAD 06:30)
+
+The complete M5 Release Window sequence at `bc5b157a` rejected its own
+activation peer twice. The exact App passed focused M1 and M5 replays with
+matching mapped path/device/inode. No root cause or fix is established. Keep
+the raw failed/interrupted receipts and the strict identity check. This is a
+nonblocking written finding under LEAD 06:30. Follow-up: [#312](https://github.com/SergeSerb2/open/issues/312);
+capture both kernel identities at the actual rejection in the complete flow.
+
+## First launch after install (LEAD 07:10)
+
+The valid M1 first cold/warm pair measured sidebar 762/496 ms and FCP
+4,625/801 ms. Retain it as INFO with no limit yet. The separate steady-state
+row scores five later pairs, with its existing medians and 1.5× maxima.
+Owner: performance lane; attribute installation/system costs in
+[#313](https://github.com/SergeSerb2/open/issues/313). No launch deferral applies.
+
+## Defaults domain for automation builds (lead, 2026-11-11)
+
+Automation builds should use their own defaults domain so that e2e runs cannot
+change a user's live preferences. Today the real-App suites (for example
+`tools/e2e/updater.py`) write keys such as `open.general.warnBeforeQuitting`
+in the shared `io.github.sergeserb2.open` domain and restore them in `finally`.
+A user's running Open session can see those values while a suite runs.

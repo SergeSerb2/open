@@ -194,6 +194,7 @@ def run(factory, results, tmp, api):
         record('W07_idle_no_pending_work', at_rest(stable)
                and stable['completionCount'] == completion_count
                and (app.config != 'Release' or welcome_cpu['appPercent'] < 1),
+               timing=True, functionalOK=at_rest(stable) and stable["completionCount"] == completion_count,
                blank=blank_cpu, welcome=welcome_cpu, state=stable)
         resume_tab = app.call('welcome', action='insert')['tab']
         resume = pause_resume_playlist(app, api)
@@ -569,7 +570,7 @@ def pixel_contrast(path, state, window, api):
     minima = dict(header=min(samples[name]['ratio'] for name in ('heading', 'subheading')),
                   title=min(samples['card%d_title' % i]['ratio'] for i in range(1, 5)),
                   body=min(samples['card%d_body' % i]['ratio'] for i in range(1, 5)))
-    labels_present = [label['label'] for card in layout['cards'] for label in card.get('labelPixels', [])] == ['Lisbon in spring', 'Weekend reading', 'A slower Sunday']
+    labels_present = [label['label'] for card in layout['cards'] for label in card.get('labelPixels', [])] == ['Lisbon in spring', 'Weekend reading', 'A slower Sunday', 'The garden journal']
     links_present = [link['label'] for link in layout.get('linkPixels', [])] == ['Essential Shortcuts', 'Settings']
     return dict(ok=labels_present and links_present and all(s['ok'] for s in samples.values()), ratios=minima, samples=samples,
                 illustrationLabelsPresent=labels_present, footerLinksPresent=links_present,
@@ -650,7 +651,7 @@ def design_gates(state, appearance):
         'copy_fits': len(cards) == 4 and all(c['requiredTextHeight'] <= c['detail'][3]
             and c['requiredTitleWidth'] <= c['title'][2] for c in cards),
         'contrast': bool(color_ok),
-        'only_permitted_labels': [c['labels'] for c in cards] == [['Lisbon in spring'], ['Weekend reading'], ['A slower Sunday'], []],
+        'only_permitted_labels': [c['labels'] for c in cards] == [['Lisbon in spring'], ['Weekend reading'], ['A slower Sunday', 'The garden journal'], []],
         'static_without_pending_work': not state['animating'] and state['animationCount'] == 0
             and not state['pendingCompletion'],
     }
@@ -685,6 +686,7 @@ def pause_resume_playlist(app, api):
                         and (app.config != 'Release' or cpu < 1)),
                 initial=initial, paused=paused, restored=restored, still=still, manual=manual,
                 pauseSeconds=pause_seconds, pauseLimitSeconds=1,
+                timing=True, functionalOK=bool(initial and mini and paused and pause_seconds <= 1 and at_rest(after) and restored and at_rest(still) and still["playedCards"] == paused["playedCards"] and manual["animating"] and manual["activeCard"] == 2 and manual["playlist"] == "stopped"),
                 appCPUPercent=cpu, seconds=seconds, limitPercent=1, cpuLoadAverage=list(os.getloadavg()))
 
 
