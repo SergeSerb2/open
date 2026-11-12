@@ -103,6 +103,10 @@ else
     log 'args.gn exists: trusting ninja regeneration; args unchanged'
 fi
 mkdir -p "$LOG_DIR"
+# A parent started through an xcrun shim (e.g. /usr/bin/python3) exports SDKROOT, CPATH and
+# LIBRARY_PATH=/usr/local/lib. Clang then adds -L/usr/local/lib, and lld fails Rust build-script
+# links with -fatal_warnings. The build sets the SDK itself; clear them.
+unset SDKROOT CPATH LIBRARY_PATH
 # Xcode 27.2: the /usr/bin/python3 shim runs `xcodebuild -sdk "$SDKROOT" -find python3`, which
 # fails when SDKROOT is the symlinked SDK in the output dir (sdk/xcode_links/...). Rust
 # build-script links (linker_driver.py, `#!/usr/bin/env python3`) then fail. Put Xcode's real

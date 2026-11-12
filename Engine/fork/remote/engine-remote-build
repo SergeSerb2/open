@@ -13,6 +13,10 @@ log_dir=${E3_LOG_DIR:?set E3_LOG_DIR}
 mkdir -p "$log_dir"
 grep -Eq '^use_remoteexec[[:space:]]*=[[:space:]]*true' "$src/$out/args.gn" ||
     { echo "engine-remote-build: $out/args.gn lacks use_remoteexec = true" >&2; exit 2; }
+# A parent started through an xcrun shim (e.g. /usr/bin/python3) exports SDKROOT, CPATH and
+# LIBRARY_PATH=/usr/local/lib. Clang then adds -L/usr/local/lib, and lld fails Rust build-script
+# links with -fatal_warnings. The build sets the SDK itself; clear them.
+unset SDKROOT CPATH LIBRARY_PATH
 # Same Xcode 27.2 python3 shim bypass as engine-build.
 real_python3=$(env -u SDKROOT xcrun -f python3)
 mkdir -p "$log_dir/python3-bin"
