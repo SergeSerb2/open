@@ -9817,10 +9817,16 @@ def sidebar_a1_checks(app, results, require, evidence):
     pressed_again = app.call('toast-undo')
     require('E8_delete_folder_toast_undo_single_use', back and not pressed_again
             and app.call('sidebar-tree') == restored_sidebar, pressedAgain=pressed_again)
-    # Sound wiring (§3.13): the App resolves its own resources; the setting stays off by default.
-    sound = app.call('sound-effect', effect='capture')
+    # Sound wiring (§3.13): the App resolves its own resources; the switch is on by default (Arc's inverse key
+    # playUserInterfaceSoundsDisabled; audit A8) and turning it off gates every play.
+    sound_default = app.call('defaults', key='open.advanced.playSoundEffects')
+    app.call('defaults', key='open.advanced.playSoundEffects', value=False)
+    try:
+        sound = app.call('sound-effect', effect='capture')
+    finally:
+        app.call('defaults', key='open.advanced.playSoundEffects', value=None)
     require('A1_sound_effect_gated_off', sound['resource'] == 'open-capture.caf' and not sound['played'] and sound['plays'] == 0
-            and app.call('defaults', key='open.advanced.playSoundEffects') in (None, False), sound=sound)
+            and sound_default in (None, True), sound=sound, default=sound_default)
 
 
 def sidebar_a2_checks(app, results, require, evidence, tmp):

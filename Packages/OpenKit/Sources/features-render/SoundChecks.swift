@@ -28,12 +28,14 @@ enum SoundChecks {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let effects = SoundEffects(defaults: defaults)
-        let absent = !effects.play(.capture) && !effects.play(.event)
         defaults.set(false, forKey: "open.advanced.playSoundEffects")
-        check(absent && !effects.play(.capture) && !effects.play(.event) && effects.loadedSoundCount == 0 && effects.playCount == 0,
-              "SE2 disabled/absent preference neither loads nor plays a sound")
+        check(!effects.play(.capture) && !effects.play(.event) && effects.loadedSoundCount == 0 && effects.playCount == 0,
+              "SE2 disabled preference neither loads nor plays a sound")
+        // Absent = on, as Arc (inverse key playUserInterfaceSoundsDisabled; audit A8, GUESS until PB5-e).
+        defaults.removeObject(forKey: "open.advanced.playSoundEffects")
+        let absentPlays = effects.play(.capture) && effects.playCount == 1 && effects.loadedSoundCount == 1
         defaults.set(true, forKey: "open.advanced.playSoundEffects")
-        check(effects.play(.capture) && effects.playCount == 1 && effects.loadedSoundCount == 1,
-              "SE3 enabled preference plays once through SoundEffects and loads one prepared player")
+        check(absentPlays && effects.play(.capture) && effects.playCount == 2 && effects.loadedSoundCount == 1,
+              "SE3 absent (default on) and enabled preference play through SoundEffects with one prepared player")
     }
 }

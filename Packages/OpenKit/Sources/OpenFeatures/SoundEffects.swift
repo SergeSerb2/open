@@ -17,11 +17,12 @@ public final class SoundEffects {
         Bundle.module.url(forResource: "open-\(effect.rawValue)", withExtension: "caf", subdirectory: "Sounds")
     }
 
-    /// Reads the existing app preference at use. The default remains off (lead Q6).
-    /// The general event effect has no production caller until its trigger is captured.
+    /// Reads the existing app preference at use. Default **on**, as Arc: its key is the inverse
+    /// `playUserInterfaceSoundsDisabled` (absent = sounds on). GUESS — capture PB5-e pending (fresh Arc data folder);
+    /// LEAD 11:40, AUDIT-2026-11-12 A8. The general event effect has no production caller until its trigger is captured.
     @discardableResult
     public func play(_ effect: Effect) -> Bool {
-        guard defaults.object(forKey: "open.advanced.playSoundEffects") as? Bool == true else { return false }
+        guard defaults.object(forKey: "open.advanced.playSoundEffects") as? Bool ?? true else { return false }
         let player: AVAudioPlayer
         if let loaded = players[effect] { player = loaded }
         else {
