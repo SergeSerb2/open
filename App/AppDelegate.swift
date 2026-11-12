@@ -94,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var initialWindowInputMonitor: Any?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
+  /// Calendar data for Join Meeting, the calendar card and Live Calendar; first use only (plan NS §2 CAL).
+  lazy var calendar = CalendarService()
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false
