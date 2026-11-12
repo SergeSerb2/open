@@ -238,7 +238,7 @@ def checks(factory, results, tmp, config, harness):
         check('folder_unique', len(set(paths)) == 2 and all(Path(v).parent == first and Path(v).stat().st_size == 131072 for v in paths) and sentinel.read_text() == 'do not overwrite', paths=paths)
         library()
         completed = row(fast2)
-        check('completed_subtitle', completed.get('subtitle', '').startswith('Completed · '), row=completed)
+        check('completed_subtitle', completed.get('subtitle') == 'Download', row=completed)  # Arc: the kind word, else "Download" (C3 s8 item 9); .txt has none
         titles = [v['title'] for v in menu(fast2)]
         check('finished_menu_order', len(titles) == 6 and titles[0].startswith('Open ') and titles[1].startswith('Copy ') and titles[2:] == ['Show in Finder', 'separator', 'Hide from Open', 'Move to Trash'], titles=titles)
         app.call('download-policy', openApp=str(opener))
