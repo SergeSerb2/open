@@ -3,7 +3,7 @@ import OpenDesign
 import OpenModel
 
 public struct SidebarHoverPreviewRequest: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case folder(ItemID), page(tabID: ItemID) }
+    public enum Kind: Equatable, Sendable { case folder(ItemID), page(tabID: ItemID), glance(tabID: ItemID) }
     public var kind: Kind
     public var anchorInWindow: CGRect
     public init(kind: Kind, anchorInWindow: CGRect) { self.kind = kind; self.anchorInWindow = anchorInWindow }
@@ -68,11 +68,14 @@ public final class HoverPreviewTracker {
         case .folder(let folder):
             guard !folder.isExpanded, enabled("open.general.previewsFolders") else { leaveTarget(); return false }
             kind = .folder(nodeID)
-        case .tab:
-            guard enabled("open.general.previewsPages"), context.model.isPinned(tabID: nodeID) || {
+        case .tab(let tab):
+            guard context.model.isPinned(tabID: nodeID) || {
                 if case .favorites = context.model.parent(of: nodeID) { return true }; return false
             }() else { leaveTarget(); return false }
-            kind = .page(tabID: nodeID)
+            // A live-data card (Recents) has its own switch; other tabs need page previews on.
+            if context.glanceKind(for: tab) != nil { kind = .glance(tabID: nodeID) }
+            else if enabled("open.general.previewsPages") { kind = .page(tabID: nodeID) }
+            else { leaveTarget(); return false }
         case .split: leaveTarget(); return false
         }
         hideTask?.cancel(); hideTask = nil; scheduledHideDelay = nil
@@ -107,8 +110,10 @@ public final class HoverPreviewTracker {
         guard context.canStartHoverPreview else { return false }
         switch next.kind {
         case .folder(let id): return enabled("open.general.previewsFolders") && context.model.node(id: id)?.folder?.isExpanded == false
-        case .page(let id):
-            guard enabled("open.general.previewsPages"), context.model.tab(id: id) != nil, context.currentTab?.id != id else { return false }
+        case .page(let id), .glance(let id):
+            guard let tab = context.model.tab(id: id), context.currentTab?.id != id else { return false }
+            if case .glance = next.kind { guard context.glanceKind(for: tab) != nil else { return false } }
+            else { guard enabled("open.general.previewsPages"), context.glanceKind(for: tab) == nil else { return false } }
             if case .favorites = context.model.parent(of: id) { return true }
             return context.model.isPinned(tabID: id)
         }
