@@ -80,9 +80,18 @@ def run(factory, results, tmp, env):
     def browser():
         app.call('window-focus', id=normal, activate=True)
         app.call('space', space=space_a)
+    def prepared(profile_id, previous=None):
+        def ready():
+            native = app.call('library')
+            host = native.get('providers', {}).get('boosts', {})
+            return native['profiles']['history'] == profile_id and host.get('loaded') and not host.get('running') and (previous is None or host.get('generation', 0) > previous)
+        assert wait(ready, timeout=5), app.call('library')
     def gallery(expect_cards=True):
-        browser(); app.call('menu-perform', id='boost-gallery')
+        browser(); before = app.call('library')
+        previous = before.get('providers', {}).get('boosts', {}).get('generation', 0) if before.get('profiles', {}).get('history') != profile_a else None
+        app.call('menu-perform', id='boost-gallery')
         assert wait(lambda: state()['boostsPresentation'] == 'gallery', timeout=5)
+        prepared(profile_a, previous)
         surfaces = {'boosts.gallery'} if expect_cards else {'boosts.layout.list', 'boosts.layout.gallery'}
         assert wait(lambda: surfaces <= ids(), timeout=5), ui()
     def ids():
@@ -91,8 +100,12 @@ def run(factory, results, tmp, env):
         return app.eval(tab, "getComputedStyle(document.querySelector('h1')).fontFamily")
     def profile(name):
         (Path(tmp) / 'gallery-before-profile.json').write_text(json.dumps(ui(), indent=2))
+        target = profile_a if name == name_a else profile_b
+        before = app.call('library')
+        previous = before.get('providers', {}).get('boosts', {}).get('generation', 0) if before['profiles']['history'] != target else None
         ui('profile', name=name)
-        assert wait(lambda: state()['boostsProfile'] == (profile_a if name == name_a else profile_b), timeout=5)
+        assert wait(lambda: state()['boostsProfile'] == target, timeout=5)
+        prepared(target, previous)
     def enabled():
         return next(m['enabled'] for m in app.call('menu-state') if m['id'] == 'boost-gallery')
     def delete_card(boost):
@@ -165,13 +178,15 @@ def run(factory, results, tmp, env):
             def f1_browser():
                 gallery(); profile(name_b); browser(); app.call('menu-perform', id='boost-gallery')
                 assert state()['boostsProfile'] == profile_a, state()
-                assert 'boosts.' + first + '.card' in ids()
+                assert wait(lambda: 'boosts.' + first + '.card' in ids(), timeout=5), ui()
+                owner_a_native = app.call('library')
                 app.call('library-close'); browser(); app.call('space', space=space_b)
                 app.call('menu-perform', id='boost-gallery')
                 assert state()['boostsProfile'] == profile_b, state()
-                assert not any(id.endswith('.card') for id in ids())
+                prepared(profile_b)
+                assert wait(lambda: not any(id.endswith('.card') for id in ids()), timeout=5), ui()
                 browser()
-                return {'visibleLibraryBOverriddenByBrowserA': True, 'closedLibraryFromB': True}
+                return {'visibleLibraryBOverriddenByBrowserA': True, 'closedLibraryFromB': True, 'ownerANative': owner_a_native, 'ownerBNative': app.call('library')}
             row('F1_browser_profile', f1_browser)
             def f1_editor():
                 gallery(); profile(name_b); browser(); app.call('select', tab=tab_a)
@@ -186,12 +201,12 @@ def run(factory, results, tmp, env):
                 ui('layout', name='List'); assert wait(lambda: state()['boostsPresentation'] == 'list' and 'boosts.list' in ids(), timeout=5)
                 ui('layout', name='Gallery'); profile(name_b)
                 app.call('menu-perform', id='view-library')
-                assert state()['boostsPresentation'] == 'gallery' and state()['boostsProfile'] == profile_b, state()
+                assert state()['boostsPresentation'] == 'gallery' and state()['boostsProfile'] == profile_a, state()
                 ui('section', section='history'); app.call('menu-perform', id='view-library')
-                assert state()['boostsProfile'] == profile_b and state()['librarySection'] == 'history', state()
+                assert state()['boostsProfile'] == profile_a and state()['librarySection'] == 'history', state()
                 ui('section', section='boosts'); app.call('menu-perform', id='view-boosts')
                 assert state()['boostsPresentation'] == 'list'
-                return {'inWindowList': True, 'plainLibraryPreserved': True, 'historyPreserved': True}
+                return {'inWindowList': True, 'plainLibraryUsesOwner': True, 'historySectionPreserved': True}
             row('F2_layout', f2)
             def bg2():
                 gallery(); controls=ui()['controls']; labels=' '.join(c['label'] + ' ' + c['value'] for c in controls)
