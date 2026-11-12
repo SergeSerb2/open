@@ -70,6 +70,15 @@ final class LiveFolderService {
   func addressChanged(tabID: ItemID, url: URL, space: Space?) {
     let previous = lastOriginURL[tabID]
     lastOriginURL[tabID] = url
+    // Sign-in and sign-out on GitHub refetch the Space's Live Folder (live-data §2.4 item 4, Arc
+    // refetch reasons `githubUserSignedIn` / `githubUserSignedOut`): leaving a sign-in page for
+    // another GitHub page means signed in; reaching the sign-out page means signed out.
+    let signedIn = previous.map { Self.isSignInPath($0.path) } == true && !Self.isSignInPath(url.path) && url.path != "/logout"
+    let signedOut = url.path == "/logout" && previous?.path != "/logout"
+    if signedIn || signedOut, let space, let folder = app.model.liveFolder(in: space.id) {
+      signInRefreshes += 1
+      Task { await refresh(folderID: folder.id, manual: true) }
+    }
     guard let pr = Self.pullRequestURL(url) else { return }
     let created = previous.map { $0.path.contains("/compare/") || $0.path.hasSuffix("/compare") } ?? false
     let reviewed = url.fragment?.hasPrefix("pullrequestreview-") == true
@@ -86,6 +95,13 @@ final class LiveFolderService {
     model.moveNode(id: tabID, to: .folder(folder.id), at: 0)
     Task { await refresh(folderID: folder.id, manual: true) }
   }
+
+  /// GitHub's sign-in pages (live-data §2.4: `/login`, `/session`, the two-factor pages).
+  static func isSignInPath(_ path: String) -> Bool {
+    path == "/login" || path.hasPrefix("/login/") || path == "/session" || path.hasPrefix("/sessions/")
+  }
+  /// Refreshes started by a sign-in or sign-out (automation read-back).
+  private(set) var signInRefreshes = 0
 
   /// `origin/owner/repo/pull/N` without query, fragment or sub-page; nil for other URLs.
   static func pullRequestURL(_ url: URL) -> URL? {

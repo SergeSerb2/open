@@ -87,7 +87,7 @@ extension AutomationController {
         "intro": intro ?? NSNull(), "stateMessage": live.stateMessage ?? NSNull(), "expanded": folder.isExpanded, "peeked": folder.peekedChildID?.description ?? NSNull(),
         "stateGlyph": app.frontWindowController.flatMap { $0.sidebar.liveFolderStateGlyph(nodeID: folder.id) }.map { ["tooltip": $0.tooltip] } ?? NSNull(),
         "hiddenItems": Array(live.hiddenItems).sorted(), "hiddenRepositories": Array(live.hiddenRepositories).sorted(),
-        "autoCreated": app.liveFolders.autoCreated, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
+        "autoCreated": app.liveFolders.autoCreated, "signInRefreshes": app.liveFolders.signInRefreshes, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
         "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
         "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":
