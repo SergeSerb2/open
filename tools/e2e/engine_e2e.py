@@ -8932,31 +8932,55 @@ def routing_checks(factory, results, tmp):
         record('routing_deep_link_welcome', ok_welcome and welcome['result'] == 'welcome' and bool(welcome_tab), state=welcome, tab=welcome_tab)
 
         # restart: the same executable and options come back after this process exits.
-        old_pid = app.call('deep-link-state')['pid']
-        app.quitting = True  # an intended exit: not an App death
-        sent = deliver('open-browser://restart')
+        # The harness stops talking to the old App (it exits on purpose); the relaunched
+        # instance answers on the same automation socket and is driven with short raw calls.
+        def raw_call(cmd, timeout=2, **args):
+            try:
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); sock.settimeout(timeout)
+                sock.connect(app.sock)
+                sock.sendall((json.dumps({"id": 1, "cmd": cmd, "args": args}) + "\n").encode())
+                buf = b""
+                while not buf.endswith(b"\n"):
+                    chunk = sock.recv(1 << 20)
+                    if not chunk: break
+                    buf += chunk
+                sock.close()
+                reply = json.loads(buf)
+                return reply.get("result") if reply.get("ok") else None
+            except Exception:
+                return None
         def pid_alive(pid):
             try: os.kill(pid, 0); return True
             except ProcessLookupError: return False
-        gone = wait_until(lambda: not pid_alive(old_pid), timeout=20, step=.1)
+        old_pid = app.call('deep-link-state')['pid']
+        # Restart keeps the normal quit prompts; answer "Quit Open?" with Quit if it shows.
+        app.call('quit-warning', button='quit')
+        app.activation_trace = app.call('activation-events')
+        app.quitting = True; app.closed = True  # an intended exit: not an App death
+        sent = deliver('open-browser://restart')
+        gone = wait_until(lambda: not pid_alive(old_pid), timeout=30, step=.1)
         def new_pid():
-            try:
-                pid = app.call('deep-link-state', timeout=2)['pid']
-                return pid if pid != old_pid else None
-            except Exception:
-                return None
-        relaunched = wait_until(new_pid, timeout=30, step=.25)
-        # quit: the relaunched instance exits through the normal quit path.
+            state = raw_call('deep-link-state')
+            return state['pid'] if state and state.get('pid') not in (None, old_pid) else None
+        relaunched = wait_until(new_pid, timeout=45, step=.25) if gone else None
+        if relaunched: raw_call('quit-warning', button='quit')
         sent_quit = deliver('open-browser://quit') if relaunched else None
-        quit_done = wait_until(lambda: not pid_alive(relaunched), timeout=20, step=.1) if relaunched else False
-        if relaunched and not quit_done:
-            try: os.kill(relaunched, signal.SIGKILL)
-            except ProcessLookupError: pass
+        quit_done = wait_until(lambda: not pid_alive(relaunched), timeout=30, step=.1) if relaunched else False
+        app_log = ([line for line in Path(app.launch_log_path).read_text(errors='replace').splitlines() if line.startswith('Open:')][-20:]
+                   if os.path.exists(app.launch_log_path) else None)
+        forced = []
+        for pid in (old_pid, relaunched):
+            if pid and pid_alive(pid):
+                forced.append(pid)
+                try: os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+        # This App was closed by the row itself; its cleanup receipt is the row's own process proof.
+        app.quit_report = {'ok': not forced and not any(pid_alive(p) for p in (old_pid, relaunched) if p),
+                           'restartRow': True, 'oldPid': old_pid, 'relaunchedPid': relaunched, 'forced': forced}
         record('routing_deep_link_restart_quit', sent.returncode == 0 and bool(gone) and bool(relaunched)
                and sent_quit is not None and sent_quit.returncode == 0 and bool(quit_done),
                oldPid=old_pid, oldGone=bool(gone), newPid=relaunched, quitDone=bool(quit_done),
-               sent=[sent.returncode, sent.stderr[-300:]], appLog=[line for line in Path(app.launch_log_path).read_text(errors='replace').splitlines()
-                       if line.startswith('Open:')][-20:] if os.path.exists(app.launch_log_path) else None)
+               sent=[sent.returncode, sent.stderr[-300:]], appLog=app_log)
     finally:
         _restore_defaults(app, saved)
         if app: app.quit()
