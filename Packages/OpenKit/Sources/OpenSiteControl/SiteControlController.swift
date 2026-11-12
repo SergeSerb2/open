@@ -149,6 +149,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         unavailableTabs.remove(tabID)
         view.window?.makeFirstResponder(view)
         if self.mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
+        mark("focus")
         animateOpen(animated)
         mark("focusAndAnimation")
         if let measureFirstDraw {
