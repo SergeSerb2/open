@@ -290,7 +290,14 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
           }
         }
         let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
-        controller.playDownloadFlight(from: start, icon: NSWorkspace.shared.icon(for: type))
+        if let view = controller.playDownloadFlight(from: start, icon: NSWorkspace.shared.icon(for: type)) {
+          #if OPEN_AUTOMATION
+          let f = view.flight
+          flightsForAutomation.append(["id": key, "start": [f.start.x, f.start.y], "target": [f.target.x, f.target.y],
+            "duration": f.duration, "fromPointer": start != nil])
+          if flightsForAutomation.count > 16 { flightsForAutomation.removeFirst() }
+          #endif
+        }
       }
     }
     if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date()
@@ -336,6 +343,10 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       tray.update(downloads.filter { entries[$0.id]?.littleOpenSessionID == id })
     }
   }
+  #if OPEN_AUTOMATION
+  /// Automation evidence: the download flights started in this run (newest last, at most 16).
+  private(set) var flightsForAutomation: [[String: Any]] = []
+  #endif
   func updateBadges() {
     for controller in app.windowControllers {
       let profileIDs = Set(app.model.spaces.map(\.profileID))

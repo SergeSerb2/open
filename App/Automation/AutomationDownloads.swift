@@ -87,6 +87,7 @@ extension AutomationController {
          "fileExists": item.fileExists as Any? ?? NSNull()] as [String: Any]
       }, "rows": overlayDownloadRows() ?? [],
        "badge": app.frontWindowController?.sidebar.downloadBadgeEvidence ?? [:], "badgeLifetime":center.badgeLifetimeForAutomation,"badgeExpiryScheduled":center.badgeExpiryScheduledForAutomation,"running": center.hasRunning,
+       "flights": center.flightsForAutomation,
        "queued": center.queued, "updates": center.updateCount, "publishes": center.publishCount,
        "detachedPages": center.detachedPageCountForAutomation,
        "openerPID": center.fileOpenerPID, "historyError": center.downloadHistoryError, "historyLoaded": center.historyLoaded,
