@@ -101,7 +101,7 @@ extension AutomationController {
           if let on = args["secrets"] as? Bool { flow.includeSecrets = on }
         case "import":
           guard let steps = app.onboardingWindowController?.steps, steps.step == .name else { throw Failure(message: "not on Name") }
-          if flow.probe == nil { await flow.refreshProbe() }; steps.next()
+          if flow.probe == nil { await flow.refreshProbe() }; await flow.loadBrowserSources(); steps.next()
         case "fresh":
           guard [.welcome, .importChoices, .failed, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() }
         case "back":

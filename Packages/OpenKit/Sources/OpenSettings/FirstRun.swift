@@ -74,12 +74,13 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public var browserSource:BrowserSource? {browserSources.first {$0.id == browserSourceID}}
     /// Detected browsers with an importable profile. Browser mode starts only when no Arc data was found.
     public func loadBrowserSources() async {
-        guard !browserSourcesLoaded else {return}
-        await wizard.loadSources()
-        browserSources=wizard.visibleSources.filter {$0.family != .arc && wizard.canSelect($0)}
-        browserSourcesLoaded=true
+        if !browserSourcesLoaded {
+            await wizard.loadSources()
+            browserSources=wizard.visibleSources.filter {$0.family != .arc && wizard.canSelect($0)}
+            browserSourcesLoaded=true
+        }
         // History is on in browser mode: the Favorites step uses it for suggestions.
-        if probe?.sidebarFound != true, let first=browserSources.first {includeHistory=true;await selectBrowser(first.id)}
+        if probe?.sidebarFound != true, browserSourceID == nil, let first=browserSources.first {includeHistory=true;await selectBrowser(first.id)}
     }
     public func selectBrowser(_ id:String) async {
         guard !busy,let source=browserSources.first(where:{$0.id == id}),let profile=source.profiles.first else {return}
@@ -168,9 +169,13 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     }
     public func choose(directory:URL) async {wizard.plan.directory=directory;probe=nil;await refreshProbe()}
     public func refreshProbe() async {
+        // The probe is always Arc's. Browser mode is chosen again below when no Arc data is found.
+        if isBrowserMode {browserSourceID=nil;wizard.plan.source = .arc}
         await wizard.refreshCounts()
         guard !Task.isCancelled else {return}
         probe=wizard.probe
+        // I-5: load the browser list with the probe, so Name → Next stays synchronous.
+        await loadBrowserSources()
     }
     public static let importedSaveError="Open could not save your data. Your imported items are still open in the browser window behind this panel. Try again."
     public static let freshSaveError="Open could not save your data. Try Start Fresh again."
