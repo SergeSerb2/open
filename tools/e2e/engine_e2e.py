@@ -8728,7 +8728,7 @@ def routing_checks(factory, results, tmp):
         resumed_url = origin + '/handoff-resume'
         continued = app.call('handoff-continue', url=resumed_url)
         resumed = landed(resumed_url)
-        refused = app.call('handoff-continue', url='file:///etc/hosts')
+        refused = app.call('handoff-continue')  # an activity with no page URL
         refused_type = app.call('handoff-continue', url=origin + '/other-type', type='com.example.other')
         followed = wait_until(lambda: (lambda h: h if h['url'] == resumed_url else None)(app.call('handoff-state')), timeout=5, step=.1)
         record('routing_handoff', bool(published) and continued == {'willContinue': True, 'accepted': True} and resumed

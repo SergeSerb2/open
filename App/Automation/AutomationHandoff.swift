@@ -8,7 +8,13 @@ extension AutomationController {
   func runHandoffCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {
     if cmd == "handoff-continue" {
       let activity = NSUserActivity(activityType: args["type"] as? String ?? NSUserActivityTypeBrowsingWeb)
-      activity.webpageURL = (args["url"] as? String).flatMap(URL.init(string:))
+      // NSUserActivity raises for a non-web webpageURL, so macOS never delivers one.
+      if let raw = args["url"] as? String {
+        guard let url = URL(string: raw), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+          throw Failure(message: "url must be http or https")
+        }
+        activity.webpageURL = url
+      }
       let willContinue = app.application(NSApp, willContinueUserActivityWithType: activity.activityType)
       let accepted = app.application(NSApp, continue: activity, restorationHandler: { _ in })
       return ["willContinue": willContinue, "accepted": accepted]
