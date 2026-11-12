@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
   /// Tab sleep (app-shell §4.7, Step G): one SleepController, started after first paint.
   lazy var tabSleep = AppSleepCoordinator(app: self)
+  lazy var handoff = HandoffPublisher(app: self)
   /// Quit order step 1 (app-shell §5.3) runs once, before the snapshot save.
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
@@ -848,6 +849,8 @@ extension AppDelegate: CommandDispatcher {
       defer { region?.end() }
       #endif
       self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
+      // Menu rebuilds follow tab, Space and window changes: the same moments Handoff must follow.
+      self.handoff.setNeedsUpdate()
     }
   }
   /// No suggestion index, history, hotkey or settings work before first paint.

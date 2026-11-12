@@ -55,6 +55,10 @@
 	<string>Websites you visit can ask for your location.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Websites you visit can ask to connect to Bluetooth devices.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>NSUserActivityTypeBrowsingWeb</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -6525,6 +6525,19 @@ def media_checks(factory, results, tmp):
         still = app.eval(video, "document.getElementById('main').paused") is False
         results["media_auto_pip_return"] = {"ok": bool(closed) and still and closed.get("reason") == "sourceShown", "pip": pip(), "playing": still}
 
+        # PB1 / D-4 revised: a minimized window is a leave for the tab it shows (Arc:
+        # `presentPipForOccludedWindow`); restoring it closes the automatic PiP like a tab return.
+        app.call("window-miniaturize")
+        mini_pip = wait_until(lambda: (lambda p: p if p["state"] == "active" and p.get("tab") == video else None)(pip()), timeout=3, step=.02)
+        mini_decision = m(video)["decision"]
+        app.call("window-deminiaturize")
+        restored = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
+        restored_playing = app.eval(video, "document.getElementById('main').paused") is False
+        results["media_auto_pip_window_hidden"] = {"ok": bool(mini_pip) and bool(mini_pip and mini_pip.get("automatic"))
+            and bool(restored) and restored.get("reason") == "sourceShown" and restored_playing,
+            "minimized": mini_pip, "decision": mini_decision, "restored": restored, "playing": restored_playing}
+        wait_until(lambda: app.call("window-state").get("isKeyWindow"), timeout=3, step=.05)
+
         # E-M7: Close pauses and snoozes until the tab shows again.
         select(home); wait_pip("active")
         app.call("pip-action", action="close")
@@ -8709,6 +8722,20 @@ def routing_checks(factory, results, tmp):
                and tabs[1]['url'] == existing_url
                and len(entries(warm)) == 1, tabs=tabs, log=log())
 
+        # PB1 Handoff: the key window's page is the published web activity; a
+        # continued activity enters the same intake as a LaunchServices URL.
+        published = wait_until(lambda: (lambda h: h if h['url'] == warm else None)(app.call('handoff-state')), timeout=5, step=.1)
+        resumed_url = origin + '/handoff-resume'
+        continued = app.call('handoff-continue', url=resumed_url)
+        resumed = landed(resumed_url)
+        refused = app.call('handoff-continue', url='file:///etc/hosts')
+        refused_type = app.call('handoff-continue', url=origin + '/other-type', type='com.example.other')
+        followed = wait_until(lambda: (lambda h: h if h['url'] == resumed_url else None)(app.call('handoff-state')), timeout=5, step=.1)
+        record('routing_handoff', bool(published) and continued == {'willContinue': True, 'accepted': True} and resumed
+               and refused['accepted'] is False and refused_type == {'willContinue': False, 'accepted': False}
+               and len(entries(resumed_url)) == 1 and bool(followed),
+               published=published, continued=continued, refused=refused, refusedType=refused_type, followed=followed)
+        app.call('space', space=target['id'])
         warm_tab = next(t['id'] for t in tabs if t['url'] == warm)
         app.call('wait', tab=warm_tab)
         work_cookies = app.eval(warm_tab, 'document.cookie')
