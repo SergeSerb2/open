@@ -2,6 +2,7 @@
 import AppKit
 import OpenEasel
 import OpenModel
+import OpenSidebar
 
 /// `easel` socket command. Every edit goes through the real views: mouse and key events are
 /// built as NSEvents and dispatched by the window (`sendEvent`), toolbar buttons are pressed,
@@ -36,6 +37,27 @@ extension AutomationController {
       menu.performActionForItem(at: index)
       return ["selected": factory.selectedTab?.id.description ?? ""]
     }
+    if action == "window-sheet" {
+      // The window's sheet (Delete Easel alert, Save as Web Page panel): its texts, or a
+      // button pressed as a click would; `cancel` ends a save panel.
+      guard let window = factory.window, let sheet = window.attachedSheet, let content = sheet.contentView else { return ["shown": false] }
+      if args["cancel"] as? Bool == true { window.endSheet(sheet, returnCode: .cancel); return ["cancelled": true] }
+      func buttons(_ v: NSView) -> [NSButton] { ((v as? NSButton).map { [$0] } ?? []) + v.subviews.flatMap(buttons) }
+      func labels(_ v: NSView) -> [String] { ((v as? NSTextField).map { [$0.stringValue] } ?? []) + v.subviews.flatMap(labels) }
+      let all = buttons(content).filter { !$0.title.isEmpty }
+      if let press = args["press"] as? String {
+        guard let button = all.first(where: { $0.title == press }) else { throw Failure(message: "no such button") }
+        button.performClick(nil)
+        return ["pressed": press]
+      }
+      return ["shown": true, "isSavePanel": sheet is NSSavePanel, "buttons": all.map(\.title),
+              "texts": labels(content).filter { !$0.isEmpty }, "message": (sheet as? NSSavePanel)?.message ?? ""]
+    }
+    if action == "export-all" {
+      guard let path = args["path"] as? String else { throw Failure(message: "path needed") }
+      let (count, failures) = try app.exportAllEasels(to: URL(fileURLWithPath: path))
+      return ["count": count, "failures": failures]
+    }
     if action == "store" {
       // Disk state of one document (after an explicit flush), without a canvas.
       guard let raw = args["document"] as? String, let id = UUID(uuidString: raw) else { throw Failure(message: "document id needed") }
@@ -52,6 +74,23 @@ extension AutomationController {
     }
     guard let documentID = EaselTab.documentID(tab.url) else { throw Failure(message: "not an Easel tab") }
     if action == "state" { return easelState(tab: tab, documentID: documentID, factory: factory) }
+    switch action {
+    case "row-menu":
+      guard let menu = factory.controller?.sidebar.contextMenu(nodeID: tab.id) else { throw Failure(message: "no row menu") }
+      return menu.items.map { $0.isSeparatorItem ? "—" : ($0.submenu != nil ? $0.title + " ▸" : $0.title) }
+    case "rename":
+      // The intent the row's inline rename sends when it commits.
+      guard let title = args["text"] as? String, factory.performSidebar(.rename(nodeID: tab.id, title: title)) == true else {
+        throw Failure(message: "rename refused")
+      }
+      return easelState(tab: tab, documentID: documentID, factory: factory)
+    case "export":
+      guard let path = args["path"] as? String, factory.exportEasel(tabID: tab.id, to: URL(fileURLWithPath: path)) else {
+        throw Failure(message: "export refused")
+      }
+      return ["path": factory.lastEaselExport as Any? ?? NSNull()]
+    default: break
+    }
     guard let host = factory.easelHosts[tab.id], !host.closed, host.canvas.window != nil else {
       throw Failure(message: "Easel is not shown")
     }
