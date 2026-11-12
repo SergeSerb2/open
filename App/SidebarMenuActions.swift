@@ -50,7 +50,7 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
   func shareSidebarTab(_ id: ItemID, via title: String) -> Bool {
     guard !isClosing, let tab = model.tab(id: id) else { return false }
     let clean = URLCleaner.clean(tab.url).url
-    guard let service = NSSharingService.sharingServices(forItems: [clean]).first(where: { $0.title == title }) else { return false }
+    guard let service = ShareServices.list(for: [clean]).first(where: { $0.title == title }) else { return false }
     #if OPEN_AUTOMATION
     sidebarShareRequest = ["url": clean.absoluteString, "node": id.description, "requested": true, "service": title,
       "servicesRequested": true, "payloadURLs": [clean.absoluteString], "closed": true]
