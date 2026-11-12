@@ -864,6 +864,9 @@ extension AppDelegate: CommandDispatcher {
           // Each service body gets its own main run-loop turn, so input is
           // handled between them and no turn carries several bodies.
           if !self.commandServicesPrepared {
+            // The Settings model is the larger half of command services; it is cached.
+            self.startupRegion("afterPaint.settingsModel") { _ = self.settingsPresenter.settings }
+            guard await self.nextStartupTurn() else { return }
             self.startupRegion("afterPaint.commandServices") { self.prepareCommandServices() }
             guard await self.nextStartupTurn() else { return }
             self.startupRegion("afterPaint.storesPrewarm") {
