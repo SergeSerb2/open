@@ -73,6 +73,8 @@ public enum SidebarIntent: Equatable, Sendable {
     case copyLink(nodeID: ItemID, markdown: Bool)
     case copyAllLinks(folderID: ItemID, markdown: Bool)
     case share(nodeID: ItemID)
+    /// "Share ▸ ‹service›" on a row or the URL field: the system share service by title. App.
+    case shareVia(nodeID: ItemID, service: String)
     case changeIcon(nodeID: ItemID)
     case customizePage(tabID: ItemID)
     case openInSplitView(tabID: ItemID)

@@ -44,8 +44,12 @@ struct SidebarMenus {
     private func moveTo(_ nodeID: ItemID) -> NSMenuItem {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
         let current = context.model.parent(of: nodeID).flatMap(spaceID(of:))
+        // One row per Space in dock order, the current one checked (capture session 8 item 2).
         var items: [NSMenuItem] = context.model.spaces.map { space in
-            item(context.title(of: space), enabled: space.id != current, .moveToSpace(nodeID: nodeID, space: space.id))
+            let row = space.id == current ? ClosureMenuItem(context.title(of: space)) {}
+                : item(context.title(of: space), .moveToSpace(nodeID: nodeID, space: space.id))
+            row.state = space.id == current ? .on : .off
+            return row
         }
         items.append(.separator())
         items.append(item("New Space…", .moveToNewSpace(nodeID: nodeID)))
@@ -110,8 +114,39 @@ struct SidebarMenus {
     }
 
     /// Share… asks the App to anchor the system picker at this tab's row.
+    /// "Share ▸": the system share services of this Mac, in their own order (capture session 8 item 1:
+    /// AirDrop · Mail · Messages · Notes · … with their icons; the same submenu on Today, pinned,
+    /// favourite rows and the URL field). The App shares the link without trackers.
     private func share(_ tab: Tab) -> NSMenuItem {
-        item("Share…", .share(nodeID: tab.id))
+        let parent = NSMenuItem(title: "Share", action: nil, keyEquivalent: "")
+        let clean = URLCleaner.clean(tab.url).url
+        parent.submenu = menu(ShareServices.list(for: [clean]).map { service in
+            let row = item(service.title, .shareVia(nodeID: tab.id, service: service.title))
+            row.image = service.image
+            return row
+        })
+        parent.isEnabled = !(parent.submenu?.items.isEmpty ?? true)
+        return parent
+    }
+
+    /// Option alternate: drawn in place of `primary` while ⌥ is held (capture session 8: Archive Tab ↔
+    /// Archive Other Tabs, Archive Tabs Below ↔ Archive Tabs Above).
+    private func alternate(_ row: NSMenuItem) -> NSMenuItem {
+        row.isAlternate = true; row.keyEquivalentModifierMask = .option; return row
+    }
+
+    /// The current tab's split item: "Add Split View" on the selected tab, "Open in Split View"
+    /// on another (capture session 8 item 3c).
+    private func splitItem(_ tab: Tab) -> NSMenuItem {
+        context.currentTab?.id == tab.id ? item("Add Split View", .addSplitView(tabID: tab.id))
+            : item("Open in Split View", .openInSplitView(tabID: tab.id))
+    }
+
+    /// Copy Link; the selected tab's shows the Copy URL shortcut ⌘⇧C (session 8 item 3c).
+    private func copyLink(_ tab: Tab) -> NSMenuItem {
+        let row = item("Copy Link", .copyLink(nodeID: tab.id, markdown: false))
+        if context.currentTab?.id == tab.id { row.keyEquivalent = "c"; row.keyEquivalentModifierMask = [.command, .shift] }
+        return row
     }
 
     /// Today (unpinned) tab: capture session 2, 08-folder-preview frame 0050.
@@ -127,14 +162,14 @@ struct SidebarMenus {
         // Arc 1.172.2 order (capture session 3 Part D, `s9/15-menus`; docs/re/sidebar-menus-parity.md §1).
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         var items: [NSMenuItem] = [
-            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+            copyLink(tab),
             share(tab),
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
             rename,
             mute(tab),
             .separator(),
-            item("Open in Split View", .openInSplitView(tabID: tab.id)),
+            splitItem(tab),
             item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
             .separator(),
@@ -147,11 +182,12 @@ struct SidebarMenus {
             let index = today.firstIndex(where: { $0.id == tab.id })
             let below = index.map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
             let above = index.map { Array(today.prefix($0).map(\.id)) } ?? []
-            // 1.172.2 shows Archive Other Tabs as a plain item (1.170 had it behind ⌥).
-            items.append(item("Archive Other Tabs", enabled: today.contains { !keep.contains($0.id) },
-                              .clearTodayKeeping(space: space, keep: keep)))
+            // Drawn: Archive Tab · Archive Tabs Below; with ⌥: Archive Other Tabs · Archive Tabs Above
+            // (capture session 8, `i3b-menu` against `i3b-opt`). AX lists all four.
+            items.append(alternate(item("Archive Other Tabs", enabled: today.contains { !keep.contains($0.id) },
+                                        .clearTodayKeeping(space: space, keep: keep))))
             items.append(item("Archive Tabs Below", enabled: !below.isEmpty, .archiveNodes(ids: below)))
-            items.append(item("Archive Tabs Above", enabled: !above.isEmpty, .archiveNodes(ids: above)))
+            items.append(alternate(item("Archive Tabs Above", enabled: !above.isEmpty, .archiveNodes(ids: above))))
         }
         return menu(items)
     }
@@ -184,7 +220,7 @@ struct SidebarMenus {
     private func pinnedItems(_ tab: Tab) -> [NSMenuItem] {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         return [
-            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+            copyLink(tab),
             share(tab),
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
@@ -192,7 +228,7 @@ struct SidebarMenus {
             mute(tab),
             editPinnedPage(tab),
             .separator(),
-            item("Open in Split View", .openInSplitView(tabID: tab.id)),
+            splitItem(tab),
             item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
             .separator(),
@@ -467,7 +503,7 @@ struct SidebarMenus {
         let quotes = UserDefaults.standard.object(forKey: SidebarContext.sharedQuotesKey) as? Bool ?? true
         return menu([
             item("Copy URL", enabled: tab != nil, .copyCurrentURL),
-            tab.map(share) ?? ClosureMenuItem("Share…", enabled: false) {},
+            tab.map(share) ?? ClosureMenuItem("Share", enabled: false) {},
             item("Capture…", enabled: tab != nil, .performCommand("capture-page")),
             item("Capture Full Page", enabled: tab != nil, .performCommand("capture-full-page")),
             item("Capture in Portrait Mode", enabled: tab != nil, .performCommand("capture-portrait")),

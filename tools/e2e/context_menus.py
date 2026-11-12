@@ -705,7 +705,7 @@ def context_menu_checks(factory, results, tmp, h):
         run('cm_join_meeting_enabled', lambda: {'ok': row_enabled('join-meeting') is True})
 
         # D2c menu order (docs/re/sidebar-menus-parity.md §1): Arc 1.172.2, capture session 3 Part D.
-        # Open differences, each recorded: Share stays "Share…" (a picker) until C3 item 1 records Arc's submenu.
+        # Share ▸ lists the system share services (capture session 8 item 1).
         def sidebar_menu_order():
             focus()
             # Its own Space, so Archive Tabs Above touches only this case's rows.
@@ -718,16 +718,25 @@ def context_menu_checks(factory, results, tmp, h):
                 empty = app.call('folder', tabs=[], title='Menu Empty', section='pinned')
                 today_ids = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
                 items = lambda node, **kw: app.call('sidebar-menu-items', **({'node': node} if node else {}), **kw)
-                today_expected = ['Copy Link', 'Share…', '—', 'Change Icon…', 'Rename…', 'Mute', '—', 'Open in Split View',
-                                  'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Other Tabs', 'Archive Tabs Below',
-                                  'Archive Tabs Above']
-                pinned_head = ['Copy Link', 'Share…', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
+                # Drawn items (capture session 8): the ⌥ alternates Archive Other Tabs / Archive Tabs Above are hidden.
+                today_expected = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', '—', 'Open in Split View',
+                                  'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Tabs Below']
+                pinned_head = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
                                'Open in Split View', 'Duplicate', 'Move to ▸', '—']
+                # Pin, favourite and folder moves animate the outline; a row's menu is found by its
+                # on-screen position, so wait until the first row answers with a tab menu twice in a row.
+                def settled():
+                    one = items(today_ids[0])['items']
+                    return one[:1] == ['Copy Link'] and one == items(today_ids[0])['items']
+                wait(settled, timeout=5)
                 first, last = items(today_ids[0]), items(today_ids[-1])
+                try: share = items(today_ids[0], path='Share')
+                except RuntimeError as error: share = {'items': [], 'error': str(error), 'menu': first, 'tab': app.tab(today_ids[0])}
                 rows = {
                     'today': first['items'] == today_expected,
-                    'today_first_above_disabled': 'Archive Tabs Above' in first['disabled'] and 'Archive Tabs Below' not in first['disabled'],
-                    'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'] and 'Archive Tabs Above' not in last['disabled'],
+                    'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'],
+                    'share_lists_services': len(share['items']) > 0 and 'Add to Reading List' not in share['items'],
+                    'move_to_current_checked': (h._try(lambda: app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order')) or {}).get('checked') is True,
                     'today_silent_mute_disabled': 'Mute' in first['disabled'],
                     'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
                     'favorite': items(favorite)['items'] == pinned_head + ['Remove Favorite'],
@@ -738,15 +747,15 @@ def context_menu_checks(factory, results, tmp, h):
                 }
                 # Behaviour: Archive Tabs Above on the row whose menu enables it archives every row above, then undo.
                 before = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
-                target = next((t for t in before if 'Archive Tabs Above' not in items(t)['disabled']), None)
-                rows['archive_above_enabled_somewhere'] = target is not None and target != before[0]
+                target = before[-1] if len(before) > 1 else None
+                rows['archive_above_enabled_somewhere'] = target is not None
                 if target is not None:
-                    app.call('sidebar-menu', node=target, item='Archive Tabs Above')
+                    app.call('sidebar-menu', node=target, item='Archive Tabs Above', alternate=True)
                     after = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
                     rows['archive_above_acts'] = target in after and len(after) < len(before)
                     app.call('key', key='z', modifiers=['command'], route='app')
                     rows['archive_above_undo'] = wait(lambda: [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab'] == before, timeout=3) is True
-                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target,
+                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target, 'share': share,
                         'menus': {'todayFirst': first, 'todayLast': last, 'pinned': items(pinned), 'favorite': items(favorite)}}
             finally:
                 for tab_id in made:
@@ -754,10 +763,10 @@ def context_menu_checks(factory, results, tmp, h):
                 h._try(focus)
         run('cm_sidebar_menu_order', sidebar_menu_order)
 
-        # D2c URL field menu (S3D order). Share stays "Share…" until C3 item 1; the toggle flips Shared Quotes.
+        # D2c URL field menu (S3D order, Share ▸ from capture session 8); the toggle flips Shared Quotes.
         def url_field_menu():
             focus()
-            expected = ['Copy URL', 'Share…', 'Capture…', 'Capture Full Page', 'Capture in Portrait Mode', '—',
+            expected = ['Copy URL', 'Share ▸', 'Capture…', 'Capture Full Page', 'Capture in Portrait Mode', '—',
                         'Show as Toolbar', 'Disable Shared Quotes']
             listed = app.call('sidebar-menu-items', surface='url-field')
             app.call('sidebar-menu', surface='url-field', item='Disable Shared Quotes')

@@ -25,6 +25,23 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
     return true
   }
 
+  /// "Share ▸ ‹service›" (capture session 8 item 1): performs the system service with the link
+  /// without trackers. Automation with `sidebar-share dismiss` records the request instead of
+  /// opening a foreign app.
+  @discardableResult
+  func shareSidebarTab(_ id: ItemID, via title: String) -> Bool {
+    guard !isClosing, let tab = model.tab(id: id) else { return false }
+    let clean = URLCleaner.clean(tab.url).url
+    guard let service = ShareServices.list(for: [clean]).first(where: { $0.title == title }) else { return false }
+    #if OPEN_AUTOMATION
+    sidebarShareRequest = ["url": clean.absoluteString, "node": id.description, "requested": true, "service": title,
+      "servicesRequested": true, "payloadURLs": [clean.absoluteString], "closed": true]
+    if dismissSidebarShareForAutomation { return true }
+    #endif
+    service.perform(withItems: [clean])
+    return true
+  }
+
   func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, sharingServicesForItems items: [Any],
                             proposedSharingServices proposedServices: [NSSharingService]) -> [NSSharingService] {
     #if OPEN_AUTOMATION

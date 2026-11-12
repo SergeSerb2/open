@@ -917,6 +917,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return controller?.beginSpaceCreation(options: SpaceCreationOptions(moving: folder.children.map(\.id),
         prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
+    case .shareVia(let id, let service): return shareSidebarTab(id, via: service)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .toggleLibraryMediaSource(let id): return app.settingsPresenter.toggleLibraryMediaSource(id)
     case .showLibrary:
