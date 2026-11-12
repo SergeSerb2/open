@@ -1,5 +1,6 @@
 import AppKit
 import OpenFeatures
+import OpenLiveData
 
 /// Tabs ▸ Join Meeting (⌘⌃J, `joinLiveMeeting:`) and the command-bar actions "Join next meeting" /
 /// "Join next video conference" (docs/re/live-data.md §5). Opens the next eligible event's call link
@@ -20,6 +21,20 @@ extension EngineWebContentHostFactory {
     return true
   }
 
+  /// Opens a call link in a new, selected tab of the focused Space (Arc's default Meet route, LD §5).
+  /// Used by Join Meeting and the calendar card's Join button.
+  func openMeetingLink(_ link: MeetingLink, from origin: String, event: CalendarEvent? = nil) {
+    guard !isClosing, !isIncognito else { return }
+    let tab = openNewTab(url: link.url, background: false)
+    #if OPEN_AUTOMATION
+    lastJoinMeeting = ["outcome": "join", "origin": origin, "event": event?.id ?? "", "title": event?.displayTitle ?? "",
+      "url": link.url.absoluteString, "service": link.service.rawValue, "tab": tab?.id.description ?? "",
+      "seq": (lastJoinMeeting["seq"] as? Int ?? 0) + 1]
+    #else
+    _ = (tab, origin, event)
+    #endif
+  }
+
   enum JoinMeetingOutcome {
     case join(CalendarEvent, MeetingLink)
     case noMeeting
@@ -31,19 +46,21 @@ extension EngineWebContentHostFactory {
     var record: [String: Any] = [:]
     defer {
       #if OPEN_AUTOMATION
-      record["seq"] = (lastJoinMeeting["seq"] as? Int ?? 0) + 1
-      lastJoinMeeting = record
+      // A join records itself in `openMeetingLink`; the other outcomes record here.
+      if !record.isEmpty {
+        record["seq"] = (lastJoinMeeting["seq"] as? Int ?? 0) + 1
+        lastJoinMeeting = record
+      }
+      #else
+      _ = record
       #endif
     }
     switch outcome {
     case .join(let event, let link):
-      let tab = openNewTab(url: link.url, background: false)
-      record = ["outcome": "join", "event": event.id, "title": event.displayTitle, "url": link.url.absoluteString,
-        "service": link.service.rawValue, "tab": tab?.id.description ?? ""]
+      openMeetingLink(link, from: "command", event: event)
+      return
     case .noMeeting:
-      // GUESS — capture pending (F2 capture 8): Arc's no-meeting feedback. Open shows a toast.
-      controller?.toasts.show(ToastContent(title: "No upcoming meetings", subtitle: "Meetings with a call link today appear here.",
-        symbol: "calendar", coalescingKey: "join-meeting"))
+      // Arc gives no feedback when there is no meeting (C3 capture, LEAD 02:15): no toast, no tab.
       record = ["outcome": "noMeeting"]
     case .noAccess(let access):
       // Open's own copy (EventKit replaces Arc's "Connect Calendar" sign-in; F2 report §7 risk note).
@@ -54,9 +71,7 @@ extension EngineWebContentHostFactory {
         coalescingKey: "join-meeting")
       controller?.toasts.show(content) { handle in
         handle.dismiss()
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-          NSWorkspace.shared.open(url)
-        }
+        CalendarPrivacySettings.open()
       }
       record = ["outcome": "noAccess", "access": access.rawValue]
     }
