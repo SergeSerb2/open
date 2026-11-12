@@ -41,7 +41,7 @@ RENTED_ALLOWED_E2E = {
               'secrets-import', 'shell', 'owner-watch', 'toolbar', 'numbering', 'history',
               'tabstrip', 'extensions', 'extensions-p3', 'extensions-e2', 'find', 'measure',
               'peek', 'media', 'sleep', 'context-menus', 'routing', 'littleopen',
-              'boost-gallery', 'sitedata', 'live-data', 'calendar'},
+              'boost-gallery', 'sitedata', 'calendar'},
     'observers': {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'},
 }
 RENTED_LANES = ('merge', 'observers')

@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import OpenModel
 import OpenCommands
+import OpenImport
 
 public struct ClearDataKinds: OptionSet, Sendable {
     public let rawValue: Int
@@ -17,8 +18,12 @@ public struct ImportPlan: Sendable {
     public var spaces = true, tabs = true, favorites = true, folders = true, archive = true, history = false, searchSettings = true
     public var secretsRequested = false
     public var boosts = true
+    /// Arc keeps its folder-based path. Other browsers import bookmarks, history and the search engine (IMC I-1).
+    public var source: ImportSource = .arc
+    public var bookmarks = true
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
+    public var isArc: Bool { source == .arc }
     /// Only the explicit consent button should call this method.
     public mutating func skipSecrets() { secretsRequested = false; secretsConsented = false }
     public mutating func consentToSecrets() { secretsRequested = true; secretsConsented = true }

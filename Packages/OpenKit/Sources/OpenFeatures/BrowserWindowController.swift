@@ -237,7 +237,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let self, let space = self.context.focusedSpace else { return }
             _ = self.sidebar(self.sidebar, didRequest: .select(nodeID: id, space: space.id))
         }
-        preview.openPeek = { [weak self] url, source in self?.peekController.open(url: url, sourceTabID: source) }
+        // A Peek shows over its selected source row; a Pinned source is selected first (a Favorite
+        // source is visible in its whole Profile). GUESS — capture pending (F2 capture items 9-10).
+        preview.openPeek = { [weak self] url, source in
+            guard let self else { return }
+            let favorite: Bool = if case .favorites? = self.model.parent(of: source) { true } else { false }
+            if !favorite, let space = self.context.focusedSpace {
+                _ = self.sidebar(self.sidebar, didRequest: .select(nodeID: source, space: space.id))
+            }
+            self.peekController.open(url: url, sourceTabID: source)
+        }
         return preview
     }()
     /// The delete confirmation sheet currently shown on this window (completion §3.3).

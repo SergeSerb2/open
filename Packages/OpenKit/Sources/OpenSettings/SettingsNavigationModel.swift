@@ -91,7 +91,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.general, "warn-before-quitting", "Warn before quitting", help: "Ask before quitting with downloads in progress.", key: "open.general.warnBeforeQuitting"),
             .init(.general, "automatic-updates", "Update Open automatically", help: "Keep Open up to date.", key: "open.general.automaticallyUpdate"),
             .init(.general, "check-updates", "Check for Updates"),
-            .init(.general, "import", "Import from Arc", help: "Bring your Spaces, tabs, bookmarks, and passwords into Open.", synonyms: "import from another browser"),
+            .init(.general, "import", "Import from another browser", help: "Bring your bookmarks, history, Spaces, and passwords from Arc, Chrome, and other browsers.", synonyms: "import from arc chrome brave edge vivaldi opera bookmarks history"),
             .init(.general, "export", "Export your Open data", help: "Export your snapshot and Archive index."),
             .init(.appearance, "website-appearance", "Website appearance", help: "Choose Light, Dark, or Match System for websites.", key: "open.web.colorScheme"),
             .init(.appearance, "toolbar", "Show the toolbar", help: "The address and page controls above each page. Applies to the focused browser window."),
