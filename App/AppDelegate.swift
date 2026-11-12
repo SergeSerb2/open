@@ -451,6 +451,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         for phrase in phrases { rows += await store.recentURLs(matchingURLPhrase: phrase).map { ($0.url, $0.title, $0.lastVisit) } }
         return rows
       }
+      // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
+      controller.context.calendarGlance = makeCalendarGlance(factory)
     }
     factory.attach(controller)
     windowControllers.append(controller)

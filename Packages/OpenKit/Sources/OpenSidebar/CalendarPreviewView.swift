@@ -42,7 +42,8 @@ public final class CalendarPreviewView: NSView {
 
     public static let headerHeight: CGFloat = 40
     public static let joinHeight: CGFloat = 52
-    public static let messageHeight: CGFloat = 132
+    /// Space above and below the message and its button.
+    public static let messagePadding: CGFloat = 22
     /// The join strip shows an event that starts within this many seconds (W3: "within a few minutes").
     public static let joinLead: TimeInterval = 10 * 60
 
@@ -87,7 +88,7 @@ public final class CalendarPreviewView: NSView {
         let body: CGFloat
         switch phase {
         case .timeline, .loading: body = (joinable == nil ? 0 : Self.joinHeight) + CalendarTimelineView.visibleHeight
-        case .needsAccess, .denied, .restricted: body = Self.messageHeight
+        case .needsAccess, .denied, .restricted: body = messageBlockHeight(width: HoverPreviewMetrics.folderWidth) + 2 * Self.messagePadding
         }
         return CGSize(width: HoverPreviewMetrics.folderWidth, height: Self.headerHeight + body)
     }
@@ -128,7 +129,8 @@ public final class CalendarPreviewView: NSView {
             message.stringValue = CalendarProvider.connectText
             accessButton.title = "Allow Calendar Access"
         case .denied:
-            message.stringValue = CalendarProvider.connectText + "\nOpen needs Calendar access in System Settings."
+            // Open's own text (EventKit replaces Arc's sign-in; F2 report §7).
+            message.stringValue = "Allow Open to use your calendars in System Settings to see upcoming meetings here."
             accessButton.title = "Open Privacy Settings"
         case .restricted:
             message.stringValue = "Calendar access is restricted on this Mac."
@@ -158,7 +160,10 @@ public final class CalendarPreviewView: NSView {
 
     private func scrollToNow() {
         layoutSubtreeIfNeeded()
-        let y = max(0, min(timeline.y(for: source.now().addingTimeInterval(-3600)), timeline.frame.height - scroll.contentSize.height))
+        // Start one whole hour before now, with the hour label fully visible.
+        let calendar = Calendar.current, earlier = source.now().addingTimeInterval(-3600)
+        let hour = calendar.dateInterval(of: .hour, for: earlier)?.start ?? earlier
+        let y = max(0, min(timeline.y(for: hour) - CalendarTimelineView.top, timeline.frame.height - scroll.contentSize.height))
         scroll.contentView.scroll(to: CGPoint(x: 0, y: y))
         scroll.reflectScrolledClipView(scroll.contentView)
     }
@@ -192,13 +197,18 @@ public final class CalendarPreviewView: NSView {
         }
         scroll.frame = CGRect(x: 0, y: y, width: w, height: max(0, bounds.height - y))
         timeline.frame = CGRect(x: 0, y: 0, width: w, height: CalendarTimelineView.dayHeight)
-        let textWidth = w - 40
-        let text = message.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: textWidth, height: 200)).height ?? 32
-        let block = text + (accessButton.isHidden ? 0 : 14 + 26)
-        let top = h + (Self.messageHeight - block) / 2
-        message.frame = CGRect(x: 20, y: top, width: textWidth, height: text)
+        let text = messageTextHeight(width: w)
+        let top = h + Self.messagePadding
+        message.frame = CGRect(x: 20, y: top, width: w - 40, height: text)
         let buttonWidth = min(w - 40, accessButton.intrinsicWidth)
         accessButton.frame = CGRect(x: (w - buttonWidth) / 2, y: top + text + 14, width: buttonWidth, height: 26)
+    }
+
+    private func messageTextHeight(width: CGFloat) -> CGFloat {
+        ceil(message.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: width - 40, height: 400)).height ?? 32)
+    }
+    private func messageBlockHeight(width: CGFloat) -> CGFloat {
+        messageTextHeight(width: width) + (accessButton.isHidden ? 0 : 14 + 26)
     }
 
     @objc public func openNew() {
@@ -333,8 +343,10 @@ public final class CalendarTimelineView: NSView {
     public override func mouseDown(with event: NSEvent) {}
     public override func mouseUp(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if let hit = blocks.first(where: { $0.frame.contains(point) }) { onSelect?(hit.event) }
+        if let hit = blocks.first(where: { $0.frame.contains(point) }) { select(hit.event) }
     }
+    /// The click path of one event block (automation uses it too).
+    public func select(_ event: CalendarEvent) { onSelect?(event) }
 }
 
 /// A filled pill button (Join, access). Blue with white text (GUESS — capture pending).
