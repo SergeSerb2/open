@@ -566,10 +566,11 @@ extension CompletionChecks {
         check(space.today.map(\.id) == beforeBelow, "Q16 one undo restores every tab below")
         check(sidebar.contextMenu(nodeID: space.today.last!.id)!.item(withTitle: "Archive Tabs Below")?.isEnabled == false,
               "Q16 last Today row keeps Archive Tabs Below visible and disabled")
-        let other = todayMenu.item(withTitle: "Archive Other Tabs")!
-        check(!other.isAlternate && other.isEnabled &&
-              todayMenu.indexOfItem(withTitle: "Archive Other Tabs") == todayMenu.indexOfItem(withTitle: "Archive Tab") + 1,
-              "CU3 Archive Other Tabs is a plain item immediately after Archive Tab (Arc 1.172.2, S3D)")
+        let other = todayMenu.item(withTitle: "Archive Other Tabs")!, above = todayMenu.item(withTitle: "Archive Tabs Above")!
+        check(other.isAlternate && other.keyEquivalentModifierMask == .option && above.isAlternate &&
+              todayMenu.indexOfItem(withTitle: "Archive Other Tabs") == todayMenu.indexOfItem(withTitle: "Archive Tab") + 1 &&
+              todayMenu.indexOfItem(withTitle: "Archive Tabs Above") == todayMenu.indexOfItem(withTitle: "Archive Tabs Below") + 1,
+              "CU3 Archive Other Tabs and Archive Tabs Above are the ⌥ alternates of Archive Tab and Archive Tabs Below (capture session 8)")
         perform(todayMenu, "Archive Other Tabs")
         check(space.today.map(\.id) == [ordered[0]], "CU3 Archive Other Tabs keeps its tab")
         undo.undo(); pump()
