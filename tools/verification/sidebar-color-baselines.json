@@ -40,17 +40,17 @@
       "colorLimits": {
         "static-active": "1.56",
         "static-inactive": "1.31",
-        "row-hover": "1.56",
+        "row-hover": "1.92",
         "selected-pinned": "2.71",
-        "selected-favorite": "1.56",
-        "toggle-hover": "1.56",
-        "home-hover": "1.56",
-        "newtab-hover": "1.55",
-        "newtab-open": "2.00",
-        "selected-today": "2.03",
-        "default-dark": "1.77",
+        "selected-favorite": "3.98",
+        "toggle-hover": "3.93",
+        "home-hover": "3.93",
+        "newtab-hover": "3.93",
+        "newtab-open": "2.49",
+        "selected-today": "2.36",
+        "default-dark": "7.22",
         "yellow": "2.25",
-        "blue-grain": "2.34"
+        "blue-grain": "2.63"
       },
       "measurements": [
         {
