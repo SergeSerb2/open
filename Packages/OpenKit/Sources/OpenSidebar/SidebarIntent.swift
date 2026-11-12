@@ -29,8 +29,12 @@ public enum SidebarIntent: Equatable, Sendable {
     case setToolbarShown(Bool)
     /// Toolbar right-click "Show Full URL" / "Hide Full URL" (`open.advanced.showFullURLWithToolbar`). App.
     case setShowFullURL(Bool)
-    /// "Manage Extensions" on the URL field and the toolbar. App.
+    /// "Manage Extensions" on the toolbar. App.
     case manageExtensions
+    /// A main-menu command by its registry id (the URL field's Capture items). App.
+    case performCommand(String)
+    /// Settings ▸ Advanced "Enable Shared Quotes" (`SidebarContext.sharedQuotesKey`). App.
+    case setSharedQuotes(Bool)
     /// The status button under the URL field (page-platform §4.7.3). `anchor` is the button's
     /// frame in window coordinates; the App anchors its popover there. App.
     case showTranslation(anchor: CGRect)

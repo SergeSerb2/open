@@ -67,6 +67,9 @@ public final class SidebarContext {
     /// macOS Increase Contrast (plan D2 §2.8, lead Q2 b). The window controller keeps it
     /// current; `sidebar-render --increase-contrast` forces it offscreen.
     public var increaseContrast = false
+    /// Settings ▸ Advanced "Enable Shared Quotes" (default on): the URL field menu toggles it,
+    /// the App's page commands read it.
+    public static let sharedQuotesKey = "open.advanced.enableSharedQuotes"
     /// True while the command bar is open for a new tab (Cmd+T). The "New Tab"
     /// row then shows the selected fill (F0040, F0063; not with Cmd+L).
     public var isNewTabCommandBarOpen: Bool = false
