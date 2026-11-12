@@ -52,7 +52,7 @@ final class NoteContentHost: WebContentHost {
       guard let self, !self.unreadable else { return nil }
       return try? self.store.writeAsset(data, ext: ext, note: self.noteID)
     }
-    editor.onOpenLink = { [weak self] url in self?.owner?.openFromNote(url) }
+    editor.onOpenLink = { [weak self] url, flags in self?.openLink(url, flags: flags) }
   }
 
   private func edited(title: String, body: NSAttributedString) {
@@ -76,6 +76,15 @@ final class NoteContentHost: WebContentHost {
     editor.titleView.string = title
     edited(title: title, body: editor.bodyView.attributedString())
     editor.needsLayout = true
+  }
+
+  /// A link in the Note follows the window's link policy, like a link in a page: Peek for a
+  /// pinned or Favorite Note's link to another site or with Shift (Settings ▸ Links), Little
+  /// Open with ⌥⌘. Otherwise it opens in a new tab (⌘: in the background); the Note stays.
+  func openLink(_ url: URL, flags: NSEvent.ModifierFlags) {
+    guard !closed else { return }
+    if let policy = shouldNavigate, !policy(url, flags) { return }
+    _ = owner?.openNewTab(url: url, background: flags.contains(.command) && !flags.contains(.option), opener: tabID)
   }
 
   /// View ▸ Appearance (website colour scheme) decides; Automatic follows the system.
