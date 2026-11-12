@@ -1979,7 +1979,7 @@ extension EngineWebContentHostFactory: NSMenuItemValidation {
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     switch item.action {
     case #selector(performFindPanelAction(_:)), #selector(performTextFinderAction(_:)), #selector(centerSelectionInVisibleArea(_:)):
-      return selectedContent != nil || (selectedNoteHost != nil && item.action != #selector(centerSelectionInVisibleArea(_:)))
+      return selectedContent != nil || selectedNoteHost != nil
     default: return true
     }
   }

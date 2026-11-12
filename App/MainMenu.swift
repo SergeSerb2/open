@@ -212,7 +212,7 @@ extension EngineWebContentHostFactory {
     if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) {
-      return selectedContent != nil || (selectedNoteHost != nil && id != "jump-to-selection")
+      return selectedContent != nil || selectedNoteHost != nil
     }
     if ["new-boost", "edit-boost", "new-legacy-boost"].contains(id) {
       // Menu validation runs during first-window composition. No page is

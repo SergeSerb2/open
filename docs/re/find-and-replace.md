@@ -17,6 +17,6 @@ Arc 1.170.0 reference binary and the shared `ArcMain` Ghidra project; capture se
 
 - Web page: Find and Replace (menu item and ⌘⌥F) has no effect. The item stays enabled, as the other Find items are.
 - Note: Find, Find Next, Find Previous, Use Selection to Find and Find and Replace show the Note body's native find
-  bar (no replace field). Jump to Selection is disabled in a Note.
+  bar (no replace field). Jump to Selection stays the text view's own action.
 - Rows: `find` suite `F20_find_replace_no_page_effect`, `F20_find_replace_key_no_page_effect`,
-  `F20_find_replace_keeps_open_bar`, `F33_note_find_replace_shows_find_bar`, `F33_note_find_shows_find_bar`.
+  `F20_find_replace_keeps_open_bar`, `F34_note_find_replace_shows_find_bar`, `F34_note_find_shows_find_bar`.
