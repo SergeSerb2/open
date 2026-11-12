@@ -11828,7 +11828,8 @@ def space_editor_creation_checks(factory, results, tmp):
         source = app.call('space-create', title='Creation Source', profile='Creation Profile')
         previous = focused()
         original_window = app.call('window-state')['id']
-        app.call('menu-perform', id='blank-window')
+        # A second normal window (a Blank Window has its own model and refuses Space switches, #462).
+        app.call('menu-perform', id='new-window')
         app.call('space', space=source)
         app.call('window-focus', id=original_window, activate=True)
         full_tab = app.call('open', url=white_fixture('Space creation page fullscreen'))['id']
@@ -12130,7 +12131,7 @@ def space_editor_creation_checks(factory, results, tmp):
             require('A7_' + entry + '_profile_redo', bool(wait_until(lambda: focused()['profile'] == changed_profile, timeout=5)), space=focused())
             app.call('sidebar-key', key='z', modifiers=['cmd'])
         windows = app.call('shell-windows')
-        app.call('menu-perform', id='blank-window'); key('escape')
+        app.call('menu-perform', id='new-window'); key('escape')
         new_window = app.call('window-state')['id']; before_close_key = spaces()
         app.call('editor-open', kind='create'); key('w', ['cmd'])
         require('A5_form_cmd_w_does_not_submit', spaces() == before_close_key)

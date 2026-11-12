@@ -216,9 +216,10 @@ def run(h, factory, results, tmp):
 
         # Native close must leave both other browser windows alive.
         browser_focus(True)
-        app.call('menu-perform', id='blank-window')
+        # Normal windows (a Blank Window is its own window kind since #462).
+        app.call('menu-perform', id='new-window')
         second = app.call('window-state')['id']
-        app.call('menu-perform', id='blank-window')
+        app.call('menu-perform', id='new-window')
         third = app.call('window-state')['id']
         before = {w['id'] for w in app.call('shell-windows')}
         receipt = key('w')
