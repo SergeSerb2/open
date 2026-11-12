@@ -31,7 +31,7 @@ struct LibraryRowItem {
 @MainActor
 final class LibraryListView: NSView, NSMenuDelegate {
     let table = LibraryTableView()
-    private let scroll = NSScrollView()
+    private let scroll = LibraryScrollView()
     private(set) var sources: [LibraryRowSource] = []
     var rowCount: Int { sources.count }
     private(set) var reloads = 0
@@ -70,7 +70,11 @@ final class LibraryListView: NSView, NSMenuDelegate {
         scroll.drawsBackground = false; scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true; scroll.scrollerStyle = .overlay
         scroll.automaticallyAdjustsContentInsets = false
-        table.makeRow = { [weak self] row in self?.makeRow(row) }
+        table.makeRow = { [weak self] row,detached in self?.makeRow(row,detached:detached) }
+        scroll.onWheel = { [weak self] active in
+            self?.table.cancelIdle()
+            if !active { self?.table.scheduleSettle() }
+        }
         table.canSelect = { [weak self] row in self?.item(at:row) != nil }
         table.onSelectionChange = { [weak self] in self?.selectionChanged() }
         table.onClick = { [weak self] row in self?.item(at:row)?.activate() }
@@ -100,7 +104,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
         while cellsCreated < capacity {
             guard generation == overscanGeneration,!Task.isCancelled else { return }
             var prepared:LibraryItemView?
-            guard await LibraryIdleWork.perform({
+            guard await LibraryIdleWork.perform(flush:false,{
                 guard generation == overscanGeneration else { return }
                 prepared = LibraryIdleWork.measure("cell.creation") { LibraryItemView() }
             }),let view = prepared else { return }
@@ -108,19 +112,22 @@ final class LibraryListView: NSView, NSMenuDelegate {
             // Always return a reserved cell to the pool, including cancellation.
             var parked = false
             defer { if !parked { table.park(view); cellsCreated += 1 } }
-            guard await LibraryIdleWork.perform({
+            guard await LibraryIdleWork.perform(flush:false,{
             guard generation == overscanGeneration else { return }
             if let first = sources.first {
                 view.frame = CGRect(x:0,y:0,width:bounds.width,height:gallery ? 118 : 56)
                 let item = LibraryIdleWork.measure("row.resolve") { first.resolve() }
                 LibraryIdleWork.row(cellsCreated-1,kind:gallery ? "boostGallery" : item.kind,operation:1)
                 LibraryIdleWork.measure("cell.configure") { view.configure(item,foreground:foreground,overlay:overlay,gallery:gallery,text:first.preparedText) }
-                LibraryIdleWork.measure("layout.pass") { view.layoutSubtreeIfNeeded() }
             }
+            }) else { return }
+            guard await LibraryIdleWork.perform(flush:false,{
+                guard generation == overscanGeneration else { return }
+                LibraryIdleWork.measure("layout.pass") { view.layoutSubtreeIfNeeded() }
             }) else { return }
             guard await LibraryIdleWork.prepareLayers(of:view,scale:window?.backingScaleFactor ?? 2,
                 row:cellsCreated,operation:1,isCurrent:{ generation == self.overscanGeneration }) else { return }
-            guard await LibraryIdleWork.perform({
+            guard await LibraryIdleWork.perform(flush:false,{
                 LibraryIdleWork.measure("cell.park") { table.park(view) }
                 cellsCreated += 1;parked = true
             }) else { return }
@@ -128,7 +135,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
         let headingCount = entries.reduce(0) { count,entry in if case .heading = entry { return count+1 }; return count }
         while headingsCreated < min(capacity,headingCount) {
             guard generation == overscanGeneration,!Task.isCancelled else { return }
-            let completed = await LibraryIdleWork.perform {
+            let completed = await LibraryIdleWork.perform(flush:false) {
             guard generation == overscanGeneration else { return }
             LibraryIdleWork.row(headingsCreated,kind:"heading",operation:2)
             let view = LibraryIdleWork.measure("cell.creation") { LibraryHeadingView() }; view.identifier = .init("day"); headingsCreated += 1
@@ -270,19 +277,21 @@ final class LibraryListView: NSView, NSMenuDelegate {
         lastSelectedRow = table.selectedRow
         onSelection?(selectedItem?.id)
     }
-    func makeRow(_ row:Int) -> NSView? {
+    func makeRow(_ row:Int,detached:Bool = false) -> NSView? {
         guard entries.indices.contains(row) else { return nil }
         switch entries[row] {
         case .heading(let text):
             let wrapper: LibraryHeadingView
             if let view = table.makeView(withIdentifier:.init("day"),owner:self) as? LibraryHeadingView { wrapper = view }
             else { wrapper = LibraryHeadingView(); headingsCreated += 1 }
+            if detached { wrapper.removeFromSuperview() }
             wrapper.identifier = .init("day"); wrapper.configure(text,color:foreground.withAlphaComponent(0.68))
             return wrapper
         case .item(let index):
             let view: LibraryItemView
             if let reusable = table.makeView(withIdentifier: .init("row"), owner: self) as? LibraryItemView { view = reusable }
             else { view = LibraryIdleWork.measure("cell.creation") { LibraryItemView() }; cellsCreated += 1 }
+            if detached { view.removeFromSuperview() }
             view.identifier = .init("row")
             cellsConfigured += 1
             view.onHover = nil

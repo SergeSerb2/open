@@ -1,5 +1,31 @@
 import AppKit
 
+/// Track native contact and momentum even when the offset no longer changes.
+/// The document's clip observer alone cannot identify an active gesture tail.
+@MainActor
+final class LibraryScrollView: NSScrollView {
+    var onWheel: ((Bool) -> Void)?
+    private var contact = false
+    private var momentum = false
+    override func scrollWheel(with event:NSEvent) {
+        LibraryIdleWork.noteInput()
+        func update(_ phase:NSEvent.Phase,_ active:inout Bool) {
+            if !phase.intersection([.mayBegin,.began,.changed,.stationary]).isEmpty { active = true }
+            if !phase.intersection([.ended,.cancelled]).isEmpty { active = false }
+        }
+        update(event.phase,&contact); update(event.momentumPhase,&momentum)
+        let active = contact || momentum
+        LibraryIdleWork.setScrolling(ObjectIdentifier(self),active:active)
+        onWheel?(active)
+        super.scrollWheel(with:event)
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { contact = false; momentum = false; LibraryIdleWork.setScrolling(ObjectIdentifier(self),active:false) }
+    }
+    isolated deinit { LibraryIdleWork.setScrolling(ObjectIdentifier(self),active:false) }
+}
+
 struct LibraryTableRow {
     let key: String
     let height: CGFloat
@@ -18,7 +44,7 @@ final class LibraryTableView: NSView, NSDraggingSource {
     var menuAtRow: ((Int) -> NSMenu?)?
     var writerAtRow: ((Int) -> NSPasteboardWriting?)?
     var canSelect: ((Int) -> Bool)?
-    var makeRow: ((Int) -> NSView?)?
+    var makeRow: ((Int,Bool) -> NSView?)?
     var onDragBegin: ((NSDraggingSession) -> Void)?
     var onDragEnd: ((NSDraggingSession,NSDragOperation) -> Void)?
     var onScroll: (() -> Void)?
@@ -101,6 +127,7 @@ final class LibraryTableView: NSView, NSDraggingSource {
     }
     func scheduleSettle() {
         cancelIdle()
+        guard !LibraryIdleWork.scrollIsActive else { return }
         let generation = settleGeneration
         settleTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for:.milliseconds(80))
@@ -121,20 +148,24 @@ final class LibraryTableView: NSView, NSDraggingSource {
             // prepare missing overscan cells here, away from the layer tree.
             if let entry = live[descriptor.key],entry.version == descriptor.version { continue }
             var prepared:NSView?
-            guard await LibraryIdleWork.perform({
+            guard await LibraryIdleWork.perform(flush:false,{
                 guard isCurrent(),rows.indices.contains(row),
                     viewport == (enclosingScrollView?.contentView.bounds ?? bounds) else { return }
                 LibraryIdleWork.realizedRow(row)
                 if live[descriptor.key] != nil { retire(descriptor.key) }
-                prepared = makeRow?(row)
-                prepared?.removeFromSuperview()
+                guard LibraryIdleWork.canBegin(estimatedMilliseconds:0.75) else { return }
+                prepared = makeRow?(row,true)
                 prepared?.frame = rect(ofRow:row)
-                LibraryIdleWork.measure("layout.pass") { prepared?.layoutSubtreeIfNeeded() }
             }),let view = prepared else { return }
             var installed = false
             defer { if !installed { park(view) } }
+            guard await LibraryIdleWork.perform(flush:false,{
+                guard isCurrent(),LibraryIdleWork.canBegin(estimatedMilliseconds:0.75) else { return }
+                LibraryIdleWork.realizedRow(row)
+                LibraryIdleWork.measure("layout.pass") { view.layoutSubtreeIfNeeded() }
+            }) else { return }
             guard await LibraryIdleWork.prepareLayers(of:view,scale:window?.backingScaleFactor ?? 2,row:row,operation:3,isCurrent:isCurrent) else { return }
-            guard await LibraryIdleWork.perform({
+            guard await LibraryIdleWork.perform(flush:false,{
                 guard isCurrent(),rows.indices.contains(row),
                     rows[row].key == descriptor.key,rows[row].version == descriptor.version,
                     viewport == (enclosingScrollView?.contentView.bounds ?? bounds) else { return }
@@ -178,7 +209,7 @@ final class LibraryTableView: NSView, NSDraggingSource {
             if let existing = live[descriptor.key]?.view { view = existing }
             else {
                 let start = ProcessInfo.processInfo.systemUptime
-                guard let made = makeRow?(row) else { return }
+                guard let made = makeRow?(row,false) else { return }
                 record("configure",start)
                 view = made; if view.superview !== self { addSubview(view) }; view.isHidden = false
             }

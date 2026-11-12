@@ -7,15 +7,18 @@ import AppKit
 enum LibraryIdleWork {
     static var notBefore = 0.0
     static var lastInput = ProcessInfo.processInfo.systemUptime
+    private static var scrolling: Set<ObjectIdentifier> = []
+    static var scrollIsActive: Bool { !scrolling.isEmpty }
+    static func setScrolling(_ owner:ObjectIdentifier,active:Bool) {
+        if active { scrolling.insert(owner) } else { scrolling.remove(owner) }
+    }
     static var intervals: [[String:Double]] = []
     private static let tracePhases = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREPARATION_TRACE"] == "1"
     private static var detail: [String:Double]?
     private static var sliceStarted = 0.0
-    // Reserve time below the 8.3ms ceiling for transaction submission and
-    // scheduling variation. A text raster gets its own turn when necessary.
-    private static let bodyBudgetMilliseconds = 6.0
-    private static var textRasterEstimate = 5.0
-    private static var layerEstimate = 0.5
+    // Budget for the slowest supported Mac. Row setup, layout and each layer
+    // are separate bodies; do not spend the frame allowance on the fast host.
+    private static let bodyBudgetMilliseconds = 3.0
     static func canBegin(estimatedMilliseconds:Double) -> Bool {
         (ProcessInfo.processInfo.systemUptime-sliceStarted)*1000+estimatedMilliseconds <= bodyBudgetMilliseconds
     }
@@ -55,35 +58,33 @@ enum LibraryIdleWork {
         }
         if let layer = view.layer { collect(layer) }
         for layer in layers where layer is LibraryTextLayer { layer.contentsScale = scale }
-        var index = 0
-        while index < layers.count {
+        for layer in layers {
             guard isCurrent(),!Task.isCancelled else { return false }
-            let completed = await perform {
+            var displayed = false
+            let completed = await perform(flush:false) {
                 guard isCurrent() else { return }
                 realizedRow(row)
                 if detail != nil { detail!["row.operation"] = Double(operation) }
-                while index < layers.count {
-                    let layer = layers[index],text = layer is LibraryTextLayer
-                    let estimate = text ? textRasterEstimate : layerEstimate
-                    guard canBegin(estimatedMilliseconds:estimate) else { break }
-                    let start = ProcessInfo.processInfo.systemUptime
-                    measure("layer.display") { layer.displayIfNeeded() }
-                    let elapsed = (ProcessInfo.processInfo.systemUptime-start)*1000
-                    // A single unexpectedly expensive raster is never used to
-                    // justify putting another body in this turn.
-                    if text { textRasterEstimate = max(textRasterEstimate,min(5.5,elapsed)) }
-                    else { layerEstimate = max(layerEstimate,min(5.5,elapsed)) }
-                    index += 1
-                }
+                guard canBegin(estimatedMilliseconds:0.75) else { return }
+                // Never combine two text rasters, even when the fast machine
+                // has time left. Each body must also be cheap on the M1.
+                measure("layer.display") { layer.displayIfNeeded() }
+                displayed = true
             }
-            guard completed else { return false }
+            guard completed,displayed else { return false }
         }
         return true
     }
     static func perform(rowKind:Int = 0, phase:Int = 0, firstUse:Bool = false,
         flush:Bool = true, _ body: () -> Void) async -> Bool {
-        let delay = max(0.008,max(notBefore,lastInput+0.5)-ProcessInfo.processInfo.systemUptime)
-        do { try await Task.sleep(for: .seconds(delay)) } catch { return false }
+        // Input can arrive while suspended. Recheck both the clock and the
+        // native gesture state after every wait, including a stationary tail.
+        while true {
+            let delay = max(0.008,max(notBefore,lastInput+0.5)-ProcessInfo.processInfo.systemUptime)
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return false }
+            guard !Task.isCancelled else { return false }
+            if !scrollIsActive,ProcessInfo.processInfo.systemUptime >= max(notBefore,lastInput+0.5) { break }
+        }
         guard !Task.isCancelled else { return false }
         let input: NSEvent.EventTypeMask = [.keyDown, .leftMouseDown, .rightMouseDown,
             .otherMouseDown, .mouseMoved, .leftMouseDragged, .rightMouseDragged,
@@ -99,7 +100,8 @@ enum LibraryIdleWork {
         var interval = detail ?? [:]; detail = nil
         interval.merge(["startUptime":start,"endUptime":ProcessInfo.processInfo.systemUptime,
             "milliseconds":milliseconds,"rowKind":Double(rowKind),
-            "phase":Double(phase),"firstUse":firstUse ? 1 : 0]) { _,new in new }
+            "phase":Double(phase),"firstUse":firstUse ? 1 : 0,
+            "scrollActive":scrollIsActive ? 1 : 0]) { _,new in new }
         intervals.append(interval)
         if intervals.count > 2048 { intervals.removeFirst(1024) }
         LibraryRaster.events["idleSlice"] = (LibraryRaster.events["idleSlice"] ?? 0)+1
