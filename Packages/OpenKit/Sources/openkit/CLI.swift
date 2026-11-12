@@ -123,7 +123,7 @@ func runImportArc(args: [String]) async throws {
     }
     print("  totalItems=\(report.totalItems) accounted=\(report.accounted) spaces=\(report.spaces)")
     print("  pinnedTabs=\(report.pinnedTabs) todayTabs=\(report.todayTabs) favorites=\(report.favorites)")
-    print("  folders=\(report.folders) collapsedFolders=\(report.collapsedFolders) splits=\(report.splits) routingRules=\(report.routingRules)")
+    print("  folders=\(report.folders) collapsedFolders=\(report.collapsedFolders) splits=\(report.splits) routingRules=\(report.routingRules) liveFolders=\(report.liveFolders) favoritesEmptyDismissed=\(report.favoritesEmptyDismissed)")
     print("  skipped easels=\(report.skippedEasels) notes=\(report.skippedNotes) unknown=\(report.skippedUnknown)")
     print("  imported easels=\(report.importedEasels)")
     print("  welcome imported=\(report.importedWelcome) skipped=0 untitledSpaces=\(report.untitledSpaces)")
