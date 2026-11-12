@@ -88,8 +88,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                     state(action='open',section='downloads');assert wait(lambda:row(value['id']))
                 return value['id']
             complete=start('/file');check('completed_download_row',wait(lambda:item(complete).get('state')=='completed') and wait(lambda:row(complete)['subtitle']=='Download'),row=row(complete))
-            expected=['Open','Copy','Show in Finder','separator','Hide from Open','Move to Trash']
-            check('completed_native_menu', [m['title'] for m in menu(complete)]==expected,items=menu(complete))
+            # Arc's download menu (D2c #394): "Open ‹ext›", "Copy ‹ext›", then the fixed items.
+            titles=[m['title'] for m in menu(complete)]
+            check('completed_native_menu', len(titles)==6 and titles[0].startswith('Open') and titles[1].startswith('Copy') and titles[2:]==['Show in Finder','separator','Hide from Open','Move to Trash'],items=menu(complete))
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
             menu(complete,'Copy');check('download_copy_file',wait(lambda:app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt')))
             payload=state(action='row-drag',id=complete);check('download_drag_file', 'public.file-url' in payload['types'] and payload['url'].endswith('/sample.txt'),payload=payload)
@@ -130,7 +131,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='chip',id='profile:'+profile);check('profile_chip_selected',state()['filterActive'] and state()['profiles']['downloads']==profile);capture('downloads-profile-filter')
             key('escape');check('escape_closes_filter',not state()['header']['filterOpen'] and state()['open'])
             state(action='filter',open=True);state(action='chip',id='profile:'+profile);state(action='filter',open=False)
-            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)]==['Pause','Cancel','Show in Finder']);capture('downloads-running')
+            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)][2:]==['Show in Finder','separator','Cancel Download','separator','Hide from Open'],items=menu(slow));capture('downloads-running')
             menu(slow,'Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused') and wait(lambda:any(m['title']=='Resume' for m in menu(slow))));capture('downloads-paused')
             menu(slow,'Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
             menu(slow,'Cancel');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
@@ -189,7 +190,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('capture-action',action='cancel')
             state(action='open',section='media');check('media_capture_rows',wait(lambda:bool(rows())),rows=rows());check('capture_page_title',rows()[0]['title']=='Downloads fixture' and '127.0.0.1' in rows()[0]['subtitle'])
             app.call('library-captures-state',recordFileActions=True)
-            capture_row=rows()[0];state(action='hover-row',id=capture_row['id']);check('capture_native_menu',[m['title'] for m in menu(capture_row['id'])]==['Open','Copy','Show in Finder','Save As…','separator','Delete']);capture('media-captures')
+            capture_row=rows()[0];state(action='hover-row',id=capture_row['id']);check('capture_native_menu',[m['title'] for m in menu(capture_row['id'])]==['Open in Preview','Send via iMessage','AirDrop','Copy Image','Show in Finder','Save As…','separator','Delete']);capture('media-captures')
             payload=state(action='row-drag',id=capture_row['id']);check('capture_drag_file','public.file-url' in payload['types'],payload=payload)
             menu(capture_row['id'],'Copy');check('capture_copy_image',app.call('library-captures-state')['pasteboardHasImage'])
             menu(capture_row['id'],'Save As…');save_path=Path(data)/'saved-capture.png';state(action='save-panel',path=str(save_path))
