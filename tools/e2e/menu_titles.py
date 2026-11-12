@@ -123,6 +123,12 @@ def run(factory, results, tmp, h):
         app.call('menu-perform', id='stay-on-top')
         off = (level(), checked())
         row('stay_on_top_toggles', before == (0, 0) and on == (3, 1) and off == (0, 0), before=before, on=on, off=off)
+
+        # With no browser window, Arc's Window menu says "View Library" (capture C-questions "_NS:451").
+        app.call('menu-perform', id='close-window')
+        h.wait_until(lambda: not app.call('shell-windows') or None, timeout=8, step=.1)
+        empty = flatten(app.call('menu-tree'), set()).get('Window', [])
+        row('menu_no_window_view_library', 'View Library' in empty and 'Open Library…' not in empty, window=empty)
     finally:
         app.quit()
         server.shutdown()
