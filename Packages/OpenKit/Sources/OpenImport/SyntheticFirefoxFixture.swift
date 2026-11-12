@@ -180,11 +180,6 @@ public struct SyntheticFirefoxFixture: Sendable {
                        [.int(visitID), .int(place), .int(date), .int(Int64(type))])
             if bucket == 0 { e.visitsInvalidTime += 1 } else { e.visitsInternal += 1 }
         }
-        // I-5: sites that match the onboarding Favorites catalog. GitHub and Wikipedia rank above the history
-        // hosts; YouTube has 3 visits (the threshold) but ranks below them. Pages only, so the visit counts above stay.
-        try place("https://github.com/synthetic/repo", "Synthetic repo", visits: 40, frecency: 20_000)
-        try place("https://en.wikipedia.org/wiki/Main_Page", "Wikipedia", visits: 12, frecency: 15_000)
-        try place("https://www.youtube.com/watch?v=synthetic", "YouTube", visits: 3, frecency: 14_000)
         e.visitRows = Int(visitID)
         try db.exec("COMMIT;")
     }
