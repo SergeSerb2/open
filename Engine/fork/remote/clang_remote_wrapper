@@ -1,0 +1,36 @@
+#!/bin/bash
+# Open remote-execution clang wrapper (runs on Linux REAPI workers, as root).
+# Toolchain: Chromium Linux_x64/clang-llvmorg-24-init-7747-g62397f8b-53.tar.xz
+#   sha256 53c3bfd12b5d01378c6277bbebcacec595ef9d9fc4ec54f155c03a1b2cae4dbf, unpacked at /opt/cr-clang.
+# Same revision as the macOS host clang in third_party/llvm-build. This file is an action
+# input, so a toolchain or root change also changes every remote cache key.
+#
+# Official Mac builds keep absolute paths in debug info and in Clang module files
+# (clang_need_input_root_absolute_path), so each action runs in a private mount namespace:
+#  1. the action's input root (with any read-only sub-mounts) is rbind-mounted at the Mac exec root;
+#  2. the Linux clang binary is bind-mounted over the Mac clang binary inside that root.
+# argv[0], the working directory and clang's resource directory
+# (third_party/llvm-build/Release+Asserts/lib/clang/<v>, an action input) are then the same
+# absolute paths as in a local compile on the Mac.
+#
+# The macOS clang package was built with HOST_LINK_VERSION=1249 (the string is in the Mac
+# binary; the driver turns it into -target-linker-version and, for arm64 macOS, enables
+# -fobjc-msgsend-selector-stubs). The Linux package has no host ld64 version, so pass it.
+mac_linker_version=1249
+set -euo pipefail
+host_root=${OPEN_REMOTE_HOST_ROOT:-/Users/serge/Developer/open-engine/chromium_git/chromium/src}
+case "${1##*/}" in
+  clang|clang++) ;;
+  *) echo "clang_remote_wrapper: unsupported tool: $1" >&2; exit 2 ;;
+esac
+input_root=$(cd ../.. && pwd -P)
+work_rel=${PWD#"$input_root"/}
+exec unshare --mount --propagation private -- /bin/sh -c '
+  set -e
+  mkdir -p "$2"
+  mount --rbind "$1" "$2"
+  mount --bind /opt/cr-clang/bin/clang "$2/third_party/llvm-build/Release+Asserts/bin/clang"
+  cd "$2/$3"
+  shift 3
+  exec "$@"
+' sh "$input_root" "$host_root" "$work_rel" "$1" "-mlinker-version=$mac_linker_version" "${@:2}"

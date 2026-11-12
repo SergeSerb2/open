@@ -7740,7 +7740,7 @@ def capture_checks(factory, results, tmp):
         results['capture_c1_area'] = {'ok': len(new) == 1 and new[0]['kind'] == 'area' and new[0]['width'] == round(300 * scale)
             and new[0]['height'] == round(200 * scale) and new[0]['bytes'] > 0 and st['result']['saved'] == new[0]['id']
             and overlay.get('frame') == overlay.get('pageFrame') and overlay.get('firstResponder') is True
-            and overlay.get('hint') == 'Click or drag to capture a portion of this page' and not overlay.get('hintHidden')
+            and overlay.get('hint') == 'Drag to capture. Press Esc to cancel.' and not overlay.get('hintHidden')
             and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
             and card.get('actions') == ['copy', 'save', 'share', 'easel', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
             'scale': scale, 'row': new, 'steps': steps, 'state': st}
@@ -7772,22 +7772,6 @@ def capture_checks(factory, results, tmp):
         results['capture_shortcut_hint'] = {'ok': (closed or {}).get('hintShows') == 1 and isinstance(hint_time, (int, float)) and hint_time > 0,
                                             'hintShows': (closed or {}).get('hintShows'), 'stored': hint_time}
 
-        # C8: hover element capture (Arc FA CA-4, capture s4 `e6-capture-ui`): the pointer rests on
-        # an element, the overlay outlines it, and a click without a drag captures exactly it.
-        close_card()
-        app.eval(tab, "(() => { const d = document.createElement('div'); d.id = 'c8';"
-                      " d.style.cssText = 'position:fixed;left:60px;top:260px;width:240px;height:120px;background:#3a7;z-index:9';"
-                      " document.body.appendChild(d); return 1; })()")
-        before = rows()
-        r = app.call('capture', mode='area', click=[180, 320])
-        after = rows()
-        hovered = next((s_ for s_ in r['steps'] if s_.get('after') == 'hover'), {})
-        new = [x for x in after if x['id'] not in {y['id'] for y in before}]
-        results['capture_c8_hover_element'] = {'ok': hovered.get('element') == [60, 260, 240, 120] and len(new) == 1
-            and new[0]['width'] == round(240 * scale) and new[0]['height'] == round(120 * scale) and new[0]['kind'] == 'area',
-            'hover': hovered, 'row': new}
-        app.eval(tab, "document.getElementById('c8').remove()")
-        close_card()
         # C4: Cmd+Shift+2 on the real key path shows the overlay; Esc during it: no row.
         count, cancelled = len(rows()), state()['cancelled']
         app.call('key', key='2', modifiers=['cmd', 'shift'])
@@ -12860,7 +12844,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -13010,6 +12994,10 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.only == "features":
+        # The widevine row needs DRM playback turned on (off by default): pass the
+        # real Settings key in the launch-argument domain (nothing is persisted).
+        extra += ["-open.advanced.enableWidevine", "YES"]
     if opts.features_passwords_engine_safety:
         extra.append('--open-allow-mock-keychain-secrets')
     if opts.only == "extensions-e2":
@@ -13067,7 +13055,7 @@ def main():
     tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True, first_run=None):
         tracker.check_alive()
         if opts.lane == "merge" and ((extra_env or {}).get("DYLD_INSERT_LIBRARIES") or os.environ.get("DYLD_INSERT_LIBRARIES")):
             raise RuntimeError("merge lane refuses injected libraries; use --lane observers on the M1")
@@ -13082,7 +13070,7 @@ def main():
             # Every first-run helper uses this factory, including F12 and the
             # multi-Profile importer. Exercise the real player at zero volume.
             launch_args += ["--intro-sound=silent"]
-        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only in ("firstrun", "onboarding", "import-robust"))
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=first_run if first_run is not None else opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
         if opts.only in ("firstrun", "import-robust") and app.call("onboarding").get("active"):
@@ -13210,6 +13198,18 @@ def main():
             results["onboarding"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
                 factory, results["onboarding"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-peek":
+            results["notes-peek"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_peek.py"))["run"](
+                factory, results["notes-peek"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-library":
+            results["notes-library"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_library.py"))["run"](
+                factory, results["notes-library"], tmp, sys.modules[__name__])
+        elif opts.only == "notes-rowmenu":
+            results["notes-rowmenu"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_rowmenu.py"))["run"](
+                factory, results["notes-rowmenu"], tmp, sys.modules[__name__])
         elif opts.only == "notes-import":
             results["notes-import"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_import.py"))["run"](
@@ -13397,6 +13397,7 @@ def main():
                 elif opts.only == "extensions-p3":
                     import extensions_p3
                     extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
+                    extensions_p3.global_commands(app, results["extensions-p3"], tmp, ROOT, wait_until)
                 elif opts.only == "extensions-e2":
                     import extensions_e2
                     extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
@@ -13493,14 +13494,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

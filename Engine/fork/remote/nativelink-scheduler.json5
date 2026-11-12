@@ -1,0 +1,83 @@
+// Open remote build: scheduler + CAS/AC (NativeLink 1.8.3 with the 4 MiB batch patch).
+// Clients (Siso on the Mac) use 127.0.0.1:50051 through SSH tunnels (the HTTPS relay blocks gRPC).
+// Remote workers reach 50051 (CAS) and 50061 (worker API) through their own SSH tunnels; both bind 127.0.0.1.
+{
+  stores: [
+    {
+      name: "AC_STORE",
+      filesystem: {
+        content_path: "/opt/e3/data/ac",
+        temp_path: "/opt/e3/data/ac-tmp",
+        eviction_policy: { max_bytes: 4000000000 },
+      },
+    },
+    {
+      name: "CAS_STORE",
+      fast_slow: {
+        fast: {
+          filesystem: {
+            content_path: "/opt/e3/data/cas",
+            temp_path: "/opt/e3/data/cas-tmp",
+            eviction_policy: { max_bytes: "${E3_CAS_BYTES:-90000000000}" },
+          },
+        },
+        slow: { noop: {} },
+      },
+    },
+  ],
+  schedulers: [
+    {
+      name: "MAIN_SCHEDULER",
+      simple: {
+        supported_platform_properties: {
+          OSFamily: "ignore",
+          "container-image": "ignore",
+          "label:action_default": "ignore",
+          "label:action_large": "ignore",
+          InputRootAbsolutePath: "ignore",
+          dockerRuntime: "ignore",
+          dockerPrivileged: "ignore",
+          dockerNetwork: "ignore",
+          Pool: "ignore",
+        },
+        // Re-queue actions whose worker vanished.
+        worker_timeout_s: 60,
+        max_job_retries: 3,
+      },
+    },
+  ],
+  // No local worker: in E3-0 the scheduler was the busiest node (CAS serving for all workers).
+  workers: [],
+  servers: [
+    {
+      name: "public",
+      // The Mac client is ~150 ms away: large HTTP/2 windows, or one stream moves only ~2 MB/s.
+      listener: {
+        http: {
+          socket_address: "127.0.0.1:50051",
+          max_decoding_message_size: 16777216,
+          advanced_http: {
+            http2_keep_alive_interval: 30,
+            experimental_http2_initial_stream_window_size: 16777216,
+            experimental_http2_initial_connection_window_size: 67108864,
+            experimental_http2_max_concurrent_streams: 1024,
+          },
+        },
+      },
+      services: {
+        cas: [{ instance_name: "default_instance", cas_store: "CAS_STORE" }],
+        ac: [{ instance_name: "default_instance", ac_store: "AC_STORE" }],
+        execution: [{ instance_name: "default_instance", cas_store: "CAS_STORE", scheduler: "MAIN_SCHEDULER" }],
+        capabilities: [{ instance_name: "default_instance", remote_execution: { scheduler: "MAIN_SCHEDULER" } }],
+        bytestream: [{ instance_name: "default_instance", cas_store: "CAS_STORE" }],
+        health: {},
+      },
+    },
+    {
+      name: "workers",
+      listener: { http: { socket_address: "127.0.0.1:50061" } },
+      services: { worker_api: { scheduler: "MAIN_SCHEDULER" }, admin: {}, health: {} },
+    },
+  ],
+  global: { max_open_files: 65536 },
+}

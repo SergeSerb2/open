@@ -9,24 +9,19 @@ public enum GlanceKind: Hashable, Sendable {
     case recents(RecentsSite)
     /// Today's events from the system calendar (LD §3.2; EventKit per LEAD 11:05 Q1).
     case calendar(CalendarProvider)
-    /// Unread mail of one Gmail inbox from the Profile's own session (LD §3.3, LF L6).
-    case gmail(account: Int)
 
     /// The settings key that turns this kind of card on or off (default on).
     public var preferenceKey: String {
         switch self {
         case .recents: RecentsSite.preferenceKey
         case .calendar: CalendarProvider.preferenceKey
-        case .gmail: GmailGlance.preferenceKey
         }
     }
 
     /// The glance a tab gets from its URL, or nil for a plain page preview.
     /// `aliases` maps extra hosts to a site (automation fixtures only; empty in normal use).
-    /// `mailHosts`: extra hosts that count as Gmail (automation fixtures only).
-    public static func match(url: URL, aliases: [String: RecentsSite] = [:], mailHosts: Set<String> = []) -> GlanceKind? {
+    public static func match(url: URL, aliases: [String: RecentsSite] = [:]) -> GlanceKind? {
         if let provider = CalendarProvider.match(url: url) { return .calendar(provider) }
-        if let account = GmailGlance.account(of: url, extraHosts: mailHosts) { return .gmail(account: account) }
         return RecentsSite.match(url: url, aliases: aliases).map { .recents($0) }
     }
 }

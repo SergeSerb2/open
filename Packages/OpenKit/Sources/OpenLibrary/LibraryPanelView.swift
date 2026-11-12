@@ -101,6 +101,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     /// Library › Easels (EZ): the App's provider, its last list, and the header card.
     public weak var easelsProvider: (any LibraryEaselsProvider)? { didSet { if oldValue !== easelsProvider { reloadEasels() } } }
     var easelItems: [LibraryEaselItem] = []
+    public weak var notesProvider: (any LibraryNotesProvider)? { didSet { if oldValue !== notesProvider { reloadEasels() } } }
+    var noteItems: [LibraryNoteItem] = []
     let easelsCard = LibraryEaselsCard()
 
     public init(viewModel: LibraryViewModel, context: SidebarContext) {
@@ -467,7 +469,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             "providers":Dictionary(uniqueKeysWithValues:hosts.map { ($0.key.rawValue,["generation":$0.value.providerGeneration,"loaded":$0.value.loaded,"running":$0.value.provider != nil] as [String:Any]) }),
             "profiles":["history":viewModel.historyProfileID.description,"downloads":viewModel.downloadProfileFilter?.description ?? "all"],
             "dragSession":listView.dragSession,"search":viewModel.query,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden],
-            "easels":easelsState,
+            "easels":easelsState, "notes":noteItems.count,
             "menuOpen":listView.activeMenu != nil,"menuLifecycle":listView.menuLifecycle,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? ""]
     }
     public func hoverTile(_ section: LibraryPanelSection, hovered: Bool) { tiles[section]?.hovered=hovered }

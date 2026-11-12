@@ -77,19 +77,6 @@ extension AutomationController {
             "sizeLabel": overlay.sizeLabelFrame.map(Self.box) ?? [], "hintHidden": overlay.hint.isHidden || overlay.hint.alphaValue == 0])
           send(.leftMouseDragged, rect[0] + rect[2], rect[1] + rect[3])
           send(.leftMouseUp, rect[0] + rect[2], rect[1] + rect[3])
-        } else if let click = a["click"] as? [Double], click.count == 2 {
-          // Hover element capture: the pointer rests on the element (the overlay's mouseMoved
-          // path), the highlight appears, then a click without a drag captures that element.
-          overlay.hover(at: CGPoint(x: click[0], y: click[1]))
-          let hoverDeadline = ContinuousClock.now.advanced(by: .seconds(5))
-          while overlay.hoveredElement == nil && ContinuousClock.now < hoverDeadline { try await Task.sleep(for: .milliseconds(20)) }
-          steps.append(["after": "hover", "element": overlay.hoveredElement.map(Self.box) ?? [], "drawCount": overlay.drawCount])
-          func send(_ type: NSEvent.EventType) {
-            let point = overlay.convert(NSPoint(x: click[0], y: click[1]), to: nil)
-            if let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) { NSApp.sendEvent(e) }
-          }
-          send(.leftMouseDown); send(.leftMouseUp)
         } else { return ["steps": steps, "state": captureState(controller)] as [String: Any] }
       }
     }

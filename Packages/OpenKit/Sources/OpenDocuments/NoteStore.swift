@@ -74,6 +74,14 @@ public final class NoteStore {
         return !dirty.contains(note.id)
     }
 
+    /// Deletes a Note: its file and image folder move to the Trash (removed when no Trash exists).
+    public func delete(_ id: UUID) {
+        cache[id] = nil; dirty.remove(id)
+        for url in [fileURL(for: id), assetDirectory(for: id)] where FileManager.default.fileExists(atPath: url.path) {
+            if (try? FileManager.default.trashItem(at: url, resultingItemURL: nil)) == nil { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
     /// Replaces a Note (an import that fills a placeholder). Written now.
     public func replace(_ note: NoteDocument) {
         cache[note.id] = note; dirty.insert(note.id); flush()

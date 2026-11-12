@@ -17,10 +17,13 @@ public final class GlobalHotkeyService: @unchecked Sendable {
     private var action: (@Sendable (TimeInterval) -> Void)?
 
     public private(set) var registeredShortcut: KeyboardShortcut?
+    /// Carbon hotkey ID (signature 'OPEN'). Several services can be registered at once (Little Open = 1, global
+    /// extension commands from 100); each handler answers only for its own ID and passes other hotkeys on.
+    public let hotKeyIdentifier: UInt32
 
     public var isRegistered: Bool { hotKeyRef != nil }
 
-    public init() {}
+    public init(identifier: UInt32 = 1) { hotKeyIdentifier = identifier }
 
     deinit { unregister() }
 
@@ -42,9 +45,14 @@ public final class GlobalHotkeyService: @unchecked Sendable {
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
         let installStatus = InstallEventHandler(
             GetApplicationEventTarget(), { _, event, userData in
-                guard let userData else { return noErr }
+                guard let userData, let event else { return OSStatus(eventNotHandledErr) }
                 let service = Unmanaged<GlobalHotkeyService>.fromOpaque(userData).takeUnretainedValue()
-                service.action?(event.map(GetEventTime) ?? ProcessInfo.processInfo.systemUptime)
+                var pressed = EventHotKeyID()
+                let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                               nil, MemoryLayout<EventHotKeyID>.size, nil, &pressed)
+                guard status == noErr, pressed.signature == GlobalHotkeyService.signature,
+                      pressed.id == service.hotKeyIdentifier else { return OSStatus(eventNotHandledErr) }
+                service.action?(GetEventTime(event))
                 return noErr
             }, 1, &eventType, selfPointer, &handlerRef
         )
@@ -52,7 +60,7 @@ public final class GlobalHotkeyService: @unchecked Sendable {
         self.handlerRef = handlerRef
 
         var hotKeyRef: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: OSType(0x4F50_454E), id: 1) // 'OPEN'
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: hotKeyIdentifier)
         let status = RegisterEventHotKey(
             keyCode, shortcut.modifiers.carbonModifiers, hotKeyID,
             GetApplicationEventTarget(), 0, &hotKeyRef
@@ -65,6 +73,8 @@ public final class GlobalHotkeyService: @unchecked Sendable {
         self.hotKeyRef = hotKeyRef
         registeredShortcut = shortcut
     }
+
+    static let signature = OSType(0x4F50_454E) // 'OPEN'
 
     /// Removes the system registration. Safe to call when nothing is registered.
     public func unregister() {

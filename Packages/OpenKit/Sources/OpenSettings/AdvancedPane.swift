@@ -45,7 +45,8 @@ public struct AdvancedPane: View {
         SettingsGroup {
             tile("Enable Picture in Picture when you leave a video tab",key:"enablePictureInPictureOnLeave",symbol:"pip",color:.purple)
             tile("Allow websites to get your theme data",key:"allowSitesThemeData",symbol:"paintpalette.fill",color:.purple)
-            tile("Enable Boosts on websites you visit",key:"enableBoosts",symbol:"paintbrush.pointed.fill",color:.purple,last:true)
+            tile("Enable Boosts on websites you visit",key:"enableBoosts",symbol:"paintbrush.pointed.fill",color:.purple)
+            tile("Play DRM-protected video",key:"enableWidevine",symbol:"play.rectangle.fill",color:.purple,last:true,subtitle:"Downloads Google's Widevine module. Some streaming services may still refuse playback. Takes effect after you quit and reopen Open.")
         }
         dataButtons
         SettingsGroup {
