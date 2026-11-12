@@ -385,6 +385,18 @@ final class AppImportRunner: ProfileDataOwner {
     #endif
     app.importInProgress = false
     if plan.directory != ArcImporter().arcDirectory { UserDefaults.standard.set(plan.directory.path, forKey: "open.import.lastArcDir") }
+    // Extra Arc data types from other modules (ArcImportProviders; EZ: Easels). Settings only.
+    if !firstRun, let profileID = app.model.defaultProfile?.id {
+      for provider in ArcImportProviders.all where plan.providers.contains(provider.id) {
+        guard !undo.cancelled else { break }
+        progress("Importing your \(provider.title.lowercased())…")
+        let done = await provider.run(arcDirectory: plan.directory, file: plan.providerFiles[provider.id], profileID: profileID)
+        counts[provider.title, default: 0] += done.imported
+        counts["Duplicates", default: 0] += done.duplicates
+        if let failure = done.failure { failures[provider.title] = failure }
+        undo.append(provider: done.undo, redo: done.redo)
+      }
+    }
     #if OPEN_AUTOMATION
     watchdog.beginPhase("writeHistory")
     #endif

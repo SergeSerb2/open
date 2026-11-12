@@ -27,6 +27,9 @@ public struct ImportPlan: Sendable {
     public var safariFiles = SafariImportFiles()
     /// Typed by the user for a Firefox Primary Password. Used once by the reader, cleared after the run, never stored.
     public var primaryPassword = ""
+    /// Import from Arc: selected extra data types (`ArcImportDataProvider.id`) and the file each one uses.
+    public var providers: Set<String> = []
+    public var providerFiles: [String: URL] = [:]
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
     public var isArc: Bool { source == .arc }
