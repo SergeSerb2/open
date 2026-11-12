@@ -277,6 +277,33 @@ def run(factory, results, tmp, env, functional_only=False):
             value = app.call('permission', origin=origin, kind=1)
             record('S3_permission', not row(absent,'row.permission.camera') and bool(allowed) and row(toggled,'row.permission.camera').get('subtitle') == 'Blocked' and value == 2 and toggled['reloadVisible'], allowed=allowed,blocked=toggled,negative=absent)
             app.call('permission', origin=origin, kind=1, state=0)
+            # S3_content (A10 E1, SC-11/SC-12): a changed content setting shows as a tile with Arc's
+            # subtitle; a tap flips the engine value; a setting back at its default does not appear.
+            def site_settings(): return {x['kind']: x['state'] for x in app.call('site-settings', origin=origin)}
+            close(); app.call('site-setting', origin=origin, kind='javascript', state='allow')
+            content_absent = opened()
+            close(); app.call('site-setting', origin=origin, kind='javascript', state='block')
+            app.call('site-setting', origin=origin, kind='popups', state='allow')
+            content_shown = opened()
+            content_ids = [r['id'] for r in content_shown['rows'] if r['id'].startswith('row.content.')]
+            content_unblocked = app.call('site-controls', action='tap', id='row.content.javascript')
+            content_engine_allowed = 'javascript' not in site_settings()
+            content_reblocked = app.call('site-controls', action='tap', id='row.content.javascript')
+            content_engine_blocked = site_settings().get('javascript') == 'block'
+            close(); app.call('site-setting', origin=origin, kind='javascript', state='allow')
+            app.call('site-setting', origin=origin, kind='popups', state='block')
+            record('S3_content',
+                   not any(r['id'].startswith('row.content.') for r in content_absent['rows'])
+                   and content_ids == ['row.content.javascript', 'row.content.popups']
+                   and row(content_shown, 'row.content.javascript').get('subtitle') == 'Blocked'
+                   and row(content_shown, 'row.content.popups').get('subtitle') == 'Allowed'
+                   and row(content_unblocked, 'row.content.javascript').get('subtitle') == 'Allowed'
+                   and content_engine_allowed and content_unblocked['reloadVisible']
+                   and row(content_reblocked, 'row.content.javascript').get('subtitle') == 'Blocked'
+                   and content_engine_blocked and 'javascript' not in site_settings() and 'popups' not in site_settings(),
+                   shown=[(r['id'], r.get('title'), r.get('subtitle')) for r in content_shown['rows']],
+                   unblocked=row(content_unblocked, 'row.content.javascript'), reblocked=row(content_reblocked, 'row.content.javascript'),
+                   negative='defaults only: no content rows')
             app.call('site-controls', action='permission-index')
             close()
             undecided_origin = origin.replace('127.0.0.1','localhost')

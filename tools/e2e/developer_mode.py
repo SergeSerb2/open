@@ -47,6 +47,9 @@ def run(factory, results, tmp, h):
         tab = next(t['id'] for t in tabs if '/a' in t.get('url', ''))
         app.call('wait', tab=tab, timeout=30)
         def state(): return app.call('developer-panel')
+        def press(button):
+            app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+            app.call('developer-panel', action='press', button=button)
         off = state()
         row('bar_hidden_without_developer_mode', off.get('shown') is False, state={k: off.get(k) for k in ('shown', 'toolbar')})
 
@@ -99,12 +102,31 @@ def run(factory, results, tmp, h):
             and site.get('hovered') == 'siteSettings' and site.get('hoverPlate') == '#000000/0.09' and 'tooltip' not in site,
             copy={k: copy.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')}, left={k: left.get(k) for k in ('hovered', 'tooltip')},
             site={k: site.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')})
-        # PB3-a2: the puzzle button and the split button open menus.
-        ext_menu = app.call('developer-panel', menu='extensionsMenu').get('menu')
+        # PB3-a2: the puzzle button opens the Extensions card (`m-ext.png`: 250 × 96 pt plus the 6 pt arrow, tip under
+        # the button 10.5 pt below it); a second press closes it. The split button opens the split menu.
+        press('extensionsMenu')
+        card = h.wait_until(lambda: state().get('extensionsCard'), timeout=5, step=.05) or {}
+        if os.environ.get('OPEN_E2E_DEVMODE_FRAMES'):  # look frame for the lead, not asserted
+            time.sleep(4); app.call('appearance', name='light'); time.sleep(.5)
+            app.call('snapshot', path=os.path.join(os.environ['OPEN_E2E_DEVMODE_FRAMES'], 'extensions-card-light.png'))
+            app.call('appearance', name='system')
+        press('extensionsMenu')
+        closed_card = h.wait_until(lambda: 'extensionsCard' not in state(), timeout=5, step=.05)
+        row('extensions_card', card.get('rows') == ['Add Extension…', 'Manage Extensions…'] and card.get('size') == [250, 102]
+            and abs(card.get('arrowGap', 0) - 10.5) < .5 and abs(card.get('arrowOffset', 9)) < .5 and card.get('label') == 'Extensions'
+            and card.get('highlighted') == 'Add Extension…'
+            and bool(closed_card), card=card, closed=bool(closed_card))
+        tabs_before = len(app.call('tabs'))
+        press('extensionsMenu')
+        h.wait_until(lambda: state().get('extensionsCard'), timeout=5, step=.05)
+        app.call('developer-panel', cardItem='Manage Extensions…')
+        opened = h.wait_until(lambda: len(app.call('tabs')) == tabs_before + 1 and 'extensionsCard' not in state(), timeout=10, step=.1)
+        row('extensions_card_manage_opens_page', bool(opened), tabs=[tabs_before, len(app.call('tabs'))],
+            newest=[t.get('url') for t in app.call('tabs')][-3:])
+        app.call('select', tab=tab)
+        h.wait_until(lambda: state().get('shown') is True, timeout=10, step=.05)
         split_menu = app.call('developer-panel', menu='splitMenu').get('menu')
-        row('extensions_and_split_menus', ext_menu == ['Add Extension…', 'Manage Extensions…']
-            and split_menu == ['Add Right Split', 'Add Left Split', '-', 'Add Top Split', 'Add Bottom Split'],
-            extensions=ext_menu, split=split_menu)
+        row('split_menu_titles', split_menu == ['Add Right Split', 'Add Left Split', '-', 'Add Top Split', 'Add Bottom Split'], split=split_menu)
         # Capture s10: resting on Capture Window opens the Portrait Mode popover. Hover reaches the one entry; until
         # EZ's popover lands it does nothing else (a click still runs the portrait capture).
         before = state()['devtools'].get('portraitCaptureRequests', 0)
@@ -133,9 +155,6 @@ def run(factory, results, tmp, h):
         def selected():
             try: return app.call('devtools-frontend', tab=tab, js=h._DEVTOOLS_SELECTED_TABS) or []
             except RuntimeError: return None  # no DevTools for this page
-        def press(button):
-            app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
-            app.call('developer-panel', action='press', button=button)
         def wait_panel(tab_id):
             return h.wait_until(lambda: (lambda ids: ids if ids and tab_id in ids else None)(selected()), timeout=20, step=.25)
         press('console')
