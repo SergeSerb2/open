@@ -43,21 +43,28 @@ def remote_session(args):
     remote(['mkdir', '-p', stage, output])
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode='w') as bundle:
-        for name in ('session.py', 'host.py', 'native.swift', 'burst.swift', 'pixels.sh', 'decode.py', 'fixture.py'):
+        for name in ('session.py', 'host.py', 'series.py', 'native.swift', 'burst.swift', 'pixels.sh', 'decode.py', 'fixture.py'):
             bundle.add(HERE / name, arcname=name, recursive=False)
         for name, data in [('script.json', args.script.read_bytes()), ('lead-rulings.txt', rulings.encode())]:
             member = tarfile.TarInfo(name)
             member.size = len(data)
             member.mode = 0o600
             bundle.addfile(member, io.BytesIO(data))
+        for extra in getattr(args, 'series', None) or []:
+            data = extra.read_bytes()
+            member = tarfile.TarInfo('scripts/' + extra.stem + '.json')
+            member.size = len(data)
+            member.mode = 0o600
+            bundle.addfile(member, io.BytesIO(data))
     remote(['/usr/bin/tar', '-xf', '-', '-C', stage], input=archive.getvalue())
     heavy = Path(home) / 'Library/Caches/OpenRE/scripts/heavy.sh'
     helpers = {}
+    deferred, preflight = [], {}
     def needs_stream(value):
         if isinstance(value, dict):
             return value.get('op') == 'burst' or any(needs_stream(v) for v in value.values())
         return isinstance(value,list) and any(needs_stream(v) for v in value)
-    names = ('native','burst') if needs_stream(json.loads(args.script.read_text())) else ('native',)
+    names = ('native','burst') if any(needs_stream(json.loads(f.read_text())) for f in [args.script, *(getattr(args, 'series', None) or [])]) else ('native',)
     for name in names:
         digest = hashlib.sha256((HERE / (name + '.swift')).read_bytes() + b'Swift6-O').hexdigest()
         binary = root / 'helpers' / digest / name
@@ -74,15 +81,24 @@ if not binary.exists():
 print('ready' if binary.exists() else 'compile')
 '''
         status = remote(['python3', '-c', prepare, root, stage, binary, name], capture_output=True, text=True).stdout.strip()
+        if status != 'ready' and getattr(args, 'series', None):
+            # Compile inside the series ticket (its build slot is held), not in a second queue ticket.
+            deferred.append('--compile=%s:%s:%s' % (name, stage / (name + '.swift'), binary))
+            previous = remote(['python3', '-c', 'import sys,pathlib; c=sorted(pathlib.Path(sys.argv[1]).glob("helpers/*/"+sys.argv[2]), key=lambda p:p.stat().st_mtime); print(c[-1] if c else "")', root, name], capture_output=True, text=True).stdout.strip()
+            if not previous:
+                raise SystemExit('no earlier helper for the preflight; run once without --series')
+            preflight[name] = Path(previous)
+            helpers[name] = binary
+            continue
         if status != 'ready':
             flags = ['-parse-as-library'] if name == 'burst' else []
             remote([heavy, 'xcrun', 'swiftc', '-O', '-swift-version', '6', *flags, stage / (name + '.swift'), '-o', binary])
         helpers[name] = binary
     native, burst = helpers['native'], helpers.get('burst',root/'helpers/unused-burst')
-    state = json.loads(remote([native, 'state'], capture_output=True, text=True).stdout)
+    state = json.loads(remote([preflight.get('native', native), 'state'], capture_output=True, text=True).stdout)
     launcher = args.pixel_launcher or Path(home) / 'Applications/OpenCapture.app'
     probe = stage / 'pixel-permission.log'
-    launched_probe = remote(['/usr/bin/open', '-n', '-W', launcher, '--args', stage / 'pixels.sh', probe, native, 'screen-permission'], check=False)
+    launched_probe = remote(['/usr/bin/open', '-n', '-W', launcher, '--args', stage / 'pixels.sh', probe, preflight.get('native', native), 'screen-permission'], check=False)
     pixel_code = remote(['cat', str(probe)+'.rc'], capture_output=True, text=True).stdout.strip()
     pixels = json.loads(remote(['cat', probe], capture_output=True, text=True).stdout) if pixel_code == '0' else {'screenRecording': False}
     args.out.mkdir(parents=True, exist_ok=True)
@@ -96,7 +112,12 @@ print('ready' if binary.exists() else 'compile')
         return 0
     if not state['trusted'] or not pixels['screenRecording']:
         raise SystemExit('M1 not launched: Accessibility or Screen Recording preflight is false')
-    command = ['/usr/bin/lockf', '-k', '-t', str(args.lock_timeout), '/tmp/open-onscreen-e2e.lock',
+    if getattr(args, 'series', None):
+        # LEAD 10:22: one strict queue ticket (build slot + screen lock) per series.
+        command = [heavy, '/usr/bin/lockf', '-k', '/tmp/open-onscreen-e2e.lock', 'python3', stage / 'series.py',
+                   stage, output, native, burst, launcher, args.backend, *deferred, *[f.stem for f in args.series]]
+    else:
+      command = ['/usr/bin/lockf', '-k', '-t', str(args.lock_timeout), '/tmp/open-onscreen-e2e.lock',
                'python3', stage / 'session.py', stage / 'script.json', '--backend', args.backend,
                '--out', output, '--native', native, '--burst-tool', burst, '--rulings', stage / 'lead-rulings.txt', '--pixel-launcher', launcher]
     # Retain failed captures and cleanup receipts too. Waiting for the lock does

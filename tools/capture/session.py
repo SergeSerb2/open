@@ -45,6 +45,11 @@ def matches(node, predicate):
     for key, expected in predicate.items():
         if key == 'index':
             continue
+        if key in ('min_h', 'max_h'):
+            h = (node.get('frame') or [0, 0, 0, 0])[3]
+            if (key == 'min_h' and h < expected) or (key == 'max_h' and h > expected):
+                return False
+            continue
         actual = str(node.get({'identifier': 'id'}.get(key, key), ''))
         if isinstance(expected, str) and expected.startswith('re:'):
             if not re.search(expected[3:], actual, re.I):
@@ -103,6 +108,11 @@ class Session:
         self.burst_events = None
         self.download_requested_at = None
         self.permission_handoff = None
+        self.nc_frames = None
+        self.drag_geometry = None
+        self.allow_boost = False
+        self.boost_frames = set()
+        self.drag_rail_ids = set()
         self.logfile = (out / 'session.jsonl').open('a')
         self.rulings = rulings.read_text() if rulings.exists() else ''
         (out / 'lead-rulings.txt').write_text(self.rulings)
@@ -173,17 +183,20 @@ class Session:
             if self.mouse_down and self.drag_first_move_at is not None:
                 current = json.loads(run(self.native, 'windows', self.pid))
                 unexpected = [w for w in current if w['onscreen'] and w['number'] not in self.drag_prior_cg_ids | self.drag_cg_ids]
+                unexpected = [w for w in unexpected if not self.drag_rail(w, now)]
                 if len(dialogs) == 1 and not self.drag_windows:
                     frame = tuple(dialogs[0].get('frame', []))
                     allowed = [w['bounds'] for w in current if w['number'] in self.drag_cg_ids]
                     if not frame or not any(frame) or any(all(abs(v-b[k]) < 2 for v,k in zip(frame,('X','Y','Width','Height'))) for b in allowed):
                         self.drag_windows.add(frame)
-                if unexpected or len(dialogs) > max(1,len(self.drag_windows)):
+                if unexpected or len(dialogs) > max(1, len(self.drag_windows), 1 + len(self.drag_rail_ids)):
                     self.log('unexpected-window-during-drag', windows=unexpected, dialog_count=len(dialogs))
                     raise Stopped('another new window appeared during the owned drag')
             for n in walk(windows):
                 title = str(n.get('title', ''))
                 if n.get('subrole') == 'AXSystemDialog' and self.owned_drag_window(n, now):
+                    continue
+                if n.get('subrole') == 'AXSystemDialog' and self.boost_editor_window(n):
                     continue
                 if n.get('subrole') == 'AXSystemDialog' or re.search(r'^(Sign [Ii]n|Log [Ii]n|Accessibility Access|Screen Recording)$', title):
                     self.observe_download_prompt(now, owned_dialog=True)
@@ -213,6 +226,54 @@ class Session:
             return False
         self.drag_windows.add(frame)
         self.log('owned-drag-window', frame=frame, first_seen_after_move=time.monotonic()-self.drag_first_move_at, pointer=state['pointer'])
+        return True
+
+    def drag_rail(self, w, now):
+        """LEAD 13:00: Arc's own drop-target rails and drag layer during C3's held sidebar drag."""
+        if not (self.s3_ruling() and '## LEAD 13:00' in self.rulings and self.drag_geometry and self.mouse_down):
+            return False
+        if w['number'] in self.drag_rail_ids:
+            return True
+        if self.drag_first_move_at is None or time.monotonic() - self.drag_first_move_at > 1:
+            return False
+        b = w['bounds']; wx, wy, ww, wh = self.drag_geometry['window']; edge = self.drag_geometry['sidebar_edge']
+        screen = self.initial['screens'][0]['frame']
+        rail = (w['layer'] == 0 and abs(b['Height'] - wh) <= 2 and abs(b['Y'] - wy) <= 2 and b['Width'] <= 80
+                and (b['X'] - 2 <= wx <= b['X'] + b['Width'] + 2 or b['X'] - 2 <= edge <= b['X'] + b['Width'] + 2))
+        layer = (w['layer'] == 500 and abs(b['X'] - screen[0]) < 1 and abs(b['Y'] - screen[1]) < 1
+                 and abs(b['Width'] - screen[2]) < 1 and abs(b['Height'] - screen[3]) < 1)
+        if rail or layer:
+            self.drag_rail_ids.add(w['number'])
+            self.drag_windows.add((b['X'], b['Y'], b['Width'], b['Height']))
+            self.log('drag-rail-accepted', window=w, rule='LEAD 13:00', kind='rail' if rail else 'drag layer',
+                     after_first_move=time.monotonic() - self.drag_first_move_at)
+            return True
+        return False
+
+    BOOST_FORBIDDEN = re.compile(r'sign ?in|log ?in|account|password|permission|allow', re.I)
+    BOOST_REQUIRED = re.compile(r'\bzap\b|\bfont|colou?r|\bcode\b', re.I)
+
+    def boost_editor_window(self, node):
+        """LEAD 18:00: after 'New Boost', an Arc-owned AXSystemDialog window may be the Boost editor."""
+        if not (self.allow_boost and self.s3_ruling() and 'LEAD 18:00 (pending answer) readback: Boost editor dialog' in self.rulings):
+            return False
+        frame = tuple(node.get('frame') or [])
+        if frame in self.boost_frames:
+            return True
+        # Once accepted, the editor keeps its AX identifier while it resizes (Code view).
+        if self.boost_frames and node.get('id') == 'boostsEditor':
+            return True
+        full = json.loads(run(self.native, 'ax-windows', self.pid))
+        wins = [w for w in walk(full) if w.get('role') == 'AXWindow' and tuple(w.get('frame') or []) == frame]
+        if len(wins) != 1:
+            return False
+        text = ' '.join(str(v) for e in walk(wins[0]) for k, v in e.items() if k in ('title', 'desc', 'value', 'help', 'placeholder'))
+        (self.out / 'boost-dialog.ax.json').write_text(json.dumps(wins[0], indent=2))
+        if self.BOOST_FORBIDDEN.search(text) or not self.BOOST_REQUIRED.search(text):
+            self.log('boost-dialog-refused', frame=frame, forbidden=bool(self.BOOST_FORBIDDEN.search(text)))
+            return False
+        self.boost_frames.add(frame)
+        self.log('boost-dialog-accepted', frame=frame, rule='LEAD 18:00')
         return True
 
     def remember_drag_windows(self):
@@ -355,7 +416,7 @@ class Session:
         # These are real app-side snapshots. They do not constitute a complete
         # AX tree; retain the missing-action finding instead of inventing one.
         result = {'source': 'Open automation socket', 'windows': self.call('windows', accessibility=True), 'children': []}
-        for command in ('window-state', 'settings-state', 'space-manager-state', 'space-manager-lifecycle', 'library-captures-state', 'library-history-state', 'downloads-state', 'commandbar-state', 'find-state', 'peek-state', 'little-open-state'):
+        for command in ('window-state', 'settings-state', 'space-manager-state', 'space-manager-lifecycle', 'library-captures-state', 'library-history-state', 'downloads-state', 'commandbar-state', 'find-state', 'peek-state', 'little-open-state', 'theme-get', 'sidebar-tree'):
             try:
                 result[command] = self.call(command)
             except RuntimeError as error:
@@ -367,7 +428,7 @@ class Session:
                         if n.get('role') == 'AXButton' and n.get('depth', 99) <= 3}
         return {'Media', 'Downloads', 'Easels', 'Archived Tabs'} <= descriptions
 
-    def target(self, predicate, frame_required=True):
+    def target(self, predicate, frame_required=True, allow_disabled=False):
         if predicate.get('source') in ('fixture','fixture-remembered') and self.s2_ruling() and '## LEAD 00:00' in self.rulings:
             actual = {k:v for k,v in predicate.items() if k not in ('source','remember')}
             if predicate['source'] == 'fixture':
@@ -402,6 +463,28 @@ class Session:
         tree = json.loads(run(self.native, 'ax-depth', self.pid, int(predicate['depth']))) if self.backend == 'arc' and not menu and 'depth' in predicate else self.tree(include_menus=menu)
         nodes = [n for n in walk(tree) if matches(n, predicate)
                  and (not frame_required or n.get('frame', [0, 0, 0, 0])[2] > 0)]
+        if self.s3_ruling() and frame_required and not menu:
+            # Arc keeps neighbouring Spaces' sidebars in AX, off-screen. Count only
+            # elements whose centre lies inside one of the app's own AX windows.
+            wins = [w['frame'] for w in walk(tree) if w.get('role') == 'AXWindow' and w.get('frame')]
+            if not wins:
+                wins = [w['frame'] for w in walk(json.loads(run(self.native, 'window-info', self.pid))) if w.get('role') == 'AXWindow' and w.get('frame')]
+            def inside(f):
+                cx, cy = f[0] + f[2] / 2, f[1] + f[3] / 2
+                return any(a <= cx < a + c and b <= cy < b + d for a, b, c, d in wins)
+            nodes = [n for n in nodes if n.get('role') == 'AXWindow' or inside(n['frame'])]
+            # Neighbouring Spaces' sidebars sit beside the visible one (under the page).
+            # The visible outline starts at the window's left edge; keep sidebar items inside it.
+            outlines = [o['frame'] for o in walk(tree) if o.get('id') == 'sidebarAllTabList' and o.get('frame')]
+            if outlines and wins:
+                left = min(w[0] for w in wins)
+                vis = min(outlines, key=lambda f: abs(f[0] - left))
+                def in_sidebar(n):
+                    if not ('/AXOutline' in n.get('anc', '') or n.get('id') == 'sidebarAllTabList' or n.get('id') == 'sidebarSpaceName'):
+                        return True
+                    cx = n['frame'][0] + n['frame'][2] / 2
+                    return vis[0] - 2 <= cx <= vis[0] + vis[2] + 2
+                nodes = [n for n in nodes if in_sidebar(n)]
         if 'index' in predicate:
             index = int(predicate['index'])
             if index >= len(nodes):
@@ -412,7 +495,7 @@ class Session:
                 raise UnavailableAX('AX target unavailable')
             raise Stopped('AX target must match exactly one visible element; matched %d' % len(nodes))
         n = nodes[0]
-        if n.get('enabled') is False or 'disabled' in n.get('flags', []):
+        if not allow_disabled and (n.get('enabled') is False or 'disabled' in n.get('flags', [])):
             raise Stopped('AX target is disabled')
         return n
 
@@ -422,11 +505,28 @@ class Session:
                 and 'AX-resolved clicks are allowed on the M1 for Arc capture' in self.rulings)
 
     def s2_ruling(self):
-        return self.m1_input_ruling() and self.script.get('capture_scope') == 'session2' and '## LEAD 23:45' in self.rulings
+        # Session 3 (plan C3) keeps every Session 2 synthetic-input guard.
+        return self.m1_input_ruling() and self.script.get('capture_scope') in ('session2', 'session3') and '## LEAD 23:45' in self.rulings
+
+    def s3_ruling(self):
+        return self.s2_ruling() and self.script.get('capture_scope') == 'session3'
+
+    # Arc shortcuts used by plan C3. Never quit, settings, delete-data or system panels.
+    S3_KEYS = {('s','cmd'), ('t','cmd'), ('l','cmd'), ('d','cmd'), ('left','cmd,opt'), ('right','cmd,opt'),
+               ('left','opt,cmd'), ('right','opt,cmd'), ('space',''), ('delete',''), ('n','cmd,shift'), ('b','cmd,shift'), ('=','cmd'), ('-','cmd'), ('0','cmd'),
+               ('n','ctrl,shift'), ('n','ctrl,opt'), ('e','ctrl,shift')} | {(str(i),'ctrl') for i in range(1,10)}
+
+    def point_in(self, n, at=None):
+        x,y,w,h = n['frame']
+        fx,fy = at if at else (.5,.5)
+        if not (0 <= fx <= 1 and 0 <= fy <= 1):
+            raise Stopped('target fraction must lie inside the AX frame')
+        return x + w*fx, y + h*fy
 
     def synthetic_field(self, text=None):
         focused = json.loads(run(self.native, 'focused', self.pid))
-        fields = [focused] if focused.get('focused') and focused.get('role') in ('AXTextField','AXSearchField') else []
+        roles = ('AXTextField', 'AXSearchField', 'AXTextArea') if self.s3_ruling() else ('AXTextField', 'AXSearchField')
+        fields = [focused] if focused.get('focused') and focused.get('role') in roles else []
         predicates = self.script.get('synthetic_input_targets', [])
         if len(fields) != 1 or not any(matches(fields[0], p) for p in predicates):
             raise Stopped('Session2 input requires one freshly focused observed synthetic field')
@@ -454,10 +554,14 @@ class Session:
 
     def input(self, *args, verified_pointer=False, target_predicate=None):
         self.guard(event=True)
-        if args[0] in ('click', 'down', 'dragto', 'key', 'type'):
+        if args[0] == 'move' and self.s3_ruling():
+            args = ('move-checked',) + tuple(args[1:])
+        if args[0] in ('click', 'down', 'dragto', 'key', 'type', 'click-check', 'move-checked'):
             if not self.m1_input_ruling():
                 raise Stopped('synthetic clicks/keys require the M1 LEAD19:30 ruling')
-            if args[0] in ('click', 'down', 'dragto'):
+            if args[0] == 'move-checked':
+                verified_pointer = True
+            if args[0] in ('click', 'down', 'dragto', 'click-check', 'move-checked'):
                 if not verified_pointer:
                     raise Stopped('pointer clicks require a fresh AX target')
                 info = json.loads(run(self.native, 'window-info', self.pid))
@@ -470,8 +574,18 @@ class Session:
                         command.append('lead-m1-desktop-rule')
                     if '## LEAD 00:15' in self.rulings:
                         command.append('lead-m1-cursor-rule')
-                    result = subprocess.run(command, capture_output=True, text=True, timeout=3)
+                    if '## LEAD 11:32' in self.rulings:
+                        command.append('lead-m1-nc23-rule')
+                    result = subprocess.run(command, capture_output=True, text=True, timeout=8)
                     check = json.loads(result.stdout)
+                    frames = sorted(map(tuple, check.get('ncFrames') or []))
+                    if frames:
+                        # LEAD 11:32 rule 5: a new alert or banner stops the block.
+                        if self.nc_frames is None:
+                            self.nc_frames = frames
+                        elif frames != self.nc_frames:
+                            self.log('nc-frames-changed', before=self.nc_frames, after=frames)
+                            raise Stopped('Notification Centre alert/banner frames changed; stop')
                     self.log('pointer-point-guard', attempt=attempt, result=check)
                     if not result.returncode and check['ok']:
                         break
@@ -488,6 +602,9 @@ class Session:
                 key, modifiers = args[1].lower(), args[2]
                 if self.s2_ruling() and ((key in ('return','tab','left','right','up','down','escape','esc') and modifiers in ('','cmd','shift','opt')) or (key,modifiers) in (('t','cmd'),('l','cmd'),('f','cmd'),('d','cmd'),('w','cmd'))):
                     pass
+                elif self.s3_ruling() and (key,modifiers) in self.S3_KEYS:
+                    if key in ('space','delete'):
+                        self.synthetic_field()
                 elif self.s2_ruling() and (key,modifiers) == ('a','cmd'):
                     self.synthetic_field()
                 elif (key not in ('escape', 'esc', 'left', 'right', 'up', 'down', 'return', 'tab') or modifiers) and (key,modifiers) not in (('l','cmd,shift'),('j','cmd,shift'),('y','cmd'),('s','cmd')):
@@ -503,6 +620,10 @@ class Session:
             self.guard(event=True)
         elif args[0] not in ('move', 'scroll', 'drag', 'dragto', 'down', 'up'):
             raise Stopped('unsupported system input')
+        if args[0] == 'click-check':
+            return
+        if args[0] == 'move-checked':
+            args = ('move',) + tuple(args[1:])
         if args[0] == 'type':
             # uidrive posts two events per UTF-16 unit at 20 ms per unit.
             # Bound each batch, and recheck ownership before continuing.
@@ -560,7 +681,7 @@ class Session:
             base = matched or [w for w in wins if w['layer'] == 0 and w['bounds']['Width'] > 100]
             if not base:
                 raise Stopped('no owned browser window matched the AX geometry')
-            win = next((w for w in wins if w['number'] == self.window), None) or max(base, key=lambda w: w['bounds']['Width'] * w['bounds']['Height'])
+            win = next((w for w in wins if w['number'] == self.window and w.get('onscreen')), None) or max(base, key=lambda w: w['bounds']['Width'] * w['bounds']['Height'])
             self.active_window = win['number']
             self.pixel_run(['/usr/sbin/screencapture', '-x', '-o', '-l', str(win['number']), str(path)])
             before = tree
@@ -916,31 +1037,53 @@ class Session:
                     self.log('appearance-original-note', note='Automatic checkmark unavailable; LEAD19:30 permits the view change and requests Automatic at session end')
                 self.restore_actions.append(step['restore'])
                 self.log('restore-registered', action=step['restore'])
+            if op == 'click_ax' and step.get('action'):
+                if not self.s3_ruling() or step['action'] not in ('AXIncrement', 'AXDecrement', 'AXShowMenu', 'AXConfirm', 'AXPick'):
+                    raise Stopped('click_ax action override needs Session3 and an approved AX action')
+                action = step['action']
             try:
-                self.ax_action(step['target'], action, step.get('text'))
+                for _ in range(max(1, min(int(step.get('repeat', 1)), 30))):
+                    self.ax_action(step['target'], action, step.get('text'))
             except UnavailableAX as error:
                 if not step.get('optional'):
                     raise
                 self.gaps.append({'step': step, 'finding': 'Arc: not captured; ' + str(error)})
                 self.log('not-captured', operation=step, reason=str(error))
         elif op == 'pointer_ax':
-            if not self.m1_input_ruling() or step.get('expect') not in ('change', 'menu') or not step.get('name'):
+            if step.get('expect') == 'selected' and not self.s3_ruling():
+                raise Stopped('selected expectation needs the Session3 scope')
+            if not self.m1_input_ruling() or step.get('expect') not in ('change', 'menu', 'selected') or not step.get('name'):
                 raise Stopped('M1 pointer click needs the lead ruling, a named frame and an expected result')
             if step.get('button','left') not in ('left','right') or int(step.get('count',1)) not in (1,2):
                 raise Stopped('one verified left/right click or double-click is allowed')
             # A burst already captured its before frame before starting the
             # recorder. A second AX/PNG pass can outlast a short movie.
-            before = self.burst_before or self.shot(step['name'] + '-before', step.get('ax_depth'))
+            before = None if step['expect'] == 'selected' else (self.burst_before or self.shot(step['name'] + '-before', step.get('ax_depth')))
             n = self.target(step['target'])
             x,y,w,h = n['frame']
             window_info = json.loads(run(self.native, 'window-info', self.pid))
             windows = [e['frame'] for e in walk(window_info) if e.get('role') == 'AXWindow' and e.get('frame')]
-            point = (x+w/2,y+h/2)
+            point = self.point_in(n, step.get('at'))
             if not any(a <= point[0] < a+c and b <= point[1] < b+d for a,b,c,d in windows):
                 raise Stopped('fresh AX target centre is outside the owned AX windows')
             self.log('pointer-target', ax_target=n, expected=step['expect'])
             self.input('click', *point, step.get('button','left'), int(step.get('count',1)), verified_pointer=True, target_predicate=step['target'])
             deadline = time.monotonic() + 2
+            if step['expect'] == 'selected':
+                # A sidebar row counts as selected when its AXRow/AXCell reports selected.
+                while True:
+                    self.guard(event=True)
+                    tree = json.loads(run(self.native, 'ax-depth', self.pid, 10))
+                    hit = [e for e in walk(tree) if e.get('role') in ('AXRow', 'AXCell') and e.get('selected') in (True, 1)
+                           and e.get('frame') and abs(e['frame'][1] - y) < 2]
+                    if hit:
+                        self.log('pointer-result', selected=True)
+                        break
+                    if time.monotonic() >= deadline:
+                        raise Stopped('expected row selection not observed within2s; no further click sent')
+                    time.sleep(.1)
+                self.log('end', operation=op)
+                return
             if step['expect'] == 'menu':
                 old_ids = {w['number'] for w in json.loads(before.with_suffix('.windows.json').read_text()) if w['onscreen']}
                 while True:
@@ -973,7 +1116,8 @@ class Session:
                 else:
                     difference = json.loads(self.pixel_run([self.native,'image-change',before,after]))
                     self.log('pointer-result-image-change', result=difference)
-                    appeared = difference['meanDifference'] > .001
+                    threshold = float(step.get('min_change', .001)) if self.s3_ruling() else .001
+                    appeared = difference['meanDifference'] > max(threshold, 1e-6)
                 if appeared and time.monotonic() <= deadline:
                     self.log('pointer-result', appeared=True)
                     break
@@ -1022,7 +1166,116 @@ class Session:
                 if not appeared:
                     raise Stopped('expected drag-start result not observed within2s')
             else:
-                self.input('move' if op == 'hover_ax' else 'click', x + w / 2, y + h / 2, *([] if op == 'hover_ax' else [step.get('button', 'left'), step.get('count', 1)]))
+                self.input('move', *self.point_in(n, step.get('at')))
+        elif op == 'allow_boost_editor':
+            if not self.s3_ruling() or 'LEAD 18:00 (pending answer) readback: Boost editor dialog' not in self.rulings:
+                raise Stopped('Boost editor capture needs the LEAD 18:00 ruling')
+            self.allow_boost = True
+            self.log('boost-editor-armed')
+        elif op == 'drag_ax':
+            # Plan C3: a complete AX-anchored drag (divider, tab reorder, colour handle).
+            # Both ends come from fresh AX frames in this block; never stored points.
+            if not self.s3_ruling() or not step.get('name'):
+                raise Stopped('drag_ax needs the Session3 scope and a name')
+            start = self.target(step['target'])
+            sx,sy = self.point_in(start, step.get('at'))
+            if step.get('offset'):
+                ox, oy = step['offset']
+                if abs(ox) > 8 or abs(oy) > 8:
+                    raise Stopped('drag start offset is limited to 8 pt')
+                sx, sy = sx + ox, sy + oy
+            if 'to' in step:
+                end = self.target(step['to'])
+                ex,ey = self.point_in(end, step.get('to_at'))
+            else:
+                dx,dy = step['by']
+                if abs(dx) > 600 or abs(dy) > 600:
+                    raise Stopped('drag offset is limited to600pt')
+                ex,ey = sx+dx, sy+dy
+            info = json.loads(run(self.native, 'window-info', self.pid))
+            frames = [e['frame'] for e in walk(info) if e.get('role') == 'AXWindow' and e.get('frame')]
+            if not any(a <= ex < a+c and b <= ey < b+d for a,b,c,d in frames):
+                raise Stopped('drag end is outside the owned AX windows')
+            main = [e['frame'] for e in walk(info) if e.get('role') == 'AXWindow' and e.get('main') and e.get('frame')]
+            outline = [e['frame'] for e in walk(self.tree()) if e.get('id') == 'sidebarAllTabList' and e.get('frame')]
+            if len(main) != 1 or not outline:
+                raise UnavailableAX('AX target: drag needs one main window and a sidebar outline')
+            # Neighbouring Spaces' outlines are present too; the visible one starts at the window's left edge.
+            outline = [min(outline, key=lambda f: abs(f[0] - main[0][0]))]
+            edge = outline[0][0] + outline[0][2] - 1
+            self.drag_geometry = {'window': main[0], 'sidebar_edge': edge}
+            if step.get('kind', 'tab') == 'canvas':
+                # Easel canvas drawing: both ends inside the window, right of the sidebar, no rails.
+                if not (edge + 20 <= sx and edge + 20 <= ex <= main[0][0] + main[0][2] - 20
+                        and main[0][1] + 60 <= min(sy, ey) and max(sy, ey) <= main[0][1] + main[0][3] - 60):
+                    raise Stopped('canvas drag must stay inside the page area')
+            elif step.get('kind', 'tab') == 'divider':
+                # Sidebar width drag: start on the divider, end inside the window; no tab drop.
+                if abs(sx - edge) > 6 or not (main[0][0] + 40 <= ex <= main[0][0] + main[0][2] - 200):
+                    raise Stopped('divider drag must start on the sidebar edge and stay inside the window')
+            # LEAD 13:00: drop inside the same sidebar, >= 20 pt from both rails.
+            elif not (main[0][0] + 40 <= ex <= edge - 20):
+                raise Stopped('drop point is within 20 pt of a drop-target rail or outside the sidebar')
+            self.drag_rail_ids = set()
+            self.drag_prior_frames = {tuple(f) for f in frames}
+            self.drag_windows.clear(); self.drag_cg_ids.clear()
+            self.drag_prior_cg_ids = {e['number'] for e in json.loads(run(self.native, 'windows', self.pid)) if e['onscreen']}
+            self.log('drag-plan', start=start, end=[ex,ey], begin=[sx,sy])
+            self.input('down', sx, sy, verified_pointer=True, target_predicate=step['target'])
+            self.mouse_down = True
+            time.sleep(float(step.get('press_seconds', .15)))
+            self.drag_first_move_at = time.monotonic()
+            # A short first stroke starts the drag; the guard then sees Arc's rails
+            # within the LEAD 13:00 one-second window and registers them.
+            fx, fy = sx + (ex - sx) * .08, sy + (ey - sy) * .08 + (4 if abs(ey - sy) < 4 else 0)
+            self.input('dragto', fx, fy, 3, .12, verified_pointer=True)
+            # input() spends its guard time before dispatch; the stroke itself lasts 0.12 s.
+            self.drag_first_move_at = time.monotonic() - .14
+            # Fast CG-only poll (no AX) so Arc's rails are first seen within one second.
+            until = self.drag_first_move_at + .9
+            while time.monotonic() < until:
+                for w in json.loads(run(self.native, 'windows', self.pid)):
+                    if w['onscreen'] and w['number'] not in self.drag_prior_cg_ids:
+                        self.drag_rail(w, None)
+                if len(self.drag_rail_ids) >= 3:
+                    break
+                time.sleep(.05)
+            self.log('drag-rails-registered', ids=sorted(self.drag_rail_ids), after_first_move=time.monotonic() - self.drag_first_move_at)
+            self.guard()
+            sx, sy = fx, fy
+            hold = step.get('hold_shot')
+            steps = int(step.get('steps', 24)); seconds = float(step.get('seconds', .6))
+            if hold:
+                # Stop just short of the end, record the drop indicator, then finish.
+                mx,my = sx+(ex-sx)*.97, sy+(ey-sy)*.97
+                self.input('dragto', mx, my, steps, seconds, verified_pointer=True)
+                self.remember_drag_windows()
+                time.sleep(.25)
+                self.input('dragto', ex, ey, 3, .1, verified_pointer=True)
+                time.sleep(.2)
+                self.shot(hold, step.get('ax_depth'))
+            else:
+                self.input('dragto', ex, ey, steps, seconds, verified_pointer=True)
+                self.remember_drag_windows()
+                time.sleep(.15)
+            if step.get('cancel'):
+                self.input('key', 'escape', '')
+            self.input('up')
+            self.mouse_down = False
+            self.drag_first_move_at = None
+            time.sleep(.3)
+            self.shot(step['name'], step.get('ax_depth'))
+        elif op == 'swipe_ax':
+            if not self.s3_ruling():
+                raise Stopped('swipe_ax needs the Session3 scope')
+            n = self.target(step['target'])
+            x,y = self.point_in(n, step.get('at'))
+            self.input('click-check', x, y, verified_pointer=True, target_predicate=step['target'])
+            dispatched = time.time()
+            result = json.loads(run(self.native, 'swipe', x, y, step.get('dx',0), step.get('dy',0), int(step.get('steps',20)), float(step.get('seconds',.3)), *(['momentum'] if step.get('momentum') else []), timeout=10))
+            if self.burst_events is not None:
+                self.burst_events.append({'operation':'swipe','start_unix':dispatched,'end_unix':time.time()})
+            self.log('swipe', target=n, point=[x,y], result=result)
         elif op == 'key':
             self.input('key', step['key'], ','.join(step.get('modifiers', [])))
         elif op == 'mouse_up':
@@ -1036,7 +1289,7 @@ class Session:
             frame = windows[0]['frame']
             self.original_frame = self.original_frame or frame
             self.log('frame-before-resize', frame=frame)
-            desired = self.original_frame if step.get('original') else [frame[0], frame[1], step['width'], step.get('height',frame[3])]
+            desired = self.original_frame if step.get('original') else [step.get('x', frame[0]), step.get('y', frame[1]), step['width'], step.get('height',frame[3])]
             result = json.loads(run(self.native, 'set-frame', self.pid, *desired))
             self.log('resize-result', result=result)
             if any(result.values()):
@@ -1052,7 +1305,7 @@ class Session:
             end = time.monotonic() + min(float(step.get('timeout', 5)), 10)
             while True:
                 try:
-                    self.target(step['target'], frame_required=False)
+                    self.target(step['target'], frame_required=False, allow_disabled=True)
                     break
                 except Stopped:
                     if time.monotonic() >= end:
@@ -1269,11 +1522,16 @@ def main():
     p.add_argument('--remote-root', help='Absolute private staging path on M1; default is under its home')
     p.add_argument('--lock-timeout', type=int, default=1800, help='Remote screen-lock wait in seconds')
     p.add_argument('--prepare-only', action='store_true', help='Stage/compile/preflight M1 without launching any app')
+    p.add_argument('--series', type=Path, nargs='+', help='M1 only: run these block scripts in one strict queue ticket (LEAD 10:22)')
     args = p.parse_args()
     if args.script.stat().st_size > 262144:
         p.error('capture script exceeds256KiB')
     script = json.loads(args.script.read_text())
     validate_script(script)
+    for extra in args.series or []:
+        if extra.stat().st_size > 262144:
+            p.error('capture script exceeds256KiB')
+        validate_script(json.loads(extra.read_text()))
     if args.host == 'm1':
         from host import remote_session
         return remote_session(args)
@@ -1293,10 +1551,15 @@ def main():
     except Exception as error:
         session.log('STOP', reason=str(error))
         print('STOP: ' + str(error), file=sys.stderr)
-        code = 1
+        # 3 = the script named an AX target that was missing, ambiguous or disabled.
+        code = 3 if isinstance(error, UnavailableAX) or str(error).startswith(('AX target', 'AX action unavailable', 'expected row selection',
+                                                                          'movie did not contain', 'expected pointer result not observed',
+                                                                          'expected pointer menu not observed', 'expected drag-start result',
+                                                                          'drag end is outside', 'divider drag must', 'drop point is within',
+                                                                          'manual accessibility needs', 'Session2 input requires')) else 1
     finally:
         session.cleanup()
-    return code if session.cleanup_ok and session.permission_handoff is None else 1
+    return code if session.cleanup_ok and session.permission_handoff is None else 1  # noqa: cleanup failure always 1
 
 
 if __name__ == '__main__':

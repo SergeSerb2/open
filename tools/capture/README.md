@@ -265,3 +265,37 @@ characters per string. Evidence names use safe short filenames. Automation
 replies are capped at8MiB. Burst measurement accepts at most1000 frames and
 20million pixels per frame, reads native frames one at a time, and retains only
 small comparison thumbnails. These are capture-tool limits, not product limits.
+
+## Session 3 additions
+
+`capture_scope: "session3"` keeps every Session 2 guard and adds:
+
+- `series.py` + `session.py --series A.json B.json …` (M1): one strict queue ticket
+  (`heavy.sh /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock series.py`) runs several blocks, each still
+  ≤ 170 s with its own launch/quit. A series stops at 15 minutes. After a script-level stop (missing or ambiguous
+  AX target, unqualified movie, missing expected result) the next independent block runs; any guard stop ends the
+  series. Changed Swift helpers compile inside the ticket. An Arc left running after a block (a modal dialog that
+  refuses the normal quit) is ended with SIGTERM to that PID and recorded in the series receipt.
+- `drag_ax` (`target`/`at`/`offset`, `to`/`to_at` or `by`, optional `hold_shot`, `kind: "divider"`): a full
+  AX-anchored drag. Tab drags accept only Arc's own drop-target rails and drag layer first seen within 1 s of the
+  first move (LEAD 13:00) and drop ≥ 20 pt from both rails; divider drags start on the sidebar edge.
+- `swipe_ax`: phased, continuous pixel scroll (began/changed/ended, optional momentum) at a verified point.
+- `at` fractions for `pointer_ax`/`hover_ax`; hover moves pass the same point guard as clicks.
+- `expect: "selected"` for sidebar rows; `min_change` for subtle pixel changes; `click_ax` `action`
+  (`AXIncrement`, `AXDecrement`, `AXShowMenu`, …) with `repeat`.
+- Predicates: `anc` (ancestor role path), `min_h`/`max_h`; neighbouring Spaces' off-screen sidebars are excluded.
+- Point guard: the LEAD 11:32 rule for the full-screen Notification Centre host of a persistent alert (AX alert
+  frames read, 40 pt clearance, Arc next below, frames must not change).
+- `allow_boost_editor`: the LEAD 18:00 capture-first rule for Arc's Boost editor panel (AXSystemDialog with Boost
+  controls and no sign-in/account/permission text).
+- Open snapshots also record `theme-get` and `sidebar-tree`. The fixture serves `/audio` (a quiet looping tone) and
+  `/media` (link, image, selectable text).
+
+## Session 4 additions
+
+- `drag_ax kind: "canvas"`: a drag that stays inside the page area right of the sidebar (Easel drawing, capture area).
+- Under session-3 scope, typing may target a focused `AXTextArea` (Easel title and text boxes) with the same
+  declared-target and declared-text checks.
+- Key allowlist adds ⌘= / ⌘− / ⌘0 (canvas zoom) and the Note shortcuts ⌃⇧N / ⌃⌥N / ⌃⇧E.
+- `shot()` reuses a remembered window only while it is on screen (capture overlays close mid-block).
+- An unfocused synthetic field is a script-level stop (exit 3), so the next independent block still runs.
