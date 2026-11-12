@@ -180,16 +180,14 @@ def checks(factory, results, tmp, config, harness):
 
 
     def controls_flow():
-        dismiss_library()  # the flight needs the sidebar's Library button on screen
-        wait(lambda: not app.call('library-section')['visible'], 3)
         known = start('/slow')
-        # PB1-b: a download that starts on a page plays the flight to the Library button (capture values),
-        # or, with Reduce Motion on (as on the rented Macs), records the skip. The record is written when the
-        # download is created, so no long wait here: a slow wait would let /slow finish before the next rows.
-        flight = wait(lambda: next((f for f in state().get('flights', []) if f['id'] == known), None), 0.5)
+        # PB1-b wiring: each download that starts on a page gets a flight record when it is created: played
+        # to the Library button, or skipped for a known reason (the Library covers the sidebar at this point of
+        # the suite; Reduce Motion on the rented Macs). The motion itself is features-render DF1–DF8.
+        flight = next((f for f in state().get('flights', []) if f['id'] == known), None)
         played = bool(flight) and 'duration' in flight and 0.2 < flight['duration'] < 2.5 \
             and flight['target'][0] < flight['start'][0] and flight['target'][1] > flight['start'][1]
-        check('download_flight', played or (bool(flight) and flight.get('skipped') == 'Reduce Motion'), flight=flight)
+        check('download_flight', played or (bool(flight) and flight.get('skipped') in ('Library open', 'Reduce Motion')), flight=flight)
         live = wait(lambda: (lambda v: v if v.get('received', 0) > 0 and v.get('total', 0) else None)(item(known)))
         library()
         running = wait(lambda: (lambda v: v if '/s · from 127.0.0.1' in v.get('subtitle', '') else None)(row(known)))
