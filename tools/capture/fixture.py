@@ -24,11 +24,16 @@ class SyntheticSite:
                     color = '#237A57' if self.server.server_port == port else '#A84B20'
                     payload = f'<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="7" fill="{color}"/><circle cx="16" cy="16" r="7" fill="white"/></svg>'.encode()
                     kind = 'image/svg+xml'
+                elif path == '/tone.wav':
+                    # A quiet synthetic tone (about -54 dBFS), looped by /audio. It is
+                    # not silent on purpose: Chromium only marks audible streams.
+                    payload = owner.tone()
+                    kind = 'audio/wav'
                 elif path == '/download.txt':
                     payload = b'Open-capture synthetic attachment. No personal data.\n'
                     kind = 'application/octet-stream'
                 else:
-                    titles = {'/': 'Open-capture index', '/article': 'Open-capture long article', '/form': 'Open-capture form', '/slow': 'Open-capture slow page', '/lisbon': 'Lisbon weather', '/lemon': 'Lemon pasta', '/long': 'Open-capture ' + 'very long title ' * 16}
+                    titles = {'/audio': 'Open-capture audio', '/media': 'Open-capture media', '/': 'Open-capture index', '/article': 'Open-capture long article', '/form': 'Open-capture form', '/slow': 'Open-capture slow page', '/lisbon': 'Lisbon weather', '/lemon': 'Lemon pasta', '/long': 'Open-capture ' + 'very long title ' * 16}
                     title = titles.get('/long' if path.startswith('/long') else path, 'Open-capture page ' + path[:80])
                     links = [('/article', 'Long article'), ('/form', 'Form'), ('/download.txt', 'Download synthetic text'), ('/slow', 'Slow page'), ('/lisbon', 'Lisbon weather'), ('/lemon', 'Lemon pasta'), ('/long/' + 'synthetic-path-' * 18, 'Very long URL')] + [(f'/page-{i}', f'Open-capture page {i}') for i in range(5)]
                     body = '<nav>' + ''.join(f'<p><a href="{html.escape(p)}">{label}</a></p>' for p, label in links) + '</nav>'
@@ -37,6 +42,10 @@ class SyntheticSite:
                         body = f'<p><a href="{owner.urls[1]}/lemon">Cross-site Lemon pasta</a></p>'
                     if path == '/article':
                         body += ''.join(f'<p>Open-capture paragraph {i}. Lemon pasta and Lisbon weather are synthetic search terms. This page has no personal content.</p>' for i in range(60))
+                    if path == '/audio':
+                        body = '<p>Open-capture quiet looping tone.</p><audio id="a" src="/tone.wav" loop autoplay controls></audio><p><button onclick="document.getElementById(\'a\').play()">Play synthetic tone</button></p>'
+                    if path == '/media':
+                        body = '<p>Open-capture <a href="/lisbon">link to Lisbon weather</a> and an image:</p><p><img src="/favicon.svg" width="160" height="160" alt="Open-capture synthetic image"></p><p>Synthetic selectable paragraph about Lemon pasta.</p>'
                     if path == '/form':
                         body += '<form action="/form"><label>Open-capture name <input name="name" autocomplete="off"></label><button>Submit synthetic form</button></form>'
                     payload = ('<!doctype html><html><head><meta charset="utf-8"><title>' + html.escape(title) + '</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>body{font:18px system-ui;margin:48px;max-width:900px;background:#f3f5ef;color:#26372f}a{color:#175d42}p{line-height:1.6}</style></head><body><h1>' + html.escape(title) + '</h1>' + body + '</body></html>').encode()
@@ -69,6 +78,14 @@ class SyntheticSite:
         except Exception:
             self.close()
             raise
+
+    @staticmethod
+    def tone():
+        import math, struct
+        rate, seconds = 22050, 2
+        frames = b''.join(struct.pack('<h', int(65 * math.sin(2 * math.pi * 440 * i / rate))) for i in range(rate * seconds))
+        header = b'RIFF' + struct.pack('<I', 36 + len(frames)) + b'WAVEfmt ' + struct.pack('<IHHIIHH', 16, 1, 1, rate, rate * 2, 2, 16) + b'data' + struct.pack('<I', len(frames))
+        return header + frames
 
     def close(self):
         for server in self.servers:
