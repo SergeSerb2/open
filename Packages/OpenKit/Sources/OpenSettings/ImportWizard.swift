@@ -52,7 +52,7 @@ import OpenImport
         return (path as NSString).abbreviatingWithTildeInPath
     }
     public var canContinue: Bool {
-        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings) }
+        if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.history || plan.searchSettings || (plan.secretsRequested && canImportBrowserSecrets)) }
         return readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public var title: String { step == .source ? "Import from another browser" : "Import from " + plan.source.displayName }
     public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.source = .arc; selectedSourceID = "arc"; if step == .source { step = .choose }; plan.directory = directory; await refreshCounts() }
@@ -92,7 +92,7 @@ import OpenImport
         }
         guard let source = selectedSource, let profile = source.profiles.first else { return }
         plan.source = .browser(source, profile: profile)
-        plan.bookmarks = true; plan.history = true; plan.searchSettings = true
+        plan.bookmarks = true; plan.history = true; plan.searchSettings = true; plan.skipSecrets()
         step = .choose
         await refreshCounts()
     }
@@ -121,8 +121,13 @@ import OpenImport
         var values: [String: Int] = [:]
         if let count = result.bookmarks { values["Bookmarks"] = count }
         if let count = result.historyVisits { values["History"] = count }
+        if let secrets = result.secrets {
+            values["Passwords"] = secrets.loginRows; values["Cookies"] = secrets.cookieRows
+            values["Cards"] = secrets.cardRows; values["Addresses"] = secrets.addressRows
+            values["Passwords and cookies"] = secrets.loginRows + secrets.cookieRows + secrets.cardRows + secrets.addressRows
+        }
         counts = values
-        readable = result.bookmarks != nil || result.historyVisits != nil || result.searchEngine != nil
+        readable = result.bookmarks != nil || result.historyVisits != nil || result.searchEngine != nil || result.secrets != nil
         counting = false
         if !readable { errorText = "No readable import data found in this \(plan.source.displayName) profile." }
     }
@@ -183,7 +188,14 @@ import OpenImport
     public var passwordsWereNotImported:Bool {outcome?.secretsReportLines.isEmpty != false}
     public var canImportPasswordsAndCookies: Bool { importActions.canImportPasswordsAndCookies }
     public var passwordsCopy: PasswordsImportCopy {
-        .init(canImport: canImportPasswordsAndCookies, savedItems: probe == nil ? nil : (probe?.secretsFound == false ? 0 : counts["Passwords and cookies"]))
+        if !plan.isArc { return .init(canImport: canImportBrowserSecrets, savedItems: counts["Passwords and cookies"], source: plan.source.displayName) }
+        return .init(canImport: canImportPasswordsAndCookies, savedItems: probe == nil ? nil : (probe?.secretsFound == false ? 0 : counts["Passwords and cookies"]))
+    }
+    /// I-2: Chromium profiles with their own "Safe Storage" Keychain item. Opera keeps its profile at the
+    /// data root, which the secrets reader does not walk yet.
+    public var canImportBrowserSecrets: Bool {
+        guard canImportPasswordsAndCookies, case .browser(let source, _) = plan.source else { return false }
+        return source.family == .chromium && !source.descriptor.profileAtRoot && source.descriptor.keychainItem != nil
     }
     public func review() { guard step == .choose, canContinue else { return }; step = .review }
     public func beginImport() async {
@@ -242,12 +254,19 @@ public struct ImportWizard: View {
                         }.frame(maxWidth: 320).disabled(model.busy)
                     }
                     browserOption("Bookmarks", \.bookmarks); browserOption("History", \.history); browserOption("Search settings", \.searchSettings)
+                    browserOption("Passwords and cookies", \.secretsRequested).disabled(!model.canImportBrowserSecrets)
                     Text(model.destinationText).font(.caption).foregroundStyle(.secondary)
                 case .review where !model.plan.isArc:
                     VStack(spacing: 0) {
                         if model.plan.bookmarks { reviewRow("bookmark", "Bookmarks", model.reviewValue("Bookmarks")) }
                         if model.plan.history { reviewRow("clock.arrow.circlepath", "History", model.reviewValue("History")) }
                         if model.plan.searchSettings { reviewRow("magnifyingglass", "Search engine", model.reviewValue("Search settings")) }
+                        if model.plan.secretsRequested && model.canImportBrowserSecrets {
+                            reviewRow("key", "Passwords", model.reviewValue("Passwords"))
+                            reviewRow("checkmark.shield", "Cookies", model.reviewValue("Cookies"))
+                            reviewRow("creditcard", "Cards", model.reviewValue("Cards"))
+                            reviewRow("person.text.rectangle", "Addresses", model.reviewValue("Addresses"))
+                        }
                     }
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
                     if model.plan.bookmarks { Text(model.destinationText).font(.caption).foregroundStyle(.secondary) }
@@ -276,7 +295,7 @@ public struct ImportWizard: View {
                         ForEach(model.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
-                    if model.plan.isArc && model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
+                    if (model.plan.isArc || model.plan.secretsRequested) && model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
                     if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(.secondary) }
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     ImportExtensionsSection(model: model.extensions) { Task { await model.installExtensions() } }

@@ -336,6 +336,12 @@ struct SidebarMenus {
             item("New Tab", .newTab),
             item("New Split View", enabled: canSplit, .newSplitView),
             space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? .separator(),
+            {
+                // Arc's plus popover row "New Easel ⌃⇧E" (interaction-states.md S2 01).
+                let row = item("New Easel", enabled: !context.isIncognito, .newEasel)
+                row.keyEquivalent = "e"; row.keyEquivalentModifierMask = [.control, .shift]
+                return row
+            }(),
             .separator(),
             item("New Space…", .newSpace),
         ])

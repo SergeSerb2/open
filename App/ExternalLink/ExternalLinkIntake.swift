@@ -108,6 +108,7 @@ extension AppDelegate {
 
   private func finishExternalLinkRestoration() {
     linkIntake.markReady()
+    deepLinks.markReady()
   }
 
   func applicationWillFinishLaunching(_ notification: Notification) {
@@ -121,6 +122,7 @@ extension AppDelegate {
       let url = URL(string: text), url.scheme != nil else {
       Self.commandLog("Ignored malformed external URL event."); return
     }
+    if DeepLinkRouter.matches(url) { deepLinks.handle(url); return }
     linkIntake.handle(urls: [url], source: SourceAppResolver.source(from: event))
   }
 
@@ -129,6 +131,7 @@ extension AppDelegate {
     // too. Give local shortcut files the same bounded reader as openFile.
     for url in urls {
       if url.isFileURL, self.application(application, openFile: url.path) { continue }
+      if DeepLinkRouter.matches(url) { deepLinks.handle(url); continue }
       linkIntake.handle(urls: [url], source: .unknown)
     }
   }

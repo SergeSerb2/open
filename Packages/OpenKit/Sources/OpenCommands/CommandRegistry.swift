@@ -72,6 +72,10 @@ public enum CommandRegistry {
         CommandDefinition(id: "new-note-in-split", title: "New Note (in Split)", menuPath: ["File"],
                           defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.control, .option])], isCustomizable: true,
                           aliases: ["Create Note in Split View", "Note Split", "Scratchpad Split", "New Note in Split"]),
+        // docs/re/easels.md: File › New Easel ⌃⇧E (`newEasel:`); also the "+" menu.
+        CommandDefinition(id: "new-easel", title: "New Easel", menuPath: ["File"],
+                          defaultShortcuts: [.ctrlShift("e")],
+                          aliases: ["Easel", "Create Easel", "Canvas", "Scrapbook"]),
         CommandDefinition(id: "close-window", title: "Close Window", menuPath: ["File"],
                           defaultShortcuts: [.cmdShift("w")]),
         CommandDefinition(id: "archive-tab", title: "Archive Tab", menuPath: ["File"],
@@ -436,8 +440,6 @@ public enum CommandRegistry {
     /// They never appear in menus. The conflict checker rejects any active
     /// command that tries to take these keys.
     static let reserved: [CommandDefinition] = [
-        CommandDefinition(id: "reserved-new-easel", title: "New Easel (reserved)",
-                          defaultShortcuts: [.ctrlShift("e")], isReserved: true),
         CommandDefinition(id: "reserved-new-chatgpt-message", title: "New ChatGPT Message (reserved)",
                           defaultShortcuts: [KeyboardShortcut(key: "g", modifiers: [.command, .option])], isReserved: true),
         CommandDefinition(id: "reserved-send-to-dia", title: "Send to Dia (reserved)", isReserved: true),
