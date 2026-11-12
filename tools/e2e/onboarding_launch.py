@@ -27,7 +27,7 @@ def main():
     h = runpy.run_path(str(root/'tools/e2e/engine_e2e.py'))
     Open, wait = h['Open'], h['wait_until']
     samples = []
-    exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    exported = subprocess.run(['defaults', 'export', __import__('prefs_domain').domain(), '-'], capture_output=True)
     domain = plistlib.loads(exported.stdout) if exported.returncode==0 else {}
     keys = ('open.firstRun.completed', 'open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')
     saved = {key: domain.get(key) for key in keys}

@@ -327,10 +327,15 @@ def run(factory, results, tmp, env):
                 wait_until(lambda: app.call("settings-state")["librarySection"] == "boosts",timeout=5,step=.05)
                 def shown_text():
                     return [v for w in app.call("windows",accessibility=True) if w["visible"] for v in w.get("text",[])]
-                wait_until(lambda: any("Made for 127.0.0.1" in v for v in shown_text()),timeout=5,step=.1)
+                # The native in-window Library (#350) names a Boost row "<domain>. <name> · on|off"
+                # (LibraryListView row label = title + ". " + subtitle); the old SwiftUI card said "Made for <domain>".
+                live=lambda v: v.startswith("127.0.0.1") and v.endswith("My Boost · on")
+                wait_until(lambda: any(live(v) for v in shown_text()),timeout=5,step=.1)
                 text=shown_text()
-                negative="Nothing Boosted Yet!" not in text
-                return dict(positive=any("My Boost" in v for v in text) and any("Made for 127.0.0.1" in v for v in text),negative=negative,text=text)
+                # Negative from the same real flow: the row must not read as turned off. (The window text also
+                # holds other sections' hidden empty-state labels, so an empty-state text proves nothing here.)
+                negative=not any(v.endswith("My Boost · off") for v in text)
+                return dict(positive=any(live(v) for v in text),negative=negative,text=text)
             row("B13_library_live",b13)
             def b14():
                 nonlocal app,tab
@@ -584,7 +589,7 @@ def run(factory, results, tmp, env):
             elif saved:
                 # A relaunch failure must also restore the shared preference keys.
                 for key,value in saved.items():
-                    cmd=["/usr/bin/defaults", "delete" if value is None else "write", "io.github.sergeserb2.open",key]
+                    cmd=["/usr/bin/defaults", "delete" if value is None else "write", __import__('prefs_domain').domain(),key]
                     if value is not None:
                         cmd += ["-bool",str(value).lower()] if isinstance(value,bool) else ["-string",str(value)]
                     subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=value is not None)

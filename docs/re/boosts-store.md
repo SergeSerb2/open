@@ -184,11 +184,13 @@ The following Arc fields have no direct, evidence-backed Open mapping:
   fields `primaryHueDegrees` → `hue`, `primarySaturation` → `intensity`,
   `invertLightness` → `invertLightness`; the equalities are stated in
   `docs/plans/boost-color-remap.md` §7.2.)
-- Integer text-zoom `level`: the scale conversion is not established here.
 
 The parser counts unmapped fields by fixed field name and unknown keys by count.
-The remaining color leaves and integer zoom levels are dropped pending a proven
-conversion (zoom: capture item C11, the stored `level` per text-size option).
+`textZoom.level` is the percent itself (capture C11, Arc 1.172.2: the Size button
+cycles 100 → 110 → 125 → 150 → 90 → 100 % and stores 110, 125, 150, 90; at 100 %
+the `textZoom` key is absent). The importer maps it to Open's multiplier
+(level / 100); a level outside 50…200 is counted as dropped. The remaining color
+leaves are dropped pending a proven conversion (colour values not captured yet).
 
 The CLI writes through `OpenBoosts` into the existing per-Profile layout while
 holding `OpenDataRoot.prepare()`'s lock. Existing stable IDs are preserved on

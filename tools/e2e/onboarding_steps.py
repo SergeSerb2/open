@@ -24,7 +24,7 @@ def run(factory, results, tmp, h):
     windows_path.write_text(json.dumps(windows))
     empty = Path(tmp)/'setup-no-arc'; empty.mkdir(exist_ok=True)
     evidence = Path(h.ROOT)/'.re/handoff/sections/s17/c3'; evidence.mkdir(parents=True, exist_ok=True)
-    exported = h.subprocess.run(['defaults','export','io.github.sergeserb2.open','-'], capture_output=True)
+    exported = h.subprocess.run(['defaults','export',__import__('prefs_domain').domain(),'-'], capture_output=True)
     domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     keys = ('open.onboarding.name', 'open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane',
             'open.links.externalInLittleOpen')
@@ -412,7 +412,7 @@ def run_favorite_icons(factory, results, tmp, h):
     source = Path(tmp)/'favorite-icons-no-arc'; source.mkdir(exist_ok=True)
     keys = ('open.firstRun.completed', 'open.onboarding.name', 'open.import.lastArcDir',
             'open.onboarding.introSoundEnabled')
-    exported = h.subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    exported = h.subprocess.run(['defaults', 'export', __import__('prefs_domain').domain(), '-'], capture_output=True)
     domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {key: domain.get(key) for key in keys}
     app = None

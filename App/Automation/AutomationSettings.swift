@@ -184,14 +184,23 @@ extension AutomationController {
     // Compare in AppKit's output color space: converting its display-profile
     // copy back to sRGB would add a second, lossy color transform to that side.
     let matchesApplication: Bool
+    var difference: [String: Double] = [:]
     if let expected = icon.appliedImage.flatMap(iconCGImage),
        let actual = NSApp.applicationIconImage.flatMap(iconCGImage),
        let expectedPixels = iconPixels(expected, matching: actual), let actualPixels = iconPixels(actual, matching: actual) {
-      matchesApplication = expectedPixels == actualPixels
+      if expectedPixels == actualPixels { matchesApplication = true }
+      else if expected.width != actual.width, let measured = iconDifference(expected, actual) {
+        // On a 2x screen AppKit keeps its own 2048 px resample of the 1024 px icon, and no second resample
+        // reproduces it bit for bit. Compare both at 1024 px in sRGB with a stated perceptual limit instead:
+        // mean absolute channel difference ≤ 1.0 of 255 and at most 1 % of channels off by more than 16.
+        difference = measured
+        matchesApplication = measured["mean"]! <= Self.iconMeanLimit && measured["farFraction"]! <= Self.iconFarLimit
+      } else { matchesApplication = false }
     } else { matchesApplication = icon.appliedID == "openDefault" && icon.appliedImage == nil }
     return ["selected": settings.appIcon.selected, "applied": icon.appliedID,
       "error": settings.appIcon.errorText,
       "matchesApplication": matchesApplication,
+      "applicationDifference": difference,
       "applicationPixels": NSApp.applicationIconImage?.representations.map { [$0.pixelsWide, $0.pixelsHigh] } ?? [],
       "imageObject": icon.appliedImage.map { String(describing: ObjectIdentifier($0)) } ?? "bundle",
       "pixels": icon.appliedImage?.representations.map { [$0.pixelsWide, $0.pixelsHigh] } ?? [],
@@ -206,6 +215,26 @@ extension AutomationController {
     guard let tiff = image.tiffRepresentation,
       let source = CGImageSourceCreateWithData(tiff as CFData, nil) else { return nil }
     return CGImageSourceCreateImageAtIndex(source, 0, nil)
+  }
+
+  static let iconMeanLimit = 1.0, iconFarLimit = 0.01
+  /// Both images drawn at 1024 px, 8-bit sRGB: mean absolute channel difference (0–255) and the fraction of
+  /// channels that differ by more than 16. Two 4 MiB buffers.
+  private func iconDifference(_ a: CGImage, _ b: CGImage) -> [String: Double]? {
+    func raster(_ image: CGImage) -> [UInt8]? {
+      let side = 1024
+      var bytes = [UInt8](repeating: 0, count: side * side * 4)
+      guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+        let context = CGContext(data: &bytes, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+          space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+      context.interpolationQuality = .high
+      context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+      return bytes
+    }
+    guard let x = raster(a), let y = raster(b) else { return nil }
+    var sum = 0, far = 0
+    for i in x.indices { let d = abs(Int(x[i]) - Int(y[i])); sum += d; if d > 16 { far += 1 } }
+    return ["mean": Double(sum) / Double(x.count), "farFraction": Double(far) / Double(x.count)]
   }
 
   private func iconPixels(_ image: CGImage, matching actual: CGImage) -> Data? {

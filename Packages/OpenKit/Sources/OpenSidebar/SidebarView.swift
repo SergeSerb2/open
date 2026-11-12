@@ -783,7 +783,24 @@ extension SidebarView {
             .filter { !$0.1.isHidden }.map(\.0)
     }
     /// The compact toolbar's "More options" menu, built as a click would build it.
-    public func toolbarMoreMenu() -> NSMenu { toolbar.makeMoreMenu() }
+    /// The "More options" rows as the popover shows them: title, shortcut, enabled.
+    public func toolbarMoreRows() -> [(title: String, shortcut: String, isEnabled: Bool)] {
+        toolbar.moreRows().map { ($0.title, $0.shortcut, $0.isEnabled) }
+    }
+    /// Opens or closes the popover through the button's own action; true when it is open afterwards.
+    @discardableResult public func toggleToolbarMorePopover() -> Bool { toolbar.toggleMorePopover(); return toolbar.morePopover != nil }
+    /// The open popover's frame in this view, its rows, and the button's glyph ("×" while open).
+    public var toolbarMoreState: (open: Bool, frame: CGRect, closeGlyph: Bool) {
+        let popover = toolbar.morePopover
+        return (popover != nil, popover.map { convert($0.bounds, from: $0) } ?? .zero, toolbar.more.glyphView.glyph == .rowClose)
+    }
+    /// Presses row `index` of the open popover (its real press path).
+    public func chooseToolbarMoreRow(_ index: Int) { toolbar.morePopover?.choose(index) }
+    /// Render scenes: draws row `index` hovered.
+    public func forceToolbarMoreHover(_ index: Int) {
+        guard let rows = toolbar.morePopover?.rowViews, rows.indices.contains(index) else { return }
+        rows[index].forcedHover = true
+    }
     /// The URL field's placeholder for the current sidebar width.
     public var urlFieldPlaceholder: String { layoutSubtreeIfNeeded(); return urlField.placeholder }
     /// The same provider used when the bottom-bar plus button opens its menu.

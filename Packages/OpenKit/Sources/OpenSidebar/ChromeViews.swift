@@ -64,25 +64,47 @@ final class ToolbarView: NSView {
         reloadMenu.isHidden = true
         setup(more, .more) { Tooltip(title: "More options", style: style()) }
         more.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
-        more.menuProvider = { [weak self] in self?.makeMoreMenu() }
+        more.action = { [weak self] in self?.toggleMorePopover() }
         more.isHidden = true
     }
 
-    /// "More options": Arc's two rows are "Reload" ⌘R (dimmed without a page) and "Toggle Sidebar" ⌘S (capture
-    /// session 9, `46-pb5-a6-compact-more`, C-report-s6 §8). Arc shows them in its own popover card; Open still
-    /// uses a system menu (the popover look is a follow-up). "Stop Loading" while a page loads is Open's choice
-    /// (GUESS: not captured; Arc's full-width reload button turns into Stop).
-    func makeMoreMenu() -> NSMenu {
-        let menu = NSMenu(); menu.autoenablesItems = false
+    /// "More options": Arc's two rows are "Reload" ⌘R (dimmed without a page) and "Toggle Sidebar" ⌘S, in its own
+    /// popover card; the button shows "×" while the card is open (capture session 9, `46-pb5-a6-compact-more`,
+    /// C-report-s6 §8). "Stop Loading" while a page loads is Open's choice (GUESS: not captured).
+    func moreRows() -> [ToolbarMorePopover.Row] {
         let loading = context.pageIsLoading
-        let reload = ClosureMenuItem(loading ? "Stop Loading" : "Reload", enabled: context.hasPage) { [unowned context] in
-            context.send(context.pageIsLoading ? .stopLoading : .reload)
+        return [
+            .init(icon: loading ? .stop : .reload, title: loading ? "Stop Loading" : "Reload", shortcut: loading ? "⌘." : "⌘R",
+                  isEnabled: context.hasPage) { [unowned context] in context.send(context.pageIsLoading ? .stopLoading : .reload) },
+            .init(icon: .sidebar, title: "Toggle Sidebar", shortcut: "⌘S", isEnabled: true) { [unowned context] in
+                context.send(.toggleSidebar)
+            },
+        ]
+    }
+    private weak var morePopoverStorage: ToolbarMorePopover?
+    /// The open card (nil once it left the view tree).
+    var morePopover: ToolbarMorePopover? { morePopoverStorage?.superview == nil ? nil : morePopoverStorage }
+
+    func toggleMorePopover() {
+        if let morePopover { morePopover.dismiss(); return }
+        guard let host = window?.contentView ?? topAncestor else { return }
+        let popover = ToolbarMorePopover(rows: moreRows())
+        let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
+        popover.dark = appearance == .dark
+        popover.onDismiss = { [weak self] in self?.more.glyphView.glyph = .spaceMore; self?.morePopoverStorage = nil }
+        popover.swallowsClick = { [weak self] location in
+            guard let self else { return false }
+            return self.more.bounds.contains(self.more.convert(location, from: nil))
         }
-        reload.keyEquivalent = loading ? "." : "r"; reload.keyEquivalentModifierMask = .command
-        let hide = ClosureMenuItem("Toggle Sidebar") { [unowned context] in context.send(.toggleSidebar) }
-        hide.keyEquivalent = "s"; hide.keyEquivalentModifierMask = .command
-        menu.addItem(reload); menu.addItem(hide)
-        return menu
+        context.existingHoverPreviews?.dismiss()
+        popover.present(in: host, under: more)
+        morePopoverStorage = popover
+        more.glyphView.glyph = .rowClose
+    }
+    private var topAncestor: NSView? {
+        var view: NSView = self
+        while let parent = view.superview { view = parent }
+        return view === self ? nil : view
     }
 
     /// The Developer Mode reload options. GUESS: Arc's menu was not captured (C-report-s10 lists no reload menu);
