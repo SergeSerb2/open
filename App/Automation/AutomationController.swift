@@ -514,7 +514,8 @@
         guard let value = a["text"] as? String else { throw Failure(message: "missing clipboard text") }
         NSPasteboard.general.clearContents(); return NSPasteboard.general.setString(value, forType: .string)
       case "shell-windows":
-        return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0] as [String: Any] }
+        return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0,
+          "title": $0.window?.title ?? "", "level": $0.window?.level.rawValue ?? 0] as [String: Any] }
       case "window-reopen":
         _ = app.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
         return true

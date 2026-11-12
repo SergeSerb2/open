@@ -312,6 +312,8 @@ public enum CommandRegistry {
                           defaultShortcuts: [.cmdShift("l")], aliases: ["Library"]),
         CommandDefinition(id: "view-media", title: "View Media", menuPath: ["Window"]),
         CommandDefinition(id: "view-boosts", title: "View Boosts", menuPath: ["Window"]),
+        // Arc 1.172.2 Window menu (runtime AX, `didClickStayOnTopWithMenuItem:`): keeps this window above others.
+        CommandDefinition(id: "stay-on-top", title: "Stay On Top", menuPath: ["Window"], aliases: ["Float Window", "Always on Top"]),
         CommandDefinition(id: "minimize-window", title: "Minimize", menuPath: ["Window"],
                           defaultShortcuts: [.cmd("m")]),
         CommandDefinition(id: "zoom-window", title: "Zoom", menuPath: ["Window"]),

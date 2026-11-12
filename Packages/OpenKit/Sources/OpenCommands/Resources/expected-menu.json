@@ -37,7 +37,7 @@
  },
  {
   "path": "Open",
-  "title": "Hide Others",
+  "title": "Hide Other Windows",
   "shortcut": "Cmd+Opt+H",
   "inScope": true
  },
@@ -109,13 +109,13 @@
  },
  {
   "path": "File",
-  "title": "Print…",
+  "title": "Print",
   "shortcut": "Cmd+P",
   "inScope": true
  },
  {
   "path": "File",
-  "title": "Save Page As…",
+  "title": "Save Page As",
   "shortcut": "Cmd+Shift+S",
   "inScope": true
  },
@@ -265,7 +265,7 @@
  },
  {
   "path": "Edit > Find",
-  "title": "Find and Replace…",
+  "title": "Find and Replace",
   "shortcut": "Cmd+Opt+F",
   "inScope": true
  },
@@ -511,13 +511,13 @@
  },
  {
   "path": "View",
-  "title": "Collapse Pinned Section",
+  "title": "Collapse Pinned Tabs",
   "shortcut": "",
   "inScope": true
  },
  {
   "path": "View",
-  "title": "Cast…",
+  "title": "Cast",
   "shortcut": "",
   "inScope": true
  },
@@ -727,7 +727,7 @@
  },
  {
   "path": "Tabs",
-  "title": "Clear Unpinned Tabs",
+  "title": "Clear Today",
   "shortcut": "Cmd+Shift+K",
   "inScope": true
  },
@@ -769,7 +769,7 @@
  },
  {
   "path": "Archive",
-  "title": "View Archive",
+  "title": "View Archive…",
   "shortcut": "",
   "inScope": true
  },
@@ -793,7 +793,13 @@
  },
  {
   "path": "Window",
-  "title": "Minimize",
+  "title": "Stay On Top",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "Minimize Window",
   "shortcut": "Cmd+M",
   "inScope": true
  },
@@ -805,25 +811,25 @@
  },
  {
   "path": "Window",
-  "title": "View Downloads",
+  "title": "View Downloads…",
   "shortcut": "Cmd+Shift+J",
   "inScope": true
  },
  {
   "path": "Window",
-  "title": "View Library",
+  "title": "Open Library…",
   "shortcut": "Cmd+Shift+L",
   "inScope": true
  },
  {
   "path": "Window",
-  "title": "View Media",
+  "title": "View Media…",
   "shortcut": "",
   "inScope": true
  },
  {
   "path": "Window",
-  "title": "View Boosts",
+  "title": "View Boosts…",
   "shortcut": "",
   "inScope": true
  },
@@ -835,7 +841,7 @@
  },
  {
   "path": "Help",
-  "title": "Open Help Center",
+  "title": "Visit Help Center",
   "shortcut": "",
   "inScope": true
  },
