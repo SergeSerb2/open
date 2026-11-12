@@ -36,7 +36,12 @@ public final class EaselStore {
 
     // MARK: Index (Library)
 
-    public struct IndexEntry: Sendable { public var id: UUID; public var title: String; public var modifiedAt: Date; public var objectCount: Int }
+    public struct IndexEntry: Sendable {
+        public var id: UUID; public var title: String; public var modifiedAt: Date; public var objectCount: Int
+        public init(id: UUID, title: String, modifiedAt: Date, objectCount: Int) {
+            self.id = id; self.title = title; self.modifiedAt = modifiedAt; self.objectCount = objectCount
+        }
+    }
     /// Every readable Easel document under `directory`, newest first. File work only: call
     /// it off the main thread. Refused files (limits, damage) are left out.
     public nonisolated static func readIndex(directory: URL) -> [IndexEntry] {
