@@ -167,7 +167,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   var detail: String {
     switch step {
     case .name: "Any name or nickname works. It stays on this Mac."
-    case .importData: "Open can bring in your Spaces, pinned tabs, Favorites, archive, and history from Arc. Nothing in Arc changes."
+    case .importData: firstRun.browserSource.map { "Open can bring in your bookmarks, open tabs, and history from \($0.name). Nothing in \($0.name) changes." } ?? "Open can bring in your Spaces, pinned tabs, Favorites, archive, and history from Arc. Nothing in Arc changes."
     case .favorites: "They become Favorites at the top of your sidebar, one click away."
     case .theme: "Pick a color for your first Space. Every Space can have its own."
     case .blocker: "Open's built-in blocker hides most ads and stops many trackers. You can turn it off for any site."
@@ -311,14 +311,23 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     switch step {
     case .name:
       setName(nameField?.stringValue ?? name)
-      if let probe = firstRun.probe { go(probe.sidebarFound || probe.historyFound || probe.archiveFound || probe.secretsFound ? .importData:.favorites); if step == .importData { if firstRun.outcome == nil { firstRun.showImport() }; render(direction: 0) } }
+      if let probe = firstRun.probe, firstRun.browserSourcesLoaded { go(probe.sidebarFound || probe.historyFound || probe.archiveFound || probe.secretsFound || firstRun.isBrowserMode ? .importData:.favorites); if step == .importData { if firstRun.outcome == nil { firstRun.showImport() }; render(direction: 0) } }
       else {
         primary?.isEnabled = false
-        tasks.append(Task { [weak self] in guard let self else { return }; await firstRun.refreshProbe(); guard !Task.isCancelled, step == .name else { return }; next() })
+        tasks.append(Task { [weak self] in guard let self else { return }; if firstRun.probe == nil { await firstRun.refreshProbe() }; await firstRun.loadBrowserSources(); guard !Task.isCancelled, step == .name else { return }; next() })
       }
     case .importData:
       if replay { go(.favorites); return }
-      if firstRun.step == .report { resetTheme(); if firstRun.wizard.reportCount("Favorites") > 0 { selectedFavorites.removeAll() }; go(firstRun.wizard.reportCount("Favorites") > 0 ? .theme:.favorites) }
+      if firstRun.step == .report {
+        resetTheme(); if firstRun.wizard.reportCount("Favorites") > 0 { selectedFavorites.removeAll() }
+        // I-5: preselect the sites the user visits most in the imported browser.
+        if firstRun.isBrowserMode && !firstRun.suggestedHosts.isEmpty {
+          selectedFavorites = Set(Self.sites.indices.filter { index in
+            firstRun.suggestedHosts.contains { $0 == Self.sites[index].host || $0.hasSuffix("." + Self.sites[index].host) }
+          })
+        }
+        go(firstRun.wizard.reportCount("Favorites") > 0 ? .theme:.favorites)
+      }
       else { tasks.append(Task { [weak self] in guard let self else { return }; if firstRun.step == .secretsConsent { await firstRun.allowPasswords() } else { await firstRun.continueImport() } }) }
     case .favorites: go(.theme)
     case .theme: go(.blocker)

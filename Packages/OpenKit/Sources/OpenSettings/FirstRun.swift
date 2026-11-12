@@ -62,7 +62,36 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         self.settings=settings;self.actions=actions
         wizard=ImportWizardViewModel(root:settings,directory:directory,actions:actions)
     }
-    public var hasSelection:Bool {includeSpacesAndTabs || includeArchive || includeHistory || (includeSecrets && wizard.canImportPasswordsAndCookies)}
+    // MARK: I-5 — import from another browser during first run (no Arc data found).
+    public private(set) var browserSources:[BrowserSource]=[]
+    public private(set) var browserSourcesLoaded=false
+    public var browserSourceID:String?
+    public var includeBookmarks=true
+    public var includeOpenTabs=true
+    /// Hosts the user visits most in the imported browser, for the Favorites step.
+    public private(set) var suggestedHosts:[String]=[]
+    public var isBrowserMode:Bool {browserSourceID != nil}
+    public var browserSource:BrowserSource? {browserSources.first {$0.id == browserSourceID}}
+    /// Detected browsers with an importable profile. Browser mode starts only when no Arc data was found.
+    public func loadBrowserSources() async {
+        guard !browserSourcesLoaded else {return}
+        await wizard.loadSources()
+        browserSources=wizard.visibleSources.filter {$0.family != .arc && wizard.canSelect($0)}
+        browserSourcesLoaded=true
+        if probe?.sidebarFound != true, let first=browserSources.first {await selectBrowser(first.id)}
+    }
+    public func selectBrowser(_ id:String) async {
+        guard !busy,let source=browserSources.first(where:{$0.id == id}),let profile=source.profiles.first else {return}
+        browserSourceID=id;wizard.plan.source = .browser(source,profile:profile)
+        await wizard.refreshCounts()
+    }
+    public func browserFound(_ key:String,singular:String,plural:String)->String {
+        if wizard.browserCounts == nil {return "Counting…"}
+        return wizard.counts[key].map {"Found: "+ImportCountCopy.phrase($0,singular:singular,plural:plural)} ?? "Not found"
+    }
+    public var hasSelection:Bool {
+        if isBrowserMode {return includeBookmarks || includeOpenTabs || includeHistory}
+        return includeSpacesAndTabs || includeArchive || includeHistory || (includeSecrets && wizard.canImportPasswordsAndCookies)}
     public var outcome:ImportOutcome? {wizard.outcome}
     public var busy:Bool {wizard.isImporting || wizard.extensions.isInstalling || step == .importing}
     public var passwordsCopy:PasswordsImportCopy {.init(canImport:wizard.canImportPasswordsAndCookies,savedItems:probe?.secretsFound == false ? 0:probe?.savedItems)}
@@ -93,6 +122,20 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func finish() {guard !busy else {return};actions.finishFirstRun(imported:imported)}
     public func continueImport() async {
         guard [.importChoices,.failed].contains(step),hasSelection,!wizard.isImporting else {return}
+        if isBrowserMode,let source=browserSource,case .browser(_,let profile)=wizard.plan.source {
+            var plan=ImportPlan(directory:wizard.plan.directory);plan.source = .browser(source,profile:profile)
+            plan.spaces=false;plan.tabs=false;plan.favorites=false;plan.folders=false;plan.archive=false;plan.boosts=false
+            plan.bookmarks=includeBookmarks;plan.openTabs=includeOpenTabs;plan.history=includeHistory;plan.searchSettings=true
+            errorText=nil;phaseText="Importing your bookmarks…";step = .importing
+            await Task.yield()
+            await wizard.beginImport(plan:plan)
+            synchronizeImportState()
+            if includeHistory && imported {
+                let directory=profile.directory
+                suggestedHosts=await Task.detached(priority:.utility) {(try? ChromiumProfileReader(directory:directory).topHosts(limit:8)) ?? []}.value
+            }
+            return
+        }
         var plan=ImportPlan(directory:wizard.plan.directory)
         plan.spaces=includeSpacesAndTabs;plan.tabs=includeSpacesAndTabs;plan.favorites=includeSpacesAndTabs;plan.folders=includeSpacesAndTabs;plan.searchSettings=includeSpacesAndTabs
         plan.boosts=includeSpacesAndTabs
@@ -146,6 +189,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         return parts.isEmpty ? nil:"Skipped: "+parts.joined(separator:", ")
     }
     public var reportSummary:String {
+        if isBrowserMode {return wizard.reportSummary}
         var parts:[String]=[]
         if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(wizard.reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
         if ["Imported tabs","Pinned and Today tabs","Favorites"].allSatisfy({outcome?.failures[$0] == nil}) {parts.append(ImportCountCopy.phrase(wizard.reportCount("Imported tabs"),singular:"tab",plural:"tabs"))}
@@ -217,7 +261,18 @@ public struct FirstRunView:View {
         if !embeddedImport {Text("Import from Arc").font(.title2)
         Text("Choose what to bring into Open. You can import again later from Settings. Nothing here changes your Arc data.").fixedSize(horizontal:false,vertical:true)}
         ScrollView {VStack(alignment:.leading,spacing:10) {
-            if model.probe?.sidebarFound == false {
+            if model.isBrowserMode,let source=model.browserSource {
+                if model.browserSources.count > 1 {
+                    Picker("Browser",selection:Binding(get:{model.browserSourceID ?? ""},set:{id in Task {await model.selectBrowser(id)}})) {
+                        ForEach(model.browserSources) {Text($0.name).tag($0.id)}
+                    }.frame(maxWidth:260).disabled(model.busy)
+                }
+                SettingsGroup {
+                    choice("Bookmarks",help:"They go to a pinned folder, “\(BrowserBookmarksImport.folderTitle(browserName:source.name))”.",found:model.browserFound("Bookmarks",singular:"bookmark",plural:"bookmarks"),value:$model.includeBookmarks,height:56)
+                    choice("Open tabs",help:"The tabs open in \(source.name) right now.",found:model.browserFound("Open tabs",singular:"tab",plural:"tabs"),value:$model.includeOpenTabs,height:56)
+                    choice("History",help:"Pages you visited. Open also uses it to suggest Favorites.",found:model.browserFound("History",singular:"visit",plural:"visits"),value:$model.includeHistory,height:62,last:true)
+                }
+            } else if model.probe?.sidebarFound == false {
                 Text("No Arc data found at \(model.wizard.directoryDisplayPath).").font(.headline).fixedSize(horizontal:false,vertical:true)
                 Text("Open looked for the files Arc keeps on this Mac and did not find them. You can pick a different folder, or start fresh.").foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)
             } else {

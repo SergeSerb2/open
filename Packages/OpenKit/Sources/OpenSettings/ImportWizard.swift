@@ -206,6 +206,12 @@ import OpenImport
     }
     /// First run can start while its estimate is still pending; the shared action reports read errors.
     public func beginImport(plan: ImportPlan) async {
+        if !plan.isArc {
+            // First run from another browser (I-5): no secrets here; Settings offers them later.
+            guard !isImporting, plan.bookmarks || plan.openTabs || plan.history || plan.searchSettings else { return }
+            self.plan = plan; self.plan.skipSecrets(); consentWasDecided = false; outcome = nil; errorText = ""; step = .review
+            await requestImport(); return
+        }
         guard !isImporting, plan.isArc, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies) else { return }
         self.plan=plan; if !canImportPasswordsAndCookies {self.plan.skipSecrets()}; consentWasDecided=false; outcome=nil; errorText=""; step = .review
         await requestImport()
