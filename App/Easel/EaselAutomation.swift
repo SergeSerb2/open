@@ -146,6 +146,19 @@ extension AutomationController {
             let window = canvas.window else { throw Failure(message: "unknown edit op") }
       window.makeFirstResponder(canvas.documentView)
       guard NSApp.sendAction(Selector((name + ":")), to: nil, from: nil) else { throw Failure(message: "edit op not handled") }
+    case "sheet":
+      // The canvas's alert sheet (live-card question): its text, or a button pressed as a click would.
+      guard let sheet = canvas.window?.attachedSheet, let alert = NSApp.windows.compactMap({ $0 }).first(where: { $0 === sheet }),
+            let content = alert.contentView else { return ["shown": false] }
+      func buttons(_ v: NSView) -> [NSButton] { ((v as? NSButton).map { [$0] } ?? []) + v.subviews.flatMap(buttons) }
+      func labels(_ v: NSView) -> [String] { ((v as? NSTextField).map { [$0.stringValue] } ?? []) + v.subviews.flatMap(labels) }
+      let all = buttons(content).filter { !$0.title.isEmpty }
+      if let press = args["press"] as? String {
+        guard let button = all.first(where: { $0.title == press }) else { throw Failure(message: "no such button") }
+        button.performClick(nil)
+        return ["pressed": press]
+      }
+      return ["shown": true, "buttons": all.map(\.title), "texts": labels(content).filter { !$0.isEmpty }]
     case "flush": app.easels.flush()
     default: throw Failure(message: "unknown easel action")
     }
@@ -175,7 +188,8 @@ extension AutomationController {
       "favicon": tab.live.faviconPNG != nil, "hostCount": factory.easelHosts.count,
       "engineContentCreationCount": factory.contentCreationCount,
       "fileExists": FileManager.default.fileExists(atPath: app.easels.fileURL(for: documentID).path),
-      "storeWrites": app.easels.writeCount, "pendingLinks": factory.easelHosts[tab.id]?.pendingLinks ?? 0,
+      "storeWrites": app.easels.writeCount, "livePages": factory.easelHosts[tab.id]?.livePages.count ?? 0,
+      "livePagesMade": factory.easelHosts[tab.id]?.livePagesMade ?? 0, "pendingLinks": factory.easelHosts[tab.id]?.pendingLinks ?? 0,
       "imageFiles": (try? FileManager.default.contentsOfDirectory(atPath: app.easels.imagesDirectory(for: documentID).path))?.sorted() ?? []]
     if let host = factory.easelHosts[tab.id], !host.closed {
       state["shown"] = host.canvas.window != nil && !host.canvas.isHiddenOrHasHiddenAncestor

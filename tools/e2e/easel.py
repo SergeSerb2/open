@@ -65,7 +65,8 @@ def run(factory, results, tmp, api):
 
     # Per-tool colours are a user preference (Arc's rectangleColor & co.): start from the defaults.
     domain = 'io.github.sergeserb2.open'
-    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')]
+    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')] \
+        + ['open.easel.liveWebCardEduSeen', 'open.easel.useAlignmentGuides']
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved_prefs = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     for key in color_keys:
@@ -345,7 +346,7 @@ def run(factory, results, tmp, api):
             # E26: Capture → Easel. The card offers Add to Easel; its menu lists New Easel and
             # each Easel; a row adds the capture as a web card and selects that Easel.
             page = api.new_tab(app, origin + '/page.html')
-            r = app.call('capture', mode='area', rect=[40, 40, 200, 120])
+            r = app.call('capture', mode='area', rect=[0, 0, 400, 240])
             actions = r['state'].get('card', {}).get('actions', [])
             rows = app.call('easel', action='capture-menu')
             target_title = easel(tab=e2)['tabTitle']
@@ -370,6 +371,51 @@ def run(factory, results, tmp, api):
             fresh = easel()
             record('E27_capture_new_easel', len(app.call('tabs')) == count + 1 and fresh['tabTitle'] == 'Untitled Easel'
                    and [x['kind'] for x in objects(fresh)] == ['webCard'], state={k: v for k, v in fresh.items() if k != 'canvas'})
+
+            # ---- E3: live web cards ----
+            app.call('select', tab=e2)
+            api.wait_until(lambda: easel(tab=e2).get('shown') or None, timeout=5, step=.1)
+            card = next(x for x in objects(easel(tab=e2)) if x['kind'] == 'webCard')
+            f = card['frame']; mid = [f[0] + f[2] / 2, f[1] + f[3] / 2]
+            menu = easel(action='menu', at=mid, tab=e2)
+            easel(action='menu', at=mid, item='Show Live Website', tab=e2)
+            sheet = easel(action='sheet', tab=e2)
+            easel(action='sheet', press='Show Live Website', tab=e2)
+            s = api.wait_until(lambda: (lambda x: x if x['livePages'] == 1 else None)(easel(tab=e2)), timeout=8, step=.1)
+            live = next(x for x in objects(s) if x['id'] == card['id']) if s else {}
+            record('E29_live_card', 'Show Live Website' in menu and 'Open Page in New Tab' in menu and sheet.get('shown')
+                   and sheet['buttons'][:2] == ['Show Live Website', 'Cancel'] and live.get('live') and live.get('liveAttached'),
+                   menu=menu, sheet=sheet, card=live)
+            time.sleep(1.5)
+            snapshot('e29-live-card-light')
+            app.call('appearance', name='dark'); time.sleep(.5)
+            snapshot('e29-live-card-dark')
+            app.call('appearance', name='light')
+            # E30: at most three live pages per canvas.
+            for _ in range(3):
+                easel(action='menu', at=mid, item='Duplicate', tab=e2)
+            s = easel(tab=e2)
+            lives = [x for x in objects(s) if x['kind'] == 'webCard' and x.get('live')]
+            record('E30_live_pool_cap', len(lives) == 4 and s['livePages'] == 3 and canvas(s)['liveCount'] == 3
+                   and sum(1 for x in lives if x['liveAttached']) == 3, livePages=s['livePages'], made=s['livePagesMade'])
+            # E31: a hidden Easel releases every live page; showing it again brings them back.
+            app.call('select', tab=page)
+            hidden = easel(tab=e2)
+            app.call('select', tab=e2)
+            shown = api.wait_until(lambda: (lambda x: x if x['livePages'] == 3 else None)(easel(tab=e2)), timeout=8, step=.1)
+            record('E31_live_release_when_hidden', hidden['livePages'] == 0 and shown, hidden=hidden['livePages'])
+            # E32: back to the screenshot (no question the second time).
+            # Duplicates sit 20 pt down-right of each other: each card's top-left corner is its own.
+            for x in [x for x in objects(easel(tab=e2)) if x['kind'] == 'webCard' and x.get('live')]:
+                g = x['frame']; easel(action='menu', at=[g[0] + 6, g[1] + 6], item='Show Screenshot', tab=e2)
+            s = easel(tab=e2)
+            record('E32_show_screenshot', s['livePages'] == 0 and not any(x.get('live') for x in objects(s) if x['kind'] == 'webCard'),
+                   livePages=s['livePages'])
+            # E33: Open Page in New Tab opens the captured page in a web tab.
+            count = len(app.call('tabs'))
+            easel(action='menu', at=mid, item='Open Page in New Tab', tab=e2)
+            tabs = app.call('tabs')
+            record('E33_open_page', len(tabs) == count + 1 and tabs[0]['url'] == origin + '/page.html', first=tabs[0])
         finally:
             server.shutdown()
     finally:
@@ -379,4 +425,7 @@ def run(factory, results, tmp, api):
             if saved_prefs.get(key) is None:
                 subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
             else:
-                subprocess.run(['defaults', 'write', domain, key, '-string', saved_prefs[key]], capture_output=True)
+                value = saved_prefs[key]
+                kind = '-bool' if isinstance(value, bool) else '-string'
+                subprocess.run(['defaults', 'write', domain, key, kind, str(value).lower() if isinstance(value, bool) else value],
+                               capture_output=True)
