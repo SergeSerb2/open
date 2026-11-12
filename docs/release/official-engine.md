@@ -23,7 +23,7 @@ Recheck the inputs against the main commit selected for the release.
 | Additional disk estimate | Allow **80–150 GiB of new free blocks** for planning. Estimate: 3–5 × the 8.1 GiB dev output for official objects and symbols (24–41 GiB), 40–80 GiB for ThinLTO/cache/link scratch, and 10–20 GiB for distribution and symbol copies; round the total. This is an unmeasured allowance, not a known minimum. It excludes an unshared source checkout or an unbounded cache. APFS cloning does not reserve future writes. |
 | Free disk now | `df -h ~/Developer/open-engine-s8`: `/dev/disk3s5`, mounted at `/System/Volumes/Data`, **926 GiB size, 831 GiB used, 65 GiB available, 93%**. Disk is user-managed. This report makes no disk decision and deletes nothing. |
 | Packaging | **STOP before distribution.** `engine-distrib` rejects release before its dry-run branch. `make_distrib.py:775–782,898,920–934` selects `_GN_arm64` and reads `out/Release_GN_arm64`. S10-3 is still required. |
-| A-1 status | **Fix needed before provenance acceptance.** `release.sh:417–420` selects the official output through a temporary `OUT_DIR_DEV` override. `engine-status` S-5 still compares that output with **dev** args. It will reject the intended release overrides under `--strict`. Do not weaken strict checking or claim A-1 PASS. |
+| A-1 status | **Fixed 2026-11-12.** `engine-status --config release` checks `OUT_DIR_RELEASE`, and S-5 compares its args with merged dev + release args (as `engine-build` writes them). It ignores only the build-execution key `use_remoteexec`. `release.sh` calls it with `--strict`. Dry run on the M5 with the official engine: A-1 PASS. |
 
 The source root must be frozen by its owner before cloning. The latest main
 view came from s10; s8 is the source root examined here. The lead must select
@@ -476,13 +476,12 @@ distribution or use another checkout's Vendor as the source.
 
 ### F. A-1 provenance through the release script
 
-First fix the S-5 mismatch described above in a reviewed implementation PR.
-The status checker must compare the selected official output with the
-same **merged dev + release args** as `engine-build`. Preserve strict
-checking for dev. Do not replace `--strict` with a warning or edit generated
-args to satisfy dev expectations. `release.sh` has no `--config release`
-option for `engine-status`; its temporary pins file changes only the out
-directory today. This is a source-confirmed blocker, not an observed run.
+`release.sh` runs `engine-status --config release --strict`. S-5 compares the
+official output's `args.gn` with the **merged dev + release args** that
+`engine-build` writes (later keys win). It ignores build-execution-only keys
+(`use_remoteexec`, which the remote build sets; it does not change any
+compile command, `Engine/fork/remote/README.md`). Every other changed or
+extra key fails under `--strict`. Dev mode (the default) is unchanged.
 
 Then run the real release path:
 
