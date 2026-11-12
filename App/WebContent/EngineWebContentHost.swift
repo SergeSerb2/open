@@ -140,6 +140,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       }
     }
     if changes.contains(.loading), !page.isLoading { historyRecorder.loadingChanged(false); historyRecorder.titleChanged(page.title) }
+    if (changes.contains(.URL) || (changes.contains(.loading) && !page.isLoading)) { ThemeData.pageChanged(self, factory: owner) }
     if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title); historyRecorder.titleChanged(page.title) }
     if changes.contains(.loading) || changes.contains(.live) { onLoadingChange?(page.isLoading) }
     guard !closed, generation == token else { return }
