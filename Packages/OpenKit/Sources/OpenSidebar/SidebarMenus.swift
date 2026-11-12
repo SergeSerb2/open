@@ -124,10 +124,18 @@ struct SidebarMenus {
                 item("Open in Split View", .openInSplitView(tabID: tab.id)),
                 item("Duplicate", .duplicate(nodeID: tab.id)), item("Close Tab", .close(nodeID: tab.id))])
         }
+        // Arc 1.172.2 order (capture session 3 Part D, `s9/15-menus`; docs/re/sidebar-menus-parity.md §1).
+        let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         var items: [NSMenuItem] = [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+            share(tab),
+            .separator(),
+            item("Change Icon…", .changeIcon(nodeID: tab.id)),
+            rename,
+            mute(tab),
             .separator(),
             item("Open in Split View", .openInSplitView(tabID: tab.id)),
+            item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
             .separator(),
             item("Archive Tab", .close(nodeID: tab.id)),
@@ -135,43 +143,60 @@ struct SidebarMenus {
         if let space = context.model.parent(of: tab.id).flatMap(spaceID(of:)) {
             var keep = Set(context.selection.ids)
             keep.insert(tab.id)
-            let alternate = item("Archive Other Tabs", .clearTodayKeeping(space: space, keep: keep))
-            alternate.isAlternate = true
-            alternate.keyEquivalentModifierMask = .option
-            items.append(alternate)
             let today = context.model.space(id: space)?.today ?? []
-            let below = today.firstIndex(where: { $0.id == tab.id }).map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
+            let index = today.firstIndex(where: { $0.id == tab.id })
+            let below = index.map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
+            let above = index.map { Array(today.prefix($0).map(\.id)) } ?? []
+            // 1.172.2 shows Archive Other Tabs as a plain item (1.170 had it behind ⌥).
+            items.append(item("Archive Other Tabs", enabled: today.contains { !keep.contains($0.id) },
+                              .clearTodayKeeping(space: space, keep: keep)))
             items.append(item("Archive Tabs Below", enabled: !below.isEmpty, .archiveNodes(ids: below)))
+            items.append(item("Archive Tabs Above", enabled: !above.isEmpty, .archiveNodes(ids: above)))
         }
         return menu(items)
+    }
+
+    /// Mute / Unmute; disabled for a silent, unmuted tab (S3D: "Mute (disabled)").
+    private func mute(_ tab: Tab) -> NSMenuItem {
+        item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id))
+    }
+
+    /// "Edit Pinned Page ▸" (pinned tabs and favourites, F0116, S3D).
+    private func editPinnedPage(_ tab: Tab) -> NSMenuItem {
+        let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
+        edit.submenu = menu([
+            item("Replace Pinned URL with Current", enabled: tab.hasLeftPinnedURL, .replacePinnedURL(tabID: tab.id)),
+            item("Edit…", .editPinnedURL(tabID: tab.id)),
+        ])
+        return edit
     }
 
     /// Pinned tab, at the top level or in a folder (F0116).
     func pinnedTab(_ tab: Tab) -> NSMenu {
         if Self.isEasel(tab) { return easel(tab) }
         if Self.isNote(tab) { return note(tab) }
-        let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
-        edit.submenu = menu([
-            item("Replace Pinned URL with Current", enabled: tab.hasLeftPinnedURL, .replacePinnedURL(tabID: tab.id)),
-            item("Edit…", .editPinnedURL(tabID: tab.id)),
-        ])
+        return menu(pinnedItems(tab) + [item("Remove Pin", .unpin(tabID: tab.id))])
+    }
+
+    /// The shared pinned / favourite list up to the last separator (S3D: the favourite menu is
+    /// the pinned menu with "Remove Favorite" last). Arc has no "Customize Page…" here; Boosts
+    /// open from Site Controls (C-report-s3 Part G).
+    private func pinnedItems(_ tab: Tab) -> [NSMenuItem] {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
-        return menu([
+        return [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             share(tab),
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
             rename,
-            item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id)),
-            item("Customize Page…", .customizePage(tabID: tab.id)),
-            edit,
+            mute(tab),
+            editPinnedPage(tab),
             .separator(),
-            item("Add Split View", .addSplitView(tabID: tab.id)),
+            item("Open in Split View", .openInSplitView(tabID: tab.id)),
             item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
             .separator(),
-            item("Remove Pin", .unpin(tabID: tab.id)),
-        ])
+        ]
     }
 
     static func isEasel(_ tab: Tab) -> Bool { tab.url.scheme?.lowercased() == "open" && tab.url.host()?.lowercased() == "easel" }
@@ -219,18 +244,9 @@ struct SidebarMenus {
         ])
     }
 
-    /// Favorite tile. guess: not captured; built from the pinned-tab menu.
+    /// Favorite tile (S3D): the pinned menu with "Remove Favorite" last.
     func favorite(_ tab: Tab) -> NSMenu {
-        let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
-        return menu(liveCalendarItems(tab) + [
-            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
-            share(tab),
-            .separator(),
-            item("Change Icon…", .changeIcon(nodeID: tab.id)),
-            rename,
-            .separator(),
-            item("Remove from Favorites", .removeFavorite(tabID: tab.id)),
-        ])
+        menu(liveCalendarItems(tab) + pinnedItems(tab) + [item("Remove Favorite", .removeFavorite(tabID: tab.id))])
     }
 
     /// Live Calendar items of a calendar Favorite (LD §4: "Show Meeting Link" with "Copy Link" and "Dismiss",
@@ -314,8 +330,11 @@ struct SidebarMenus {
             .separator(),
             item("New Nested Folder…", .newNestedFolder(parentFolderID: folder.id)),
             item("Turn “\(folder.title)” into Space", .turnFolderIntoSpace(folderID: folder.id)),
+        ] + (folder.children.isEmpty ? [] : [
+            // S3D: an empty folder has no Copy items; their place with tabs is pending (C3 item 4).
             item("Copy All Links", .copyAllLinks(folderID: folder.id, markdown: false)),
             item("Copy All Links as Markdown", .copyAllLinks(folderID: folder.id, markdown: true)),
+        ]) + [
             .separator(),
             item("Change Icon…", .changeIcon(nodeID: folder.id)),
             rename,
