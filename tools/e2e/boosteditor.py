@@ -17,6 +17,10 @@ def run(factory, results, tmp, env):
         import boost_zap_review
         boost_zap_review.run(factory, results, tmp, env)
         return
+    if os.environ.get("OPEN_E2E_BOOST_RETIRE_ONLY") == "1":
+        import boost_profile_retirement
+        boost_profile_retirement.run(factory, results, tmp, env)
+        return
     if os.environ.get("OPEN_E2E_BOOST_ZAP_ONLY") == "1":
         import boost_zap
         boost_zap.run(factory, results, tmp, env)
@@ -314,14 +318,28 @@ def run(factory, results, tmp, env):
                     wait_until(lambda: call()["completedRefreshCount"] > before and all(probe(t)["font"].startswith("Avenir") for t in handles),timeout=5,step=.02)
                     state=call()
                     after=page_counts()
-                    return dict(positive=state["refreshPages"] == 10 and state["refreshSkippedPages"] == 0 and state["refreshMs"] < 100 and after == counts,
+                    return dict(positive=state["refreshPages"] == 10 and state["refreshSkippedPages"] == 0 and (state["refreshMs"] < 100 or not timing_judged) and after == counts,
                                 negative=negative,refreshMs=state["refreshMs"],pages=state["refreshPages"],counts=counts,afterCounts=after,discarded=discarded)
                 finally:
                     if peer:
                         app.call("window-focus",id=peer,activate=True);app.call("window-close")
                     app.call("window-focus",id=original,activate=True)
                     for extra in tabs[1:]+([other] if other else []): app.call("close",tab=extra)
+            # B12's limit (refresh of ten live pages < 100 ms) is a timing budget for real hardware: on the rented
+            # virtual Macs it measures 135–146 ms with the same code (LEAD 12:18: M1-only, skip with a stated reason).
+            # The flow still runs there (later rows, such as B18, use the font it sets); every other check must pass,
+            # and the row reports SKIP for the timing with the measured value.
+            def virtual_mac():
+                sysctl=lambda name: subprocess.run(["sysctl","-n",name],capture_output=True,text=True).stdout.strip()
+                return sysctl("kern.hv_vmm_present") == "1" and sysctl("hw.model").startswith("VirtualMac")
+            timing_judged=not virtual_mac()
             row("B12_ten_live_pages",b12)
+            if not timing_judged and results.get("B12_ten_live_pages",{}).get("ok"):
+                measured=results["B12_ten_live_pages"]
+                results["B12_ten_live_pages"]=dict(status="SKIP",reason="timing budget (refresh < 100 ms) is judged on the M1; "
+                    "on this virtual Mac every other check passed",refreshMs=measured.get("refreshMs"),pages=measured.get("pages"),
+                    load=measured.get("load"))
+                print("B12_ten_live_pages SKIP virtual Mac: timing budget is M1-only, refreshMs",measured.get("refreshMs"),flush=True)
             def b13():
                 close();app.call("command",id="view-boosts")
                 wait_until(lambda: app.call("settings-state")["librarySection"] == "boosts",timeout=5,step=.05)

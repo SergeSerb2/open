@@ -53,6 +53,11 @@ public final class PaneChromeView: NSView {
         didSet { buttons[4].siteControlState = siteControlState }
     }
     public var siteControlsAnchor: NSView { buttons[4] }
+    /// F6: set by the window from the same rule as the sidebar button
+    /// (`BrowserWindowController.siteControlsAvailable(tabID:)`), never decided here.
+    public var siteControlsAvailable = false {
+        didSet { if siteControlsAvailable != oldValue { buttons[4].isEnabled = onSiteControls != nil && siteControlsAvailable } }
+    }
     @discardableResult public func pressSiteControls() -> Bool {
         guard buttons[4].isEnabled, !buttons[4].isHidden else { return false }
         buttons[4].performClick(nil); return true
@@ -117,7 +122,7 @@ public final class PaneChromeView: NSView {
         let back = host?.canGoBack ?? false, forward = host?.canGoForward ?? false
         if buttons[0].isEnabled != back { buttons[0].isEnabled = back }
         if buttons[1].isEnabled != forward { buttons[1].isEnabled = forward }
-        let siteAvailable = onSiteControls != nil && host?.currentURL?.scheme != "about" && host?.currentURL != nil
+        let siteAvailable = onSiteControls != nil && siteControlsAvailable
         if buttons[4].isEnabled != siteAvailable { buttons[4].isEnabled = siteAvailable }
         buttons[4].siteControlState = siteControlState
         let loading = host?.isLoading == true

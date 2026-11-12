@@ -67,6 +67,7 @@ public enum DeveloperPanelAction: String, CaseIterable, Sendable {
     }
     @MainActor var image: NSImage {
         if self == .extensionsMenu { return DeveloperPanelGlyphs.puzzle }
+        if self == .captureWindow { return DeveloperPanelGlyphs.picture }
         return NSImage(systemSymbolName: symbol, accessibilityDescription: title) ?? NSImage()
     }
     /// The three controls that toggle DevTools on a panel.
@@ -123,6 +124,38 @@ enum DeveloperPanelGlyphs {
             return true
         }
         image.isTemplate = true; image.accessibilityDescription = DeveloperPanelAction.extensionsMenu.title
+        return image
+    }()
+
+    /// The Capture Window glyph: one framed picture with a small flower inside (our own drawing).
+    /// Arc's ink box is 17 × 13 pt: a rounded frame with a 1 pt stroke, a flower head about 4.5 × 3.5 pt over a
+    /// stem, and two leaves about 9 pt across (`44-pb3a-probe/d-0.png` x 2083–2116, y 47–72 at 2x).
+    static let picture: NSImage = {
+        let image = NSImage(size: NSSize(width: 17, height: 13), flipped: false) { _ in
+            NSColor.black.set()
+            let frame = NSBezierPath(roundedRect: CGRect(x: 0.625, y: 0.625, width: 15.75, height: 11.75), xRadius: 2.5, yRadius: 2.5)
+            frame.lineWidth = 1.25; frame.stroke()
+            // Flower head: a rounded cup with two petal tips, about 4.6 × 3.8 pt.
+            let head = NSBezierPath()
+            head.move(to: CGPoint(x: 6.2, y: 10.9))
+            head.line(to: CGPoint(x: 7.35, y: 10.0)); head.line(to: CGPoint(x: 8.5, y: 11.1)); head.line(to: CGPoint(x: 9.65, y: 10.0))
+            head.line(to: CGPoint(x: 10.8, y: 10.9))
+            head.curve(to: CGPoint(x: 8.5, y: 7.1), controlPoint1: CGPoint(x: 11.0, y: 8.5), controlPoint2: CGPoint(x: 9.9, y: 7.1))
+            head.curve(to: CGPoint(x: 6.2, y: 10.9), controlPoint1: CGPoint(x: 7.1, y: 7.1), controlPoint2: CGPoint(x: 6.0, y: 8.5))
+            head.close(); head.fill()
+            let stem = NSBezierPath(); stem.move(to: CGPoint(x: 8.5, y: 7.3)); stem.line(to: CGPoint(x: 8.5, y: 2.6))
+            stem.lineWidth = 1.1; stem.stroke()
+            // Two leaves from the stem's foot, up and out, about 9 pt across.
+            for side: CGFloat in [-1, 1] {
+                let leaf = NSBezierPath(), base = CGPoint(x: 8.5, y: 2.8), tip = CGPoint(x: 8.5 + side * 4.4, y: 6.6)
+                leaf.move(to: base)
+                leaf.curve(to: tip, controlPoint1: CGPoint(x: 8.5 + side * 1.6, y: 2.3), controlPoint2: CGPoint(x: 8.5 + side * 4.3, y: 3.6))
+                leaf.curve(to: base, controlPoint1: CGPoint(x: 8.5 + side * 2.4, y: 6.8), controlPoint2: CGPoint(x: 8.5 + side * 0.6, y: 5.2))
+                leaf.close(); leaf.fill()
+            }
+            return true
+        }
+        image.isTemplate = true; image.accessibilityDescription = DeveloperPanelAction.captureWindow.title
         return image
     }()
 }

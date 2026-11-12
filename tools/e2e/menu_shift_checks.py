@@ -77,7 +77,8 @@ def run(h, factory, results, tmp):
         tab = app.call('tabs')[0]['id']
         app.call('wait', tab=tab)
         browser_focus(True)
-        rows = [r for r in app.call('menu-state') if r['modifierMask'] & SHIFT
+        # ⌘⇧ letters only: ⌃⇧N (New Note) and ⌃⇧E (New Easel) are Control shortcuts, not this inventory.
+        rows = [r for r in app.call('menu-state') if r['modifierMask'] & SHIFT and r['modifierMask'] & COMMAND
                 and len(r['key']) == 1 and r['key'].isalpha()]
         actual = {r['id']: (r['key'], r['modifierMask']) for r in rows}
         check('inventory', actual == EXPECTED and len(rows) == len(EXPECTED), rows=rows)
@@ -216,9 +217,10 @@ def run(h, factory, results, tmp):
 
         # Native close must leave both other browser windows alive.
         browser_focus(True)
-        app.call('menu-perform', id='blank-window')
+        # Normal windows (a Blank Window is its own window kind since #462).
+        app.call('menu-perform', id='new-window')
         second = app.call('window-state')['id']
-        app.call('menu-perform', id='blank-window')
+        app.call('menu-perform', id='new-window')
         third = app.call('window-state')['id']
         before = {w['id'] for w in app.call('shell-windows')}
         receipt = key('w')

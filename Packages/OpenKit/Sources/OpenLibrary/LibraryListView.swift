@@ -26,6 +26,9 @@ struct LibraryRowItem {
     var activate: () -> Void
     var actions: [LibraryRowAction] = []
     var hoverActions: [LibraryRowAction] = []
+    /// False: a right-click opens no menu (Arc's Downloads rows); the More button still opens it.
+    var contextMenu = true
+    var moreTooltip = "More"
 }
 
 /// Native, reusable rows. The model owns snapshots and mutations; this view
@@ -89,7 +92,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.onScroll = { [weak self] in self?.overscanGeneration += 1 }
         table.onPrefetch = { [weak self] range,direction,stride in self?.prefetchRows(range,direction:direction,stride:stride) }
         table.menuAtRow = { [weak self] row in
-            guard let self else { return nil }; let menu = self.menu(at:row); self.activeMenu = menu; return menu
+            guard let self, self.item(at:row)?.contextMenu != false else { return nil }; let menu = self.menu(at:row); self.activeMenu = menu; return menu
         }
         table.setAccessibilityLabel("Library items")
         scroll.documentView = table; addSubview(scroll)
@@ -400,7 +403,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
             guard let item = item(at: row) else { return nil }
             let frame = root.convert(table.rect(ofRow: row),from: table)
             return ["id":item.id,"frame":[frame.minX,frame.minY,frame.width,frame.height],"title":item.title,"subtitle":item.subtitle,
-              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),"toolTip":item.toolTip ?? ""]
+              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),"contextMenu":item.contextMenu,"toolTip":item.toolTip ?? ""]
         }
     }
 }
@@ -460,7 +463,7 @@ private final class LibraryItemView: NSView {
             }) }
         }
         var actions = item.hoverActions
-        if !item.actions.isEmpty { actions.append(.init(title:"More",glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
+        if !item.actions.isEmpty { actions.append(.init(title:item.moreTooltip,glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
         // The table's reuse identifier stays "row". Item identity belongs to AX,
         // not the viewport reuse pool.
         setAccessibilityIdentifier(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")
