@@ -1015,7 +1015,12 @@ def feature_checks(app, style, results, tmp):
     app.call("policy", dialogs="accept", prompt="hello", permissions="grant", contextMenu="record",
              fullscreen="record")
 
+    # Touched-row runs: OPEN_E2E_FEATURES_ONLY=row[,row] runs only those rows of this function.
+    only_rows = set(filter(None, os.environ.get("OPEN_E2E_FEATURES_ONLY", "").split(",")))
+
     def run(name, fn):
+        if only_rows and name not in only_rows:
+            return
         begin_row(name)
         try:
             results[name] = fn()
@@ -1346,8 +1351,9 @@ def feature_checks(app, style, results, tmp):
         return runpy.run_path(os.path.join(ROOT, "tools/e2e/sad_tab.py"))["run"](
             app, results, new_tab, wait_until, t, run)
     run("sad_tab", sad_tab)
-    runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
-        app, results, tmp, new_tab, wait_until)
+    if not only_rows:
+        runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
+            app, results, tmp, new_tab, wait_until)
 
 
 
@@ -13562,7 +13568,7 @@ def main():
                         feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
-            if opts.only == "features" and not opts.features_passwords_engine_safety:
+            if opts.only == "features" and not opts.features_passwords_engine_safety and not os.environ.get("OPEN_E2E_FEATURES_ONLY"):
                 # Own launches: Chrome's startup-complete signal (BEST_EFFORT tasks).
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/startup_complete.py"))["run"](
                     factory, results["features"], new_tab, wait_until, begin_row, opts.style)
