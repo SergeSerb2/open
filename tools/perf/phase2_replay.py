@@ -217,7 +217,7 @@ def main():
                     'origin': manifest['origin'], 'route': manifest['route'], 'provenance': current,
                     'frame': pair['frame'], 'viewport': pair['viewport'],
                     'metric_filter': sorted(selected), 'fail_after_metric': a.fail_after_metric,
-                    'app_cadence': a.app_cadence, 'calibration_only': a.calibrate}
+                    'app_cadence': a.app_cadence, 'calibration_only': a.calibrate, 'quiet_pair': True}
                 config = work / 'worker-config.json'; atomic(config, cfg)
                 command = [str(Path.home() / 'Library/Caches/OpenRE/scripts/heavy.sh'),
                     '/usr/bin/lockf', '-k', '-t', '30', '/tmp/open-onscreen-e2e.lock',

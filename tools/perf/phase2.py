@@ -243,6 +243,13 @@ def worker(cfg):
     if row['background_jobs_before'] and not calibration:
         row['error']='Background build invalidates score measurements';atomic(out/'sample.json',row);return 1
     max_load=cfg['provenance'].get('max_load1',10)
+    if cfg.get('quiet_pair'):
+        from profile_state import quiet_pair
+        row['quiet_readings'],quiet=quiet_pair(max_load)
+        if not quiet:
+            row['gate_refused']=True;atomic(out/'sample.json',row);return 75
+        if existing_pids(ARC) or existing_pids(OPEN):
+            row['foreign_browser']=True;atomic(out/'sample.json',row);return 76
     if not calibration and os.getloadavg()[0]>max_load:row['gate_refused']=True;atomic(out/'sample.json',row);return 75
     expected=cfg['provenance']
     for name,digest in expected['measurement_helpers'].items():

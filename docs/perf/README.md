@@ -190,6 +190,10 @@ changed manifests, changed snapshots and mismatched host/OS/display stop
 before launch. Inputs and outputs stay under `.re/perf`; copied temporary
 states use a short private socket path and are verified again after copying.
 Each session records and checks its current app, engine and helper hashes.
+Open-only Phase 2 workers take two load readings ten seconds apart after
+their FIFO/screen hold starts. Both must be below the declared ceiling;
+the current M5 rerun uses `--max-load 6`. A foreign browser at either
+boundary stops the run without adopting or quitting it.
 `--preflight` validates the real private starting trees and live provenance,
 then writes an unscored receipt without capture, input, windows or a queue ticket.
 It reports whether a foreign browser is present, without touching that process.
@@ -236,6 +240,18 @@ The probe adds work and is off unless explicitly requested. The CLI requires
 `--calibrate` for this probe. Collect it separately from scored frame-pacing rows.
 Every wheel trial already records the script's actual native-event intervals
 without this extra display link.
+
+Idle and memory reruns follow LEAD 21:36 / H2-perf-fixes §6: use the second
+launch of the same private Open profile, with components installed and
+production ad-block lists freshly checked. Keep the original 60-second
+settles and 120-second CPU windows. `profile_state.py` reads installed
+component manifests, verifies the active ad-block generation/list hashes
+and source receipts, and records each list's last-check age against the
+store's 24-hour interval. Snapshots retain launch age, load, component
+versions and ad-block state. A bundled seed without source receipts does
+not qualify as fresh. First-launch preparation is retained separately and
+contributes no scored rows. The earlier fresh-profile measurements remain
+historical data with their original protocol disclosed.
 
 `tools/perf/assemble.py --input RECEIPT:TASK,TASK ... --negative RECEIPT
 --out .re/perf/DATE/accepted.json` combines selected accepted task receipts,
