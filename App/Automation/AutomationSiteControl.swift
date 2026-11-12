@@ -2,6 +2,7 @@
 import AppKit
 import OpenFeatures
 import OpenModel
+import OpenBoosts
 import OpenSiteControl
 import OpenDesign
 import Darwin
@@ -124,6 +125,36 @@ extension AutomationController {
         rimTintShare: d("rimShare"), ringTintShare: d("ringShare"), moreTintShare: d("moreShare"), topWhiteMix: d("topWhite"),
         rim: args["rimAlpha"] == nil ? nil : (d("rimGray"), d("rimAlpha")), ring: args["ringAlpha"] == nil ? nil : (d("ringGray"), d("ringAlpha")))
       scc.view.panel.layoutSubtreeIfNeeded()
+    case "deliver":
+      // F8: hand an action to the product code past the panel's enabled state and past this
+      // command's own checks, so a refusal proves the product guard, not the harness.
+      func uuid(_ key: String) throws -> UUID {
+        guard let raw = args[key] as? String, let value = UUID(uuidString: raw) else { throw Failure(message: "missing \(key)") }
+        return value
+      }
+      switch args["what"] as? String {
+      case "action":
+        guard scc.isPresented, let id = args["id"] as? String, ["share", "newBoost", "capture", "captureFull"].contains(id) else {
+          throw Failure(message: "action needs an open panel and a known id") }
+        scc.view.panel.onAction?(id, .zero)
+      case "boostEnabled":
+        guard scc.isPresented, let enabled = args["enabled"] as? Bool else { throw Failure(message: "boostEnabled needs an open panel") }
+        scc.view.panel.onBoostEnabled?(BoostID(rawValue: try uuid("boost")), enabled)
+      case "boostEdit":
+        guard scc.isPresented else { throw Failure(message: "boostEdit needs an open panel") }
+        scc.view.panel.onEdit?(BoostID(rawValue: try uuid("boost")))
+      case "anchor":
+        let tab = ItemID(rawValue: try uuid("tab"))
+        let anchor: SiteControlAnchor
+        switch args["anchor"] as? String {
+        case "urlField": anchor = .urlField
+        case "paneBar": anchor = .paneBar(tab)
+        default: throw Failure(message: "anchor must be urlField or paneBar")
+        }
+        if scc.isPresented { scc.dismiss(reason: .escape, animated: false) }
+        owner.toggleSiteControls(anchor: anchor, tabID: tab)
+      default: throw Failure(message: "what must be action, boostEnabled, boostEdit or anchor")
+      }
     case "tap":
       guard scc.isPresented, let id = args["id"] as? String, id.utf8.count <= 256,
             let button = scc.view.panel.controls.first(where: { $0.controlID == (id.hasPrefix("row.") ? String(id.dropFirst(4)) : id) }),
