@@ -7555,6 +7555,9 @@ def page_checks(factory, results, tmp, style="alloy"):
     if os.environ.get("OPEN_E2E_PAGE_COPY_ONLY") == "1":
         page_commands_checks(factory, results, tmp)
         return
+    if os.environ.get("OPEN_E2E_PAGE_TRANSLATE_ONLY") == "1":
+        page_translate_checks(factory, results, tmp)
+        return
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)
@@ -12741,7 +12744,45 @@ def page_translate_checks(factory, results, tmp):
           const out = { p1: document.getElementById('p1').textContent, title: document.getElementById('title').textContent,
             hadUnit: !!unit, applied: r.applied, units: b.units.length };
           t.restore();
-          return out; })()''')
+          return out; })()''', world='open')
+        # PB4 row 5: the runtime lives in Open's isolated world; the page's own scripts cannot see it.
+        app.call('translate', action='translate'); state_is('translated')
+        page_view = app.eval(spa_tab, "typeof window.__openTranslate")
+        open_view = app.eval(spa_tab, "typeof window.__openTranslate", world='open')
+        app.call('translate', action='revert'); state_is('offered')
+        results['X7_isolated_world'] = {'ok': page_view == 'undefined' and open_view == 'object', 'page': page_view, 'open': open_view}
+        # PB4 row 5: Translate Selection (context menu) on device, then Copy; an English selection is refused.
+        def select_text(js_node):
+            # Selects the node and returns its center (the right-click must land on the selection).
+            box = app.eval(spa_tab, "(() => { const n = " + js_node + "; n.scrollIntoView({block: 'center'}); const r = document.createRange(); r.selectNodeContents(n); const s = getSelection(); s.removeAllRanges(); s.addRange(r); const b = n.getBoundingClientRect(); return [b.left + Math.min(40, b.width / 2), b.top + b.height / 2]; })()")
+            return box
+        at = select_text("document.getElementById('p1')")
+        app.call('events'); app.call('policy', contextMenu='record')
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        sel_menu = wait_until(lambda: [e for e in app.call('events') if e['type'] == 'contextMenu'], timeout=5) or []
+        sel_items = sel_menu[-1].get('openItems', []) if sel_menu else []
+        title = app.call('translate', action='selection').get('menuTitle', '')
+        at = select_text("document.getElementById('p1')")
+        app.call('policy', contextMenu='run-open:' + title)
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        sel = wait_until(lambda: (lambda v: v if v.get('state') in ('translated', 'failed') else None)(app.call('translate', action='selection')), timeout=10, step=.1) or {}
+        # The App's own snapshot (its windows only, no screen-recording tool): window + popover overlay.
+        if sel.get('popoverWindow'):
+            app.call('snapshot', path=os.path.join(OUT, 'page-translate-selection.png'), overlayWindows=[sel['popoverWindow']])
+        copied = app.call('translate', action='selection-copy')
+        pasted = subprocess.run(['/usr/bin/pbpaste'], capture_output=True, text=True).stdout
+        app.call('translate', action='selection-close')
+        results['X8_translate_selection'] = {'ok': title in sel_items and sel.get('state') == 'translated' and sel.get('source') == 'fr'
+            and sel.get('shown') and sel.get('result') and sel.get('result') != sel.get('text') and sel.get('shownText') == sel.get('result') and sel.get('anchorInPage')
+            and copied.get('pressed') and pasted == sel.get('result'),
+            'items': sel_items, 'state': sel, 'pasted': pasted}
+        app.eval(spa_tab, "document.body.insertAdjacentHTML('beforeend', '<p id=\"en-x8\">This sentence is written in plain English for the test.</p>'); true")
+        at = select_text("document.getElementById('en-x8')")
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        same = wait_until(lambda: (lambda v: v if v.get('state') == 'failed' and 'already in' in v.get('message', '') else None)(app.call('translate', action='selection')), timeout=10, step=.1) or app.call('translate', action='selection')
+        app.call('policy', contextMenu='')
+        app.call('translate', action='selection-close')
+        results['X8_selection_same_language'] = {'ok': same.get('state') == 'failed' and 'already in' in same.get('message', ''), 'state': same}
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
             and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
         # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
