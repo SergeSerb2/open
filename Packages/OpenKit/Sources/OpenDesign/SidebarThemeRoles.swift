@@ -86,7 +86,9 @@ public struct SidebarRoles: Sendable, Hashable {
         newTabGlyph = Self.ink(content, light: 0.50, dark: 0.50)
         placeholder = Self.ink(content, light: 0.30, dark: 0.30)
         urlText = Self.ink(content, light: 0.60, dark: 0.60)
-        bottomGlyph = Self.ink(content, light: 0.55, dark: 0.58)
+        // The bottom-bar plus: medians over 30 / 15 shots (session 3 `bottom_plus`); the
+        // Library icon measures 0.552 / 0.588 and Home keeps its own glyph fit.
+        bottomGlyph = Self.ink(content, light: 0.565, dark: 0.60)
         toolbarGlyphDisabled = Self.ink(content, light: 0.22, dark: 0.25)
         separator = Self.ink(content, light: ic ? 0.30 : 0.15, dark: ic ? 0.30 : 0.15)
         fieldFill = Self.ink(content, light: 0.043, dark: 0.10)

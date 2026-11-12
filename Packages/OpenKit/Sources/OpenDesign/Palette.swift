@@ -180,7 +180,7 @@ public enum SidebarRole {
     /// Close (×) and unload (−) glyphs on a hovered or selected row: core pixels
     /// black ≈ 0.56 (F0013, F0015) → `GrayA11`.
     public static let rowAccessory = GrayScale.a(11)
-    /// Bottom-bar glyphs: black 0.55 / white 0.58 (`SidebarRoles`; session 3).
+    /// Bottom-bar plus: black 0.565 / white 0.60 (`SidebarRoles`; session 3).
     public static let bottomGlyph = SidebarRoles.token(\.bottomGlyph)
     /// Bottom-bar glyphs while the window is inactive: peak black ≈ 0.28 on the
     /// inactive capture → `SidebarForeground` (0.30). Dark: guess.
