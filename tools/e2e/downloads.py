@@ -228,6 +228,14 @@ def checks(factory, results, tmp, config, harness):
         failed = start('/fail'); library()
         check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed', 30), item=item(failed), row=row(failed))
         dismiss_library()
+        # PB1-b wiring: the download started above got a flight record when it was created: played to the
+        # Library button, or skipped for a known reason (the Library covers the sidebar at that point of the
+        # suite; Reduce Motion on the rented Macs). Read only now: an early downloads-state call changes the
+        # rows the checks above read. The motion itself is features-render DF1–DF8.
+        flight = next((f for f in state().get('flights', []) if f['id'] == known), None)
+        played = bool(flight) and 'duration' in flight and 0.2 < flight['duration'] < 2.5 \
+            and flight['target'][0] < flight['start'][0] and flight['target'][1] > flight['start'][1]
+        check('download_flight', played or (bool(flight) and flight.get('skipped') in ('Library open', 'Reduce Motion')), flight=flight)
 
 
     def files_flow():

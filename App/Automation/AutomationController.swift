@@ -326,6 +326,7 @@
       case "welcome": return try welcome(a)
       case "easel": return try easel(a)
       case "note": return try note(a)
+      case "blank-window": return try blankWindowState()
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -379,6 +380,7 @@
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
       case _ where Self.liveDataCommands.contains(cmd): return try await runLiveDataCommand(cmd, a)
+      case "favorites-empty-state": return try runFavoritesEmptyCommand(a)
       case "history-state", "history-clear", "library-history-state", "library-history-delete":
         return try await runHistoryCommand(cmd, a)
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
@@ -627,6 +629,7 @@
         case "today": destination = .spaceToday(SpaceID(rawValue: uuid))
         case "pinned": destination = .spacePinned(SpaceID(rawValue: uuid))
         case "folder": destination = .folder(ItemID(rawValue: uuid))
+        case "favorites": destination = .favorites(ProfileID(rawValue: uuid))
         default: throw Failure(message: "invalid drop parent")
         }
         return controller.context.performNodeDrop(ids: ids, to: destination, index: index)
@@ -734,7 +737,7 @@
         guard let controller = app.frontWindowController, let path = (a["items"] as? [String])?.joined(separator: "\u{1F}") ?? a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
         let node: ItemID?
         if let raw = a["node"] {
-          guard let text = raw as? String, let uuid = UUID(uuidString: text), app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+          guard let text = raw as? String, let uuid = UUID(uuidString: text), (app.hostFactories[controller.windowID]?.model ?? app.model).node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
           node = ItemID(rawValue: uuid)
         } else { node = nil }
         let separator: Character = a["items"] != nil ? "\u{1F}" : "/"
@@ -949,7 +952,8 @@
         let peek = controller.peekController
         return ["shown": peek.isShown, "expanding": peek.isExpanding, "stack": peek.stack.map { item in
           ["source": item.sourceTabID.description, "originalHostTab": item.hostTabID.description,
-           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0] as [String: Any]
+           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0,
+           "style": (item.host as? EngineWebContentHost).map { $0.content.runtimeStyle == .chrome ? "chrome" : "alloy" } ?? ""] as [String: Any]
         }] as [String: Any]
       case "spaces":
         return app.model.spaces.map { space in
@@ -1656,6 +1660,22 @@
           SitePermissionStore.forContext(context).set(origin: origin, kind: kind, state: s, requestSystemAuthorization: false)
         }
         return SitePermissionStore.forContext(context).state(origin: origin, kind: kind).rawValue
+      case "protocol-handlers":
+        // Chromium's web protocol handler registry of the focused Profile.
+        let context = try focusedBrowser(w, create: false).context
+        var result: [String: Any] = [:]
+        // Remove first, so `translated` describes the state after the removal.
+        if let scheme = a["removeScheme"] as? String, let template = a["removeURLTemplate"] as? String {
+          result["removed"] = context.protocolHandlers.first { $0.scheme == scheme && $0.urlTemplate == template }
+            .map { context.removeProtocolHandler($0) } ?? false
+        }
+        if let raw = a["translate"] as? String, raw.utf8.count <= 4096, let target = URL(string: raw) {
+          result["translated"] = context.protocolHandlerURL(for: target)?.absoluteString ?? NSNull()
+        }
+        result["handlers"] = context.protocolHandlers.map {
+          ["scheme": $0.scheme, "urlTemplate": $0.urlTemplate, "default": $0.isDefault] as [String: Any]
+        }
+        return result
       case "download-dir":
         w.downloadDirectory = URL(fileURLWithPath: a["path"] as? String ?? NSTemporaryDirectory())
         return true

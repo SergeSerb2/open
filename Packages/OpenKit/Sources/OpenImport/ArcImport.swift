@@ -21,6 +21,8 @@ public struct ImportReport: Sendable {
     public var folders: Int = 0
     /// Arc Live Folders brought over with their settings (LF L7).
     public var liveFolders: Int = 0
+    /// Profiles whose Favorites empty-state card Arc had dismissed (A3).
+    public var favoritesEmptyDismissed: Int = 0
     public var splits: Int = 0
     public var routingRules: Int = 0
     public var skippedEasels: Int = 0
@@ -690,8 +692,11 @@ public struct ArcImporter {
                 }
                 let title = note.title.isEmpty ? ((item["title"] as? String) ?? "") : note.title
                 note.title = title
+                // `SidebarArcDocument.customInfo.iconType` is the same custom icon as a tab's
+                // (easels-notes.md §4.3); Open's Note rows take an icon through Change Icon….
                 let tab = Tab(id: Self.itemID(forArcID: arcID), url: NoteLink.url(for: noteID),
                               title: title.isEmpty ? "Untitled" : title,
+                              iconOverride: tabCustomIcon(from: nd),
                               createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
                               lastActiveAt: Self.date(from2001: (nd["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
                               isUnread: item["isUnread"] as? Bool ?? false)
@@ -1099,6 +1104,14 @@ public struct ArcImporter {
             } catch { report.extensionProfilesUnreadable += 1 }
         }
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
+        // Favorites empty-state card (A3): Arc's dismissal per Profile key, or the older global flag.
+        if let prefs = try? ArcPreferences.read(arcDirectory: arcDirectory), prefs.found {
+            let all = prefs.bools[ArcPreferenceMapping.favoritesEmptyDismissedKey] == true
+            let ids = Set(prefs.favoritesEmptyDismissedProfiles.map { ProfileID(rawValue: Self.profileID(forArcProfileKey: $0)) })
+            for profile in model.profiles where all || ids.contains(profile.id) {
+                profile.favoritesEmptyStateDismissed = true; report.favoritesEmptyDismissed += 1
+            }
+        }
         return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords,
             sourceDefaultProfileID: defaultProfileID,
             sourceProfileDirectories: sourceProfileDirectories,

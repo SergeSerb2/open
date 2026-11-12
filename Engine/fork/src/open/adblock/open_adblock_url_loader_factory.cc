@@ -215,6 +215,22 @@ std::string ListCspOf(const open_adblock::OpenBlockerResult& result) {
   return std::string(csp);
 }
 
+// §7.4 rule 4: the $removeparam target of `request`, or an empty GURL. Same
+// origin, GET or HEAD, a different URL, and never from a cut URL.
+GURL RewriteOf(const open_adblock::OpenBlockerResult& result,
+               const network::ResourceRequest& request) {
+  if (result.truncated || result.rewritten_url.empty() ||
+      (request.method != "GET" && request.method != "HEAD")) {
+    return GURL();
+  }
+  GURL rewritten(std::string(result.rewritten_url));
+  if (!rewritten.is_valid() || rewritten == request.url ||
+      !url::IsSameOriginWith(rewritten, request.url)) {
+    return GURL();
+  }
+  return rewritten;
+}
+
 network::URLLoaderCompletionStatus BlockedStatus() {
   return network::URLLoaderCompletionStatus(net::ERR_BLOCKED_BY_CLIENT);
 }
@@ -642,8 +658,13 @@ void OpenAdBlockURLLoaderFactory::StartRequest(
     RecordAdBlockRequestLatency(base::TimeTicks::Now() - arrival);
   };
 
+  if (context_.main_frame_navigation) {
+    StartMainFrameRequest(std::move(receiver), request_id, options, request,
+                          std::move(client), annotation, arrival, fail_open);
+    return;
+  }
   // §7.4 rule 1: off, excluded, not http(s), or a main-frame document
-  // (defensive: main-frame navigation factories are not wrapped). Not
+  // (defensive: main-frame factories take the branch above). Not
   // |is_outermost_main_frame|: that flag marks every request the main frame
   // makes, its subresources included.
   if (fail_open || !context_.matcher->IsActiveFor(context_.top_host) ||
@@ -697,17 +718,60 @@ void OpenAdBlockURLLoaderFactory::StartRequest(
   OpenAdBlockURLLoader* raw = loader.get();
   loaders_.insert(std::move(loader));
 
-  // §7.4 rule 4: a $removeparam rewrite, same origin, GET or HEAD, not a
-  // navigation, and not from a cut URL. At most one per request.
-  const GURL rewritten(std::string(result.rewritten_url));
-  if (!result.truncated && rewritten.is_valid() && !navigation &&
-      (request.method == "GET" || request.method == "HEAD") &&
-      url::IsSameOriginWith(rewritten, request.url) &&
-      rewritten != request.url) {
+  // §7.4 rule 4: a $removeparam rewrite, same origin, GET or HEAD, and not
+  // from a cut URL. At most one per request: the followed request is not
+  // checked again. Subframe navigations included (EZ 09:05, 2026-11-12).
+  const GURL rewritten = RewriteOf(result, request);
+  if (rewritten.is_valid()) {
     raw->StartWithRewrite(request, rewritten);
   } else {
     raw->StartTarget(request);
   }
+  RecordAdBlockRequestLatency(base::TimeTicks::Now() - arrival);
+}
+
+void OpenAdBlockURLLoaderFactory::StartMainFrameRequest(
+    mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+    int32_t request_id,
+    uint32_t options,
+    const network::ResourceRequest& request,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+    const net::MutableNetworkTrafficAnnotationTag& annotation,
+    base::TimeTicks arrival,
+    bool fail_open) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BusyScope busy(CpuPart::kRequest);
+  // Off, no query, not http(s), or an excluded site (the request's own host:
+  // a main frame is its own top site).
+  if (fail_open || !request.url.SchemeIsHTTPOrHTTPS() ||
+      !request.url.has_query() ||
+      !context_.matcher->IsActiveFor(request.url.host())) {
+    target_->CreateLoaderAndStart(std::move(receiver), request_id, options,
+                                  request, std::move(client), annotation);
+    RecordAdBlockRequestLatency(base::TimeTicks::Now() - arrival);
+    return;
+  }
+  open_adblock::OpenBlockerResult result;
+  {
+    CpuPartScope cpu(CpuPart::kCheck);
+    result = context_.matcher->Check(request.url, request.url,
+                                      OpenRequestType::Document,
+                                      kOpenAdBlockMatchCapBytes);
+  }
+  // Main frames are never blocked or redirected; only rule 4 applies.
+  const GURL rewritten = RewriteOf(result, request);
+  if (!rewritten.is_valid()) {
+    target_->CreateLoaderAndStart(std::move(receiver), request_id, options,
+                                  request, std::move(client), annotation);
+    RecordAdBlockRequestLatency(base::TimeTicks::Now() - arrival);
+    return;
+  }
+  auto loader = std::make_unique<OpenAdBlockURLLoader>(
+      this, std::move(receiver), request_id, options, std::move(client),
+      annotation, OpenRequestType::Document, request.url, std::string());
+  OpenAdBlockURLLoader* raw = loader.get();
+  loaders_.insert(std::move(loader));
+  raw->StartWithRewrite(request, rewritten);
   RecordAdBlockRequestLatency(base::TimeTicks::Now() - arrival);
 }
 

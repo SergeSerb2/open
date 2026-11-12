@@ -43,6 +43,11 @@ struct SidebarMenus {
     /// "Move to ▸": every other Space, a separator, "New Space…".
     private func moveTo(_ nodeID: ItemID) -> NSMenuItem {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
+        if context.isWindowOnly {
+            // A Blank Window's tab moves into one of the browser's Spaces (the App handles the intent).
+            parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, .moveToSpace(nodeID: nodeID, space: $0.id)) })
+            return parent
+        }
         let current = context.model.parent(of: nodeID).flatMap(spaceID(of:))
         // One row per Space in dock order, the current one checked (capture session 8 item 2).
         var items: [NSMenuItem] = context.model.spaces.map { space in
@@ -81,7 +86,8 @@ struct SidebarMenus {
         let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
         func hasLinks(_ node: SidebarNode) -> Bool {
             switch node {
-            case .tab: return true
+            // A Note has no shareable address in Open (its own row menu disables Copy Link).
+            case .tab(let tab): return !Self.isNote(tab)
             case .split(let split): return !split.panes.isEmpty
             case .folder(let folder): return folder.children.contains(where: hasLinks)
             }
@@ -125,7 +131,11 @@ struct SidebarMenus {
         if !tabs.isEmpty {
             // With a folder Arc draws only "Delete" (nothing was executed in the capture); Open keeps the
             // tabs' archive item beside it until a capture shows what Delete does to the tabs.
-            items.append(item("Archive Tabs", .archiveNodes(ids: tabs)))
+            // Arc STR has the plural "Remove Notes from Sidebar" beside the row's "Remove Note from Sidebar"
+            // (easels-notes.md §4.3); used when every selected row is a Note. GUESS: its place in this menu
+            // (Arc 1.172 cannot show a Note row, so no capture can settle it).
+            let onlyNotes = folders.isEmpty && !tabObjects.isEmpty && tabObjects.count == ids.count && tabObjects.allSatisfy(Self.isNote)
+            items.append(item(onlyNotes ? "Remove Notes from Sidebar" : "Archive Tabs", .archiveNodes(ids: tabs)))
             let spaces = Set(ids.map { context.model.parent(of: $0) }.map { parent -> SpaceID? in
                 if case .spaceToday(let id)? = parent { id } else { nil }
             })

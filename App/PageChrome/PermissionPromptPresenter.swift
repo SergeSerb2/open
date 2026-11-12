@@ -51,7 +51,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     guard !closed, let owner, !owner.isClosing else { request.dismiss(); return }
     guard entries.filter({ $0.page === page }).count + (current?.page === page ? 1 : 0) < PageChromeLimits.pendingRequests,
           request.origin.absoluteString.utf8.count <= PageChromeLimits.urlBytes,
-          request.kinds.rawValue != 0, request.kinds.rawValue & ~UInt32(0x80000fff) == 0 else {
+          request.kinds.rawValue != 0, request.kinds.rawValue & ~UInt32(0x80001fff) == 0,
+          (request.protocolHandlerScheme ?? "").utf8.count <= 64 else {
       owner.record("pageChromeRefused", page, ["reason": "Permission request exceeds queue, origin or kind limits."])
       request.dismiss(); return
     }
@@ -62,9 +63,12 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     if previous.values.allSatisfy({ $0 == .allow }) { request.grant(); return }
     entries.append(Entry(page: page, request: request, previous: previous)); presentPending()
   }
-  static func question(origin: URL, kinds: OEPermissionKind) -> String {
+  static func question(origin: URL, kinds: OEPermissionKind, protocolScheme: String? = nil) -> String {
     let site = URLComponents(url: origin, resolvingAgainstBaseURL: false)?.host ?? "this website"
     switch kinds {
+    // navigator.registerProtocolHandler. The mail wording is Arc's (PB1, E-questions 07:05).
+    case .protocolHandler where protocolScheme == "mailto": return "Make \(site) your default mail app?"
+    case .protocolHandler: return "Allow \(site) to open all \(protocolScheme ?? "these") links?"
     case .notifications: return "Allow \(site) to send you notifications?"
     case .idleDetection: return "Allow \(site) to know when you’re actively using this device?"
     case .multipleDownloads: return "Allow \(site) to download multiple files?"
@@ -112,7 +116,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     }
     guard anchor.view.window != nil else { return }
     entries.remove(at: index); current = entry
-    view.question.stringValue = Self.question(origin: entry.request.origin, kinds: entry.request.kinds)
+    view.question.stringValue = Self.question(origin: entry.request.origin, kinds: entry.request.kinds,
+                                                  protocolScheme: entry.request.protocolHandlerScheme)
     let symbol = SitePermissionStore.kinds.first(where: { entry.request.kinds.contains($0.0) })?.2 ?? "lock"
     view.symbol.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
     let screen = anchor.view.window!.convertToScreen(anchor.view.convert(anchor.rect, to: nil))

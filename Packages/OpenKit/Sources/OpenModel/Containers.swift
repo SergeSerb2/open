@@ -102,6 +102,9 @@ public final class Profile {
     public var favorites: [Tab]
     public var settings: ProfileSettings
     public var dataDirectoryName: String
+    /// The user dismissed the Favorites empty-state card for this Profile (audit A3; Arc keeps
+    /// `topAppsEmptyStateDismissedForProfiles`). Stored with the Profile in the snapshot.
+    public var favoritesEmptyStateDismissed = false
 
     public init(id: ProfileID = ProfileID(), name: String = "Default", icon: SpaceIcon? = nil, favorites: [Tab] = [], settings: ProfileSettings = ProfileSettings(), dataDirectoryName: String = "Default") {
         self.id = id; self.name = name; self.icon = icon

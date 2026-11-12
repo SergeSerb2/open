@@ -395,6 +395,55 @@ def context_menu_checks(factory, results, tmp, h):
             return {'ok': bool(stack) and url == origin + '/target.html' and disabled, 'state': state, 'url': url, 'nested': nested.get('shown')}
         run('cm_peek_and_split_disabled', peek)
 
+        def peek_extension_items():
+            # A12: Peek pages are Alloy style. The engine adds the extension's
+            # chrome.contextMenus items to CEF's Alloy model (CEF patch 0306), with
+            # Chrome's grouping, and a click reaches contextMenus.onClicked.
+            focus()
+            name = 'Open context menu limits probe'
+            extension = wait(lambda: next((e for e in app.call('extensions')['installed'] if e['name'] == name), None), timeout=15)
+            assert extension, 'real extension fixture missing'
+            probe = h.new_tab(app, 'chrome-extension://' + extension['id'] + '/probe.html')
+            def send(**message):
+                return app.eval(probe, 'chrome.runtime.sendMessage(' + json.dumps(message) + ')')
+            state = {}
+            try:
+                assert send(op='configure', count=2).get('ok')
+                send(op='clicks')
+                app.call('select', tab=tab); focus()
+                menu('#link', 'run-open:Open Link in Peek')
+                state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
+                page = state['stack'][-1]['content']
+                app.call('wait', tab=page)
+                app.eval(page, 'document.body.innerHTML += \'<a id="nested" href="/target.html?x=1">Nested link</a>\'')
+                shown, _ = menu('p', target=page)
+                leaves = [c for c in shown.get('commands', []) if c['submenu'] == name]
+                ran, _ = menu('p', 'run:%d' % leaves[0]['id'], target=page) if leaves else ({}, [])
+                page_click = wait(lambda: send(op='clicks').get('clicks') or None, timeout=5) or []
+                link_shown, _ = menu('#nested', target=page)
+                link_leaves = [c for c in link_shown.get('commands', []) if c['submenu'] == name]
+                if len(link_leaves) > 1:
+                    menu('#nested', 'run:%d' % link_leaves[1]['id'], target=page)
+                link_click = wait(lambda: send(op='clicks').get('clicks') or None, timeout=5) or []
+                assert send(op='configure', count=0).get('ok')
+                none, _ = menu('p', target=page)
+            finally:
+                h._try(lambda: send(op='configure', count=0))
+                h._try(lambda: app.call('peek-close'))
+                h._try(lambda: app.call('close', tab=probe))
+                h._try(lambda: app.call('select', tab=tab))
+            target_url = origin + '/target.html'
+            return {'ok': [c['title'] for c in leaves] == ['Probe leaf 0', 'Probe leaf 1'] and all(c['enabled'] for c in leaves)
+                          and state['stack'][-1].get('style') == 'alloy'
+                          and len(page_click) == 1 and page_click[0]['menuItemId'] == 'leaf-0'
+                          and page_click[0]['pageUrl'] == target_url and page_click[0]['linkUrl'] is None and page_click[0]['frameId'] == 0
+                          and len(link_click) == 1 and link_click[0]['menuItemId'] == 'leaf-1'
+                          and link_click[0]['linkUrl'] == target_url + '?x=1' and link_click[0]['pageUrl'] == target_url
+                          and not [c for c in none.get('commands', []) if c['submenu'] == name],
+                    'peek': state, 'leaves': leaves, 'pageClick': page_click, 'linkLeaves': link_leaves,
+                    'linkClick': link_click, 'afterRemoval': none.get('shown')}
+        run('cm_peek_extension_items', peek_extension_items)
+
         def search(selector, text, title, expected):
             focus()
             select(selector, text)
