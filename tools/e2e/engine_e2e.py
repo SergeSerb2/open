@@ -11149,7 +11149,8 @@ def library_capture_checks(app, require, root, evidence):
     width, _, first_pixel = read_image(first_png)
     _, _, next_pixel = read_image(next_png)
     scale = width / window_width
-    points = [(panel_frame[0] + r['frame'][0] + 6, panel_frame[1] + r['frame'][1] + r['frame'][3] / 2) for r in listed[:2]]
+    # Inside the selection plate, clear of the text: the row's middle, 7 pt below its top.
+    points = [(panel_frame[0] + r['frame'][0] + r['frame'][2] / 2, panel_frame[1] + r['frame'][1] + 7) for r in listed[:2]]
     before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
     after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
     distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
