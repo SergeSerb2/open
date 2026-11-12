@@ -699,7 +699,8 @@
           guard let text = raw as? String, let uuid = UUID(uuidString: text), app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
           nodeID = ItemID(rawValue: uuid)
         }
-        guard var level = controller.sidebar.contextMenu(nodeID: nodeID) else { throw Failure(message: "no sidebar menu") }
+        // `surface=url-field`: the URL field's right-click menu instead of a row's.
+        guard var level = a["surface"] as? String == "url-field" ? controller.sidebar.urlFieldMenu() : controller.sidebar.contextMenu(nodeID: nodeID) else { throw Failure(message: "no sidebar menu") }
         if let path = a["path"] as? String {
           for part in path.split(separator: "/") {
             guard let sub = level.items.first(where: { $0.title == part && !$0.isAlternate })?.submenu else { throw Failure(message: "\(part) has no submenu") }
@@ -721,7 +722,7 @@
         } else { node = nil }
         let separator: Character = a["items"] != nil ? "\u{1F}" : "/"
         guard !path.isEmpty, !path.split(separator: separator, omittingEmptySubsequences: false).contains(where: { $0.isEmpty }) else { throw Failure(message: "empty sidebar menu path") }
-        guard var level = controller.sidebar.contextMenu(nodeID: node) else { throw Failure(message: "no sidebar menu") }
+        guard var level = a["surface"] as? String == "url-field" ? controller.sidebar.urlFieldMenu() : controller.sidebar.contextMenu(nodeID: node) else { throw Failure(message: "no sidebar menu") }
         let parts = path.split(separator: separator).map(String.init)
         for (depth, part) in parts.enumerated() {
           let matches = level.items.indices.filter { index in

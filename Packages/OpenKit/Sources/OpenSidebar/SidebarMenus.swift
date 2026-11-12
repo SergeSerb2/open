@@ -426,10 +426,22 @@ struct SidebarMenus {
         return parent
     }
 
-    /// Bottom-bar plus button. guess: not captured.
-    /// Right-click on the URL field (CC-36; order guess).
+    /// Right-click on the URL field, Arc 1.172.2 (capture session 3 Part D): Copy URL · Share ▸ ·
+    /// Capture… · Capture Full Page · Capture in Portrait Mode · — · Show as Toolbar ·
+    /// Disable Shared Quotes. Share stays Open's picker until C3 records Arc's submenu.
     func urlField() -> NSMenu {
-        menu([item("Show as Toolbar", .setToolbarShown(true)), .separator(), item("Manage Extensions", .manageExtensions)])
+        let tab = context.currentTab
+        let quotes = UserDefaults.standard.object(forKey: SidebarContext.sharedQuotesKey) as? Bool ?? true
+        return menu([
+            item("Copy URL", enabled: tab != nil, .copyCurrentURL),
+            tab.map(share) ?? ClosureMenuItem("Share…", enabled: false) {},
+            item("Capture…", enabled: tab != nil, .performCommand("capture-page")),
+            item("Capture Full Page", enabled: tab != nil, .performCommand("capture-full-page")),
+            item("Capture in Portrait Mode", enabled: tab != nil, .performCommand("capture-portrait")),
+            .separator(),
+            item("Show as Toolbar", .setToolbarShown(true)),
+            item(quotes ? "Disable Shared Quotes" : "Enable Shared Quotes", .setSharedQuotes(!quotes)),
+        ])
     }
 
     /// Right click on the Library button (capture C-report-s3 Part D): a disabled

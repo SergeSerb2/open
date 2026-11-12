@@ -748,6 +748,24 @@ def context_menu_checks(factory, results, tmp, h):
                     h._try(lambda t=tab_id: app.call('close', tab=t))
                 h._try(focus)
         run('cm_sidebar_menu_order', sidebar_menu_order)
+
+        # D2c URL field menu (S3D order). Share stays "Share…" until C3 item 1; the toggle flips Shared Quotes.
+        def url_field_menu():
+            focus()
+            expected = ['Copy URL', 'Share…', 'Capture…', 'Capture Full Page', 'Capture in Portrait Mode', '—',
+                        'Show as Toolbar', 'Disable Shared Quotes']
+            listed = app.call('sidebar-menu-items', surface='url-field')
+            app.call('sidebar-menu', surface='url-field', item='Disable Shared Quotes')
+            flipped = app.call('sidebar-menu-items', surface='url-field')
+            app.call('sidebar-menu', surface='url-field', item='Enable Shared Quotes')
+            restored = app.call('sidebar-menu-items', surface='url-field')
+            app.call('sidebar-menu', surface='url-field', item='Copy URL')
+            copied = app.call('pasteboard')
+            rows = {'order': listed['items'] == expected, 'none_disabled_with_page': listed['disabled'] == [],
+                    'quotes_toggle': flipped['items'][-1] == 'Enable Shared Quotes' and restored['items'][-1] == 'Disable Shared Quotes',
+                    'copy_url': isinstance(copied, str) and copied.startswith(origin)}
+            return {'ok': all(rows.values()), 'rows': rows, 'listed': listed, 'copied': copied}
+        run('cm_url_field_menu', url_field_menu)
         if only_case and not ran_cases:
             raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:
