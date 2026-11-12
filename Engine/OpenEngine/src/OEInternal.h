@@ -308,6 +308,14 @@ class OEDevToolsClient;
                     mediaCallback:(CefRefPtr<CefMediaAccessCallback>)media
                    mediaRequested:(uint32_t)mediaRequested
                    promptCallback:(CefRefPtr<CefPermissionPromptCallback>)prompt;
+- (void)oe_setProtocolHandlerScheme:(NSString*)scheme
+                        urlTemplate:(NSString*)urlTemplate;
+@end
+
+@interface OEProtocolHandler ()
+- (instancetype)initOEWithScheme:(NSString*)scheme
+                      urlTemplate:(NSString*)urlTemplate
+                        isDefault:(BOOL)isDefault;
 @end
 
 @interface OEContextMenu ()

@@ -1020,7 +1020,12 @@ def feature_checks(app, style, results, tmp):
     app.call("policy", dialogs="accept", prompt="hello", permissions="grant", contextMenu="record",
              fullscreen="record")
 
+    # Touched-row runs: OPEN_E2E_FEATURES_ONLY=row[,row] runs only those rows of this function.
+    only_rows = set(filter(None, os.environ.get("OPEN_E2E_FEATURES_ONLY", "").split(",")))
+
     def run(name, fn):
+        if only_rows and name not in only_rows:
+            return
         begin_row(name)
         try:
             results[name] = fn()
@@ -1233,6 +1238,50 @@ def feature_checks(app, style, results, tmp):
             ' opus: MediaSource.isTypeSupported(\'audio/webm; codecs="opus"\'),'
             ' mp3: document.createElement("audio").canPlayType("audio/mpeg")})')}
 
+    def protocol_handler():
+        # navigator.registerProtocolHandler (PB1 mailto): the prompt carries the kind,
+        # scheme and template; a grant stores the handler in Chromium's registry; a
+        # navigation to the scheme goes to the handler; removal ends it. Deny stores nothing.
+        kind = 1 << 12
+        template = "https://example.com/?compose=%s"
+        w = new_tab(app, "https://example.com/")
+        try:
+            before = app.call("protocol-handlers", translate="mailto:someone@example.org")
+            app.call("events")
+            app.eval(w, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+            wait_until(lambda: any(h["scheme"] == "mailto" and h["default"] for h in app.call("protocol-handlers")["handlers"]), timeout=5)
+            prompts = [e for e in app.call("events") if e["type"] == "permission"]
+            granted = app.call("protocol-handlers", translate="mailto:someone@example.org")
+            app.eval(w, 'location.href = "mailto:someone@example.org"')
+            routed = wait_until(lambda: (app.eval(w, "location.href") or "").startswith("https://example.com/?compose=mailto"), timeout=10)
+            landed = app.eval(w, "location.href")
+            app.call("policy", permissions="deny")
+            app.call("navigate", tab=w, url="https://example.com/")
+            app.call("wait", tab=w)
+            app.call("events")
+            app.eval(w, 'navigator.registerProtocolHandler("web+opentest", "https://example.com/?x=%s")')
+            time.sleep(1)
+            denied_prompts = [e for e in app.call("events") if e["type"] == "permission"]
+            denied = app.call("protocol-handlers", translate="web+opentest:1")
+            removed = app.call("protocol-handlers", removeScheme="mailto", removeURLTemplate=template,
+                               translate="mailto:someone@example.org")
+        finally:
+            app.call("policy", permissions="grant")
+            app.call("close", tab=w)
+        expected = "https://example.com/?compose=mailto%3Asomeone%40example.org"
+        return {"ok": before["translated"] is None and before["handlers"] == []
+                      and len(prompts) == 1 and prompts[0]["kinds"] == kind
+                      and prompts[0].get("protocolScheme") == "mailto" and prompts[0].get("protocolURLTemplate") == template
+                      and granted["translated"] == expected
+                      and granted["handlers"] == [{"scheme": "mailto", "urlTemplate": template, "default": True}]
+                      and bool(routed) and landed == expected
+                      and len(denied_prompts) == 1 and denied_prompts[0]["kinds"] == kind
+                      and denied_prompts[0].get("protocolScheme") == "web+opentest"
+                      and denied["translated"] is None and len(denied["handlers"]) == 1
+                      and removed["removed"] is True and removed["handlers"] == [] and removed["translated"] is None,
+                "before": before, "prompts": prompts, "granted": granted, "landed": landed,
+                "deniedPrompts": denied_prompts, "denied": denied, "removed": removed}
+
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
@@ -1301,14 +1350,15 @@ def feature_checks(app, style, results, tmp):
                      ("context_menu", context_menu), ("audio_state", audio), ("fullscreen", fullscreen),
                      ("picture_in_picture", pip), ("pdf_viewer", pdf), ("print_to_pdf", print_to_pdf),
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
-                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
+                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("protocol_handler", protocol_handler), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
     def sad_tab():
         return runpy.run_path(os.path.join(ROOT, "tools/e2e/sad_tab.py"))["run"](
             app, results, new_tab, wait_until, t, run)
     run("sad_tab", sad_tab)
-    runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
-        app, results, tmp, new_tab, wait_until)
+    if not only_rows:
+        runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
+            app, results, tmp, new_tab, wait_until)
 
 
 
@@ -10416,9 +10466,9 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     undo()
     require('E3_unpin_and_menu_duplicate_selection', unpinned and len(ids_after - ids_before) == 3 and shape(tree()['today']) == before_dup,
             newIDs=sorted(ids_after - ids_before), tree=tree())
-    select(abc); app.call('sidebar-menu', node=a, item='Pin Tabs')
+    select(abc); app.call('sidebar-menu', node=a, item='Pin Tabs', alternate=True)
     menu_pinned = all(app.tab(n)['section'] == 'pinned' for n in abc)
-    app.call('sidebar-menu', node=a, item='Unpin Tabs')
+    app.call('sidebar-menu', node=a, item='Unpin Tabs', alternate=True)
     before_context_dup = shape(tree()['today']); ids_before = {n['id'] for n in walk(tree()['today'])}
     app.call('sidebar-menu', node=a, item='Duplicate'); ids_after = {n['id'] for n in walk(tree()['today'])}; undo()
     require('A3_selection_context_pin_duplicate', menu_pinned and all(app.tab(n)['section'] == 'today' for n in abc)
@@ -10430,7 +10480,7 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     # Copy plain/Markdown and both move variants use real selection menus.
     select(abc)
     app.call('sidebar-menu', node=a, item='Copy Links'); plain = app.call('pasteboard')
-    app.call('sidebar-menu', node=a, item='Copy links as Markdown'); markdown = app.call('pasteboard')
+    app.call('sidebar-menu', node=a, item='Copy links as Markdown', alternate=True); markdown = app.call('pasteboard')
     require('A3_selection_copy_links', plain.splitlines() == [app.tab(n)['url'] for n in abc]
             and markdown.splitlines() == ['[%s](%s)' % (app.tab(n)['title'], app.tab(n)['url']) for n in abc])
     dest = fresh('Move Destination'); app.call('space', space=space); select(abc)
@@ -12968,7 +13018,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -13195,6 +13245,11 @@ def main():
             # Every first-run helper uses this factory, including F12 and the
             # multi-Profile importer. Exercise the real player at zero volume.
             launch_args += ["--intro-sound=silent"]
+        # The Favorites empty-state card (A3) adds 105 pt above the Space title on a fresh Profile. Suites
+        # written before it keep the old geometry; a suite that checks the card passes
+        # extra_args=["--favorites-empty-state=shown"].
+        if not any(a.startswith("--favorites-empty-state=") for a in (extra_args or [])):
+            launch_args += ["--favorites-empty-state=hidden"]
         app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=first_run if first_run is not None else opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
@@ -13496,6 +13551,9 @@ def main():
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
+        elif opts.only == "favorites-empty":
+            results["favorites-empty"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "favorites_empty.py"))["run"](factory, results["favorites-empty"], tmp, globals())
         elif opts.only == "live-data":
             results["live-data"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
@@ -13548,7 +13606,7 @@ def main():
                         feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
-            if opts.only == "features" and not opts.features_passwords_engine_safety:
+            if opts.only == "features" and not opts.features_passwords_engine_safety and not os.environ.get("OPEN_E2E_FEATURES_ONLY"):
                 # Own launches: Chrome's startup-complete signal (BEST_EFFORT tasks).
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/startup_complete.py"))["run"](
                     factory, results["features"], new_tab, wait_until, begin_row, opts.style)
@@ -13650,14 +13708,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode"):
+    for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

@@ -380,6 +380,7 @@
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
       case _ where Self.liveDataCommands.contains(cmd): return try await runLiveDataCommand(cmd, a)
+      case "favorites-empty-state": return try runFavoritesEmptyCommand(a)
       case "history-state", "history-clear", "library-history-state", "library-history-delete":
         return try await runHistoryCommand(cmd, a)
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
@@ -628,6 +629,7 @@
         case "today": destination = .spaceToday(SpaceID(rawValue: uuid))
         case "pinned": destination = .spacePinned(SpaceID(rawValue: uuid))
         case "folder": destination = .folder(ItemID(rawValue: uuid))
+        case "favorites": destination = .favorites(ProfileID(rawValue: uuid))
         default: throw Failure(message: "invalid drop parent")
         }
         return controller.context.performNodeDrop(ids: ids, to: destination, index: index)
@@ -695,6 +697,18 @@
         }
         let fresh = controller.sidebar.libraryButtonContextMenu() ?? menu
         return ["items": fresh.items.map { ["title": $0.title, "enabled": $0.isEnabled, "on": $0.state == .on] as [String: Any] }]
+      case "plus-popover":
+        // The bottom-bar "+" popover: op=toggle (as a click on "+"), op=key code=<125|126|36|53>, or state only.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no window") }
+        switch a["op"] as? String {
+        case "toggle"?: controller.sidebar.togglePlusPopover()
+        case "key"?:
+          guard let code = a["code"] as? Int, [125, 126, 36, 76, 53].contains(code) else { throw Failure(message: "unsupported key code") }
+          controller.sidebar.plusPopoverKey(UInt16(code))
+        case nil: break
+        default: throw Failure(message: "unknown plus-popover op")
+        }
+        return controller.sidebar.plusPopoverState
       case "sidebar-menu-items":
         // The right-click menu of a row (or the Space with no node) in Arc's notation:
         // "—" for a separator, "Title ▸" for a submenu; `disabled` lists disabled titles.
@@ -938,7 +952,8 @@
         let peek = controller.peekController
         return ["shown": peek.isShown, "expanding": peek.isExpanding, "stack": peek.stack.map { item in
           ["source": item.sourceTabID.description, "originalHostTab": item.hostTabID.description,
-           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0] as [String: Any]
+           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0,
+           "style": (item.host as? EngineWebContentHost).map { $0.content.runtimeStyle == .chrome ? "chrome" : "alloy" } ?? ""] as [String: Any]
         }] as [String: Any]
       case "spaces":
         return app.model.spaces.map { space in
@@ -1645,6 +1660,22 @@
           SitePermissionStore.forContext(context).set(origin: origin, kind: kind, state: s, requestSystemAuthorization: false)
         }
         return SitePermissionStore.forContext(context).state(origin: origin, kind: kind).rawValue
+      case "protocol-handlers":
+        // Chromium's web protocol handler registry of the focused Profile.
+        let context = try focusedBrowser(w, create: false).context
+        var result: [String: Any] = [:]
+        // Remove first, so `translated` describes the state after the removal.
+        if let scheme = a["removeScheme"] as? String, let template = a["removeURLTemplate"] as? String {
+          result["removed"] = context.protocolHandlers.first { $0.scheme == scheme && $0.urlTemplate == template }
+            .map { context.removeProtocolHandler($0) } ?? false
+        }
+        if let raw = a["translate"] as? String, raw.utf8.count <= 4096, let target = URL(string: raw) {
+          result["translated"] = context.protocolHandlerURL(for: target)?.absoluteString ?? NSNull()
+        }
+        result["handlers"] = context.protocolHandlers.map {
+          ["scheme": $0.scheme, "urlTemplate": $0.urlTemplate, "default": $0.isDefault] as [String: Any]
+        }
+        return result
       case "download-dir":
         w.downloadDirectory = URL(fileURLWithPath: a["path"] as? String ?? NSTemporaryDirectory())
         return true

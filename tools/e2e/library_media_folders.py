@@ -3,7 +3,7 @@
 
 Flow: Media first-use card -> "Choose Folders..." -> folder files appear as Media rows (images and
 movies only; hidden files, symlinks and other types never) -> the Library button's right-click
-"Show media from:" menu turns sources off and on -> "Hide from Library" hides one file and
+"Show media from:" menu turns sources off and on -> "Hide from Open" hides one file and
 survives a relaunch. Run: python3 tools/e2e/library_media_folders.py --output DIR --config Release
 """
 import argparse
@@ -104,9 +104,10 @@ def run(output, config='Release', frames=False):
 
             doc = next(r for r in rows() if r['id'].endswith('/doc-photo.png'))
             actions = state(action='row-menu', id=doc['id'])['items']
-            check('file_row_menu', [a['title'] if isinstance(a, dict) else a for a in actions][:3] == ['Open', 'Copy', 'Show in Finder']
-                  and 'Hide from Library' in json.dumps(actions) and 'Delete' not in json.dumps(actions), items=actions)
-            state(action='row-action', id=doc['id'], name='Hide from Library')
+            titles = [a['title'] if isinstance(a, dict) else a for a in actions]
+            check('file_row_menu', titles[:3] == ['Open in Preview', 'Send via iMessage', 'AirDrop'] and titles[3].startswith('Copy')
+                  and titles[4:] == ['Show in Finder', 'separator', 'Hide from Open'] and 'Delete' not in json.dumps(actions), items=actions)
+            state(action='row-action', id=doc['id'], name='Hide from Open')
             hidden = wait_until(lambda: 'doc-photo.png' not in names(), timeout=5, step=.05)
             check('hide_from_library', hidden and (folders['Documents'] / 'doc-photo.png').exists(), names=names())
 

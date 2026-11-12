@@ -395,6 +395,55 @@ def context_menu_checks(factory, results, tmp, h):
             return {'ok': bool(stack) and url == origin + '/target.html' and disabled, 'state': state, 'url': url, 'nested': nested.get('shown')}
         run('cm_peek_and_split_disabled', peek)
 
+        def peek_extension_items():
+            # A12: Peek pages are Alloy style. The engine adds the extension's
+            # chrome.contextMenus items to CEF's Alloy model (CEF patch 0306), with
+            # Chrome's grouping, and a click reaches contextMenus.onClicked.
+            focus()
+            name = 'Open context menu limits probe'
+            extension = wait(lambda: next((e for e in app.call('extensions')['installed'] if e['name'] == name), None), timeout=15)
+            assert extension, 'real extension fixture missing'
+            probe = h.new_tab(app, 'chrome-extension://' + extension['id'] + '/probe.html')
+            def send(**message):
+                return app.eval(probe, 'chrome.runtime.sendMessage(' + json.dumps(message) + ')')
+            state = {}
+            try:
+                assert send(op='configure', count=2).get('ok')
+                send(op='clicks')
+                app.call('select', tab=tab); focus()
+                menu('#link', 'run-open:Open Link in Peek')
+                state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
+                page = state['stack'][-1]['content']
+                app.call('wait', tab=page)
+                app.eval(page, 'document.body.innerHTML += \'<a id="nested" href="/target.html?x=1">Nested link</a>\'')
+                shown, _ = menu('p', target=page)
+                leaves = [c for c in shown.get('commands', []) if c['submenu'] == name]
+                ran, _ = menu('p', 'run:%d' % leaves[0]['id'], target=page) if leaves else ({}, [])
+                page_click = wait(lambda: send(op='clicks').get('clicks') or None, timeout=5) or []
+                link_shown, _ = menu('#nested', target=page)
+                link_leaves = [c for c in link_shown.get('commands', []) if c['submenu'] == name]
+                if len(link_leaves) > 1:
+                    menu('#nested', 'run:%d' % link_leaves[1]['id'], target=page)
+                link_click = wait(lambda: send(op='clicks').get('clicks') or None, timeout=5) or []
+                assert send(op='configure', count=0).get('ok')
+                none, _ = menu('p', target=page)
+            finally:
+                h._try(lambda: send(op='configure', count=0))
+                h._try(lambda: app.call('peek-close'))
+                h._try(lambda: app.call('close', tab=probe))
+                h._try(lambda: app.call('select', tab=tab))
+            target_url = origin + '/target.html'
+            return {'ok': [c['title'] for c in leaves] == ['Probe leaf 0', 'Probe leaf 1'] and all(c['enabled'] for c in leaves)
+                          and state['stack'][-1].get('style') == 'alloy'
+                          and len(page_click) == 1 and page_click[0]['menuItemId'] == 'leaf-0'
+                          and page_click[0]['pageUrl'] == target_url and page_click[0]['linkUrl'] is None and page_click[0]['frameId'] == 0
+                          and len(link_click) == 1 and link_click[0]['menuItemId'] == 'leaf-1'
+                          and link_click[0]['linkUrl'] == target_url + '?x=1' and link_click[0]['pageUrl'] == target_url
+                          and not [c for c in none.get('commands', []) if c['submenu'] == name],
+                    'peek': state, 'leaves': leaves, 'pageClick': page_click, 'linkLeaves': link_leaves,
+                    'linkClick': link_click, 'afterRemoval': none.get('shown')}
+        run('cm_peek_extension_items', peek_extension_items)
+
         def search(selector, text, title, expected):
             focus()
             select(selector, text)
@@ -705,7 +754,7 @@ def context_menu_checks(factory, results, tmp, h):
         run('cm_join_meeting_enabled', lambda: {'ok': row_enabled('join-meeting') is True})
 
         # D2c menu order (docs/re/sidebar-menus-parity.md §1): Arc 1.172.2, capture session 3 Part D.
-        # Open differences, each recorded: Share stays "Share…" (a picker) until C3 item 1 records Arc's submenu.
+        # Share ▸ lists the system share services (capture session 8 item 1).
         def sidebar_menu_order():
             focus()
             # Its own Space, so Archive Tabs Above touches only this case's rows.
@@ -718,16 +767,25 @@ def context_menu_checks(factory, results, tmp, h):
                 empty = app.call('folder', tabs=[], title='Menu Empty', section='pinned')
                 today_ids = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
                 items = lambda node, **kw: app.call('sidebar-menu-items', **({'node': node} if node else {}), **kw)
-                today_expected = ['Copy Link', 'Share…', '—', 'Change Icon…', 'Rename…', 'Mute', '—', 'Open in Split View',
-                                  'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Other Tabs', 'Archive Tabs Below',
-                                  'Archive Tabs Above']
-                pinned_head = ['Copy Link', 'Share…', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
+                # Drawn items (capture session 8): the ⌥ alternates Archive Other Tabs / Archive Tabs Above are hidden.
+                today_expected = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', '—', 'Open in Split View',
+                                  'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Tabs Below']
+                pinned_head = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
                                'Open in Split View', 'Duplicate', 'Move to ▸', '—']
+                # Pin, favourite and folder moves animate the outline; a row's menu is found by its
+                # on-screen position, so wait until the first row answers with a tab menu twice in a row.
+                def settled():
+                    one = items(today_ids[0])['items']
+                    return one[:1] == ['Copy Link'] and one == items(today_ids[0])['items']
+                wait(settled, timeout=5)
                 first, last = items(today_ids[0]), items(today_ids[-1])
+                try: share = items(today_ids[0], path='Share')
+                except RuntimeError as error: share = {'items': [], 'error': str(error), 'menu': first, 'tab': app.tab(today_ids[0])}
                 rows = {
                     'today': first['items'] == today_expected,
-                    'today_first_above_disabled': 'Archive Tabs Above' in first['disabled'] and 'Archive Tabs Below' not in first['disabled'],
-                    'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'] and 'Archive Tabs Above' not in last['disabled'],
+                    'today_last_below_disabled': 'Archive Tabs Below' in last['disabled'],
+                    'share_lists_services': len(share['items']) > 0 and 'Add to Reading List' not in share['items'],
+                    'move_to_current_checked': (h._try(lambda: app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order')) or {}).get('checked') is True,
                     'today_silent_mute_disabled': 'Mute' in first['disabled'],
                     'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
                     'favorite': items(favorite)['items'] == pinned_head + ['Remove Favorite'],
@@ -738,15 +796,15 @@ def context_menu_checks(factory, results, tmp, h):
                 }
                 # Behaviour: Archive Tabs Above on the row whose menu enables it archives every row above, then undo.
                 before = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
-                target = next((t for t in before if 'Archive Tabs Above' not in items(t)['disabled']), None)
-                rows['archive_above_enabled_somewhere'] = target is not None and target != before[0]
+                target = before[-1] if len(before) > 1 else None
+                rows['archive_above_enabled_somewhere'] = target is not None
                 if target is not None:
-                    app.call('sidebar-menu', node=target, item='Archive Tabs Above')
+                    app.call('sidebar-menu', node=target, item='Archive Tabs Above', alternate=True)
                     after = [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab']
                     rows['archive_above_acts'] = target in after and len(after) < len(before)
                     app.call('key', key='z', modifiers=['command'], route='app')
                     rows['archive_above_undo'] = wait(lambda: [n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'tab'] == before, timeout=3) is True
-                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target,
+                return {'ok': all(rows.values()), 'rows': rows, 'todayOrder': before, 'target': target, 'share': share,
                         'menus': {'todayFirst': first, 'todayLast': last, 'pinned': items(pinned), 'favorite': items(favorite)}}
             finally:
                 for tab_id in made:
@@ -754,10 +812,10 @@ def context_menu_checks(factory, results, tmp, h):
                 h._try(focus)
         run('cm_sidebar_menu_order', sidebar_menu_order)
 
-        # D2c URL field menu (S3D order). Share stays "Share…" until C3 item 1; the toggle flips Shared Quotes.
+        # D2c URL field menu (S3D order, Share ▸ from capture session 8); the toggle flips Shared Quotes.
         def url_field_menu():
             focus()
-            expected = ['Copy URL', 'Share…', 'Capture…', 'Capture Full Page', 'Capture in Portrait Mode', '—',
+            expected = ['Copy URL', 'Share ▸', 'Capture…', 'Capture Full Page', 'Capture in Portrait Mode', '—',
                         'Show as Toolbar', 'Disable Shared Quotes']
             listed = app.call('sidebar-menu-items', surface='url-field')
             app.call('sidebar-menu', surface='url-field', item='Disable Shared Quotes')
@@ -783,6 +841,94 @@ def context_menu_checks(factory, results, tmp, h):
             ok = titles == expected and enabled.get('New Boost') is True and enabled.get('New Split') is True
             return {'ok': ok, 'titles': titles, 'enabled': enabled, 'keys': keys}
         run('cm_plus_menu', plus_menu)
+
+        # D2c "+" popover (capture session 8 item 7): opens on New Tab, ↓ wraps, ↑ returns, Esc closes, Return runs.
+        def plus_popover():
+            focus()
+            pop = lambda **kw: app.call('plus-popover', **kw)
+            opened = pop(op='toggle')
+            down = pop(op='key', code=125); down2 = pop(op='key', code=125)
+            pop(op='key', code=126); up = pop(op='key', code=126)
+            closed = pop(op='key', code=53)
+            folders = lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder'])
+            before = folders()
+            pop(op='toggle'); pop(op='key', code=125); pop(op='key', code=125)   # New Space, New Folder
+            ran = pop(op='key', code=36)
+            made = wait(lambda: folders() == before + 1, timeout=3) is True
+            app.call('sidebar-key', key='escape')
+            app.call('key', key='z', modifiers=['command'], route='app')
+            rows = {'opens_on_new_tab': opened['shown'] and opened['highlighted'] == 'New Tab' and opened['closeGlyph'],
+                    'titles': [r['title'] for r in opened['rows']] == ['New Space', 'New Folder', 'New Easel', 'New Boost', 'New Split', 'New Tab'],
+                    'size': opened['size'] == [222, 309] and all(r['frame'][2:] == [194, 40] for r in opened['rows']),
+                    'down_wraps': down['highlighted'] == 'New Space' and down2['highlighted'] == 'New Folder',
+                    'up_returns': up['highlighted'] == 'New Tab',
+                    'esc_closes': closed['shown'] is False and closed['closeGlyph'] is False,
+                    'return_runs_new_folder': ran['shown'] is False and made}
+            return {'ok': all(rows.values()), 'rows': rows, 'opened': opened}
+        run('cm_plus_popover', plus_popover)
+
+        # D2c split row (capture session 8 item 5): order, pane submenu, ⌥ alternates hidden.
+        def split_menu_order():
+            focus()
+            app.call('space', space=app.call('space-create', title='Split order', profile='Default'))
+            made = [app.call('open', url=origin + '/target.html?split=%d' % i, background=True)['id'] for i in range(2)]
+            try:
+                app.call('select', tab=made[0])
+                app.call('sidebar-menu', node=made[1], item='Open in Split View')
+                split_id = next(n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+                # A pane's menu title is its page title: wait until both pages have one.
+                for tab_id in made:
+                    app.call('wait', tab=tab_id)
+                wait(lambda: all(app.tab(t).get('title') for t in made), timeout=10)
+                listed = app.call('sidebar-menu-items', node=split_id)
+                panes = [t for t in listed['items'] if t.endswith(' ▸') and t not in ('Move to ▸',)]
+                pane = app.call('sidebar-menu-items', node=split_id, path=panes[0][:-2]) if panes else {'items': []}
+                head = ['Share Split View…', '—', 'Separate All Tabs', 'Add Tab…', 'Convert to Vertical Split View', '—', 'Tab Options']
+                tail = ['—', 'Duplicate', 'Move to ▸', '—', 'Archive Item']
+                items = listed['items']
+                rows = {'head': items[:7] == head, 'two_panes': len(panes) == 2,
+                        'tail': items[9:14] == tail and items[14:] in ([], ['Archive Tabs Below']),
+                        'tab_options_header': 'Tab Options' in listed['disabled'],
+                        'pane': pane['items'] == ['Separate from Split View', '—', 'Share ▸', 'Mute', 'Copy Link', 'Copy link as Markdown', '—', 'Archive Item']}
+                return {'ok': all(rows.values()), 'rows': rows, 'listed': listed, 'pane': pane}
+            finally:
+                for tab_id in made:
+                    h._try(lambda t=tab_id: app.call('close', tab=t))
+                h._try(focus)
+        run('cm_split_menu_order', split_menu_order)
+
+        # D2c multi-selection (capture session 8 item 6): drawn order for 2 Today tabs and for a tab + a folder.
+        def selection_menu_order():
+            focus()
+            app.call('space', space=app.call('space-create', title='Selection order', profile='Default'))
+            made = [app.call('open', url=origin + '/target.html?sel=%d' % i, background=True)['id'] for i in range(3)]
+            try:
+                folder = app.call('folder', tabs=[made[2]], title='Sel Folder', section='pinned')
+                app.call('sidebar-click', node=made[0]); app.call('sidebar-click', node=made[1], modifiers=['cmd'])
+                tabs = app.call('sidebar-menu-items', node=made[0])
+                app.call('sidebar-key', key='escape')
+                app.call('sidebar-click', node=made[0]); app.call('sidebar-click', node=folder, modifiers=['cmd'])
+                mixed = app.call('sidebar-menu-items', node=folder)
+                app.call('sidebar-key', key='escape')
+                rows = {'tabs': tabs['items'] == ['Copy Links', 'Share 2 Items…', '—', 'Change Icon…', 'Mute', '—', 'Open in Split View', 'Duplicate',
+                                                  'Move to ▸', 'New Folder with 2 Items', '—', 'Archive Tabs', 'Archive Tabs Below'],
+                        'tabs_disabled': set(tabs['disabled']) == {'Change Icon…', 'Mute', 'Archive Tabs Below'},
+                        'mixed': mixed['items'] == ['Copy Links', 'Share 2 Items…', '—', 'Open in Split View', 'Move to ▸', 'New Folder with 2 Items',
+                                                    '—', 'Archive Tabs', 'Delete'],
+                        'mixed_split_disabled': 'Open in Split View' in mixed['disabled']}
+                # Behaviour: Open in Split View joins the two selected tabs into one split; undo restores them.
+                app.call('sidebar-click', node=made[0]); app.call('sidebar-click', node=made[1], modifiers=['cmd'])
+                app.call('sidebar-menu', node=made[0], item='Open in Split View')
+                kinds = [n['kind'] for n in app.call('sidebar-tree')['today']]
+                rows['split_from_selection'] = kinds.count('split') == 1
+                app.call('key', key='z', modifiers=['command'], route='app')
+                rows['split_undo'] = wait(lambda: 'split' not in [n['kind'] for n in app.call('sidebar-tree')['today']], timeout=3) is True
+                return {'ok': all(rows.values()), 'rows': rows, 'tabs': tabs, 'mixed': mixed}
+            finally:
+                for tab_id in made:
+                    h._try(lambda t=tab_id: app.call('close', tab=t))
+                h._try(focus)
+        run('cm_selection_menu_order', selection_menu_order)
         if only_case and not ran_cases:
             raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:
