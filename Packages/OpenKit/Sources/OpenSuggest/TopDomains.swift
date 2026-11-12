@@ -2,7 +2,9 @@ import Foundation
 
 /// Popular sites with display names (Arc parity FA TD-1/TD-2: Arc ships `TopDomains.json` and
 /// `popularDomains.json`). Open's own curated list in rough popularity order, written for Open; Arc's
-/// files are not used. Typed prefixes complete to these domains when no tab or history row does.
+/// files are not used. Typed prefixes offer the site as a row. Inline completion stays with tabs and history:
+/// Arc's "amazon" with no history shows no completion (commandbar-render Flows, CC-5); whether Arc
+/// completes a popular domain inline is not captured (C3-PB1-i).
 public enum TopDomains {
     public struct Site: Sendable, Hashable {
         public let domain: String
@@ -67,8 +69,7 @@ public enum TopDomains {
 }
 
 /// One row: the first popular site whose domain starts with the typed text ("you" → YouTube).
-/// Weighted below history, so the user's own pages still win; it may complete inline when no tab or
-/// history row completes (`InlineCompletion.canComplete`).
+/// Weighted below history, so the user's own pages still win. No inline completion (see above).
 public struct TopDomainsProvider: SuggestProvider {
     public let id = "topDomains"
     public init() {}
