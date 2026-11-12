@@ -105,18 +105,19 @@ def run(factory, results, tmp, harness):
             'ok': joined.get('outcome') == 'join' and joined.get('event') == 'teams' and joined.get('service') == 'teams',
             'joined': joined}
 
-        # 4. No meeting with a call link: a toast, no new tab.
+        # 4. No meeting with a call link: no feedback, as Arc (C3 capture, LEAD 02:15): no toast, no new tab.
         cal(action='fixture', access='granted', events=[
             {'id': 'nolink', 'title': 'Lunch', 'start': 10, 'location': 'Cafe'},
             {'id': 'old', 'title': 'Old call', 'start': -30, 'end': 30, 'url': MEET},  # started > 10 min ago
         ])
         n_tabs = len(tabs())
+        shown_before = app.call('toasts')['shown']
         joined = join('menu')
-        toast = toasts()
+        time.sleep(0.5)  # a toast would show at once; give it a moment
+        shown_after = app.call('toasts')['shown']
         results['cal_join_no_meeting'] = {
-            'ok': joined.get('outcome') == 'noMeeting' and len(tabs()) == n_tabs and bool(toast)
-                and toast[0]['title'] == 'No upcoming meetings',
-            'joined': joined, 'toast': toast[:1]}
+            'ok': joined.get('outcome') == 'noMeeting' and len(tabs()) == n_tabs and shown_after == shown_before,
+            'joined': joined, 'toasts': [shown_before, shown_after]}
 
         # 5. Calendar card (L4): a Pinned Google Calendar tab shows the native card on hover.
         card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq=lambda: cal(action='join-result').get('seq', 0))

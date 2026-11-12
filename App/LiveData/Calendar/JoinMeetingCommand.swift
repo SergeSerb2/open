@@ -60,9 +60,7 @@ extension EngineWebContentHostFactory {
       openMeetingLink(link, from: "command", event: event)
       return
     case .noMeeting:
-      // GUESS — capture pending (F2 capture 8): Arc's no-meeting feedback. Open shows a toast.
-      controller?.toasts.show(ToastContent(title: "No upcoming meetings", subtitle: "Meetings with a call link today appear here.",
-        symbol: "calendar", coalescingKey: "join-meeting"))
+      // Arc gives no feedback when there is no meeting (C3 capture, LEAD 02:15): no toast, no tab.
       record = ["outcome": "noMeeting"]
     case .noAccess(let access):
       // Open's own copy (EventKit replaces Arc's "Connect Calendar" sign-in; F2 report §7 risk note).
