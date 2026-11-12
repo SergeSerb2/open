@@ -209,6 +209,8 @@ public final class SidebarContext {
     /// (host, port, path, query).
     static func fieldText(_ url: URL, _ developerHosts: Set<String>) -> String {
         if url.absoluteString == "open://welcome" { return "Welcome to Open" }
+        // GUESS — capture pending (Arc 1.172 cannot create Notes): a Note's URL field names the kind.
+        if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "note" { return "Note" }
         let scheme = url.scheme?.lowercased()
         let key = scheme == "file" ? "file" : url.host()?.lowercased()
         guard let key, developerHosts.contains(key) else { return URL.displayHost(url) }
