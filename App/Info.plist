@@ -45,6 +45,8 @@
 	<true/>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>banner</string>
+	<key>NSDockTilePlugIn</key>
+	<string>OpenDockTile.docktileplugin</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Open shows your upcoming meetings and joins their video calls.</string>
 	<key>NSCameraUsageDescription</key>
