@@ -392,8 +392,9 @@ def run(factory, results, tmp, h):
         return chosen, report
     chosen, first = provider_import()
     first_files = sorted(p.name for p in marker.glob('*')) if marker.exists() else []
-    provider = (chosen.get('settingsProviders') or [{}])[0]
-    reported = (first.get('settingsProviders') or [{}])[0]
+    # Other providers (EZ's Easels) are registered too: pick the fixture by id.
+    provider = next((p for p in chosen.get('settingsProviders', []) if p['id'] == 'fixture'), {})
+    reported = next((p for p in first.get('settingsProviders', []) if p['id'] == 'fixture'), {})
     _, again = provider_import()
     repeat = again.get('settingsOutcome', {})
     app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
