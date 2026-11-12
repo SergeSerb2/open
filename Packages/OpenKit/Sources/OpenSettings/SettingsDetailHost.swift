@@ -63,14 +63,33 @@ struct SettingsDetailHost: NSViewRepresentable {
     }
     private func cancelIdlePreparation() {
         idleWork?.cancel(); idleWork = nil; idleSections.removeAll()
+        stopWaitingForSheet()
+    }
+    private var sheetEndObserver: NSObjectProtocol?
+    private func stopWaitingForSheet() {
+        if let sheetEndObserver { NotificationCenter.default.removeObserver(sheetEndObserver) }
+        sheetEndObserver = nil
+    }
+    /// A sheet (the import wizard) owns the window: a cold page layout (about 20 ms, more on
+    /// slower Macs) must not land inside its work. Resume once, when the sheet ends. No polling.
+    private func resumeIdlePreparationAfterSheet(in window: NSWindow) {
+        guard sheetEndObserver == nil else { return }
+        sheetEndObserver = NotificationCenter.default.addObserver(forName: NSWindow.didEndSheetNotification,
+                                                                  object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.stopWaitingForSheet(); self.scheduleIdlePreparation()
+            }
+        }
     }
     private func scheduleIdlePreparation() {
-        guard !idleSections.isEmpty else { return }
+        guard !idleSections.isEmpty, idleWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.idleWork?.isCancelled == false else { return }
                 self.idleWork = nil
-                guard self.window?.isVisible == true else { self.cancelIdlePreparation(); return }
+                guard let window = self.window, window.isVisible else { self.cancelIdlePreparation(); return }
+                if window.attachedSheet != nil { self.resumeIdlePreparationAfterSheet(in: window); return }
                 let section = self.idleSections.removeFirst()
                 if self.pages[section] == nil {
                     let view = self.page(for: section).0
