@@ -687,7 +687,17 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
             case "library-archive":
                 try await env.prepareLibrary(); let library = env.library
                 library.query = "Example"; library.archiveSpaceFilter = vm.model.spaces[0].id; await library.reloadArchive()
-                try require(library.archiveRows.count == 2 && !library.favicons.isEmpty, "search/Space filter or favicon store")
+                try require(library.archiveRows.count == 2, "search/Space filter returned \(library.archiveRows.count) Archive rows instead of 2")
+                // Native Library rows load icons on demand; the removed window's
+                // eager favicons dictionary is no longer populated by reload.
+                for row in library.archiveRows {
+                    let loaded = await withCheckedContinuation { continuation in
+                        library.loadRowIcon(row.url) { image in
+                            continuation.resume(returning: image?.isValid == true)
+                        }
+                    }
+                    try require(loaded, "native Archive row favicon missing for \(row.id)")
+                }
                 let restored = library.archiveRows[0].id; await library.restore(id: restored)
                 let disk = try env.diskModel()
                 try require(disk.spaces.contains { $0.today.contains { $0.id == restored } } && env.libraryActions.log.contains("restoreArchived \(restored)"), "restore did not reach Today on disk")
