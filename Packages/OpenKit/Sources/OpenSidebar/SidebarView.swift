@@ -849,6 +849,14 @@ extension SidebarView {
 
     /// The text the URL field shows: the current page's host or the placeholder.
     public var displayedURLText: String { urlField.displayedText }
+    /// The Space header's hover "…" button: its frame in the header and its menu titles (it opens
+    /// the Space menu, capture session 8 item 8).
+    public var spaceHeaderMore: (frame: CGRect, hidden: Bool, menu: [String])? {
+        guard let header = pager.currentPage?.header else { return nil }
+        header.layoutSubtreeIfNeeded()
+        let titles = header.more.menuProvider?()?.items.filter { !$0.isAlternate }.map { $0.isSeparatorItem ? "—" : $0.title } ?? []
+        return (header.more.frame, header.more.isHidden, titles)
+    }
     /// Read actual private-window view visibility for real-App acceptance.
     public var incognitoChrome: [String: Bool] {
         ["favoritesHidden": favorites.isHidden, "libraryHidden": bottomBar.home.isHidden,
