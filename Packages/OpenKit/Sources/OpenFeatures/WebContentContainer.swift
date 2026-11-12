@@ -10,6 +10,9 @@ public final class PaneSlotView: NSView {
     }
     public let tabID: ItemID
     public private(set) var paneChrome: PaneChromeView?
+    /// Developer Mode's content panel and its network list (DeveloperContentPanel.swift).
+    public private(set) var developerPanel: DeveloperContentPanelView?
+    public private(set) var networkList: NetworkListView?
     public private(set) var placeholderView: PlaceholderContentView?
     public private(set) var sadTabView: SadTabView?
     public private(set) var contentHostView: NSView?
@@ -31,11 +34,26 @@ public final class PaneSlotView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, toolbar: Bool = false, fullURL: Bool = false, focused: Bool, style: SpaceThemeStyle,
                    close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping (Bool) -> Void,
-                   toolbarMenu: (() -> NSMenu?)? = nil, reload: @escaping () -> Void, closeSadTab: @escaping () -> Void) {
+                   toolbarMenu: (() -> NSMenu?)? = nil, reload: @escaping () -> Void, closeSadTab: @escaping () -> Void,
+                   developer: Bool = false, networkLog: NetworkLog? = nil,
+                   developerAction: ((DeveloperPanelAction, NSView) -> Void)? = nil, closeNetwork: (() -> Void)? = nil) {
         isFocused = split && focused
         self.style = style; swipeIndicator?.style = style
         focusRing.strokeColor = style.accentColor(.light).cgColor
-        if split || toolbar {
+        let developer = developer && !split
+        if developer {
+            if developerPanel == nil { let panel = DeveloperContentPanelView(); developerPanel = panel; clip.addSubview(panel) }
+            developerPanel?.fill = style.lightPalette?.background.nsColor ?? .white
+            developerPanel?.urlString = tab.url.absoluteString
+            developerPanel?.onAction = developerAction
+            developerPanel?.networkShown = networkLog != nil
+        } else { developerPanel?.removeFromSuperview(); developerPanel = nil }
+        if developer, let networkLog {
+            if networkList == nil { let list = NetworkListView(); networkList = list; clip.addSubview(list) }
+            if networkList?.log !== networkLog { networkList?.log = networkLog }
+            networkList?.onClose = closeNetwork
+        } else { networkList?.log = nil; networkList?.removeFromSuperview(); networkList = nil }
+        if split || (toolbar && !developer) {
             if paneChrome == nil { let chrome = PaneChromeView(); paneChrome = chrome; clip.addSubview(chrome) }
             paneChrome?.role = split ? .pane : .toolbar; paneChrome?.showsFullURL = fullURL; paneChrome?.toolbarMenu = split ? nil : toolbarMenu
             // isFocused updates the bar, including when its value is unchanged.
@@ -90,17 +108,22 @@ public final class PaneSlotView: NSView {
         if indicator.superview !== clip {
             if let paneChrome { clip.addSubview(indicator, positioned: .below, relativeTo: paneChrome) } else { clip.addSubview(indicator) }
         }
-        let bar = paneChrome == nil ? 0 : SplitMetrics.barHeight
+        let bar = developerPanel != nil ? DeveloperPanelMetrics.height : paneChrome == nil ? 0 : SplitMetrics.barHeight
         indicator.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
         indicator.update(event)
     }
     /// Updates slot geometry without forcing layout in the embedded web subtree.
     fileprivate func layoutContents() {
         if clip.frame != bounds { clip.frame = bounds }
-        let bar = paneChrome == nil ? 0 : SplitMetrics.barHeight
+        let bar = developerPanel != nil ? DeveloperPanelMetrics.height : paneChrome == nil ? 0 : SplitMetrics.barHeight
         let chromeFrame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
         if paneChrome?.frame != chromeFrame { paneChrome?.frame = chromeFrame }
-        let page = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
+        if developerPanel?.frame != chromeFrame { developerPanel?.frame = chromeFrame }
+        let bottom = networkList == nil ? 0 : min(NetworkListView.height, max(0, bounds.height - bar - 120))
+        if let networkList, networkList.frame != CGRect(x: 0, y: 0, width: bounds.width, height: bottom) {
+            networkList.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bottom)
+        }
+        let page = CGRect(x: 0, y: bottom, width: bounds.width, height: max(0, bounds.height - bar - bottom))
         // Frame setters enter OpenEngine's geometry bridge even for equal values.
         // A cached slot can move while the page's local frame stays equal: keep
         // that window-coordinate change so Chrome's child window still follows.
@@ -170,6 +193,20 @@ public final class WebContentContainer: NSView {
     public var showsFullURL = false { didSet { if showsFullURL != oldValue { updateSlots() } } }
     /// Right-click menu of the content toolbar.
     public var onToolbarMenu: (() -> NSMenu?)?
+    /// Developer Mode sites (lowercased hosts, "file" for files), from the App's Developer Mode store.
+    public var developerModeHosts: Set<String> = [] { didSet { if developerModeHosts != oldValue { updateSlots() } } }
+    /// Tabs whose network list is open, and the App's per-tab request logs.
+    public var networkShownTabs: Set<ItemID> = [] { didSet { if networkShownTabs != oldValue { updateSlots() } } }
+    public var networkLogProvider: ((ItemID) -> NetworkLog?)?
+    public var onDeveloperAction: ((ItemID, DeveloperPanelAction, NSView) -> Void)?
+    public var onCloseNetwork: ((ItemID) -> Void)?
+    /// The Developer Mode site key of a URL: its lowercased http(s) host, or "file" (App `DeveloperMode.host(for:)`).
+    nonisolated public static func developerHost(_ url: URL?) -> String? {
+        guard let url, let scheme = url.scheme?.lowercased() else { return nil }
+        if scheme == "file" { return "file" }
+        guard scheme == "http" || scheme == "https", let host = url.host()?.lowercased(), !host.isEmpty, host.count <= 253 else { return nil }
+        return host
+    }
     public var onPaneClicked: ((ItemID) -> Void)?
     public var onLinkClicked: ((ItemID, URL, NSEvent.ModifierFlags) -> Bool)?
     public var onPaneClose: ((ItemID) -> Void)?
@@ -303,6 +340,11 @@ public final class WebContentContainer: NSView {
             if focused == id { onFocusedMetadata?(tab.title) }
         }
         slots.first { $0.tabID == id }?.paneChrome?.update()
+        // Developer Mode is per site: a navigation can show, hide or retitle the developer bar.
+        if !developerModeHosts.isEmpty, let slot = slots.first(where: { $0.tabID == id }), let tab = tabProvider(id) {
+            let wanted = ids.count == 1 && (Self.developerHost(tab.url).map { developerModeHosts.contains($0) } ?? false)
+            if wanted != (slot.developerPanel != nil) { updateSlots() } else { slot.developerPanel?.urlString = tab.url.absoluteString }
+        }
     }
     private func updateSlots() {
         for slot in slots {
@@ -318,7 +360,11 @@ public final class WebContentContainer: NSView {
                                // that changed after this view was configured.
                                if self.ids.count > 1, self.ids.contains(id) { self.onPaneClose?(id) }
                                else { self.onSadTabClose?(id) }
-                           })
+                           },
+                           developer: Self.developerHost(tab.url).map { developerModeHosts.contains($0) } ?? false,
+                           networkLog: networkShownTabs.contains(id) ? networkLogProvider?(id) : nil,
+                           developerAction: { [weak self] action, view in self?.onDeveloperAction?(id, action, view) },
+                           closeNetwork: { [weak self] in self?.onCloseNetwork?(id) })
             slot.paneChrome?.extensionsUI = extensionsUI
             slot.paneChrome?.onSiteControls = onSiteControls.map { handler in { handler(id) } }
             slot.paneChrome?.update()
