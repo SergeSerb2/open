@@ -69,7 +69,6 @@ public final class CaptureController {
 
     public static let dragToCaptureKey = "open.capture.dragToCaptureEnabled"
     public static let shortcutHintKey = "open.capture.shortcutHintLastShown"
-    public static let portraitBackgroundKey = "open.capture.portraitBackground"
     /// Lazy images load before a full-page capture (§4.6.4). Waits at most `fullPageSettle`.
     static let settleScript = """
     (async () => { document.querySelectorAll('img[loading=lazy]').forEach(i => { i.loading = 'eager' });
@@ -89,6 +88,20 @@ public final class CaptureController {
     public var playSound: () -> Void = { SoundEffects.shared.play(.capture) }
     /// Capture → Easel: the App shows its Easel menu at the button. Nil hides the action.
     public var addToEasel: ((Result, NSView) -> Void)?
+    /// The desktop wallpaper's bytes for the window's screen (Portrait Mode "Use Desktop
+    /// Wallpaper"). Called only when the user picks that swatch, never at popover open or at
+    /// launch. Nil (no access, a dynamic set, a folder) falls back to the website colour.
+    public var wallpaperData: (@MainActor () async -> Data?)?
+    /// Portrait Mode: the popover while it shows.
+    public private(set) var portraitPopover: PortraitPopoverPanel?
+    public private(set) var portraitView: PortraitCaptureView?
+    public private(set) var portraitPreviewCount = 0
+    public private(set) var wallpaperReads = 0
+    public private(set) var wallpaperFallbacks = 0
+    private var portraitPage: CGImage?
+    private var portraitWallpaper: Data?
+    private var portraitWork: Task<Void, Never>?
+    private var portraitTarget: NSView?
     /// After every finished, failed, or cancelled flow (automation waits on this).
     public var onChange: (() -> Void)?
 
@@ -138,6 +151,7 @@ public final class CaptureController {
         generation += 1; lastEntry = entry; lastError = nil
         if entry == .command, now() - defaults.double(forKey: Self.shortcutHintKey) > CaptureMetrics.shortcutHintInterval { pendingHint = true }
         if kind == .area { showOverlay(on: target.view, pressPoint: pressPoint) }
+        else if kind == .portrait { showPortrait(target) }
         else { capture(kind, selection: nil) }
     }
 
@@ -229,8 +243,8 @@ public final class CaptureController {
         let token = generation, content = target.content
         let viewSize = target.view.bounds.size
         let host = target.url?.host ?? target.url?.scheme ?? "", title = target.title, sourceURL = target.url
-        let background = CaptureComposer.PortraitBackground(defaultsValue: defaults.string(forKey: Self.portraitBackgroundKey))
-        let theme = style(), library = target.isPrivate ? nil : library
+        let portrait = PortraitStyle(defaults: defaults), wallpaper = portrait.source == .wallpaper ? portraitWallpaper : nil
+        let library = target.isPrivate ? nil : library
         if kind == .fullPage { dismissProgress = toasts.progress() }
         task = Task { @MainActor [weak self] in
             do {
@@ -243,7 +257,7 @@ public final class CaptureController {
                 } else { png = try await content.snapshotPNG(); truncated = false }
                 guard let self, self.generation == token else { return }
                 let output = try await CaptureComposer.render(.init(kind: kind, png: png, selection: selection, viewSize: viewSize,
-                                                                    portraitBackground: background, themeStyle: theme))
+                                                                    portrait: portrait, wallpaper: wallpaper))
                 guard self.generation == token else { return }
                 let savedID = try await library?.save(png: output.png, kind: kind, sourceHost: host, title: String(title.prefix(4096)))
                 guard self.generation == token else {
@@ -493,6 +507,7 @@ public final class CaptureController {
 
     /// Window close or controller teardown: cancel everything; nothing outlives the window.
     public func tearDown() {
+        closePortrait()
         generation += 1; task?.cancel(); task = nil
         dismissProgress?(); dismissProgress = nil
         held = nil; pendingHint = false
@@ -502,8 +517,97 @@ public final class CaptureController {
 
     /// Cancels the overlay or the card from outside (tab switch, automation).
     public func cancel() {
+        if portraitPopover != nil { closePortrait(); return }
         if let overlay { overlay.cancel() }
         else if phase == .capturing { generation += 1; task?.cancel(); task = nil; fail("The capture was cancelled.") }
         else { closeCard() }
+    }
+
+    // MARK: Portrait Mode popover
+
+    /// Opens the popover at the page's sidebar-side edge (the capture: it points at the page from
+    /// the sidebar side). The page snapshot for the preview is taken once, here.
+    private func showPortrait(_ target: PageTarget) {
+        closePortrait()
+        let view = PortraitCaptureView(style: PortraitStyle(defaults: defaults))
+        view.onStyle = { [weak self] next in self?.portraitStyleChanged(next) }
+        view.onCapture = { [weak self] in
+            guard let self else { return }
+            self.closePortrait()
+            self.capture(.portrait, selection: nil)
+        }
+        let popover = PortraitPopoverPanel(content: view)
+        let page = target.view
+        // Anchor: the page's sidebar-side edge, vertically centred (capture: it points at the page).
+        if let window = page.window {
+            let edge = window.convertPoint(toScreen: page.convert(CGPoint(x: 0, y: page.bounds.midY), to: nil))
+            popover.show(anchor: edge, in: window)
+        }
+        popover.onClose = { [weak self, weak popover] in
+            guard let self, let popover, self.portraitPopover === popover else { return }
+            self.closePortrait()
+        }
+        portraitPopover = popover; portraitView = view; portraitTarget = page
+        let token = generation, content = target.content
+        portraitWork = Task { @MainActor [weak self] in
+            guard let png = try? await content.snapshotPNG(), let self, self.generation == token,
+                  let image = CaptureComposer.decode(png) else { return }
+            self.portraitPage = Self.downscaled(image, maxWidth: 640)
+            self.refreshPortraitPreview()
+        }
+        onChange?()
+    }
+
+    public func closePortrait() {
+        portraitWork?.cancel(); portraitWork = nil
+        let popover = portraitPopover; portraitPopover = nil
+        popover?.onClose = nil; popover?.close()
+        portraitView = nil; portraitTarget = nil
+        portraitPage = nil
+    }
+
+    private func portraitStyleChanged(_ next: PortraitStyle) {
+        if next.source == .wallpaper && portraitWallpaper == nil {
+            // Read only now, on the user's pick.
+            let token = generation
+            wallpaperReads += 1
+            Task { @MainActor [weak self] in
+                let data = await self?.wallpaperData?()
+                guard let self, self.generation == token else { return }
+                if let data, CaptureComposer.wallpaperImage(data, longSide: 64) != nil {
+                    self.portraitWallpaper = data
+                    next.save(to: self.defaults)
+                } else {
+                    // No alert: log, then use the website colour.
+                    self.wallpaperFallbacks += 1
+                    FileHandle.standardError.write(Data("Open: Portrait Mode could not read the desktop wallpaper; using the website colour.\n".utf8))
+                    var fallback = next; fallback.source = .website
+                    fallback.save(to: self.defaults)
+                    self.portraitView?.style = fallback
+                }
+                self.refreshPortraitPreview()
+            }
+            return
+        }
+        next.save(to: defaults)
+        refreshPortraitPreview()
+    }
+
+    private func refreshPortraitPreview() {
+        guard let page = portraitPage, let view = portraitView else { return }
+        let style = view.style, wallpaper = style.source == .wallpaper ? portraitWallpaper : nil
+        portraitPreviewCount += 1
+        view.preview = CaptureComposer.portrait(page, style: style, wallpaper: wallpaper)
+        onChange?()
+    }
+
+    static func downscaled(_ image: CGImage, maxWidth: Int) -> CGImage {
+        guard image.width > maxWidth, let space = CGColorSpace(name: CGColorSpace.sRGB) else { return image }
+        let w = maxWidth, h = max(1, image.height * maxWidth / image.width)
+        guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return context.makeImage() ?? image
     }
 }

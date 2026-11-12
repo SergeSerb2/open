@@ -105,7 +105,8 @@ extension AutomationController {
     }
     // Reading `state` must not prompt: events are read only when access is already granted.
     guard service.source.access == .granted else { return out }
-    let events = await service.todayEvents()
+    let events = await service.todayEvents(remember: false)
+    out["joinableInMemory"] = service.joinableMeetingInMemory?.event.id ?? NSNull()
     out["events"] = events.map { ["id": $0.id, "title": $0.displayTitle, "join": $0.joinLink?.url.absoluteString ?? ""] }
     if let next = NextMeeting.pick(events, now: service.now) {
       out["next"] = ["id": next.event.id, "url": next.link.url.absoluteString, "service": next.link.service.rawValue]
