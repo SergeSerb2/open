@@ -204,8 +204,10 @@ extension AutomationController {
         state["settingsSource"] = wizard.plan.source.importKey
         state["settingsSelectedSource"] = wizard.selectedSourceID
         state["settingsSourcesLoaded"] = wizard.sourcesLoaded
+        state["settingsCanContinueFromSource"] = wizard.canContinueFromSource
         state["settingsSources"] = wizard.sources.map { source -> [String: Any] in
           ["id": source.id, "name": source.name, "family": source.family.rawValue, "selectable": wizard.canSelect(source),
+           "visible": wizard.visibleSources.contains(source),
            "status": wizard.sourceStatus(source) ?? "", "profiles": source.profiles.map { ["id": $0.id, "name": $0.name] }]
         }
         state["settingsBrowserLabels"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.browserReportCategories.map { ($0, wizard.countLabel($0)) })
