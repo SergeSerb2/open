@@ -322,7 +322,7 @@ The defaults below are proposals until the user selects that location:
 
 ```bash
 export OPEN_RELEASE_FEED_URL='https://sergeserb2.github.io/open-releases/appcast.xml'
-export OPEN_RELEASE_DOWNLOAD_PREFIX='https://github.com/SergeSerb2/open/releases/download/v<marketing>/'
+export OPEN_RELEASE_DOWNLOAD_PREFIX='https://github.com/SergeSerb2/open-releases/releases/download/v<marketing>/'
 ```
 
 Also fill `Public MPL source location:` and the exact source-offer links in
