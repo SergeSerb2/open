@@ -121,8 +121,8 @@ extension SpaceThemeStyle {
         return base == .dark ? .light : .dark
     }
 
-    /// No stored colour: the default theme (fixed corners, follows macOS).
-    public var isDefaultTheme: Bool { lightPalette == nil && contentAppearance == nil }
+    // `isDefaultTheme` is defined once, in SpaceAccent.swift (D2 and D3 both added it; main
+    // 0c1346a3 did not compile). That definition also requires the default corners fill.
 
     /// The active window's background at 3 × 3 points over the window.
     func fieldSamples() -> [RGBA] {
