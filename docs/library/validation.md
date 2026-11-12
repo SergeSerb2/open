@@ -1077,6 +1077,21 @@ not an M1 performance receipt.
 
 Preparation now separates detached row construction and text raster bodies.
 It checks elapsed time plus the next-body estimate before each layer and
-attaches only completed rows. Fixed M5 slices, rented functional suites and
-one new M1 replacement set are pending. The earlier failures do not qualify
+attaches only completed rows. Five fixed M5 launches have later-row maxima 3.306333, 2.871167,
+2.938625, 3.143625 and 3.163750 ms, all below 8.3 ms, with full trace
+coverage and normal cleanup. Rented functional suites and one new M1
+replacement set are pending. The earlier failures do not qualify
 open or scroll, and their original limits and receipts remain unchanged.
+
+At the fixed product head `072f2305`, the recreated rented Mac 2 passes Gallery
+14/14, Library content 96/96 and overlay 40/40. A complete Profiles rerun
+stops after 26 passing rows: `profile-engine action=delete` returns a Profile
+directory permission error. Its engine deletion adapter, Profile directory
+code and check match main. The cause has not been proved. All seven owned
+App cleanups pass normally with zero survivors. History did not run. The
+earlier rented Mac 1 attempt stopped on App-launch and window-count helper
+timeouts; that original failed receipt remains separate.
+
+The outside-Library functional failure stops further qualification under the
+lead's failure-stop rule. No new M1 measurement or final gate has run. A scope
+ruling is pending; no permission, assertion, timeout or receipt was changed.
