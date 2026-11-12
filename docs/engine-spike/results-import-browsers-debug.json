@@ -1,7 +1,26 @@
 {
   "cleanup": {
     "ok": true,
-    "processes": []
+    "processes": [
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          64140,
+          64149,
+          64150,
+          64151
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      }
+    ]
   },
   "config": "Debug",
   "engine": {
@@ -16,23 +35,193 @@
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794470169"
   },
   "import-browsers": {
-    "suite": {
-      "error": "local variable 'runpy' referenced before assignment",
-      "ok": false
+    "bookmarks_folder_tree": {
+      "error": "",
+      "folders": [
+        "Imported from Chrome",
+        "Imported from Chrome/Bookmarks bar",
+        "Imported from Chrome/Bookmarks bar/Example Folder",
+        "Imported from Chrome/Other bookmarks"
+      ],
+      "load": [
+        10.7578125,
+        9.033203125,
+        7.98779296875
+      ],
+      "ok": true,
+      "outcome": {
+        "Bookmark folders": 4,
+        "Bookmarks": 4,
+        "Duplicates": 0,
+        "History": 5,
+        "History duplicates": 0,
+        "Imported History": 5,
+        "Imported items": 4,
+        "Search settings": 1,
+        "Skipped bookmarks": 1
+      },
+      "summary": "Imported 4 bookmarks.",
+      "tabs": 4
+    },
+    "bookmarks_size_limit": {
+      "atLimit": "Found: 1",
+      "load": [
+        10.7578125,
+        9.033203125,
+        7.98779296875
+      ],
+      "ok": true,
+      "overLimit": "Could not be read"
+    },
+    "choose_counts": {
+      "labels": {
+        "Bookmarks": "Found: 4",
+        "History": "Found: 6",
+        "Search settings": "DuckDuckGo"
+      },
+      "load": [
+        10.64990234375,
+        8.9833984375,
+        7.96435546875
+      ],
+      "ok": true,
+      "title": "Import from Chrome"
+    },
+    "history_imported": {
+      "history": 5,
+      "load": [
+        10.7578125,
+        9.033203125,
+        7.98779296875
+      ],
+      "ok": true,
+      "visits": 5
+    },
+    "reimport_idempotent": {
+      "load": [
+        10.7578125,
+        9.033203125,
+        7.98779296875
+      ],
+      "nodes": 8,
+      "ok": true,
+      "repeat": {
+        "Bookmark folders": 0,
+        "Bookmarks": 0,
+        "Duplicates": 13,
+        "History": 0,
+        "History duplicates": 5,
+        "Imported History": 0,
+        "Imported items": 0,
+        "Search settings": 0,
+        "Skipped bookmarks": 1
+      }
+    },
+    "search_engine": {
+      "engines": [
+        "duckduckgo"
+      ],
+      "load": [
+        10.7578125,
+        9.033203125,
+        7.98779296875
+      ],
+      "ok": true
+    },
+    "second_profile_custom_search": {
+      "custom": [
+        "imported-ex"
+      ],
+      "engines": [
+        "imported-ex"
+      ],
+      "load": [
+        10.7578125,
+        9.033203125,
+        7.98779296875
+      ],
+      "ok": true,
+      "outcome": {
+        "Bookmark folders": 2,
+        "Bookmarks": 1,
+        "Duplicates": 0,
+        "Imported items": 1,
+        "Search settings": 1,
+        "Skipped bookmarks": 0
+      }
+    },
+    "sources_detected": {
+      "load": [
+        10.64990234375,
+        8.9833984375,
+        7.96435546875
+      ],
+      "ok": true,
+      "selected": "chrome",
+      "sources": {
+        "brave": [
+          false,
+          "No data",
+          0
+        ],
+        "chrome": [
+          true,
+          "",
+          2
+        ],
+        "edge": [
+          true,
+          "",
+          1
+        ],
+        "firefox": [
+          false,
+          "No data",
+          0
+        ],
+        "vivaldi": [
+          true,
+          "",
+          1
+        ]
+      },
+      "step": "Source",
+      "title": "Import from another browser"
+    },
+    "sources_unselectable": {
+      "brave": "No data",
+      "firefox": "No data",
+      "load": [
+        10.64990234375,
+        8.9833984375,
+        7.96435546875
+      ],
+      "ok": true
+    },
+    "undo": {
+      "load": [
+        10.7578125,
+        9.033203125,
+        7.98779296875
+      ],
+      "nodes": 0,
+      "ok": true,
+      "undoTitle": "Import from Chrome",
+      "visits": 0
     }
   },
   "interrupted_attempts": [],
   "lane": "all",
   "load": [
-    10.013671875,
-    8.75244140625,
-    7.83984375
+    10.64990234375,
+    8.9833984375,
+    7.96435546875
   ],
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "41249d9dba61dc143b73db2e794a62b64b85dfb4"
+    "head": "98d3db85723f3b87fd42f33af0b36dd95f2a823a"
   },
-  "started": "2026-11-12 02:07:31",
+  "started": "2026-11-12 02:08:14",
   "style": "chrome"
 }
