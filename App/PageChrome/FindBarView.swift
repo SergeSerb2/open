@@ -260,7 +260,8 @@ private final class FindFieldEditor: NSTextView {
     super.keyDown(with: event)
   }
   override func performFindPanelAction(_ sender: Any?) { onAction?((sender as? NSMenuItem)?.tag ?? 1) }
-  override func performTextFinderAction(_ sender: Any?) { onAction?(1) }
+  /// Find and Replace with the Find field focused: no effect (Arc's Find field handles tag 1 only).
+  override func performTextFinderAction(_ sender: Any?) {}
   override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
     if item.action == #selector(performFindPanelAction(_:)) || item.action == #selector(performTextFinderAction(_:)) { return true }
     return super.validateUserInterfaceItem(item)

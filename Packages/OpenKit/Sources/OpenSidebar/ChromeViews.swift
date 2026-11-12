@@ -56,22 +56,47 @@ final class ToolbarView: NSView {
         toggle.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
         setup(more, .more) { Tooltip(title: "More options", style: style()) }
         more.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
-        more.menuProvider = { [weak self] in self?.makeMoreMenu() }
+        more.action = { [weak self] in self?.toggleMorePopover() }
         more.isHidden = true
     }
 
-    /// "More options" (guess: the menu was not opened in the capture; plan §3.16).
-    func makeMoreMenu() -> NSMenu {
-        let menu = NSMenu(); menu.autoenablesItems = false
+    /// "More options": Arc's two rows are "Reload" ⌘R (dimmed without a page) and "Toggle Sidebar" ⌘S, in its own
+    /// popover card; the button shows "×" while the card is open (capture session 9, `46-pb5-a6-compact-more`,
+    /// C-report-s6 §8). "Stop Loading" while a page loads is Open's choice (GUESS: not captured).
+    func moreRows() -> [ToolbarMorePopover.Row] {
         let loading = context.pageIsLoading
-        let reload = ClosureMenuItem(loading ? "Stop Loading" : "Reload This Page", enabled: context.hasPage) { [unowned context] in
-            context.send(context.pageIsLoading ? .stopLoading : .reload)
+        return [
+            .init(icon: loading ? .stop : .reload, title: loading ? "Stop Loading" : "Reload", shortcut: loading ? "⌘." : "⌘R",
+                  isEnabled: context.hasPage) { [unowned context] in context.send(context.pageIsLoading ? .stopLoading : .reload) },
+            .init(icon: .sidebar, title: "Toggle Sidebar", shortcut: "⌘S", isEnabled: true) { [unowned context] in
+                context.send(.toggleSidebar)
+            },
+        ]
+    }
+    private weak var morePopoverStorage: ToolbarMorePopover?
+    /// The open card (nil once it left the view tree).
+    var morePopover: ToolbarMorePopover? { morePopoverStorage?.superview == nil ? nil : morePopoverStorage }
+
+    func toggleMorePopover() {
+        if let morePopover { morePopover.dismiss(); return }
+        guard let host = window?.contentView ?? topAncestor else { return }
+        let popover = ToolbarMorePopover(rows: moreRows())
+        let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
+        popover.dark = appearance == .dark
+        popover.onDismiss = { [weak self] in self?.more.glyphView.glyph = .spaceMore; self?.morePopoverStorage = nil }
+        popover.swallowsClick = { [weak self] location in
+            guard let self else { return false }
+            return self.more.bounds.contains(self.more.convert(location, from: nil))
         }
-        reload.keyEquivalent = loading ? "." : "r"; reload.keyEquivalentModifierMask = .command
-        let hide = ClosureMenuItem("Hide Sidebar") { [unowned context] in context.send(.toggleSidebar) }
-        hide.keyEquivalent = "s"; hide.keyEquivalentModifierMask = .command
-        menu.addItem(reload); menu.addItem(hide)
-        return menu
+        context.existingHoverPreviews?.dismiss()
+        popover.present(in: host, under: more)
+        morePopoverStorage = popover
+        more.glyphView.glyph = .rowClose
+    }
+    private var topAncestor: NSView? {
+        var view: NSView = self
+        while let parent = view.superview { view = parent }
+        return view === self ? nil : view
     }
 
     /// True while the toolbar shows Back, Forward, and "More options" only.
@@ -125,6 +150,11 @@ public enum SiteControlButtonState: String, Sendable {
 @MainActor
 final class URLFieldView: NSView {
     unowned let context: SidebarContext
+    /// "Search or Enter URL…", or "Search…" while the sidebar is compact (below `CompactToolbarMetrics.switchWidth`).
+    var placeholder: String {
+        ChromeMetrics.isCompact(sidebarWidth: superview?.bounds.width ?? bounds.width + 16) ? "Search…" : "Search or Enter URL…"
+    }
+    private var wasCompact = false
     private let fill = CALayer()
     private let magnifier = GlyphView()
     private let label = TextLabel()
@@ -163,7 +193,8 @@ final class URLFieldView: NSView {
         label.font = Typography.urlField.font
         label.baseline = URLFieldMetrics.textBaselineOffset
         label.inset = SpaceListMetrics.textInset
-        label.text = { [unowned context] in context.pageHost ?? "Search or Enter URL…" }
+        // The compact sidebar shortens the placeholder to "Search…" (capture session 9, C-report-s6 §8).
+        label.text = { [unowned self, unowned context] in context.pageHost ?? self.placeholder }
         label.color = { [unowned context] in
             (context.hasPage ? SidebarRole.urlText : SidebarRole.placeholder).nsColor
         }
@@ -240,6 +271,8 @@ final class URLFieldView: NSView {
 
     override func layout() {
         super.layout()
+        let compact = ChromeMetrics.isCompact(sidebarWidth: superview?.bounds.width ?? bounds.width + 16)
+        if compact != wasCompact { wasCompact = compact; label.needsDisplay = true }
         // Field frame is `[8, 46, W − 16, 36]` in sidebar space; this view is that frame.
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = bounds

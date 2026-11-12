@@ -91,7 +91,7 @@ def run(factory, results, tmp, api):
     evidence = root / '.re/handoff/sections/s17/c4'
     evidence.mkdir(parents=True, exist_ok=True)
     app = None
-    domain = 'io.github.sergeserb2.open'
+    domain = __import__('prefs_domain').domain()
     keys = ('open.settings.lastPane', 'open.library.lastSection', 'open.import.lastArcDir')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
@@ -753,7 +753,7 @@ def negative_gates(factory, results, tmp, api):
     evidence = Path(api.ROOT) / '.re/handoff/sections/s17/c4/negative'
     evidence.mkdir(parents=True, exist_ok=True)
     app = None
-    domain = 'io.github.sergeserb2.open'
+    domain = __import__('prefs_domain').domain()
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {'open.settings.lastPane': before.get('open.settings.lastPane')}

@@ -83,7 +83,7 @@ enum ToolbarChecks {
         window.sidebarWidth = BrowserWindowState.minimumSidebarWidth; c.layoutContent(); try await settle()
         check(c.sidebar.bounds.width == 164 && c.sidebar.toolbarVisibleButtons == ["more"] && !c.sidebar.urlFieldVisible,
               "TB8 164 pt compact sidebar with the toolbar: only More options (\(c.sidebar.toolbarVisibleButtons))")
-        check(c.sidebar.toolbarMoreMenu().items.map(\.title) == ["Reload This Page", "Hide Sidebar"], "TB8 compact More options keeps Reload and Hide Sidebar")
+        check(c.sidebar.toolbarMoreRows().map { $0.title } == ["Reload", "Toggle Sidebar"], "TB8 compact More options keeps Reload and Toggle Sidebar (Arc's titles, capture s9)")
 
         // A split keeps its pane bars; the toolbar flag only adds the bar to a single pane.
         let second = space.pinned[1].tab!
