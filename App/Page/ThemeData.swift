@@ -26,7 +26,9 @@ enum ThemeData {
     let first = lastEnabled == nil
     lastEnabled = now
     if now { active = true; watchThemes(app: app) }
-    if !(first && !now) { refreshAll(app: app) }
+    // Skip only a first observation of "off" when no page ever got variables (default ON makes
+    // the first observed change usually on → off, which must remove them).
+    if !(first && !now && !active) { refreshAll(app: app) }
   }
 
   private static var watching = false
