@@ -2,19 +2,6 @@ import Foundation
 import SQLite3
 import OpenModel
 
-/// One node of a Chromium `Bookmarks` tree (PUB: `components/bookmarks/browser/bookmark_codec.cc`).
-public indirect enum ChromiumBookmark: Sendable, Hashable {
-    case folder(guid: String, title: String, children: [ChromiumBookmark])
-    case url(guid: String, title: String, url: URL, added: Date?)
-
-    public var urlCount: Int {
-        switch self {
-        case .url: 1
-        case .folder(_, _, let children): children.reduce(0) { $0 + $1.urlCount }
-        }
-    }
-}
-
 /// The default search engine of a Chromium profile, in Chromium's template format.
 public struct ChromiumSearchEngine: Sendable, Hashable {
     public var name: String
@@ -58,12 +45,12 @@ public struct ChromiumProfileReader: Sendable {
 
     /// The three roots in Chromium order. Empty roots are dropped.
     /// GUESS — capture pending (F3 §3 item 3): Arc's subfolder titles for the roots.
-    public func bookmarks() throws -> (roots: [ChromiumBookmark], skipped: Int) {
+    public func bookmarks() throws -> (roots: [ImportedBookmark], skipped: Int) {
         let file = directory.appendingPathComponent("Bookmarks")
         guard FileManager.default.fileExists(atPath: file.path) else { throw ReadError.missing }
         guard let roots = try Self.readJSON(file)["roots"] as? [String: Any] else { throw ReadError.unreadable }
         var skipped = 0, nodes = 0
-        func node(_ value: Any, depth: Int) -> ChromiumBookmark? {
+        func node(_ value: Any, depth: Int) -> ImportedBookmark? {
             nodes += 1
             guard depth < Self.maxDepth, nodes <= Self.maxBookmarkNodes, let object = value as? [String: Any] else { skipped += 1; return nil }
             let guid = (object["guid"] as? String) ?? (object["id"] as? String) ?? ""
@@ -71,21 +58,21 @@ public struct ChromiumProfileReader: Sendable {
             switch object["type"] as? String {
             case "folder":
                 let children = ((object["children"] as? [Any]) ?? []).compactMap { node($0, depth: depth + 1) }
-                return .folder(guid: guid, title: title, children: children)
+                return .folder(sourceID: guid, title: title, children: children)
             case "url":
                 guard let raw = object["url"] as? String, let url = URL(string: raw),
                       let scheme = url.scheme?.lowercased(), ["http", "https", "file"].contains(scheme) else {
                     skipped += 1; return nil
                 }
-                return .url(guid: guid, title: title, url: url, added: Self.chromiumDate(object["date_added"]))
+                return .url(sourceID: guid, title: title, url: url, dateAdded: Self.chromiumDate(object["date_added"]))
             default: skipped += 1; return nil
             }
         }
         let titles = ["bookmark_bar": "Bookmarks bar", "other": "Other bookmarks", "synced": "Mobile bookmarks"]
-        var result: [ChromiumBookmark] = []
+        var result: [ImportedBookmark] = []
         for key in ["bookmark_bar", "other", "synced"] {
             guard let root = roots[key], case .folder(let guid, _, let children)? = node(root, depth: 0), !children.isEmpty else { continue }
-            result.append(.folder(guid: guid.isEmpty ? key : guid, title: titles[key]!, children: children))
+            result.append(.folder(sourceID: guid.isEmpty ? key : guid, title: titles[key]!, children: children))
         }
         guard nodes <= Self.maxBookmarkNodes else { throw ReadError.tooLarge }
         return (result, skipped)
@@ -177,37 +164,18 @@ public enum ChromiumSearchMapping {
     }
 }
 
-/// Builds a source model that `BrowserModel.mergeImportedSidebar` merges into one live Space.
-/// Bookmarks become pinned tabs in a pinned folder "Imported from <Browser>".
-/// Evidence: PUB secondary sources (docs/re/browser-import.md §2). GUESS — capture pending: exact title and nesting.
+/// Wraps the shared "Imported from <Browser>" folder (`ImportedBookmarksFolder`, BrowserBookmarks.swift)
+/// in a source model that `BrowserModel.mergeImportedSidebar` merges into one live Space.
 @MainActor
 public enum BrowserBookmarksImport {
-    public static func folderTitle(browserName: String) -> String { "Imported from " + browserName }
-
-    public static func itemID(_ sourceKey: String, _ guid: String) -> ItemID {
-        ItemID(rawValue: ArcImporter.deterministicUUID(for: sourceKey + "/" + guid, namespace: "browser-bookmark"))
-    }
-
-    public static func rootFolderID(sourceKey: String) -> ItemID { itemID(sourceKey, "root-folder") }
+    public static func folderTitle(browserName: String) -> String { ImportedBookmarksFolder.title(browserName: browserName) }
 
     /// Profile and Space IDs are the live destination IDs, so the merge lands in place.
-    public static func sourceModel(roots: [ChromiumBookmark], browserName: String, sourceKey: String,
+    public static func sourceModel(roots: [ImportedBookmark], browserName: String, sourceKey: String,
                                    profileID: ProfileID, settings: ProfileSettings, spaceID: SpaceID) -> BrowserModel {
-        func convert(_ node: ChromiumBookmark) -> SidebarNode {
-            switch node {
-            case .folder(let guid, let title, let children):
-                return .folder(Folder(id: itemID(sourceKey, "folder:" + guid), title: title.isEmpty ? "Folder" : title,
-                                      isExpanded: false, children: children.map(convert)))
-            case .url(let guid, let title, let url, let added):
-                let date = added ?? Date()
-                return .tab(Tab(id: itemID(sourceKey, "url:" + guid), url: url, title: title, pinnedURL: url,
-                                createdAt: date, lastActiveAt: date))
-            }
-        }
-        let root = Folder(id: rootFolderID(sourceKey: sourceKey), title: folderTitle(browserName: browserName),
-                          isExpanded: true, children: roots.map(convert))
+        let root = ImportedBookmarksFolder.make(browserName: browserName, sourceKey: sourceKey, roots: roots)
         let profile = Profile(id: profileID, settings: settings)
-        let space = Space(id: spaceID, profileID: profileID, pinned: roots.isEmpty ? [] : [.folder(root)])
+        let space = Space(id: spaceID, profileID: profileID, pinned: root.children.isEmpty ? [] : [.folder(root)])
         return BrowserModel(profiles: [profile], spaces: [space])
     }
 }
