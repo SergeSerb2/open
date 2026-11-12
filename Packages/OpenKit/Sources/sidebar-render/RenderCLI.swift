@@ -279,6 +279,14 @@ enum RenderCLI {
         let delegate: any SidebarDelegate = context.media == nil ? RecordingDelegate() : MediaScene.delegate(context: context)
         let scene = RenderScene(context: context, options: options, delegate: delegate)
         scene.background.renderScale = scale
+        if let hover = value(args, "--more-popover") {
+            // Look frames (PB5 A6): the compact toolbar's "More options" card, with row `hover` drawn hovered.
+            // Both modes: with --plain-theme the Space follows --appearance (default theme).
+            if args.contains("--plain-theme") { context.focusedSpace?.theme = SpaceTheme() }
+            scene.layoutSubtreeIfNeeded()
+            scene.sidebar.toggleToolbarMorePopover()
+            if let index = Int(hover) { scene.sidebar.forceToolbarMoreHover(index) }
+        }
         var image: CGImage
         if let n = value(args, "--switch-to").flatMap(Int.init), model.spaces.indices.contains(n), let window = model.windows.first {
             // A transition frame: animate the switch and capture the presentation tree at `--at` seconds.

@@ -39,7 +39,7 @@ def run(factory, results, tmp, h):
         row('library_lists_notes', {'Alpha', 'Beta'} <= set(rows) and lib.get('notes') == 2
             and 'first line of alpha' in rows.get('Alpha', {}).get('subtitle', ''), titles=sorted(rows), notes=lib.get('notes'),
             alpha=rows.get('Alpha'))
-        domain = 'io.github.sergeserb2.open'
+        domain = __import__('prefs_domain').domain()
         time.sleep(.5)
         app.call('snapshot', path=os.path.join(frames, 'nl-library-notes.png'))
 

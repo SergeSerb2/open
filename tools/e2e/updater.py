@@ -49,13 +49,13 @@ def file_sha256(path):
 
 
 def domain():
-    result = subprocess.run(['defaults', 'export', DOMAIN, '-'], capture_output=True)
+    result = subprocess.run(['defaults', 'export', __import__('prefs_domain').domain(), '-'], capture_output=True)
     return plistlib.loads(result.stdout) if result.returncode == 0 else {}
 
 
 def write(key, value):
     if value is None:
-        subprocess.run(['defaults', 'delete', DOMAIN, key], capture_output=True, check=False)
+        subprocess.run(['defaults', 'delete', __import__('prefs_domain').domain(), key], capture_output=True, check=False)
     else:
         # The existing CFPreferences helper preserves plist types, including dates.
         write_collection(key, value)

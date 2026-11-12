@@ -147,7 +147,7 @@ def run(factory, results, tmp, h):
             and too_big['imageError'] == 'not an image', state={k: too_big[k] for k in ('images', 'assets', 'imageError')})
 
         # Look frames: a selection with the format bar, light and dark.
-        domain = 'io.github.sergeserb2.open'
+        domain = __import__('prefs_domain').domain()
         stored_scheme = subprocess.run(['defaults', 'read', domain, 'open.web.colorScheme'], capture_output=True, text=True)
         try:
             for scheme in ('light', 'dark'):
