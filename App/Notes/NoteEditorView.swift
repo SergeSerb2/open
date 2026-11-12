@@ -11,9 +11,13 @@ enum NoteLook {
     NSColor(srgbRed: CGFloat(value >> 16 & 0xFF) / 255, green: CGFloat(value >> 8 & 0xFF) / 255,
             blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
   }
-  /// `NotesBackground`: white 85 % / black 50 % (main catalog).
-  static let background = Pair(light: NSColor(white: 1, alpha: 0.85), dark: NSColor(white: 0, alpha: 0.5))
-  /// `TitleText` #220C7F / #E6E6FF; placeholder the same at 40 %.
+  /// The document surface, the same as a web page area (LEAD 01:55): white in light; in dark,
+  /// Chromium's default dark page canvas #121212, which a blank dark-scheme page shows.
+  /// (Arc's translucent `NotesBackground` white 85 % / black 50 % read grey over the window.)
+  static let background = Pair(light: .white, dark: hex(0x121212))
+  /// Arc title colour, cited per LEAD 01:55: `TitleText` #220C7F / #E6E6FF in
+  /// `ARC_TextEditor.bundle` Assets.car (docs/re/easels-notes.md §4.5, evidence CAR).
+  /// Placeholder the same at 40 %.
   static let title = Pair(light: hex(0x220C7F), dark: hex(0xE6E6FF))
   /// Body #000 / #FFF; placeholder 40 %.
   static let body = Pair(light: .black, dark: .white)

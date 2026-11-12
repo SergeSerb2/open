@@ -134,8 +134,9 @@ def run(factory, results, tmp, h):
                 app.call('note', action='focus', field='body')
                 time.sleep(.3)
                 app.call('snapshot', path=os.path.join(frames, 'n1-note-%s.png' % scheme))
-            row('appearance_follows_view_menu', bool(looks['light']) and bool(looks['dark']),
-                light=bool(looks['light']), dark=bool(looks['dark']), frames=frames)
+            row('appearance_follows_view_menu', bool(looks['light']) and bool(looks['dark'])
+                and looks['light']['background'] == '#FFFFFF' and looks['dark']['background'] == '#121212',
+                light=looks['light'] and looks['light']['background'], dark=looks['dark'] and looks['dark']['background'], frames=frames)
         finally:
             if stored_scheme.returncode == 0:
                 subprocess.run(['defaults', 'write', domain, 'open.web.colorScheme', stored_scheme.stdout.strip()])

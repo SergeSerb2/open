@@ -82,6 +82,8 @@ extension AutomationController {
       "focused": responder === host?.editor.titleView ? "title" : responder === host?.editor.bodyView ? "body" : "other",
       "placeholders": [NoteLook.titlePlaceholder, NoteLook.bodyPlaceholder],
       "dark": host?.editor.isDark ?? false,
+      "background": host.flatMap { $0.editor.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB) }
+        .map { String(format: "#%02X%02X%02X", Int(($0.redComponent * 255).rounded()), Int(($0.greenComponent * 255).rounded()), Int(($0.blueComponent * 255).rounded())) } ?? "",
       "editable": host.map { $0.editor.titleView.isEditable && $0.editor.bodyView.isEditable } ?? false,
       "unreadable": host?.unreadable ?? false,
       "favicon": tab?.live.faviconPNG == NoteTab.faviconPNG && tab?.live.faviconPNG != nil,
