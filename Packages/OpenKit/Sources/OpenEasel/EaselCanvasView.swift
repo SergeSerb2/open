@@ -440,6 +440,8 @@ public final class EaselCanvasView: NSView {
     // MARK: State (automation and accessibility)
 
     public func state() -> [String: Any] {
+        // A size change marks layout as needed; report the laid-out geometry, not the old one.
+        layoutSubtreeIfNeeded()
         func r(_ c: CGRect) -> [Double] { [c.minX, c.minY, c.width, c.height].map { (Double($0) * 1000).rounded() / 1000 } }
         let objects: [[String: Any]] = document.paintOrder.map { o in
             var item: [String: Any] = ["id": o.id.uuidString.lowercased(), "kind": o.content.kindName, "frame": r(o.frame),
