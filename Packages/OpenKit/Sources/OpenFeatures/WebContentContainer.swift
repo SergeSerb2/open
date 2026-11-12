@@ -212,6 +212,8 @@ public final class WebContentContainer: NSView {
     public var onPaneMenu: ((ItemID, NSView) -> Void)?
     public var onURLField: (() -> Void)?
     public var onSiteControls: ((ItemID) -> Void)?
+    /// F6: the window's one availability rule for Site Control buttons.
+    public var siteControlsAvailable: ((ItemID) -> Bool)?
     /// The window's toasts (the pane bar's Copy button says what it copied).
     public weak var toasts: ToastCenter?
     public var onTabURLChanged: ((ItemID, URL) -> Void)?
@@ -365,6 +367,7 @@ public final class WebContentContainer: NSView {
                            developerHover: { [weak self] action, view in self?.onDeveloperHover?(id, action, view) })
             slot.paneChrome?.extensionsUI = extensionsUI
             slot.paneChrome?.onSiteControls = onSiteControls.map { handler in { handler(id) } }
+            slot.paneChrome?.siteControlsAvailable = siteControlsAvailable?(id) ?? false
             slot.paneChrome?.update()
         }
     }

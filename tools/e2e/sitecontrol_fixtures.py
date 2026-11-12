@@ -1,8 +1,22 @@
 """Shared Section 12 fixtures. The caller owns the temp directory and server lifetime."""
 import http.server
 import pathlib
+import socketserver
 import threading
 from contextlib import contextmanager
+
+
+class LoopbackHTTPServer(http.server.ThreadingHTTPServer):
+    """Binds 127.0.0.1 only and does no name lookup. HTTPServer.server_bind calls
+    socket.getfqdn(), a PTR query through mDNSResponder; on macOS that asks Local
+    Network privacy and shows "Allow 'Python' to find devices on local networks?"
+    (rented Mac 1 log, 2026-11-12 20:57:09: PTR from the suite's Python, then nehelper,
+    then UserNotificationCenter). Fixture hosts are mapped with --host-resolver-rules."""
+    def __init__(self, handler):
+        super().__init__(("127.0.0.1", 0), handler)
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 @contextmanager
@@ -26,7 +40,7 @@ window.scriptUpdateAtFirstScript={version:window.boostScriptUpdateVersion??null,
             super().__init__(*a, directory=str(folder), **kw)
         def log_message(self, *a):
             pass
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

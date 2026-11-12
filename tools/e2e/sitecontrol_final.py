@@ -3,13 +3,15 @@ import base64
 from collections import Counter
 from contextlib import contextmanager, ExitStack
 import hashlib
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 import json
 import os
 from pathlib import Path
 import ssl
 import subprocess
 import threading
+
+from sitecontrol_fixtures import LoopbackHTTPServer
 
 
 @contextmanager
@@ -41,7 +43,7 @@ def fixture(tmp):
     with ExitStack() as resources:
         servers, pins = [], []
         for index in range(3):
-            server = resources.enter_context(ThreadingHTTPServer(('127.0.0.1', 0), Page))
+            server = resources.enter_context(LoopbackHTTPServer(Page))
             if index:
                 key, cert, config = [root / (str(index) + suffix) for suffix in ('.key', '.pem', '.cnf')]
                 config.write_text('[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n'
