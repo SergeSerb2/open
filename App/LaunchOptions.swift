@@ -34,6 +34,8 @@ struct LaunchOptions {
   var replayOnboarding = false
   private(set) var replayRefused = false
   var arcDirectory: URL?
+  /// A synthetic `~/Library` for browser-import detection (e2e fixtures).
+  var browserImportLibrary: URL?
   /// Debug and automation builds: replaces Open's PiP site-rule file (media-pip §4.5.4, e2e).
   var pipSiteRules: URL?
 
@@ -89,6 +91,8 @@ struct LaunchOptions {
         replayOnboarding = true
       } else if let v = value("arc-dir") {
         arcDirectory = path(v)
+      } else if let v = value("browser-import-library") {
+        browserImportLibrary = path(v)
       } else if let v = value("style") {
         defaultStyle = v == "alloy" ? .alloy : .chrome
       } else if let v = value("open-remote-debugging-port") {

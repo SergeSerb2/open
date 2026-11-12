@@ -36,7 +36,7 @@ public struct GeneralPane: View {
             }
         }
         OpenSettingsGroup("Move in") {
-            OpenSettingsRow(root: model.root, id: "general/import", title: "Import from Arc", help: "Bring your Spaces, tabs, bookmarks, and passwords into Open.") {
+            OpenSettingsRow(root: model.root, id: "general/import", title: "Import from another browser", help: "Bring your bookmarks, history, Spaces, and passwords from Arc, Chrome, and other browsers.") {
                 Button("Import…") { model.root.showsImport = true }
             }
             OpenSettingsRow(root: model.root, id: "general/export", title: "Export your Open data", last: true) {

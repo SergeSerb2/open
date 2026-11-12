@@ -20,7 +20,7 @@ extension AutomationController {
       if action.hasPrefix("settings-") {
         guard flow == nil else { throw Failure(message: "finish first run before opening Settings") }
         let settings = app.settingsPresenter.settings
-        if action == "settings-import" {
+        if action == "settings-import" || action == "settings-open-sources" {
           app.settingsPresenter.show(pane: .general); settings.showsImport = true
         }
         let wizard = settings.importWizard
@@ -56,6 +56,24 @@ extension AutomationController {
           guard !wizard.busy else { throw Failure(message: "wizard is busy") }
           wizard.finish()
         case "settings-inspect": break
+        case "settings-open-sources":
+          // The real sheet's own task loads the catalog; await the same call.
+          await wizard.loadSources()
+        case "settings-source":
+          guard wizard.step == .source, let id = args["id"] as? String, id.utf8.count <= 64 else { throw Failure(message: "wizard is not on Source") }
+          wizard.selectedSourceID = id
+          guard wizard.canContinueFromSource else { throw Failure(message: "source is not selectable") }
+          await wizard.continueFromSource()
+        case "settings-profile":
+          guard wizard.step == .choose, let id = args["id"] as? String, id.utf8.count <= 255 else { throw Failure(message: "wizard is not on Choose") }
+          await wizard.selectProfile(id)
+        case "settings-browser-select":
+          guard wizard.step == .choose, !wizard.plan.isArc, !wizard.busy else { throw Failure(message: "wizard is not on a browser Choose step") }
+          if let on = args["bookmarks"] as? Bool { wizard.plan.bookmarks = on }
+          if let on = args["history"] as? Bool { wizard.plan.history = on }
+          if let on = args["search"] as? Bool { wizard.plan.searchSettings = on }
+        case "settings-back":
+          wizard.backToSource()
         case "settings-run":
           guard firstRunActionTask == nil, wizard.step == .review else { throw Failure(message: "wizard is not ready") }
           firstRunActionTask = Task { @MainActor [weak self] in
@@ -182,6 +200,17 @@ extension AutomationController {
         state["secretsUnfinishedMessage"] = wizard.unfinishedSecretsImportMessage ?? ""
         state["settingsFailures"] = wizard.outcome?.failures ?? [:]
         state["settingsReportValues"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.reportCategories.map { ($0, wizard.reportValue($0)) })
+        state["settingsTitle"] = wizard.title
+        state["settingsSource"] = wizard.plan.source.importKey
+        state["settingsSelectedSource"] = wizard.selectedSourceID
+        state["settingsSourcesLoaded"] = wizard.sourcesLoaded
+        state["settingsSources"] = wizard.sources.map { source -> [String: Any] in
+          ["id": source.id, "name": source.name, "family": source.family.rawValue, "selectable": wizard.canSelect(source),
+           "status": wizard.sourceStatus(source) ?? "", "profiles": source.profiles.map { ["id": $0.id, "name": $0.name] }]
+        }
+        state["settingsBrowserLabels"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.browserReportCategories.map { ($0, wizard.countLabel($0)) })
+        state["settingsReportSummary"] = wizard.step == .report ? wizard.reportSummary : ""
+        state["undoTitle"] = app.undoManager.undoActionName
       }
     }
     return state
