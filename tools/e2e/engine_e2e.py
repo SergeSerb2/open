@@ -7640,6 +7640,9 @@ def page_checks(factory, results, tmp, style="alloy"):
     if os.environ.get("OPEN_E2E_PAGE_COPY_ONLY") == "1":
         page_commands_checks(factory, results, tmp)
         return
+    if os.environ.get("OPEN_E2E_PAGE_CAPTURE_ONLY") == "1":
+        capture_checks(factory, results, tmp)
+        return
     if os.environ.get("OPEN_E2E_PAGE_TRANSLATE_ONLY") == "1":
         page_translate_checks(factory, results, tmp)
         return
@@ -7787,6 +7790,82 @@ def page_engine_checks(factory, results, tmp):
         server.shutdown(); server.server_close()
 
 
+PORTRAIT_ASPECT, PORTRAIT_HEIGHT = 239 / 127, 96 / 127
+
+
+def portrait_canvas(width, height):
+    """CaptureComposer.portraitLayout: the canvas for a page image of this pixel size."""
+    h = round(height / PORTRAIT_HEIGHT); w = round(h * PORTRAIT_ASPECT)
+    if width > w * 0.86:
+        w = round(width / 0.86); h = round(w / PORTRAIT_ASPECT)
+    return [w, h]
+
+
+def solid_png(path, rgb, size=(64, 40)):
+    import struct, zlib
+    raw = b''.join(b'\x00' + bytes(rgb) * size[0] for _ in range(size[1]))
+    def chunk(kind, data): return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    with open(path, 'wb') as f:
+        f.write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size[0], size[1], 8, 2, 0, 0, 0))
+                + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+
+
+def portrait_rows(app, results, tab, rows, tmp, wait_until):
+    """PB2 row 4: the popover, its controls, the wallpaper rule and the capture (real menu item, real
+    button, controls through their accessibility actions). Automation builds never read the real
+    wallpaper: without an injected image the pick falls back to the website colour."""
+    count = len(rows())
+    app.call('capture-portrait', wallpaper='')
+    app.call('capture', mode='portrait')
+    s = app.call('capture-portrait')
+    pop, pv, place = s.get('popover', {}), s.get('preview', {}), s.get('placement', {})
+    results['capture_c3_portrait_popover'] = {'ok': s.get('shown') and pop.get('size') == [286, 246]
+        and pop.get('buttonTitle') == 'Capture in Portrait Mode' and pop.get('labels') == ['Use Website Color', 'Use Desktop Wallpaper', 'Portrait Capture Watermark Toggle']
+        and pop.get('button', [0])[2] > 240 and pop.get('website', [0, 0, 0])[2] == 17 and pop.get('wallpaper', [0, 0, 0])[2] == 17
+        and abs(pv.get('width', 0) / max(1, pv.get('height', 1)) - PORTRAIT_ASPECT) < 0.02
+        # Anchored at the page's sidebar-side edge, vertically centred. AppKit puts it on the sidebar
+        # side when there is room (Arc's capture) and flips it onto the page when there is not.
+        and min(abs(place.get('popoverMaxX', 9e9) - place.get('pageMinX', 0)), abs(place.get('popoverMinX', 9e9) - place.get('pageMinX', 0))) < 40
+        and abs(place.get('popoverMidY', 0) - place.get('pageMidY', 9e9)) < 40
+        and len(rows()) == count and s.get('style', {}).get('source') == 'color', 'state': s}
+    a = app.call('capture-portrait', action='color', value=0.0)
+    b = app.call('capture-portrait', action='color', value=1.0)
+    results['capture_c3_portrait_color_slider'] = {'ok': a['style']['color'] == 0 and b['style']['color'] == 1
+        and a['preview']['corner'] != b['preview']['corner'] and b['popover']['knobX'] > a['popover']['knobX'] + 100,
+        'corners': [a['preview']['corner'], b['preview']['corner']]}
+    web = app.call('capture-portrait', action='website')
+    results['capture_c3_portrait_website_color'] = {'ok': web['style']['source'] == 'website' and web['popover']['selected'] == {'website': 1, 'wallpaper': 0}
+        and web['preview']['corner'] != b['preview']['corner'], 'state': web['style'], 'corner': web['preview']['corner']}
+    hidden = app.call('capture-portrait', action='watermark')
+    shown = app.call('capture-portrait', action='watermark')
+    results['capture_c3_portrait_watermark'] = {'ok': hidden['style']['hidesWatermark'] is True and shown['style']['hidesWatermark'] is False
+        and hidden['preview']['watermark'] != shown['preview']['watermark'], 'pixels': [hidden['preview']['watermark'], shown['preview']['watermark']]}
+    reads = shown['wallpaperReads']
+    fell = app.call('capture-portrait', action='wallpaper', settle=3000)
+    results['capture_c3_portrait_wallpaper_fallback'] = {'ok': fell['wallpaperReads'] == reads + 1 and fell['wallpaperFallbacks'] == shown['wallpaperFallbacks'] + 1
+        and fell['style']['source'] == 'website' and fell['shown'], 'state': fell['style'], 'reads': fell['wallpaperReads']}
+    image = os.path.join(tmp, 'portrait-wallpaper.png'); solid_png(image, (20, 160, 90))
+    app.call('capture-portrait', wallpaper=image)
+    wall = app.call('capture-portrait', action='wallpaper', settle=3000)
+    corner = wall.get('preview', {}).get('corner', [])
+    results['capture_c3_portrait_wallpaper'] = {'ok': wall['style']['source'] == 'wallpaper' and wall['wallpaperReads'] == fell['wallpaperReads'] + 1
+        and len(corner) == 3 and abs(corner[0] - 20) <= 6 and abs(corner[1] - 160) <= 6 and abs(corner[2] - 90) <= 6, 'corner': corner}
+    app.call('capture-portrait', action='color', value=0.5)
+    done = app.call('capture-portrait', action='capture')
+    row = rows()[-1] if len(rows()) > count else {}
+    stored = [app.call('defaults', key=k) for k in ('open.capture.portraitBackground', 'open.capture.portraitColorPercentage', 'open.capture.portraitHidesWatermark')]
+    results['capture_c3_portrait'] = {'ok': row.get('kind') == 'portrait' and abs(row['width'] / row['height'] - PORTRAIT_ASPECT) < 0.003
+        and done['capture'].get('result', {}).get('saved') == row.get('id') and not done['shown'] and stored == ['color', 0.5, False],
+        'row': row, 'stored': stored}
+    app.call('key', key='escape'); wait_until(lambda: not app.call('capture-state').get('card'), timeout=3, step=.05)
+    app.call('capture', mode='portrait')
+    opened = app.call('capture-portrait')
+    app.call('key', key='escape')
+    closed = wait_until(lambda: (lambda v: v if not v['shown'] else None)(app.call('capture-portrait', settle=0)), timeout=3, step=.05)
+    results['capture_c3_portrait_escape'] = {'ok': opened['shown'] and bool(closed) and len(rows()) == count + 1, 'rows': len(rows())}
+    app.call('capture-portrait', wallpaper='')
+
+
 def capture_checks(factory, results, tmp):
     """page-platform §8.3 C1–C7: the Capture tool in the real App (Step 13)."""
     server, origin = _static_server(os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform'))
@@ -7800,7 +7879,8 @@ def capture_checks(factory, results, tmp):
             app.call('key', key='escape')
             wait_until(lambda: not state().get('card'), timeout=3, step=.05)
     # The App writes these in the shared preferences domain: start from defaults, restore after.
-    capture_keys = ('open.capture.shortcutHintLastShown', 'open.capture.dragToCaptureEnabled', 'open.capture.portraitBackground')
+    capture_keys = ('open.capture.shortcutHintLastShown', 'open.capture.dragToCaptureEnabled', 'open.capture.portraitBackground',
+                    'open.capture.portraitColorPercentage', 'open.capture.portraitHidesWatermark')
     saved_keys = {}
     emulated = [False]
     try:
@@ -7886,11 +7966,8 @@ def capture_checks(factory, results, tmp):
         results['capture_c4_escape'] = {'ok': bool(shown) and shown.get('firstResponder') is True and not after_esc['overlayActive'] and after_esc['cancelled'] == cancelled + 1
             and len(rows()) == count, 'overlay': shown, 'state': after_esc}
 
-        # C3: portrait -> a 4:5 PNG.
-        r = app.call('capture', mode='portrait')
-        row = rows()[-1]
-        results['capture_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
-            and r['state']['result']['saved'] == row['id'], 'row': row}
+        # C3: Capture in Portrait Mode opens Arc's popover (capture 43-pb2-probe); its button captures.
+        portrait_rows(app, results, tab, rows, tmp, wait_until)
         close_card()
 
         # C2: full page of the 12,000 px page; bands at their offsets.
@@ -7976,11 +8053,12 @@ def capture_checks(factory, results, tmp):
             and bands == [k % 12 for k in range(16)], 'row': row, 'bands': bands, 'error': r['state'].get('error'), 'state': r['state']}
         close_card()
         app.call('navigate', tab=tab, url=origin + '/long.html'); app.call('wait', tab=tab)
-        app.call('capture', mode='portrait')
+        app.call('capture', mode='portrait'); app.call('capture-portrait', action='capture')
         row = rows()[-1]
         view = app.eval(tab, '[innerWidth, innerHeight]')
-        results['capture_2x_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
-            and abs(row['width'] - round(view[0] * 2 / 0.86)) <= 2, 'row': row, 'view': view}
+        expected = portrait_canvas(view[0] * 2, view[1] * 2)
+        results['capture_2x_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] - expected[0]) <= 2
+            and abs(row['height'] - expected[1]) <= 2, 'row': row, 'view': view, 'expected': expected}
         close_card()
         app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={})
         emulated[0] = False
@@ -9034,6 +9112,26 @@ def routing_checks(factory, results, tmp):
         welcome_tab = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == 'open://welcome' and t['selected']), None), timeout=5, step=.05)
         record('routing_deep_link_welcome', ok_welcome and (welcome or {}).get('result') == 'welcome' and bool(welcome_tab), state=welcome, tab=welcome_tab)
 
+        # PB1 mailto: an external mailto: link (LaunchServices, real kAEGetURL) goes to the focused Profile's
+        # web protocol handler (engine #471) and lands like a web link; with no handler nothing opens.
+        app.call('policy', permissions='grant')
+        mail_tab = new_tab(app, origin + '/mail-home')
+        template = origin + '/compose?to=%s'
+        app.eval(mail_tab, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+        registered = wait_until(lambda: any(h['scheme'] == 'mailto' and h['default'] for h in app.call('protocol-handlers')['handlers']), timeout=8, step=.1)
+        mail_before = app.call('mailto-state')['handled']
+        expected_mail = origin + '/compose?to=mailto%3Asomeone%40example.org'
+        sent_mail = deliver('mailto:someone@example.org')
+        mail_landed = landed(expected_mail)
+        mail_state = app.call('mailto-state')
+        app.call('protocol-handlers', removeScheme='mailto', removeURLTemplate=template)
+        tabs_before_none = len(app.call('tabs'))
+        sent_none = deliver('mailto:nobody@example.org')
+        none_state = wait_until(lambda: (lambda st: st if st['handled'] >= mail_before + 2 else None)(app.call('mailto-state')), timeout=8, step=.1)
+        record('routing_mailto_handler', bool(registered) and sent_mail.returncode == 0 and mail_landed
+               and mail_state['translated'] == expected_mail and sent_none.returncode == 0 and bool(none_state)
+               and none_state['translated'] == '' and len(app.call('tabs')) == tabs_before_none,
+               state=mail_state, noHandler=none_state)
         # restart: the same executable and options come back after this process exits.
         # The harness stops talking to the old App (it exits on purpose); the relaunched
         # instance answers on the same automation socket and is driven with short raw calls.
@@ -9565,6 +9663,12 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     bar('t', 'window'); app.call('key', text='netfl')
     typed = wait_until(lambda: (lambda st: st if st.get('final') and st.get('fieldText') == 'netflix.com' else None)(state()), timeout=5, step=.05) or state()
     rows_td = typed.get('rows', [])
+    # Capture PB1-i (C-report-s6 §8): "amaz" lists Amazon first, then Amazon.co.uk, Amazon.es, AWS, Amazon.ca.
+    press('escape'); bar('t', 'window'); app.call('key', text='amaz')
+    amaz = wait_until(lambda: (lambda st: st if st.get('final') and st.get('fieldText') == 'amazon.com' else None)(state()), timeout=5, step=.05) or state()
+    amaz_titles = [r.get('title') for r in amaz.get('rows', []) if r.get('kind') == 'navigate']
+    results['commandbar_top_domain_regional'] = {'ok': amaz_titles[:5] == ['Amazon', 'Amazon.co.uk', 'Amazon.es', 'Amazon Web Services (AWS)', 'Amazon.ca'],
+        'rows': amaz_titles}
     results['commandbar_top_domain_row'] = {'ok': typed.get('fieldText') == 'netflix.com' and bool(rows_td)
         and rows_td[0].get('title') == 'Netflix' and 'netflix.com' in (rows_td[0].get('url') or ''),
         'field': typed.get('fieldText'), 'text': typed.get('text'), 'rows': [r.get('title') for r in rows_td[:4]]}
@@ -13020,7 +13124,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -13374,6 +13478,10 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/automation_stress.py'))['run'](
                 factory, results[opts.only], tmp, sys.modules[__name__])
+        elif opts.only == "no-system-prompts":
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/no_system_prompts.py'))['run'](
+                factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "import-other-browsers":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/import_other_browsers.py'))['run'](
@@ -13708,14 +13816,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode"):
+    for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "blank-window", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

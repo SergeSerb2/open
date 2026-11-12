@@ -155,6 +155,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         capture.onOverlayChange = { [weak self] up in self?.onCaptureOverlayChange?(up) }
         capture.library = captureLibrary
         capture.addToEasel = captureAddToEasel
+        capture.wallpaperData = { [weak self] in await self?.captureWallpaperData?() }
         capture.pageTarget = { [weak self] in self?.capturePageTarget() }
         capture.anchor = { [weak self] in
             guard let self else { return .zero }
@@ -184,6 +185,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public weak var captureLibrary: (any CaptureLibrary)? { didSet { captureStorage?.library = captureLibrary } }
     /// Capture → Easel (the App's Easel menu); nil hides the card's Add to Easel button.
     public var captureAddToEasel: ((CaptureController.Result, NSView) -> Void)? { didSet { captureStorage?.addToEasel = captureAddToEasel } }
+    /// Portrait Mode "Use Desktop Wallpaper": the wallpaper bytes for this window's screen (App).
+    public var captureWallpaperData: (@MainActor () async -> Data?)?
     /// The capture overlay shows: history swipes must not navigate (EP-1 reads this, §4.4).
     public var captureOverlayActive: Bool { captureStorage?.isOverlayActive == true }
     /// The page a capture takes: the top Peek page while Peek shows, else the focused pane.

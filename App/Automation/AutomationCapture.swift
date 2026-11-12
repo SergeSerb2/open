@@ -27,6 +27,7 @@ extension AutomationController {
       await Task.yield()
       return captureState(controller)
     case "captures": return try capturesIndex(a)
+    case "capture-portrait": return try await capturePortrait(a, controller)
     default: return try await capture(a, w, controller)
     }
   }
@@ -100,6 +101,76 @@ extension AutomationController {
       try await Task.sleep(for: .milliseconds(20))
     }
     return ["steps": steps, "state": captureState(controller)] as [String: Any]
+  }
+
+  /// Portrait Mode popover (PB2 row 4): `action` = state | website | wallpaper | color (`value`
+  /// 0…1) | watermark | capture | close; `wallpaper` = an image path used instead of the real
+  /// wallpaper (automation builds never read the real one). Controls go through their own
+  /// accessibility press / value paths and the real button.
+  private func capturePortrait(_ a: [String: Any], _ controller: BrowserWindowController) async throws -> Any {
+    let capture = controller.capture
+    if let path = a["wallpaper"] as? String { PortraitWallpaper.overrideURL = path.isEmpty ? nil : URL(fileURLWithPath: path) }
+    let action = a["action"] as? String ?? "state"
+    if action != "state" {
+      guard let view = capture.portraitView else { throw Failure(message: "the Portrait Mode popover is not open") }
+      switch action {
+      case "website": _ = view.left.accessibilityPerformPress()
+      case "wallpaper": _ = view.right.accessibilityPerformPress()
+      case "color":
+        guard let value = a["value"] as? Double, value.isFinite else { throw Failure(message: "color needs value 0…1") }
+        view.slider.setAccessibilityValue(value)
+      case "watermark": view.watermarkButton.performClick(nil)
+      case "capture":
+        view.captureButton.performClick(nil)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(60))
+        while capture.phase == .capturing || capture.portraitPopover != nil {
+          guard ContinuousClock.now < deadline else { throw Failure(message: "portrait capture did not finish") }
+          try await Task.sleep(for: .milliseconds(20))
+        }
+      case "close": capture.closePortrait()
+      default: throw Failure(message: "unknown portrait action \(action)")
+      }
+    }
+    // Let a preview refresh or a wallpaper read land.
+    let before = capture.portraitPreviewCount
+    let deadline = ContinuousClock.now.advanced(by: .milliseconds(a["settle"] as? Int ?? 1500))
+    while ContinuousClock.now < deadline, capture.portraitView != nil, capture.portraitPreviewCount == before || capture.portraitView?.preview == nil {
+      if action == "state" && capture.portraitView?.preview != nil { break }
+      try await Task.sleep(for: .milliseconds(20))
+    }
+    var state: [String: Any] = ["shown": capture.portraitPopover?.isShown == true, "previews": capture.portraitPreviewCount,
+      "wallpaperReads": capture.wallpaperReads, "wallpaperFallbacks": capture.wallpaperFallbacks, "capture": captureState(controller)]
+    if let view = capture.portraitView {
+      let style = view.style
+      state["style"] = ["source": style.source.rawValue, "color": style.colorPercentage, "hidesWatermark": style.hidesWatermark]
+      state["popover"] = ["size": [view.frame.width, view.frame.height], "button": Self.box(view.captureButton.frame),
+        "buttonTitle": view.captureButton.title, "website": Self.box(view.left.frame), "wallpaper": Self.box(view.right.frame),
+        "slider": Self.box(view.slider.frame), "knobX": Double(view.slider.knobCenterX), "watermark": Self.box(view.watermarkButton.frame),
+        "labels": [view.left.accessibilityLabel() ?? "", view.right.accessibilityLabel() ?? "", view.watermarkButton.accessibilityLabel() ?? ""],
+        "selected": ["website": view.left.accessibilityValue() as? Int ?? 0, "wallpaper": view.right.accessibilityValue() as? Int ?? 0]] as [String: Any]
+      if let preview = view.preview, let page = controller.captureHost()?.view {
+        state["preview"] = ["width": preview.width, "height": preview.height, "corner": Self.pixel(preview, 2, 2),
+          "watermark": Self.pixel(preview, Int(Double(preview.width) * 0.08), preview.height - Int(Double(preview.width) * 0.08))]
+        let anchor = page.convert(page.bounds, to: nil)
+        if let frame = capture.portraitPopover?.cardFrameInScreen, let window = page.window {
+          let pageInScreen = window.convertToScreen(anchor)
+          state["placement"] = ["side": capture.portraitPopover?.chrome.side == .left ? "left" : "right", "popoverMaxX": Double(frame.maxX), "popoverMinX": Double(frame.minX), "pageMinX": Double(pageInScreen.minX),
+            "popoverMidY": Double(frame.midY), "pageMidY": Double(pageInScreen.midY)]
+        }
+      }
+    }
+    return state
+  }
+
+  /// One pixel's sRGB bytes (x from the left, y from the top).
+  static func pixel(_ image: CGImage, _ x: Int, _ y: Int) -> [Int] {
+    guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+          let context = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return [] }
+    context.draw(image, in: CGRect(x: -x, y: -(image.height - 1 - y), width: image.width, height: image.height))
+    guard let data = context.data else { return [] }
+    let p = data.bindMemory(to: UInt8.self, capacity: 4)
+    return [Int(p[0]), Int(p[1]), Int(p[2])]
   }
 
   static func box(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map { Double($0) } }

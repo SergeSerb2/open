@@ -749,9 +749,9 @@ def context_menu_checks(factory, results, tmp, h):
         for identifier, path in [('help-center', '/blob/main/docs/commands.md'), ('getting-started', '#readme'),
                                  ('release-notes', '/releases'), ('contact-team', '/issues/new')]:
             run('cm_help_' + identifier, lambda i=identifier, p=path: help_item(i, 'https://github.com/SergeSerb2/open' + p))
-        # Join Meeting is live (CAL #331): enabled in a normal window. Menu validation never reads the calendar
-        # (no store, no Calendar prompt); with no meeting the command does nothing, as Arc (e2e `calendar`).
-        run('cm_join_meeting_enabled', lambda: {'ok': row_enabled('join-meeting') is True})
+        # Join Meeting follows Arc: enabled only while a joinable meeting is in memory (e2e `calendar` covers the
+        # enabled cases). This suite has no calendar state, so the item is disabled.
+        run('cm_join_meeting_disabled_without_meeting', lambda: {'ok': row_enabled('join-meeting') is False})
 
         # D2c menu order (docs/re/sidebar-menus-parity.md §1): Arc 1.172.2, capture session 3 Part D.
         # Share ▸ lists the system share services (capture session 8 item 1).
