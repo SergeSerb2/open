@@ -21,6 +21,7 @@ final class AppLibrarySession {
   private(set) var panelGeneration = 0
   /// Library › Easels data (EZ); the panel holds it weakly.
   private(set) var easelsProvider: EaselLibraryProvider?
+  private(set) var notesProvider: NoteLibraryProvider?
   private(set) weak var releasedPanel: LibraryPanelView?
 
   init(model: LibraryViewModel, controller: BrowserWindowController) {
@@ -67,6 +68,10 @@ final class AppLibrarySession {
       easels.controller = controller
       easelsProvider = easels
       panel.easelsProvider = easels
+      let notes = notesProvider ?? NoteLibraryProvider(app: app)
+      notes.controller = controller
+      notesProvider = notes
+      panel.notesProvider = notes
     }
     controller?.prepareLibraryPanel(panel,width:panel.section == .spaces ? max(417,(controller?.contentView.bounds.width ?? 1280)-56) : 417)
     return panel
