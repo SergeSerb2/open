@@ -45,6 +45,8 @@
 	<true/>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>banner</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Open shows your upcoming meetings and joins their video calls.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Websites you visit can ask to use your camera.</string>
 	<key>NSMicrophoneUsageDescription</key>
