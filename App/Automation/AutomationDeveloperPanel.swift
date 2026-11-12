@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
 import AppKit
 import OpenFeatures
+import OpenDesign
 
 extension AutomationController {
   /// `developer-panel` {action?: "state" | "press", button?: DeveloperPanelAction raw value}: the front window's
@@ -16,17 +17,39 @@ extension AutomationController {
             let button = slot?.developerPanel?.button(action) as? NSButton else { throw Failure(message: "no developer bar or unknown button") }
       button.performClick(nil)
     }
-    var state: [String: Any] = ["shown": slot?.developerPanel != nil, "toolbar": slot?.paneChrome != nil, "logs": factory.developerPanel.state]
+    if (a["action"] as? String) == "hover" {
+      // The pointer entering the button (its tracking area's callback), without moving the system pointer.
+      guard let raw = a["button"] as? String, let action = DeveloperPanelAction(rawValue: raw), let panel = slot?.developerPanel
+      else { throw Failure(message: "no developer bar or unknown button") }
+      panel.pointer((a["inside"] as? Bool) ?? true, action)
+    }
+    // The Extensions / Split View menus: titles without opening them (a menu blocks), or run one row by title.
+    var menuTitles: [String]?
+    if let raw = a["menu"] as? String, let action = DeveloperPanelAction(rawValue: raw) {
+      guard let menu = factory.developerPanel.menu(for: action) else { throw Failure(message: "no menu") }
+      menuTitles = menu.items.map { $0.isSeparatorItem ? "-" : $0.title }
+      if let title = a["item"] as? String {
+        guard let index = menu.items.firstIndex(where: { $0.title == title }), menu.items[index].isEnabled else { throw Failure(message: "no enabled item") }
+        menu.performActionForItem(at: index)
+      }
+    }
+    if (a["action"] as? String) == "reload-menu" {
+      guard let title = a["item"] as? String, controller.sidebar.runDeveloperReloadItem(title) else { throw Failure(message: "no reload item") }
+    }
+    var state: [String: Any] = ["shown": slot?.developerPanel != nil, "toolbar": slot?.paneChrome != nil, "devtools": factory.developerPanel.state(slot?.tabID)]
     if let panel = slot?.developerPanel {
       state["frame"] = [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height]
       state["url"] = panel.urlString
-      state["networkPressed"] = panel.networkShown
+      state["activePanel"] = panel.activePanel?.rawValue ?? ""
+      state["palette"] = panel.paletteDescription
+      state["hovered"] = panel.hovered?.rawValue ?? ""
+      state["hoverPlate"] = panel.hoverPlateDescription ?? ""
       state["buttons"] = DeveloperPanelAction.allCases.compactMap { action -> [String: Any]? in
         guard let view = panel.button(action) else { return nil }
-        return ["id": action.rawValue, "frame": [view.frame.minX, view.frame.minY, view.frame.width, view.frame.height], "label": view.accessibilityLabel() ?? ""]
+        return ["id": action.rawValue, "frame": [view.frame.minX, view.frame.minY, view.frame.width, view.frame.height], "label": view.accessibilityLabel() ?? "",
+                "tooltip": action.tooltip.map { [$0.title] + $0.keys } ?? []]
       }
     }
-    if let list = slot?.networkList { state["networkRows"] = list.rowCount; state["networkFrame"] = [list.frame.minX, list.frame.minY, list.frame.width, list.frame.height] }
     // Sidebar rows of the focused Space: host subtitle, title baseline and the dashed outline (pane 2).
     if let space = controller.context.focusedSpace {
       state["rows"] = space.today.compactMap { node -> [String: Any]? in
@@ -34,6 +57,11 @@ extension AutomationController {
         row["url"] = tab.url.absoluteString; return row
       }
     }
+    state["sidebarToolbar"] = controller.sidebar.developerToolbarState()
+    if let tip = TooltipController.shared.visibleOrPendingTooltip { state["tooltip"] = [tip.title] + tip.keys }
+    if let menuTitles { state["menu"] = menuTitles }
+    state["splitPanes"] = controller.splitController.split?.panes.count ?? 1
+    state["splitOrientation"] = controller.splitController.split.map { $0.orientation == .horizontal ? "horizontal" : "vertical" } ?? ""
     if let page = slot?.contentHostView { state["pageFrame"] = [page.frame.minX, page.frame.minY, page.frame.width, page.frame.height] }
     return state
   }

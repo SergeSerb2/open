@@ -293,8 +293,27 @@ and the type list `ToastController`, `ToastWindow`, `ToastAnimator`,
   "Developer Mode" On/Off (SC-11). Menu validation `FUN_100314424` retitles the
   View ▸ Developer item to "Turn on Developer Mode for this site" or "Turn off
   Developer Mode for this site" and can hide it (`setHidden_`).
-- **PG-10.3 Effect unknown.** No string proves what Developer Mode changes
-  on the page or in the chrome. guess only.
+- **PG-10.3 Effect (captured, PB3-a and session 10).** Captures settle what
+  PG-10.3 left open. Evidence: `44-pb3a-probe/d-0.png`, `d-2-dark.png`
+  (C-report-s6 §8, :247, :273) and `v10/d1-devbar-hover-menus` (C-report-s10
+  PB3-a1…a4).
+  - A striped bar sits over the page. It has nine controls with AX names
+    Site Settings, Copy Link, Capture Window, Capture, Toggle Console,
+    Toggle Network Panel, Inspect Element, Extensions Menu, Split View Menu.
+  - The tooltip texts are "Copy Link ⇧⌘C", "Capture a portion of this page
+    ⇧⌘2", "Toggle Console ⌥⌘J", "Toggle Network Panel", "Inspect Element
+    ⌥⌘C", "Extensions" and "Split View Options". Capture Window has no
+    tooltip: resting on it opens the "Capture in Portrait Mode" popover.
+  - Console, Network and Inspect open Chromium's DevTools, docked at the
+    right. There is no network list of Arc's own.
+  - The sidebar row gets a dashed outline and a "host:port" subtitle.
+  - In the sidebar toolbar, a ▾ chevron sits right of Reload (ink 8.5 × 4.5
+    pt, centered 11.75 pt inside the sidebar edge, in Reload's grey). Reload
+    moves 6.25 pt left. Back, forward and reload ink centers are 273.5,
+    307.5 and 335.25 pt at sidebar width 363.5.
+  - **guess:** the chevron's menu was not captured. Open lists its existing
+    reload commands: Refresh the Page ⌘R, Force Refresh the Page ⇧⌘R, and
+    Clear Cache and Refresh (LEAD 12:18).
 - **PG-10.4 JavaScript from Apple Events (proven).** `ArcBrowser
   isJavaScriptFromAppleEventsAllowed` / `toggleJavaScriptFromAppleEventsAllowed`
   (Chromium's pref; default false in Chromium,

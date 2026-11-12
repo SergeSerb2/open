@@ -294,7 +294,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.
     public var lastToastTitle: String { toasts.lastTitle }
-    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, incognitoTitle: String? = nil, siteControlSource: (any SiteControlDataSource)? = nil, siteControlActions: (any SiteControlActions)? = nil) {
+    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, incognitoTitle: String? = nil, windowOnlyTitle: String? = nil, siteControlSource: (any SiteControlDataSource)? = nil, siteControlActions: (any SiteControlActions)? = nil) {
         WindowSpeedTrace.mark("controllerInitBody")
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
@@ -304,7 +304,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root = BrowserRootView(frame: CGRect(origin: .zero, size: dimensions))
         // Only the frame follows the Space; private content keeps its fixed dark appearance.
         root.appearance = incognitoTitle == nil ? NSApp.effectiveAppearance : NSAppearance(named: .darkAqua)
-        context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
+        context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle, windowOnlyTitle: windowOnlyTitle)
         context.systemAppearance = context.isIncognito ? .dark : ContentAppearance(NSApp.effectiveAppearance)
         context.increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         WindowSpeedTrace.mark("sidebarInitBegin")

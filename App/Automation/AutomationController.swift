@@ -326,6 +326,7 @@
       case "welcome": return try welcome(a)
       case "easel": return try easel(a)
       case "note": return try note(a)
+      case "blank-window": return try blankWindowState()
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -736,7 +737,7 @@
         guard let controller = app.frontWindowController, let path = (a["items"] as? [String])?.joined(separator: "\u{1F}") ?? a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
         let node: ItemID?
         if let raw = a["node"] {
-          guard let text = raw as? String, let uuid = UUID(uuidString: text), app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+          guard let text = raw as? String, let uuid = UUID(uuidString: text), (app.hostFactories[controller.windowID]?.model ?? app.model).node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
           node = ItemID(rawValue: uuid)
         } else { node = nil }
         let separator: Character = a["items"] != nil ? "\u{1F}" : "/"
