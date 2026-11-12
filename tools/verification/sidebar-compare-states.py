@@ -285,26 +285,41 @@ def record_limits(baseline, data, captures, out, attempts, receipt):
     return 0
 
 
-def record_transition(reason, key, old_limits, combined):
-    """Write this key's measured moves and raised Arc limits (lead-approved change only)."""
+def record_transition(reason, key, old_limits, attempts):
+    """Write this key's measured moves and raised Arc limits (lead-approved change only).
+
+    An element colour counts as moved only when it moved in every paired attempt; its
+    old and new values are the medians over the attempts. Every observed ink/position
+    pair of a moved element is recorded."""
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     elements, limits = {}, dict(old_limits)
     for name in LIMITS:
-        main_rows, _ = table_metrics(combined["main"][name])
-        branch_rows, worst = table_metrics(combined["branch"][name])
-        if [r["element"] for r in main_rows] != [r["element"] for r in branch_rows]:
+        runs = [(table_metrics(t["main"]), table_metrics(t["branch"])) for t in attempts[name]]
+        names = [r["element"] for r in runs[0][0][0]]
+        if any([r["element"] for r in side[0]] != names for run in runs for side in run):
             raise ValueError(name + ": compared elements differ; a transition records colour moves only")
-        for m, b in zip(main_rows, branch_rows):
-            moves = [None if x is None or y is None or abs(x - y) <= COLOR_DRIFT else [str(x), str(y)]
-                     for x, y in zip(m["colors"], b["colors"])]
-            if m["position"] != b["position"] or m["ink"] != b["ink"]:
-                # An ink-threshold shift of a recoloured glyph; the PR lists each one.
-                if not any(moves):
-                    raise ValueError(name + ": " + m["element"] + " geometry moved without a colour move")
-                moves.append({"position": [m["position"], b["position"]], "ink": [m["ink"], b["ink"]]})
+        for i, element in enumerate(names):
+            pairs = [(run[0][0][i], run[1][0][i]) for run in runs]
+            moves = []
+            for c in range(len(pairs[0][0]["colors"])):
+                values = [(m["colors"][c], b["colors"][c]) for m, b in pairs]
+                if any(x is None or y is None for x, y in values) or not all(abs(x - y) > COLOR_DRIFT for x, y in values):
+                    moves.append(None)
+                    continue
+                med = lambda v: sorted(v)[len(v) // 2]
+                moves.append([str(med([x for x, _ in values])), str(med([y for _, y in values]))])
+            shapes = {(m["position"], b["position"], tuple(m["ink"]), tuple(b["ink"])) for m, b in pairs
+                      if m["position"] != b["position"] or m["ink"] != b["ink"]}
+            if shapes and not any(moves):
+                raise ValueError(name + ": " + element + " geometry moved without a colour move")
+            if len(shapes) > 1:
+                raise ValueError(name + ": " + element + " ink shift differs between attempts")
+            for mp, bp, mi, bi in shapes:
+                moves.append({"position": [mp, bp], "ink": [list(mi), list(bi)]})
             if any(moves):
-                elements.setdefault(name, {})[m["element"]] = moves
-        ceiling = worst[1].quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+                elements.setdefault(name, {})[element] = moves
+        worst = max(run[1][1][1] for run in runs)
+        ceiling = worst.quantize(Decimal("0.01"), rounding=ROUND_CEILING)
         if ceiling > Decimal(limits[name]):
             limits[name] = str(ceiling)
     transition = json.loads(TRANSITION.read_text()) if TRANSITION.exists() else {"environments": {}}
@@ -412,6 +427,7 @@ def main():
     if not args.record_limits:
         receipt["branchBinarySHA256"] = hashlib.sha256(renderer.read_bytes()).hexdigest()
     combined = {"main": {}, "branch": {}}
+    recorded_attempts = {}
     failed = []
     data = private_roots(root)
     try:
@@ -429,7 +445,10 @@ def main():
                     raise ValueError("display changed during paired render")
                 result = gate_tables(name, tables, color_limits, (moved or {}).get("elements", {}).get(name))
                 attempt_results.append({"attempt": attempt, **result})
-                if result["passed"] or attempt == args.attempts:
+                recorded_attempts.setdefault(name, []).append(tables)
+                # Recording a transition keeps every attempt: offscreen text ink varies by
+                # a few levels between processes, and only consistent moves are recorded.
+                if (result["passed"] and not args.record_transition) or attempt == args.attempts:
                     for kind, table in tables.items():
                         combined[kind][name] = table
                         (out / kind / name / "table.md").write_bytes(table)
@@ -458,7 +477,9 @@ def main():
             hashlib.sha256(renderer.read_bytes()).hexdigest() != receipt["branchBinarySHA256"]):
         raise ValueError("renderer changed during comparison; rerun after its build completes")
     if args.record_transition:
-        return record_transition(args.record_transition, key, color_limits, combined)
+        if args.attempts < 3:
+            raise ValueError("record a transition with --attempts 3")
+        return record_transition(args.record_transition, key, color_limits, recorded_attempts)
     identical = sum(state["byteIdentical"] for state in receipt["states"])
     print(f"states passed: {13 - len(failed)}/13; tables byte-identical (informational): {identical}/13; output: {out}")
     return 1 if failed else 0
