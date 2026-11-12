@@ -6,12 +6,13 @@ import OpenModel
 /// - the sidebar header "This Window" over this window's tabs only (newest first), with no
 ///   Favorites, no pinned section and no Space dots; the bottom bar keeps Library and "+";
 /// - default theme colours, the command bar open, the window title "Space 1" until a page shows;
-/// - ⌘W on the last tab closes the window with no prompt; it is not restored at relaunch.
+/// - ⌘W on the last tab closes the window with no prompt; it is not restored at relaunch;
+/// - ⇧⌘T reopens a closed tab in this window, and does not bring a closed Blank Window back.
 ///
 /// Open builds it as a window with its own in-memory model: one untitled Space on a stand-in
 /// for the source Profile (same id and data directory, so pages, history and the Archive are
 /// that Profile's). Nothing of it is written to the session snapshot.
-/// GUESS (not captured): tab drag between windows, ⇧⌘T after closing, the Archive entry of a
+/// GUESS (not captured): tab drag between windows, the Archive entry of a
 /// closed tab, and restore with "restore windows" on.
 @MainActor
 enum BlankWindow {

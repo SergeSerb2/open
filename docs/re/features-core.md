@@ -1258,8 +1258,9 @@ purpose.
    theme colours. Both open with the command bar open. In a Blank Window the row
    menu is the ordinary Today-tab menu (with Move to ▸), ⌘W on the last tab
    closes the window with no prompt, and it was not restored at relaunch (with
-   "restore windows" off). Not captured: tab drag between windows, ⇧⌘T after
-   closing, the Archive entry of a closed tab.
+   "restore windows" off). ⇧⌘T reopens a closed tab in that window and does not
+   bring a closed Blank Window back. Not captured: tab drag between windows, the
+   Archive entry of a closed tab.
    Verify.
 3. **New Incognito Window** opens a window on the hidden incognito context
    (§5.2 rule 6): distinct sidebar header for its Today list, no history/
