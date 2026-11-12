@@ -869,10 +869,14 @@ extension AppDelegate: CommandDispatcher {
             guard await self.nextStartupTurn() else { return }
             self.startupRegion("afterPaint.commandServices") { self.prepareCommandServices() }
             guard await self.nextStartupTurn() else { return }
-            self.startupRegion("afterPaint.storesPrewarm") {
-              if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+            // Suggest engine creation and its tab-index build take one turn each.
+            if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile {
+              self.startupRegion("afterPaint.suggestEngine") { _ = self.stores.suggest(for: profile.id) }
+              guard await self.nextStartupTurn() else { return }
+              // The engine is cached for this Profile; this builds its tab index.
+              self.startupRegion("afterPaint.suggestIndex") { self.stores.prewarm(profileID: profile.id) }
+              guard await self.nextStartupTurn() else { return }
             }
-            guard await self.nextStartupTurn() else { return }
           }
           // Startup T5: the sleep controller starts after first paint, never before.
           self.startupRegion("afterPaint.sleep") { self.tabSleep.start() }
