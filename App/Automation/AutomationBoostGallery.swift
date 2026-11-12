@@ -135,12 +135,20 @@ extension AutomationController {
       owner.makeFirstResponder(field); field.selectText(nil)
       _ = try await sendKey(["window": owner.windowNumber, "text": text.isEmpty ? "\u{7f}" : text, "route": "app"], try? window)
     case "press":
-      let matches = nodes.filter {
+      // Native AppKit buttons can report AXUnknown in process while a hosted
+      // proxy reports AXButton. Prefer the actual rendered button; keep the
+      // same unique-target and enabled checks before sending target/action.
+      let nativeMatches = nodes.filter { object in
+        guard args["id"] == nil, let label = args["label"] as? String,
+          let button = object as? NSButton else { return false }
+        return [button.title, string(button, "accessibilityLabel"), string(button, "accessibilityTitle")].contains(label)
+      }
+      let matches = nativeMatches.isEmpty ? nodes.filter {
         if let id = args["id"] as? String { return identifier($0) == id }
         guard let label = args["label"] as? String else { return false }
         return [string($0, "accessibilityLabel"), string($0, "accessibilityTitle")].contains(label)
           && [NSAccessibility.Role.button.rawValue, NSAccessibility.Role.checkBox.rawValue].contains(string($0, "accessibilityRole"))
-      }
+      } : nativeMatches
       guard matches.count == 1, let target = matches.first else { throw Failure(message: "expected one Gallery control; found \(matches.count)") }
       if let raw = args["profileBeforePress"] as? String {
         guard !settings, let uuid = UUID(uuidString: raw), app.model.profile(id: ProfileID(rawValue: uuid)) != nil else { throw Failure(message: "unknown queued Profile") }
@@ -153,8 +161,16 @@ extension AutomationController {
     }
     if action != "state" { await Task.yield() }
     return ["window": owner.windowNumber, "key": owner.isKeyWindow,
-      "controls": nodes.map { ["class": String(describing: type(of: $0)), "id": identifier($0), "label": string($0, "accessibilityLabel"),
-        "title": string($0, "accessibilityTitle"), "role": string($0, "accessibilityRole"), "value": string($0, "accessibilityValue")] },
+      "controls": nodes.map { object -> [String:Any] in
+        var state: [String:Any] = ["class": String(describing: type(of: object)), "id": identifier(object), "label": string(object, "accessibilityLabel"),
+          "title": string(object, "accessibilityTitle"), "role": string(object, "accessibilityRole"), "value": string(object, "accessibilityValue")]
+        if let button = object as? NSButton { state["nativeTitle"] = button.title }
+        if let view = object as? NSView, let root = owner.contentView {
+          let rect = root.convert(view.bounds, from: view)
+          state["frame"] = [rect.minX, root.isFlipped ? rect.minY : root.bounds.height-rect.maxY, rect.width, rect.height]
+        }
+        return state
+      },
       "popupItems": nodes.compactMap { ($0 as? NSPopUpButton)?.itemTitles }] as [String: Any]
   }
 }
