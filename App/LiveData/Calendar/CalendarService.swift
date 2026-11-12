@@ -1,4 +1,5 @@
 import Foundation
+import OpenLiveData
 
 /// App-wide calendar data for Join Meeting, the calendar glance card and Live Calendar (plan NS §2 CAL).
 /// Created lazily by `AppDelegate.calendar` on the first calendar feature use: nothing runs at launch.

@@ -7,18 +7,22 @@ import OpenModel
 public enum GlanceKind: Hashable, Sendable {
     /// Recent pages of one site from the Profile's own history (LD §3.4). No network.
     case recents(RecentsSite)
+    /// Today's events from the system calendar (LD §3.2; EventKit per LEAD 11:05 Q1).
+    case calendar(CalendarProvider)
 
     /// The settings key that turns this kind of card on or off (default on).
     public var preferenceKey: String {
         switch self {
         case .recents: RecentsSite.preferenceKey
+        case .calendar: CalendarProvider.preferenceKey
         }
     }
 
     /// The glance a tab gets from its URL, or nil for a plain page preview.
     /// `aliases` maps extra hosts to a site (automation fixtures only; empty in normal use).
     public static func match(url: URL, aliases: [String: RecentsSite] = [:]) -> GlanceKind? {
-        RecentsSite.match(url: url, aliases: aliases).map { .recents($0) }
+        if let provider = CalendarProvider.match(url: url) { return .calendar(provider) }
+        return RecentsSite.match(url: url, aliases: aliases).map { .recents($0) }
     }
 }
 
