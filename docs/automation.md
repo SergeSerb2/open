@@ -1334,7 +1334,8 @@ only its disposable browser model, and app appearance is restored in `finally`.
 `OPEN_FIND_FAIL_AT_PEEK=1` forces an early failure with Peek and Find open;
 the normal owned-process cleanup must still pass.
 
-Find and Replace opens Find in web pages. Jump to Selection scrolls the
+Find and Replace has no effect in web pages, as in Arc, and shows the find bar of a
+Note (docs/re/find-and-replace.md). Jump to Selection scrolls the
 selection's containing element to the center via the existing main-world
 JavaScript API; this API does not provide an isolated world. Use Selection
 to Find uses the native menu action and has the 1,000-byte query cap without

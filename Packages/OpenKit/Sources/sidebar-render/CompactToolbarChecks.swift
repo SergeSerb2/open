@@ -53,8 +53,14 @@ enum CompactToolbarChecks {
         tab.live.isLoading = true
         let stop = sidebar.toolbarMoreMenu().items.first
         tab.live.isLoading = false
-        check(titles == ["Reload This Page", "Hide Sidebar"] && keys == ["r", "s"] && hide && stop?.title == "Stop Loading",
-              "CT2 More options menu: Reload This Page ⌘R (Stop Loading while loading), Hide Sidebar ⌘S sends .toggleSidebar")
+        check(titles == ["Reload", "Toggle Sidebar"] && keys == ["r", "s"] && hide && stop?.title == "Stop Loading",
+              "CT2 More options menu, as Arc (capture s9): Reload ⌘R (Stop Loading while loading), Toggle Sidebar ⌘S sends .toggleSidebar")
+        let compactPlaceholder = sidebar.urlFieldPlaceholder
+        width(228)
+        let fullPlaceholder = sidebar.urlFieldPlaceholder
+        width(200)
+        check(compactPlaceholder == "Search…" && fullPlaceholder == "Search or Enter URL…",
+              "CT2b URL field placeholder: \"Search…\" in the compact sidebar, \"Search or Enter URL…\" at 228 (\(compactPlaceholder) / \(fullPlaceholder))")
         width(228)
         let swaps = SidebarDiagnostics.compactToolbarSwaps
         var layouts = SidebarDiagnostics.tabRowLayouts

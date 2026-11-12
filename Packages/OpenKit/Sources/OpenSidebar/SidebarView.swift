@@ -768,6 +768,8 @@ extension SidebarView {
     }
     /// The compact toolbar's "More options" menu, built as a click would build it.
     public func toolbarMoreMenu() -> NSMenu { toolbar.makeMoreMenu() }
+    /// The URL field's placeholder for the current sidebar width.
+    public var urlFieldPlaceholder: String { layoutSubtreeIfNeeded(); return urlField.placeholder }
     /// The same provider used when the bottom-bar plus button opens its menu.
     public func plusMenu() -> NSMenu? { context.isIncognito ? nil : bottomBar.menus.plus() }
     /// The "+" popover (capture session 8 item 7): open or close as a click on "+" does.

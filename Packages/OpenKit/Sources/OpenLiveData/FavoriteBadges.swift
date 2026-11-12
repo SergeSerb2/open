@@ -13,7 +13,7 @@ public enum FavoriteApp: String, CaseIterable, Sendable {
         if host.hasPrefix("www.") { host.removeFirst(4) }
         switch host {
         // x.com: Twitter's current host (GUESS — Arc 1.170's table names twitter.com).
-        case "twitter.com", "x.com", "mobile.twitter.com": return .twitter
+        case "twitter.com", "x.com", "mobile.twitter.com", "mobile.x.com": return .twitter
         case "web.whatsapp.com": return .whatsApp
         case "mail.google.com": return .gmail
         case "calendar.google.com": return .googleCalendar
@@ -28,17 +28,18 @@ public enum FavoriteApp: String, CaseIterable, Sendable {
         }
     }
 
-    /// The apps whose page title carries an unread count. GUESS — capture pending (PB2-questions
-    /// "EZ 13:20" item 1): the messaging and mail apps of the table.
+    /// The apps with an unread badge: the ones Arc's ARC_AppTray catalog has a badge color for and
+    /// whose page title carries a count (GMailBadgeRed, WhatsAppBadgeRed, TwitterBadgeGray).
+    /// GithubBadgeBlack also exists, but GitHub's title has no count: no badge (GUESS — capture pending).
     public var hasUnreadBadge: Bool {
         switch self {
-        case .twitter, .whatsApp, .gmail, .outlook, .slack: true
+        case .twitter, .whatsApp, .gmail: true
         default: false
         }
     }
 
     /// Badge fill (ARC_AppTray asset catalog, sRGB): GMailBadgeRed / WhatsAppBadgeRed (0.918, 0.263,
-    /// 0.208), TwitterBadgeGray (0.267 gray; white in dark). Apps without an asset use the red (GUESS).
+    /// 0.208), TwitterBadgeGray (0.267 gray; white in dark).
     public func badgeFill(dark: Bool) -> (red: Double, green: Double, blue: Double) {
         if self == .twitter { return dark ? (1, 1, 1) : (0.267, 0.267, 0.267) }
         return (0.918, 0.263, 0.208)
