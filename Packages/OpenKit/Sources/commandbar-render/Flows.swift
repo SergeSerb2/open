@@ -110,8 +110,10 @@ enum Flows {
                   hint == "hint YouTube" && completedName == "youtube.com", "trailing \(hint), completion \(completedName ?? "none")")
             let a = fresh(.newTab)
             a.type("amazon"); a.settle()
-            check("\"amazon\" (the name, no completion) also offers Space", a.controller.view.debugTrailing == "hint+space Amazon" && a.controller.inlineCompletion == nil,
-                  "trailing \(a.controller.view.debugTrailing)")
+            // Capture PB1-i: the built-in top-domain list completes "amazon" to amazon.com even with no
+            // history, so the hint is Tab only (CC-5: a completion never offers Space).
+            check("\"amazon\" completes to amazon.com from the built-in list: Tab only", a.controller.view.debugTrailing == "hint Amazon" && a.controller.inlineCompletion?.fieldText == "amazon.com",
+                  "trailing \(a.controller.view.debugTrailing), completion \(a.controller.inlineCompletion?.fieldText ?? "none")")
             check("Tab enters Site Search (chip, empty query)", s.controller.siteScope?.id == "youtube" && s.controller.text.isEmpty,
                   "scope \(s.controller.siteScope?.id ?? "nil"), text \"\(s.controller.text)\"")
             s.type("lofi beats"); s.settle()
