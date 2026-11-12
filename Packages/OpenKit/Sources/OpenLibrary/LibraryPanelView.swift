@@ -306,7 +306,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
     func updateEmptyCopy() {
-        let noMatches = !viewModel.query.isEmpty || hasActiveFilters
+        // Downloads: every outside entry sets the Profile filter to the window owner's Profile, so a filter alone
+        // does not mean the user narrowed anything. With no download in any Profile the copy stays "No downloads yet".
+        let noMatches = !viewModel.query.isEmpty || (hasActiveFilters && !(section == .downloads && viewModel.downloads.downloads.isEmpty))
         let folderSources = section == .media && viewModel.mediaFolders.map { !$0.onboarded } == true
         let copy = folderSources ? (title:"Show your media here",body:"Screenshots, images and videos from this Mac, ready to drag into any page.",button:Optional("Choose Folders…")) : section.emptyCopy
         emptyGlyph.glyph = LibraryGlyph(rawValue:section.rawValue) ?? .media

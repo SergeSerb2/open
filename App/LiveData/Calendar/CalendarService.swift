@@ -19,17 +19,29 @@ final class CalendarService {
 
   #if OPEN_AUTOMATION
   /// E2E only: replaces the system store with a fixture source (no TCC prompt on test machines).
-  func replaceSource(_ replacement: any CalendarSource) { source = replacement; generation += 1; onChange?() }
+  func replaceSource(_ replacement: any CalendarSource) { source = replacement; lastEvents = []; generation += 1; onChange?() }
   #endif
 
   var now: Date { source.now }
 
+  /// The events of the last fetch by any consumer (Live Calendar, the calendar card, Join Meeting). Memory only.
+  private(set) var lastEvents: [CalendarEvent] = []
+  /// The meeting Join Meeting would open, from memory only: no fetch, no store, no prompt. Menu validation uses it.
+  var joinableMeetingInMemory: (event: CalendarEvent, link: MeetingLink)? {
+    guard source.access == .granted else { return nil }
+    return NextMeeting.pick(lastEvents, now: source.now)
+  }
+
   /// Today's events (local calendar day of `now`), widened to one hour past `now` near midnight.
-  func todayEvents() async -> [CalendarEvent] {
+  /// `remember: false` is for automation reads only: they must not fill the memory that menu validation uses.
+  func todayEvents(remember: Bool = true) async -> [CalendarEvent] {
     let now = source.now, calendar = Calendar.current
     let start = min(calendar.startOfDay(for: now), now.addingTimeInterval(-NextMeeting.joinableAfterStart))
     let endOfDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(86_400)
-    return await source.events(from: start, to: max(endOfDay, now.addingTimeInterval(3_600)))
+    let asked = source
+    let events = await source.events(from: start, to: max(endOfDay, now.addingTimeInterval(3_600)))
+    if remember, asked === source { lastEvents = events }
+    return events
   }
 
   func nextMeeting() async -> (event: CalendarEvent, link: MeetingLink)? {

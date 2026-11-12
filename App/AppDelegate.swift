@@ -96,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var deepLinks = DeepLinkRouter(app: self)
+  lazy var mailto = MailtoRouter(app: self)
   lazy var linkIntake: ExternalLinkIntake = {
     let intake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
     let meet = MeetRoute(app: self)
@@ -115,7 +116,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var liveFetch = LiveFetchHost(app: self)
   lazy var liveFolders = LiveFolderService(app: self)
   /// Calendar data for Join Meeting, the calendar card and Live Calendar; first use only (plan NS §2 CAL).
-  lazy var calendar = CalendarService()
+  var calendar: CalendarService {
+    if let loadedCalendar { return loadedCalendar }
+    let made = CalendarService(); loadedCalendar = made; return made
+  }
+  /// The calendar service if a calendar feature already created it. Menu validation reads only this.
+  private(set) var loadedCalendar: CalendarService?
   /// Live Calendar Favorite tiles (LD §4); idle until a calendar Favorite tile appears.
   lazy var liveCalendar = LiveCalendarCoordinator(app: self)
   var keyBindings = KeyBindingStore.empty

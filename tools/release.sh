@@ -93,7 +93,7 @@ FEED=appcast.xml
 [[ "$CHANNEL" != beta ]] || FEED=appcast-beta.xml
 FEED_URL=${OPEN_RELEASE_FEED_URL:-https://sergeserb2.github.io/open-releases/appcast.xml}
 if [[ "$CHANNEL" == beta ]]; then FEED_URL=${FEED_URL%/*}/appcast-beta.xml; fi
-DOWNLOAD_PREFIX=${OPEN_RELEASE_DOWNLOAD_PREFIX:-https://github.com/SergeSerb2/open/releases/download/$TAG/}
+DOWNLOAD_PREFIX=${OPEN_RELEASE_DOWNLOAD_PREFIX:-https://github.com/SergeSerb2/open-releases/releases/download/$TAG/}
 DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX%/}/
 TOOLS=${OPEN_SPARKLE_TOOLS:-$HOME/Developer/open-release-tools/sparkle-${SPARKLE_PIN:-UNCONFIGURED}/bin}
 MODE=production
