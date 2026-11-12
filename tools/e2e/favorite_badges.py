@@ -1,7 +1,8 @@
 """Audit A2: Favorite ("Top App") unread badges through the real App, real pages and the real menu.
 
-A private server answers for the app hosts (x.com, web.whatsapp.com, mail.google.com) and a plain
-host (example.com) through host-resolver rules; no request reaches a public host. Each page sets
+A private HTTPS server (a one-day self-signed certificate; the app hosts are HSTS-preloaded, so
+plain HTTP cannot load) answers for the app hosts (x.com, web.whatsapp.com, mail.google.com) and a
+plain host (example.com) through host-resolver rules; no request reaches a public host. Each page sets
 its own title, as a signed-in app does. Rows (FB_*):
   gmail_count        "Inbox (12) - … - Gmail" shows 12
   leading_count      "(3) Home / X" shows 3
@@ -17,6 +18,11 @@ its own title, as a signed-in app does. Rows (FB_*):
 """
 import http.server
 import json
+import os
+import shutil
+import ssl
+import subprocess
+import tempfile
 import threading
 
 HOSTS = ('x.com', 'web.whatsapp.com', 'mail.google.com', 'example.com')
@@ -41,6 +47,14 @@ def run(factory, results, harness):
 
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     server.daemon_threads = True
+    folder = tempfile.mkdtemp(prefix='open-favorite-badges-')
+    cert, key = os.path.join(folder, 'cert.pem'), os.path.join(folder, 'key.pem')
+    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                    '-subj', '/CN=Open favorite badge fixture', '-keyout', key, '-out', cert],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(cert, key)
+    server.socket = tls.wrap_socket(server.socket, server_side=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     rules = ', '.join('MAP %s 127.0.0.1:%d' % (h, server.server_port) for h in HOSTS)
     app = None
@@ -51,11 +65,12 @@ def run(factory, results, harness):
 
     try:
         app = factory(urls=('about:blank',), fresh=True,
-                      extra_args=['--host-resolver-rules=' + rules + ', MAP * ~NOTFOUND, EXCLUDE localhost', '--no-proxy-server'])
+                      extra_args=['--host-resolver-rules=' + rules + ', MAP * ~NOTFOUND, EXCLUDE localhost',
+                                  '--ignore-certificate-errors', '--no-proxy-server'])
         for key in KEYS: app.call('defaults', key=key, value=None)
 
         def favorite(host, path='/'):
-            tab = new_tab(app, 'http://%s%s' % (host, path))
+            tab = new_tab(app, 'https://%s%s' % (host, path))
             app.call('wait', tab=tab)
             app.call('favorite', tab=tab)
             return tab
@@ -133,7 +148,7 @@ def run(factory, results, harness):
         app.call('window-focus', id=first_window, activate=True)
 
         app.call('sidebar-menu', node=x, item='Remove Favorite')
-        pinned = new_tab(app, 'http://x.com/notifications')
+        pinned = new_tab(app, 'https://x.com/notifications')
         app.call('wait', tab=pinned)
         app.call('pin', tab=pinned)
         title(pinned, '(4) Notifications / X')
@@ -150,3 +165,4 @@ def run(factory, results, harness):
         finally:
             server.shutdown()
             server.server_close()
+            shutil.rmtree(folder, ignore_errors=True)

@@ -21,6 +21,10 @@ TEAMS = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_e2e%40thread.v2/
 
 def run(factory, results, tmp, harness):
     wait_until, new_tab = harness['wait_until'], harness['new_tab']
+    badges = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'favorite_badges.py'))['run']
+    if os.environ.get('OPEN_E2E_FAVORITE_BADGES_ONLY') == '1':
+        badges(factory, results, harness)
+        return
     # The denied card's button must not open System Settings on the test machine.
     app = factory(urls=('about:blank',), fresh=True, extra_args=ENGINE_SWITCHES, extra_env={'OPEN_E2E_NO_SYSTEM_SETTINGS': '1'})
 
@@ -144,7 +148,7 @@ def run(factory, results, tmp, harness):
         finally:
             app.quit()
     # Audit A2: Favorite unread badges (own launch: app hosts map to a local server).
-    runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'favorite_badges.py'))['run'](factory, results, harness)
+    badges(factory, results, harness)
 
 
 def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
