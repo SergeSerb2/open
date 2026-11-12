@@ -110,6 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var initialWindowInputMonitor: Any?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
+  /// Live Folder / glance fetches (LF L2): made on first use only.
+  lazy var liveFetch = LiveFetchHost(app: self)
+  lazy var liveFolders = LiveFolderService(app: self)
   /// Calendar data for Join Meeting, the calendar card and Live Calendar; first use only (plan NS §2 CAL).
   lazy var calendar = CalendarService()
   /// Live Calendar Favorite tiles (LD §4); idle until a calendar Favorite tile appears.
