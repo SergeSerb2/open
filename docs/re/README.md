@@ -36,3 +36,4 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 | `capture-session-2-results.md` | Capture session 2 (2026-10-26): what each plan and open PR must change, contradictions with lead decisions, and what stays uncaptured. Measurements are in `interaction-states.md` §20 |
 | `live-data.md` | Live Folders (GitHub), Calendar Preview and mail previews, Live Calendar, Join Meeting, Peek Email: surfaces, data paths, storage, flags (F2, 2026-11-11) |
 | `browser-import.md` | Arc's import from Safari, Chromium-family browsers and Firefox: surfaces, strings, categories, source file formats, consent matrix |
+| `live-data.md` | Live Folders (GitHub), Calendar Preview and mail previews, Live Calendar, Join Meeting, Peek Email: surfaces, data paths, storage, flags (F2, 2026-11-11) |
