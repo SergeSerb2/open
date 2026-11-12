@@ -9439,6 +9439,7 @@ def commandbar_checks(factory, results, tmp, config):
             app.quit(); server.shutdown(); server.server_close()
 
     import settings_live
+    settings_live.dock_tile(factory, results, tmp, wait_until)
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
