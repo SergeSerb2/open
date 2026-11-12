@@ -16,7 +16,9 @@ public final class EaselCanvasView: NSView {
     public private(set) var tool: EaselTool = .pointer
     public private(set) var selection: [UUID] = []
     public private(set) var zoom: CGFloat = 1
-    public static let zoomSteps: [CGFloat] = [0.33, 0.5, 0.75, 1, 1.25, 1.5, 2, 3]
+    /// ⌘− ≈ 74 %, 50 %, min ≈ 33 % (docs/re/easels.md); ⌘= ≈ ×1.75, ×2.5, max ≈ ×4 on the third
+    /// press (C-report-s6 §1, measured ×1.65–1.76, ×2.35–2.52, ×3.77).
+    public static let zoomSteps: [CGFloat] = [0.33, 0.5, 0.75, 1, 1.75, 2.5, 4]
 
     let scrollView = NSScrollView()
     let docView = EaselDocumentView()
@@ -35,7 +37,7 @@ public final class EaselCanvasView: NSView {
         super.init(frame: CGRect(x: 0, y: 0, width: 900, height: 700))
         wantsLayer = true
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -425,11 +427,14 @@ public final class EaselCanvasView: NSView {
         let z = min(max(value, Self.zoomSteps.first!), Self.zoomSteps.last!)
         guard abs(z - zoom) > 0.0001 else { return }
         let clip = scrollView.contentView.bounds
-        let anchor = docPoint(CGPoint(x: clip.midX, y: clip.minY))
+        // The zoom keeps the visible centre in place (C-report-s6 §1: anchored near the centre).
+        let anchor = docPoint(CGPoint(x: clip.midX, y: clip.midY))
         zoom = z
         layoutDocument()
-        let y = anchor.y * scale
-        docView.scroll(CGPoint(x: 0, y: max(0, y)))
+        let size = scrollView.contentView.bounds.size
+        let center = viewPoint(anchor)
+        docView.scroll(CGPoint(x: max(0, min(center.x - size.width / 2, docView.bounds.width - size.width)),
+                               y: max(0, min(center.y - size.height / 2, docView.bounds.height - size.height))))
     }
 
     // MARK: State (automation and accessibility)
