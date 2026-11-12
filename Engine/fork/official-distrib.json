@@ -1,10 +1,10 @@
 {
- "status": "official release engine for the App (adopted on engine/lane-2026-11-11)",
+ "status": "official release engine for the App (adopted on engine/lane-2026-11-11; engine items 2026-11-12)",
  "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
  "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
  "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",
- "framework_sha256": "b8d6e3363eec07f880bbc1505580480c143b4625a7247d84032753852751259f",
- "framework_uuid": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+ "framework_sha256": "0eb161479b8150aca15574cb9e7265312f2bd54ea3e502ded579367066db28c8",
+ "framework_uuid": "4C4C44EA-5555-3144-A1EC-D6BD6C48EBCA",
  "chromium_version": "156.0.8078.48",
  "cef_version": "156.0.14+g4fa4ab5",
  "chromium_head": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
@@ -16,14 +16,19 @@
  "args_delta_vs_release_args_gn": "use_remoteexec = true",
  "pgo_profile": "chrome-mac-arm-8078-1791925243-b77c87a12380c6212a5d36737d1c76576eaaa85d-8bf8e95f3aaaafc23171beddc0ee3f397abd1e12.profdata",
  "pgo_profile_sha256": "15fbc265a780b68bd943e5a2f2c89b58a006c45e28435257e4d927f1c7ee0c20",
- "open_patches": "all 47 active (Engine/fork/patches/*/series), incl. chromium/0011 (ThinLTO jobs 6), 0012 (Widevine opt-in), 0013 (bookmark deletion barrier); 117 CEF patches; 141 overlay files (engine-status S-2..S-4 PASS)",
- "built_at": "2026-11-11 23:05 America/Vancouver (remote compile, boat.dev + NativeLink); 2026-11-12 00:54 incremental local rebuild for patch 0012 (1 compile + framework link); 2026-11-12 03:47 incremental local rebuild for patch 0013 (138 steps)",
- "symbols": "dSYM + receipts archived on the M5 in ~/Developer/open-engine/symbols/<distribution_name>/ (not in git)",
+ "open_patches": "all 49 active (Engine/fork/patches/*/series), incl. chromium/0011 (ThinLTO jobs 6), 0012 (Widevine opt-in), 0013 (bookmark deletion barrier), 0507 (protocol handlers), cef/0306 (Alloy extension menu); 146 overlay files (engine-status S-2..S-4 PASS)",
+ "built_at": "2026-11-11 23:05 America/Vancouver (remote compile, boat.dev + NativeLink); 2026-11-12 00:54 incremental local rebuild for patch 0012 (1 compile + framework link); 2026-11-12 03:47 incremental local rebuild for patch 0013 (138 steps); 2026-11-12 09:2x\u201311:55 incremental local rebuilds (OFFLINE) for patches 0306, 0507 and the ad-block / protocol-handler overlay (last: 5 steps)",
+ "symbols": "dSYM + receipts archived on the M5 in ~/Developer/open-engine/symbols/<distribution_name>/ (not in git); this build's dSYM: ~/Developer/open-engine/symbols/candidate-0eb16147-engine-items/ until it is recorded as the distribution",
  "known_limits": [
   "CEF framework links with --lto-O0 (thinlto_optimize_default); no link-time optimization"
  ],
  "widevine": "enable_widevine=true, bundle_widevine_cdm=false (release.args.gn); CDM component registers only with --open-enable-widevine (Advanced setting \"Play DRM-protected video\", off by default)",
  "superseded": [
+  {
+   "framework_sha256": "b8d6e3363eec07f880bbc1505580480c143b4625a7247d84032753852751259f",
+   "framework_uuid": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+   "reason": "before the 2026-11-12 engine items (patch 0306 Alloy extension menu, 0507 protocol handlers, $removeparam on navigations)"
+  },
   {
    "framework_sha256": "cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b",
    "framework_uuid": "4C4C44F3-5555-3144-A1A2-041993A5F496",

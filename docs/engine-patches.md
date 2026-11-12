@@ -956,6 +956,16 @@ Section 8 decisions (differences from page-platform §6, with the reason):
 - **EP-6 reports no page.** Chromium keeps the creating document of a non-persistent notification inside content's dispatcher; the embedder finds the tab by origin.
 - **Test hooks** (`CefGetDisplayedNotifications`, `CefSimulateNotificationClick`, `CefSimulateHistorySwipe`) run only with the browser switch `--open-automation`, which only automation builds of the App pass. The swipe hook replays the overlay controller sequence and the navigation, not Chromium's gesture recognition (manual check U-S1).
 
+## Engine items 2026-11-12 (0306, 0507, ad-block rule 4)
+
+| Item | Patch / overlay | What it does |
+|---|---|---|
+| `$removeparam` on navigations | overlay only: `open/adblock/open_adblock_hooks.cc`, `open_adblock_url_loader_factory.{h,cc}` | Main-frame navigation factories are wrapped for the rewrite only; subframe navigations lose the old `!navigation` condition. One internal 307 per request, same origin, GET/HEAD. Plan: adblock-fork §7.4 rule 4. |
+| Web protocol handlers | chromium `0507-page-protocol-handler-request.patch` (one accessor); overlay `open/browser/page/open_protocol_handlers.cc`; `cef_open_page.h`: `CefGetPendingProtocolHandlerRequest`, `CefGetProtocolHandlers`, `CefTranslateProtocolHandlerURL`, `CefRemoveProtocolHandler` | Chrome already prompts, stores and routes; these expose the pending request's scheme/URL and the registry. |
+| Extension items in Alloy menus | cef `0306-open-alloy-extension-menu.patch` (`menu_manager.cc`, two calls); overlay `open/browser/extensions/open_alloy_extension_menu.{h,cc}` | `ContextMenuMatcher` + `PopulateExtensionItems` fill a private model that is copied into CEF's Alloy model; commands run through the matcher. |
+
+Rebase: re-check `RegisterProtocolHandlerPermissionRequest` (only class with `RequestType::kRegisterProtocolHandler`; the overlay casts on that), `context_menu_helpers::PopulateExtensionItems`, and `CefMenuManager::CreateContextMenu` / `ExecuteCommand`.
+
 ## Profiles (Section 10, 0701–0703)
 
 The Profile APIs use the experimental surface in overlay header

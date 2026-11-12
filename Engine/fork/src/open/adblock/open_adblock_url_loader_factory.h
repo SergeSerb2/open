@@ -50,6 +50,9 @@ struct AdBlockFactoryContext {
   // registrable domain, so an exclusion of a subdomain matches (§6.7).
   std::string top_host;
   bool subframe_navigation = false;
+  // A main-frame navigation: only $removeparam applies (§7.4 rule 4); main
+  // frames are never blocked. Exclusions use each request's own host.
+  bool main_frame_navigation = false;
   // The document that counts this factory's stops. Frameless factories
   // (shared and service workers) have none and do not count (§7.5).
   content::WeakDocumentPtr document;
@@ -118,6 +121,17 @@ class OpenAdBlockURLLoaderFactory : public network::mojom::URLLoaderFactory {
   struct ColdRequest;
   void ResumeColdRequest(std::unique_ptr<ColdRequest> request, bool fail_open);
   void StartRequest(
+      mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& annotation,
+      base::TimeTicks arrival,
+      bool fail_open);
+  // A main-frame navigation request: a $removeparam rewrite or a direct
+  // pass-through (no loader, no extra hop for the response).
+  void StartMainFrameRequest(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
       int32_t request_id,
       uint32_t options,

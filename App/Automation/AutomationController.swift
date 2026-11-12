@@ -951,7 +951,8 @@
         let peek = controller.peekController
         return ["shown": peek.isShown, "expanding": peek.isExpanding, "stack": peek.stack.map { item in
           ["source": item.sourceTabID.description, "originalHostTab": item.hostTabID.description,
-           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0] as [String: Any]
+           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0,
+           "style": (item.host as? EngineWebContentHost).map { $0.content.runtimeStyle == .chrome ? "chrome" : "alloy" } ?? ""] as [String: Any]
         }] as [String: Any]
       case "spaces":
         return app.model.spaces.map { space in
@@ -1658,6 +1659,22 @@
           SitePermissionStore.forContext(context).set(origin: origin, kind: kind, state: s, requestSystemAuthorization: false)
         }
         return SitePermissionStore.forContext(context).state(origin: origin, kind: kind).rawValue
+      case "protocol-handlers":
+        // Chromium's web protocol handler registry of the focused Profile.
+        let context = try focusedBrowser(w, create: false).context
+        var result: [String: Any] = [:]
+        // Remove first, so `translated` describes the state after the removal.
+        if let scheme = a["removeScheme"] as? String, let template = a["removeURLTemplate"] as? String {
+          result["removed"] = context.protocolHandlers.first { $0.scheme == scheme && $0.urlTemplate == template }
+            .map { context.removeProtocolHandler($0) } ?? false
+        }
+        if let raw = a["translate"] as? String, raw.utf8.count <= 4096, let target = URL(string: raw) {
+          result["translated"] = context.protocolHandlerURL(for: target)?.absoluteString ?? NSNull()
+        }
+        result["handlers"] = context.protocolHandlers.map {
+          ["scheme": $0.scheme, "urlTemplate": $0.urlTemplate, "default": $0.isDefault] as [String: Any]
+        }
+        return result
       case "download-dir":
         w.downloadDirectory = URL(fileURLWithPath: a["path"] as? String ?? NSTemporaryDirectory())
         return true
