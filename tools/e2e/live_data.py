@@ -296,6 +296,58 @@ def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
         server.shutdown()
 
 
+def live_folder_import_checks(app, results, wait_until, tmp, harness):
+    """L7: Import from Arc brings an Arc Live Folder (settings + PR rows) and Arc's two Live Folder
+    preferences. Synthetic Arc home: <home>/Library/Application Support/Arc + Preferences plist."""
+    import json, plistlib, runpy, uuid
+    from pathlib import Path
+    home = Path(tmp) / 'arc-live-home'
+    arc = home / 'Library' / 'Application Support' / 'Arc'
+    arc.mkdir(parents=True, exist_ok=True)
+    ids = runpy.run_path(str(Path(harness['ROOT']) / 'tools' / 'e2e' / 'firstrun.py'))['fixture'](arc)
+    sidebar = json.loads((arc / 'StorableSidebar.json').read_text())
+    items = sidebar['sidebar']['containers'][1]['items']
+    def new_id(name): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/lf-l7/' + name)).upper()
+    live_id, pr1, pr2 = new_id('live'), new_id('pr1'), new_id('pr2')
+    for key, url, title in ((pr1, 'https://github.com/acme/app/pull/12', 'Fix sidebar drag'), (pr2, 'https://github.com/acme/web/pull/7', 'New header')):
+        items.extend([key, dict(id=key, data={'tab': dict(savedURL=url, savedTitle=title)}, childrenIds=[], title=title)])
+    items.extend([live_id, dict(id=live_id, title='Pull Requests', childrenIds=[pr1, pr2], data={'list': {'automaticLiveFolderData': {
+        'dataSource': {'github': {}}, 'hiddenItems': [{'url': {'_0': 'https://github.com/acme/app/pull/3'}}],
+        'filter': {'github': {'attributes': 15, 'hiddenRepositories': [{'owner': 'acme', 'name': 'old'}]}},
+        'lastFetch': {'timestamp': 0, 'status': {'success': {}}}}}})])
+    for i in range(0, len(items), 2):
+        if items[i] == ids['beta'] or (isinstance(items[i + 1], dict) and items[i + 1].get('id') == ids['pb']):
+            items[i + 1]['childrenIds'].append(live_id)
+    (arc / 'StorableSidebar.json').write_text(json.dumps(sidebar))
+    prefs_dir = home / 'Library' / 'Preferences'; prefs_dir.mkdir(parents=True, exist_ok=True)
+    with open(prefs_dir / 'company.thebrowser.Browser.plist', 'wb') as f:
+        plistlib.dump({'hasTurnedOffGithubLiveFolder': True, 'hasSeenGithubLiveFolderEducation': True}, f, fmt=plistlib.FMT_BINARY)
+    keys = ('open.liveFolders.githubAutoCreate', 'open.liveFolders.introSeen')
+    for key in keys: app.call('defaults', key=key, value=None)
+    state = lambda: app.call('first-run')
+    app.call('first-run', action='settings-import', directory=str(arc))
+    app.call('first-run', action='settings-next')
+    app.call('first-run', action='settings-run')
+    report = wait_until(lambda: (lambda s: s if s.get('settingsStep') == 'report' else None)(state()), timeout=60, step=.05) or state()
+    try: app.call('first-run', action='settings-done')
+    except RuntimeError: pass
+    beta = next((s for s in app.call('spaces') if s['title'] == 'Beta'), None)
+    folder = app.call('live-folder-state', space=beta['id']) if beta else {}
+    rows = {r['url']: r['live'] for r in folder.get('rows', [])}
+    prefs = {k: app.call('defaults', key=k) for k in keys}
+    results['live_folder_arc_import'] = {'ok': bool(beta) and folder.get('exists') and folder.get('title') == 'Pull Requests'
+        and rows == {'https://github.com/acme/app/pull/12': 'https://github.com/acme/app/pull/12', 'https://github.com/acme/web/pull/7': 'https://github.com/acme/web/pull/7'}
+        and folder.get('hiddenItems') == ['https://github.com/acme/app/pull/3'] and folder.get('hiddenRepositories') == ['acme/old']
+        and prefs == {'open.liveFolders.githubAutoCreate': False, 'open.liveFolders.introSeen': True},
+        'folder': folder, 'prefs': prefs, 'report': {k: report.get(k) for k in ('lastOutcome', 'lastFailures', 'arcPreferences')}}
+    # Undo the import: the folder and the two settings go back.
+    app.call('sidebar-key', key='z', modifiers=['command'])
+    wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+    undone = wait_until(lambda: (lambda v: v if v == {k: None for k in keys} else None)({k: app.call('defaults', key=k, persistent=True) for k in keys}), timeout=10, step=.1)
+    results['live_folder_arc_import_undo'] = {'ok': undone is not None and not any(s['title'] == 'Beta' and app.call('live-folder-state', space=s['id']).get('exists') for s in app.call('spaces')),
+        'prefs': {k: app.call('defaults', key=k, persistent=True) for k in keys}}
+
+
 def run(factory, results, tmp, harness):
     new_tab, wait_until = harness['new_tab'], harness['wait_until']
     server, port = harness['_sleep_server']()
@@ -401,6 +453,7 @@ def run(factory, results, tmp, harness):
         app.call('hover', leave=True, ms=400)
         results['live_recents_hides_on_leave'] = {'ok': app.call('glance-state').get('shown') is False}
         gmail_checks(app, results, wait_until, new_tab, {'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
+        live_folder_import_checks(app, results, wait_until, tmp, harness)
         holder['app'] = app
         app = live_folder_checks(holder, results, wait_until, factory, new_tab)
     finally:
