@@ -59,7 +59,7 @@ extension AutomationController {
     case "press": allowed = ["action", "item"]
     case "gutter": allowed = ["action", "item"]
     case "paste-file": allowed = ["action", "path"]
-    case "click-link": allowed = ["action", "at"]
+    case "click-link": allowed = ["action", "at", "modifiers"]
     default: throw Failure(message: "unknown note action")
     }
     guard Set(args.keys).isSubset(of: allowed) else { throw Failure(message: "unknown note argument") }
@@ -184,6 +184,17 @@ extension AutomationController {
       default:
         guard let at = args["at"] as? Int, let storage = editor.bodyView.textStorage, at >= 0, at < storage.length,
           let link = storage.attribute(.link, at: at, effectiveRange: nil) else { throw Failure(message: "no link there") }
+        var flags: NSEvent.ModifierFlags = []
+        for name in args["modifiers"] as? [String] ?? [] {
+          switch name {
+          case "command": flags.insert(.command)
+          case "shift": flags.insert(.shift)
+          case "option": flags.insert(.option)
+          case "control": flags.insert(.control)
+          default: throw Failure(message: "unknown modifier \(name)")
+          }
+        }
+        editor.linkFlagsForNextClick = flags
         editor.bodyView.clicked(onLink: link, at: at)
       }
     default: break
