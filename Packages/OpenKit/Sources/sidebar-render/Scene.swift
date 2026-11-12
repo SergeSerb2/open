@@ -1,5 +1,6 @@
 import AppKit
 import OpenDesign
+import OpenLiveData
 import OpenModel
 import OpenSidebar
 
@@ -15,6 +16,8 @@ final class RenderScene: NSView {
         /// Panel without a page: white 10 % (Arc's empty state). Otherwise opaque white.
         var emptyPanel = true
         var previewFolderID: ItemID?
+        /// A Pinned tab shown with the Recents card (LF L1 look frames).
+        var previewRecents: (tabID: ItemID, site: RecentsSite)?
     }
 
     let background: ThemeBackgroundView
@@ -25,12 +28,14 @@ final class RenderScene: NSView {
     let cardShadow = RevealCardShadowView()
     let options: Options
     let folderPreview: FolderPreviewView?
+    let recentsPreview: RecentsPreviewView?
 
     init(context: SidebarContext, options: Options, delegate: any SidebarDelegate) {
         self.options = options
         background = ThemeBackgroundView(frame: CGRect(origin: .zero, size: options.size))
         sidebar = SidebarView(context: context)
         folderPreview = options.previewFolderID.flatMap { context.model.node(id: $0)?.folder }.map { FolderPreviewView(context: context, folder: $0) }
+        recentsPreview = options.previewRecents.flatMap { item in context.model.tab(id: item.tabID).map { RecentsPreviewView(context: context, tab: $0, site: item.site) } }
         super.init(frame: CGRect(origin: .zero, size: options.size))
         wantsLayer = true
         sidebar.delegate = delegate
@@ -44,6 +49,12 @@ final class RenderScene: NSView {
         if !options.sidebarHidden || options.revealCard { addSubview(sidebar) }
         if let folderPreview {
             addSubview(folderPreview)
+        }
+        if let recentsPreview {
+            // The card's history read is async; renders wait for it (synthetic rows, < 1 s).
+            let deadline = Date().addingTimeInterval(2)
+            while !recentsPreview.isLoaded, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+            addSubview(recentsPreview)
         }
         if options.trafficLights && !(options.sidebarHidden && !options.revealCard) {
             if options.revealCard { sidebar.addSubview(lights) } else { addSubview(lights) }
@@ -81,6 +92,14 @@ final class RenderScene: NSView {
             let row = sidebar.rowFrame(nodeID: folderPreview.folder.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
             folderPreview.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
                                          width: HoverPreviewMetrics.folderWidth, height: height)
+        }
+        if let recentsPreview {
+            sidebar.layoutSubtreeIfNeeded()
+            let height = min(recentsPreview.fittingSize.height, bounds.height - 20)
+            // As HoverPreviewController's glance placement: 4 pt right of the sidebar, centered on the row.
+            let row = sidebar.rowFrame(nodeID: recentsPreview.tab.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
+            recentsPreview.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
+                                          width: HoverPreviewMetrics.folderWidth, height: height)
         }
 
     }
