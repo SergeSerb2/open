@@ -22,6 +22,8 @@ final class AppImportUndo {
   private var archives: [(ArchiveStore, [ArchivedTabRecord])] = []
   private var histories: [(HistoryStore, HistoryImportUndo)] = []
   private var boosts: [(ProfileID, BoostStore, [Boost])] = []
+  /// Settings written by the import: the values before (nil = absent) and after.
+  private var defaults: [(previous: [String: Any?], applied: [String: Any])] = []
   private(set) var task: Task<Void, Never>?
   private(set) var pendingOperations = 0
   private(set) var errorText = ""
@@ -50,6 +52,19 @@ final class AppImportUndo {
   func append(boosts values: [Boost], store: BoostStore, profileID: ProfileID) {
     guard !values.isEmpty else { return }
     boosts.append((profileID, store, values)); registerIfNeeded()
+  }
+
+  func append(defaults previous: [String: Any?], applied: [String: Any]) {
+    guard !applied.isEmpty else { return }
+    defaults.append((previous, applied)); registerIfNeeded()
+  }
+
+  private func applyDefaults(undoing: Bool) {
+    let store = UserDefaults.standard
+    for entry in (undoing ? defaults.reversed() : defaults) {
+      if undoing { for (key, value) in entry.previous { if let value { store.set(value, forKey: key) } else { store.removeObject(forKey: key) } } }
+      else { for (key, value) in entry.applied { store.set(value, forKey: key) } }
+    }
   }
 
   func finishImport() {
@@ -92,6 +107,7 @@ final class AppImportUndo {
           }.value
         }
         applyModel(undoing: true)
+        applyDefaults(undoing: true)
         for (profileID, _, _) in boosts { app.stores.boosts.refresh(profile: profileID) }
         for (store, receipt) in histories.reversed() {
           guard await store.removeImportedHistory(receipt) else { throw UndoFailure.store }
@@ -99,6 +115,7 @@ final class AppImportUndo {
         for (store, records) in archives.reversed() { try await store.delete(ids: records.map(\.id)) }
       } else {
         applyModel(undoing: false)
+        applyDefaults(undoing: false)
         var replacedBoosts: [(ProfileID, BoostStore, [Boost])] = []
         for (profileID, store, values) in boosts {
           guard app.model.profile(id: profileID) != nil, !app.stores.boosts.isRetired(profileID) else { continue }

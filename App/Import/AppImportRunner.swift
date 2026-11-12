@@ -40,6 +40,10 @@ final class AppImportRunner: ProfileDataOwner {
   private(set) var historyInProgress = false
   private(set) var historyProcessed = 0
   private(set) var importAllMilliseconds: Double = 0
+  #if OPEN_AUTOMATION
+  /// The last Arc-preferences mapping (`first-run` automation state).
+  var lastArcPreferences: [String: Any] = [:]
+  #endif
   private(set) var historyMilliseconds: Double = 0
   private(set) var totalMilliseconds: Double = 0
   #if OPEN_AUTOMATION
@@ -308,6 +312,9 @@ final class AppImportRunner: ProfileDataOwner {
     // Resolve metadata only after the live model has landed. Destination
     // directory collision suffixes must never be used to read the Arc source.
     mapExtensions()
+    // Arc app settings (live previews, Live Calendar reminder, Meet route): after the Profiles landed.
+    applyArcPreferences(directory: plan.directory, imported: imported, profileMapping: profileMapping, undo: undo,
+                        counts: &counts, failures: &failures)
     if plan.boosts {
       guard !undo.cancelled else { return result() }
       #if OPEN_AUTOMATION
@@ -486,6 +493,35 @@ final class AppImportRunner: ProfileDataOwner {
 
   /// Source Profiles are DTOs. Live Profiles use the same allocator and
   /// initialization hook as Settings creation, retaining the stable import ID.
+  /// Maps Arc's app preferences into Open's settings (`ArcPreferences`, `ArcPreferenceMapping`); undone with the import.
+  private func applyArcPreferences(directory: URL, imported: ArcImportResult, profileMapping: [ProfileID: ProfileID],
+                                   undo: AppImportUndo, counts: inout [String: Int], failures: inout [String: String]) {
+    let prefs: ArcPreferences
+    do { prefs = try ArcPreferences.read(arcDirectory: directory) }
+    catch { failures["Arc settings"] = "Could not be read"; return }
+    guard prefs.found else { return }
+    var writes: [String: Any] = ArcPreferenceMapping.openSettings(prefs)
+    var reminders = 0
+    for (arcKey, arcValue) in prefs.reminderIntervals {
+      guard let value = ArcPreferenceMapping.openInterval(arcValue) else { continue }
+      let sourceID = ProfileID(rawValue: ArcImporter.profileID(forArcProfileKey: arcKey))
+      let targetID = sourceID == imported.sourceDefaultProfileID
+        ? app.model.defaultProfile?.id : (profileMapping[sourceID] ?? sourceID)
+      guard let targetID, app.model.profile(id: targetID) != nil else { continue }
+      writes["open.calendar.reminder.\(targetID.description)"] = value; reminders += 1
+    }
+    let defaults = UserDefaults.standard
+    let previous = Dictionary(uniqueKeysWithValues: writes.keys.map { ($0, defaults.object(forKey: $0)) })
+    for (key, value) in writes { defaults.set(value, forKey: key) }
+    undo.append(defaults: previous, applied: writes)
+    counts["Arc settings"] = writes.count
+    counts["Live Calendar reminders"] = reminders
+    #if OPEN_AUTOMATION
+    lastArcPreferences = ["found": prefs.found, "read": prefs.bools.merging(prefs.reminderIntervals.mapValues { _ in true }) { a, _ in a }.keys.sorted(),
+      "written": writes.mapValues { "\($0)" }]
+    #endif
+  }
+
   private func materializeProfiles(in source: BrowserModel) throws -> BrowserModel {
     let destination = BrowserModel()
     destination.unavailableProfileDirectoryNames = app.model.unavailableProfileDirectoryNames

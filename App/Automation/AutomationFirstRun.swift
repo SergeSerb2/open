@@ -157,6 +157,7 @@ extension AutomationController {
     if let outcome = app.importRunner.lastOutcome {
       state["lastOutcome"] = outcome.counts; state["lastFailures"] = outcome.failures
     }
+    state["arcPreferences"] = app.importRunner.lastArcPreferences
     if let current {
       state["welcome"] = current.welcomeStatus
       state["probeReady"] = current.probe != nil
