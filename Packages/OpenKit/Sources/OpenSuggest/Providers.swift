@@ -547,7 +547,12 @@ public struct HistoryProvider: SuggestProvider {
             quality = TextMatching.rowQuality(query, titles: [TextMatching.fold(m.title)], urls: [(hostBytes, 1), (urlBytes, 0.9)])
             hostOrURL = max(TextMatching.quality(query.bytes, in: hostBytes), TextMatching.quality(query.bytes, in: urlBytes))
             // FTS matched it (for example on a token our matcher reads differently); keep a floor.
-            if quality == 0 { quality = 20 }
+            // A multi-word query is the exception: FTS ignores word order, and Arc needs title words
+            // adjacent and in order (capture PB1-h), so a row our matcher rejects is dropped.
+            if quality == 0 {
+                if query.tokens.count > 1 { return nil }
+                quality = 20
+            }
         }
         var row = Suggestion(
             id: "history:\(TextMatching.urlKey(m.url))", kind: .history,
