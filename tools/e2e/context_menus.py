@@ -822,6 +822,39 @@ def context_menu_checks(factory, results, tmp, h):
                     h._try(lambda t=tab_id: app.call('close', tab=t))
                 h._try(focus)
         run('cm_split_menu_order', split_menu_order)
+
+        # D2c multi-selection (capture session 8 item 6): drawn order for 2 Today tabs and for a tab + a folder.
+        def selection_menu_order():
+            focus()
+            app.call('space', space=app.call('space-create', title='Selection order', profile='Default'))
+            made = [app.call('open', url=origin + '/target.html?sel=%d' % i, background=True)['id'] for i in range(3)]
+            try:
+                folder = app.call('folder', tabs=[made[2]], title='Sel Folder', section='pinned')
+                app.call('sidebar-click', node=made[0]); app.call('sidebar-click', node=made[1], modifiers=['cmd'])
+                tabs = app.call('sidebar-menu-items', node=made[0])
+                app.call('sidebar-key', key='escape')
+                app.call('sidebar-click', node=made[0]); app.call('sidebar-click', node=folder, modifiers=['cmd'])
+                mixed = app.call('sidebar-menu-items', node=folder)
+                app.call('sidebar-key', key='escape')
+                rows = {'tabs': tabs['items'] == ['Copy Links', 'Share 2 Items…', '—', 'Change Icon…', 'Mute', '—', 'Open in Split View', 'Duplicate',
+                                                  'Move to ▸', 'New Folder with 2 Items', '—', 'Archive Tabs', 'Archive Tabs Below'],
+                        'tabs_disabled': set(tabs['disabled']) == {'Change Icon…', 'Mute', 'Archive Tabs Below'},
+                        'mixed': mixed['items'] == ['Copy Links', 'Share 2 Items…', '—', 'Open in Split View', 'Move to ▸', 'New Folder with 2 Items',
+                                                    '—', 'Archive Tabs', 'Delete'],
+                        'mixed_split_disabled': 'Open in Split View' in mixed['disabled']}
+                # Behaviour: Open in Split View joins the two selected tabs into one split; undo restores them.
+                app.call('sidebar-click', node=made[0]); app.call('sidebar-click', node=made[1], modifiers=['cmd'])
+                app.call('sidebar-menu', node=made[0], item='Open in Split View')
+                kinds = [n['kind'] for n in app.call('sidebar-tree')['today']]
+                rows['split_from_selection'] = kinds.count('split') == 1
+                app.call('key', key='z', modifiers=['command'], route='app')
+                rows['split_undo'] = wait(lambda: 'split' not in [n['kind'] for n in app.call('sidebar-tree')['today']], timeout=3) is True
+                return {'ok': all(rows.values()), 'rows': rows, 'tabs': tabs, 'mixed': mixed}
+            finally:
+                for tab_id in made:
+                    h._try(lambda t=tab_id: app.call('close', tab=t))
+                h._try(focus)
+        run('cm_selection_menu_order', selection_menu_order)
         if only_case and not ran_cases:
             raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:
