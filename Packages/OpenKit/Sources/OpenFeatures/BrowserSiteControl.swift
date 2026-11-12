@@ -67,15 +67,23 @@ extension BrowserWindowController {
         view.panel.sidebarContent = style.resolvedAppearance(system: context.systemAppearance)
         view.sidebarMaxX = sidebar.isHidden ? nil : sidebar.convert(sidebar.bounds, to: root).maxX
     }
+    /// F6: the one availability rule for the sidebar URL-field button and every pane-bar
+    /// button: the source has a live, non-`about:` page for the tab and no Peek covers it.
+    func siteControlsAvailable(tabID: ItemID) -> Bool {
+        siteControlsAvailable(siteControlSource?.buttonState(for: tabID))
+    }
+    private func siteControlsAvailable(_ state: (available: Bool, boosted: Bool)?) -> Bool {
+        state?.available == true && !(hasPeekController && peekController.isShown)
+    }
     public func refreshSiteControlButtons() {
         let ids = Set(container.slots.map(\.tabID) + [splitController.focusedTab?.id].compactMap { $0 })
         let states = Dictionary(uniqueKeysWithValues: ids.compactMap { id in
             siteControlSource.map { (id, $0.buttonState(for: id)) }
         })
         if siteControlSource != nil {
-            sidebar.siteControlsAvailable = splitController.focusedTab.map { states[$0.id]?.available == true } == true
-                && !(hasPeekController && peekController.isShown)
+            sidebar.siteControlsAvailable = siteControlsAvailable(splitController.focusedTab.flatMap { states[$0.id] })
         }
+        for slot in container.slots { slot.paneChrome?.siteControlsAvailable = siteControlsAvailable(states[slot.tabID]) }
         func state(_ id: ItemID?) -> SiteControlButtonState {
             let boosted = id.flatMap { states[$0] }?.boosted == true
             let open = siteControl?.isPresented == true && siteControl?.tabID == id

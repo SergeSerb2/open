@@ -186,6 +186,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return session
   }
   func cancelLibraryIdleWork() { for session in librarySessions.values { session.cancelIdleWork() } }
+  /// Window ▸ View Easels & Notes: the in-window Library at its Easels page (Easels and Notes).
+  func showLibraryEasels() {
+    showLibrary()
+    activeLibrarySession?.panel?.select(.easels, animated: false)
+  }
   func toggleLibrary(section: LibrarySection? = nil) {
     if let session = activeLibrarySession, session.controller?.isLibraryOpen == true { session.close() }
     else { showLibrary(section: section) }
