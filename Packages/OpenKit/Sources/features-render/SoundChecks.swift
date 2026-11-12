@@ -34,8 +34,15 @@ enum SoundChecks {
         // Absent = on, as Arc (inverse key playUserInterfaceSoundsDisabled; audit A8, GUESS until PB5-e).
         defaults.removeObject(forKey: "open.advanced.playSoundEffects")
         let absentPlays = effects.play(.capture) && effects.playCount == 1 && effects.loadedSoundCount == 1
+        // Audio runs on its own queue; the call returned at once. Wait for that request before the next one.
+        let returnedWhileBusy = effects.isBusy
+        let deadline = Date().addingTimeInterval(10)
+        while effects.isBusy, Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
         defaults.set(true, forKey: "open.advanced.playSoundEffects")
-        check(absentPlays && effects.play(.capture) && effects.playCount == 2 && effects.loadedSoundCount == 1,
+        check(absentPlays && !effects.isBusy && effects.play(.capture) && effects.playCount == 2 && effects.loadedSoundCount == 1,
               "SE3 absent (default on) and enabled preference play through SoundEffects with one prepared player")
+        // A request that arrives while one is in flight is dropped (no pile-up behind a stuck audio server).
+        let dropped = effects.isBusy ? !effects.play(.capture) && effects.droppedCount == 1 : true
+        check(dropped, "SE4 a request during an in-flight one is dropped (off-main audio; returnedWhileBusy=\(returnedWhileBusy))")
     }
 }
