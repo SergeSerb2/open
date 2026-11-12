@@ -178,6 +178,8 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `new-incognito-window` | New Incognito Window | Cmd+Shift+N | window | File |
 | `new-little-open-window` | New Little Open Window | Cmd+Opt+N | window | File |
 | `blank-window` | Blank Window | Cmd+Ctrl+N | window | File |
+| `new-note` | New Note | Ctrl+Shift+N | window | File |
+| `new-note-in-split` | New Note (in Split) | Ctrl+Opt+N | window | File |
 | `new-easel` | New Easel | Ctrl+Shift+E | window | File |
 | `close-window` | Close Window | Cmd+Shift+W | window | File |
 | `archive-tab` | Archive Tab | Cmd+W | window | File |
@@ -356,8 +358,6 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 Go to Tab 1–9 targets come from one model query, `BrowserModel.goToItemTargets(windowID:includeFavorites:ninthSelectsLast:)` (commandbar-completion §4.4.1): the focused Space's Profile Favorites (when "Include Favorites in ordering" is on, the default), then pinned, then Today in sidebar order; expanded folders give their visible children, a peeked folder its one visible child, collapsed folders and a collapsed pinned section nothing; a split counts once. Cmd+9 is the last item unless "Switch to ninth tab" is on (default off). The Tabs menu's numbered section and Go to Last Tab use the same list. `show-shortcuts-overlay` stays registered, disabled, with no handler: Arc shows no hints while Command is held (CC-39).
 
 Reserved (out-of-scope keys):
-- `reserved-new-note` New Note (reserved): Ctrl+Shift+N
-- `reserved-new-note-in-split` New Note in Split (reserved): Ctrl+Opt+N
 - `reserved-new-chatgpt-message` New ChatGPT Message (reserved): Cmd+Opt+G
 - `reserved-send-to-dia` Send to Dia (reserved): —
 - `reserved-view-easels-notes` View Easels & Notes (reserved): —

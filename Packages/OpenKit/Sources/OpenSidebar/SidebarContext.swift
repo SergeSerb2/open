@@ -224,6 +224,8 @@ public final class SidebarContext {
         if url.absoluteString == "open://welcome" { return "Welcome to Open" }
         // Arc shows a lock and "Share" for an Easel; Open has no sharing, so it names the page kind.
         if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "easel" { return "Easel" }
+        // GUESS — capture pending (Arc 1.172 cannot create Notes): a Note's URL field names the kind.
+        if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "note" { return "Note" }
         let scheme = url.scheme?.lowercased()
         let key = scheme == "file" ? "file" : url.host()?.lowercased()
         guard let key, developerHosts.contains(key) else { return URL.displayHost(url) }
