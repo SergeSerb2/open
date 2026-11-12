@@ -95,6 +95,9 @@ extension AutomationController {
         guard let pane = owner.container.slots.first(where: { $0.tabID == tab.id })?.paneChrome,
               pane.pressSiteControls() else { throw Failure(message: "no visible pane anchor") }
       } else if via == "urlField" {
+        // Reload can reset tracking while the tagged pointer stays at its old
+        // position. Enter from the page so the real hover path runs again.
+        _ = try await runExtensionCommand("ext-hover", ["inside": false])
         _ = try await runExtensionCommand("ext-hover", ["inside": true])
         owner.sidebar.refreshExtensionsLayout()
         guard !owner.sidebar.siteControlsAnchor.isHiddenOrHasHiddenAncestor,
@@ -135,6 +138,13 @@ extension AutomationController {
     }
     let menu = scc.isPresented ? scc.makeMenu().items.map { ["title": $0.title, "enabled": $0.isEnabled, "separator": $0.isSeparatorItem] as [String: Any] } : []
     let tip = scc.view.visibleArrowTip
+    let visibleAnchor: [String: Any]
+    if let tab = owner.splitController.focusedTab,
+       let anchor = owner.visibleSiteControlAnchor(tabID: tab.id), let window = anchor.window {
+      let toolbar = owner.container.slots.contains { $0.paneChrome?.role == .toolbar && $0.paneChrome?.siteControlsAnchor === anchor }
+      visibleAnchor = ["frame": rect(window.convertToScreen(anchor.convert(anchor.bounds, to: nil))),
+        "surface": toolbar ? "toolbar" : (anchor.isDescendant(of: owner.sidebar) ? "sidebar" : "pane")]
+    } else { visibleAnchor = [:] }
     return ["presented": scc.isPresented, "tab": scc.tabID?.description ?? "", "host": snapshot?.context.displayHost ?? "",
       "mode": scc.mode == .extensionPicker ? "extensionPicker" : "standard",
       "isIncognito": snapshot?.context.isIncognito ?? false,
@@ -143,6 +153,7 @@ extension AutomationController {
       "extensionsVisible": scc.isPresented && panel.extensionsSectionVisible,
       "boostsVisible": scc.isPresented && panel.boostsSectionVisible,
       "reloadVisible": scc.isPresented && panel.showsReload,
+      "visibleAnchor": visibleAnchor,
       "anchor": rect(scc.view.anchorFrame), "body": rect(scc.view.panelFrame), "tip": [Double(tip.x), Double(tip.y)],
       "urlButtonState": owner.sidebar.siteControlState.rawValue,
       "security": controls.first(where: { $0["id"] as? String == "security" }) ?? [:],

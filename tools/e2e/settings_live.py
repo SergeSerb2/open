@@ -91,7 +91,7 @@ def run(factory, results, tmp, wait_until, restore_defaults):
             s = app.call('settings-icon', select=icon)
             icon_rows[icon] = {'ok': s['selected'] == icon and s['applied'] == icon
                 and s['matchesApplication'] and s['pixels'] == [[1024, 1024]] and not s['error'],
-                'pixels': s['pixels']}
+                'pixels': s['pixels'], 'state': s}
         first = app.call('settings-icon', select='openDark')
         again = app.call('settings-icon', select='openDark')
         reset = app.call('settings-icon', select='openDefault')

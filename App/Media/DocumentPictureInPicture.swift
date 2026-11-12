@@ -16,7 +16,10 @@ final class DocumentPictureInPicture {
   private let host: DocumentPictureInPictureHost
   var onClosed: (() -> Void)?
 
-  init(pip: OEPictureInPicture, openerTabID: ItemID) {
+  // Swift 6.4 can inline this initializer and hoist a resilient field offset
+  // before this class's metadata is initialized. Keep allocation and field
+  // initialization together; otherwise the first PiP can overwrite its header.
+  @inline(never) init(pip: OEPictureInPicture, openerTabID: ItemID) {
     self.pip = pip; self.openerTabID = openerTabID
     host = DocumentPictureInPictureHost(pip: pip)
   }

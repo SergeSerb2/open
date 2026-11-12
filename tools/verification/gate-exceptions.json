@@ -1,0 +1,146 @@
+[
+  {
+    "row": "applescript/A1_JXA",
+    "status": "BLOCKED",
+    "reason": "external JXA needs macOS Automation consent; self AppleScript pass is separate",
+    "clearsWhen": "User grants macOS Automation consent and the external JXA row passes",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "User grants macOS Automation consent and the external JXA row passes"
+  },
+  {
+    "row": "applescript/external_osascript",
+    "status": "BLOCKED",
+    "reason": "read-only AEDeterminePermissionToAutomateTarget, askUserIfNeeded=false",
+    "clearsWhen": "User grants macOS Automation consent and the external osascript row passes",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "User grants macOS Automation consent and the external osascript row passes"
+  },
+  {
+    "row": "media/media_recording_card",
+    "status": "BLOCKED",
+    "reason": "macOS camera/microphone access is not granted to this build; the suite does not ask (a system prompt)",
+    "clearsWhen": "User grants camera/microphone consent and the recording card row passes",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "User grants camera/microphone consent and the recording card row passes"
+  },
+  {
+    "row": "page/Z3_smart_zoom",
+    "status": "BLOCKED",
+    "reason": "needs a physical trackpad gesture check by the user (U-S1)",
+    "clearsWhen": "User completes U-S1 and a committed automated path replaces the manual row",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "User completes U-S1 and a committed automated path replaces the manual row"
+  },
+  {
+    "row": "page/X1_apple_backend",
+    "status": "BLOCKED",
+    "reason": "French → English OS translation asset is not installed",
+    "clearsWhen": "French to English OS asset is installed and the real Apple backend row passes",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "French to English OS asset is installed and the real Apple backend row passes"
+  },
+  {
+    "row": "passwords/PW-KC1",
+    "status": "BLOCKED",
+    "reason": "Lead decision: user hand check; no synthetic Keychain-error hook and no real Keychain access in this suite",
+    "clearsWhen": "User completes the Keychain check and a dialog-free acceptance path replaces the manual row",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "User completes the Keychain check and a dialog-free acceptance path replaces the manual row"
+  },
+  {
+    "row": "page/N6_click_opens_tab",
+    "status": "DEFERRED",
+    "reason": "product gap",
+    "clearsWhen": "The v1 clients.openWindow product gap is fixed and the notification click opens the real tab",
+    "owner": "OpenEngine",
+    "added": "2026-11-10",
+    "expires": "The v1 clients.openWindow product gap is fixed and the notification click opens the real tab"
+  },
+  {
+    "row": "page/N1_macos_delivered",
+    "status": "BLOCKED",
+    "reason": "needs user-granted macOS notification consent or delivery confirmation (U-N1)",
+    "clearsWhen": "User grants notification consent or completes U-N1 and real macOS delivery passes",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "User grants notification consent or completes U-N1 and real macOS delivery passes"
+  },
+  {
+    "row": "sleep/sleep_f3_capture",
+    "status": "BLOCKED",
+    "reason": "unverified: no capture fixture without a camera or microphone grant (memory-fork §11 F3 records capture as unverified, not passed)",
+    "clearsWhen": "User grants camera/microphone consent and the capture sleep row passes",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "User grants camera/microphone consent and the capture sleep row passes"
+  },
+  {
+    "row": "passwords-probe/PR-4",
+    "status": "BLOCKED",
+    "reason": "superseded payment card probe requires a dialog-free path",
+    "clearsWhen": "A dialog-free payment card probe exists; the superseded observation remains opt-in",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "A dialog-free payment card probe exists; the superseded observation remains opt-in"
+  },
+  {
+    "row": "passwords-probe/PR-5",
+    "status": "BLOCKED",
+    "reason": "superseded WebAuthn probe requires a dialog-free path",
+    "clearsWhen": "A dialog-free WebAuthn probe exists; the superseded observation remains opt-in",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "A dialog-free WebAuthn probe exists; the superseded observation remains opt-in"
+  },
+  {
+    "row": "passwords-probe/PR-7",
+    "status": "BLOCKED",
+    "reason": "superseded HTTP Basic probe requires a dialog-free path",
+    "clearsWhen": "A dialog-free HTTP Basic probe exists; the superseded observation remains opt-in",
+    "owner": "lead/user",
+    "added": "2026-11-10",
+    "expires": "A dialog-free HTTP Basic probe exists; the superseded observation remains opt-in"
+  },
+  {
+    "row": "downloads/history_retry",
+    "status": "DEFERRED",
+    "reason": "engine: download callbacks end when the originating tab closes (CEF download_manager_delegate_impl.cc:331-344, 483-492)",
+    "clearsWhen": "Engine patch delivers terminal download callbacks to a Profile-level owner after originating-tab close; unchanged Retry predicate passes",
+    "owner": "engine lane / lead",
+    "added": "2026-11-10",
+    "expires": "Engine callback-lifetime patch lands"
+  },
+  {
+    "row": "sitecontrol/S11_material",
+    "status": "DEFERRED",
+    "reason": "S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)",
+    "clearsWhen": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control",
+    "owner": "lead / design D3",
+    "added": "2026-11-11",
+    "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
+  },
+  {
+    "row": "sitecontrol/S12_elements",
+    "status": "DEFERRED",
+    "reason": "S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)",
+    "clearsWhen": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control",
+    "owner": "lead / design D3",
+    "added": "2026-11-11",
+    "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
+  },
+  {
+    "row": "sitecontrol/P1_first_draw",
+    "status": "DEFERRED",
+    "reason": "first-draw p95 must be below 8 ms (warm 30 and including cold)",
+    "clearsWhen": "P1 passes on a valid quiet M1 sample after the performance agent H2 reduces the focus hand-off (makeFirstResponder + animateOpen, about 4.3 ms, unchanged from main) measured by D3 on 2026-11-11",
+    "owner": "performance / H2",
+    "added": "2026-11-11",
+    "expires": "P1 passes on a valid quiet M1 sample after the performance agent H2 reduces the focus hand-off (makeFirstResponder + animateOpen, about 4.3 ms, unchanged from main) measured by D3 on 2026-11-11"
+  }
+]

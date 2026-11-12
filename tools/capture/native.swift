@@ -10,7 +10,7 @@ func attr(_ e: AXUIElement, _ key: String) -> CFTypeRef? {
   var value: CFTypeRef?
   return AXUIElementCopyAttributeValue(e, key as CFString, &value) == .success ? value : nil
 }
-let fieldNames = ["AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXIdentifier", "AXHelp", "AXPlaceholderValue", "AXMenuItemCmdChar", "AXEnabled", "AXFocused", "AXSelected", "AXExpanded", "AXMain", "AXMinimized", "AXMenuItemCmdModifiers", "AXValue", "AXPosition", "AXSize", "AXFont", "AXMenuItemMarkChar", "AXURL"]
+let fieldNames = ["AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXIdentifier", "AXHelp", "AXPlaceholderValue", "AXMenuItemCmdChar", "AXEnabled", "AXFocused", "AXSelected", "AXExpanded", "AXMain", "AXMinimized", "AXMenuItemCmdModifiers", "AXValue", "AXPosition", "AXSize", "AXFont", "AXMenuItemMarkChar", "AXURL", "AXHidden"]
 func fields(_ e: AXUIElement) -> [String: AnyObject] {
   var result: CFArray?
   AXUIElementCopyMultipleAttributeValues(e, fieldNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &result)
@@ -24,7 +24,7 @@ func fields(_ e: AXUIElement) -> [String: AnyObject] {
 func describe(_ v: [String: AnyObject]) -> [String: Any] {
   var d: [String: Any] = [:]
   for (key, name) in [("role", "AXRole"), ("subrole", "AXSubrole"), ("title", "AXTitle"), ("desc", "AXDescription"), ("id", "AXIdentifier"), ("help", "AXHelp"), ("placeholder", "AXPlaceholderValue"), ("key", "AXMenuItemCmdChar")] { if let value = v[name] as? String { d[key] = String(value.prefix(2048)) } }
-  for (key, name) in [("enabled", "AXEnabled"), ("focused", "AXFocused"), ("selected", "AXSelected"), ("expanded", "AXExpanded"), ("main", "AXMain"), ("minimized", "AXMinimized"), ("keyModifiers", "AXMenuItemCmdModifiers")] { if let value = v[name] as? NSNumber { d[key] = value } }
+  for (key, name) in [("enabled", "AXEnabled"), ("focused", "AXFocused"), ("selected", "AXSelected"), ("expanded", "AXExpanded"), ("main", "AXMain"), ("minimized", "AXMinimized"), ("keyModifiers", "AXMenuItemCmdModifiers"), ("hidden", "AXHidden")] { if let value = v[name] as? NSNumber { d[key] = value } }
   if let value = v["AXValue"], CFGetTypeID(value) != AXUIElementGetTypeID() { d["value"] = String(describing: value).prefix(500).description }
   if let value = v["AXURL"] as? URL { d["url"] = String(value.absoluteString.prefix(2048)) }
   if let value = v["AXMenuItemMarkChar"] as? String { d["mark"] = value }
@@ -70,6 +70,10 @@ func capture(_ app: AXUIElement, windows: Bool, menus: Bool, shallow: Bool = fal
     queue += ((raw as? [AXUIElement]) ?? []).map { ($0, nil, 0) }
   }
   if menus, let menu = attr(app, "AXMenuBar"), CFGetTypeID(menu) == AXUIElementGetTypeID() { queue.append((menu as! AXUIElement, nil, 0)) }
+  // Open pop-up and context menus are direct AXMenu children of the application.
+  if menus, let kids = attr(app, "AXChildren") as? [AXUIElement] {
+    for kid in kids where (attr(kid, "AXRole") as? String) == "AXMenu" { queue.insert((kid, nil, 0), at: 0) }
+  }
   while cursor < queue.count {
     if result.rows.count >= 1500 || ProcessInfo.processInfo.systemUptime - start >= 5 { result.partial = true; break }
     let (element, parent, depth) = queue[cursor]; cursor += 1
@@ -77,6 +81,8 @@ func capture(_ app: AXUIElement, windows: Bool, menus: Bool, shallow: Bool = fal
     let values = fields(element)
     var row = describe(values)
     row["depth"] = depth
+    // Ancestor role path, so a predicate can scope to a popover or sheet.
+    if let parent { row["anc"] = (result.rows[parent]["anc"] as? String ?? "") + "/" + (result.rows[parent]["role"] as? String ?? "") } else { row["anc"] = "" }
     let index = result.rows.count
     result.rows.append(row); result.elements.append(element); result.parents.append(parent)
     if row["role"] == nil { result.rows[index]["unavailable"] = "AX attributes unavailable"; result.partial = true; continue }
@@ -309,6 +315,10 @@ case "point-guard":
   let blockedNames = Set(["UserNotificationCenter", "CoreServicesUIAgent", "SecurityAgent", "universalAccessAuthWarn", "System Settings", "tccd"])
   var hits: [[String: Any]] = [], systemWindows: [[String: Any]] = [], ignored: [[String: Any]] = []
   var bannerAtPoint = false
+  // LEAD 11:32: the full-screen Notification Centre host (layer 23) of a persistent alert.
+  let ncRule = desktopRule && a.contains("lead-m1-nc23-rule")
+  let screenBounds = CGDisplayBounds(CGMainDisplayID())
+  var ncFrames: [[Double]] = [], ncRead: [String: Any] = [:]
   for row in rows {
     let owner = row[kCGWindowOwnerPID as String] as? Int ?? 0
     let bundle = NSRunningApplication(processIdentifier: Int32(owner))?.bundleIdentifier ?? ""
@@ -327,6 +337,20 @@ case "point-guard":
        || (layer < 0 && (lower == "com.apple.windowmanager" || name == "Window Server" || name == "WindowServer"))) {
       ignored.append(info); continue
     }
+    if ncRule, lower == "com.apple.notificationcenterui", layer == 23, let rect,
+       abs(rect.width - screenBounds.width) < 1, abs(rect.height - screenBounds.height) < 1 {
+      let tree = capture(AXUIElementCreateApplication(Int32(owner)), windows: true, menus: false)
+      // Only alert/banner elements count (desktop widgets are other NC windows, LEAD 19:52).
+      let frames: [[Double]] = tree.rows.compactMap { row -> [Double]? in
+        guard let sub = row["subrole"] as? String, sub.range(of: "Alert|Banner", options: .regularExpression) != nil,
+              let f = row["frame"] as? [CGFloat], f.count == 4, f[2] > 0, f[3] > 0 else { return nil }
+        return f.map { Double($0) } }
+      ncFrames = frames
+      ncRead = ["nodes": tree.rows.count, "partial": tree.partial, "windowQueryError": tree.windowQueryError]
+      let clear = !frames.isEmpty && !tree.partial && frames.allSatisfy { f in
+        !CGRect(x: f[0], y: f[1], width: f[2], height: f[3]).insetBy(dx: -40, dy: -40).contains(point) }
+      if clear { var i = info; i["rule"] = "LEAD 11:32 nc23"; ignored.append(i); continue }
+    }
     if layer >= 0 && (blocked.contains(lower) || blockedNames.contains(name)) { systemWindows.append(info) }
     if let raw = row[kCGWindowBounds as String] as? NSDictionary,
        let rect = CGRect(dictionaryRepresentation: raw as CFDictionary), rect.contains(point),
@@ -339,7 +363,7 @@ case "point-guard":
   let ok = Int(front) == pid && systemWindows.isEmpty && (hits.first?["pid"] as? Int) == pid
     && NSRunningApplication(processIdentifier: Int32(pid))?.bundleIdentifier == "company.thebrowser.Browser"
   let retryBanner = bannerAtPoint && !systemWindows.isEmpty && systemWindows.allSatisfy { ($0["bundle"] as? String)?.lowercased() == "com.apple.notificationcenterui" }
-  emit(["ok": ok, "frontmostPID": front, "hits": hits, "systemWindows": systemWindows, "ignored": ignored, "retryBanner": retryBanner])
+  emit(["ok": ok, "frontmostPID": front, "hits": hits, "systemWindows": systemWindows, "ignored": ignored, "retryBanner": retryBanner, "ncFrames": ncFrames, "ncRead": ncRead])
   if !ok { exit(3) }
 case "image-alpha-bounds":
   guard let data = try? Data(contentsOf: URL(fileURLWithPath: a[2])), let bitmap = NSBitmapImageRep(data: data) else { exit(3) }
@@ -353,8 +377,11 @@ case "image-alpha-bounds":
 case "image-change":
   guard let beforeData = try? Data(contentsOf: URL(fileURLWithPath: a[2])),
         let afterData = try? Data(contentsOf: URL(fileURLWithPath: a[3])),
-        let before = NSBitmapImageRep(data: beforeData), let after = NSBitmapImageRep(data: afterData),
-        before.pixelsWide == after.pixelsWide, before.pixelsHigh == after.pixelsHigh else { exit(3) }
+        let before = NSBitmapImageRep(data: beforeData), let after = NSBitmapImageRep(data: afterData) else { exit(3) }
+  // A changed capture size (a popover or sheet closed) is itself a visible change.
+  if before.pixelsWide != after.pixelsWide || before.pixelsHigh != after.pixelsHigh {
+    emit(["meanDifference": 1.0, "samples": 0, "sizeChanged": [before.pixelsWide, before.pixelsHigh, after.pixelsWide, after.pixelsHigh]]); exit(0)
+  }
   var sum = 0.0, count = 0
   for y in stride(from: 0, to: before.pixelsHigh, by: 8) {
     for x in stride(from: 0, to: before.pixelsWide, by: 8) {
@@ -367,6 +394,46 @@ case "image-change":
     }
   }
   emit(["meanDifference": count > 0 ? sum / Double(count) : 0, "samples": count])
+case "swipe":
+  // Trackpad-like continuous scroll with phases: swipe X Y DX DY STEPS SECONDS [momentum].
+  // The caller verifies ownership of the point first. Pixel deltas, began/changed/ended.
+  let x = Double(a[2])!, y = Double(a[3])!, dx = Double(a[4])!, dy = Double(a[5])!
+  let steps = max(2, min(120, Int(a[6])!)), seconds = max(0.05, min(3, Double(a[7])!))
+  let momentum = a.count > 8 && a[8] == "momentum"
+  let source = CGEventSource(stateID: .hidSystemState)
+  CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: x, y: y), mouseButton: .left)?.post(tap: .cghidEventTap)
+  usleep(50_000)
+  func scroll(_ sx: Int32, _ sy: Int32, phase: Int64, momentumPhase: Int64 = 0) {
+    guard let e = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2, wheel1: sy, wheel2: sx, wheel3: 0) else { return }
+    e.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+    e.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+    e.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentumPhase)
+    e.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: Int64(sy))
+    e.setIntegerValueField(.scrollWheelEventPointDeltaAxis2, value: Int64(sx))
+    e.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: Double(sy))
+    e.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: Double(sx))
+    e.post(tap: .cghidEventTap)
+  }
+  var times: [Double] = []
+  let start = ProcessInfo.processInfo.systemUptime
+  scroll(0, 0, phase: 128) // may begin
+  usleep(16_000)
+  var sentX = 0.0, sentY = 0.0
+  for i in 1...steps {
+    let tx = (dx * Double(i) / Double(steps)).rounded(), ty = (dy * Double(i) / Double(steps)).rounded()
+    scroll(Int32(tx - sentX), Int32(ty - sentY), phase: i == 1 ? 1 : 2)
+    sentX = tx; sentY = ty
+    times.append(ProcessInfo.processInfo.systemUptime - start)
+    usleep(useconds_t(seconds / Double(steps) * 1_000_000))
+  }
+  scroll(0, 0, phase: 4)
+  if momentum {
+    let vx = dx / Double(steps), vy = dy / Double(steps)
+    scroll(Int32(vx), Int32(vy), phase: 0, momentumPhase: 1)
+    for k in 1...8 { usleep(16_000); scroll(Int32(vx * pow(0.7, Double(k))), Int32(vy * pow(0.7, Double(k))), phase: 0, momentumPhase: 2) }
+    scroll(0, 0, phase: 0, momentumPhase: 3)
+  }
+  emit(["sent": [sentX, sentY], "steps": steps, "seconds": ProcessInfo.processInfo.systemUptime - start, "momentum": momentum, "times": times])
 case "windows":
   let pid = Int(a[2])!
   let rows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as! [[String: Any]]

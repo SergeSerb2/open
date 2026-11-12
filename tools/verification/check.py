@@ -85,6 +85,7 @@ def onscreen_suite(command):
     waiting_for_lock = False
     directory = job = lock_file = None
     cleanup_complete = False
+    borrowed = False
     output = ""
 
     def cleanup():
@@ -97,16 +98,26 @@ def onscreen_suite(command):
         try:
             if job is not None:
                 if job.returncode is None:
-                    with contextlib.suppress(ProcessLookupError):
-                        os.killpg(job.pid, signal.SIGTERM)
+                    if borrowed:
+                        # The outer gate owns this whole process group. Keep
+                        # the renderer inside it so a killed worker cannot
+                        # leave a renderer outside the outer cleanup boundary.
+                        job.terminate()
+                    else:
+                        with contextlib.suppress(ProcessLookupError):
+                            os.killpg(job.pid, signal.SIGTERM)
                     # Keep the leader unreaped through the TERM grace. Its PID
                     # cannot be reused before KILL reaches remaining group members.
                     time.sleep(2)
-                    groups = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="], text=True)
-                    if any(fields[0] == str(job.pid) and not fields[1].startswith("Z")
-                           for line in groups.splitlines() if len(fields := line.split()) == 2):
-                        with contextlib.suppress(ProcessLookupError):
-                            os.killpg(job.pid, signal.SIGKILL)
+                    if borrowed:
+                        if job.poll() is None:
+                            job.kill()
+                    else:
+                        groups = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="], text=True)
+                        if any(fields[0] == str(job.pid) and not fields[1].startswith("Z")
+                               for line in groups.splitlines() if len(fields := line.split()) == 2):
+                            with contextlib.suppress(ProcessLookupError):
+                                os.killpg(job.pid, signal.SIGKILL)
                     output, _ = job.communicate(timeout=2)
                 job.wait()
             native_apps = stop_native_suite_apps(directory.name) if directory is not None else 0
@@ -156,7 +167,22 @@ def onscreen_suite(command):
     failure = None
     try:
         lock_path = "/tmp/open-onscreen-e2e.lock"
-        while cancelled is None:
+        # A gate stage already holds the pathname lock through our cleanup.
+        # Never trust the environment marker without its live lockf ancestor.
+        if os.environ.get('OPEN_VERIFY_EXTERNAL_SCREEN_LOCK') == '1':
+            parent = os.getppid()
+            for _ in range(32):
+                if parent <= 1:
+                    break
+                fields = subprocess.check_output(['ps', '-p', str(parent), '-o', 'ppid=,args='], text=True).strip().split(None, 1)
+                if len(fields) != 2:
+                    break
+                parent, arguments = int(fields[0]), fields[1]
+                if '/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock ' in arguments:
+                    borrowed = True
+                    break
+            require(borrowed, 'external screen lock marker has no live lockf owner')
+        while cancelled is None and not borrowed:
             # TANDEM-RULES §3.4a: this native suite never creates a priority flag.
             # Queue time stays outside the execution deadline, as for lock acquisition.
             priority = Path("/tmp/open-onscreen-priority")
@@ -193,14 +219,14 @@ def onscreen_suite(command):
             lock_file = None
         if cancelled is not None:
             exit_cancelled()
-        directory = tempfile.TemporaryDirectory(prefix="open-onscreen-suite-")
+        directory = tempfile.TemporaryDirectory(prefix="open-onscreen-suite-", dir=os.environ.get('OPEN_VERIFY_GATE_SCREEN_ROOT'))
         # Foundation can ignore TMPDIR for NSTemporaryDirectory on macOS. Give
         # the registered-app launcher an explicit owned root as well.
         environment = dict(os.environ, TMPDIR=directory.name + "/", OPEN_VERIFY_SUITE_ROOT=directory.name)
         print(f"On-screen lock acquired; suite deadline=180s; worker {os.getpid()}", flush=True)
         if cancelled is None:
             job = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   text=True, env=environment, start_new_session=True)
+                                   text=True, env=environment, start_new_session=not borrowed)
             print(f"On-screen renderer {job.pid}; private temporary root={directory.name}", flush=True)
             deadline = time.monotonic() + 180
             while cancelled is None:
@@ -945,9 +971,11 @@ def main():
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
         matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
+        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
+    elif name == "features-idle":
+        require(subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'), 'features-idle requires the M1')
         idle = run(sys.executable, str(root / "tools/verification/features-idle.py"))
         matches(r"features-render idle check: [1-9]\d* passed, 0 failed", idle)
-        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
     elif name in ("sidebar-render", "commandbar-render", "sitecontrol-render"):
         command = [str(root / "Packages/OpenKit/.build/release" / name), "check"]
         if name == "sitecontrol-render":

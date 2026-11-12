@@ -16,7 +16,8 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-BUNDLE = str(ROOT / 'build/Debug/Open.app')
+CONFIG = 'Debug'
+BUNDLE = str(ROOT / 'build' / CONFIG / 'Open.app')
 
 
 def matches(pattern):
@@ -70,7 +71,7 @@ def popen(args, *a, **kw):
     return original_popen(args, *a, **kw)
 subprocess.Popen = popen
 '''
-    code += "sys.argv = ['engine_e2e.py', '--only', 'shell', '--style', 'chrome', '--keep']; e.main()\n"
+    code += "sys.argv = ['engine_e2e.py', '--only', 'shell', '--style', 'chrome', '--keep', '--config', %r]; e.main()\n" % CONFIG
     roots = []
     runner = None
     with (output / ('beforeunload.log' if before_unload else 'download.log' if download_base else 'negative.log' if negative else 'positive.log')).open('w') as log:
@@ -196,10 +197,18 @@ subprocess.Popen = popen
 
 
 if __name__ == '__main__':
-    output = Path(sys.argv[1]).resolve()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('output', type=Path)
+    parser.add_argument('--config', choices=('Debug', 'Release'), default='Debug')
+    parser.add_argument('--before-unload', action='store_true')
+    options = parser.parse_args()
+    CONFIG = options.config
+    BUNDLE = str(ROOT / 'build' / CONFIG / 'Open.app')
+    output = options.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     from downloads import server
-    if '--before-unload' in sys.argv[2:]:
+    if options.before_unload:
         results = [run(False, output, before_unload=True)]
     else:
         results = [run(False, output), run(True, output)]
