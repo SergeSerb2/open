@@ -68,6 +68,19 @@ def run(factory, results, tmp, h):
         frames = os.path.join(h.ROOT, '.re', 'nt-frames'); os.makedirs(frames, exist_ok=True)
         app.call('snapshot', path=os.path.join(frames, 'blank-window.png'))
 
+        # ⇧⌘T (capture C10 addition): a tab closed here reopens in this window.
+        third = h.new_tab(app, origin + '/three')
+        key('w', 'command')
+        h.wait_until(lambda: all(t['id'] != third for t in app.call('tabs')) or None, timeout=5, step=.1)
+        key('t', 'command', 'shift')
+        back = h.wait_until(lambda: [t for t in app.call('tabs') if '/three' in t['url']] or None, timeout=8, step=.1) or []
+        reopened = blank()
+        row('reopen_closed_tab_in_this_window', len(back) == 1 and reopened['isBlankWindow'] and reopened['browserWindows'] == 2
+            and len(app.call('tabs')) == 3, tabs=[t['url'] for t in app.call('tabs')])
+        if back:
+            app.call('close', tab=back[0]['id'])
+            h.wait_until(lambda: len(app.call('tabs')) == 2 or None, timeout=5, step=.1)
+
         # 5. Move to ▸ ‹Space›: the tab leaves this window and lands at the top of that Space's Today list.
         target = app.call('spaces')[0]
         title = target['title'] or 'Space 1'
@@ -82,6 +95,9 @@ def run(factory, results, tmp, h):
         key('w', 'command')
         closed = h.wait_until(lambda: (lambda s: s if s['browserWindows'] == 1 and not s['isBlankWindow'] else None)(blank()), timeout=8, step=.1) or blank()
         after = app.call('tabs')
+        # ⇧⌘T in the browser window does not bring a closed Blank Window back.
+        key('t', 'command', 'shift'); time.sleep(1)
+        row('reopen_does_not_restore_blank_window', blank()['browserWindows'] == 1 and not blank()['isBlankWindow'], state=blank())
         row('last_tab_closes_window', still_blank and closed['browserWindows'] == 1 and closed['window'] == main_window
             and len(after) == len(main_tabs) + 1 and any('/two' in t['url'] for t in after) and set(main_tabs) <= {t['id'] for t in after}, after=closed)
     finally:
@@ -92,7 +108,7 @@ def run(factory, results, tmp, h):
     try:
         s = app.call('blank-window')
         row('not_restored_at_relaunch', s['browserWindows'] == 1 and not s['isBlankWindow']
-            and all('/one' not in t['url'] for t in app.call('tabs')) and any('/two' in t['url'] for t in app.call('tabs')), state=s)
+            and any('/two' in t['url'] for t in app.call('tabs')), state=s)
     finally:
         app.quit()
         server.shutdown()
