@@ -9504,12 +9504,14 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
         and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
         'rows': rows[:4], 'tab': doc}
-    # Top Domains (PB1, Open's own list): "netfl" offers a "Netflix" row (subtitle netflix.com); no inline completion.
+    # Top Domains (capture PB1-i): "netfl" completes the field inline to netflix.com and lists "Netflix" first.
     app.call('select', tab=tab); app.call('focus', tab=tab)
-    bar('t', 'window'); typed = type_query('netfl')
-    site = next((r for r in typed.get('rows', []) if r.get('title') == 'Netflix'), None)
-    results['commandbar_top_domain_row'] = {'ok': bool(site) and 'netflix.com' in (site.get('url') or '')
-        and typed.get('fieldText', typed.get('text')) == 'netfl', 'row': site, 'field': typed.get('fieldText')}
+    bar('t', 'window'); app.call('key', text='netfl')
+    typed = wait_until(lambda: (lambda st: st if st.get('final') and st.get('fieldText') == 'netflix.com' else None)(state()), timeout=5, step=.05) or state()
+    rows_td = typed.get('rows', [])
+    results['commandbar_top_domain_row'] = {'ok': typed.get('fieldText') == 'netflix.com' and bool(rows_td)
+        and rows_td[0].get('title') == 'Netflix' and 'netflix.com' in (rows_td[0].get('url') or ''),
+        'field': typed.get('fieldText'), 'text': typed.get('text'), 'rows': [r.get('title') for r in rows_td[:4]]}
     press('escape')
     # "Undo <name>": archive a fresh Today tab, then the bar offers the named Undo and running it restores the tab.
     fresh = new_tab(app, 'about:blank#pb1-undo')

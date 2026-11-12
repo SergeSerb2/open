@@ -1150,6 +1150,9 @@ extension AppDelegate: CommandDispatcher {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
+    // New Note with no browser window key (a Little Open window, Settings, no key window):
+    // the Note goes to the front browser window (NoteTab.create).
+    if ["new-note", "new-note-in-split"].contains(id) { return frontStandardWindowController != nil }
     return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
@@ -1180,6 +1183,12 @@ extension AppDelegate: CommandDispatcher {
     case "new-tab":
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
+    case "new-note", "new-note-in-split":
+      // The App is the menu's dispatcher while a Little Open window is key (MainMenu.build):
+      // create the Note in the front browser window and bring that window forward.
+      guard let controller = frontStandardWindowController, let factory = hostFactories[controller.windowID] else { return }
+      controller.window?.makeKeyAndOrderFront(nil)
+      _ = NoteTab.create(in: factory, split: id == "new-note-in-split")
     case "settings": if !settingsShortcutCaptured { settingsPresenter.show() }
     case "new-profile": settingsPresenter.showNewProfile()
     case "search-settings": performCommand(id, payload: nil)

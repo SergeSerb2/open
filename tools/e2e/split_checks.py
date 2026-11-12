@@ -24,6 +24,18 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         print('split %-34s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
         if name.startswith('speed_'):
             print('  speed receipt:', {k: v for k, v in evidence.items() if k not in ('samples', 'scope')}, flush=True)
+    if environment:
+        # The probe stays in the App process only. A child that inherits DYLD_INSERT_LIBRARIES can abort in
+        # dyld (/usr/bin/profiles, arm64e, did: its crash dialog blocked the rented Macs on 2026-11-12).
+        def descendants(pid):
+            kids = [int(p) for p in subprocess.run(['pgrep', '-P', str(pid)], capture_output=True, text=True).stdout.split()]
+            return kids + [d for k in kids for d in descendants(k)]
+        h.wait_until(lambda: len(descendants(app.pid)) >= 2, timeout=10, step=.2)
+        kids = descendants(app.pid)
+        def env_of(pid): return subprocess.run(['ps', 'eww', '-o', 'command=', '-p', str(pid)], capture_output=True, text=True).stdout
+        leaked = [k for k in kids if 'DYLD_INSERT_LIBRARIES=' in env_of(k)]
+        row('injected_library_not_inherited', len(kids) >= 2 and not leaked,
+            children=len(kids), leaked=len(leaked))
     def state(): return app.call('split', op='state')
     def settled(count=None):
         value = h.wait_until(lambda: (lambda s: s if count is None or len(s['panes']) == count else None)(state()), timeout=5, step=.02)
