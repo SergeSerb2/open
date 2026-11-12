@@ -347,6 +347,21 @@ struct SidebarMenus {
         menu([item("Show as Toolbar", .setToolbarShown(true)), .separator(), item("Manage Extensions", .manageExtensions)])
     }
 
+    /// Right click on the Library button (capture C-report-s3 Part D): a disabled
+    /// "Show media from:" header, then Documents · Desktop · Screenshots · Captures · Downloads.
+    func libraryMediaSources() -> NSMenu? {
+        let sources = context.libraryMediaSources
+        guard !sources.isEmpty else { return nil }
+        var items: [NSMenuItem] = [ClosureMenuItem("Show media from:", enabled: false) {}]
+        for source in sources {
+            let entry = item(source.title, .toggleLibraryMediaSource(source.id))
+            entry.state = source.enabled ? .on : .off
+            entry.identifier = NSUserInterfaceItemIdentifier("library-media-source-" + source.id)
+            items.append(entry)
+        }
+        return menu(items)
+    }
+
     func plus() -> NSMenu {
         let space = context.focusedSpace
         let canSplit: Bool = {

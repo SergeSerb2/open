@@ -657,6 +657,16 @@
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         let index = (a["index"] as? Int) ?? Int(a["index"] as? String ?? "") ?? 0
         return controller.toasts.performAccessory(at: index)
+      case "library-button-menu":
+        // The Library button's real right-click menu: list it, or choose one item by title.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        guard let menu = controller.sidebar.libraryButtonContextMenu() else { return ["items": []] }
+        if let title = a["item"] as? String {
+          guard let index = menu.items.firstIndex(where: { $0.title == title && $0.isEnabled }) else { throw Failure(message: "no enabled item \(title)") }
+          menu.performActionForItem(at: index); await Task.yield()
+        }
+        let fresh = controller.sidebar.libraryButtonContextMenu() ?? menu
+        return ["items": fresh.items.map { ["title": $0.title, "enabled": $0.isEnabled, "on": $0.state == .on] as [String: Any] }]
       case "sidebar-menu", "sidebar-menu-state":
         // Builds the same NSMenu a right-click shows (a row, or the Space with no node)
         // and performs the item at a "/" path; `alternate` picks the ⌥ alternate title.

@@ -903,6 +903,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
+    case .toggleLibraryMediaSource(let id): return app.settingsPresenter.toggleLibraryMediaSource(id)
     case .showLibrary:
       app.settingsPresenter.toggleLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
     // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
