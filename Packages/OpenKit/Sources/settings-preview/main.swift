@@ -20,6 +20,7 @@ import CryptoKit
     ]
     var defaultError: String?
     var canImportPasswordsAndCookies = false
+    var canImportBrowserPasswords = false
     var importHandler: (@MainActor (ImportPlan) async -> ImportOutcome)?
     var importPlansWithConsent = 0
     func record(_ text: String) { log.append(text); print("ACTION \(text)") }
@@ -144,6 +145,7 @@ import CryptoKit
         if args.contains("--first-run-only") {try await renderFirstRunScreens(output:output,scales:scales);return}
         if args.contains("--profiles-shell-only") {try await renderProfilesShell(output:output,scales:scales);return}
         if args.contains("--import-sources-only") {try await renderImportSources(output:output,scales:scales);return}
+        if args.contains("--import-other-browsers-only") {try await renderImportOtherBrowsers(output:output,scales:scales);return}
         settings.selectedPane = .shortcuts
         env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
         for dark in [false,true] { for scale in scales {

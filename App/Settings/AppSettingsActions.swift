@@ -359,6 +359,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     AppDelegate.commandLog(message)
   }
   var canImportPasswordsAndCookies: Bool { app.importRunner.canImportPasswordsAndCookies }
+  var canImportBrowserPasswords: Bool { app.importRunner.canImportBrowserPasswords }
   var hasUnfinishedSecretsImport: Bool { app.importRunner.hasUnfinishedSecretsImport }
   func isDefaultBrowser() -> Bool { app.defaultBrowserService.isDefaultBrowser }
   @ObservationIgnored private(set) var defaultBrowserRequest: Task<Void, Never>?
