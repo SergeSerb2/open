@@ -548,8 +548,17 @@ app_build() {
     # developer's source plist or the already signed app.
     /usr/libexec/PlistBuddy -c "Set :SUFeedURL $FEED_URL" "$STAGE/built/Open.app/Contents/Info.plist"
     cp "$ROOT/build/xcodebuild-Release.log" "$STAGE/app-build.log"
-    output "$STAGE/built" "$STAGE/app-build.log"
+    # Archive the App's dSYM before hygiene strips the binary. The archive is
+    # the only place crash addresses of the shipped App can be resolved.
+    local dsym="$ROOT/build/Release/Open.app.dSYM"
+    [[ -d "$dsym" ]] || die 'Open.app.dSYM missing from the Release build; cannot strip the App without its symbols'
+    mkdir -p "$REL/symbols"
+    rm -rf "$REL/symbols/Open.app.dSYM"
+    ditto "$dsym" "$REL/symbols/Open.app.dSYM"
+    [[ "$(app_uuid "$STAGE/built/Open.app/Contents/MacOS/Open")" == "$(app_uuid "$REL/symbols/Open.app.dSYM")" ]] || die 'archived Open.app.dSYM UUID differs from the built App binary'
+    output "$STAGE/built" "$STAGE/app-build.log" "$REL/symbols/Open.app.dSYM"
 }
+app_uuid() { xcrun dwarfdump --uuid "$1" | awk '/arm64/{print $2; exit}'; }
 bundle_check() {
     python3 - "$1" "$LOCALES" "$VERSION" "$BUILD" "$CHROMIUM_TAG" "$CEF_COMMIT" "$ENGINE_STAMP" "$SPARKLE_PIN" "$FEED_URL" <<'PY'
 from pathlib import Path
@@ -573,6 +582,9 @@ if actual!=locales.split():raise SystemExit('locale mismatch: '+repr(actual))
 for f in a.rglob('*'):
  if f.name.endswith(('.dSYM','.delta')) or re.search(r'(^|[-_])(test[-_]?fixtures?)([-_.]|$)',f.name,re.I):raise SystemExit('unshippable bundle item: '+str(f))
  if f.is_symlink() and not f.resolve().is_relative_to(a.resolve()):raise SystemExit('bundle symlink escapes app: '+str(f))
+if not (a/'Contents/Resources/Credits.rtf').is_file():raise SystemExit('Credits.rtf missing: the About panel has no credits')
+for twin in ('Acknowledgements.txt','CREDITS.html'):
+ if (a/'Contents/Resources'/twin).exists():raise SystemExit('duplicate credits file in the App: '+twin)
 for name in ['icudtl.dat','resources.pak','chrome_100_percent.pak','chrome_200_percent.pak']:
  if not (fw/'Resources'/name).is_file():raise SystemExit('required CEF resource missing: '+name)
 if not list((fw/'Resources').glob('v8_context_snapshot*.bin')):raise SystemExit('missing V8 snapshot')
@@ -589,6 +601,16 @@ hygiene() {
     mkdir -p "$STAGE/hygiene"
     ditto "$STAGE/built/Open.app" "$STAGE/hygiene/Open.app"
     cp "$STAGE/credits/Credits.rtf" "$STAGE/hygiene/Open.app/Contents/Resources/Credits.rtf"
+    # Ship the credits once (lead ruling 2026-11-12, about 10 MiB): the standard
+    # About panel reads Credits.rtf. The text and HTML twins are release assets
+    # beside the DMG ($REL/Acknowledgements.txt, $REL/CREDITS.html), not App resources.
+    rm -f "$STAGE/hygiene/Open.app/Contents/Resources/Acknowledgements.txt" "$STAGE/hygiene/Open.app/Contents/Resources/CREDITS.html"
+    # Strip local symbols from the App binary (about 15 MiB). Global symbols stay;
+    # the archived dSYM (same UUID, checked in 05-app-build) resolves crash addresses.
+    local binary="$STAGE/hygiene/Open.app/Contents/MacOS/Open" before
+    before=$(app_uuid "$binary")
+    xcrun strip -x "$binary"
+    [[ "$(app_uuid "$binary")" == "$before" && "$before" == "$(app_uuid "$REL/symbols/Open.app.dSYM")" ]] || die 'stripped App binary no longer matches the archived dSYM UUID'
     grep -Eq -- '-D[[:space:]]*OPEN_AUTOMATION|automation.sock' "$STAGE/app-build.log" && die 'automation condition found in release build log'
     bundle_check "$STAGE/hygiene/Open.app"
     output "$STAGE/hygiene"
@@ -732,11 +754,11 @@ for arg in sys.argv[2:]:
  size=int(subprocess.check_output(['du','-sk',str(p)]).split()[0])*1024 if p.is_dir() else p.stat().st_size
  mb=size/1_000_000
  print(f'{p.name}: {mb:.2f} MB ({size} bytes)')
- if mb>320:
-  if sys.argv[1]!='1':raise SystemExit('FAIL: size exceeds 320 MB hard limit')
-  print('mode-SKIP: dev-engine dry run exceeds 320 MB; production limit is unchanged')
- if mb>285:print('WARN: size exceeds 285 MB warning threshold')
- if 300<mb<=320:print('WARN: above the 300 MB target; within hard limit')
+ # Hard limit 335 MB (lead ruling 2026-11-12; SwiftShader stays in the bundle).
+ if mb>335:
+  if sys.argv[1]!='1':raise SystemExit('FAIL: size exceeds 335 MB hard limit')
+  print('mode-SKIP: dry run exceeds the 335 MB production limit; the limit is unchanged')
+ if 300<mb<=335:print('WARN: above the 300 MB target; within the 335 MB hard limit')
 PY
 }
 dmg() {
@@ -1180,7 +1202,7 @@ summary() {
         fi
         size_check "$APP" "$DMG"
         if grep -q mode-SKIP "$STAGE/sizes.txt"; then
-            row A-7 mode-SKIP 'dev engine exceeds 320 MB; measured sizes recorded; production limit unchanged'
+            row A-7 mode-SKIP 'dry run exceeds the 335 MB production limit; measured sizes recorded; limit unchanged'
         else row A-7 PASS 'within hard size limit; warning/target lines recorded'; fi
         bundle_check "$APP"
         row A-8 PASS "exact locale set: $LOCALES"

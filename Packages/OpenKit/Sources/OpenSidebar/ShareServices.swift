@@ -14,6 +14,9 @@ private enum SystemShareServices: ShareServiceListing {
 }
 public enum ShareServices {
     public static func list(for items: [Any]) -> [NSSharingService] {
-        (SystemShareServices.self as ShareServiceListing.Type).services(for: items)
+        // Arc's submenu has no "Add to Reading List" (Safari's own service): AirDrop · Mail · Messages ·
+        // Notes · Open in News · Freeform · Journal · Reminders on the capture Mac (session 8 item 1).
+        let readingList = NSSharingService(named: .addToSafariReadingList)?.title
+        return (SystemShareServices.self as ShareServiceListing.Type).services(for: items).filter { $0.title != readingList }
     }
 }
