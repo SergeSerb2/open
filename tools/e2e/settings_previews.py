@@ -131,12 +131,12 @@ def run(config, output, force_failure, expected_engine):
         signed_engine = signed_framework_sha256(Path(ROOT) / "Vendor/cef/Release" / framework.parent)
         report["engine"]["replayedSignedSHA256"] = signed_engine
         assert report["engine"]["embeddedSHA256"] == signed_engine, "App framework does not match the signed supplied distribution"
-        # A unique bundle ID gives UserDefaults.standard a fresh domain without
-        # adding a preferences hook to the App or touching the user's choices.
+        # A unique bundle ID keeps this copy apart from other Open processes; preferences use the private domain.
         subprocess.run(["cp", "-cR", str(Path(ROOT) / "build" / config / "Open.app"), str(bundle)], check=True)
         info = bundle / "Contents/Info.plist"
         values = plistlib.loads(info.read_bytes())
-        values["CFBundleIdentifier"] = domain
+        # Not the preferences domain: a defaults suite named after the App's own bundle ID does not work.
+        values["CFBundleIdentifier"] = "com.open.previews-e2e." + uuid.uuid4().hex
         info.write_bytes(plistlib.dumps(values))
         subprocess.run(["codesign", "--force", "--sign", "-", str(bundle)], check=True, capture_output=True)
         report["engine"]["runningBundleSHA256"] = framework_sha256(bundle / "Contents/Frameworks" / framework)
