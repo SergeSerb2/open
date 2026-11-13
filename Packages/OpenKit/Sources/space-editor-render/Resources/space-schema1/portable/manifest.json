@@ -62,12 +62,12 @@
       "original": true,
       "renderScale": 1,
       "trustedMainCommit": "d926d500c09f046faece1827252bafccec769b3d",
-      "reason": "Original references on trusted main. No PNG is regenerated. Exact original byte comparisons and render scale 1 remain in force.",
+      "reason": "Original display key. Legacy glyph-only updates are recorded in legacyGlyphRerecord; editor references remain unchanged.",
       "pngSHA256": {
         "legacy": {
-          "window-0.png": "d01d2a666b551e970aa2930db1b095af2805736d550b2f577c3deebc081aa9dc",
-          "window-1.png": "8788b7a4ba89ce4dd082815a1fc14f4cc56cf7415cd5a72ada99c55727f00a82",
-          "window-2.png": "cf3458610d9915d731763d8c9468ee5483bf2e331bc5e444d5c2741590d31099"
+          "window-0.png": "2d8ab9605943cbe2b1af730fa0e5d1dfa799a607edf5dd6f113c75f1bbf2e380",
+          "window-1.png": "342ab4b90358e604f628ba2954ebb7fb1655e94258904ab46cb3e766814d7de8",
+          "window-2.png": "c3f7501d7da1c27630c36b410c89d9af3781d68d3455e861008524f3adac5bcf"
         },
         "editor": {
           "window-0.png": "4b367f903df1a577d35b2e22c8f254cd586295d04be503f373228123b2e83191",
@@ -95,6 +95,103 @@
           "sidebar-render": "c2234d37be9370b26ccf1139dfd2a0c918a95616e084d23cf3c0a4d60c3bfa03",
           "space-editor-render": "4308889b388c1c52c13c97ea1958dd00440ad5501d5fa46b94ed37c800d2910f"
         }
+      },
+      "legacyGlyphRerecord": {
+        "commit": "2f0c80f8435b6570e3e49e0fa7487046f028c39b",
+        "approval": "LEAD 2026-11-13 05:55: only #543 sidebar-toggle weight and New Tab plus size; no pixels outside the two glyph rects",
+        "comparison": "unchanged PNG byte identity",
+        "files": [
+          {
+            "file": "window-0.png",
+            "oldSHA256": "d01d2a666b551e970aa2930db1b095af2805736d550b2f577c3deebc081aa9dc",
+            "newSHA256": "2d8ab9605943cbe2b1af730fa0e5d1dfa799a607edf5dd6f113c75f1bbf2e380",
+            "differingPixels": 232,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              529
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                514,
+                35,
+                532
+              ]
+            ],
+            "glyphPixelCounts": [
+              160,
+              72
+            ]
+          },
+          {
+            "file": "window-1.png",
+            "oldSHA256": "8788b7a4ba89ce4dd082815a1fc14f4cc56cf7415cd5a72ada99c55727f00a82",
+            "newSHA256": "342ab4b90358e604f628ba2954ebb7fb1655e94258904ab46cb3e766814d7de8",
+            "differingPixels": 229,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              389
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                374,
+                35,
+                392
+              ]
+            ],
+            "glyphPixelCounts": [
+              159,
+              70
+            ]
+          },
+          {
+            "file": "window-2.png",
+            "oldSHA256": "cf3458610d9915d731763d8c9468ee5483bf2e331bc5e444d5c2741590d31099",
+            "newSHA256": "c3f7501d7da1c27630c36b410c89d9af3781d68d3455e861008524f3adac5bcf",
+            "differingPixels": 232,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              471
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                456,
+                35,
+                474
+              ]
+            ],
+            "glyphPixelCounts": [
+              161,
+              71
+            ]
+          }
+        ]
       }
     }
   }
