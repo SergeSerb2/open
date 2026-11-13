@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Loopback-only static workloads and bounded numerical telemetry collector."""
 import functools
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler
 import json
 import math
 from pathlib import Path
@@ -11,6 +11,9 @@ import threading
 import time
 import urllib.request
 from urllib.parse import urlsplit, parse_qs
+import sys as _sys
+_sys.path.append(str(Path(__file__).resolve().parents[1] / 'e2e'))  # loopback_http; appended, so the stdlib wins
+from loopback_http import LoopbackHTTPServer
 
 PAGES=Path(__file__).parent/'pages'
 
@@ -100,7 +103,7 @@ class Collector:
                 self.end_headers()
                 try:self.wfile.write(data)
                 except (BrokenPipeError,ConnectionResetError):pass
-        self.http=ThreadingHTTPServer(('127.0.0.1',port),Handler)
+        self.http=LoopbackHTTPServer(Handler, port)
         self.url=f'http://127.0.0.1:{self.http.server_port}'
         self.thread=threading.Thread(target=self.http.serve_forever,daemon=True);self.thread.start()
     def wait(self,run,event='loaded',timeout=45,after_wall_ms=0,visible=False):

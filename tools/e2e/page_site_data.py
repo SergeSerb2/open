@@ -1,9 +1,10 @@
 """View menu site clears through the real App and local HTTP origin boundaries."""
 from collections import Counter
 from contextlib import ExitStack
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 import os
 import threading
+from loopback_http import LoopbackHTTPServer
 
 
 def run(factory, results, tmp, style, harness, site_control=False):
@@ -111,7 +112,7 @@ def run(factory, results, tmp, style, harness, site_control=False):
     try:
         servers = []
         for _ in range(2):
-            server = resources.enter_context(ThreadingHTTPServer(('127.0.0.1', 0), Page))
+            server = resources.enter_context(LoopbackHTTPServer(Page))
             worker = threading.Thread(target=server.serve_forever, daemon=True)
             worker.start()
             resources.callback(worker.join, timeout=5)

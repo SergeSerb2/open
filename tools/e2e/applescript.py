@@ -10,6 +10,7 @@ import threading
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from loopback_http import LoopbackHTTPServer
 
 KEY = 'open.developer.allowJavaScriptFromAppleEvents'
 MODE_KEY = 'open.developer.modeHosts'
@@ -30,7 +31,7 @@ def csp_fixture_server():
             self.wfile.write(body)
 
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, 'http://127.0.0.1:%d/' % server.server_address[1]
 
