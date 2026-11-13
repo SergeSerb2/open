@@ -65,7 +65,10 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='release-delay',seconds=.6);generation=state()['panelGeneration'];state(action='close');time.sleep(.3)
             state(action='open',section='media');time.sleep(.4)
             check('reopen_cancels_release',state()['panelCreated'] and state()['panelGeneration']==generation)
-            state(action='close');check('closed_view_released',wait(lambda:not state().get('panelCreated',True)) and not state().get('releasedPanelAlive',True),state=state())
+            state(action='close')
+            # Async idle preparation can retain the detached panel until its next suspension completes.
+            released=wait(lambda:(lambda value:value if not value.get('panelCreated',True) and not value.get('releasedPanelAlive',True) else None)(state()))
+            check('closed_view_released',bool(released),state=released or state())
             state(action='open',section='downloads');check('reopen_builds_fresh_panel',state()['panelGeneration']==generation+1)
             sessions=len(state(action='sessions')['sessions'])
             app.call('command',id='new-window');state(action='open',section='history')
