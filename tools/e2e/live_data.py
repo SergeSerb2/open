@@ -44,7 +44,7 @@ def github_fixture():
     {'signed_in': bool, 'prs': {kind_marker: [(owner/repo, number, title, status)]},
      'sso': None (no banner) or a list of hrefs in its banner}."""
     import http.server, threading, html, urllib.parse
-    state = {'signed_in': True, 'prs': {}, 'requests': [], 'sso': None}
+    state = {'signed_in': True, 'prs': {}, 'requests': [], 'sso': None, 'fetch_gate': None}
     markers = {'author:@me': 'created', 'review-requested:@me': 'review', 'review:approved': 'approved', 'review:changes_requested': 'changes'}
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -56,6 +56,8 @@ def github_fixture():
             if parsed.path == '/login':
                 body = '<!doctype html><title>Sign in</title><form action="/session" method="post"><input name="login"></form>'
             elif parsed.path == '/pulls':
+                gate = state['fetch_gate']
+                if gate is not None: gate.wait(timeout=10)
                 query = urllib.parse.parse_qs(parsed.query).get('q', [''])[0]
                 kind = next((v for k, v in markers.items() if k in query), '')
                 rows = state['prs'].get(kind, [])
@@ -212,7 +214,7 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         before = {(r['url'], r['live']) for r in state.get('rows', [])}
         facts_before = {r['url']: (r['status'], r['number'], r['repository'], r['awaitingMyReview']) for r in state.get('rows', [])}
         app.quit()
-        app = holder['app'] = factory(urls=(), fresh=False)
+        app = holder['app'] = factory(urls=(), fresh=False, extra_env={'OPEN_AUTOMATION_GITHUB_ORIGIN': 'http://github.localhost:%d' % port})
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
         again = app.call('live-folder-state')
         # C-LF-1: the PR facts are stored with the row, so the glyph is right before any refresh.
@@ -353,15 +355,24 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         app.call('live-folder-refresh')
         # The saved last-fetch state can say SSO, but a URL is never restored from disk.
         app.quit()
-        app = holder['app'] = factory(urls=(), fresh=False)
-        app.call('live-folder-origin', url=origin)
-        restored, restored_menu = app.call('live-folder-state'), sso_menu()
+        import threading
+        gate = gh['fetch_gate'] = threading.Event()
+        try:
+            app = holder['app'] = factory(urls=(), fresh=False, extra_env={'OPEN_AUTOMATION_GITHUB_ORIGIN': origin})
+            app.call('live-folder-origin', url=origin)
+            # Hold any automatic fetch at the fixture while inspecting the restored model.
+            restored, restored_menu = app.call('live-folder-state'), sso_menu()
+        finally:
+            gh['fetch_gate'] = None
+            gate.set()
         results['live_folder_sso_link_is_transient'] = {'ok': restored.get('outcome') == 'needsSSO'
             and restored.get('ssoURL') is None and restored_menu.get('checked') and not restored_menu.get('enabled'),
             'state': restored, 'menu': restored_menu}
-        app.call('live-folder-refresh')
         gh['sso'] = None
-        cleared = app.call('live-folder-refresh')
+        # A refresh may already be running after activation. Wait for its 20 s native
+        # deadline, then a completed fixture refresh; a busy reply is not a result.
+        cleared = wait_until(lambda: (lambda r: r if r.get('outcome') == 'success' else None)(app.call('live-folder-refresh')),
+                             timeout=30, step=.1) or {}
         clean, clean_menu = app.call('live-folder-state'), sso_menu()
         results['live_folder_sso_clears_after_success'] = {'ok': cleared.get('outcome') == 'success' and clean.get('ssoURL') is None
             and not clean_menu.get('checked') and not clean_menu.get('enabled') and not press_sso(), 'state': clean, 'menu': clean_menu}

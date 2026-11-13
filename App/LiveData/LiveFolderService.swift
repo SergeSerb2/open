@@ -15,7 +15,14 @@ final class LiveFolderService {
   private unowned let app: AppDelegate
   /// github.com, or a fixture origin set by automation. Static so the per-navigation check in
   /// `EngineWebContentHost` never creates the service.
-  static var origin = GitHubQuery.defaultOrigin
+  static var origin: URL = {
+    #if OPEN_AUTOMATION
+    // A restored Live Folder can refresh before the socket accepts commands. Keep
+    // that first real fetch on the same synthetic origin as the rest of the suite.
+    if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_GITHUB_ORIGIN"], let url = URL(string: raw) { return url }
+    #endif
+    return GitHubQuery.defaultOrigin
+  }()
   var origin: URL { get { Self.origin } set { Self.origin = newValue } }
   /// Last origin URL per tab, to see "compare page → new PR page" (PR created).
   private var lastOriginURL: [ItemID: URL] = [:]
