@@ -85,6 +85,7 @@ final class AppLibrarySession {
   func cancelIdleWork() { panel?.cancelIdleWork() }
   func close() {
     guard let controller, controller.isLibraryOpen else { return }
+    if controller.hasPeekController { controller.peekController.closeLibraryPreviews() }
     panel?.isPresented = false
     controller.dismissLibraryPanel()
     panel?.onIdleRefresh?()

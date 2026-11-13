@@ -154,7 +154,7 @@ extension AutomationController {
         case "access": guard !calendar.accessButton.isHidden else { throw Failure(message: "no access button") }
           calendar.askAccess()
         case "gear":
-          return try trackCalendarGear(calendar, controller: controller, item: a["item"] as? String ?? "")
+          return try await trackCalendarGear(calendar, controller: controller, item: a["item"] as? String ?? "")
         case "event":
           let index = a["row"] as? Int ?? 0
           guard calendar.timeline.blocks.indices.contains(index) else { throw Failure(message: "no event block \(index)") }
@@ -171,7 +171,7 @@ extension AutomationController {
   }
 
   /// Press the real gear and choose an item inside AppKit's menu tracking loop. No system input.
-  private func trackCalendarGear(_ calendar: CalendarPreviewView, controller: BrowserWindowController, item title: String) throws -> Any {
+  private func trackCalendarGear(_ calendar: CalendarPreviewView, controller: BrowserWindowController, item title: String) async throws -> Any {
     guard calendar.gearMenu().items.contains(where: { $0.title == title && !$0.isSeparatorItem && $0.isEnabled })
     else { throw Failure(message: "gear menu has no enabled item \(title)") }
     let receipt = CalendarGearTrackingReceipt(calendar: calendar, controller: controller, item: title)
@@ -184,6 +184,15 @@ extension AutomationController {
     }
     defer { NotificationCenter.default.removeObserver(observer); receipt.stop() }
     _ = calendar.gearButton.accessibilityPerformPress()
+    // Native menu tracking reconciles AppKit areas against the hardware cursor.
+    // Restore the socket pointer through the same tagged motion path as `hover`;
+    // otherwise an unrelated hardware position can dismiss the refreshed card.
+    if let window = controller.window, let pointer = BrowserWindowController.automationPointer,
+       pointer.window == window.windowNumber {
+      _ = try await mouse(["action": "hover", "window": window.windowNumber,
+        "x": Double(pointer.location.x), "y": Double(window.frame.height - pointer.location.y)],
+        app.hostFactories[controller.windowID])
+    }
     return ["opened": receipt.selected, "tracked": receipt.tracked, "cardStayedVisible": receipt.cardStayedVisible]
   }
 

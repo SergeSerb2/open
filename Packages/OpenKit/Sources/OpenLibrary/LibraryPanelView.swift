@@ -455,6 +455,21 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         }
     }
     isolated deinit { if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) } }
+    /// Reads the existing native tiles without laying out or building content.
+    /// Frames use panel coordinates, as in automationState().
+    public var automationRailState: [[String:Any]] {
+        sections.compactMap { candidate in
+            guard let tile=tiles[candidate] else { return nil }
+            let frame=convert(tile.bounds,from:tile)
+            let point=tile.convert(CGPoint(x:tile.bounds.midX,y:tile.bounds.midY),to:nil)
+            let hit=window?.contentView?.superview?.hitTest(point)
+            return ["id":candidate.rawValue,"frame":[frame.minX,frame.minY,frame.width,frame.height],
+                "selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile,
+                "focusRing":tile.keyboardFocus,"drawnLabels":tile.drawnLabelCount,
+                "hitClass":hit.map { String(describing:type(of:$0)) } ?? "","canDragWindow":tile.mouseDownCanMoveWindow]
+        }
+    }
+
     /// Window-relative top-left coordinates, used by real socket capture clients.
     public func automationState() -> [String:Any] {
         layoutSubtreeIfNeeded()
@@ -464,13 +479,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         }
         let ink = foreground.usingColorSpace(.sRGB) ?? foreground
         return ["foreground":[ink.redComponent,ink.greenComponent,ink.blueComponent,ink.alphaComponent],"section":section.rawValue,"panelFrame":[frame.minX,frame.minY,frame.width,frame.height],
-            "rail":sections.compactMap { candidate -> [String:Any]? in
-                guard let tile=tiles[candidate] else { return nil }
-                let point = tile.convert(CGPoint(x:tile.bounds.midX,y:tile.bounds.midY),to:nil)
-                let hit = window?.contentView?.superview?.hitTest(point)
-                return ["id":candidate.rawValue,"frame":rect(tile),"selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile,"focusRing":tile.keyboardFocus,"drawnLabels":tile.drawnLabelCount,
-                    "hitClass":hit.map { String(describing:type(of:$0)) } ?? "", "canDragWindow":tile.mouseDownCanMoveWindow]
-            },
+            "rail":automationRailState,
             "header":["searchFrame":section == .spaces ? [] : rect(header),"filterFrame":section.hasFilter ? rect(filter) : [],"filterOpen":filterOpen,"chips":filterOpen ? filterEditor.state(in:self) : []] as [String:Any],
             "providers":Dictionary(uniqueKeysWithValues:hosts.map { ($0.key.rawValue,["generation":$0.value.providerGeneration,"loaded":$0.value.loaded,"running":$0.value.provider != nil] as [String:Any]) }),
             "profiles":["history":viewModel.historyProfileID.description,"downloads":viewModel.downloadProfileFilter?.description ?? "all"],
