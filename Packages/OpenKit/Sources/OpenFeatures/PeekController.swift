@@ -142,10 +142,12 @@ public final class PeekController {
         host.load(url); refresh(); host.focus(); installKeys()
         let interval = duration(Motion.peekOpen), generation = motionGeneration
         if interval > 0 { overlay.freezeHost(host.view, image: nil) }
+        let focusAfterFreeze = overlay.window?.firstResponder
         overlay.animatePresentation(true, duration: interval) { [weak self, weak host] in
             guard let self, let host, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
             self.overlay.endHostSnapshot()
-            host.focus()
+            if self.isShown, self.overlay.window?.isKeyWindow == true,
+               self.overlay.window?.firstResponder === focusAfterFreeze { host.focus() }
         }
         PeekMotionTrace.region("open.onChange") { onChange?() }
     }
