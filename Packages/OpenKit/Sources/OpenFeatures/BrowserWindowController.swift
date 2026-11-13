@@ -785,17 +785,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 hold.fillMode = .both; hold.isRemovedOnCompletion = false
                 layer.add(hold, forKey: "libraryPreparation")
             }
-            CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
-                guard let self, self.libraryMotionGeneration == generation,
-                      self.libraryPageMotionGeneration == pageGeneration,
-                      !self.isLibraryOpen, self.libraryCloseCommitPending else { return }
-                self.libraryCloseCommitPending = false
-                self.animateLibraryClose(animated: animated, generation: generation)
-            } }
+            CATransaction.setCompletionBlock { [weak self] in
+                // A completion may arrive immediately. Submit motion on the
+                // next turn so it cannot join preparation's implicit commit.
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.libraryMotionGeneration == generation,
+                          self.libraryPageMotionGeneration == pageGeneration,
+                          !self.isLibraryOpen, self.libraryCloseCommitPending else { return }
+                    self.libraryCloseCommitPending = false
+                    self.animateLibraryClose(animated: animated, generation: generation)
+                }
+            }
         } else {
             animateLibraryClose(animated: animated, generation: generation)
         }
         CATransaction.commit()
+        if libraryCloseCommitPending { CATransaction.flush() }
     }
     private func animateLibraryClose(animated: Bool, generation: Int) {
         animateLibrary(opening: false, duration: 0.20, animated: animated)
