@@ -77,6 +77,19 @@ base::ScopedFD OpenLease(const base::FilePath& path) {
   return fd;
 }
 
+bool LeaseIsCurrent(int fd, const base::FilePath& path) {
+  struct stat held;
+  struct stat current;
+  // Cleanup may retire the install directory between open() and flock(), or
+  // while flock() changes lock type. Never protect a new clone with an old,
+  // unlinked lease. The cleaner holds EX while renaming and deleting entries.
+  return fstat(fd, &held) == 0 && lstat(path.value().c_str(), &current) == 0 &&
+         S_ISREG(held.st_mode) && S_ISREG(current.st_mode) &&
+         held.st_uid == getuid() && (held.st_mode & 0777) == 0600 &&
+         held.st_nlink == 1 && current.st_nlink == 1 &&
+         held.st_dev == current.st_dev && held.st_ino == current.st_ino;
+}
+
 bool IdentityMatches(const base::FilePath& path, const std::string& identity) {
   base::ScopedFD fd(HANDLE_EINTR(open(
       path.value().c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)));
@@ -143,14 +156,19 @@ std::optional<OpenCodeSignClone> GetOpenCodeSignClone(
   if (!PrivateDirectory(root) || !PrivateDirectory(install)) {
     return std::nullopt;
   }
-  base::ScopedFD lease = OpenLease(install.Append("lease"));
-  if (!lease.is_valid() || flock(lease.get(), LOCK_SH | LOCK_NB) != 0) {
+  const base::FilePath lease_path = install.Append("lease");
+  base::ScopedFD lease = OpenLease(lease_path);
+  if (!lease.is_valid() || flock(lease.get(), LOCK_SH | LOCK_NB) != 0 ||
+      !LeaseIsCurrent(lease.get(), lease_path)) {
     return std::nullopt;
   }
   const std::string identity = Identity(*original);
   const base::FilePath clone = install.Append("Application.bundle");
   const base::FilePath metadata = install.Append("identity");
   if (Matches(executable, clone, executable_name, metadata, identity)) {
+    if (!LeaseIsCurrent(lease.get(), lease_path)) {
+      return std::nullopt;
+    }
     VLOG(1) << "Open code-sign clone reused: " << clone;
     return OpenCodeSignClone{clone, std::move(lease)};
   }
@@ -158,7 +176,8 @@ std::optional<OpenCodeSignClone> GetOpenCodeSignClone(
   // Do not remove a clone that another running browser still needs after a
   // live bundle swap. An unavailable exclusive lease is a cache failure: use
   // Chromium's per-run clone. The next exclusive owner retires the old clone.
-  if (flock(lease.get(), LOCK_EX | LOCK_NB) != 0) {
+  if (flock(lease.get(), LOCK_EX | LOCK_NB) != 0 ||
+      !LeaseIsCurrent(lease.get(), lease_path)) {
     return std::nullopt;
   }
   // Another process can have populated the cache while we changed lock type.
@@ -181,7 +200,8 @@ std::optional<OpenCodeSignClone> GetOpenCodeSignClone(
     VLOG(1) << "Open code-sign clone created: " << clone;
   }
   if (flock(lease.get(), LOCK_SH | LOCK_NB) != 0 ||
-      !Matches(executable, clone, executable_name, metadata, identity)) {
+      !Matches(executable, clone, executable_name, metadata, identity) ||
+      !LeaseIsCurrent(lease.get(), lease_path)) {
     return std::nullopt;
   }
   return OpenCodeSignClone{clone, std::move(lease)};
