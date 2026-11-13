@@ -1,10 +1,13 @@
 # Cross-window page preservation
 
 The lead reopened this parked 1.1 investigation in the 2026-11-13 night lane.
-The shell implementation is in `ns/nt-live-tab-transfer`. Engine adoption and
-real-App acceptance are pending; this document does not claim either is done.
-If the engine is not adopted by 04:00 Vancouver, the URL reload fallback stays
-and the no-reload feature returns to 1.1.
+The shell implementation is in `ns/nt-live-tab-transfer`. The private
+`267b0ad8` engine passed the full Blank Window real-App suite (24/24) on a
+rented Mac, including five document/identity preservation checks. Its scoped
+build also passed. These receipts qualify the private transfer path; official
+engine adoption remains separate. The shipping `b0cb685a` engine keeps URL
+reload moves. If the engine is not adopted by 04:00 Vancouver, that fallback
+stays and the no-reload feature returns to 1.1.
 
 ## Engine boundary
 
