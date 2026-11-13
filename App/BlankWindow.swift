@@ -126,9 +126,9 @@ extension AppDelegate {
 extension AppDelegate {
   /// Tabs dragged from another window whose model does not hold them: a Blank Window's own model
   /// and the browser's model (C-report-s11 1(a): both ways; afterwards the tab is in the
-  /// destination's list and gone from the source). Only plain tabs move; the page loads again in
-  /// the destination (its live page does not cross models: Open's limit). GUESS: the moved tab is
-  /// selected in the destination.
+  /// destination's list and gone from the source). Same-Profile live engine tabs
+  /// retain their page when the adopted engine supports transfer. Other tabs
+  /// keep the existing URL reload fallback. The destination selects the moved tab.
   func dropTabs(_ ids: [ItemID], fromAnotherWindowInto factory: EngineWebContentHostFactory,
                 parent: NodeParent, index: Int, perform: Bool) -> Bool {
     guard index >= 0, !ids.isEmpty, ids.count <= 500 else { return false }
@@ -147,6 +147,11 @@ extension AppDelegate {
     var position = index, last: ItemID?
     for id in ids {
       guard let tab = source.model.tab(id: id) else { continue }
+      if factory.transferLiveTab(id, from: source, to: parent, at: position) {
+        position += 1; last = id
+        source.finishTabTransfer()
+        continue
+      }
       let moved = factory.model.newTab(in: space.id, url: tab.url, title: tab.title, at: 0)
       moved.customTitle = tab.customTitle; moved.customIcon = tab.customIcon; moved.iconOverride = tab.iconOverride
       if parent != .spaceToday(space.id) || position != 0 { _ = factory.model.moveNode(id: moved.id, to: parent, at: position) }
@@ -168,15 +173,24 @@ extension EngineWebContentHostFactory {
     model.closeTab(id: id)
     undo?.enableUndoRegistration()
     model.archiveSink?.discardArchived(ids: [id])
+    finishTabTransfer()
+  }
+
+  func finishTabTransfer() {
     if isBlankWindow, orderedTabs.isEmpty { DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) } }
     else if isBlankWindow { select(nodeID: orderedTabs.first?.id) }
   }
 
   /// Row menu ▸ Move to ▸ ‹Space›: the tab leaves this window and opens at the top of that
-  /// Space's Today list in the browser's model. The page loads again there (its live page does
-  /// not move between the two models: Open's limit, not an Arc fact).
+  /// Space's Today list in the browser's model. A live same-Profile page uses
+  /// OpenEngine transfer; unsupported engines or destinations retain URL reload.
   func moveBlankWindowTab(_ id: ItemID, toSpace spaceID: SpaceID) -> Bool {
     guard isBlankWindow, let tab = model.tab(id: id), app.model.space(id: spaceID) != nil else { return false }
+    if let destination = app.windowControllers.compactMap({ app.hostFactories[$0.windowID] }).first(where: {
+      $0 !== self && $0.model === app.model && !$0.isIncognito && $0.focusedSpace?.id == spaceID
+    }), destination.transferLiveTab(id, from: self, to: .spaceToday(spaceID), at: 0) {
+      finishTabTransfer(); app.scheduleSave(); return true
+    }
     let moved = app.model.newTab(in: spaceID, url: tab.url, title: tab.title, at: 0)
     moved.customTitle = tab.customTitle; moved.customIcon = tab.customIcon; moved.iconOverride = tab.iconOverride
     releaseTabToAnotherWindow(id)
@@ -234,7 +248,13 @@ extension AutomationController {
     controller.contentView.layoutSubtreeIfNeeded()
     let sidebar = controller.sidebar
     let frame = controller.window?.frame ?? .zero
+    #if OPEN_ENGINE_WEB_CONTENT_TRANSFER
+    let liveTransfer = true
+    #else
+    let liveTransfer = false
+    #endif
     return ["isBlankWindow": factory.isBlankWindow, "window": factory.windowState.id.description, "space": space.id.description,
+      "liveTabTransferSupported": liveTransfer,
       "headerTitle": controller.context.title(of: space), "headerHidden": controller.context.hidesHeader(for: space),
       "favoritesShown": sidebar.favoritesShown, "spaceDots": sidebar.spaceSwitcherCount,
       "libraryButtonShown": !sidebar.homeButton.isHidden, "plusShown": !sidebar.plusButton.isHidden,
