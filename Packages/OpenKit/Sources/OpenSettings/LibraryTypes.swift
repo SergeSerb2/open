@@ -29,6 +29,7 @@ public extension CapturesProvider { var loadFailed: Bool { false } }
     func deleteBoost(id: String, profileID: ProfileID)
     func editBoost(id: String, profileID: ProfileID)
     func restoreArchived(id: ItemID)
+    func previewArchived(url: URL, profileID: ProfileID)
     func deleteArchived(id: ItemID)
     func clearArchive()
     func revealDownload(id: String)
@@ -115,6 +116,7 @@ extension LibraryActions { public func flushHistoryWrites() async {} }
 
 // Existing render fixtures do not own downloadable files.
 public extension LibraryActions {
+    func previewArchived(url: URL, profileID: ProfileID) {}
     func copyDownload(id: String) {}
     func trashDownload(id: String) {}
 }
