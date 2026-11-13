@@ -140,12 +140,17 @@ public final class ThemeBackgroundView: NSView {
             addSubview(blur, positioned: .below, relativeTo: themeSurface)
             windowBlur = blur
         }
-        windowBlur?.isHidden = !enabled
+        if let blur = windowBlur, blur.isHidden == enabled { blur.isHidden = !enabled }
         guard enabled, let blur = windowBlur else { return }
         let dark = style.backdropScheme == .dark
-        blur.material = dark ? .underWindowBackground : .sidebar
-        blur.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        blur.state = isWindowActive ? .active : .inactive
+        let material: NSVisualEffectView.Material = dark ? .underWindowBackground : .sidebar
+        let appearance: NSAppearance.Name = dark ? .darkAqua : .aqua
+        let state: NSVisualEffectView.State = isWindowActive ? .active : .inactive
+        // Reapplying an appearance can invalidate AppKit's material subtree.
+        // A field flush with unchanged inputs must not create another update.
+        if blur.material != material { blur.material = material }
+        if blur.appearance?.name != appearance { blur.appearance = NSAppearance(named: appearance) }
+        if blur.state != state { blur.state = state }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -182,8 +187,8 @@ public final class ThemeBackgroundView: NSView {
         // field rebuilds on a display tick; static previews finish them below.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        themeSurface.frame = bounds
-        windowBlur?.frame = bounds
+        if themeSurface.frame != bounds { themeSurface.frame = bounds }
+        if let blur = windowBlur, blur.frame != bounds { blur.frame = bounds }
         themeHost.frame = themeSurface.bounds
         pageBlur?.frame = bounds
         for layer in [current, incoming].compactMap({ $0 }) {
