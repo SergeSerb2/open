@@ -475,6 +475,12 @@ public final class WebContentContainer: NSView {
         if let slot = slots.first(where: { !$0.isHidden && $0.frame.contains(p) }) { onPaneClicked?(slot.tabID) }
     }
     public override func mouseDown(with event: NSEvent) { observeClick(event) }
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        // NSView hit regions stay at their old frames while the render server
+        // moves the panes. Do not send a click into the wrong page in flight.
+        if transitioning, !isHidden, bounds.contains(convert(point, from: superview)) { return self }
+        return super.hitTest(point)
+    }
     public func setLivePaneFrames(_ frames: [CGRect]) {
         guard frames.count == slots.count else { return }
         finishPaneMotion()
