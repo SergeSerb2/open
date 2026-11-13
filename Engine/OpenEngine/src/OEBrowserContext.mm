@@ -703,13 +703,15 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   // Serialize the Profile snapshot once. Each browser still gets its own
   // stored extra-info copy (including its per-page styles) and renderer message.
   // Rebuilding the full list twice per browser made ten-page Boost edits slow.
-  CefRefPtr<CefListValue> scripts = [self oe_scriptsValue];
+  // Stay lazy while preparing a context before its first browser exists.
+  CefRefPtr<CefListValue> scripts;
   // OTR web contents have their own context. Match that exact owner, so updates
   // cover its browsers without installing a parent profile's scripts there.
   for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
     if (webContent.context != self || !webContent.oe_browser) {
       continue;
     }
+    if (!scripts) scripts = [self oe_scriptsValue];
     CefSetBrowserExtraInfo(webContent.oe_browser,
                            [webContent oe_extraInfoWithScripts:scripts]);
     CefRefPtr<CefProcessMessage> msg =
