@@ -540,7 +540,9 @@ extension LibraryPanelView {
                 guard let self else { return }
                 self.viewModel.actions.editBoost(id:id,profileID:profile)
             }
-            return LibraryRowItem(id:id,title:item.domain,subtitle:item.name+" · "+(item.isEnabled ? "on" : "off"),kind:"boost",image:symbol("paintbrush.pointed"),activate:edit,
+            // Arc's card: the Boost name over its host, no on/off text (capture session 8 item 14,
+            // `v13/33-boost-menu-delete/i14-boosts.png`: "My Boost" over "127.0.0.1").
+            return LibraryRowItem(id:id,title:item.name,subtitle:item.domain,kind:"boost",image:symbol("paintbrush.pointed"),activate:edit,
                 actions:[.init(title:"Edit Boost",run:edit),.init(title:item.isEnabled ? "Turn Off" : "Turn On",run:{ [weak self] in
                     guard let self else { return }
                     self.viewModel.actions.setBoostEnabled(id:id,enabled:!item.isEnabled,profileID:profile); self.renderRows()
@@ -550,7 +552,7 @@ extension LibraryPanelView {
                         self.viewModel.actions.deleteBoost(id:id,profileID:profile); self.renderRows()
                     }
                 // Arc: a right-click on a Boost card opens no menu (capture session 8 item 14, `v13/33-boost-menu-delete`).
-                })],contextMenu:false)
+                })],contextMenu:false,isOn:item.isEnabled)
           }
         }
     }
