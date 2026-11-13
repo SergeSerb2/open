@@ -120,6 +120,11 @@ extension AutomationController {
           charactersIgnoringModifiers: text.isEmpty ? "\u{7f}" : text, isARepeat: false, keyCode: text.isEmpty ? 51 : 0) { NSApp.sendEvent(event) }
       }
       try? await Task.sleep(for: .milliseconds(20))
+    case "advanced-step":
+      // One increment / decrement of an "Advanced color controls" slider (the popover must be open).
+      guard let popover = controller.boostEditor?.view?.advancedPopover, popover.isPresented,
+        let label = args["slider"] as? String else { throw Failure(message: "advanced popover is closed") }
+      guard popover.step(label, up: args["up"] as? Bool ?? true) else { throw Failure(message: "unknown slider") }
     case "tap":
       guard let editor = controller.boostEditor, let view = editor.view, let id = args["id"] as? String else { throw Failure(message: "Boost editor is closed") }
       if id.hasPrefix("menu.") {
@@ -167,6 +172,7 @@ extension AutomationController {
       "active": session.isActiveOnPage, "window": panel.windowNumber, "key": panel.isKeyWindow,
       "frame": [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height],
       "pad": [rect.minX, rect.minY, rect.width, rect.height],
+      "advanced": view.advancedPopover.map { ["open": $0.isPresented, "sliders": $0.sliderValues] as [String: Any] } ?? ["open": false],
       "alert": editor.activeAlert.map { ["title": $0.messageText, "message": $0.informativeText, "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? [:],
       "controls": (view.controls + (view.codeView?.controls ?? [])).map { ["id": $0.controlID, "enabled": $0.isEnabled, "visible": !$0.isHiddenOrHasHiddenAncestor, "tooltip": $0.tooltipTitle ?? ""] },
       "refreshMs": runtime.lastRefreshMilliseconds, "refreshPages": runtime.lastRefreshPageCount,
