@@ -260,6 +260,40 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and set(alert.get('buttons', [])) >= {'Delete Folder', 'Cancel'} and gone.get('exists') is False
             and app.call('live-folder-state').get('exists') is False
             and app.call('defaults', key='open.liveFolders.githubAutoCreate') is False, 'alert': alert}
+        # C-LF-2: Open's design is ten PR rows, then the actual sidebar Show More control.
+        gh['prs'] = {'created': [('acme/app', n, 'Pull request %d' % n, 'open') for n in range(100, 113)]}
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        long_folder = app.call('live-folder-state', wait=True)
+        def exposed(st): return [r['id'] for r in st.get('rows', []) if r.get('exposed')]
+        limited = wait_until(lambda: (lambda s: s if len(exposed(s)) == 10 and s.get('showMore') else None)(app.call('live-folder-state')), timeout=3, step=.05) or long_folder
+        results['live_folder_show_more_limit'] = {'ok': len(limited.get('rows', [])) == 13 and len(exposed(limited)) == 10
+            and (limited.get('showMore') or {}).get('title') == 'Show More', 'state': limited}
+        if os.environ.get('OPEN_LIVE_DATA_FRAMES'):
+            for name in ('light', 'dark'):
+                app.call('appearance', name=name)
+                app.call('live-folder-state', revealMore=True); time.sleep(.3)
+                app.call('snapshot', window=app.call('window-state').get('number'),
+                         path=os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-folder-show-more-%s.png' % name))
+            app.call('appearance', name='system')
+        fetches = limited.get('fetchPagesCreated')
+        pressed = app.call('live-folder-show-more')
+        revealed = wait_until(lambda: (lambda s: s if len(exposed(s)) == 13 and s.get('showMore') is None else None)(app.call('live-folder-state')), timeout=3, step=.05) or app.call('live-folder-state')
+        results['live_folder_show_more_reveals_without_fetch'] = {'ok': pressed.get('pressed') is True and len(exposed(revealed)) == 13
+            and revealed.get('showMore') is None and revealed.get('fetchPagesCreated') == fetches, 'pressed': pressed, 'state': revealed}
+        app.call('folder-toggle', folder=long_folder['id'])
+        app.call('folder-toggle', folder=long_folder['id'])
+        reset = wait_until(lambda: (lambda s: s if len(exposed(s)) == 10 and s.get('showMore') else None)(app.call('live-folder-state')), timeout=3, step=.05) or app.call('live-folder-state')
+        results['live_folder_show_more_resets_on_collapse'] = {'ok': len(exposed(reset)) == 10 and bool(reset.get('showMore')), 'state': reset}
+        gh['prs']['created'] = gh['prs']['created'][:10]
+        app.call('live-folder-refresh')
+        boundary = app.call('live-folder-state')
+        gh['prs']['created'] = []
+        app.call('live-folder-refresh')
+        empty = app.call('live-folder-state')
+        results['live_folder_show_more_boundary_and_empty'] = {'ok': len(exposed(boundary)) == 10 and boundary.get('showMore') is None
+            and empty.get('rows') == [] and empty.get('showMore') is None and app.call('live-folder-show-more').get('pressed') is False,
+            'boundary': boundary, 'empty': empty}
+        app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:
         try:
