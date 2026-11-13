@@ -506,9 +506,17 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         let cpuStarted = measuring ? clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) : 0
         var phaseStart = started
         let expanding = changedFolder.flatMap { context.model.node(id: $0)?.folder }?.isExpanded ?? true
-        rowMotion.begin(outline, animated: animated && !initial,
-                        duration: expanding ? Motion.folderExpand : Motion.folderCollapse,
-                        timing: expanding ? Motion.folderExpandTiming : Motion.folderCollapseTiming)
+        // Root-count observation can reconcile expansion again after a row
+        // edit. A no-op refresh must not replace the row's in-flight layer
+        // animation before its first presentation tree has been committed.
+        var beganMotion = false
+        func beginMotion() {
+            guard !beganMotion else { return }
+            beganMotion = true
+            rowMotion.begin(outline, animated: animated && !initial,
+                            duration: expanding ? Motion.folderExpand : Motion.folderCollapse,
+                            timing: expanding ? Motion.folderExpandTiming : Motion.folderCollapseTiming)
+        }
         func phase(_ name: String) {
             guard measuring else { return }
             let now = CACurrentMediaTime()
@@ -516,7 +524,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             phaseStart = now
         }
         defer {
-            rowMotion.end(outline)
+            if beganMotion { rowMotion.end(outline) }
             phase("layer-motion")
             syncingExpansion = false
             if measuring {
@@ -553,6 +561,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                 let target = displayedChildren(of: folder)
                 let previous = folderChildren[key] ?? []
                 if old != state || native != (state != .collapsed) || previous.map(ObjectIdentifier.init) != target.map(ObjectIdentifier.init) {
+                    beginMotion()
                     let expanding = state == .expanded
                     let transition = old != state
                     let duration = transition ? (expanding ? Motion.folderExpand : Motion.folderCollapse) : Motion.rowStructure
