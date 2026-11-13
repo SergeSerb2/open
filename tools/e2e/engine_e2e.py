@@ -11864,19 +11864,20 @@ def space_manager_checks(results, tmp, config, style):
         app.call('window-focus', id=second, activate=True); app.call('window-close')
         require('no_browser_window', app.call('shell-windows') == [])
         # PR #350 hosts Library in a browser. With no browser, the command
-        # creates a live owner; it must keep the shared model and original IDs.
+        # reopens the retained model window as a live owner, keeping its IDs.
         app.call('library-open'); no_browser = manager_ready(app)
         created_windows = app.call('shell-windows')
         created_owner = created_windows[0]['id'] if len(created_windows) == 1 else ''
-        require('library_without_browser_creates_live_owner', no_browser and no_browser['contextValid'] and no_browser['sameModel']
-                and created_owner and created_owner != second and no_browser['contextWindow'] == created_owner,
+        require('library_without_browser_reopens_live_owner', no_browser and no_browser['contextValid'] and no_browser['sameModel']
+                and created_owner == second and no_browser['contextWindow'] == created_owner
+                and created_windows[0]['number'] != second_manager['window'],
                 state=state(app), windows=created_windows)
         app.call('pasteboard-write', text='new-owner-sentinel')
         app.call('space-manager-menu', space=s2, node=pin, item='Copy Link')
         copied_without_browser = app.call('pasteboard')
         with open(app.call('save')) as stream: retained_snapshot = json.load(stream)
         retained_space = next(s for s in retained_snapshot['spaces'] if s['id'] == s2)
-        require('library_new_owner_copy_link_retains_model_ids', len(app.call('shell-windows')) == 1
+        require('library_reopened_owner_copy_link_retains_model_ids', len(app.call('shell-windows')) == 1
                 and len(retained_snapshot['windows']) == 1 and retained_snapshot['windows'][0]['id'] == created_owner
                 and any(n.get('tab', {}).get('_0', {}).get('id') == pin for n in retained_space['pinned'])
                 and copied_without_browser == pin_url_before_close,
