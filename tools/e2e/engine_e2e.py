@@ -10285,7 +10285,7 @@ def folder_peek_checks(factory, results, tmp):
             raise AssertionError(name)
     def motion_result(name, response, duration, curve):
         motion = response.get("motion", {})
-        native = any(animation.get("path") == "position" and abs(animation.get("duration", 0) - duration) < .001
+        native = any(animation.get("path") == "transform.translation.y" and abs(animation.get("duration", 0) - duration) < .001
                      and len(animation.get("curve", [])) == 8
                      and all(abs(a-b) < .001 for a,b in zip(animation["curve"][2:6], curve))
                      for animation in motion.get("animations", []))
@@ -10293,7 +10293,10 @@ def folder_peek_checks(factory, results, tmp):
         common = set.intersection(*(set(sample["rows"]) for sample in samples)) if samples else set()
         trajectories = [[sample["rows"][row] for sample in samples] for row in common]
         moving = any(max(values)-min(values) > 1 and abs(values[-1]-values[-2]) < .1 for values in trajectories)
-        require(name, abs(motion.get("appliedDuration", 0)-duration) < .001 and native and moving, motion=motion)
+        # Real row frames settle once; only presentation geometry may move.
+        model_stable = bool(samples) and all(sample.get("modelRows") is not None for sample in samples)
+        model_stable = model_stable and all(max(sample["modelRows"][row] for sample in samples) - min(sample["modelRows"][row] for sample in samples) < .1 for row in common)
+        require(name, abs(motion.get("appliedDuration", 0)-duration) < .001 and native and moving and model_stable, motion=motion)
     def state(folder):
         value = app.call("tabs", sidebar=True)
         row = next((f for f in value["folders"] if f["id"] == folder), {})
