@@ -649,7 +649,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                         self.positionTrafficLights()
                     }
                 } }
-                let layers = [sidebar.layer, dimmedLights.layer].compactMap { $0 }
+                let layers = [sidebar.layer, dimmedLights.motionLayer].compactMap { $0 }
                     + Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer }
                 for (index, layer) in layers.enumerated() {
                     layer.removeAnimation(forKey: "sidebarToggle")
@@ -860,7 +860,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if button.isHidden != hidden { button.isHidden = hidden }
             if isLibraryOpen { button.layer?.removeAnimation(forKey: "sidebarToggle"); button.layer?.setValue(0, forKeyPath: "transform.translation.x") }
         }
-        if isLibraryOpen { dimmedLights.layer?.removeAnimation(forKey: "sidebarToggle"); dimmedLights.layer?.setValue(0, forKeyPath: "transform.translation.x") }
+        if isLibraryOpen { dimmedLights.motionLayer.removeAnimation(forKey: "sidebarToggle"); dimmedLights.motionLayer.setValue(0, forKeyPath: "transform.translation.x") }
         if !hidden { placeTrafficLights(whileMoving: placeMoving) }
     }
 
@@ -995,7 +995,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             finishSidebarPanelLayout()
             container.setSidebarSliding(false)
             // Clear anchored-hide transforms before the same layers become a card.
-            for layer in [sidebar.layer, dimmedLights.layer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
+            for layer in [sidebar.layer, dimmedLights.motionLayer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
                 layer.removeAnimation(forKey: "sidebarToggle")
                 CATransaction.begin(); CATransaction.setDisableActions(true)
                 layer.setValue(0, forKeyPath: "transform.translation.x"); CATransaction.commit()
@@ -1042,7 +1042,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func slideCard(from: CGFloat, to: CGFloat, generation: Int, completion: (@MainActor () -> Void)?) {
         let layers = [sidebar.layer, cardShadow.layer].compactMap { $0 }
-        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.layer].compactMap { $0 }
+        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.motionLayer].compactMap { $0 }
         cardAnimations = [:]
         CATransaction.begin()
         CATransaction.setCompletionBlock {
@@ -1076,7 +1076,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         cardState = .off
         sidebar.isHidden = true
         cardShadow.isHidden = true
-        for layer in [sidebar.layer, cardShadow.layer, dimmedLights.layer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
+        for layer in [sidebar.layer, cardShadow.layer, dimmedLights.motionLayer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
             layer.removeAnimation(forKey: "reveal")
         }
         sidebar.presentation = .anchored
