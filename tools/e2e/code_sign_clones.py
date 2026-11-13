@@ -41,6 +41,7 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--baseline', action='store_true')
     parser.add_argument('--compare', type=Path)
+    parser.add_argument('--functional-only', action='store_true', help='one content launch; no scored timing set')
     args = parser.parse_args()
     args.bundle = args.bundle.resolve()
     args.out.mkdir(parents=True, exist_ok=False)
@@ -50,7 +51,8 @@ def main():
     created = []
     apps = []
     held = None
-    root = Path(tempfile.mkdtemp(prefix='open-clones-e2e-'))
+    # macOS's default TMPDIR plus a case name can exceed sockaddr_un.sun_path.
+    root = Path(tempfile.mkdtemp(prefix='open-clones-e2e-', dir='/tmp'))
 
     def save():
         (args.out / 'report.json').write_text(json.dumps(report, indent=2))
@@ -113,7 +115,7 @@ def main():
         created.append(link)
         # A symlink inside a valid retired clone must be unlinked, not traversed.
         (stale[0] / 'outside-link').symlink_to(outside, target_is_directory=True)
-        for index in range(5):
+        for index in range(1 if args.functional_only else 5):
             load = list(os.getloadavg())
             app = launch('sample-%d' % index)
             try:
@@ -170,7 +172,7 @@ def main():
                 check('empty_keeps_current', identity(current) == before)
             finally:
                 stop(app)
-        if args.compare:
+        if args.compare and not args.functional_only:
             baseline = json.loads(args.compare.read_text())
             check('matched_launch_paint', report['medianPaintMs'] <= baseline['medianPaintMs'] * 1.10,
                   beforeMs=baseline['medianPaintMs'], afterMs=report['medianPaintMs'], maximumFactor=1.10,
@@ -181,9 +183,11 @@ def main():
     finally:
         if held:
             held.close()
-        for app in apps:
+        # Include a constructor that failed after LaunchServices started its App.
+        for app in e._OWNED_APPS:
             if not app.closed:
                 app.quit()
+        report['finalCleanup'] = [app.quit_report for app in e._OWNED_APPS]
         # These synthetic entries alone are ours; all other cache deletion is
         # performed by the launched App's production maintenance path.
         for directory in created:
