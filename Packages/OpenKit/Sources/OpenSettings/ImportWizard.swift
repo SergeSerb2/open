@@ -235,6 +235,7 @@ import OpenImport
         else if family == .firefox && !plan.passwords && plan.primaryPassword.isEmpty && !result.needsPrimaryPassword { plan.passwords = true }
         readable = !values.isEmpty
         counting = false
+        untickNotFound()
         if !readable { errorText = "No readable import data found in this \(plan.source.displayName) profile." }
     }
     private func refreshBrowserCounts() async {
@@ -258,6 +259,7 @@ import OpenImport
         counts = values
         readable = result.bookmarks != nil || result.openTabs != nil || result.historyVisits != nil || result.searchEngine != nil || result.secrets != nil
         counting = false
+        untickNotFound()
         if !readable { errorText = "No readable import data found in this \(plan.source.displayName) profile." }
     }
     public func refreshCounts() async {
@@ -291,6 +293,19 @@ import OpenImport
         guard let probe else {return "Counting…"}
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
+    }
+    /// A data type with "Not found" is unticked and its toggle disabled, like Passwords without a source, so the
+    /// Report never flags data that was never there (hand check, IMF 20:15). It is ticked again when a later
+    /// profile or file has it.
+    public func isNotFound(_ category: String) -> Bool { !counting && countLabel(category) == "Not found" }
+    private var untickedNotFound: Set<String> = []
+    private func untickNotFound() {
+        let keys: [(String, WritableKeyPath<ImportPlan, Bool>)] = [("Bookmarks", \.bookmarks), ("History", \.history), ("Open tabs", \.openTabs)]
+        for (category, key) in keys {
+            if isNotFound(category) {
+                if plan[keyPath: key] { plan[keyPath: key] = false; untickedNotFound.insert(category) }
+            } else if untickedNotFound.remove(category) != nil { plan[keyPath: key] = true }
+        }
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public static let browserReportCategories=["Bookmarks","Open tabs","History","Search settings"]
@@ -542,7 +557,7 @@ public struct ImportWizard: View {
         .padding(.horizontal, 12).frame(height: 36)
     }
     private func browserOption(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
-        HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
+        HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })).disabled(model.isNotFound(name)); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
     }
     private func providerRow(_ provider: any ArcImportDataProvider) -> some View {
         VStack(alignment: .leading, spacing: 2) {

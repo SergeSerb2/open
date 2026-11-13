@@ -92,8 +92,13 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         if wizard.browserCounts == nil && wizard.familyCounts == nil {return "Counting…"}
         return wizard.counts[key].map {"Found: "+ImportCountCopy.phrase($0,singular:singular,plural:plural)} ?? "Not found"
     }
+    /// The same rule as Settings ▸ Import: a data type with "Not found" is off and cannot be turned on.
+    public func browserIncluded(_ key:String)->Bool {
+        let on=key == "Bookmarks" ? includeBookmarks:key == "Open tabs" ? includeOpenTabs:includeHistory
+        return on && !wizard.isNotFound(key)
+    }
     public var hasSelection:Bool {
-        if isBrowserMode {return includeBookmarks || includeOpenTabs || includeHistory}
+        if isBrowserMode {return browserIncluded("Bookmarks") || browserIncluded("Open tabs") || browserIncluded("History")}
         return includeSpacesAndTabs || includeArchive || includeHistory || (includeSecrets && wizard.canImportPasswordsAndCookies)}
     public var outcome:ImportOutcome? {wizard.outcome}
     public var busy:Bool {wizard.isImporting || wizard.extensions.isInstalling || step == .importing}
@@ -132,7 +137,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
             }
             var plan=ImportPlan(directory:wizard.plan.directory);plan.source = .browser(source,profile:profile)
             plan.spaces=false;plan.tabs=false;plan.favorites=false;plan.folders=false;plan.archive=false;plan.boosts=false
-            plan.bookmarks=includeBookmarks;plan.openTabs=includeOpenTabs;plan.history=includeHistory;plan.searchSettings=true
+            plan.bookmarks=browserIncluded("Bookmarks");plan.openTabs=browserIncluded("Open tabs");plan.history=browserIncluded("History");plan.searchSettings=true
             errorText=nil;phaseText="Importing your bookmarks…";step = .importing
             await Task.yield()
             await wizard.beginImport(plan:plan)
@@ -279,9 +284,9 @@ public struct FirstRunView:View {
                     }.frame(maxWidth:260).disabled(model.busy)
                 }
                 SettingsGroup {
-                    choice("Bookmarks",help:"They go to a pinned folder, “\(BrowserBookmarksImport.folderTitle(browserName:source.name))”.",found:model.browserFound("Bookmarks",singular:"bookmark",plural:"bookmarks"),value:$model.includeBookmarks,height:56)
-                    choice("Open tabs",help:"The tabs open in \(source.name) right now.",found:model.browserFound("Open tabs",singular:"tab",plural:"tabs"),value:$model.includeOpenTabs,height:56)
-                    choice("History",help:"Pages you visited. Open also uses it to suggest Favorites.",found:model.browserFound("History",singular:"visit",plural:"visits"),value:$model.includeHistory,height:62,last:true)
+                    choice("Bookmarks",help:"They go to a pinned folder, “\(BrowserBookmarksImport.folderTitle(browserName:source.name))”.",found:model.browserFound("Bookmarks",singular:"bookmark",plural:"bookmarks"),value:browserToggle("Bookmarks",$model.includeBookmarks),height:56,enabled:!model.wizard.isNotFound("Bookmarks"))
+                    choice("Open tabs",help:"The tabs open in \(source.name) right now.",found:model.browserFound("Open tabs",singular:"tab",plural:"tabs"),value:browserToggle("Open tabs",$model.includeOpenTabs),height:56,enabled:!model.wizard.isNotFound("Open tabs"))
+                    choice("History",help:"Pages you visited. Open also uses it to suggest Favorites.",found:model.browserFound("History",singular:"visit",plural:"visits"),value:browserToggle("History",$model.includeHistory),height:62,last:true,enabled:!model.wizard.isNotFound("History"))
                 }
             } else if model.probe?.sidebarFound == false {
                 Text("No Arc data found at \(model.wizard.directoryDisplayPath).").font(.headline).fixedSize(horizontal:false,vertical:true)
@@ -305,6 +310,9 @@ public struct FirstRunView:View {
             else {Button("Not Now"){model.skipImport()};primary("Continue"){Task {await model.continueImport()}}.disabled(!model.hasSelection)}
         }.fixedSize(horizontal:false,vertical:true)}
     }}
+    private func browserToggle(_ key:String,_ value:Binding<Bool>)->Binding<Bool> {
+        Binding(get:{model.browserIncluded(key)},set:{value.wrappedValue=$0})
+    }
     private func choice(_ title:String,help:String,found:String,value:Binding<Bool>,height:CGFloat,last:Bool=false,enabled:Bool=true)->some View {
         SettingsRow(divider:!last,minimumHeight:height) {HStack(alignment:.top,spacing:8) {
             VStack(alignment:.leading,spacing:4) {Toggle(title,isOn:value).toggleStyle(.checkbox).disabled(!enabled);Text(help).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.leading,21)}

@@ -164,11 +164,14 @@ public final class SidebarContext {
     /// Live Calendar actions for the tile menu and the reminder; nil keeps tiles plain.
     @ObservationIgnored public var liveCalendar: LiveCalendarActions?
     public func glanceKind(for tab: Tab) -> GlanceKind? {
+        // A Live Folder row with PR facts shows its PR card (C-LF-1); the tracker already checked the master switch.
+        if tab.liveItemURL != nil, tab.liveItem != nil { return .pullRequest }
         guard let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases, mailHosts: glanceMailHosts) else { return nil }
         switch kind {
         case .recents: guard recentPagesSource != nil else { return nil }
         case .calendar: guard calendarGlance != nil else { return nil }
         case .gmail: guard mailGlanceSource != nil else { return nil }
+        case .pullRequest: return nil  // never matched from a URL
         }
         let key = kind.preferenceKey
         return previewPreferences.object(forKey: key) == nil || previewPreferences.bool(forKey: key) ? kind : nil
