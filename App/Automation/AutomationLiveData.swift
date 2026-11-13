@@ -157,27 +157,15 @@ extension AutomationController {
   private func trackCalendarGear(_ calendar: CalendarPreviewView, controller: BrowserWindowController, item title: String) throws -> Any {
     guard calendar.gearMenu().items.contains(where: { $0.title == title && !$0.isSeparatorItem && $0.isEnabled })
     else { throw Failure(message: "gear menu has no enabled item \(title)") }
-    let receipt = CalendarGearTrackingReceipt()
+    let receipt = CalendarGearTrackingReceipt(calendar: calendar, controller: controller, item: title)
     let observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { note in
       nonisolated(unsafe) let trackingMenu = note.object as? NSMenu
       MainActor.assumeIsolated {
         guard let trackingMenu else { return }
-        receipt.tracked = true
-        receipt.timer = Timer(timeInterval: 0.05, repeats: false) { _ in
-          MainActor.assumeIsolated {
-            receipt.cardStayedVisible = controller.hoverPreview.card?.content === calendar && controller.context.hoverPreviews.request != nil
-            if receipt.cardStayedVisible,
-               let index = trackingMenu.items.firstIndex(where: { $0.title == title && !$0.isSeparatorItem && $0.isEnabled }) {
-              trackingMenu.performActionForItem(at: index)
-              receipt.selected = true
-            }
-            trackingMenu.cancelTrackingWithoutAnimation()
-          }
-        }
-        if let timer = receipt.timer { RunLoop.main.add(timer, forMode: .eventTracking) }
+        receipt.beginTracking(trackingMenu)
       }
     }
-    defer { NotificationCenter.default.removeObserver(observer); receipt.timer?.invalidate(); receipt.timer = nil }
+    defer { NotificationCenter.default.removeObserver(observer); receipt.stop() }
     _ = calendar.gearButton.accessibilityPerformPress()
     return ["opened": receipt.selected, "tracked": receipt.tracked, "cardStayedVisible": receipt.cardStayedVisible]
   }
@@ -226,6 +214,35 @@ private final class CalendarGearTrackingReceipt {
   var tracked = false
   var cardStayedVisible = false
   var selected = false
-  var timer: Timer?
+  private weak var calendar: CalendarPreviewView?
+  private weak var controller: BrowserWindowController?
+  private var menu: NSMenu?
+  private let item: String
+  private var timer: Timer?
+
+  init(calendar: CalendarPreviewView, controller: BrowserWindowController, item: String) {
+    self.calendar = calendar; self.controller = controller; self.item = item
+  }
+
+  func beginTracking(_ menu: NSMenu) {
+    self.menu = menu; tracked = true
+    timer = Timer(timeInterval: 0.05, repeats: false) { [weak self] _ in
+      MainActor.assumeIsolated { self?.choose() }
+    }
+    if let timer { RunLoop.main.add(timer, forMode: .eventTracking) }
+  }
+
+  private func choose() {
+    guard let menu else { return }
+    defer { menu.cancelTrackingWithoutAnimation() }
+    guard let calendar, let controller else { return }
+    cardStayedVisible = controller.hoverPreview.card?.content === calendar && controller.context.hoverPreviews.request != nil
+    if cardStayedVisible, let index = menu.items.firstIndex(where: { $0.title == item && !$0.isSeparatorItem && $0.isEnabled }) {
+      menu.performActionForItem(at: index)
+      selected = true
+    }
+  }
+
+  func stop() { timer?.invalidate(); timer = nil; menu = nil }
 }
 #endif
