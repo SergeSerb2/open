@@ -47,7 +47,7 @@ enum VisualFinishChecks {
         let longTitle = String(b.displayTitle.prefix(30)) + "…"
         // Capture session 8 item 5; a Today split adds Archive Tabs Below (its ⌥ alternates are not drawn).
         let expectedMenu = ["Share Split View…", "—", "Separate All Tabs", "Add Tab…", "Convert to Vertical Split View", "—", "Tab Options", "Pane A", longTitle,
-                        "—", "Duplicate", "Move to", "—", "Archive Item"]
+                        "—", "Change Icon…", "Rename…", "—", "Duplicate", "Move to", "—", "Archive Item"]
         check(titles == expectedMenu || titles == expectedMenu + ["Archive Tabs Below"], "split menu: \(titles.joined(separator: " · "))")
         let menu = sidebar.contextMenu(nodeID: split.id)!
         check(menu.item(withTitle: "Tab Options")?.isEnabled == false, "\"Tab Options\" is a header")

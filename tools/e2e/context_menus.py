@@ -885,10 +885,10 @@ def context_menu_checks(factory, results, tmp, h):
                 panes = [t for t in listed['items'] if t.endswith(' ▸') and t not in ('Move to ▸',)]
                 pane = app.call('sidebar-menu-items', node=split_id, path=panes[0][:-2]) if panes else {'items': []}
                 head = ['Share Split View…', '—', 'Separate All Tabs', 'Add Tab…', 'Convert to Vertical Split View', '—', 'Tab Options']
-                tail = ['—', 'Duplicate', 'Move to ▸', '—', 'Archive Item']
+                tail = ['—', 'Change Icon…', 'Rename…', '—', 'Duplicate', 'Move to ▸', '—', 'Archive Item']
                 items = listed['items']
                 rows = {'head': items[:7] == head, 'two_panes': len(panes) == 2,
-                        'tail': items[9:14] == tail and items[14:] in ([], ['Archive Tabs Below']),
+                        'tail': items[9:17] == tail and items[17:] in ([], ['Archive Tabs Below']),
                         'tab_options_header': 'Tab Options' in listed['disabled'],
                         'pane': pane['items'] == ['Separate from Split View', '—', 'Share ▸', 'Mute', 'Copy Link', 'Copy link as Markdown', '—', 'Archive Item']}
                 return {'ok': all(rows.values()), 'rows': rows, 'listed': listed, 'pane': pane}

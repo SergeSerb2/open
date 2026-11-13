@@ -87,7 +87,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         app.call('suggest-remote', enabled=False)
         if not functional_only and lane != 'merge':
             app.call('split', op='observe')
-        app.call('window-frame', frame=[60, 60, 1360, 860])
+        app.call('window-frame', frame=[60, 60, 1360, 860], unconstrained=True)
         empty_menu = app.call('split', op='plus')
         row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split'), menu=empty_menu)
         a = opened('a'); original_page = app.page(a)['identifier']; app.call('focus', tab=a)
@@ -123,6 +123,64 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             pixel_ok = all((p['delta_e00'] <= 2 if p['focused'] else p['delta_e00'] > 10) for p in ring_pixels)
             row('snapshot_two_panes', geometry(captured, 'horizontal', 2) and pixel_ok and abs(height/scale-860) <= 1,
                 path=str(png), snapshot=snapshot, ringPixels=ring_pixels, scale=scale)
+
+        # C12-D2-2, session 12: native split-row customization and its persisted presentation.
+        custom_id = state()['id']
+        def row_menu(item=None):
+            return app.call('sidebar-menu', node=custom_id, item=item) if item else app.call('sidebar-menu-items', node=custom_id)
+        def presentation(): return state().get('rowPresentation', {})
+        def rename(value, cancel=False):
+            row_menu('Rename…')
+            before = state()['renameEditor']
+            app.call('key', text=value, route='app')
+            key('escape' if cancel else 'return', ())
+            return before
+        original_titles = presentation().get('titles', [])
+        listed = row_menu()['items']
+        row('custom_menu_initial', 'Change Icon…' in listed and 'Rename…' in listed and 'Reset Name and Icon' not in listed, menu=listed)
+        initial = rename('D2 Split')
+        h.wait_until(lambda: presentation()['titles'] == ['D2 Split'],timeout=3,step=.02)
+        row('custom_rename_inline', initial.get('text') == '2 Tabs' and initial.get('placeholder') == 'Title'
+            and initial.get('selection') == [0,6] and presentation()['titles'] == ['D2 Split']
+            and presentation()['paneFaviconsVisible'] == 0 and presentation()['iconSource'] == 'count', editor=initial,presentation=presentation())
+        rename('Cancelled split',cancel=True)
+        row('custom_rename_escape', presentation()['titles'] == ['D2 Split'] and 'Reset Name and Icon' in row_menu()['items'],presentation=presentation())
+        row_menu('Reset Name and Icon')
+        h.wait_until(lambda: presentation()['titles'] == original_titles,timeout=3,step=.02)
+        row('custom_name_reset', presentation()['titles'] == original_titles and presentation()['paneFaviconsVisible'] == 2
+            and 'Reset Name and Icon' not in row_menu()['items'],presentation=presentation())
+        row_menu('Change Icon…')
+        h.wait_until(lambda: app.call('editor-state').get('count',0) > 0,timeout=5,step=.02)
+        for value in ('grinning face','down','return'):
+            app.call('editor-act',action='key',key=value)
+        h.wait_until(lambda: not app.call('editor-state')['open'],timeout=3,step=.02)
+        row('custom_icon_only', presentation()['titles'] == ['2 Tabs'] and presentation()['iconSource'] == 'custom'
+            and 'Reset Name and Icon' in row_menu()['items'],presentation=presentation())
+        row_menu('Reset Name and Icon')
+        row('custom_icon_reset', presentation()['titles'] == original_titles and presentation()['paneFaviconsVisible'] == 2
+            and 'Reset Name and Icon' not in row_menu()['items'],presentation=presentation())
+        rename('D2 Persisted Split')
+        row_menu('Change Icon…')
+        h.wait_until(lambda: app.call('editor-state').get('count',0) > 0,timeout=5,step=.02)
+        for value in ('grinning face','down','return'):
+            app.call('editor-act',action='key',key=value)
+        h.wait_until(lambda: not app.call('editor-state')['open'],timeout=3,step=.02)
+        captures = []
+        for appearance in ('light','dark'):
+            app.call('appearance',name=appearance)
+            path = Path(h.ROOT) / '.re/s9-split' / ('split-custom-' + appearance + '.png')
+            app.call('snapshot',path=str(path))
+            captures.append(str(path))
+        app.call('appearance',name='system')
+        app.call('save'); app.quit(); app = factory(urls=()); settled(2)
+        restored_node = next(n for n in app.call('sidebar-tree')['today'] if n['id'] == custom_id)
+        row('custom_relaunch', restored_node['customTitle'] == 'D2 Persisted Split'
+            and restored_node['iconOverride'] == {'type':'emoji','value':'😀'}
+            and presentation()['titles'] == ['D2 Persisted Split'] and presentation()['iconSource'] == 'custom',node=restored_node,presentation=presentation(),captures=captures)
+        row_menu('Reset Name and Icon')
+        reset = presentation()
+        row('custom_relaunch_reset', reset['titles'] == original_titles and reset['paneFaviconsVisible'] == 2
+            and not reset['customIconVisible'] and 'Reset Name and Icon' not in row_menu()['items'],presentation=reset)
 
         # C2: all four edge zones use actual destination callbacks and pasteboard decoding.
         zones = []
@@ -249,7 +307,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         widths = [p['frame'][2] for p in narrow['panes']]
         row('narrow_equal_scaling', narrow['container'][2] < 800 and max(widths)-min(widths) <= 1
             and max(widths) < 200 and geometry(narrow, 'horizontal', 4), state=narrow)
-        app.call('window-frame', frame=[60, 60, 1360, 860]); settled(4)
+        app.call('window-frame', frame=[60, 60, 1360, 860], unconstrained=True); settled(4)
         # Closing the focused third pane keeps a split with a valid focused survivor.
         closed = state()['focused']; key('-'); s = settled(3)
         row('close_focused_pane', closed not in [p['id'] for p in s['panes']] and s['focused'] == s['panes'][0]['id']

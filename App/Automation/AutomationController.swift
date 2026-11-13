@@ -2180,7 +2180,7 @@
       switch node {
       case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
       case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "expanded": folder.isExpanded, "iconOverride": describeIcon(folder.iconOverride), "peekedChildID": folder.peekedChildID?.description ?? "", "children": folder.children.map(describeNode)]
-      case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
+      case .split(let split): return ["id": split.id.description, "kind": "split", "title":split.displayTitle, "customTitle":split.customTitle as Any? ?? NSNull(), "iconOverride":describeIcon(split.iconOverride), "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
     func menuEnabled(_ item: NSMenuItem) -> Bool {
