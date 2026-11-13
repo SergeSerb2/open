@@ -281,6 +281,38 @@ public enum ThemeField {
         return Composition(underlay: underlay, solid: nil, image: image)
     }
 
+    /// Theme tint over the system's behind-window material. The fitted opacity
+    /// is retained; only the constant neutral underlay is removed. Static
+    /// previews continue to use `makeImage` or `composition`.
+    public static func makeWindowTint(style: SpaceThemeStyle, windowSize: CGSize) -> CGImage? {
+        // Fixed 64×64 RGBA float field: largest allocation is 65,536 bytes.
+        let n = 64
+        let e = Evaluator(style: style, windowSize: windowSize, isActive: true)
+        var pixels = [Float](repeating: 0, count: n * n * 4)
+        for y in 0..<n {
+            for x in 0..<n {
+                let u = (Double(x) + 0.5) / Double(n), v = (Double(y) + 0.5) / Double(n)
+                let (r, g, b) = e.color(u: u, v: v)
+                let a: Double
+                if case .corners = style.fill { a = e.alpha } else { a = e.fill(u: u, v: v).1 }
+                // Unmix in the field's encoded space. Extended float channels
+                // retain colors outside sRGB until the window's ColorSync pass.
+                let gray = e.underlay * (1 - a)
+                let i = (y * n + x) * 4
+                pixels[i] = Float(r - gray); pixels[i + 1] = Float(g - gray)
+                pixels[i + 2] = Float(b - gray); pixels[i + 3] = Float(a)
+            }
+        }
+        let data = pixels.withUnsafeBytes { Data($0) }
+        guard let provider = CGDataProvider(data: data as CFData),
+              let space = CGColorSpace(name: CGColorSpace.extendedSRGB) else { return nil }
+        let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
+                                | CGBitmapInfo.floatComponents.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        return CGImage(width: n, height: n, bitsPerComponent: 32, bitsPerPixel: 128, bytesPerRow: n * 16,
+                       space: space, bitmapInfo: info, provider: provider, decode: nil,
+                       shouldInterpolate: true, intent: .defaultIntent)
+    }
+
     /// The whole-window field as a small float image in uv space. Stretch it over
     /// the window with linear filtering; the field is smooth, so 64×64 samples
     /// stay within a fraction of a level of the exact math.

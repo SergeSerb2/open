@@ -138,7 +138,7 @@ Evidence for the structure: Arc's theme shader library (`ARC_WindowThemeUI`, `de
 The stored stops are saturated (`#FF8558`, `#F0E941`, `#FF5598` in Space 1). On screen the top-left reads `#F2A686`, about 27 % lighter. Two things cause this (fitted, RMS 1.3–1.6 / 255 on two Spaces):
 
 - The gradient layer draws at about 64 % opacity (`intensityFactor` 0.8 on both fitted Spaces).
-- Under it lies a light, neutral material (`translucencyStyle: light`, `isVibrant: true`). It reads gray 0.694 while the window is active and 0.83 while inactive. On a real active window this material is vibrancy over the desktop, so the true underlay varies with the wallpaper. We use the fitted constant. The App can swap in an `NSVisualEffectView` later if a vibrant capture shows a difference.
+- Under it lies a light, neutral material (`translucencyStyle: light`, `isVibrant: true`). It reads gray 0.694 while the window is active and 0.83 while inactive. On a real active window this material is vibrancy over the desktop, so the true underlay varies with the wallpaper. Real browser windows now place an `NSVisualEffectView` with `.behindWindow` blending below the fitted tint. The material and explicit Aqua/Dark Aqua appearance follow `SpaceThemeStyle.backdropScheme`; the existing window-activation events select its active or inactive state. `isVibrant: false` keeps an opaque field. Embedded previews retain the fitted constant. The system owns the desktop blur; there is no polling or per-frame theme work. Wallpaper-matrix calibration is pending C14-T.
 
 ### 3.4 Text appearance
 
@@ -635,7 +635,7 @@ pixel = (1 − w) × tint + w × backdrop        w = 0.115
 tint  = (activeField − w × activeBackdrop) / (1 − w)
 ```
 
-Each theme's active field stays the reference: every earlier theme fit measured it, so active windows render as before. The backdrop is chosen per window scheme (`SpaceThemeStyle.backdropScheme`: an imported Arc theme's `translucencyStyle`; editor and default themes follow the macOS appearance, as their underlay wash does).
+The active field remains the reference for static previews and the hover-reveal card. Live browser windows instead remove the fitted constant underlay from that field and retain the fitted tint coverage over a system behind-window material (§3.3). The table below records the earlier constant-underlay fit, not wallpaper-independent live-window colors. The backdrop is chosen per window scheme (`SpaceThemeStyle.backdropScheme`: an imported Arc theme's `translucencyStyle`; editor and default themes follow the macOS appearance, as their underlay wash does).
 
 | State | Backdrop | Evidence |
 |---|---|---|

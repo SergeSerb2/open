@@ -8,7 +8,7 @@ import OpenModel
 ///
 /// Cost: the field is one solid color or a 64×64 float image stretched by the
 /// GPU, rebuilt only when the theme, the active state, or the window aspect
-/// changes. Editor fills sit over an opaque underlay layer, so the window
+/// changes. Static editor previews sit over an opaque underlay layer, so the window
 /// server blends them in the display's space. Grain is one tile repeated by
 /// replicator layers (shared contents, no large bitmaps).
 ///
@@ -65,6 +65,17 @@ public final class ThemeBackgroundView: NSView {
         didSet { if composesInDisplaySpace != oldValue { [current, incoming].compactMap { $0 }.forEach { $0.invalidateField() }; refresh() } }
     }
 
+    /// Only real browser windows opt in. Embedded previews and the page card
+    /// retain their fitted constant underlay.
+    public var usesWindowBackdrop = false {
+        didSet { if usesWindowBackdrop != oldValue { applyMaterial() } }
+    }
+    public var drawsWindowBackdrop: Bool { windowBlur?.isHidden == false }
+    public var windowBackdropMaterial: Int? { drawsWindowBackdrop ? windowBlur?.material.rawValue : nil }
+    public var isWindowBackdropActive: Bool { drawsWindowBackdrop && windowBlur?.state == .active }
+    private let themeSurface = ThemeSurfaceView()
+    private var windowBlur: NSVisualEffectView?
+
     private var current = ThemeLayer(style: .defaultTheme(system: .light))
     /// Holds the theme layers. Its opacity is `1 − w` over the page blur, else 1.
     private let themeHost = CALayer()
@@ -90,12 +101,13 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func applyMaterial() {
+        updateWindowMaterial()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if material == .overPage, let blur = pageBlur ?? PageBlurLayer.make() {
             pageBlur = blur
             blur.frame = bounds
-            if blur.superlayer == nil { layer?.insertSublayer(blur, below: themeHost) }
+            if blur.superlayer == nil { (themeSurface.superview == nil ? layer : themeSurface.layer)?.insertSublayer(blur, below: themeHost) }
             themeHost.opacity = Float(1 - WindowMaterial.backdropWeight)
         } else {
             pageBlur?.removeFromSuperlayer()
@@ -104,6 +116,36 @@ public final class ThemeBackgroundView: NSView {
         CATransaction.commit()
         [current, incoming].compactMap { $0 }.forEach { $0.invalidateField() }
         refresh()
+    }
+
+    private func updateWindowMaterial() {
+        if usesWindowBackdrop, themeSurface.superview == nil {
+            // A sibling surface keeps the tint above AppKit's material layer.
+            // Static previews retain their original layer tree byte for byte.
+            themeSurface.wantsLayer = true
+            themeSurface.layerContentsRedrawPolicy = .never
+            themeSurface.frame = bounds
+            addSubview(themeSurface)
+            themeHost.removeFromSuperlayer()
+            themeSurface.layer?.addSublayer(themeHost)
+        }
+        let style = targetStyle
+        let enabled = usesWindowBackdrop && material == .window && style.isVibrant
+        if enabled, windowBlur == nil {
+            let blur = NSVisualEffectView(frame: bounds)
+            blur.blendingMode = .behindWindow
+            // The material sits below the theme. It must not apply vibrancy to
+            // the sidebar's already fitted text and semantic role colors.
+            blur.isEmphasized = false
+            addSubview(blur, positioned: .below, relativeTo: themeSurface)
+            windowBlur = blur
+        }
+        windowBlur?.isHidden = !enabled
+        guard enabled, let blur = windowBlur else { return }
+        let dark = style.backdropScheme == .dark
+        blur.material = dark ? .underWindowBackground : .sidebar
+        blur.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        blur.state = isWindowActive ? .active : .inactive
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -140,7 +182,9 @@ public final class ThemeBackgroundView: NSView {
         // field rebuilds on a display tick; static previews finish them below.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        themeHost.frame = bounds
+        themeSurface.frame = bounds
+        windowBlur?.frame = bounds
+        themeHost.frame = themeSurface.bounds
         pageBlur?.frame = bounds
         for layer in [current, incoming].compactMap({ $0 }) {
             layer.frame = fieldRect
@@ -169,11 +213,12 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func rebuildFields() {
+        updateWindowMaterial()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for l in [current, incoming].compactMap({ $0 }) {
             l.frame = fieldRect
-            if l.update(size: fieldRect.size, active: isWindowActive, cardTint: drawsPageBlur, scale: scale, displaySpace: composesInDisplaySpace) { fieldRebuildCount += 1 }
+            if l.update(size: fieldRect.size, active: isWindowActive, cardTint: drawsPageBlur, scale: scale, displaySpace: composesInDisplaySpace, windowTint: drawsWindowBackdrop) { fieldRebuildCount += 1 }
         }
         CATransaction.commit()
     }
@@ -247,6 +292,11 @@ public final class ThemeBackgroundView: NSView {
     }
 }
 
+@MainActor
+private final class ThemeSurfaceView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 /// The blurred page under the hover-reveal card: a backdrop layer with a Gaussian
 /// blur (σ = `WindowMaterial.pageBlurSigma`), rendered by the window server from
 /// whatever the window draws below it, including the engine's page layers. It does
@@ -284,13 +334,12 @@ private final class ThemeDisplayTarget: NSObject {
     @objc func tick(_ link: CADisplayLink) { owner?.displayFrame() }
 }
 
-/// One theme: the underlay, the gradient field, and the grain tile layers.
-/// Editor fills keep the field unblended over an opaque underlay, so the
-/// layer tree is opaque and cross-fades as one group.
+/// One theme: the underlay, gradient field, and grain tile layers. Static
+/// previews include the opaque fitted underlay. Live windows instead draw the
+/// fitted tint over the system material; each theme cross-fades as one group.
 final class ThemeLayer: CALayer {
     var theme: SpaceThemeStyle { didSet { if theme != oldValue { fieldKey = nil; grainKey = nil } } }
-    /// Section 5 hook: replace this opaque gray with the window material here.
-    /// Keep it below the unblended fill and inside this theme's opacity group.
+    /// Constant neutral underlay for embedded previews and opaque themes.
     private let underlay = CALayer()
     private let field = CALayer()
     private let grainColumns = CAReplicatorLayer()
@@ -299,7 +348,7 @@ final class ThemeLayer: CALayer {
     private var fieldKey: FieldKey?
     private var grainKey: GrainKey?
 
-    private struct FieldKey: Equatable { var active: Bool; var cardTint: Bool; var aspect: Int; var displaySpace: Bool }
+    private struct FieldKey: Equatable { var active: Bool; var cardTint: Bool; var aspect: Int; var displaySpace: Bool; var windowTint: Bool }
     private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat; var texture: SpaceStyleTexture }
 
     init(style: SpaceThemeStyle) {
@@ -344,16 +393,22 @@ final class ThemeLayer: CALayer {
         grainColumns.instanceTransform = CATransform3DMakeTranslation(t, 0, 0)
     }
 
-    @MainActor func update(size: CGSize, active: Bool, cardTint: Bool, scale: CGFloat, displaySpace: Bool) -> Bool {
+    @MainActor func update(size: CGSize, active: Bool, cardTint: Bool, scale: CGFloat, displaySpace: Bool, windowTint: Bool) -> Bool {
         guard size.width > 0, size.height > 0 else { return false }
         resize(to: size)
         // Rebuild when the aspect ratio moves by more than 0.5 %.
-        // The card tint does not depend on the window's active state.
-        let key = FieldKey(active: active || cardTint, cardTint: cardTint, aspect: Int((size.width / size.height * 200).rounded()), displaySpace: displaySpace)
+        // The system material owns the live window's active state. Its tint,
+        // like the page-card tint, is independent of that state.
+        let key = FieldKey(active: (windowTint && theme.isVibrant) || active || cardTint, cardTint: cardTint, aspect: Int((size.width / size.height * 200).rounded()), displaySpace: displaySpace, windowTint: windowTint)
         let rebuilt = key != fieldKey
         if rebuilt {
             fieldKey = key
-            if displaySpace, !cardTint, let c = ThemeField.composition(style: theme, windowSize: size, isActive: active) {
+            if windowTint, theme.isVibrant {
+                underlay.isHidden = true
+                underlay.backgroundColor = nil
+                field.backgroundColor = nil
+                field.contents = ThemeField.makeWindowTint(style: theme, windowSize: size)
+            } else if displaySpace, !cardTint, let c = ThemeField.composition(style: theme, windowSize: size, isActive: active) {
                 underlay.backgroundColor = c.underlay
                 underlay.isHidden = false
                 field.backgroundColor = c.solid
