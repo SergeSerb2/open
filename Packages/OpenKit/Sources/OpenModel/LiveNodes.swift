@@ -10,6 +10,8 @@ public enum SleepPhase: Sendable { case placeholder, live, frozen, sleeping }
 public final class TabLiveState {
     /// Engine-owned: true only while this tab has live web content. Never persisted.
     public var hasWebContent: Bool = false
+    /// A completed page load in this process. Restored tabs start false (C12-D2-3).
+    public var hasLoadedInThisLaunch: Bool = false
     public var sleepPhase: SleepPhase = .placeholder
     public var isCapturing: Bool = false
     public var devToolsOpen: Bool = false
