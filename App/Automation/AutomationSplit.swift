@@ -57,7 +57,7 @@ extension AutomationController {
                 point: NSPoint(x: point[0], y: window.frame.height - point[1]), node: raw)
             defer { info.draggingPasteboard.releaseGlobally() }
             guard info.draggingPasteboard.string(forType: .init("com.open.sidebar.node")) == raw else {
-                throw Failure(message: "split drag pasteboard did not retain the source node")
+                throw Failure(message: "split drag pasteboard did not retain the source node (written: \(info.payloadWritten), typePresent: \(info.draggingPasteboard.types?.contains(.init("com.open.sidebar.node")) ?? false))")
             }
             let entered = container.draggingEntered(info)
             let updated = container.draggingUpdated(info)
@@ -259,6 +259,7 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
     let draggingSource: Any?
     let draggingLocation: NSPoint
     let draggingPasteboard = NSPasteboard.withUniqueName()
+    private(set) var payloadWritten = false
     let draggingSourceOperationMask: NSDragOperation = .move
     let draggingSequenceNumber = 1
     var draggedImageLocation: NSPoint { draggingLocation }
@@ -271,8 +272,11 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
         draggingDestinationWindow = window; draggingSource = source; draggingLocation = point
         super.init()
         let type = NSPasteboard.PasteboardType("com.open.sidebar.node")
-        draggingPasteboard.declareTypes([type], owner: nil)
-        draggingPasteboard.setString(node, forType: type)
+        // Match the sidebar's real native drag writer: an owned item, not a
+        // legacy pasteboard string declaration. Readback is required above.
+        draggingPasteboard.clearContents()
+        let item = NSPasteboardItem()
+        payloadWritten = item.setString(node, forType: type) && draggingPasteboard.writeObjects([item])
     }
     func slideDraggedImage(to screenPoint: NSPoint) {}
     override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
