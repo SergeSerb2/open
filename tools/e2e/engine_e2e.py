@@ -11356,16 +11356,23 @@ def library_capture_checks(app, require, root, evidence):
     # The native Library (#350) shows captures in Media: one list row per capture, newest first, screenshots
     # included (Media's "All" kind). Title "Capture of <host>", subtitle "Capture · <host> · <date>".
     media_error = 'Could not load media'
+    capture_ids = [r['id'] for r in rows]
     opened_media = open_section('media')
-    recovered = wait_until(lambda: (lambda s: s if s.get('section') == 'media' and not s['loadFailed'] and len(s['items']) == 7 else None)(state()),
-                           timeout=10, step=.05) if opened_media else None
+    def recovered_state():
+        current, native = state(), app.call('library')
+        provider = native.get('providers', {}).get('media', {})
+        visible_ids = [r['id'] for r in native.get('rows', []) if r.get('kind') == 'capture']
+        # The model finishes before the native provider publishes its rows.
+        # Keyboard checks need the rendered list, not the earlier empty state.
+        return current if (current.get('section') == 'media' and not current['loadFailed'] and len(current['items']) == 7
+                           and provider.get('loaded') and not provider.get('running') and visible_ids == capture_ids) else None
+    recovered = wait_until(recovered_state, timeout=10, step=.05) if opened_media else None
     require('library_capture_reopen_recovers', recovered and not recovered['loadFailed'] and len(recovered['items']) == 7
             and [i['name'] for i in recovered['items']] == [r['fileName'] for r in rows]
             and not any(media_error in t for t in recovered['text']), state=recovered or state())
 
     def panel(): return app.call('library')
     def media_rows(): return [r for r in panel().get('rows', []) if r.get('kind') == 'capture']
-    capture_ids = [r['id'] for r in rows]
     current = state(focus='sidebar', recordFileActions=True)
     tab_path = []
     for _ in range(16):
