@@ -819,6 +819,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if !opening, animated, !sidebar.isHidden { fadeLibrary(sidebar, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : duration) }
     }
     private func addMotion(_ animation: CAAnimation, to layer: CALayer, key: String, requestedAt: CFTimeInterval? = nil) {
+        // Ask ProMotion to keep the active display's cadence during this finite
+        // layer animation. The render server still owns every display tick.
+        let hz = Float(window?.screen?.maximumFramesPerSecond ?? 60)
+        animation.preferredFrameRateRange = CAFrameRateRange(minimum: hz, maximum: hz, preferred: hz)
         let request = requestedAt ?? CACurrentMediaTime()
         animation.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil)
             + (key == "sidebarToggle" ? Motion.sidebarDelayOverride ?? 0 : 0)
