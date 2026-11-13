@@ -164,7 +164,9 @@ def run(factory, results, tmp, root, wait, engine):
             focus(window)
             titles = [r['title'] for r in app.call('ext-ui-menu', kind='bar') if not r['separator']]
             menus.append(dict(titles=titles, expected=name, window=window))
-        row('menu_follows_key_window', all(m['titles'] == [m['expected'], 'Manage Extensions…', 'Add Extension…'] for m in menus), menus=menus)
+        # PR #506 (5b6a0c3f, merged as 34a51432) put Add before Manage to match the captured menu bar.
+        # Keep the exact order and the Profile-specific extension assertion for both key windows.
+        row('menu_follows_key_window', all(m['titles'] == [m['expected'], 'Add Extension…', 'Manage Extensions…'] for m in menus), menus=menus)
         pop = popup(work_id)
         assert pop, 'Work popup did not open'
         popup_page = app.call('ext-popup')['page']
