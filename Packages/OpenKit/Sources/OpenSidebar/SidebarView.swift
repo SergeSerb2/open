@@ -437,6 +437,7 @@ public final class SidebarView: NSView {
               let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return nil }
         if let tab = cell as? TabCellView { return tab.favicon.convert(tab.favicon.bounds, to: nil) }
         if let folder = cell as? FolderCellView { return folder.icon.convert(folder.icon.bounds, to: nil) }
+        if let split = cell as? SplitCellView { return split.customIcon.convert(split.customIcon.bounds, to:nil) }
         return nil
     }
 
@@ -826,6 +827,12 @@ extension SidebarView {
     public func splitRowCells(splitID: ItemID) -> (cells: [CGRect], dividersVisible: Bool)? {
         guard let cell = cell(nodeID: splitID) as? SplitCellView else { return nil }
         return (cell.visibleCellFrames.map { convert($0, from: cell) }, cell.dividersVisible)
+    }
+
+    public func splitRowPresentation(splitID:ItemID) -> [String:Any]? {
+        guard let cell = cell(nodeID:splitID) as? SplitCellView else { return nil }
+        cell.layoutSubtreeIfNeeded()
+        return cell.presentation
     }
 
     /// Back, forward, and reload show in the sidebar toolbar.

@@ -67,6 +67,7 @@ public enum SidebarIntent: Equatable, Sendable {
     case replacePinnedURL(tabID: ItemID)
     case editPinnedURL(tabID: ItemID)
     case rename(nodeID: ItemID, title: String)
+    case resetSplitCustomization(splitID: ItemID)
     case setExpanded(folderID: ItemID, expanded: Bool)
     case setFolderExpansion(folderID: ItemID, expansion: FolderExpansion)
     case pin(tabID: ItemID)

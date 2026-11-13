@@ -31,7 +31,7 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func openNodeIconPicker(_ id: ItemID) -> Bool {
     guard let node = model.node(id: id), let controller, let window, !isClosing,
-          node.tab != nil || node.folder != nil else { return false }
+          node.tab != nil || node.folder != nil || node.split != nil else { return false }
     controller.closeThemeEditor(); iconPicker?.close()
     if let space = space(containing: id), focusedSpace?.id != space.id { focus(space: space) }
     controller.sidebar.layoutSubtreeIfNeeded()
@@ -39,7 +39,7 @@ extension EngineWebContentHostFactory {
     // a picker never changes expansion, scroll position, or sidebar selection.
     let anchor = controller.sidebar.rowIconFrame(for: id) ?? fallbackIconAnchor()
     let target: IconTarget = node.folder == nil ? .tab : .folder
-    let current = node.tab?.iconOverride ?? node.folder?.iconOverride
+    let current = node.tab?.iconOverride ?? node.folder?.iconOverride ?? node.split?.iconOverride
       ?? (node.tab?.customIcon ?? node.folder?.customIcon).map { SpaceIcon.emoji($0) }
     let picker = IconPickerController(target: target, current: current, window: window, anchor: anchor) { [weak self] icon in
       guard let self, self.model.node(id: id) != nil else { return }

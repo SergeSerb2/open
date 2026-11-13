@@ -18,8 +18,13 @@ extension AutomationController {
         switch args["op"] as? String ?? "state" {
         case "state":
             window.layoutIfNeeded()
+            let editor = window.firstResponder as? NSTextView
+            let field = editor?.delegate as? NSTextField
+            let rename: [String:Any] = field.map { ["text":$0.stringValue,"placeholder":$0.placeholderString ?? "",
+                "selection":[editor?.selectedRange().location ?? 0,editor?.selectedRange().length ?? 0]] } ?? [:]
             return ["id": split.split?.id.description ?? "", "orientation": split.split?.orientation.rawValue ?? "",
-                "fractions": split.split?.fractions ?? [], "focused": split.focusedTab?.id.description ?? "",
+                "rowPresentation":split.split.flatMap { controller.sidebar.splitRowPresentation(splitID:$0.id) } ?? [:],
+                "renameEditor":rename, "fractions": split.split?.fractions ?? [], "focused": split.focusedTab?.id.description ?? "",
                 "selected": controller.context.window?.selectedNodeBySpace[controller.context.window!.focusedSpaceID]?.description ?? "",
                 "maximized": split.maximizedPaneID?.description ?? "", "container": frame(container), "retainedSlots": container.retainedSlotCount,
                 "sidebarURL": controller.sidebar.urlFieldText, "sidebarText": controller.sidebar.displayedURLText, "title": window.title,
