@@ -135,11 +135,26 @@ def run(factory, results, tmp, h):
         off = (level(), checked())
         row('stay_on_top_toggles', before == (0, 0) and on == (3, 1) and off == (0, 0), before=before, on=on, off=off)
 
-        # With no browser window, Arc's Window menu says "View Library" (capture C-questions "_NS:451").
+        # C-NT1 (C-report-s11): View Easels & Notes… opens Library ▸ Easels, then reads "Hide Easels & Notes";
+        # choosing it again closes the Library.
+        def easels_item():
+            window_menu = next(r for r in app.call('menu-tree') if r.get('title') == 'Window')['children']
+            return next((r for r in window_menu if r.get('id') == 'view-easels-notes'), {})
+        app.call('menu-perform', id='view-easels-notes')
+        shown = h.wait_until(lambda: (lambda x: x if x.get('open') and x.get('section') == 'easels' else None)(app.call('library')), timeout=8, step=.2)
+        hide_title = easels_item().get('title')
+        app.call('menu-perform', id='view-easels-notes')
+        closed = h.wait_until(lambda: not app.call('library').get('open') or None, timeout=8, step=.2)
+        row('menu_easels_toggles', bool(shown) and hide_title == 'Hide Easels & Notes' and bool(closed)
+            and easels_item().get('title') == 'View Easels & Notes…', hide=hide_title, after=easels_item().get('title'))
+
+        # With no browser window, Arc's Window menu says "View Library" (capture C-questions "_NS:451"),
+        # and View Easels… does nothing (C-NT1): disabled here.
         app.call('menu-perform', id='close-window')
         h.wait_until(lambda: not app.call('shell-windows') or None, timeout=8, step=.1)
         empty = flatten(app.call('menu-tree'), set()).get('Window', [])
         row('menu_no_window_view_library', 'View Library' in empty and 'Open Library…' not in empty, window=empty)
+        row('menu_no_window_easels_disabled', easels_item().get('enabled') is False, item=easels_item())
     finally:
         app.quit()
         server.shutdown()

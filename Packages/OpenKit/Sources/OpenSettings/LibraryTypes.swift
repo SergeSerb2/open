@@ -87,7 +87,7 @@ extension LibraryActions { public func flushHistoryWrites() async {} }
             guard data.count <= 16 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
             let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .secondsSince1970
             let next = try decoder.decode([CaptureItemSnapshot].self, from: data)
-            guard next.count <= 50_000, next.allSatisfy({ Self.safeName($0.fileName) }), Set(next.map(\.id)).count == next.count else { throw CocoaError(.fileReadCorruptFile) }
+            guard next.count <= 50_000, next.allSatisfy({ Self.safeName($0.fileName) && ($0.sourceURL?.absoluteString.utf8.count ?? 0) <= CaptureItemSnapshot.maxSourceURLBytes }), Set(next.map(\.id)).count == next.count else { throw CocoaError(.fileReadCorruptFile) }
             return next
     }
     nonisolated public static func safeName(_ name: String) -> Bool { !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && !name.contains("\\") && URL(fileURLWithPath: name).lastPathComponent == name }

@@ -108,6 +108,28 @@ def run(factory, results, tmp, env):
                 ok=wait_until(lambda: probe(tab)["font"].startswith("Avenir") and abs(float(probe(tab)["zoom"])-1.1)<.001 and probe(tab)["transform"] == "capitalize", timeout=5, step=.02)
                 return dict(positive=bool(ok),negative=not (before["font"].startswith("Avenir") and str(before["zoom"]) == "1.1" and before["transform"] == "capitalize"),before=before,live=probe(tab))
             row("B3_font_text", b3)
+            def b3b():
+                # Capture session 11: "Advanced color controls" holds Contrast, Brightness and Original
+                # Saturation, each 0…100, default 50, moving in steps of 10 per increment.
+                assert ready(), "color controls did not become ready"
+                tap("editor.color.advanced")
+                opened = wait_until(lambda: call().get("advanced", {}).get("open"), timeout=5, step=.05)
+                before = call()["advanced"].get("sliders", {})
+                call("advanced-step", slider="Brightness", up=False)
+                call("advanced-step", slider="Contrast", up=True); call("advanced-step", slider="Contrast", up=True)
+                call("advanced-step", slider="Original Saturation", up=True); call("advanced-step", slider="Original Saturation", up=True)
+                after = call()["advanced"]["sliders"]
+                wheel = wait_until(lambda: (lambda w: w if abs(w.get("brightness", 0) - 0.9) < 1e-9 and abs(w.get("contrast", 0) - 1.2) < 1e-9 and abs(w.get("originalSaturation", 0) - 1.4) < 1e-9 else None)(items()[0].get("colorWheel") or {}), timeout=5, step=.05) or items()[0].get("colorWheel")
+                call("advanced-step", slider="Brightness", up=True)
+                call("advanced-step", slider="Contrast", up=False); call("advanced-step", slider="Contrast", up=False)
+                call("advanced-step", slider="Original Saturation", up=False); call("advanced-step", slider="Original Saturation", up=False)
+                restored = call()["advanced"]["sliders"]
+                tap("editor.color.advanced")
+                return dict(positive=bool(opened) and after == {"Contrast": 70, "Brightness": 40, "Original Saturation": 70}
+                            and abs(wheel.get("brightness", 0) - 0.9) < 1e-9 and abs(wheel.get("contrast", 0) - 1.2) < 1e-9
+                            and abs(wheel.get("originalSaturation", 0) - 1.4) < 1e-9 and restored == before, negative=before == {"Contrast": 50, "Brightness": 50, "Original Saturation": 50},
+                            before=before, after=after, wheel=wheel)
+            row("B3b_advanced_sliders", b3b)
             def b4():
                 from boost_zap import PickerFlow
                 picker = PickerFlow(app, tab, wait_until)

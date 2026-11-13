@@ -121,6 +121,7 @@ extension EngineWebContentHostFactory {
   /// Window menu state: page tools plus the focused page's Developer Mode title (§4.10.3).
   func pageMenuState(for id: String) -> CommandMenuState? {
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: selectedContent?.url) }
+    if id == "view-easels-notes" { return app.menuState(for: id) }
     // Arc 1.172.2 runtime titles (capture AX union): "Pin Tab" / "Unpin Tab" for the current tab and
     // "Pin Tabs" for a sidebar selection; "New Folder from Selection…" for a selection. Both commands
     // already act on the selection (`performSelectionAppCommand`). GUESS: "Unpin Tabs" when every

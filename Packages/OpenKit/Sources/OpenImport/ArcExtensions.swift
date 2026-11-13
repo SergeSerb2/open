@@ -106,7 +106,13 @@ public struct ArcExtensionsReader: Sendable {
                 }
             }
             let path = entry?["path"] as? String ?? ""
-            let isInternal = path.hasPrefix("/Applications/") || (path.isEmpty && folders[id] == nil)
+            // Built in, never a reinstall candidate: a component (Chromium `ManifestLocation` 5 kComponent,
+            // 10 kExternalComponent), an extension the browser installed by default (`was_installed_by_default`, such as
+            // Chrome's "Google Docs Offline" and "Chrome Web Store Payments", which live in the profile's own Extensions
+            // folder), an extension inside an app bundle, or a settings-only entry with no payload.
+            let location = entry?["location"] as? Int
+            let isInternal = location == 5 || location == 10 || entry?["was_installed_by_default"] as? Bool == true
+                || path.hasPrefix("/Applications/") || (path.isEmpty && folders[id] == nil)
                 || (entry == nil && manifest == nil)
             let name = manifest?["name"] as? String
             guard id.utf8.count <= 256, (name?.utf8.count ?? 0) <= 1024 else { throw ArcExtensionsReadError.exceedsLimit }

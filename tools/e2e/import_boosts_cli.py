@@ -62,8 +62,16 @@ def initial_checks(process, output, ids):
         # PB4 row 4, zoom part (capture C11): textZoom.level is the percent, mapped too (1 leaf per Boost).
         # The second Boost's level 2 is outside 50…200: dropped, not clamped.
         # Capture C11: secondaryHueOffset 45 (Arc's fixed second knob) maps; the second Boost's 30 is dropped.
-        'boost_cli_dropped': counts.get('droppedFields') == 12 and counts.get('mappedFields') == 25,
+        # Session 11: advancedSettings maps (3 leaves) and the untouched baseAppearance maps (1).
+        'boost_cli_dropped': counts.get('droppedFields') == 8 and counts.get('mappedFields') == 29,
         'boost_cli_text_zoom': enabled.get('textZoom') == 1.25 and disabled.get('textZoom') is None,
+        # Capture session 11: the advanced sliders come back as Open's slider values (Brightness 40 → 0.9,
+        # Contrast 70 → 1.2, Original Saturation 60 → 1.2); the untouched Boost keeps Open's defaults.
+        'boost_cli_advanced': abs(enabled.get('colorWheel', {}).get('brightness', 0) - 0.9) < 1e-9
+            and abs(enabled.get('colorWheel', {}).get('contrast', 0) - 1.2) < 1e-9
+            and abs(enabled.get('colorWheel', {}).get('originalSaturation', 0) - 1.2) < 1e-9
+            and disabled.get('colorWheel', {}).get('brightness') == 1 and disabled.get('colorWheel', {}).get('contrast') == 1
+            and disabled.get('colorWheel', {}).get('originalSaturation') == 1,
         'boost_cli_color': enabled.get('colorWheel', {}).get('hue') == 90 and enabled.get('colorWheel', {}).get('intensity') == .4
             and enabled.get('colorWheel', {}).get('invertLightness') is False and disabled.get('colorWheel', {}).get('hue') == 90
             and enabled.get('colorWheel', {}).get('intensity') == .4,

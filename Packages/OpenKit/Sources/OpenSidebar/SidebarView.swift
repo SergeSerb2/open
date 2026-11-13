@@ -616,6 +616,32 @@ extension SidebarView {
         return page.dropDestination(item: item, childIndex: childIndex).map { ($0.parent, $0.index) }
     }
 
+    /// Rails convert their own window coordinates through screen coordinates into this outline.
+    /// The native outline delegate still validates, decodes the pasteboard, and commits the drop.
+    func receiveRailDrop(_ info: any NSDraggingInfo, perform: Bool) -> Bool {
+        guard let page = pager.currentPage, let rail = info.draggingDestinationWindow,
+              let window else { return false }
+        let screen = rail.convertPoint(toScreen: info.draggingLocation)
+        var point = page.outline.convert(window.convertPoint(fromScreen: screen), from: nil)
+        point.x = page.outline.bounds.midX
+        let row = page.outline.row(at: point)
+        let item = row >= 0 ? page.outline.item(atRow: row) as AnyObject? : nil
+        let parent = item.flatMap { page.outline.parent(forItem: $0) }
+        let count = page.outlineView(page.outline, numberOfChildrenOfItem: parent)
+        let index = item.flatMap { item in (0..<count).first { page.outlineView(page.outline, child: $0, ofItem: parent) as AnyObject === item } }
+            .map { $0 + (point.y > page.outline.rect(ofRow: row).midY ? 1 : 0) } ?? count
+        let operation = page.outlineView(page.outline, validateDrop: info, proposedItem: parent, proposedChildIndex: index)
+        guard operation.contains(.move) else { page.clearDropIndicator(); return false }
+        if perform { return page.outlineView(page.outline, acceptDrop: info, item: parent, childIndex: index) }
+        return true
+    }
+
+    public func clearDropIndicator() { pager.pages.values.forEach { $0.clearDropIndicator() } }
+    public var dropIndicatorFrame: CGRect? {
+        guard let page = pager.currentPage, !page.dropIndicator.isHidden else { return nil }
+        return convert(page.dropIndicator.bounds, from: page.dropIndicator)
+    }
+
     /// Simulates a two-finger horizontal swipe through the pager's real handler.
     public func simulateSwipe(_ events: [NSEvent]) {
         for e in events { _ = pager.handleScroll(e) }
@@ -922,6 +948,19 @@ extension SidebarView {
         header.layoutSubtreeIfNeeded()
         let titles = header.more.menuProvider?()?.items.filter { !$0.isAlternate }.map { $0.isSeparatorItem ? "—" : $0.title } ?? []
         return (header.more.frame, header.more.isHidden, titles)
+    }
+    /// A Blank Window header's "Move to…" button: shown, its title and its menu (C-report-s11 1(a)).
+    public var blankHeaderMoveTo: (shown: Bool, title: String, frame: CGRect, menu: [String])? {
+        guard let header = pager.currentPage?.header else { return nil }
+        header.layoutSubtreeIfNeeded()
+        let shown = header.moveTo.superview != nil && !header.moveTo.isHidden
+        return (shown, header.moveTo.title, header.moveTo.frame, header.moveToMenu().items.map(\.title))
+    }
+    /// Chooses a Space in the Blank Window header's "Move to…" menu (the same item a click picks).
+    @discardableResult
+    public func chooseBlankHeaderMoveTo(_ title: String) -> Bool {
+        guard let menu = pager.currentPage?.header.moveToMenu(), let index = menu.items.firstIndex(where: { $0.title == title }) else { return false }
+        menu.performActionForItem(at: index); return true
     }
     /// Read actual private-window view visibility for real-App acceptance.
     public var incognitoChrome: [String: Bool] {
