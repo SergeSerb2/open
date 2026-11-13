@@ -19,7 +19,9 @@ enum PeekHostSnapshot {
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0, width <= 8192, height <= 8192 else { return nil }
         // At most 8192² × 4 = 256 MiB for a decoded viewport; no full-page image.
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        return PeekMotionTrace.region("snapshot.decode") {
+            CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+        }
     }
 }
 
