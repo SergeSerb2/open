@@ -8924,6 +8924,13 @@ def routing_checks(factory, results, tmp):
         return subprocess.run(['/usr/bin/open', '-a', app.bundle, url], capture_output=True, text=True, timeout=15)
     def landed(url, count=1):
         return wait_until(lambda: len([t for t in app.call('tabs') if t['url'] == url]) == count, timeout=8, step=.05)
+    def loaded_document(url):
+        # Model selection alone can leave an external tab as a placeholder.
+        # Observe the real page without selecting it again through automation.
+        tab = wait_until(lambda: next((t for t in app.call('tabs')
+                         if t['url'] == url and t['selected'] and t['hasWebContent'] and t['loaded']), None),
+                         timeout=8, step=.05)
+        return bool(tab and app.eval(tab['id'], 'location.href') == url)
 
     try:
         # Capture actual persisted values, including absence, before resetting.
@@ -8957,6 +8964,10 @@ def routing_checks(factory, results, tmp):
         default_tab = new_tab(app, origin + '/default-context')
         app.eval(default_tab, 'document.cookie="atc_default=1; max-age=3600"; 1')
         app.call('space', space=target['id'])
+        empty_url = origin + '/empty-space-external'
+        sent = deliver(empty_url)
+        record('routing_empty_space_document', sent.returncode == 0 and loaded_document(empty_url),
+               tabs=app.call('tabs'), log=log())
         existing_url = origin + '/existing-today'
         work_tab = new_tab(app, existing_url)
         app.eval(work_tab, 'document.cookie="atc_work=1; max-age=3600"; 1')
@@ -9122,6 +9133,7 @@ def routing_checks(factory, results, tmp):
         fast_cold = origin + '/cold-fast'
         app = factory(urls=(), snapshot=fixture_path, delivery_urls=(fast_cold,))
         fast_reached = landed(fast_cold)
+        fast_loaded = loaded_document(fast_cold)
         fast_log = log()
         app.quit()
         cold = origin + '/cold-launch'
@@ -9138,6 +9150,8 @@ def routing_checks(factory, results, tmp):
                and len(entries(cold)) == 1 and app.call('tabs')[0]['selected'], log=cold_log,
                pending=pending, fastLaunch=fast_log,
                command='open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...')
+        record('routing_cold_launch_document', fast_loaded and loaded_document(cold),
+               fastLoaded=fast_loaded, tabs=app.call('tabs'))
         app.call('command', id='air-traffic-control')
         settings = wait_until(lambda: (lambda row: row if row['settingsVisible'] and row['pane'] == 'links'
                               and row['scrollTarget'] == 'links/rules' else None)(app.call('settings-state')),
@@ -9957,7 +9971,7 @@ def space_manager_engine_provenance(config):
 
 
 
-def space_manager_route_checks(app, results, space, library_key, tmp):
+def space_manager_route_checks(app, results, space, library_key, tmp, manager_ready):
     """Use real manager row keys, controls, menus, engine hosts and pasteboard."""
     def require(name, condition, **detail):
         results[name] = dict(detail, ok=bool(condition))
@@ -9967,9 +9981,19 @@ def space_manager_route_checks(app, results, space, library_key, tmp):
         state = app.call('space-manager-state')
         return next(r for col in state['columns'] if col['id'] == space for r in col['rows'] if r['id'] == tab)
 
+    def open_manager():
+        app.call('library-open')
+        if not manager_ready(app): raise AssertionError('native Manager input did not settle')
+
     def click_row(tab):
+        open_manager()
         point = row(tab)['point']
         app.call('mouse', action='click', window=app.call('space-manager-state')['window'], x=point[0], y=point[1])
+        # PR #350 selects in the owning browser and closes its embedded Library.
+        if not wait_until(lambda: app.call('window-state')['selected'] == tab
+                          and not app.call('space-manager-lifecycle')['visible'], timeout=5):
+            raise AssertionError('native Manager row did not select and close Library')
+        open_manager()
 
     def click_control(tab, label, favicon=False):
         info = app.call('space-manager-row-controls', space=space, node=tab)
@@ -9995,7 +10019,14 @@ def space_manager_route_checks(app, results, space, library_key, tmp):
     copied = app.call('pasteboard')
     # Record both regressions before stopping: old routing breaks both in one run.
     results['manager_copy_link_pasteboard'] = {'ok': copied == pinned_url, 'expected': pinned_url, 'actual': copied}
-    library_key(app, 'down')  # Native keyboard focus starts at the first (pinned) row.
+    # A modifier-click focuses the real outline without activating the row
+    # (plain selection closes Library in #350). Down then focuses the pin.
+    pin_point = row(pin)['point']
+    app.call('mouse', action='click', window=app.call('space-manager-state')['window'],
+             x=pin_point[0], y=pin_point[1], modifiers=['cmd'])
+    outline_focused = app.call('library').get('firstResponder') == 'SidebarOutlineView'
+    require('manager_pinned_outline_keyboard_focus', outline_focused, panel=app.call('library'))
+    library_key(app, 'down')
     library_key(app, 'delete')
     wait_until(lambda: any(t['id'] == pin and not t['hasWebContent'] for t in app.call('tabs')), timeout=2)
     retained = next((t for t in app.call('tabs') if t['id'] == pin), None)
@@ -11175,14 +11206,22 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         finally:
             cancelled_alert()
         app.call('library-close'); app.call('window-focus', id=browser, activate=True)
-        # The tab's real Share menu item must invoke NSSharingServicePicker with
-        # that row's URL. The automation policy closes it without choosing a service.
+        # Capture session 8 replaced a single tab's picker with Share > service
+        # (#463, b4d724fad). The selection's Share N Items still opens the real
+        # picker. Preserve the picker/payload/anchor check on that current path.
+        share_tabs = [opened('Share Picker A'), opened('Share Picker B')]
+        app.call('sidebar-click', node=share_tabs[0])
+        app.call('sidebar-click', node=share_tabs[1], modifiers=['cmd'])
+        share_selection = app.call('selection')
+        share_urls = [app.tab(n)['url'] for n in share_selection]
         require('I9_share_window_ready', state()['appActive'])
         app.call('sidebar-share', dismiss=True)
         try:
-            menu(a, 'Share…')
+            menu(share_tabs[0], 'Share 2 Items…')
             shared = app.call('sidebar-share', waitClosed=True)
-            require('I9_share_system_picker', shared and shared.get('closed') and not shared['pending'] and shared['requested'] and shared['url'] == app.tab(a)['url']
+            require('I9_share_system_picker', set(share_selection) == set(share_tabs)
+                    and shared and shared.get('closed') and not shared['pending'] and shared['requested']
+                    and shared['url'] == share_urls[0] and shared.get('payloadURLs') == share_urls
                     and shared['servicesRequested'] and shared['anchor'][2] > 0 and not shared.get('choseService'), request=shared)
         finally:
             app.call('sidebar-share', close=True, dismiss=False)
@@ -11222,6 +11261,16 @@ def library_capture_checks(app, require, root, evidence):
 
     def index_rows():
         with open(index) as stream: return json.load(stream)
+
+    def replace_index(data):
+        # The live native provider may read during fixture setup. Expose only
+        # complete files, just as the App's capture writer does.
+        descriptor, staged = tempfile.mkstemp(prefix='.capture-index-', dir=os.path.dirname(index))
+        try:
+            with os.fdopen(descriptor, 'wb') as stream: stream.write(data)
+            os.replace(staged, index)
+        finally:
+            if os.path.exists(staged): os.unlink(staged)
 
     error_copy = ['Captures could not be loaded.', 'Open will try again next time you open the Library.']
     if mode != 'keyboard':
@@ -11272,10 +11321,20 @@ def library_capture_checks(app, require, root, evidence):
                 and any(media_error in text for text in current['text']), state=current or state(), png=path)
         # A directory at the index path is a real unreadable-file case, including
         # when the suite runs as the file owner (chmod alone would be unreliable).
-        app.call('library-close'); os.unlink(index); os.mkdir(index)
+        app.call('library-close')
+        # Native idle preparation (#350) can read the index while this fixture
+        # changes. Swap file/directory atomically: unlink + mkdir exposes a
+        # missing path, which the real provider correctly accepts as empty.
+        staged_directory = tempfile.mkdtemp(prefix='.unreadable-index-', dir=os.path.dirname(index))
+        libc = ctypes.CDLL('/usr/lib/libSystem.B.dylib', use_errno=True)
+        swap = libc.renamex_np
+        swap.argtypes, swap.restype = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint], ctypes.c_int
+        if swap(os.fsencode(index), os.fsencode(staged_directory), 2) != 0:  # Darwin RENAME_SWAP
+            raise OSError(ctypes.get_errno(), 'could not install unreadable index fixture')
+        os.unlink(staged_directory)  # The previous corrupt file, now outside the live path.
         unreadable = media_when(lambda s: s['loadFailed'])
         require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
-                and any(media_error in text for text in unreadable['text']), state=unreadable or state())
+                and any(media_error in text for text in unreadable['text']), state=unreadable or state(), provider=app.call('library').get('providers', {}).get('media', {}))
         app.call('library-close'); os.rmdir(index)
         missing = media_when(lambda s: not s['loadFailed'])
         require('library_missing_index_empty', missing and not missing['loadFailed']
@@ -11285,7 +11344,7 @@ def library_capture_checks(app, require, root, evidence):
         # the valid boundary. Keep the large fixture out of the visible grid.
         for extra in (0, 1):
             app.call('library-close')
-            with open(index, 'wb') as stream: stream.write(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
+            replace_index(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
             boundary = media_when(lambda s: s['loadFailed'] == bool(extra)) or state()
             require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary.get('loadFailed') == bool(extra)
                     and boundary.get('captureCount') == 0, state=boundary)
@@ -11293,7 +11352,7 @@ def library_capture_checks(app, require, root, evidence):
                       kind='area', sourceHost='example.com') for i in range(50_001)]
         for count in (50_000, 50_001):
             app.call('library-close')
-            with open(index, 'w') as stream: json.dump(large[:count], stream)
+            replace_index(json.dumps(large[:count]).encode())
             expected = count if count == 50_000 else 0
             boundary = media_when(lambda s: s['loadFailed'] == (count > 50_000) and s['captureCount'] == expected) or state()
             require('library_index_row_limit_' + ('at' if count == 50_000 else 'over'),
@@ -11314,21 +11373,28 @@ def library_capture_checks(app, require, root, evidence):
         name = 'Example Capture %d.png' % number
         with open(os.path.join(directory, name), 'wb') as stream: stream.write(png)
         rows.append(dict(id=ident, fileName=name, createdAt=1800000000-number, kind=kind, sourceHost='example.com'))
-    with open(index, 'w') as stream: json.dump(rows, stream)
+    replace_index(json.dumps(rows).encode())
     app.call('library-close')
     # The native Library (#350) shows captures in Media: one list row per capture, newest first, screenshots
     # included (Media's "All" kind). Title "Capture of <host>", subtitle "Capture · <host> · <date>".
     media_error = 'Could not load media'
+    capture_ids = [r['id'] for r in rows]
     opened_media = open_section('media')
-    recovered = wait_until(lambda: (lambda s: s if s.get('section') == 'media' and not s['loadFailed'] and len(s['items']) == 7 else None)(state()),
-                           timeout=10, step=.05) if opened_media else None
+    def recovered_state():
+        current, native = state(), app.call('library')
+        provider = native.get('providers', {}).get('media', {})
+        visible_ids = [r['id'] for r in native.get('rows', []) if r.get('kind') == 'capture']
+        # The model finishes before the native provider publishes its rows.
+        # Keyboard checks need the rendered list, not the earlier empty state.
+        return current if (current.get('section') == 'media' and not current['loadFailed'] and len(current['items']) == 7
+                           and provider.get('loaded') and not provider.get('running') and visible_ids == capture_ids) else None
+    recovered = wait_until(recovered_state, timeout=10, step=.05) if opened_media else None
     require('library_capture_reopen_recovers', recovered and not recovered['loadFailed'] and len(recovered['items']) == 7
             and [i['name'] for i in recovered['items']] == [r['fileName'] for r in rows]
             and not any(media_error in t for t in recovered['text']), state=recovered or state())
 
     def panel(): return app.call('library')
     def media_rows(): return [r for r in panel().get('rows', []) if r.get('kind') == 'capture']
-    capture_ids = [r['id'] for r in rows]
     current = state(focus='sidebar', recordFileActions=True)
     tab_path = []
     for _ in range(16):
@@ -11400,7 +11466,7 @@ def library_capture_checks(app, require, root, evidence):
     require('library_media_delete_file_and_index', deleted and len(index_rows()) == 6 and capture_ids[0] not in gone['selected']
             and capture_ids[0] not in [r['id'] for r in media_rows()], state=gone)
     with open(first_file, 'wb') as stream: stream.write(png)
-    with open(index, 'w') as stream: json.dump(rows, stream)
+    replace_index(json.dumps(rows).encode())
     app.call('library-close')
 
     # Browser shortcuts keep their owners while the list has focus: Escape closes the Library (native panel:
@@ -11466,8 +11532,15 @@ def space_manager_checks(results, tmp, config, style):
         return [row['id'] for row in app.call('spaces')]
 
     def manager_ready(app):
-        return wait_until(lambda: (lambda s: s if s['visible'] and s['section'] == 'spaces'
-                         and s['identity'] and s['hostedManagers'] == 1 else None)(state(app)), timeout=5)
+        def ready():
+            snapshot = state(app)
+            if not (snapshot['visible'] and snapshot['section'] == 'spaces'
+                    and snapshot['identity'] and snapshot['hostedManagers'] == 1): return None
+            # The embedded panel fades in over the old sidebar (#350). Wait
+            # for its real controls before any subsequent mouse/key input.
+            rail = app.call('library').get('rail', [])
+            return snapshot if any(r['id'] == 'spaces' and r['hitClass'] == 'LibraryControl' for r in rail) else None
+        return wait_until(ready, timeout=5)
 
     def library_key(app, key, modifiers=()):
         return app.call('key', key=key, modifiers=list(modifiers), route='app', window=state(app)['window'])
@@ -11609,16 +11682,21 @@ def space_manager_checks(results, tmp, config, style):
         # Settle the actual window before reading coordinates, then poll the
         # cache-empty Archive state. Never accept an eagerly created cache.
         library_window = 0
-        last_uncached = {}
+        last_uncached, click_panel = {}, {}
         def archive_ready():
-            nonlocal last_uncached, library_window
+            nonlocal last_uncached, library_window, click_panel
             # state() lays out the current Library window. Sample its row points
             # afterwards, in the same deadline poll, rather than before layout.
             library_window = state(app)['window']
             last_uncached = app.call('space-manager-lifecycle')
+            click_panel = app.call('library')
+            # PR #350 fades the old sidebar out before hiding its views. The
+            # native tile must own hit testing before a real click can reach it.
+            spaces_tile = next((r for r in click_panel.get('rail', []) if r['id'] == 'spaces'), {})
             has_row = any(r['section'] == 'spaces' for r in last_uncached['sectionRows'])
-            return last_uncached if library_window and has_row and last_uncached['visible'] and last_uncached['section'] == 'archive' and last_uncached['identity'] == '' else None
+            return last_uncached if library_window and has_row and spaces_tile.get('hitClass') == 'LibraryControl' and last_uncached['visible'] and last_uncached['section'] == 'archive' and last_uncached['identity'] == '' else None
         uncached = wait_until(archive_ready, timeout=5)
+        click_bar = app.call('commandbar-state')
         if uncached:
             section = next(r for r in uncached['sectionRows'] if r['section'] == 'spaces')
             app.call('mouse', action='click', window=library_window, x=section['point'][0], y=section['point'][1])
@@ -11628,9 +11706,9 @@ def space_manager_checks(results, tmp, config, style):
             # Keep the actual timeout state as well as the failed ready result.
             # A None from wait_until otherwise hides the reason it never settled.
             print('library_section_click_fills_cache FAIL ' + json.dumps(dict(
-                uncached=last_uncached, reopened=state(app), ready=reopened), sort_keys=True), flush=True)
+                uncached=last_uncached, reopened=state(app), ready=reopened, panel=click_panel, commandbar=click_bar), sort_keys=True), flush=True)
         require('library_section_click_fills_cache', cache_ok,
-                uncached=last_uncached, reopened=reopened, after=app.call('space-manager-lifecycle'))
+                uncached=last_uncached, reopened=reopened, after=app.call('space-manager-lifecycle'), panel=click_panel, commandbar=click_bar)
         require('E6_relaunch_preserves_ids', order(app) == reordered and [row['id'] for row in saved['spaces']] == reordered
                 and reopened and [c['id'] for c in reopened['columns']] == reordered, expected=reordered, state=state(app))
         # The manager's real tab menu archives into the App's existing store.
@@ -11652,13 +11730,15 @@ def space_manager_checks(results, tmp, config, style):
         app.call('library-open')
         # Delete/undo the Space through its real manager controls, preserving
         # both the Space and its archived tab's original identity.
-        app.call('space-manager-menu', space=s2, item='Delete')
+        # PR #482 (81ec4180) uses the shared native Space menu in Library.
+        delete_menu = app.call('space-manager-menu', space=s2, item='?')
+        app.call('space-manager-menu', space=s2, item='Delete Space')
         # A1: the Manager's Delete confirms first, with a sheet on the Library window.
         manager_alert = app.call('alert', window='library')
         app.call('alert', window='library', button='Delete')
-        require('manager_delete_space', s2 not in order(app) and 'Delete' in manager_alert['buttons']
+        require('manager_delete_space', s2 not in order(app) and 'Delete Space' in delete_menu and 'Delete' in manager_alert['buttons']
                 and any(t.endswith(' Space?') and t.startswith('Delete your ') for t in manager_alert['texts']),
-                order=order(app), alert=manager_alert)
+                order=order(app), alert=manager_alert, menu=delete_menu)
         library_key(app, 'z', ['cmd'])
         require('manager_delete_space_undo_ids', order(app) == reordered and app.tab(tab)['id'] == tab, order=order(app), tab=tab)
         # App-only appearance changes; always restore the original App override.
@@ -11672,8 +11752,9 @@ def space_manager_checks(results, tmp, config, style):
             original_appearance = ('dark' if 'Dark' in appearance_before else 'light' if 'Aqua' in appearance_before else 'system')
             app.call('appearance', name=original_appearance)
         require('manager_app_appearance_restored', app.call('space-manager-lifecycle')['appAppearance'] == appearance_before, state=app.call('space-manager-lifecycle'))
-        # One presenter follows B, then A, then B after A closes. The Space
-        # edit precedes each lifetime mutation, with no intervening undoable edit.
+        # PR #350 gives each browser its own Library session. Read A's hidden
+        # cache passively while B is front, then prove each session keeps its
+        # owner and scroll position. Edits still precede lifetime changes.
         order_before_window = order(app)
         app.call('space-manager-drag', space=s1, to=0)
         undo_before_window = state(app)['modelUndoCount']
@@ -11684,11 +11765,16 @@ def space_manager_checks(results, tmp, config, style):
         app.call('menu-perform', id='new-window')
         second = next(row['id'] for row in app.call('shell-windows') if row['id'] != original_window)
         app.call('window-focus', id=second, activate=True)
+        # New Window deliberately opens the command bar (#144). Finish that
+        # separate input context before exercising B's embedded Library.
+        if app.call('commandbar-state').get('presented'):
+            app.call('key', key='escape', route='app')
         app.call('window-focus', id=original_window, activate=True)
         app.call('window-focus', id=second, activate=True)
-        hidden_after = app.call('space-manager-lifecycle')
+        hidden_after = app.call('space-manager-lifecycle', id=original_window)
         require('hidden_manager_focus_does_not_rebind', hidden_after['identity'] == hidden_before['identity']
-                and hidden_after['contextWindow'] == hidden_before['contextWindow'] and hidden_after['builtColumns'] == hidden_before['builtColumns'],
+                and hidden_after['contextWindow'] == hidden_before['contextWindow'] and hidden_after['builtColumns'] == hidden_before['builtColumns']
+                and app.call('window-state')['id'] == second,
                 before=hidden_before, after=hidden_after)
         app.call('library-open'); second_manager = manager_ready(app)
         library_key(app, 'z', ['cmd'])
@@ -11700,15 +11786,30 @@ def space_manager_checks(results, tmp, config, style):
                 and state(app)['contextValid'] and app.call('space-manager-lifecycle')['undoRegistrationEnabled'],
                 order=order(app), expectedOrder=order_before_window, snapshotWindows=after_create['windows'], shellWindows=app.call('shell-windows'),
                 undoBefore=undo_before_window, undoAfter=state(app)['modelUndoCount'])
+        # Three 240 pt cards fit the native full-width panel (#350). Use a
+        # narrow real browser so this row actually has horizontal overflow.
+        second_frame = app.call('window-state')['frame']
+        app.call('library', action='resize', width=800, height=second_frame[3])
+        manager_ready(app)
         scrolled = app.call('space-manager-scroll', x=32)
         app.call('window-focus', id=original_window, activate=True)
         app.call('library-open'); first_manager = manager_ready(app)
-        require('manager_rebind_second_and_first', second_manager['contextWindow'] == second and first_manager['contextWindow'] == original_window
-                and second_manager['identity'] != first_manager['identity'] and second_manager['window'] == first_manager['window'],
+        require('manager_sessions_follow_own_windows', second_manager['contextWindow'] == second and first_manager['contextWindow'] == original_window
+                and second_manager['identity'] != first_manager['identity'] and second_manager['window'] != first_manager['window']
+                and first_manager['identity'] == hidden_before['identity'],
                 first=first_manager, second=second_manager)
-        copied_origin = app.call('space-manager-lifecycle')['origin']
-        require('visible_manager_rebind_keeps_horizontal_origin', scrolled['origin'][0] > 0
-                and abs(copied_origin[0] - scrolled['origin'][0]) < 0.5, before=scrolled['origin'], after=copied_origin)
+        first_origin = app.call('space-manager-lifecycle')['origin']
+        app.call('window-focus', id=second, activate=True)
+        app.call('library-open'); second_again = manager_ready(app)
+        second_origin = app.call('space-manager-lifecycle')['origin']
+        require('manager_sessions_keep_independent_horizontal_origins', scrolled['origin'][0] > 0
+                and abs(first_origin[0] - hidden_before['origin'][0]) < 0.5
+                and abs(second_origin[0] - scrolled['origin'][0]) < 0.5
+                and second_again['identity'] == second_manager['identity'],
+                before=scrolled['origin'], first=first_origin, second=second_origin)
+        app.call('library', action='resize', width=second_frame[2], height=second_frame[3])
+        app.call('window-focus', id=original_window, activate=True)
+        app.call('library-open'); manager_ready(app)
         app.call('space-manager-scroll', x=0)
         order_before_close = order(app)
         app.call('space-manager-drag', space=s1, to=0)
@@ -11716,8 +11817,8 @@ def space_manager_checks(results, tmp, config, style):
         app.call('window-focus', id=original_window, activate=True)
         app.call('window-close')
         app.call('library-open'); surviving = manager_ready(app)
-        require('closed_presenter_rebinds_live_window', surviving['contextWindow'] == second and surviving['contextValid']
-                and len(app.call('shell-windows')) == 1, state=surviving)
+        require('closed_session_preserves_live_window', surviving['contextWindow'] == second and surviving['contextValid']
+                and surviving['identity'] == second_manager['identity'] and len(app.call('shell-windows')) == 1, state=surviving)
         library_key(app, 'z', ['cmd'])
         with open(app.call('save')) as stream: after_close = json.load(stream)
         require('library_undo_after_window_close', order(app) == order_before_close
@@ -11735,8 +11836,12 @@ def space_manager_checks(results, tmp, config, style):
         row = next(row for col in rebound['columns'] if col['id'] == s2 for row in col['rows'] if row['id'] == tab)
         app.call('mouse', action='click', window=rebound['window'], x=row['point'][0], y=row['point'][1])
         selected = state_when(app, lambda s: s['id'] == second and s['selected'] == tab and s['shownPages'] == [tab])
-        require('rebound_manager_intents', selected and state(app)['contextWindow'] == second, browser=selected, actualBrowser=app.call('window-state', id=second), manager=state(app), point=row['point'], tab=tab, png=capture(app, 'manager-rebound-click'))
-        pin = space_manager_route_checks(app, results, s2, library_key, tmp)
+        # Native Library closes after selection (#350, ec9b4055). Its passive
+        # cache must still belong to the surviving browser, with no stale A context.
+        selected_cache = app.call('space-manager-lifecycle')
+        require('rebound_manager_intents', selected and selected_cache['contextWindow'] == second and not selected_cache['visible'],
+                browser=selected, actualBrowser=app.call('window-state', id=second), manager=selected_cache, point=row['point'], tab=tab)
+        pin = space_manager_route_checks(app, results, s2, library_key, tmp, manager_ready)
         if not results['manager_today_archive_selects_neighbor']['ok']: raise AssertionError('manager_today_archive_selects_neighbor')
         # #124 review: a URL dropped on another Space's column lands in that Space
         # (not the browser's focused one) and the browser shows it there.
@@ -11773,7 +11878,7 @@ def space_manager_checks(results, tmp, config, style):
         source_ids = snapshot_ids(export_source['pinned'] + export_source['today'])
         export_title = next(sp['title'] for sp in app.call('spaces') if sp['id'] == s1) or 'Space'
         export_dest = next(sp for sp in app.call('spaces') if sp['id'] == s3)
-        app.call('space-manager-menu', space=s1, item='Turn into Folder/' + (export_dest['title'] or 'Space'))
+        app.call('space-manager-menu', space=s1, item='Export “' + export_title + '” into Folder/' + (export_dest['title'] or 'Space'))
         exported = wait_until(lambda: s1 not in order(app), timeout=5)
         with open(app.call('save')) as stream: exported_snapshot = json.load(stream)
         dest_pinned = next(sp for sp in exported_snapshot['spaces'] if sp['id'] == s3)['pinned']
@@ -11787,23 +11892,30 @@ def space_manager_checks(results, tmp, config, style):
         app.call('library-close')
         app.call('window-focus', id=second, activate=True); app.call('window-close')
         require('no_browser_window', app.call('shell-windows') == [])
-        no_browser = app.call('library-open')
-        no_browser = manager_ready(app)
-        require('no_browser_reuses_retained_model_window', no_browser and no_browser['contextValid'] and no_browser['sameModel']
-                and no_browser['contextWindow'] == second and app.call('shell-windows') == [], state=state(app))
-        app.call('pasteboard-write', text='no-browser-sentinel')
+        # PR #350 hosts Library in a browser. With no browser, the command
+        # reopens the retained model window as a live owner, keeping its IDs.
+        app.call('library-open'); no_browser = manager_ready(app)
+        created_windows = app.call('shell-windows')
+        created_owner = created_windows[0]['id'] if len(created_windows) == 1 else ''
+        require('library_without_browser_reopens_live_owner', no_browser and no_browser['contextValid'] and no_browser['sameModel']
+                and created_owner == second and no_browser['contextWindow'] == created_owner
+                and created_windows[0]['number'] != second_manager['window'],
+                state=state(app), windows=created_windows)
+        app.call('pasteboard-write', text='new-owner-sentinel')
         app.call('space-manager-menu', space=s2, node=pin, item='Copy Link')
         copied_without_browser = app.call('pasteboard')
         with open(app.call('save')) as stream: retained_snapshot = json.load(stream)
         retained_space = next(s for s in retained_snapshot['spaces'] if s['id'] == s2)
-        require('no_browser_copy_link_retains_model_ids', app.call('shell-windows') == []
-                and len(retained_snapshot['windows']) == 1 and retained_snapshot['windows'][0]['id'] == second
+        require('library_reopened_owner_copy_link_retains_model_ids', len(app.call('shell-windows')) == 1
+                and len(retained_snapshot['windows']) == 1 and retained_snapshot['windows'][0]['id'] == created_owner
                 and any(n.get('tab', {}).get('_0', {}).get('id') == pin for n in retained_space['pinned'])
                 and copied_without_browser == pin_url_before_close,
                 snapshot=retained_snapshot, pasteboard=copied_without_browser)
+        app.call('library-close'); app.call('window-focus', id=created_owner, activate=True); app.call('window-close')
         app.call('window-reopen'); app.call('library-open'); recovered = manager_ready(app)
         require('last_window_reopen_recovers', len(app.call('shell-windows')) == 1 and recovered['contextWindow'] == app.call('shell-windows')[0]['id']
                 and recovered['contextValid'], state=recovered)
+        second = recovered['contextWindow']
         # Native nil-target undo stays menu-owned. Other context keys exercise
         # the same OEApplication path and leave no panels or command bar open.
         # A selected Today tab makes accidental browser Cmd+W observable as an archive.

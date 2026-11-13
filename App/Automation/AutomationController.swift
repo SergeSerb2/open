@@ -791,7 +791,7 @@
         if let sheet = target?.attachedSheet { dialogs.append(sheet.windowNumber); target?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
         app.settingsPresenter.closeLibrary()
         return ["closed": app.settingsPresenter.libraryWindow == nil, "dialogs": dialogs] as [String: Any]
-      case "space-manager-lifecycle": return spaceManagerLifecycle()
+      case "space-manager-lifecycle": return try spaceManagerLifecycle(a)
       case "space-manager-row-controls": return try spaceManagerRowControls(a)
       case "space-manager-scroll":
         let (manager, _) = try realSpaceManager()
@@ -799,7 +799,7 @@
         let clip = manager.scrollView.contentView
         var bounds = clip.bounds; bounds.origin.x = x
         clip.scroll(to: clip.constrainBoundsRect(bounds).origin); manager.scrollView.reflectScrolledClipView(clip)
-        return spaceManagerLifecycle()
+        return try spaceManagerLifecycle([:])
       default: break
       }
       let w: EngineWebContentHostFactory
@@ -963,7 +963,9 @@
         guard let controller = w.controller, controller.hasPeekController else { return ["shown": false, "stack": []] as [String: Any] }
         let peek = controller.peekController
         return ["shown": peek.isShown, "expanding": peek.isExpanding, "stack": peek.stack.map { item in
-          ["source": item.sourceTabID.description, "originalHostTab": item.hostTabID.description,
+          ["source": item.sourceTabID.description, "url": item.url.absoluteString,
+           "profile": item.profileID.description, "librarySpace": item.librarySpaceID?.description ?? "",
+           "originalHostTab": item.hostTabID.description,
            "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0,
            "style": (item.host as? EngineWebContentHost).map { $0.content.runtimeStyle == .chrome ? "chrome" : "alloy" } ?? ""] as [String: Any]
         }] as [String: Any]
@@ -2912,28 +2914,31 @@
       return true
     }
     /// Passive cache read: do not layout/build the hidden manager while checking focus work.
-    private func spaceManagerLifecycle() -> [String: Any] {
+    private func spaceManagerLifecycle(_ args: [String: Any]) throws -> [String: Any] {
       let adapter = app.settingsPresenter
-      let manager = adapter.library?.spaceManagerView as? SpaceManagerView
-      let target = adapter.libraryWindow
-      var sectionRows: [[String: Any]] = [], visited = 0
-      func findSections(_ view: NSView, depth: Int) {
-        guard depth <= 24, visited < 512 else { return }; visited += 1
-        if let table = view as? NSTableView, table.tableColumns.contains(where: { $0.identifier.rawValue == "section" }) {
-          for (row, section) in LibrarySection.allCases.enumerated() where row < table.numberOfRows {
-            let rect = table.convert(table.rect(ofRow: row), to: nil)
-            sectionRows.append(["section": section.rawValue, "point": [rect.midX, (target?.frame.height ?? 0) - rect.midY]])
-          }
+      let session: AppLibrarySession?
+      if let id = args["id"] as? String {
+        guard let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown browser window") }
+        session = adapter.librarySessions[controller.windowID]
+      } else { session = adapter.activeLibrarySession }
+      let manager = session?.model.spaceManagerView as? SpaceManagerView
+      let target = session?.controller?.isLibraryOpen == true ? session?.controller?.window : nil
+      var sectionRows: [[String: Any]] = []
+      // PR #350 replaced the table rail with native tiles. Use the same real
+      // controls as Library automation; the harness still clicks via sendEvent.
+      if let panel = session?.panel, let target {
+        for tile in panel.automationRailState {
+          guard let section = tile["id"] as? String, let frame = tile["frame"] as? [CGFloat], frame.count == 4 else { continue }
+          let point = panel.convert(CGPoint(x: frame[0] + frame[2] / 2, y: frame[1] + frame[3] / 2), to: nil)
+          sectionRows.append(["section": section, "point": [point.x, target.frame.height - point.y]])
         }
-        for child in view.subviews.prefix(512) { findSections(child, depth: depth + 1) }
       }
-      if let content = target?.contentView { findSections(content, depth: 0) }
       return ["identity": manager.map { String(describing: ObjectIdentifier($0)) } ?? "",
         "contextWindow": manager?.context.windowID.description ?? "", "builtColumns": manager?.builtColumnIDs.count ?? 0,
         "origin": [manager?.scrollView.contentView.bounds.origin.x ?? 0, manager?.scrollView.contentView.bounds.origin.y ?? 0],
         "systemAppearance": manager.map { String(describing: $0.context.systemAppearance) } ?? "",
         "appAppearance": NSApp.appearance?.name.rawValue ?? "", "visible": target?.isVisible == true,
-        "key": target?.isKeyWindow == true, "section": adapter.library?.section.rawValue ?? "",
+        "key": target?.isKeyWindow == true, "section": session?.model.section.rawValue ?? "",
         "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows] as [String: Any]
     }
     /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
