@@ -55,6 +55,15 @@ def run(factory, results, tmp, h, guard, row_ids=None):
         matches = [w for w in windows if w.get('visible') and w['number'] == sheet['window']
                    and w.get('class', '').endswith('HTTPAuthSheet')]
         assert len(matches) == 1 and sheet['parent'] > 0, 'specific Open sheet is not attached'
+        assert sheet['title'] == 'Sign in to 127.0.0.1', 'auth heading differs from C13-AUTH'
+        assert sheet['body'] == 'Your connection to this site is private.', 'auth message differs from C13-AUTH'
+        assert sheet['buttons'] == ['Cancel', 'Sign in'], 'auth button copy/order differs from C13-AUTH'
+        parent = next(w for w in windows if w['number'] == sheet['parent'])
+        bounds = [float(x) for x in re.findall(r'-?\d+(?:\.\d+)?', matches[0]['frame'])]
+        outer = [float(x) for x in re.findall(r'-?\d+(?:\.\d+)?', parent['frame'])]
+        assert bounds[2:] == [413, 257], 'auth sheet size differs from C13-AUTH'
+        assert all(abs(bounds[i] + bounds[i + 2] / 2 - outer[i] - outer[i + 2] / 2) <= 1
+                   for i in (0, 1)), 'auth sheet is not centered over the whole window'
         assert not [w for w in windows if w.get('visible') and w.get('parent') == sheet['parent']
                     and w.get('class') == 'NativeWidgetMacNSWindow'], 'Chromium auth dialog also appeared'
         return tab, sheet
@@ -73,6 +82,12 @@ def run(factory, results, tmp, h, guard, row_ids=None):
             launch()
             tab, sheet = show(origin)
             if name in ('PW-AUTH-submit', 'PW-AUTH-return'):
+                # Click the Password control's padding through real own-window
+                # dispatch. The surrounding field background must focus its editor.
+                app.call('mouse', window=sheet['window'], action='click', x=95, y=160)
+                app.call('key', window=sheet['window'], text='padding-probe', route='app')
+                focus = state()
+                assert focus['passwordPresent'] and not focus['usernamePresent'], 'field padding did not focus Password'
                 enter_credentials()
                 before = len(app.call('tabs'))
                 for command in ('t', 'l', 'w'):
@@ -98,7 +113,7 @@ def run(factory, results, tmp, h, guard, row_ids=None):
                 retry = wait(lambda: (s if (s := state()).get('visible') and s['window'] != sheet['window'] else None),
                              timeout=10, step=.05)
                 assert retry, 'rejected credentials did not produce a fresh challenge'
-                assert not retry['passwordPresent'], 'retry retained the rejected password'
+                assert not retry['usernamePresent'] and not retry['passwordPresent'], 'retry retained rejected credentials'
                 app.call('http-auth', answer='cancel'); gone()
                 return {'freshChallengeAfterRejection': True, 'rejectedPasswordCleared': True}
             if name == 'PW-AUTH-tab-close':
