@@ -2,6 +2,7 @@ import AppKit
 import OpenFeatures
 import OpenLiveData
 import OpenModel
+import OpenSidebar
 
 /// Live Calendar (docs/re/live-data.md §4): calendar Favorites count down to the next meeting and remind
 /// before it starts. Starts when a calendar Favorite tile appears and Calendar access is already granted
@@ -26,7 +27,36 @@ final class LiveCalendarCoordinator {
   private(set) var reminders: [[String: Any]] = []
   #endif
 
-  init(app: AppDelegate) { self.app = app }
+  private var settingsObserver: (any NSObjectProtocol)?
+
+  init(app: AppDelegate) {
+    self.app = app
+    // "Disable / Enable Live Calendar" on a Favorite (Open's design, CG1): recompute at once; turning one back on
+    // starts Live Calendar again if it had stopped.
+    settingsObserver = NotificationCenter.default.addObserver(forName: FavoriteTileSettings.didChange, object: nil, queue: .main) { [weak self] _ in
+      // Every window reloads its settings from this notification. Wait until all those callbacks have run
+      // before reading their settings, so another window cannot keep the disabled Favorite live.
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        if self.isActive { self.update() } else if self.hasLiveFavorite() { self.tileAppeared() }
+      }
+    }
+  }
+
+  /// A calendar Favorite with Live Calendar on exists in some window.
+  private func hasLiveFavorite() -> Bool {
+    app.windowControllers.contains { controller in
+      controller.context.liveCalendar != nil && (controller.context.favoritesProfile?.favorites ?? []).contains {
+        CalendarProvider.match(url: $0.url) != nil && controller.context.liveCalendarEnabled(for: $0)
+      }
+    }
+  }
+
+  /// The calendar card's gear ▸ Refresh: drop the fetch cache and fetch again now.
+  func refetch() {
+    lastFetch = nil
+    if isActive { update() } else if hasLiveFavorite() { tileAppeared() }
+  }
 
   func actions() -> LiveCalendarActions {
     LiveCalendarActions(
@@ -88,7 +118,7 @@ final class LiveCalendarCoordinator {
     for controller in app.windowControllers where controller.context.liveCalendar != nil {
       let favorites = controller.context.favoritesProfile?.favorites ?? []
       var tiles: [ItemID: LiveCalendar.TileState] = [:]
-      for tab in favorites where CalendarProvider.match(url: tab.url) != nil {
+      for tab in favorites where CalendarProvider.match(url: tab.url) != nil && controller.context.liveCalendarEnabled(for: tab) {
         anyTile = true
         if let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded) { tiles[tab.id] = state }
       }

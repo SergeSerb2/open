@@ -354,10 +354,16 @@ struct SidebarMenus {
             items.append(badge)
         }
         if context.liveCalendar != nil, CalendarProvider.match(url: url) != nil {
-            let on = context.favoriteTileSettings.showsSubtitle(url: url)
-            let subtitle = ClosureMenuItem("Show Time to Next Meeting") { context.updateFavoriteTileSettings { $0.setShowsSubtitle(!on, url: url) } }
-            subtitle.state = on ? .on : .off
-            items.append(subtitle)
+            let live = context.liveCalendarEnabled(for: tab)
+            if live {
+                let on = context.favoriteTileSettings.showsSubtitle(url: url)
+                let subtitle = ClosureMenuItem("Show Time to Next Meeting") { context.updateFavoriteTileSettings { $0.setShowsSubtitle(!on, url: url) } }
+                subtitle.state = on ? .on : .off
+                items.append(subtitle)
+            }
+            // Open's design (LEAD 19:30, CG1): Arc's string "Disable Live Calendar" (`S:110792–110804`) is in its card
+            // menu; where Arc turns it back on was never captured. Open puts both titles here, per Favorite.
+            items.append(ClosureMenuItem(live ? "Disable Live Calendar" : "Enable Live Calendar") { context.setLiveCalendarEnabled(!live, for: tab) })
         }
         if !items.isEmpty { items.append(.separator()) }
         return items
@@ -367,7 +373,7 @@ struct SidebarMenus {
     /// `G:FUN_101d28c10`; the reminder times of `LiveCalendarInterval`). Placement first, then a separator:
     /// GUESS — capture pending (F2 item 7). Arc picks the reminder time in the reminder card; Open also lists it here.
     func liveCalendarItems(_ tab: Tab) -> [NSMenuItem] {
-        guard let actions = context.liveCalendar, CalendarProvider.match(url: tab.url) != nil else { return [] }
+        guard let actions = context.liveCalendar, CalendarProvider.match(url: tab.url) != nil, context.liveCalendarEnabled(for: tab) else { return [] }
         var items: [NSMenuItem] = []
         if let state = context.liveCalendarTiles[tab.id] {
             let show = NSMenuItem(title: "Show Meeting Link", action: nil, keyEquivalent: "")

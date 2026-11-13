@@ -153,6 +153,8 @@ extension AutomationController {
           calendar.join()
         case "access": guard !calendar.accessButton.isHidden else { throw Failure(message: "no access button") }
           calendar.askAccess()
+        case "gear":
+          return try trackCalendarGear(calendar, controller: controller, item: a["item"] as? String ?? "")
         case "event":
           let index = a["row"] as? Int ?? 0
           guard calendar.timeline.blocks.indices.contains(index) else { throw Failure(message: "no event block \(index)") }
@@ -166,6 +168,23 @@ extension AutomationController {
       return ["opened": true]
     default: throw Failure(message: "unknown live-data command")
     }
+  }
+
+  /// Press the real gear and choose an item inside AppKit's menu tracking loop. No system input.
+  private func trackCalendarGear(_ calendar: CalendarPreviewView, controller: BrowserWindowController, item title: String) throws -> Any {
+    guard calendar.gearMenu().items.contains(where: { $0.title == title && !$0.isSeparatorItem && $0.isEnabled })
+    else { throw Failure(message: "gear menu has no enabled item \(title)") }
+    let receipt = CalendarGearTrackingReceipt(calendar: calendar, controller: controller, item: title)
+    let observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { note in
+      nonisolated(unsafe) let trackingMenu = note.object as? NSMenu
+      MainActor.assumeIsolated {
+        guard let trackingMenu else { return }
+        receipt.beginTracking(trackingMenu)
+      }
+    }
+    defer { NotificationCenter.default.removeObserver(observer); receipt.stop() }
+    _ = calendar.gearButton.accessibilityPerformPress()
+    return ["opened": receipt.selected, "tracked": receipt.tracked, "cardStayedVisible": receipt.cardStayedVisible]
   }
 
   private func liveSpace(_ a: [String: Any]) throws -> Space {
@@ -192,7 +211,12 @@ extension AutomationController {
         "subtitle": view.joinable.map { CalendarPreviewView.subtitle(for: $0.event, now: Date()) } ?? ""] as [String: Any],
       "access": view.accessButton.isHidden ? NSNull() : view.accessButton.title,
       "events": view.timeline.blocks.map { ["id": $0.event.id, "title": $0.event.displayTitle, "frame": [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height]] },
-      "card": controller.hoverPreview.card.map(rect) ?? [], "privacyOpened": CalendarPrivacySettings.openedForAutomation] as [String: Any]
+      "card": controller.hoverPreview.card.map(rect) ?? [], "privacyOpened": CalendarPrivacySettings.openedForAutomation,
+      // Gear (CG1): the menu it opens is the same NSMenu object model as a click shows ("-" = separator).
+      "gear": ["shown": !view.gearButton.isHidden, "frame": rect(view.gearButton), "refreshing": view.isRefreshing,
+        "spinner": !view.spinner.isHidden && view.isRefreshing, "spinnerFrame": rect(view.spinner),
+        "items": view.gearMenu().items.map { $0.isSeparatorItem ? "-" : $0.title },
+        "enabled": view.gearMenu().items.filter { !$0.isSeparatorItem }.map(\.isEnabled)] as [String: Any]] as [String: Any]
   }
 
   private func glanceController(_ a: [String: Any]) throws -> BrowserWindowController {
@@ -200,5 +224,42 @@ extension AutomationController {
     guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
     return controller
   }
+}
+
+@MainActor
+private final class CalendarGearTrackingReceipt {
+  var tracked = false
+  var cardStayedVisible = false
+  var selected = false
+  private weak var calendar: CalendarPreviewView?
+  private weak var controller: BrowserWindowController?
+  private var menu: NSMenu?
+  private let item: String
+  private var timer: Timer?
+
+  init(calendar: CalendarPreviewView, controller: BrowserWindowController, item: String) {
+    self.calendar = calendar; self.controller = controller; self.item = item
+  }
+
+  func beginTracking(_ menu: NSMenu) {
+    self.menu = menu; tracked = true
+    timer = Timer(timeInterval: 0.05, repeats: false) { [weak self] _ in
+      MainActor.assumeIsolated { self?.choose() }
+    }
+    if let timer { RunLoop.main.add(timer, forMode: .eventTracking) }
+  }
+
+  private func choose() {
+    guard let menu else { return }
+    defer { menu.cancelTrackingWithoutAnimation() }
+    guard let calendar, let controller else { return }
+    cardStayedVisible = controller.hoverPreview.card?.content === calendar && controller.context.hoverPreviews.request != nil
+    if cardStayedVisible, let index = menu.items.firstIndex(where: { $0.title == item && !$0.isSeparatorItem && $0.isEnabled }) {
+      menu.performActionForItem(at: index)
+      selected = true
+    }
+  }
+
+  func stop() { timer?.invalidate(); timer = nil; menu = nil }
 }
 #endif
