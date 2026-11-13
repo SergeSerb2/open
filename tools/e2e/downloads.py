@@ -227,7 +227,7 @@ def checks(factory, results, tmp, config, harness):
         check('menu_cancel', wait(lambda: row(unknown).get('subtitle') == 'Cancelled'))
         dismiss_library()
         failed = start('/fail'); library()
-        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed', 30), item=item(failed), row=row(failed))
+        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed to Download', 30), item=item(failed), row=row(failed))
         dismiss_library()
         # PB1-b wiring: the download started above got a flight record when it was created: played to the
         # Library button, or skipped for a known reason (the Library covers the sidebar at that point of the

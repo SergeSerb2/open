@@ -37,7 +37,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 |---|---|---|---|
 | Downloads, completed (S1L, S8 item 9) | More button "More Options": Open ‹kind› · Copy ‹kind› · Show in Finder · — · Hide from Arc · Move to Trash; ‹kind› is the file-kind word, else the extension; subtitle: the kind word, else "Download"; right-click opens no menu | the same ("Hide from Open") | a file with no extension: "Open" / "Copy" is a GUESS |
 | Downloads, in progress / paused (S8 item 10) | Open ‹kind› · Copy (disabled) · Show in Finder (disabled) · — · Cancel Download · — · Hide | the same; Pause/Resume and Cancel stay as hover controls (Arc has no pause, resume or retry menu strings) | none |
-| Downloads, failed / cancelled (S8 item 10) | Open, Copy, Show in Finder all disabled · — · Hide from Arc | the same; failed rows keep the Retry hover control | none |
+| Downloads, failed / cancelled (S8 item 10; S12 C12-PB1-3) | Open, Copy, Show in Finder all disabled · — · Hide from Arc; a truncated transfer shows "Failed to Download" by 30 seconds and still at 60 and 90 seconds | the same; failed rows keep the Retry hover control | S12 failed-row menu still awaits capture; its relaunch behavior is tracked by PB1 |
 | Archived Tabs (S1L; S8 item 11; S11 C-D2-2) | right-click opens no menu; hover shows only a tooltip with the tab title, with no Delete / Restore glyphs on manually archived tabs; rows show the title and the URL without its scheme | the same; keyboard delete and row activation remain | other archived item kinds were not settled by S11 |
 | Media captures (S11 C-D2-1) | Copy Image · Copy Source URL · Open Source URL · — · Send via iMessage · AirDrop · — · Delete; title tooltip on hover, no ellipsis button; saved captures appear without a folder grant | the same; native system share services; new captures retain the full source URL | older Open captures without a saved source URL disable its two source actions; folder-file order and separators remain GUESS |
 | Easels (S4) | card menu: a single "Delete" | the same | none |
@@ -69,3 +69,15 @@ Copy Image · Copy Source URL · Open Source URL · — · Send via iMessage · 
 Evidence and the optional source-URL field are recorded in [library-session11.md](library-session11.md).
 Open's folder-file menu remains Open in Preview · Send via iMessage · AirDrop · Copy ‹Image|Video› ·
 Show in Finder · — · Hide from Open. Its order and separators remain a guess; the folder-grant capture is still open.
+
+## 5. Failed-download subtitle (session 12 C12-PB1-3)
+
+Arc 1.172.2 shows "Failed to Download" after a loopback transfer advertises 2 MiB, sends 512 KiB and closes the
+connection. The first frame still shows progress; the 30-, 60- and 90-second frames show the failure text.
+Evidence: `.re/capture/s12/m1/arc/v9/34-failure-verified-90/failure-at-{30,60,90}.{png,ax.json}`;
+the request times are in that block's `session.jsonl`. The first scheduled 5-second frame ran late while the
+Library opened, so these captures do not establish an exact failure delay. The subtitle follows this measurement;
+this change does not alter transfer retries or persistence. The failed-row menu remains unmeasured. The final
+C12-PB1-3 report separately records that this failed row was absent after relaunch, including an exact-name search
+showing "No results found" (`.re/capture/s12/m1/arc/v11/36-failure-relaunch/failed-after-relaunch.{png,ax.json}`).
+The PB1 lane tracks that relaunch behavior; this change covers the subtitle.
