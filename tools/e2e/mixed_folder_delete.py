@@ -1,5 +1,6 @@
 """C13-D2-6: normal folder + Today selection, through the real sidebar menu and stores."""
 from pathlib import Path
+import os
 
 
 def checks(h, factory, results, tmp):
@@ -49,6 +50,8 @@ def checks(h, factory, results, tmp):
         record('confirmation', sheet and sheet['title'] == 'Delete your “C13 Folder” folder?'
                and sheet['text'] == 'Deleting this folder will archive the tabs inside it.'
                and set(sheet['buttons']) == {'Cancel', 'Delete Folder'}, sheet=sheet)
+        if os.environ.get('OPEN_MIXED_DELETE_EARLY_FAILURE') == '1':
+            raise RuntimeError('deliberate early failure with the mixed Delete sheet open')
         app.call('alert', button='Cancel')
         record('cancel', sidebar_ids() == before and app.call('archive-list', profile=profile)['rows'] == archive_before)
         delete()
