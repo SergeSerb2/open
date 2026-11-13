@@ -5,11 +5,12 @@ import json
 from pathlib import Path
 import tempfile
 import time
-from engine_e2e import Open, wait_until
+from engine_e2e import Open
 from library_overlay import capture_window
 
 
 def run(output, config):
+    output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     checks = {}
     app = None
@@ -42,8 +43,8 @@ def run(output, config):
             try:
                 app.call('settings-icon', select='not-an-icon')
                 refused = False
-            except RuntimeError:
-                refused = True
+            except RuntimeError as error:
+                refused = 'unknown icon' in str(error)
             check('unknown_option_refused', refused and app.call('settings-icon')['applied'] == 'openDefault')
         finally:
             if app: app.quit()
