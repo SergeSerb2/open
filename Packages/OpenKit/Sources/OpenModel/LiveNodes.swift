@@ -123,6 +123,9 @@ public final class Folder {
     public var children: [SidebarNode]
     /// Set on a Live Folder (LF L2, live-data §2.7); nil for every normal folder.
     public var live: LiveFolderConfig?
+    /// Last fetch's organization SSO link (C-LF-3, Open's design). Session state only;
+    /// deliberately absent from the snapshot DTO and preferences.
+    public var liveSSOURL: URL?
 
     public init(id: ItemID = ItemID(), title: String = "Folder", isExpanded: Bool = true, customIcon: String? = nil, iconOverride: SpaceIcon? = nil, children: [SidebarNode] = [], peekedChildID: ItemID? = nil) {
         self.id = id; self.title = title; self.isExpanded = isExpanded

@@ -99,7 +99,7 @@ extension AutomationController {
         "hiddenItems": Array(live.hiddenItems).sorted(), "hiddenRepositories": Array(live.hiddenRepositories).sorted(),
         "autoCreated": app.liveFolders.autoCreated, "signInRefreshes": app.liveFolders.signInRefreshes, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
         "showMore": more.map { ["title": "Show More", "frame": [$0.minX, $0.minY, $0.width, $0.height]] } ?? NSNull(),
-        "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
+        "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "ssoURL": folder.liveSSOURL?.absoluteString ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
         "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":
       let controller = try glanceController(a)
