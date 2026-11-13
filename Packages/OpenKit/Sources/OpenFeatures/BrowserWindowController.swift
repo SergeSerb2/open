@@ -388,13 +388,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 self?.dismissSidebarReveal()
             }
         })
-        pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
-            MainActor.assumeIsolated {
-                if let self, event.window === self.window, BrowserWindowController.pointerEventFilter?(event) ?? true {
+        pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .mouseEntered, .mouseExited]) { [weak self] event in
+            let accepted = MainActor.assumeIsolated { () -> Bool in
+                guard let self, event.window === self.window else { return true }
+                // Native menu teardown can queue tracking events from the hardware
+                // cursor. While the socket owns the pointer, reject those events
+                // before AppKit routes them to views, not just for sidebar reveal.
+                // The socket reconciles enter/exit at its tagged motion's point.
+                guard BrowserWindowController.pointerEventFilter?(event) ?? true else { return false }
+                if event.type == .mouseMoved || event.type == .leftMouseDragged {
                     self.trackSidebarPointer(self.root.convert(event.locationInWindow, from: nil))
                 }
+                return true
             }
-            return event
+            return accepted ? event : nil
         }
         // Cmd+Shift drag to capture (§4.6.2). Returns at once unless the press has exactly
         // Cmd+Shift, or a held press is in progress; the capture controller is made lazily.
