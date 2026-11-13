@@ -13,6 +13,16 @@ from pathlib import Path
 
 
 def run(factory, results, tmp, h):
+    server, origin = h._fixture_server('BlankWindow')
+    try:
+        blank_window_checks(factory, results, h, origin)
+        live_transfer_checks(factory, results, h, origin)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def blank_window_checks(factory, results, h, origin):
     def row(name, ok, **evidence):
         results[name] = dict(ok=bool(ok), **evidence)
         print('blank-window %-34s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
@@ -21,7 +31,6 @@ def run(factory, results, tmp, h):
 
     def blank(): return app.call('blank-window')
 
-    server, origin = h._fixture_server('BlankWindow')
     app = factory(urls=(origin + '/main',), fresh=True)
     try:
         main_tab = app.call('tabs')[0]['id']
@@ -202,11 +211,6 @@ def run(factory, results, tmp, h):
         app.call('defaults', key='open.advanced.restoreWindowsOnLaunch', value=None)
     finally:
         app.quit()
-    try:
-        live_transfer_checks(factory, results, h, origin)
-    finally:
-        server.shutdown()
-        server.server_close()
 
 
 def live_transfer_checks(factory, results, h, origin):
@@ -226,11 +230,13 @@ def live_transfer_checks(factory, results, h, origin):
             return app.call('sidebar-drag', op='rail', window=target, rail=0, node=tab, top=top, perform=True)['accepted']
         finally:
             app.call('sidebar-drag', op='end')
-    def open_blank():
+    def open_blank(with_placeholder=True):
         key('n', 'control', 'command')
         opened = h.wait_until(lambda: (lambda s: s if s['isBlankWindow'] else None)(app.call('blank-window')), timeout=8)
         if not opened: raise AssertionError('live transfer Blank Window did not open')
         key('escape')
+        if not with_placeholder:
+            return opened['window'], None, opened['frame'][3] / 2
         placeholder = h.new_tab(app, origin + '/transfer-placeholder')
         return opened['window'], placeholder, app.call('sidebar-row', node=placeholder)['point'][1]
     try:
@@ -290,6 +296,22 @@ def live_transfer_checks(factory, results, h, origin):
         app.call('select', tab=returned)
         after, after_page = document(returned), page(returned)
         row('live_transfer_move_to_space_keeps_document', closed and returned == tab and after == initial
+            and identity(after_page) == identity(original), before=initial, after=after, returnedPage=after_page)
+
+        # A new Blank Window has no engine browser tab yet. Transfer creates
+        # its destination owner without replacing the live page.
+        blank, _, empty_top = open_blank(with_placeholder=False)
+        front(main); accepted = drop(returned, blank, empty_top); front(blank)
+        incoming = next(t['id'] for t in app.call('tabs') if t['url'] == origin + '/transfer-form')
+        after, after_page = document(incoming), page(incoming)
+        row('live_transfer_into_empty_blank_keeps_document', accepted and incoming == tab and after == initial
+            and identity(after_page) == identity(original), before=initial, after=after, movedPage=after_page)
+        accepted_back = drop(incoming, main, main_top)
+        closed = h.wait_until(lambda: all(w['id'] != blank for w in app.call('shell-windows')), timeout=8)
+        front(main)
+        returned = next(t['id'] for t in app.call('tabs') if t['url'] == origin + '/transfer-form')
+        after, after_page = document(returned), page(returned)
+        row('live_transfer_empty_owner_close_keeps_document', accepted_back and closed and returned == tab and after == initial
             and identity(after_page) == identity(original), before=initial, after=after, returnedPage=after_page)
     finally:
         app.quit()
