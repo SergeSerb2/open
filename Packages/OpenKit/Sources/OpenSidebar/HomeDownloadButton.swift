@@ -79,6 +79,8 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate, NSDraggingSour
         let tint = NSColor(deviceRed: 0x21/255, green: 0x2A/255, blue: 0xFB/255, alpha: 1)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         track.strokeColor = tint.withAlphaComponent(0.22).cgColor
+        // The native crops show the same pale opaque fill in both appearances.
+        track.fillColor = NSColor(deviceRed: 231/255, green: 231/255, blue: 252/255, alpha: 1).cgColor
         ring.strokeColor = tint.cgColor; check.contentTintColor = tint; arrow.contentTintColor = tint
         CATransaction.commit()
         guard state != previous else { return }

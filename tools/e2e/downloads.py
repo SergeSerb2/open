@@ -286,14 +286,17 @@ def checks(factory, results, tmp, config, harness):
             dismiss_library()
 
     def captured_mark_flow():
+        capture_root = Path(os.environ.get('OPEN_DOWNLOADS_CAPTURE_DIR', str(root)))
+        capture_root.mkdir(parents=True, exist_ok=True)
         library(); dismiss_library()
         for appearance in ('light', 'dark'):
             app.call('appearance', name=appearance)
             key = start('/finish?name=mark-' + appearance + '.txt')
             live = wait(lambda: state()['badge'] if item(key).get('received', 0) > 0 and state()['badge'].get('running', 0) > 0 else None)
             check('captured_mark_running_' + appearance, live and live['ringBounds'] == [1, 1, 18, 18] and live['stackCount'] == 0, badge=live)
-            app.call('snapshot', path=str(root / ('mark-running-' + appearance + '.png')))
-            box = state()['badge']['markFrame']
+            app.call('snapshot', path=str(capture_root / ('mark-running-' + appearance + '.png')))
+            badge = state()['badge']
+            box = badge.get('markFrame', badge['frame'])
             app.call('mouse', action='click', queued=True, window=app.call('library-state')['window'], x=box[0]+box[2]/2, y=box[1]+box[3]/2)
             opened = wait(lambda: app.call('library-state').get('open') and app.call('library-state').get('section') == 'downloads')
             check('captured_mark_click_' + appearance, opened and app.call('library-state')['windowID'] == app.call('shell-windows')[0]['id'])
@@ -302,10 +305,10 @@ def checks(factory, results, tmp, config, harness):
             time.sleep(5.1)
             badge = state()['badge']
             check('captured_mark_five_after_' + appearance, badge['stackCount'] == 1 and badge['thumbnailSize'] == 32 and badge['files'][0]['id'] == key, badge=badge)
-            app.call('snapshot', path=str(root / ('mark-completed-' + appearance + '.png')))
+            app.call('snapshot', path=str(capture_root / ('mark-completed-' + appearance + '.png')))
             library(); dismiss_library()
             check('captured_mark_library_keeps_' + appearance, state()['badge']['stackCount'] == 1 and state()['badge']['files'][0]['id'] == key, badge=state()['badge'])
-            app.call('snapshot', path=str(root / ('mark-after-library-' + appearance + '.png')))
+            app.call('snapshot', path=str(capture_root / ('mark-after-library-' + appearance + '.png')))
 
 
     def fallback_flow():
