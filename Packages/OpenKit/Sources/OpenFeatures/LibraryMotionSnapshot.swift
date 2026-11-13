@@ -9,15 +9,22 @@ struct LibraryMotionSnapshot {
     let source: NSView
     let frame: CGRect
     let image: CGImage
+    let backingScale: CGFloat
 
     func install() -> NSView? {
-        guard let parent = source.superview, source.frame == frame else { return nil }
+        guard let parent = source.superview, source.frame == frame,
+              source.window?.backingScaleFactor == backingScale else { return nil }
         let view = LibraryMotionSnapshotView(frame: frame)
+        // Host this immutable texture ourselves. An AppKit backing layer can
+        // otherwise redraw its empty NSView over the supplied image contents.
+        let texture = CALayer()
+        texture.contents = image
+        texture.contentsGravity = .resize
+        texture.contentsScale = backingScale
+        texture.needsDisplayOnBoundsChange = false
+        texture.allowsGroupOpacity = false
+        view.layer = texture
         view.wantsLayer = true
-        view.layer?.contents = image
-        view.layer?.contentsGravity = .resize
-        view.layer?.contentsScale = source.window?.backingScaleFactor ?? 1
-        view.layer?.allowsGroupOpacity = false
         parent.addSubview(view, positioned: .above, relativeTo: source)
         return view
     }
@@ -75,6 +82,7 @@ extension WebContentContainer {
                   let width = properties[kCGImagePropertyPixelWidth as String] as? Int,
                   let height = properties[kCGImagePropertyPixelHeight as String] as? Int,
                   width > 0, height > 0, width <= 8192, height <= 8192,
+                  width == Int(expectedWidth), height == Int(expectedHeight),
                   width * height <= 16 * 1024 * 1024 - pixels,
                   let image = CGImageSourceCreateImageAtIndex(source, 0,
                     [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
@@ -87,10 +95,11 @@ extension WebContentContainer {
             // Bake the pane's rounded clip into stationary pixels. Closing can
             // then move a plain image instead of a rounded, masked subtree.
             guard let rounded = libraryRoundedImage(image, view: view) else { return nil }
-            snapshots.append(.init(source: view, frame: frame, image: rounded))
+            snapshots.append(.init(source: view, frame: frame, image: rounded, backingScale: scale))
         }
         guard bounds == originalBounds, snapshots.allSatisfy({
-            $0.source.frame == $0.frame && $0.source.isDescendant(of: self) && !$0.source.isHiddenOrHasHiddenAncestor
+            $0.source.frame == $0.frame && $0.source.window?.backingScaleFactor == $0.backingScale
+                && $0.source.isDescendant(of: self) && !$0.source.isHiddenOrHasHiddenAncestor
         }) else { return nil }
         librarySnapshotStatus = "ready"
         return snapshots

@@ -27,6 +27,7 @@ public final class PaneSlotView: NSView {
     init(tabID: ItemID) {
         self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
         layer?.allowsGroupOpacity = false; clip.layer?.allowsGroupOpacity = false
+        layer?.needsDisplayOnBoundsChange = false; clip.layer?.needsDisplayOnBoundsChange = false
         layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = PanelMetrics.shadowOpacity
         layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
         clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.cornerCurve = .continuous; clip.layer?.masksToBounds = true; addSubview(clip)

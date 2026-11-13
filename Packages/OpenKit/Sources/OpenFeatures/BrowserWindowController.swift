@@ -916,6 +916,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             libraryMotionOpening = opening
             for layer in [container.layer, Optional(emptyPanel)].compactMap({ $0 }) {
                 layer.allowsGroupOpacity = false
+                layer.needsDisplayOnBoundsChange = false
                 layer.removeAnimation(forKey: "sidebarToggle")
                 layer.removeAnimation(forKey: "libraryPreparation")
                 layer.removeAnimation(forKey: "libraryFrame")
