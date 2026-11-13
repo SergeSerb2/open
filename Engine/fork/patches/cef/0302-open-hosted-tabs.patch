@@ -372,23 +372,28 @@ index 8f0c3140a..113d8ce95 100644
 diff --git a/cef/include/views/cef_browser_view_delegate.h b/cef/include/views/cef_browser_view_delegate.h
 --- a/cef/include/views/cef_browser_view_delegate.h
 +++ b/cef/include/views/cef_browser_view_delegate.h
-@@ -82,7 +82,9 @@
+@@ -80,9 +80,10 @@
+   /// from |browser_view|. |settings| and |client| are the values returned from
+   /// CefLifeSpanHandler::OnBeforePopup(). |is_devtools| will be true if the
    /// popup will be a DevTools browser. Return the delegate that will be used
-   /// for the new popup BrowserView.
+-  /// for the new popup BrowserView.
++  /// for the new popup BrowserView. Open: |browser_view| may be null for
++  /// DevTools of a hosted tab, which has no opener BrowserView.
    ///
 -  /*--cef(optional_param=client)--*/
-+  /// Open: a hosted tab has no opener BrowserView. Its dock delegate still
-+  /// receives the DevTools popup through the C API.
 +  /*--cef(optional_param=browser_view,optional_param=client)--*/
    virtual CefRefPtr<CefBrowserViewDelegate> GetDelegateForPopupBrowserView(
        CefRefPtr<CefBrowserView> browser_view,
        const CefBrowserSettings& settings,
-@@ -100,7 +102,8 @@
+@@ -98,9 +99,10 @@
+   /// |browser_view|. |is_devtools| will be true if the popup is a DevTools
+   /// browser. Optionally add |popup_browser_view| to the views hierarchy
    /// yourself and return true. Otherwise return false and a default CefWindow
-   /// will be created for the popup.
+-  /// will be created for the popup.
++  /// will be created for the popup. Open: |browser_view| may be null for
++  /// DevTools of a hosted tab, which has no opener BrowserView.
    ///
 -  /*--cef()--*/
-+  /// Open: |browser_view| is null for DevTools of a hosted tab.
 +  /*--cef(optional_param=browser_view)--*/
    virtual bool OnPopupBrowserViewCreated(
        CefRefPtr<CefBrowserView> browser_view,
