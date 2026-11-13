@@ -683,7 +683,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     sidebarPanelShadow.prepare(frame: panelFrame)
                     sidebarPanelShadow.isHidden = container.isHidden
                     for (shadowLayer, key, from, to) in sidebarPanelShadow.motion(from: oldPanel.size, translation: oldPanel.minX - panelFrame.minX) {
-                        let spring = Motion.sidebarToggle.animation(keyPath: key)
+                        let spring = Motion.sidebarAnimation(keyPath: key, showing: !hidden)
                         spring.fromValue = from; spring.toValue = to
                         addMotion(spring, to: shadowLayer, key: "sidebarToggle", requestedAt: requestedAt)
                     }
