@@ -50,7 +50,10 @@ def boost(name, css='body{outline:3px solid rgb(1,2,3)}', **extra):
                       textTransform='uppercase', zaps=['#example-promo'], textZoom={'level': 125},
                       colorScheme={'colorWheelDriven': {'_0': dict(primaryHueDegrees=90, primarySaturation=.4,
                                                                   secondaryHueOffset=45, invertLightness=False,
-                                                                  baseAppearance={'light': {}}, advancedSettings={})}})
+                                                                  # Sliders moved (capture session 11): Brightness 40,
+                                                                  # Contrast 70, Original Saturation 60.
+                                                                  advancedSettings=dict(lightnessShift=-0.2, preservedLightness=0.7,
+                                                                                        preservedSaturation=0.6))}})
     components.update(extra)
     return dict(title='Example ' + name, hostPattern='example.com', creatorID='synthetic-creator',
                 author='Example author', type='edited', lastModified='2026-05-28T20:28:43Z', isActive='true',
@@ -183,7 +186,7 @@ def write(root, sidebar=True):
             fields = boost(name, textZoom={'level': 2},
                            # An offset other than Arc's fixed 45 (capture C11) has no Open input: dropped.
                            colorScheme={'colorWheelDriven': {'_0': dict(primaryHueDegrees=90, primarySaturation=.4,
-                                        secondaryHueOffset=30, invertLightness=False, baseAppearance={'light': {}}, advancedSettings={})}})
+                                        secondaryHueOffset=30, invertLightness=False, baseAppearance={'light': {}})}})
             fields['forkedFromBoostID'] = IDS['enabled']
             fields['data'] = json.dumps(dict(json.loads(fields['data']),
                 css='body{border-top:7px solid rgb(9,8,7)!important}'))
