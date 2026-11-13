@@ -11509,27 +11509,27 @@ def space_manager_checks(results, tmp, config, style):
         require('E5_menu_real_manager', ready and ready['section'] == 'spaces' and ready['managerClass'] == 'OpenSidebar.SpaceManagerView'
                 and ready['sameModel'] and ready['sameUndoManager'] and not ready['previewsEnabled'] and ready['globalPreviewsEnabled'],
                 state=state(app), png=rest, preferenceDomain=bundle_id)
-        # No Arc frame of the Manager exists (capture C2 is pending), so the real
-        # Library page is compared with the plan's spec: §3.2 columns (inset 16,
-        # width 244, gap 12, header 44) and the S4 R1 header (icon 13/9, title
-        # x 41, grabber W − 58, "…" W − 32; docs/design.md §20). Target ≤ 1 pt.
+        # PR #350 (ec9b4055) replaced the S4 header layout with the approved D1
+        # Library cards: 24/48 insets, 240 width, 24 gap, footer controls.
+        # Card height follows the real viewport, including smaller rented displays.
+        # Compare the independent design values within 1 pt, not the old S4 spec.
         def spec_rows(snapshot):
             rows = []
             for index, column in enumerate(snapshot['columns']):
-                width = 244
-                expected = {'column': [16 + index * 256, 16, 244, column['managerSize'][1] - 32],
-                            'icon': [13, 9, 26, 26], 'grabber': [width - 58, 10, 24, 24], 'more': [width - 32, 10, 24, 24]}
+                width, height = 240, max(0, column['managerSize'][1] - 96)
+                expected = {'column': [24 + index * 264, 48, width, height],
+                            'icon': [13, 12, 26, 26], 'title': [44, 12, width - 86, 26],
+                            'edit': [width - 39, 9, 30, 30],
+                            'grabber': [9, height - 39, 30, 30], 'more': [width - 39, height - 39, 30, 30]}
                 actual = dict(column['header'], column=column['column'])
                 for part, frame in expected.items():
                     error = max(abs(a - e) for a, e in zip(actual.get(part, [1e9] * 4), frame))
                     rows.append({'space': column['id'], 'part': part, 'expected': frame, 'actual': actual.get(part), 'error': error})
-                title = actual.get('title', [1e9] * 4)
-                rows.append({'space': column['id'], 'part': 'title.x', 'expected': [41], 'actual': [title[0]], 'error': abs(title[0] - 41)})
             return rows
         geometry = spec_rows(ready)
         worst = max((row['error'] for row in geometry), default=1e9)
         require('E5_manager_spec_geometry', len(ready['columns']) == 3 and worst <= 1, worst=worst, rows=geometry,
-                reference='plan §3.2 + docs/design.md §20 S4 R1; no Arc capture (C2 pending)')
+                reference='PR #350 (ec9b4055), approved D1 Library cards; viewport-relative height')
         if os.environ.get('OPEN_SPACE_MANAGER_EARLY_FAILURE') == '1':
             raise AssertionError('deliberate early failure with Library open')
         library = ready['window']
@@ -11557,7 +11557,7 @@ def space_manager_checks(results, tmp, config, style):
         app.call('mouse', action='hover', window=library, x=point[0], y=point[1])
         hovered = capture(app, 'manager-hovered')
         results['manager_captures'] = {'rest': rest, 'hovered': hovered,
-            'comparison': 'no Arc Manager capture exists (C2 pending); geometry compared with the plan spec in E5_manager_spec_geometry'}
+            'comparison': 'geometry compared with the approved D1 Library cards (PR #350) in E5_manager_spec_geometry'}
         refused = []
         for invalid in (-1, len(original)):
             try: app.call('space-manager-drag', space=s1, to=invalid)

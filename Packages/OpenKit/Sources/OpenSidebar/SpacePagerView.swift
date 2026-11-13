@@ -68,7 +68,13 @@ final class SpacePagerView: NSView {
         super.layout()
         if shownSpaceID == nil { showFocused(animated: false); return }
         layoutPages()
-        if !animating && swipe == nil { offset = CGFloat(creationPage == nil ? focusedIndex : spaces.count) * bounds.width }
+        if !animating && swipe == nil {
+            // Focus observation runs on the next main-actor turn. A layout in
+            // between must keep the displayed Space in place so showFocused
+            // can start its spring from the existing presentation position.
+            let shownIndex = shownSpaceID.flatMap { id in spaces.firstIndex { $0.id == id } } ?? focusedIndex
+            offset = CGFloat(creationPage == nil ? shownIndex : spaces.count) * bounds.width
+        }
         placeStrip()
     }
 
