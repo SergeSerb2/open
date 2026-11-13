@@ -295,7 +295,7 @@ bool CefRemoveProtocolHandler(CefRefPtr<CefRequestContext> request_context,
 /// document.styleSheets entry. Subframes are not affected. Must be called on
 /// the render process main thread.
 ///
-/*--cef(added=experimental)--*/
+/*--cef(added=experimental,optional_param=css)--*/
 bool CefSetOpenUserStyleSheet(CefRefPtr<CefBrowser> browser,
                               const CefString& key,
                               const CefString& css);
