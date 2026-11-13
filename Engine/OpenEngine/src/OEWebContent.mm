@@ -465,6 +465,8 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     return;
   }
   if (!_userStyleSheets) _userStyleSheets = [NSMutableDictionary dictionary];
+  NSLog(@"E3DBG oe uss key=%@ len=%lu had=%d browser=%d", key, (unsigned long)css.length,
+        _userStyleSheets[key] != nil, _browser != nullptr);
   if ((css.length ? [_userStyleSheets[key] isEqualToString:css]
                   : _userStyleSheets[key] == nil)) {
     return;
