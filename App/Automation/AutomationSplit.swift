@@ -52,6 +52,7 @@ extension AutomationController {
             // NSOutlineView.mouseDown tracks native drag input synchronously. The socket's
             // virtual pointer does not run the WindowServer drag loop. Exercise the actual
             // destination callbacks with the real sidebar pasteboard format instead.
+            try await activateForInput(window)
             let info = SplitDraggingInfo(window: window, source: controller.sidebar,
                 point: NSPoint(x: point[0], y: window.frame.height - point[1]), node: raw)
             defer { info.draggingPasteboard.releaseGlobally() }
