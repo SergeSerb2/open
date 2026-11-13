@@ -359,6 +359,41 @@ void OpenTabStrip::UpdateTab(CefRefPtr<CefBrowser> browser,
   --applying_;
 }
 
+bool OpenTabStrip::TransferTab(CefRefPtr<CefBrowser> browser,
+                               int index, bool pinned) {
+  CEF_REQUIRE_UIT_RETURN(false);
+  auto host = CefBrowserHostBase::FromBrowser(browser);
+  OpenTabStrip* source = host ? FromId(IdForHost(host.get())) : nullptr;
+  content::WebContents* contents = host ? host->GetWebContents() : nullptr;
+  if (closed_ || !source || source == this || source->closed_ ||
+      !source->browser_ || !contents ||
+      CefRequestContextImpl::GetProfile(request_context_) !=
+          CefRequestContextImpl::GetProfile(source->request_context_)) {
+    return false;
+  }
+  auto* from_model = source->browser_->tab_strip_model();
+  const int from = from_model->GetIndexOfWebContents(contents);
+  if (from == TabStripModel::kNoTab || !EnsureBrowser()) return false;
+  // Detaching the last tab can close the source Browser synchronously. Keep
+  // the strip alive, and never use its Browser/model after the detach.
+  CefRefPtr<OpenTabStrip> keep_source(source);
+  ++source->applying_;
+  ++applying_;
+  auto detached = from_model->DetachTabAtForInsertion(from);
+  CHECK(detached);
+  CHECK(OpenHostedPlatformDelegate::SetStripIdFor(
+      host->platform_delegate(), id_));
+  auto* model = browser_->tab_strip_model();
+  const int boundary = model->IndexOfFirstNonPinnedTab();
+  const int to = std::clamp(index, pinned ? 0 : boundary,
+                            pinned ? boundary : model->count());
+  model->InsertDetachedTabAt(to, std::move(detached),
+      pinned ? AddTabTypes::ADD_PINNED : AddTabTypes::ADD_NONE);
+  --applying_;
+  --source->applying_;
+  return true;
+}
+
 void OpenTabStrip::ActivateTab(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UIT_RETURN_VOID();
   content::WebContents* contents = ContentsFor(browser);
@@ -804,6 +839,8 @@ void OpenTabStrip::PutBack(base::WeakPtr<content::WebContents> contents,
   if (!contents || closed_) {
     return;
   }
+  auto host = ChromeBrowserHostImpl::GetBrowserForContents(contents.get());
+  if (!host || IdForHost(host.get()) != id_) return;
   Browser* home = EnsureBrowser();
   if (!home || home->tab_strip_model()->GetIndexOfWebContents(
                    contents.get()) != TabStripModel::kNoTab) {

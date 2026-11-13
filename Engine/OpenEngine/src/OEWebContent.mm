@@ -1053,6 +1053,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   if (_browser) _browser->ReloadIgnoreCache();
 }
 - (void)stopLoading {
+  _client->CancelAuthenticationRequests();
   if (_browser) _browser->StopLoad();
 }
 

@@ -156,6 +156,11 @@ configuration.logFile = directories.root.appendingPathComponent("State/engine.lo
 configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort
 configuration.verboseLogging = options.verboseLogging
+#if OPEN_HTTP_AUTH_ENGINE
+configuration.handlesHTTPAuthentication = true
+#elseif OPEN_AUTOMATION
+configuration.handlesHTTPAuthentication = CommandLine.arguments.contains("--engine-api-auth")
+#endif
 // CEF main_runner.cc starts Chrome's MainThreadStackSamplingProfiler even in
 // our unbranded Release build (thread_profiler_configuration.cc treats it as
 // local). Open does not use its startup or periodic sampling collections.

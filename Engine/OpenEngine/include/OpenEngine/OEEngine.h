@@ -47,6 +47,11 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// Verbose Chromium logging. Default: NO.
 @property(nonatomic) BOOL verboseLogging;
 
+/// Route HTTP/proxy authentication to OEWebContentDelegate instead of the
+/// Chromium login dialog. Default: NO. Enable only when the shell installs
+/// its authentication handler; unanswered/unhandled requests then cancel.
+@property(nonatomic) BOOL handlesHTTPAuthentication;
+
 /// Keychain item that holds the cookie and password encryption key.
 /// Default: "Open Safe Storage" / "Open". Stock Chromium uses the shared
 /// "Chromium Safe Storage" item, which other Chromium-based apps may own,

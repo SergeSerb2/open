@@ -27,6 +27,7 @@ class OpenHostedPlatformDelegate : public CefBrowserPlatformDelegateChrome {
 
   // The strip id of |delegate| if it is a hosted tab's delegate, else 0.
   static int StripIdFor(const CefBrowserPlatformDelegate* delegate);
+  static bool SetStripIdFor(CefBrowserPlatformDelegate* delegate, int strip_id);
 
   int strip_id() const { return strip_id_; }
 
@@ -38,7 +39,7 @@ class OpenHostedPlatformDelegate : public CefBrowserPlatformDelegateChrome {
   bool IsHidden() const override;
 
  private:
-  const int strip_id_;
+  int strip_id_;
 };
 
 }  // namespace open_engine

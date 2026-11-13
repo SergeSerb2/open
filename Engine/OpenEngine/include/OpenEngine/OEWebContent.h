@@ -12,6 +12,7 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 @class OEOpenRequest;
 @class OEJavaScriptDialog;
 @class OEPermissionRequest;
+@class OEAuthenticationRequest;
 @class OEContextMenu;
 @class OEFindResult;
 
@@ -162,6 +163,18 @@ NS_SWIFT_UI_ACTOR
 - (BOOL)webContent:(OEWebContent*)webContent
     decidePermissionRequest:(OEPermissionRequest*)request
     NS_SWIFT_NAME(webContent(_:decidePermissionRequest:));
+
+/// HTTP/proxy authentication, on the main thread. Retain and answer the
+/// request to show shell UI. NO (or no implementation) cancels the challenge.
+/// Chromium's own login dialog is never shown.
+- (BOOL)webContent:(OEWebContent*)webContent
+    handleAuthenticationRequest:(OEAuthenticationRequest*)request
+    NS_SWIFT_NAME(webContent(_:handleAuthenticationRequest:));
+/// A pending request was withdrawn by navigation or page closure. Remove its
+/// sheet/queue entry. The request has already been cancelled.
+- (void)webContent:(OEWebContent*)webContent
+    didCancelAuthenticationRequest:(OEAuthenticationRequest*)request
+    NS_SWIFT_NAME(webContent(_:didCancelAuthenticationRequest:));
 
 /// Right click. Return YES and complete `menu` later to show our own NSMenu.
 /// Return NO to show the engine's default menu.
@@ -550,6 +563,29 @@ OE_EXPORT @interface OEOpenRequest : NSObject
 @property(nonatomic, readonly, weak, nullable) OEWebContent* sourceWebContent;
 /// The context the new web content must use (the opener's).
 @property(nonatomic, readonly) OEBrowserContext* context;
+@end
+
+/// A single HTTP 401 or proxy 407 challenge. Keep and answer on the main
+/// thread. Answers are one-shot; deallocation cancels an unanswered request.
+/// Credentials are passed to the network stack and are never logged or stored
+/// by this object. This API does not provide password-manager save or fill.
+/// Credentials are limited to 4096 UTF-16 units each; an oversized answer
+/// cancels. At most 16 retained challenges per page are accepted. Metadata
+/// limits (CEF string units): origin 16384, host 1024, realm 4096, scheme 64;
+/// larger challenges are cancelled before delivery.
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEAuthenticationRequest : NSObject
+@property(nonatomic, readonly, copy, nullable) NSURL* originURL;
+@property(nonatomic, readonly, copy) NSString* host;
+@property(nonatomic, readonly) NSInteger port;
+@property(nonatomic, readonly, copy) NSString* realm;
+@property(nonatomic, readonly, copy) NSString* scheme;
+@property(nonatomic, readonly, getter=isProxyAuthentication) BOOL proxyAuthentication
+    NS_SWIFT_NAME(isProxyAuthentication);
+@property(nonatomic, readonly, getter=isPending) BOOL pending NS_SWIFT_NAME(isPending);
+- (void)continueWithUsername:(NSString*)username password:(NSString*)password
+    NS_SWIFT_NAME(continue(username:password:));
+- (void)cancel;
 @end
 
 typedef NS_ENUM(NSInteger, OEJavaScriptDialogKind) {
