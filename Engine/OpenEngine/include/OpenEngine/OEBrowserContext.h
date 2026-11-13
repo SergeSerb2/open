@@ -208,6 +208,11 @@ OE_EXPORT @interface OEBrowserContext : NSObject
 /// context, including documents in web contents that already exist.
 @property(nonatomic, readonly, copy) NSArray<OEUserScript*>* userScripts;
 - (void)addUserScript:(OEUserScript*)script NS_SWIFT_NAME(addUserScript(_:));
+/// Replace only the caller's script IDs, then publish one complete snapshot.
+/// Scripts with other IDs retain their order; added IDs replace existing ones.
+- (void)replaceUserScriptsWithIdentifiers:(NSArray<NSString*>*)identifiers
+                                 scripts:(NSArray<OEUserScript*>*)scripts
+    NS_SWIFT_NAME(replaceUserScripts(removing:adding:));
 - (void)removeUserScriptWithIdentifier:(NSString*)identifier
     NS_SWIFT_NAME(removeUserScript(identifier:));
 - (void)removeAllUserScripts;
