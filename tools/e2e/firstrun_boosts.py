@@ -195,10 +195,16 @@ def run(factory, results, tmp, h):
             def style():
                 return app.eval(tab, "({outline:getComputedStyle(document.body).outlineColor,"
                     "outlineWidth:getComputedStyle(document.body).outlineWidth,"
+                    "zoom:getComputedStyle(document.documentElement).zoom,"
                     "border:getComputedStyle(document.body).borderTopWidth,documentID:window.exampleDocumentID,"
                     "boostStyle:document.getElementById('open-boosts-style')?.textContent??null})")
+            def width_matches(value, expected):
+                # Imported 125% zoom quantizes widths to device pixels: CSSOM reports
+                # a 3px outline as 2.8px on the M1's 2x display.
+                return value.endswith('px') and abs(float(value[:-2]) - expected) <= 0.25
             def boosted(value):
-                return value['outline'] == 'rgb(1, 2, 3)' and value['outlineWidth'] == '3px'
+                return value['outline'] == 'rgb(1, 2, 3)' and float(value['zoom']) == 1.25 \
+                    and width_matches(value['outlineWidth'], 3)
             def cleared(value):
                 return value['outline'] == 'rgb(4, 5, 6)' and value['outlineWidth'] == '0px' \
                     and value['border'] == '0px' and value['boostStyle'] is None
@@ -220,7 +226,7 @@ def run(factory, results, tmp, h):
             app.call('command', id='view-boosts')
             assert h.wait_until(lambda: app.call('settings-state')['librarySection'] == 'boosts', timeout=5, step=.05)
             app.call('boost-library', action='enabled', boost=disabled['id'], enabled=True)
-            assert h.wait_until(lambda: style()['border'] == '7px', timeout=5, step=.05)
+            assert h.wait_until(lambda: width_matches(style()['border'], 7), timeout=5, step=.05)
             disabled_broken = style()['border'] == '0px'
             app.call('boost-library', action='enabled', boost=disabled['id'], enabled=False)
             assert h.wait_until(lambda: style()['border'] == '0px', timeout=5, step=.05)
