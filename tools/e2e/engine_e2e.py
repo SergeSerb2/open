@@ -11192,14 +11192,22 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         finally:
             cancelled_alert()
         app.call('library-close'); app.call('window-focus', id=browser, activate=True)
-        # The tab's real Share menu item must invoke NSSharingServicePicker with
-        # that row's URL. The automation policy closes it without choosing a service.
+        # Capture session 8 replaced a single tab's picker with Share > service
+        # (#463, b4d724fad). The selection's Share N Items still opens the real
+        # picker. Preserve the picker/payload/anchor check on that current path.
+        share_tabs = [opened('Share Picker A'), opened('Share Picker B')]
+        app.call('sidebar-click', node=share_tabs[0])
+        app.call('sidebar-click', node=share_tabs[1], modifiers=['cmd'])
+        share_selection = app.call('selection')
+        share_urls = [app.tab(n)['url'] for n in share_selection]
         require('I9_share_window_ready', state()['appActive'])
         app.call('sidebar-share', dismiss=True)
         try:
-            menu(a, 'Share…')
+            menu(share_tabs[0], 'Share 2 Items…')
             shared = app.call('sidebar-share', waitClosed=True)
-            require('I9_share_system_picker', shared and shared.get('closed') and not shared['pending'] and shared['requested'] and shared['url'] == app.tab(a)['url']
+            require('I9_share_system_picker', set(share_selection) == set(share_tabs)
+                    and shared and shared.get('closed') and not shared['pending'] and shared['requested']
+                    and shared['url'] == share_urls[0] and shared.get('payloadURLs') == share_urls
                     and shared['servicesRequested'] and shared['anchor'][2] > 0 and not shared.get('choseService'), request=shared)
         finally:
             app.call('sidebar-share', close=True, dismiss=False)
