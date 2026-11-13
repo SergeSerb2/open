@@ -2916,9 +2916,8 @@
       var sectionRows: [[String: Any]] = []
       // PR #350 replaced the table rail with native tiles. Use the same real
       // controls as Library automation; the harness still clicks via sendEvent.
-      if let panel = adapter.activeLibrarySession?.panel, let target,
-        let tiles = panel.automationState()["rail"] as? [[String: Any]] {
-        for tile in tiles {
+      if let panel = adapter.activeLibrarySession?.panel, let target {
+        for tile in panel.automationRailState {
           guard let section = tile["id"] as? String, let frame = tile["frame"] as? [CGFloat], frame.count == 4 else { continue }
           let point = panel.convert(CGPoint(x: frame[0] + frame[2] / 2, y: frame[1] + frame[3] / 2), to: nil)
           sectionRows.append(["section": section, "point": [point.x, target.frame.height - point.y]])
