@@ -2,8 +2,10 @@
 
 #include <CommonCrypto/CommonDigest.h>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <removefile.h>
+#include <stdio.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>

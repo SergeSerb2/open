@@ -63,7 +63,7 @@ def main():
             raise AssertionError(name)
 
     def launch(label, blank=False):
-        app = e.Open('Release', 'alloy', str(root / label), ['--use-mock-keychain'],
+        app = e.Open('Release', 'chrome', str(root / label), ['--use-mock-keychain'],
                      str(args.out / (label + '.log')), urls=('about:blank' if blank else FIXTURE,),
                      extra_env={'OPEN_E2E_APP_BUNDLE': str(args.bundle)})
         apps.append(app)
