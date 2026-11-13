@@ -3,6 +3,7 @@
 #import "OEInternal.h"
 
 #include "include/cef_devtools_message_observer.h"
+#include <atomic>
 
 /// One per OEWebContent. UI callbacks forward to the weak OEWebContent on
 /// the main thread. GetAuthCredentials arrives on IO and dispatches to main.
@@ -221,6 +222,7 @@ class OEClient : public CefClient,
   // Weak: the shell retains unanswered requests. All access is on main.
   NSHashTable<OEAuthenticationRequest*>* auth_requests_ =
       [NSHashTable weakObjectsHashTable];
+  std::atomic<uint64_t> auth_epoch_{0};
   __weak OEWebContent* view_;
   // CEF patch 1001 can deliver a download update after this page is gone.
   // Keep its original Profile attribution without retaining the page or Profile.

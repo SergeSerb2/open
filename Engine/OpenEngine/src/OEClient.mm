@@ -641,6 +641,7 @@ void OEClient::SetClosing() {
 }
 
 void OEClient::CancelAuthenticationRequests() {
+  ++auth_epoch_;
   OEWebContent* page = view_;
   NSArray<OEAuthenticationRequest*>* requests = auth_requests_.allObjects;
   [auth_requests_ removeAllObjects];
@@ -666,6 +667,7 @@ bool OEClient::GetAuthCredentials(CefRefPtr<CefBrowser> browser,
   // Do not read view_ or any page state on CEF's IO thread. The ref-counted
   // client and callback survive dispatch; the page remains weak.
   CefRefPtr<OEClient> client(this);
+  const uint64_t epoch = auth_epoch_.load();
   NSString* origin = OEString(origin_url);
   NSString* authHost = OEString(host);
   NSString* authRealm = OEString(realm);
@@ -674,7 +676,8 @@ bool OEClient::GetAuthCredentials(CefRefPtr<CefBrowser> browser,
     OEWebContent* page = client->view_;
     for (OEAuthenticationRequest* old in client->auth_requests_.allObjects)
       if (!old.isPending) [client->auth_requests_ removeObject:old];
-    if (client->closing_ || !OEIsPageBrowser(page, browser) ||
+    if (client->closing_ || client->auth_epoch_.load() != epoch ||
+        !OEIsPageBrowser(page, browser) ||
         client->auth_requests_.count >= 16 ||
         ![page.delegate respondsToSelector:
             @selector(webContent:handleAuthenticationRequest:)]) {
