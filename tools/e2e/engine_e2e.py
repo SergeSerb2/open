@@ -11408,25 +11408,34 @@ def library_capture_checks(app, require, root, evidence):
     require('library_media_rows_ax', [r['id'] for r in listed] == capture_ids
             and all(r['title'] == 'Capture of example.com' and r['subtitle'].startswith('Capture · example.com · ') for r in listed)
             and any('Capture of example.com' in t for t in current['text']), rows=listed)
-    # Selection is drawn: the first two rows' pixels swap when Down moves the selection.
+    # Selection is drawn over the window's gradient. Compare each row with its
+    # own unselected baseline, rather than comparing different background positions.
     window_width = app.call('window-state')['frame'][2]
     panel_frame = panel()['panelFrame']
     first_png = os.path.join(evidence, 'media-selection-first.png')
     next_png = os.path.join(evidence, 'media-selection-next.png')
+    baseline_png = os.path.join(evidence, 'media-selection-baseline.png')
+    key('down'); key('down')
+    app.call('snapshot', path=baseline_png, window=current['window'])
+    key('up'); key('up')
     app.call('snapshot', path=first_png, window=current['window'])
     key('down'); down = state()
     app.call('snapshot', path=next_png, window=current['window'])
     width, _, first_pixel = read_image(first_png)
     _, _, next_pixel = read_image(next_png)
+    _, _, baseline_pixel = read_image(baseline_png)
     scale = width / window_width
     # Inside the selection plate, clear of the text: the row's middle, 7 pt below its top.
     points = [(panel_frame[0] + r['frame'][0] + r['frame'][2] / 2, panel_frame[1] + r['frame'][1] + 7) for r in listed[:2]]
     before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
     after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
+    baseline_pixels = [baseline_pixel(px * scale, py * scale) for px, py in points]
     distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
-    require('library_media_selection_pixels', distance(before_pixels[0], before_pixels[1]) >= 5
-            and distance(before_pixels[0], after_pixels[1]) <= 3 and distance(before_pixels[1], after_pixels[0]) <= 3,
-            before=before_pixels, after=after_pixels, points=points, scale=scale, firstPNG=first_png, nextPNG=next_png)
+    require('library_media_selection_pixels', distance(before_pixels[0], baseline_pixels[0]) >= 5
+            and distance(after_pixels[1], baseline_pixels[1]) >= 5
+            and distance(before_pixels[1], baseline_pixels[1]) <= 3 and distance(after_pixels[0], baseline_pixels[0]) <= 3,
+            baseline=baseline_pixels, before=before_pixels, after=after_pixels, points=points, scale=scale,
+            baselinePNG=baseline_png, firstPNG=first_png, nextPNG=next_png)
     key('up'); up = state()
     for _ in range(10): key('down')
     bottom = state()
