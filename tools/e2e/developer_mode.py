@@ -88,7 +88,8 @@ def run(factory, results, tmp, h):
             'capture': ['Capture a portion of this page', '⇧', '⌘', '2'], 'console': ['Toggle Console', '⌥', '⌘', 'J'],
             'network': ['Toggle Network Panel'], 'inspect': ['Inspect Element', '⌥', '⌘', 'C'], 'extensionsMenu': ['Extensions'],
             'splitMenu': ['Split View Options']}, tooltips=tips)
-        # Hover (h-copy, h-site): a grey plate (light: black 9 %) and the tooltip pill with key caps; Site Settings: plate only.
+        # Hover (h-copy, h-site; C3 session 11): a plate (light black 7 %, dark white 8 %) and the tooltip pill with key
+        # caps; Site Settings: plate only.
         app.call('appearance', name='light'); time.sleep(.3)
         app.call('developer-panel', action='hover', button='copyLink')
         copy = state()
@@ -97,10 +98,15 @@ def run(factory, results, tmp, h):
         app.call('developer-panel', action='hover', button='siteSettings')
         site = state()
         app.call('developer-panel', action='hover', button='siteSettings', inside=False)
+        app.call('appearance', name='dark'); time.sleep(.3)
+        app.call('developer-panel', action='hover', button='network')
+        dark_plate = state().get('hoverPlate')
+        app.call('developer-panel', action='hover', button='network', inside=False)
         app.call('appearance', name='system')
-        row('hover_plate_and_tooltip_pill', copy.get('hovered') == 'copyLink' and copy.get('hoverPlate') == '#000000/0.09'
+        row('hover_plate_dark', dark_plate == '#FFFFFF/0.08', plate=dark_plate)
+        row('hover_plate_and_tooltip_pill', copy.get('hovered') == 'copyLink' and copy.get('hoverPlate') == '#000000/0.07'
             and copy.get('tooltip') == ['Copy Link', '⇧', '⌘', 'C'] and left.get('hovered') == '' and 'tooltip' not in left
-            and site.get('hovered') == 'siteSettings' and site.get('hoverPlate') == '#000000/0.09' and 'tooltip' not in site,
+            and site.get('hovered') == 'siteSettings' and site.get('hoverPlate') == '#000000/0.07' and 'tooltip' not in site,
             copy={k: copy.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')}, left={k: left.get(k) for k in ('hovered', 'tooltip')},
             site={k: site.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')})
         # PB3-a2: the puzzle button opens the Extensions card (`m-ext.png`: 250 × 96 pt plus the 6 pt arrow, tip under
@@ -113,6 +119,18 @@ def run(factory, results, tmp, h):
             app.call('appearance', name='system')
         press('extensionsMenu')
         closed_card = h.wait_until(lambda: 'extensionsCard' not in state(), timeout=5, step=.05)
+        # C3 session 11: the card uses the "+" popover's style (default theme: #FDFDFF / #D3D4FF, dark #050627 / #2E3391).
+        card_colors = {}
+        for mode in ('light', 'dark'):
+            app.call('appearance', name=mode); time.sleep(.3)
+            press('extensionsMenu')
+            card_colors[mode] = (h.wait_until(lambda: state().get('extensionsCard'), timeout=5, step=.05) or {}).get('colors')
+            if os.environ.get('OPEN_E2E_DEVMODE_FRAMES'):
+                time.sleep(.4); app.call('snapshot', path=os.path.join(os.environ['OPEN_E2E_DEVMODE_FRAMES'], 'extensions-card-%s.png' % mode))
+            press('extensionsMenu'); h.wait_until(lambda: 'extensionsCard' not in state(), timeout=5, step=.05)
+        app.call('appearance', name='system')
+        row('extensions_card_plus_popover_style', card_colors == {'light': {'fill': '#FDFDFF', 'highlight': '#D3D4FF'},
+                                                                 'dark': {'fill': '#050627', 'highlight': '#2E3391'}}, colors=card_colors)
         row('extensions_card', card.get('rows') == ['Add Extension…', 'Manage Extensions…'] and card.get('size') == [250, 102]
             and abs(card.get('arrowGap', 0) - 10.5) < .5 and abs(card.get('arrowOffset', 9)) < .5 and card.get('label') == 'Extensions'
             and card.get('highlighted') == 'Add Extension…'

@@ -27,6 +27,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     let header: SpaceHeaderView
     let scroll = PageScrollView()
     let outline = SidebarOutlineView()
+    let dropIndicator = SidebarDropIndicator()
     let spacer = SpacerItem(), divider = DividerItem(), newTab = NewTabItem()
     var menus: SidebarMenus
 
@@ -106,7 +107,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.registerForDraggedTypes([.sidebarNode, .URL, .fileURL])
         outline.setDraggingSourceOperationMask(.move, forLocal: true)
         outline.setDraggingSourceOperationMask(.copy, forLocal: false)
-        outline.draggingDestinationFeedbackStyle = .gap
+        outline.draggingDestinationFeedbackStyle = .none
+        dropIndicator.isHidden = true
+        outline.addSubview(dropIndicator)
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = false
@@ -898,12 +901,15 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         context.suppressPreviews(.drag, true)
         TooltipController.shared.cancel(for: nil)
         draggingIDs = Set(draggedItems.compactMap { itemID(of: $0) })
+        context.tabDragChanged?(Array(draggingIDs))
         updateRowStates(animated: false)
     }
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         draggingIDs = []
+        context.tabDragChanged?(nil)
+        clearDropIndicator()
         context.suppressPreviews(.drag, false)
         context.haptics.endDrag()
         outline.dragWasStarted = false
@@ -930,11 +936,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
             return (.folder(f.id), childIndex, nil)
         case nil:
-            let pinnedCount = space.isPinnedCollapsed ? 0 : space.pinned.count
+            let pinnedCount = context.hidesSpaceChrome || space.isPinnedCollapsed ? 0 : space.pinned.count
             let pinnedEnd = 1 + pinnedCount
-            let newTabIndex = pinnedEnd + (space.today.isEmpty ? 0 : 1)
+            let newTabIndex = pinnedEnd + (context.hidesSpaceChrome || space.today.isEmpty ? 0 : 1)
             let todayStart = newTabIndex + (context.manager?.libraryLayout == true ? 0 : 1)
-            if childIndex <= pinnedEnd { return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil) }
+            if !context.hidesSpaceChrome, childIndex <= pinnedEnd { return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil) }
             if childIndex <= todayStart { return (.spaceToday(space.id), 0, childIndex == todayStart ? nil : (nil, todayStart)) }
             return (.spaceToday(space.id), childIndex - todayStart, nil)
         case let t as AnyObject where t is Tab || t is Split:
@@ -950,20 +956,43 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     private func outlineView(_ outlineView: NSOutlineView, parentOf item: AnyObject) -> Any? { outlineView.parent(forItem: item) }
 
+    func clearDropIndicator() { dropIndicator.isHidden = true }
+    private func showDropIndicator(item: Any?, index: Int) {
+        let items = children(of: item)
+        let row: Int
+        if index == NSOutlineViewDropOnItemIndex, let item { row = outline.row(forItem: item) + 1 }
+        else if items.indices.contains(index) { row = outline.row(forItem: items[index]) }
+        else if let last = items.last { row = outline.row(forItem: last) + 1 }
+        else { row = 0 }
+        let y = row < outline.numberOfRows ? outline.rect(ofRow: max(0, row)).minY
+            : (outline.numberOfRows > 0 ? outline.rect(ofRow: outline.numberOfRows - 1).maxY : 0)
+        dropIndicator.frame = CGRect(x: 8, y: y - 4, width: max(0, outline.bounds.width - 16), height: 8)
+        dropIndicator.isHidden = false
+        outline.addSubview(dropIndicator, positioned: .above, relativeTo: nil)
+        dropIndicator.needsDisplay = true
+    }
+
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
         context.suppressPreviews(.drag, true)
-        guard let dest = dropDestination(item: item, childIndex: index) else { return [] }
+        guard let dest = dropDestination(item: item, childIndex: index) else { clearDropIndicator(); return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
-            let allowed = ids.contains { context.model.canMoveNode(id: $0, to: dest.parent) }
-            if allowed { context.haptics.insertionChanged(parent: dest.parent, index: dest.index) }
+            let allowed = context.acceptsNodeDrop(ids: ids, to: dest.parent, index: dest.index)
+            if allowed {
+                context.haptics.insertionChanged(parent: dest.parent, index: dest.index)
+                let target = dest.retarget ?? (item, index)
+                showDropIndicator(item: target.0, index: target.1)
+            } else { clearDropIndicator() }
             return allowed ? .move : []
         }
-        return SidebarPasteboard.urls(from: info.draggingPasteboard).isEmpty ? [] : .copy
+        guard !SidebarPasteboard.urls(from: info.draggingPasteboard).isEmpty else { clearDropIndicator(); return [] }
+        let target = dest.retarget ?? (item, index)
+        showDropIndicator(item: target.0, index: target.1)
+        return .copy
     }
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
-        defer { context.suppressPreviews(.drag, false) }
+        defer { context.suppressPreviews(.drag, false); clearDropIndicator() }
         guard let dest = dropDestination(item: item, childIndex: index) else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
             let accepted = context.performNodeDrop(ids: ids, to: dest.parent, index: dest.index)
@@ -1049,11 +1078,13 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     override func draggingEnded(_ sender: any NSDraggingInfo) {
+        page?.clearDropIndicator()
         page?.context.suppressPreviews(.drag, false)
         super.draggingEnded(sender)
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        page?.clearDropIndicator()
         page?.context.haptics.endDrag()
         page?.context.suppressPreviews(.drag, false)
         super.draggingExited(sender)
@@ -1217,6 +1248,16 @@ final class SpaceHeaderView: NSView {
     var iconFrameInWindow: CGRect { icon.convert(icon.bounds, to: nil) }
     let chevron = PlateButton(glyph: .disclosureDown)
     let more = PlateButton(glyph: .spaceMore)
+    /// Blank Window header "Move to…" (C-report-s11 1(a): AX button "Move to...", small grey text at
+    /// the header's right). GUESS: its menu lists the browser's Spaces and moves all of this
+    /// window's tabs there (capture item C-NT6); the look (11 pt semibold, 55 % title colour) is
+    /// read from the frame `v7/e1b-drag-back/e2-hold.png`.
+    private(set) lazy var moveTo: NSButton = {
+        let button = NSButton(title: "Move to…", target: self, action: #selector(showMoveToMenu(_:)))
+        button.isBordered = false
+        button.setAccessibilityLabel("Move to...")
+        return button
+    }()
     let profileIndicator: ProfileIndicatorButton
     var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; needsLayout = true } } }
 
@@ -1249,6 +1290,26 @@ final class SpaceHeaderView: NSView {
         chevron.context = context
         more.context = context
         addSubview(icon); addSubview(title); addSubview(chevron); addSubview(more); addSubview(profileIndicator)
+        if context.isWindowOnly { addSubview(moveTo) }
+    }
+
+    /// The Spaces of the browser; choosing one moves every tab of this window there (top first).
+    func moveToMenu() -> NSMenu {
+        let menu = NSMenu(title: "Move to")
+        let ids = space.today.flatMap { node -> [ItemID] in
+            switch node { case .tab(let tab): [tab.id]; case .split(let split): split.panes.map(\.id); case .folder: [] }
+        }
+        for target in context.windowOnlyMoveSpaces?() ?? [] {
+            menu.addItem(ClosureMenuItem(target.title) { [weak self] in
+                // Bottom first: each tab lands on top of the Space's Today list, so the order stays.
+                for id in ids.reversed() { _ = self?.context.send(.moveToSpace(nodeID: id, space: target.id)) }
+            })
+        }
+        return menu
+    }
+
+    @objc private func showMoveToMenu(_ sender: NSButton) {
+        moveToMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -1291,6 +1352,15 @@ final class SpaceHeaderView: NSView {
         more.frame = CGRect(x: w - m.headerMoreTrailing - s, y: (m.headerHeight - s) / 2, width: s, height: s)
         more.isHidden = !hovered || context.hidesSpaceChrome
         var right = hovered ? more.frame.minX - 2 : w - 17
+        if context.isWindowOnly {
+            let color = spaceTitleColor.withAlphaComponent(0.55)
+            moveTo.attributedTitle = NSAttributedString(string: "Move to…", attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: color])
+            let size = moveTo.attributedTitle.size()
+            moveTo.frame = CGRect(x: w - m.headerMoreTrailing - ceil(size.width), y: (m.headerHeight - ceil(size.height)) / 2,
+                                  width: ceil(size.width), height: ceil(size.height))
+            right = moveTo.frame.minX - 6
+        }
         let hasProfiles = tracked({ !context.hidesSpaceChrome && context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
         profileIndicator.isHidden = !hasProfiles
         if hasProfiles {
