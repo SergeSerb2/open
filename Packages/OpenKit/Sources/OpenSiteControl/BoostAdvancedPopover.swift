@@ -8,6 +8,18 @@ public final class BoostAdvancedPopover {
     public var onClose: (() -> Void)?
     public private(set) var isPresented = false
     public var offscreenMaterial: CGImage? { get { surface.offscreenMaterial } set { surface.offscreenMaterial = newValue } }
+    /// The three sliders by accessibility label ("Contrast", "Brightness", "Original Saturation"), 0…100.
+    public var sliderValues: [String: Double] {
+        Dictionary(uniqueKeysWithValues: surface.sliders.map { ($0.accessibilityLabel() ?? "", $0.doubleValue) })
+    }
+    /// One accessibility increment or decrement of the named slider (the VoiceOver / arrow-key step).
+    @discardableResult
+    public func step(_ label: String, up: Bool) -> Bool {
+        guard let slider = surface.sliders.first(where: { $0.accessibilityLabel() == label }) else { return false }
+        let done = up ? slider.accessibilityPerformIncrement() : slider.accessibilityPerformDecrement()
+        slider.finish()
+        return done
+    }
     private let parent: NSWindow,anchor: NSView,visibleFrame: CGRect
     private let surface: AdvancedSurface
     private var monitor: Any?
@@ -140,13 +152,15 @@ final class EditorSlider: NSControl {
     override func mouseDown(with event: NSEvent) { guard isEnabled else { return };finish();keyboardFocus = false;pointerFocus = true;window?.makeFirstResponder(self);pointerFocus = false;session.beginInteractive(owner: owner);dragging = true;point(event) }
     override func mouseDragged(with event: NSEvent) { if dragging { point(event) } }
     override func mouseUp(with event: NSEvent) { if dragging { point(event);dragging = false;finish() } }
-    override func keyDown(with event: NSEvent) { if [123,124,125,126].contains(event.keyCode) { step([124,126].contains(event.keyCode) ? 1 : -1) } else { finish();super.keyDown(with: event) } }
+    /// Capture session 11: Arc's sliders move in steps of 10 per increment (0…100, default 50).
+    static let increment: Double = 10
+    override func keyDown(with event: NSEvent) { if [123,124,125,126].contains(event.keyCode) { step([124,126].contains(event.keyCode) ? Self.increment : -Self.increment) } else { finish();super.keyDown(with: event) } }
     override func becomeFirstResponder() -> Bool { keyboardFocus = !pointerFocus;needsDisplay = true;return true }
     override func resignFirstResponder() -> Bool { finish();keyboardFocus = false;needsDisplay = true;return true }
     override func setAccessibilityFocused(_ value: Bool) { if !value { finish() };super.setAccessibilityFocused(value) }
     override func accessibilityValue() -> Any? { value }
-    override func accessibilityPerformIncrement() -> Bool { step(1);return isEnabled }
-    override func accessibilityPerformDecrement() -> Bool { step(-1);return isEnabled }
+    override func accessibilityPerformIncrement() -> Bool { step(Self.increment);return isEnabled }
+    override func accessibilityPerformDecrement() -> Bool { step(-Self.increment);return isEnabled }
     func finish() { end?.cancel();end = nil;session.endInteractive(owner: owner) }
     private func step(_ delta: Double) {
         guard isEnabled else { return };keyboardFocus = true;session.beginInteractive(owner: owner);change(value+delta);end?.cancel()

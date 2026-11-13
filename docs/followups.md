@@ -618,7 +618,7 @@ has a download). After #480, `library_corrupt_index_downloads` can expect
 
 No work on these until the lead schedules them (`docs/re/sidebar-menus-parity.md`):
 - Split row: "Rename…", "Change Icon…" and "Reset Name and Icon" from Arc's code (MH). The split-row menu was not captured in 1.172.2 (C3 item 5).
-- Library › Media: "Open Source URL" and "Copy Source URL". Open's capture index stores only the source host, so it needs the full source URL first. The Media menu order and separators stay marked GUESS (session 8 item 12 was skipped).
+- Library › Media: **resolved after LEAD 20:15 scheduled C-D2-1**. New captures retain their full source URL; the two source actions and exact saved-capture menu follow session 11. Older captures without a URL disable these actions. Only folder-file menu order and separators remain unmeasured. See [library-session11.md](re/library-session11.md).
 - Pinned tab row: "Customize Page…" is Open's own item and not in Arc's menu (S3D). Keep it or move it; this needs a decision.
 
 ## Easels: not capturable without an Arc account (LEAD 15:25 ruling)
