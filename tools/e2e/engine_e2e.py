@@ -1293,6 +1293,46 @@ def feature_checks(app, style, results, tmp):
                 "before": before, "prompts": prompts, "granted": granted, "landed": landed,
                 "deniedPrompts": denied_prompts, "denied": denied, "removed": removed}
 
+    def user_style_sheet():
+        # PB1 11:05: a user-origin sheet per page. Computed values change, but the page sees no
+        # <style> node and no document.styleSheets entry; it survives navigation, updates live,
+        # is removed by nil, and a srcdoc iframe does not get it.
+        probe = ('(() => { const r = document.documentElement; const f = document.querySelector("iframe");'
+                 ' return {v: getComputedStyle(r).getPropertyValue("--open-test").trim(),'
+                 ' margin: getComputedStyle(document.body).marginLeft, sheets: document.styleSheets.length,'
+                 ' styles: document.querySelectorAll("style").length,'
+                 ' frame: f && f.contentDocument ? getComputedStyle(f.contentDocument.documentElement).getPropertyValue("--open-test").trim() : null}; })()')
+        import urllib.parse
+        page = '<!doctype html><title>uss</title><body>x<iframe srcdoc="<p>in</p>"></iframe>'
+        w = new_tab(app, "data:text/html," + urllib.parse.quote(page))
+        try:
+            time.sleep(0.5)
+            before = app.eval(w, probe)
+            app.call("user-style-sheet", tab=w, key="theme", css=":root{--open-test:7px} body{margin-left:7px}")
+            live = wait_until(lambda: (lambda r: r if r["v"] == "7px" else None)(app.eval(w, probe)), timeout=5) or app.eval(w, probe)
+            app.call("navigate", tab=w, url="https://example.com/")
+            app.call("wait", tab=w)
+            navigated = app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
+            # example.com's own <style> elements: the baseline is a second tab without the sheet.
+            plain = new_tab(app, "https://example.com/")
+            baseline = app.eval(plain, probe.replace('document.querySelector("iframe")', 'null'))
+            app.call("close", tab=plain)
+            app.call("user-style-sheet", tab=w, key="theme", css=":root{--open-test:9px}")
+            updated = wait_until(lambda: (lambda r: r if r["v"] == "9px" else None)(app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))), timeout=5) \
+                or app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
+            app.call("user-style-sheet", tab=w, key="theme")
+            removed = wait_until(lambda: (lambda r: r if r["v"] == "" else None)(app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))), timeout=5) \
+                or app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
+        finally:
+            app.call("close", tab=w)
+        return {"ok": before["v"] == "" and live["v"] == "7px" and live["margin"] == "7px"
+                      and live["sheets"] == before["sheets"] and live["styles"] == before["styles"] and live["frame"] in ("", None)
+                      and navigated["v"] == "7px" and baseline["v"] == ""
+                      and navigated["styles"] == baseline["styles"] and navigated["sheets"] == baseline["sheets"]
+                      and updated["v"] == "9px" and removed["v"] == "",
+                "before": before, "live": live, "navigated": navigated, "baseline": baseline,
+                "updated": updated, "removed": removed}
+
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
@@ -1361,7 +1401,7 @@ def feature_checks(app, style, results, tmp):
                      ("context_menu", context_menu), ("audio_state", audio), ("fullscreen", fullscreen),
                      ("picture_in_picture", pip), ("pdf_viewer", pdf), ("print_to_pdf", print_to_pdf),
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
-                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("protocol_handler", protocol_handler), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
+                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("protocol_handler", protocol_handler), ("user_style_sheet", user_style_sheet), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
     def sad_tab():
         return runpy.run_path(os.path.join(ROOT, "tools/e2e/sad_tab.py"))["run"](
@@ -7657,6 +7697,19 @@ def page_checks(factory, results, tmp, style="alloy"):
     if os.environ.get("OPEN_E2E_PAGE_TRANSLATE_ONLY") == "1":
         page_translate_checks(factory, results, tmp)
         return
+    if os.environ.get("OPEN_E2E_PAGE_DEVTOOLS_ONLY") == "1":
+        # Touched-row run: only the DevTools rows (D1, D2, D4 docked) of the tools group.
+        server, port = page_tools_fixture_server()
+        app = factory(urls=("http://127.0.0.1:%d/cookies.html" % port,), fresh=True)
+        try:
+            app.call("window-frame", frame=[80, 60, 1360, 860])
+            app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+            app.call("wait", tab=app.call("tabs")[0]["id"])
+            page_tools_devtools_checks(app, results, port, style)
+        finally:
+            app.quit()
+            server.shutdown()
+        return
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)
@@ -12360,6 +12413,44 @@ def page_tools_devtools_checks(app, results, port, style):
     finally:
         _try(lambda: app.call("devtools-close", tab=tab))
         _try(lambda: app.call("dismiss"))
+    if style != "alloy":
+        # D4 (IMC 10:55): DevTools docked in an embedder view (CEF 0302 dock delegate). It opens on
+        # the panel inside the view's child window, not in its own window; it follows a resize;
+        # close removes it; window mode still works afterwards.
+        try:
+            focus_browser()
+            top_before = app.call("devtools-dock", tab=tab)["appWindows"]
+            app.call("devtools-dock", tab=tab, panel="console", width=360)
+            console = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            docked = wait_until(lambda: (lambda s: s if s["dockScreenFrame"] and s["dockScreenFrame"] in s["childWindows"] else None)(
+                app.call("devtools-dock", tab=tab)), timeout=5, step=.2) or app.call("devtools-dock", tab=tab)
+            app.call("devtools-dock", tab=tab, panel="network", width=480)
+            network = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            resized = wait_until(lambda: (lambda s: s if s["dockScreenFrame"] in s["childWindows"] else None)(
+                app.call("devtools-dock", tab=tab)), timeout=5, step=.2) or app.call("devtools-dock", tab=tab)
+            app.call("devtools-close", tab=tab)
+            gone = wait_until(lambda: (lambda s: s if not s["hasDevTools"] and s["dockScreenFrame"] not in s["childWindows"] else None)(
+                app.call("devtools-dock", tab=tab)), timeout=10, step=.25) or app.call("devtools-dock", tab=tab)
+            app.call("devtools-dock", tab=tab, remove=True)
+            focus_browser()
+            app.call("command", id="javascript-console")
+            window_mode = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            window_state = app.call("devtools-dock", tab=tab)
+            results["D4_devtools_docked_" + style] = {
+                "ok": bool(console) and docked["dockScreenFrame"] in docked["childWindows"]
+                      and docked["appWindows"] == top_before
+                      and bool(network) and resized["dockScreenFrame"] in resized["childWindows"]
+                      and resized["dockScreenFrame"] != docked["dockScreenFrame"]
+                      and not gone["hasDevTools"] and gone["dockScreenFrame"] not in gone["childWindows"]
+                      and bool(window_mode) and window_state["appWindows"] == top_before + 1,
+                "docked": docked, "console": console, "network": network, "resized": resized,
+                "closed": gone, "windowMode": window_state, "topLevelBefore": top_before}
+        finally:
+            _try(lambda: app.call("devtools-close", tab=tab))
+            _try(lambda: app.call("devtools-dock", tab=tab, remove=True))
     app.call("close", tab=tab)
 
 

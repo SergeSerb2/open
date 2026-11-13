@@ -35,6 +35,9 @@ paths: chrome/browser/notifications/mac/notification_platform_bridge_mac.cc
 # 0507-page-protocol-handler-request.patch
 paths: chrome/browser/custom_handlers/chrome_protocol_handler_registry_delegate.cc components/custom_handlers/register_protocol_handler_permission_request.h
 
+# 0508-open-password-auth-product-name.patch
+paths: chrome/app/chromium_strings.grd
+
 # 0305-open-extension-prompts.patch
 paths: chrome/browser/ui/views/extensions/extension_install_dialog_view.cc chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc
 # 0306-open-extension-windows-tabs.patch
@@ -79,3 +82,6 @@ paths: chrome/common/chrome_isolated_world_ids.h extensions/renderer/isolated_wo
 
 # 0903-open-adblock-context-cache.patch
 paths: components/web_cache/browser/web_cache_manager.cc components/web_cache/browser/web_cache_manager.h components/web_cache/renderer/web_cache_impl.cc
+
+# 0509-open-macos-product-strings.patch
+paths: chrome/app/chromium_strings.grd chrome/app/password_manager_ui_strings.grdp chrome/app/settings_chromium_strings.grdp components/autofill_payments_strings.grdp components/autofill_strings.grdp components/components_chromium_strings.grd components/management_strings.grdp components/new_or_sad_tab_strings.grdp components/page_info_strings.grdp components/password_manager_strings.grdp components/privacy_sandbox_strings.grd components/reset_password_strings.grdp components/search_engine_choice_strings.grdp components/security_interstitials_strings.grdp components/ssl_errors_strings.grdp extensions/strings/extensions_chromium_strings.grdp

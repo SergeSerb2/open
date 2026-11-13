@@ -1,8 +1,29 @@
 diff --git a/cef/libcef/renderer/render_frame_observer.cc b/cef/libcef/renderer/render_frame_observer.cc
-index 6013d1357..263136f87 100644
+index 6013d1357..c210a896d 100644
 --- a/cef/libcef/renderer/render_frame_observer.cc
 +++ b/cef/libcef/renderer/render_frame_observer.cc
-@@ -161,7 +161,10 @@ void CefRenderFrameObserver::DidCreateScriptContext(
+@@ -22,6 +22,7 @@
+ #include "cef/libcef/renderer/render_frame_observer.h"
+ #include "cef/libcef/renderer/v8_impl.h"
+ #include "content/public/renderer/render_frame.h"
++#include "open/renderer/open_user_style_sheets.h"
+ #include "third_party/blink/public/web/blink.h"
+ #include "third_party/blink/public/web/web_document.h"
+ #include "third_party/blink/public/web/web_element.h"
+@@ -47,6 +48,12 @@ void CefRenderFrameObserver::DidCommitProvisionalLoad(
+     blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+     CefRefPtr<CefBrowserImpl> browserPtr =
+         CefBrowserImpl::GetBrowserForMainFrame(frame->Top());
++    // Open (0601): the browser's user style sheets, in the new document
++    // before it parses or runs anything.
++    if (browserPtr) {
++      open_engine::ApplyUserStyleSheetsAtCommit(frame,
++                                                browserPtr->GetIdentifier());
++    }
+     browserPtr->OnLoadingStateChange(true);
+   }
+   OnLoadStart();
+@@ -161,7 +168,10 @@ void CefRenderFrameObserver::DidCreateScriptContext(
    }
  
    // Do this last, in case the client callback modified the window object.
@@ -14,7 +35,7 @@ index 6013d1357..263136f87 100644
  }
  
  void CefRenderFrameObserver::WillReleaseScriptContext(
-@@ -196,7 +199,9 @@ void CefRenderFrameObserver::WillReleaseScriptContext(
+@@ -196,7 +206,9 @@ void CefRenderFrameObserver::WillReleaseScriptContext(
      handler->OnContextReleased(browserPtr.get(), framePtr.get(), contextPtr);
    }
  

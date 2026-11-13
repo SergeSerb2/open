@@ -30,6 +30,9 @@ _cef_get_pending_protocol_handler_request
 _cef_get_protocol_handlers
 _cef_translate_protocol_handler_url
 _cef_remove_protocol_handler
+_cef_set_open_dev_tools_dock_delegate
+_cef_set_open_user_style_sheet
+_cef_forget_open_user_style_sheets
 # Open fork API (media-pip EM-1b/EM-2/EM-3/EM-5, cef/include/cef_media_controller.h)
 _cef_media_controller_get_for_browser
 

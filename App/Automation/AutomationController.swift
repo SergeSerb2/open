@@ -1162,6 +1162,42 @@
       case "devtools-close":
         try content(a, w).closeDevTools()
         return true
+      case "user-style-sheet":
+        // OEWebContent.setUserStyleSheet(_:forKey:) on one page (PB1 theme data).
+        guard let key = a["key"] as? String else { throw Failure(message: "missing key") }
+        try content(a, w).setUserStyleSheet(a["css"] as? String, forKey: key)
+        return true
+      case "devtools-dock":
+        // Test host for docked DevTools (IMC owns the real placement): puts the
+        // page's DevTools view over the right part of the page and reports frames.
+        let page = try content(a, w)
+        let panels: [String: OEDevToolsPanel] = ["default": .default, "elements": .elements,
+          "console": .console, "network": .network, "inspect": .inspectMode]
+        if let name = a["panel"] as? String {
+          guard let panel = panels[name], let dock = page.devToolsView(panel: panel) else {
+            throw Failure(message: "no docked DevTools for this page")
+          }
+          let host = page.view
+          if let parent = host.superview, dock.superview !== parent { parent.addSubview(dock, positioned: .above, relativeTo: host) }
+          let width = (a["width"] as? Double).map { CGFloat($0) } ?? 360
+          dock.frame = NSRect(x: host.frame.maxX - width, y: host.frame.minY, width: width, height: host.frame.height)
+        }
+        if a["remove"] as? Bool == true {
+          // Removing a test host must not open a fresh DevTools frontend.
+          for dock in page.view.superview?.subviews.filter({ $0.className.contains("DevToolsDock") }) ?? [] {
+            dock.removeFromSuperview()
+          }
+        }
+        let window = page.view.window
+        let dock = page.hasDevTools ? page.view.superview?.subviews.first { $0.className.contains("DevToolsDock") } : nil
+        let dockScreen = dock.flatMap { d in d.window.map { $0.convertToScreen(d.convert(d.bounds, to: nil)) } }
+        let children = (window?.childWindows ?? []).filter { $0.isVisible }.map { NSStringFromRect($0.frame) }
+        return ["hasDevTools": page.hasDevTools, "dockScreenFrame": dockScreen.map { NSStringFromRect($0) } ?? "",
+          "childWindows": children,
+          "appWindows": NSApp.windows.filter { $0.isVisible && $0.parent == nil }.count,
+          "topLevel": NSApp.windows.filter { $0.isVisible && $0.parent == nil }.map {
+            ["class": $0.className, "title": $0.title, "frame": NSStringFromRect($0.frame),
+             "borderless": $0.styleMask.rawValue == 0] as [String: Any] }] as [String: Any]
       case "troubleshooting-state":
         let t = TroubleshootingActions.shared
         return ["tracing": OEEngine.shared.isTracing, "recording": t.isRecording,
