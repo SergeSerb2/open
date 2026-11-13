@@ -75,12 +75,16 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate, NSDraggingSour
     override func updateLayer() {
         super.updateLayer()
         let state = tracked({ context?.downloadBadge }) { [weak self] in self?.needsDisplay = true }
-        // Session-12 Color LCD capture: the same blue in light and dark.
-        let tint = NSColor(deviceRed: 0x21/255, green: 0x2A/255, blue: 0xFB/255, alpha: 1)
+        // Use the Favorites-empty disc's bright Space accent in both appearances.
+        // The mark keeps that accent even when the card itself uses its dark neutral disc.
+        let titleInk = tracked({
+            let style = context?.focusedSpace.map { context!.style(for: $0) } ?? .defaultTheme(system: context?.systemAppearance ?? .light)
+            return style.roles(.light).title.nsColor
+        }) { [weak self] in self?.needsDisplay = true }
+        let tint = FavoritesEmptyStateView.accentColor(titleInk: titleInk)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         track.strokeColor = tint.withAlphaComponent(0.22).cgColor
-        // The native crops show the same pale opaque fill in both appearances.
-        track.fillColor = NSColor(deviceRed: 231/255, green: 231/255, blue: 252/255, alpha: 1).cgColor
+        track.fillColor = FavoritesEmptyStateView.cardFillColor(.light).cgColor
         ring.strokeColor = tint.cgColor; check.contentTintColor = tint; arrow.contentTintColor = tint
         CATransaction.commit()
         guard state != previous else { return }

@@ -311,6 +311,37 @@ def checks(factory, results, tmp, config, harness):
             app.call('snapshot', path=str(capture_root / ('mark-after-library-' + appearance + '.png')))
 
 
+    def captured_theme_flow():
+        from live_data import png_pixels
+        from collections import Counter
+        space = next(v['id'] for v in app.call('spaces') if v['focused'])
+        original = app.call('theme-get', space=space)['style']
+        key = start('/slow?name=theme-mark.txt')
+        def ink(label):
+            wait(lambda: item(key).get('received', 0) > 0)
+            path = root / ('mark-theme-' + label + '.png')
+            app.call('snapshot', path=str(path))
+            w, h, bpp, pixels = png_pixels(str(path))
+            scale = w / app.call('window-state')['frame'][2]
+            x, y, width, height = state()['badge']['markFrame']
+            colors = [tuple(pixels[py][px*bpp:px*bpp+3])
+                      for py in range(max(0, int(y*scale)), min(h, int((y+height)*scale)))
+                      for px in range(max(0, int(x*scale)), min(w, int((x+width)*scale)))]
+            # Exclude the red sidebar background; retain only the high-chroma ring/arrow ink.
+            saturated = [c for c in colors if max(c)-min(c) > 120]
+            return Counter(saturated).most_common(1)[0][0] if saturated else (0, 0, 0)
+        try:
+            app.call('theme-set', space=space, style=None)
+            before = ink('default')
+            app.call('theme-set', space=space, style=dict(keyColor=dict(red=.93,green=.24,blue=.31,alpha=1),colorCount=3,appearance='light',noiseFactor=0,intensityFactor=.8))
+            # Read real rendered pixels, not the model's requested theme.
+            changed = wait(lambda: (lambda color: color if color[0] > color[1]+60 and color[0] > color[2]+60 else None)(ink('red')))
+            check('captured_mark_theme_accent', before[2] > before[0]+60 and before[2] > before[1]+60 and changed and changed != before, default=before, themed=ink('red'))
+        finally:
+            app.call('theme-set', space=space, style=original)
+            library(); menu(key, 'Cancel Download'); wait(lambda: item(key).get('state') == 'cancelled'); dismiss_library()
+
+
     def fallback_flow():
         before = state()['fallbacks']
         path = None
@@ -1003,7 +1034,7 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
+                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
