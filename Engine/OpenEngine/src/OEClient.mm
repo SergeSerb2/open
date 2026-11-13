@@ -273,6 +273,7 @@ void OEClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     [[OEEngine shared] oe_browserDidClose];
     return;
   }
+  CancelAuthenticationRequests();
   if (!closing_ && !close_requested_ && view.oe_hostBrowser) {
     close_requested_ = true;
     [view oe_requestClose];
@@ -634,12 +635,70 @@ void OEClient::OnFindResult(CefRefPtr<CefBrowser> browser,
 
 #pragma mark Requests
 
+void OEClient::SetClosing() {
+  closing_ = true;
+  CancelAuthenticationRequests();
+}
+
+void OEClient::CancelAuthenticationRequests() {
+  OEWebContent* page = view_;
+  NSArray<OEAuthenticationRequest*>* requests = auth_requests_.allObjects;
+  [auth_requests_ removeAllObjects];
+  for (OEAuthenticationRequest* request in requests) {
+    if (!request.isPending) continue;
+    [request cancel];
+    if ([page.delegate respondsToSelector:
+          @selector(webContent:didCancelAuthenticationRequest:)]) {
+      [page.delegate webContent:page didCancelAuthenticationRequest:request];
+    }
+  }
+}
+
+bool OEClient::GetAuthCredentials(CefRefPtr<CefBrowser> browser,
+    const CefString& origin_url, bool isProxy, const CefString& host,
+    int port, const CefString& realm, const CefString& scheme,
+    CefRefPtr<CefAuthCallback> callback) {
+  if (origin_url.length() > 16384 || host.length() > 1024 ||
+      realm.length() > 4096 || scheme.length() > 64) {
+    callback->Cancel();
+    return true;
+  }
+  // Do not read view_ or any page state on CEF's IO thread. The ref-counted
+  // client and callback survive dispatch; the page remains weak.
+  CefRefPtr<OEClient> client(this);
+  NSString* origin = OEString(origin_url);
+  NSString* authHost = OEString(host);
+  NSString* authRealm = OEString(realm);
+  NSString* authScheme = OEString(scheme);
+  dispatch_async(dispatch_get_main_queue(), ^{
+    OEWebContent* page = client->view_;
+    for (OEAuthenticationRequest* old in client->auth_requests_.allObjects)
+      if (!old.isPending) [client->auth_requests_ removeObject:old];
+    if (client->closing_ || !OEIsPageBrowser(page, browser) ||
+        client->auth_requests_.count >= 16 ||
+        ![page.delegate respondsToSelector:
+            @selector(webContent:handleAuthenticationRequest:)]) {
+      callback->Cancel();
+      return;
+    }
+    OEAuthenticationRequest* request = [[OEAuthenticationRequest alloc]
+        initOEWithOrigin:[NSURL URLWithString:origin] host:authHost port:port
+        realm:authRealm scheme:authScheme proxy:isProxy callback:callback];
+    [client->auth_requests_ addObject:request];
+    if (![page.delegate webContent:page handleAuthenticationRequest:request])
+      [request cancel];
+  });
+  return true;
+}
+
 bool OEClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                               CefRefPtr<CefFrame> frame,
                               CefRefPtr<CefRequest> request,
                               bool user_gesture,
                               bool is_redirect) {
   OEWebContent* page = view_;
+  if (frame->IsMain() && !is_redirect && OEIsPageBrowser(page, browser))
+    CancelAuthenticationRequests();
   // Also cover renderer navigation, redirects and popup creation. Shell-only
   // loadURL filtering does not see these. Leave the current document intact:
   // starting a replacement here (even deferred) could override a newer load.

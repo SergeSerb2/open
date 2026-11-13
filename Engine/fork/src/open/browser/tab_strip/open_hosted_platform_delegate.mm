@@ -46,6 +46,16 @@ int OpenHostedPlatformDelegate::StripIdFor(
   return it == Delegates().end() ? 0 : it->second;
 }
 
+// static
+bool OpenHostedPlatformDelegate::SetStripIdFor(
+    CefBrowserPlatformDelegate* delegate, int strip_id) {
+  auto it = Delegates().find(delegate);
+  if (it == Delegates().end() || strip_id <= 0) return false;
+  static_cast<OpenHostedPlatformDelegate*>(delegate)->strip_id_ = strip_id;
+  it->second = strip_id;
+  return true;
+}
+
 CefWindowHandle OpenHostedPlatformDelegate::GetHostWindowHandle() const {
   // The WebContents view itself; the embedder parents it.
   if (!web_contents_) {

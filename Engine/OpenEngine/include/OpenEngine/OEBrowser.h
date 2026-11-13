@@ -2,6 +2,8 @@
 #import <OpenEngine/OEDefines.h>
 #import <OpenEngine/OEExtension.h>
 
+#define OE_HAS_WEB_CONTENT_TRANSFER 1
+
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
 @class OEBrowser;
@@ -181,6 +183,16 @@ OE_EXPORT @interface OEBrowser : NSObject
 - (void)insertWebContent:(OEWebContent*)webContent
                  atIndex:(NSUInteger)index
     NS_SWIFT_NAME(insert(_:at:));
+/// Moves a live hosted tab, including its document and native view, from an
+/// open browser of the same context. Flushes pending strip changes first.
+/// Preserves pinning. The shell reparents the view and chooses selection after
+/// success. The insertion index must be in 0...webContents.count (inclusive).
+/// NO leaves both memberships intact (wrong owner/context/index, closed or
+/// unsupported content). No synchronous lifecycle delegate callback is sent.
+- (BOOL)transferWebContent:(OEWebContent*)webContent
+              fromBrowser:(OEBrowser*)source
+                  atIndex:(NSUInteger)index
+    NS_SWIFT_NAME(transfer(_:from:at:));
 /// Also happens automatically when the content closes.
 - (void)removeWebContent:(OEWebContent*)webContent NS_SWIFT_NAME(remove(_:));
 - (void)moveWebContent:(OEWebContent*)webContent

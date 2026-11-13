@@ -484,6 +484,15 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   virtual void ReleaseExtensionActionMenu(int menu_id) = 0;
 
   ///
+  /// Moves a live hosted tab from another strip of the same Profile into this
+  /// strip, without recreating its WebContents. False leaves ownership intact.
+  /// No tab request callbacks are delivered synchronously for this operation.
+  ///
+  /*--cef()--*/
+  virtual bool TransferTab(CefRefPtr<CefBrowser> browser,
+                          int index, bool pinned) = 0;
+
+  ///
   /// Closes the remaining tabs and the hidden window. The object is invalid
   /// afterwards.
   ///

@@ -151,6 +151,7 @@
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
     var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
+    var engineAPIProof: EngineAPIProof?
     var profileProofContexts: [String: OEBrowserContext] = [:]
     var recordedOpenWorldCallbacks: [[String: Any]] = []
 
@@ -315,6 +316,7 @@
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
         return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
+      case "engine-api": return try await runEngineAPICommand(a)
       case "speed-trace": return try await speedTrace(a)
       case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)

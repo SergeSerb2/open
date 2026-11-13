@@ -415,6 +415,43 @@ class OETabStripHandler : public CefTabStripHandler {
   }
 }
 
+- (BOOL)transferWebContent:(OEWebContent*)webContent
+              fromBrowser:(OEBrowser*)source atIndex:(NSUInteger)index {
+  if (!source || source == self || _closed || source->_closed ||
+      _context.oe_closing || index > _tabs.count ||
+      _context != source.context || webContent.context != _context ||
+      webContent.oe_hostBrowser != source || webContent.oe_tabStrip != source ||
+      ![source->_tabs containsObject:webContent] ||
+      [_tabs containsObject:webContent] || !webContent.oe_browser ||
+      !webContent.oe_browser->IsValid() || webContent.oe_client->IsClosing() ||
+      _popup || source->_popup || _pendingPopup || source->_pendingPopup) return NO;
+  [source oe_syncTabStrip];
+  [self oe_syncTabStrip];
+  CefRefPtr<CefTabStrip> target = [self oe_tabStripCreatingIfNeeded:YES];
+  if (!target) return NO;
+  const BOOL pinned = [source isPinnedWebContent:webContent];
+  const NSUInteger position = MIN(index, _tabs.count);
+  // Only live hosted pages contribute to Chromium's strip index.
+  int liveIndex = 0;
+  for (NSUInteger i = 0; i < position; ++i) {
+    OEWebContent* page = _tabs[i];
+    if (page.oe_hostBrowser == self && page.oe_browser) ++liveIndex;
+  }
+  if (!target->TransferTab(webContent.oe_browser, liveIndex, pinned)) return NO;
+  [source->_shellMoves removeObject:webContent];
+  [source->_chromiumTabs removeObject:webContent];
+  [source removeWebContent:webContent];
+  [webContent oe_setHostBrowser:self];
+  [_tabs insertObject:webContent atIndex:position];
+  webContent.oe_tabStrip = self;
+  if (pinned) [_pinned addObject:webContent];
+  _actions = nil;
+  source->_actions = nil;
+  [source oe_setNeedsTabStripSync];
+  [self oe_setNeedsTabStripSync];
+  return YES;
+}
+
 - (void)moveWebContent:(OEWebContent*)webContent toIndex:(NSUInteger)index {
   NSUInteger current = [_tabs indexOfObjectIdenticalTo:webContent];
   if (current == NSNotFound) {

@@ -4,8 +4,8 @@
 
 #include "include/cef_devtools_message_observer.h"
 
-/// One per OEWebContent. Every callback runs on the CEF UI thread, which is
-/// the main thread, and forwards to the (weak) OEWebContent.
+/// One per OEWebContent. UI callbacks forward to the weak OEWebContent on
+/// the main thread. GetAuthCredentials arrives on IO and dispatches to main.
 class OEClient : public CefClient,
                  public CefLifeSpanHandler,
                  public CefDisplayHandler,
@@ -23,8 +23,10 @@ class OEClient : public CefClient,
   explicit OEClient(OEWebContent* content)
       : view_(content), download_context_(content.context) {}
 
-  void SetClosing() { closing_ = true; }
-  void Detach() { view_ = nil; }
+  void SetClosing();
+  bool IsClosing() const { return closing_ || close_requested_; }
+  void CancelAuthenticationRequests();
+  void Detach() { CancelAuthenticationRequests(); view_ = nil; }
 
   // CefClient
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -180,6 +182,10 @@ class OEClient : public CefClient,
                     bool finalUpdate) override;
 
   // CefRequestHandler
+  bool GetAuthCredentials(CefRefPtr<CefBrowser> browser,
+      const CefString& origin_url, bool isProxy, const CefString& host,
+      int port, const CefString& realm, const CefString& scheme,
+      CefRefPtr<CefAuthCallback> callback) override;
   bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                       CefRefPtr<CefFrame> frame,
                       CefRefPtr<CefRequest> request,
@@ -212,6 +218,9 @@ class OEClient : public CefClient,
                        size_t params_size) override;
 
  private:
+  // Weak: the shell retains unanswered requests. All access is on main.
+  NSHashTable<OEAuthenticationRequest*>* auth_requests_ =
+      [NSHashTable weakObjectsHashTable];
   __weak OEWebContent* view_;
   // CEF patch 1001 can deliver a download update after this page is gone.
   // Keep its original Profile attribution without retaining the page or Profile.

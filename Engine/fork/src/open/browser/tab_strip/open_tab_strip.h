@@ -111,6 +111,8 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
   void UpdateTab(CefRefPtr<CefBrowser> browser,
                  int index,
                  bool pinned) override;
+  bool TransferTab(CefRefPtr<CefBrowser> browser,
+                   int index, bool pinned) override;
   void ActivateTab(CefRefPtr<CefBrowser> browser) override;
   int GetTabId(CefRefPtr<CefBrowser> browser) override;
   int GetTabCount() override;

@@ -304,6 +304,14 @@ class OEDevToolsClient;
                        callback:(CefRefPtr<CefJSDialogCallback>)callback;
 @end
 
+@interface OEAuthenticationRequest ()
+- (instancetype)initOEWithOrigin:(nullable NSURL*)origin
+                            host:(NSString*)host port:(NSInteger)port
+                           realm:(NSString*)realm scheme:(NSString*)scheme
+                           proxy:(BOOL)proxy
+                        callback:(CefRefPtr<CefAuthCallback>)callback;
+@end
+
 @interface OEPermissionRequest ()
 - (instancetype)initOEWithOrigin:(NSURL*)origin
                             kinds:(OEPermissionKind)kinds

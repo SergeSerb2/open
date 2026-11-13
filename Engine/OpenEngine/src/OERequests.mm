@@ -30,6 +30,41 @@
 
 @end
 
+@implementation OEAuthenticationRequest {
+  CefRefPtr<CefAuthCallback> _callback;
+}
+
+- (instancetype)initOEWithOrigin:(NSURL*)origin
+                            host:(NSString*)host port:(NSInteger)port
+                           realm:(NSString*)realm scheme:(NSString*)scheme
+                           proxy:(BOOL)proxy
+                        callback:(CefRefPtr<CefAuthCallback>)callback {
+  if ((self = [super init])) {
+    _originURL = [origin copy];
+    _host = [host copy]; _port = port;
+    _realm = [realm copy]; _scheme = [scheme copy]; _proxy = proxy;
+    _callback = callback;
+  }
+  return self;
+}
+
+- (BOOL)isPending { return _callback != nullptr; }
+- (void)continueWithUsername:(NSString*)username password:(NSString*)password {
+  CefRefPtr<CefAuthCallback> callback = _callback;
+  _callback = nullptr;
+  if (!callback) return;
+  if (username.length > 4096 || password.length > 4096) callback->Cancel();
+  else callback->Continue(OECef(username), OECef(password));
+}
+- (void)cancel {
+  CefRefPtr<CefAuthCallback> callback = _callback;
+  _callback = nullptr;
+  if (callback) callback->Cancel();
+}
+- (void)dealloc { if (_callback) _callback->Cancel(); }
+
+@end
+
 @implementation OEJavaScriptDialog {
   CefRefPtr<CefJSDialogCallback> _callback;
 }
