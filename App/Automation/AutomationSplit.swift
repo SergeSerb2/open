@@ -55,6 +55,9 @@ extension AutomationController {
             let info = SplitDraggingInfo(window: window, source: controller.sidebar,
                 point: NSPoint(x: point[0], y: window.frame.height - point[1]), node: raw)
             defer { info.draggingPasteboard.releaseGlobally() }
+            guard info.draggingPasteboard.string(forType: .init("com.open.sidebar.node")) == raw else {
+                throw Failure(message: "split drag pasteboard did not retain the source node")
+            }
             let entered = container.draggingEntered(info)
             let updated = container.draggingUpdated(info)
             let overlayShown = !container.dropOverlay.isHidden
@@ -266,7 +269,9 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
     init(window: NSWindow, source: NSView, point: NSPoint, node: String) {
         draggingDestinationWindow = window; draggingSource = source; draggingLocation = point
         super.init()
-        draggingPasteboard.setString(node, forType: .init("com.open.sidebar.node"))
+        let type = NSPasteboard.PasteboardType("com.open.sidebar.node")
+        draggingPasteboard.declareTypes([type], owner: nil)
+        draggingPasteboard.setString(node, forType: type)
     }
     func slideDraggedImage(to screenPoint: NSPoint) {}
     override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
