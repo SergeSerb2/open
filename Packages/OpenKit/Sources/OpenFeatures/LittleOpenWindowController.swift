@@ -341,9 +341,11 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     /// removed the session, so a second close cannot schedule another teardown.
     func closeWindow() {
         let finish = { [self] in
+            commandBar.dismiss(reason: .programmatic)
             container.closeAll(); window?.delegate = nil; window?.close()
         }
         guard window?.isVisible == true, !Motion.reducesMotion, let layer = root.layer else { finish(); return }
+        window?.ignoresMouseEvents = true
         let start = layer.presentation()?.opacity ?? layer.opacity
         CATransaction.begin(); CATransaction.setDisableActions(true)
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
@@ -361,7 +363,9 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         systemAppearanceObservation = nil
         closed = true; extensionsMenu?.cancelTrackingWithoutAnimation(); extensionsMenu = nil
         if let extensionObservation { extensionsUI?.removeObserver(extensionObservation) }; extensionObservation = nil
-        commandBar.dismiss(reason: .programmatic); spacePopover?.close(); spacePicker = nil
+        // Keep the command-bar pixels alive until the root's exit fade ends.
+        // Submission is already guarded by `closed`.
+        spacePopover?.close(); spacePicker = nil
     }
     public func windowShouldClose(_ sender: NSWindow) -> Bool { coordinator?.close(sessionID: session.id, archiveReason: nil); return false }
     func updateVisibility() { session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false }
