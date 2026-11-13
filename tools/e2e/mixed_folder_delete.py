@@ -17,11 +17,16 @@ def checks(h, factory, results, tmp):
         return ids(tree['pinned'] + tree['today'])
 
     def select():
-        app.call('sidebar-click', node=folder)
-        app.call('sidebar-click', node=today, modifiers=['cmd'])
+        app.call('sidebar-key', key='escape')
+        app.call('sidebar-click', node=today)
+        app.call('sidebar-click', node=folder, modifiers=['cmd'])
+        selected = app.call('selection')
+        if set(selected) != {folder, today}:
+            raise RuntimeError('mixed Delete requires exactly the folder and Today tab selected: ' + str(selected))
+        return selected
 
     def delete():
-        select()
+        record('selection', set(select()) == {folder, today})
         app.call('sidebar-menu', node=folder, item='Delete')
         return h.wait_until(lambda: app.call('window-state')['confirmation'], timeout=3, step=.05)
 
