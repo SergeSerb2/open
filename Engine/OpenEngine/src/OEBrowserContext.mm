@@ -626,6 +626,30 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 
 #pragma mark User scripts
 
+static CefRefPtr<CefListValue> OEUserScriptsValue(NSArray<OEUserScript*>* scripts) {
+  CefRefPtr<CefListValue> list = CefListValue::Create();
+  size_t i = 0;
+  for (OEUserScript* s in scripts) {
+    CefRefPtr<CefDictionaryValue> d = CefDictionaryValue::Create();
+    d->SetString("identifier", OECef(s.identifier));
+    d->SetString("source", OECef(s.source));
+    d->SetBool("openWorld", s.world == OEScriptWorldOpen);
+    d->SetBool("css", s.kind == OEUserScriptKindStyleSheet);
+    d->SetBool("end", s.injectionTime == OEUserScriptInjectionTimeDocumentEnd);
+    d->SetBool("mainFrameOnly", s.mainFrameOnly);
+    CefRefPtr<CefListValue> pats = CefListValue::Create();
+    size_t j = 0;
+    for (NSString* p in s.matchPatterns) {
+      pats->SetString(j++, OECef(p));
+    }
+    d->SetList("matches", pats);
+    list->SetDictionary(i++, d);
+  }
+  return list;
+}
+
+
+
 - (NSArray<OEUserScript*>*)userScripts {
   return [[NSArray alloc] initWithArray:_scripts copyItems:YES];
 }
@@ -650,11 +674,11 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
     [self removeUserScriptWithIdentifier:script.identifier broadcast:NO];
     [_scripts addObject:[script copy]];
   }
-  [self oe_broadcastScripts];
+  [self oe_broadcastScriptsRemoving:replaced.allObjects adding:scripts];
 }
 
 - (void)removeUserScriptWithIdentifier:(NSString*)identifier {
-  [self removeUserScriptWithIdentifier:identifier broadcast:YES];
+  [self replaceUserScriptsWithIdentifiers:@[identifier] scripts:@[]];
 }
 
 - (void)removeUserScriptWithIdentifier:(NSString*)identifier
@@ -676,47 +700,52 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 }
 
 - (CefRefPtr<CefListValue>)oe_scriptsValue {
-  CefRefPtr<CefListValue> list = CefListValue::Create();
-  size_t i = 0;
-  for (OEUserScript* s in _scripts) {
-    CefRefPtr<CefDictionaryValue> d = CefDictionaryValue::Create();
-    d->SetString("source", OECef(s.source));
-    d->SetBool("openWorld", s.world == OEScriptWorldOpen);
-    d->SetBool("css", s.kind == OEUserScriptKindStyleSheet);
-    d->SetBool("end", s.injectionTime == OEUserScriptInjectionTimeDocumentEnd);
-    d->SetBool("mainFrameOnly", s.mainFrameOnly);
-    CefRefPtr<CefListValue> pats = CefListValue::Create();
-    size_t j = 0;
-    for (NSString* p in s.matchPatterns) {
-      pats->SetString(j++, OECef(p));
-    }
-    d->SetList("matches", pats);
-    list->SetDictionary(i++, d);
-  }
-  return list;
+  return OEUserScriptsValue(_scripts);
 }
 
 // Update the stored snapshot before notifying current renderers. Replacement
 // renderers receive it before document start; OnRenderViewReady also resends it.
 - (void)oe_broadcastScripts {
+  [self oe_broadcastScriptsRemoving:nil adding:nil];
+}
+
+- (void)oe_broadcastScriptsRemoving:(NSArray<NSString*>*)removed
+                            adding:(NSArray<OEUserScript*>*)added {
   if (_state == OEBrowserContextStateClosed || _oe_closing) return;
   // Serialize the Profile snapshot once. Each browser still gets its own
   // stored extra-info copy (including its per-page styles) and renderer message.
   // Rebuilding the full list twice per browser made ten-page Boost edits slow.
   // Stay lazy while preparing a context before its first browser exists.
   CefRefPtr<CefListValue> scripts;
+  CefRefPtr<CefListValue> removals;
+  CefRefPtr<CefListValue> additions;
   // OTR web contents have their own context. Match that exact owner, so updates
   // cover its browsers without installing a parent profile's scripts there.
   for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
     if (webContent.context != self || !webContent.oe_browser) {
       continue;
     }
-    if (!scripts) scripts = [self oe_scriptsValue];
+    if (!scripts) {
+      scripts = [self oe_scriptsValue];
+      if (removed) {
+        removals = CefListValue::Create();
+        size_t index = 0;
+        for (NSString* identifier in removed) removals->SetString(index++, OECef(identifier));
+        additions = OEUserScriptsValue(added);
+      }
+    }
     CefSetBrowserExtraInfo(webContent.oe_browser,
                            [webContent oe_extraInfoWithScripts:scripts]);
+    // Current renderers retain unrelated scripts. Sending the entire ad-block
+    // list for a one-Boost edit made renderer parsing dominate live refresh.
     CefRefPtr<CefProcessMessage> msg =
-        CefProcessMessage::Create(kOEMsgScriptsUpdate);
-    msg->GetArgumentList()->SetList(0, scripts->Copy());
+        CefProcessMessage::Create(removed ? kOEMsgScriptsPatch : kOEMsgScriptsUpdate);
+    if (removed) {
+      msg->GetArgumentList()->SetList(0, removals->Copy());
+      msg->GetArgumentList()->SetList(1, additions->Copy());
+    } else {
+      msg->GetArgumentList()->SetList(0, scripts->Copy());
+    }
     webContent.oe_browser->GetMainFrame()->SendProcessMessage(PID_RENDERER,
                                                               msg);
   }

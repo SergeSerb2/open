@@ -525,7 +525,10 @@ Other scripts keep their order. Duplicate added IDs use the last addition,
 matching repeated `addUserScript` calls. Boost store edits use this transaction
 instead of publishing a removal and an addition separately. Each broadcast
 serializes the Profile list once, while retaining each browser's own stored
-extra-info snapshot and per-page styles.
+extra-info snapshot and per-page styles. Existing renderers receive only the
+removed IDs and added scripts, so editing a Boost does not repeatedly parse
+unrelated ad-block scriptlets. Browser creation and renderer recovery retain
+the full-snapshot path; both messages preserve script IDs, order and worlds.
 
 This includes private (OTR) browsers. Broadcasts select web contents by their
 exact `OEBrowserContext` identity; each snapshot reads that context's scripts.

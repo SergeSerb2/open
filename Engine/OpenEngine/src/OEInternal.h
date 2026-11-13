@@ -70,7 +70,8 @@ inline bool OEIsChromeNewTabURL(NSURL* _Nullable url) {
 bool OEMatchesPattern(const std::string& pattern, const std::string& url);
 
 /// Process message names (browser <-> renderer).
-extern const char kOEMsgScriptsUpdate[];    // browser -> renderer
+extern const char kOEMsgScriptsUpdate[];    // browser -> renderer, full snapshot
+extern const char kOEMsgScriptsPatch[];     // browser -> renderer, removed IDs + additions
 extern const char kOEExtraScripts[];        // extra_info key
 extern const char kOEMsgUserStyleSheet[];   // browser -> renderer: key, css
 extern const char kOEExtraUserStyles[];     // extra_info key: {key: css}
