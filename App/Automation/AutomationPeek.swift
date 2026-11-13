@@ -39,6 +39,7 @@ extension AutomationController {
         let displayed = layer.presentation() ?? layer
         return ["frame": rect(layer.frame), "presentation": rect(displayed.frame),
           "opacity": displayed.opacity, "scale": [displayed.transform.m11, displayed.transform.m22],
+          "rasterized": layer.shouldRasterize, "rasterScale": layer.rasterizationScale,
           "animations": (layer.animationKeys() ?? []).map { key in
             let animation = layer.animation(forKey: key)
             let paths = (animation as? CAAnimationGroup)?.animations?.compactMap { ($0 as? CAPropertyAnimation)?.keyPath }
@@ -49,6 +50,8 @@ extension AutomationController {
       return ["shown": peek.isShown, "expanding": peek.isExpanding, "kind": overlay.motionKind,
         "snapshot": overlay.hasMotionSnapshot,
         "hostHidden": peek.stack.last?.host?.view.isHiddenOrHasHiddenAncestor ?? true,
+        "hostAttached": peek.stack.last?.host?.view.window != nil,
+        "backingScale": overlay.window?.backingScaleFactor ?? 1,
         "duration": overlay.motionDuration, "startedAt": overlay.motionStartedAt,
         "layouts": overlay.layoutCount, "hostFrameChanges": overlay.hostFrameChangeCount,
         "panelFrame": rect(overlay.panel.frame), "clipFrame": rect(overlay.pageClip.frame),

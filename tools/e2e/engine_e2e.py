@@ -4509,6 +4509,18 @@ def peek_checks(factory, results, tmp):
         app.call("pin", tab=source)
         baseline = app.call("host-counts")
         app.call("peek-open", tab=source, url=fixture("Peek page"))
+        opening_samples = []
+        for _ in range(8):
+            motion = app.call('peek-motion')
+            if not motion.get('overlay', {}).get('animations'):
+                break
+            opening_samples.append(motion)
+            time.sleep(.01)
+        results['peek_open_defers_engine_until_motion_ends'] = {'ok': bool(opening_samples)
+            and all(s.get('snapshot') and s.get('hostHidden') and not s.get('hostAttached')
+                    and s['panel'].get('rasterized')
+                    and s['panel'].get('rasterScale') == s.get('backingScale') for s in opening_samples),
+            'samples': opening_samples}
         app.call("wait")
         state = app.call("peek-state")
         content = state["stack"][-1]["content"]
@@ -4538,7 +4550,8 @@ def peek_checks(factory, results, tmp):
                     and s['hostFrameChanges'] == motion_before['hostFrameChanges'] for s in active),
             'before': motion_before, 'samples': sampled}
         results['peek_expand_freezes_live_compositor'] = {'ok': bool(active)
-            and all(s.get('snapshot') and s.get('hostHidden') for s in active), 'samples': sampled}
+            and all(s.get('snapshot') and s.get('hostHidden') and s['panel'].get('rasterized')
+                    and s['panel'].get('rasterScale') == s.get('backingScale') for s in active), 'samples': sampled}
         wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
         promoted = next(t["id"] for t in app.call("tabs") if t["selected"])
         counts = app.call("host-counts")
@@ -4635,6 +4648,7 @@ def peek_checks(factory, results, tmp):
             app.call('key', key='escape')
             results['peek_reduce_motion_has_no_geometry_animation'] = {'ok': reduced['shown']
                 and not reduced['panel']['animations'] and not reduced['overlay']['animations']
+                and not reduced['panel'].get('rasterized')
                 and not app.call('peek-state')['stack'], 'open': reduced}
         finally:
             app.call('window-motion', reduced=False)
