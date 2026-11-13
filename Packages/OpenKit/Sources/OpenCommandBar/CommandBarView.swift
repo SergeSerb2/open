@@ -166,6 +166,8 @@ public final class CommandBarView: NSView {
     public var debugListScrollOffset: CGFloat { panel.results.scrollOffset }
     /// Panel layout passes since creation.
     public var debugPanelLayoutCount: Int { panel.layoutCount }
+    public var debugResultsLayoutCount: Int { panel.results.layoutRowsCount }
+    public var debugRowUpdateCount: Int { panel.results.rowUpdateCount }
     /// Text field frame in panel points.
     public var debugFieldFrame: CGRect { panel.input.field.frame }
     /// The scope chip's capsule in input-row points (zero without a chip), and whether it is hovered.

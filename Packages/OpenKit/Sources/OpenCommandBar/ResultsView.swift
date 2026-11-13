@@ -9,6 +9,8 @@ final class ResultsView: NSView {
     private(set) var rows: [CommandBarRow] = []
     private(set) var selectedIndex: Int?
     private var rowViews: [ResultRowView] = []
+    private(set) var layoutRowsCount = 0
+    private(set) var rowUpdateCount = 0
     private let selectionLayer = CALayer()
     private(set) var scrollOffset: CGFloat = 0
     var extensionIcon: (@MainActor (String) -> NSImage?)? {
@@ -83,6 +85,7 @@ final class ResultsView: NSView {
 
     /// Replaces the rows. Views whose row did not change are not redrawn.
     func setRows(_ newRows: [CommandBarRow], selected: Int?) {
+        rowUpdateCount += 1
         rows = newRows
         while rowViews.count < rows.count {
             let v = ResultRowView(frame: .zero)
@@ -135,6 +138,7 @@ final class ResultsView: NSView {
     }
 
     private func layoutRows() {
+        layoutRowsCount += 1
         let l = layoutSpec
         let w = bounds.width - 2 * l.listPaddingX
         let visible = CGRect(x: 0, y: 0, width: bounds.width, height: visibleHeight).insetBy(dx: 0, dy: -1)
