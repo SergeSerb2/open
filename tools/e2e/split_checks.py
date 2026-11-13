@@ -128,14 +128,14 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         custom_id = state()['id']
         def row_menu(item=None):
             return app.call('sidebar-menu', node=custom_id, item=item) if item else app.call('sidebar-menu-items', node=custom_id)
-        def presentation(): return state()['rowPresentation']
+        def presentation(): return state().get('rowPresentation', {})
         def rename(value, cancel=False):
             row_menu('Rename…')
             before = state()['renameEditor']
             app.call('key', text=value, route='app')
             key('escape' if cancel else 'return', ())
             return before
-        original_titles = presentation()['titles']
+        original_titles = presentation().get('titles', [])
         listed = row_menu()['items']
         row('custom_menu_initial', 'Change Icon…' in listed and 'Rename…' in listed and 'Reset Name and Icon' not in listed, menu=listed)
         initial = rename('D2 Split')

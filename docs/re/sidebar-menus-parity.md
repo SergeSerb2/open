@@ -24,7 +24,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | Folder row (S3D, S8 item 4) | Share Folder… · — · New Nested Folder… · Turn "‹name›" into Space · Copy All Links · Copy All Links as Markdown · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Delete; an empty folder has no Copy items | the same | none |
 | Live Folder row (code, live-data §2.2) | not captured | header · Repositories · Single Sign-On ▸ · Refresh · — · Copy All Links · — · Delete Live Folder | order is a GUESS (F2 item 3) |
 | Space menu: title, empty area, Clear row, Space dot, title "…" button (S3D, S8 item 8) | Change Space Icon… · Rename Space… · Edit Theme Color… · Set Profile ▸ · — · New Folder · Live Folders ▸ · — · Share Space… · Export "‹name›" into Folder ▸ · — · Manage Spaces… · — · Delete Space | the same (Share Space… disabled: no account) | none |
-| Split row (S8 item 5) | Share Split View… · — · Separate All Tabs · Add Tab… · Convert to … Split View · — · Tab Options (disabled) · ‹pane› ▸ … · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Archive Item · Archive Tabs Below (⌥ pair). Pane ▸: Separate from Split View · — · Share · Mute · Copy Link · Copy link as Markdown · — · Archive Item | the same without Change Icon… and Rename… | Change Icon… / Rename… need a split name and icon in the model (deferred, `docs/followups.md`) |
+| Split row (S8 item 5) | Share Split View… · — · Separate All Tabs · Add Tab… · Convert to … Split View · — · Tab Options (disabled) · ‹pane› ▸ … · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Archive Item · Archive Tabs Below (⌥ pair). Pane ▸: Separate from Split View · — · Share · Mute · Copy Link · Copy link as Markdown · — · Archive Item | the same, plus Reset Name and Icon immediately before Change Icon… when customized (S12 C12-D2-2) | none; saved name/icon and Reset implemented |
 | Multi-selection (S8 item 6) | tabs: Copy Links · — · Share N Items… · — · Change Icon… (disabled) · Mute · — · Open in Split View · Duplicate · Move to ▸ · New Folder with N Items · — · Archive Tabs (⌥ pair for Today tabs). With a folder: Copy Links · — · Share N Items… · — · Open in Split View (disabled) · Move to ▸ · New Folder with N Items · — · Delete | the same; Open adds ⌥ alternates "Copy links as Markdown" and "Pin Tabs" / "Unpin Tabs"; with a folder Open keeps "Archive Tabs" beside "Delete" | Open additions (behind ⌥); Delete with a folder: what it does to the tabs is not captured |
 | Easel row (S4E) | Copy Link · — · Change Icon… · Rename… · — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar · Delete Easel | adds "Save as Web Page…" after Copy Link | Open addition (lead ruling LEAD 04:05 S4); keep |
 | URL field (S3D, S8 item 1) | Copy URL · Share ▸ · Capture… · Capture Full Page · Capture in Portrait Mode · — · Show as Toolbar · Disable Shared Quotes | the same ("Enable Shared Quotes" when off) | none |
@@ -49,7 +49,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 
 The build order of the first inventory is done: sidebar row menus, URL field, "+" popover, then the Library sections
 (one PR each). Open items: the two C3 captures above (C-D2-1 Media menus, C-D2-2 Archive hover glyphs), the deferred
-items in `docs/followups.md` (split Change Icon / Rename, Media Source URL), and the GUESS rows marked in the tables.
+items in `docs/followups.md` (Media Source URL), and the GUESS rows marked in the tables.
 
 ## 4. Library file menus from Arc's code (2026-11-12, Arc 1.172.2 build 90755)
 

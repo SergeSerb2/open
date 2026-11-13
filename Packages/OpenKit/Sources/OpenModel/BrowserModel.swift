@@ -1867,7 +1867,6 @@ public final class BrowserModel {
             tab.customTitle = new
             registerChange(undo: { tab.customTitle = old }, redo: { tab.customTitle = new })
         } else if let split = index[id]?.split {
-            guard title.utf8.count <= 16_384 else { return }
             let old = split.customTitle, new = title.isEmpty ? nil : title
             guard old != new, title != split.displayTitle else { return }
             split.customTitle = new
