@@ -110,13 +110,13 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             # Complete several real engine transfers while the Library is closed.
             for _ in range(3):
                 newest=start('/file',open_after=False);assert wait(lambda:item(newest).get('state')=='completed')
-            check('badge_three_files',wait(lambda:app.call('downloads-state')['badge'].get('stackCount')==3),badge=app.call('downloads-state')['badge'])
-            badge=app.call('downloads-state')['badge'];check('badge_size_and_name',badge['thumbnailSize']==39 and badge['tooltipTitle']==item(newest)['name'])
+            check('badge_latest_file',wait(lambda:app.call('downloads-state')['badge'].get('stackCount')==1),badge=app.call('downloads-state')['badge'])
+            badge=app.call('downloads-state')['badge'];check('badge_size_and_name',badge['thumbnailSize']==32 and badge['tooltipTitle']==item(newest)['name'])
             check('badge_file_drag','public.file-url' in badge['drag']['types'] and badge['drag']['url'].endswith(item(newest)['name'].replace(' ','%20')));capture('download-badge')
-            box=badge['frame'];time.sleep(.25)
+            box=badge['markFrame'];time.sleep(.25)
             app.call('mouse',action='click',queued=True,window=state()['window'],x=box[0]+box[2]/2,y=box[1]+box[3]/2)
             check('badge_click_opens_downloads',wait(lambda:state()['open'] and state()['section']=='downloads'))
-            check('opening_library_clears_badge',wait(lambda:app.call('downloads-state')['badge']['stackCount']==0) and not app.call('downloads-state')['badgeExpiryScheduled'])
+            check('opening_library_keeps_badge',wait(lambda:app.call('downloads-state')['badge']['stackCount']==1) and app.call('downloads-state')['badgeExpiryScheduled'])
             app.call('download-badge-lifetime',seconds=.6)
             expiring=start('/file',open_after=False);assert wait(lambda:item(expiring).get('state')=='completed')
             check('badge_expiry_scheduled',app.call('downloads-state')['badgeExpiryScheduled'])
