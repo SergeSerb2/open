@@ -599,17 +599,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // no row layout or model width write runs on the animation's display ticks.
             let sidebarFrame = CGRect(x: 0, y: 0, width: width, height: size.height)
             let targetOffset: CGFloat = hidden ? -width : 0
+            // A shrinking clip still needs the old, wider backing until it has
+            // finished. Growing can prepare the wider viewport once at entry.
+            let defersViewport = animate && panelFrame.width < container.frame.width
             let geometryChanged = (!continuingPanelMotion && container.frame != panelFrame) || sidebar.frame != sidebarFrame
-            if geometryChanged { sidebarGeometryChanges += 1 }
+            if geometryChanged && (!defersViewport || sidebar.frame != sidebarFrame) { sidebarGeometryChanges += 1 }
             let targetChanged = (sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0) != targetOffset
             if case .floatingCard = sidebar.presentation { sidebar.presentation = .anchored }
             CATransaction.begin(); CATransaction.setDisableActions(true)
             if animate {
                 sidebarPanelTarget = panelFrame
                 sidebarPanelRootSize = size
-                // Resize the native viewport once. The render-server clip reveals
-                // the final backing without scaling text or moving view frames.
-                if container.frame != panelFrame { container.frame = panelFrame }
+                // One native viewport resize: at entry when growing, at rest
+                // when shrinking. The clip never exposes missing backing pixels.
+                if !defersViewport && container.frame != panelFrame { container.frame = panelFrame }
                 if emptyPanel.frame != panelFrame { emptyPanel.frame = panelFrame }
                 container.layoutSubtreeIfNeeded()
             } else if !continuingPanelMotion {
@@ -659,9 +662,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     }
                 }
                 if animate, let layer = container.layer {
-                    let translation = oldPanel.minX - panelFrame.minX
+                    let fromTranslation = oldPanel.minX - container.frame.minX
+                    let targetTranslation = panelFrame.minX - container.frame.minX
                     layer.removeAnimation(forKey: "sidebarToggle")
-                    layer.setValue(0, forKeyPath: "transform.translation.x")
+                    layer.setValue(targetTranslation, forKeyPath: "transform.translation.x")
                     sidebarPanelClip.anchorPoint = .zero
                     sidebarPanelClip.position = .zero
                     sidebarPanelClip.bounds = CGRect(origin: .zero, size: panelFrame.size)
@@ -670,7 +674,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     sidebarPanelClip.cornerCurve = .continuous
                     layer.mask = sidebarPanelClip
                     let move = Motion.sidebarToggle.animation(keyPath: "transform.translation.x")
-                    move.fromValue = translation; move.toValue = 0
+                    move.fromValue = fromTranslation; move.toValue = targetTranslation
                     addMotion(move, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
                     sidebarAnimations["panel"] = layer.animation(forKey: "sidebarToggle")
                     let clip = Motion.sidebarToggle.animation(keyPath: "bounds.size")
@@ -678,7 +682,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     addMotion(clip, to: sidebarPanelClip, key: "sidebarToggle", requestedAt: requestedAt)
                     sidebarPanelShadow.prepare(frame: panelFrame)
                     sidebarPanelShadow.isHidden = container.isHidden
-                    for (shadowLayer, key, from, to) in sidebarPanelShadow.motion(from: oldPanel.size, translation: translation) {
+                    for (shadowLayer, key, from, to) in sidebarPanelShadow.motion(from: oldPanel.size, translation: oldPanel.minX - panelFrame.minX) {
                         let spring = Motion.sidebarToggle.animation(keyPath: key)
                         spring.fromValue = from; spring.toValue = to
                         addMotion(spring, to: shadowLayer, key: "sidebarToggle", requestedAt: requestedAt)
