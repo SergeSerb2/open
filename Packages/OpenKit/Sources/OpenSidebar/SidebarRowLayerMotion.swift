@@ -27,7 +27,7 @@ final class SidebarRowLayerMotion {
         if enabled {
             outline.enumerateAvailableRowViews { view, row in
                 guard self.previous.count < 256, let item = outline.item(atRow: row) as AnyObject? else { return }
-                var point = view.convert(.zero, to: outline)
+                var point = view.convert(NSPoint.zero, to: outline)
                 point.y += view.layer?.presentation()?.transform.m42 ?? 0
                 self.previous[ObjectIdentifier(item)] = Previous(origin: point, view: view)
             }
@@ -83,7 +83,7 @@ final class SidebarRowLayerMotion {
         outline.enumerateAvailableRowViews { view, row in
             guard let item = outline.item(atRow: row) as AnyObject?, let layer = view.layer else { return }
             let old = self.previous[ObjectIdentifier(item)]
-            let delta = old.map { $0.origin.y - view.convert(.zero, to: outline).y } ?? -min(16, view.bounds.height)
+            let delta = old.map { $0.origin.y - view.convert(NSPoint.zero, to: outline).y } ?? -min(16, view.bounds.height)
             layer.removeAnimation(forKey: "row.structure.position")
             layer.removeAnimation(forKey: "row.structure.opacity")
             layer.transform = CATransform3DIdentity; layer.opacity = 1
