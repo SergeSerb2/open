@@ -9818,7 +9818,7 @@ def commandbar_results_work_checks(app, results, bar, press, tab):
     state = lambda: app.call('commandbar-state')
     app.call('suggest-remote', enabled=False)
     app.call('select', tab=tab); app.call('focus', tab=tab)
-    app.eval(tab, 'window.commandBarResizeCount=0; window.addEventListener("resize",()=>window.commandBarResizeCount++)')
+    app.eval(tab, 'window.commandBarResizeCount=0; window.addEventListener("resize",()=>window.commandBarResizeCount++);1')
     try:
         for reduced in (False, True):
             app.call('window-motion', reduced=reduced)
