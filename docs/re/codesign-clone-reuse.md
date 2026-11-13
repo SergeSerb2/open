@@ -1408,3 +1408,52 @@ prohibited experiment ran or timing input changed. No row-g launch ran.
 known #283 updater case and open scan item preserved. Row g stays pending;
 no current-engine launch gain is claimed. The lead owns the merge and engine
 refresh. This agent has not merged the PR or changed another engine copy.
+
+### 1.0.1 stale-cleanup lease guard (2026-11-13)
+
+H2's after-first-paint cleanup can retire an inactive install directory under
+an exclusive lease. A producer can have opened that lease before cleanup,
+then acquire its lock after retirement. Lock conversion also has a scheduling
+window. The old descriptor must not protect a newly recreated install path.
+
+`open_code_sign_clone.cc::LeaseIsCurrent` compares `fstat(fd)` with
+`lstat(install/lease)`: both must be regular files with one link and equal
+`st_dev`/`st_ino`. The held lease must still belong to the user and have mode
+0600. Checks run after initial shared acquisition, after exclusive conversion,
+before a reuse return, and after the final shared conversion. A mismatch returns
+`nullopt`; the unchanged manager then creates Chromium's per-run clone. Cloning
+is never disabled.
+
+The source guard was built at `3a9dd6c6`. The private Release framework is
+`61709cc0c07de5a6c489ef692c0491bc6a303cc08fcdecf94ea9d8c06abf8121`,
+UUID `4C4C44D5-5555-3144-A137-FBAB1476EFFE`. The OFFLINE incremental build
+passed in 2m06.52s (51 executed steps, four local jobs). Shared source and
+outputs were restored to `267b0ad8` before runtime qualification; strict
+engine status was 8 PASS, 0 FAIL, 0 WARN.
+
+The real-App comparison ran on fresh rental `0vak6f9flht7g`, macOS 27.2.
+A diagnostic interposer in ignored evidence pauses the actual lease `flock`.
+For lock conversions it exposes the permitted unlock/relock window. An
+external cleanup process obtains EX, renames and deletes the owned install
+directory, and a second real Open App recreates its clone. The original
+producer then resumes its real `flock`. No shipping hook or substitute clone
+implementation is involved. Each launch loads and reads a real renderer page.
+
+| Case | Old engine `267b0ad8` | Guarded engine `61709cc0` |
+|---|---|---|
+| Fresh clone and ordinary reuse | PASS, shared lease held | PASS, shared lease held |
+| Retirement before initial SH | Unsafe reuse: deleted lease retained, source link count 2 | Safe per-run fallback: stale fd closed, source link count 3 |
+| Retirement during EX conversion | Same unsafe reuse | Same safe fallback |
+| Retirement during final SH conversion | Same unsafe reuse | Same safe fallback |
+| Real page text and renderer | PASS in all launches | PASS in all launches |
+| Owned process/window cleanup | PASS | PASS |
+
+The new safety predicate fails on the old engine in all three race cases.
+Both final screen workers exit 0 with `safe=true`, no leaked group, no system
+window and no crash. Earlier harness setup and ledger-path failures remain
+separate, unqualified receipts; neither required an engine change.
+
+Receipts are in `engine-items/.re/e3-clone-lease-101/`: `runtime.tar.gz`,
+`runtime-summary.json`, `{old,candidate}/result.json`, `pause-lease.c`,
+`lease-runtime.py`, `window-status.json` and the build/restore logs. These
+records prove lease safety and runtime behavior; they make no timing claim.
