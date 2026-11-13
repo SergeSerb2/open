@@ -117,12 +117,20 @@ def fixture(library):
     with sqlite3.connect(chrome/'Default/Cookies') as db:
         db.executescript("CREATE TABLE cookies(host_key TEXT NOT NULL, name TEXT NOT NULL, encrypted_value BLOB);")
         db.executemany('INSERT INTO cookies VALUES(?,?,?)', [('.example.com', 'a', b'v10'), ('.example.com', 'b', b'v10')])
-    # Extensions: one Web Store extension (a reinstall candidate) and one component (internal, excluded).
+    # Extensions: one Web Store extension (a reinstall candidate) and three built-in ones (excluded): a component in
+    # the app bundle; a component with a relative path (`location` 5); and a default-installed extension that lives in
+    # the profile's own Extensions folder like Chrome's "Google Docs Offline" (`location` 10, `was_installed_by_default`).
+    (chrome/'Default/Extensions/qqqqrrrrssssttttuuuuvvvvwwwwxxxx/1.0').mkdir(parents=True)
     (chrome/'Default/Secure Preferences').write_text(json.dumps({'extensions': {'settings': {
-        'aaaabbbbccccddddeeeeffffgggghhhh': {'path': 'aaaabbbbccccddddeeeeffffgggghhhh/1.0', 'from_webstore': True,
+        'aaaabbbbccccddddeeeeffffgggghhhh': {'path': 'aaaabbbbccccddddeeeeffffgggghhhh/1.0', 'from_webstore': True, 'location': 1,
                                              'manifest': {'name': 'Example Extension', 'version': '1.0'}},
         'iiiijjjjkkkkllllmmmmnnnnoooopppp': {'path': '/Applications/Example.app/Contents/Resources/component',
-                                             'manifest': {'name': 'Example Component', 'version': '1.0'}}}}}))
+                                             'manifest': {'name': 'Example Component', 'version': '1.0'}},
+        'yyyyzzzzaaaabbbbccccddddeeeeffff': {'path': 'example_component', 'location': 5,
+                                             'manifest': {'name': 'Example Relative Component', 'version': '1.0'}},
+        'qqqqrrrrssssttttuuuuvvvvwwwwxxxx': {'path': 'qqqqrrrrssssttttuuuuvvvvwwwwxxxx/1.0', 'from_webstore': True,
+                                             'location': 10, 'was_installed_by_default': True,
+                                             'manifest': {'name': 'Example Default Extension', 'version': '1.0'}}}}}))
     work = {'version': 1, 'checksum': '0', 'roots': {
         'bookmark_bar': {'type': 'folder', 'guid': '00000000-0000-4000-b000-000000000001', 'name': 'Bookmarks bar', 'children': [
             url('20000000-0000-4000-a000-000000000001', 'Example Work', 'https://work.example.com/')]},
