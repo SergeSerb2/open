@@ -85,6 +85,23 @@ struct SidebarMenus {
         }
         let folders = ids.filter { context.model.node(id: $0)?.folder != nil }
         let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
+        // C13-D2-6 captured the normal sidebar menu for one ordinary root folder of tabs plus one
+        // separate Today tab. Keep Option, Manager, nested/split/Note/Easel and larger selections
+        // on their existing paths until captured.
+        let archiveFolderTabs: Bool = {
+            guard !context.isOptionHeld, context.manager == nil, ids.count == 2,
+                  folders.count == 1, tabs.count == 1,
+                  let folder = context.model.node(id: folders[0])?.folder, folder.live == nil,
+                  !folder.children.isEmpty,
+                  let tab = context.model.tab(id: tabs[0]), !Self.isNote(tab), !Self.isEasel(tab),
+                  case .spaceToday(let space)? = context.model.parent(of: tab.id),
+                  let parent = context.model.parent(of: folder.id),
+                  parent == .spacePinned(space) || parent == .spaceToday(space) else { return false }
+            return folder.children.allSatisfy {
+                guard case .tab(let child) = $0 else { return false }
+                return !Self.isNote(child) && !Self.isEasel(child)
+            }
+        }()
         func hasLinks(_ node: SidebarNode) -> Bool {
             switch node {
             // A Note has no shareable address in Open (its own row menu disables Copy Link).
@@ -129,9 +146,7 @@ struct SidebarMenus {
                       alternate(item(unpin ? "Unpin Tabs" : "Pin Tabs", .setPinned(ids: ids, pinned: !unpin)))]
         }
         items += [moveTo(ids), item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)), .separator()]
-        if !tabs.isEmpty {
-            // With a folder Arc draws only "Delete" (nothing was executed in the capture); Open keeps the
-            // tabs' archive item beside it until a capture shows what Delete does to the tabs.
+        if !tabs.isEmpty && !archiveFolderTabs {
             // Arc STR has the plurals "Remove Notes from Sidebar" / "Remove Easels from Sidebar" beside the rows'
             // singulars (easels-notes.md §3.2, §4.3); used when every selected row is a Note, or every one an Easel.
             // GUESS: their place in this menu. A Note row cannot be captured (Arc 1.172); the Easel selection
@@ -152,7 +167,10 @@ struct SidebarMenus {
                 ]
             }
         }
-        if !folders.isEmpty { items.append(item("Delete", .deleteFolders(ids: folders))) }
+        if !folders.isEmpty {
+            items.append(item("Delete", .deleteFolders(ids: archiveFolderTabs ? ids : folders, archiveFolderTabs: archiveFolderTabs)))
+            if archiveFolderTabs { items.append(.separator()) }
+        }
         return menu(items)
     }
 

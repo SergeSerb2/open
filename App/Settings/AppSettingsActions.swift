@@ -314,7 +314,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     switch intent {
     case .deleteSpace(let id): alert = SidebarConfirmations.deleteSpaceAlert(model: model, spaceID: id); ids = []
     case .deleteFolder(let id): ids = [id]; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
-    case .deleteFolders(let selection): ids = selection; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
+    case .deleteFolders(let selection, _): ids = selection; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
     default: return false
     }
     guard let alert else { return false }

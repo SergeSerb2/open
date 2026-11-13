@@ -1225,7 +1225,8 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        page?.menu(at: convert(event.locationInWindow, from: nil))
+        page?.context.isOptionHeld = event.modifierFlags.contains(.option)
+        return page?.menu(at: convert(event.locationInWindow, from: nil))
     }
 
     /// No disclosure triangle: folder rows toggle on click, as in Arc.

@@ -25,7 +25,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | Live Folder row (code, live-data §2.2) | not captured | header · Repositories · Single Sign-On ▸ · Refresh · — · Copy All Links · — · Delete Live Folder | order is a GUESS (F2 item 3) |
 | Space menu: title, empty area, Clear row, Space dot, title "…" button (S3D, S8 item 8) | Change Space Icon… · Rename Space… · Edit Theme Color… · Set Profile ▸ · — · New Folder · Live Folders ▸ · — · Share Space… · Export "‹name›" into Folder ▸ · — · Manage Spaces… · — · Delete Space | the same (Share Space… disabled: no account) | none |
 | Split row (S8 item 5) | Share Split View… · — · Separate All Tabs · Add Tab… · Convert to … Split View · — · Tab Options (disabled) · ‹pane› ▸ … · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Archive Item · Archive Tabs Below (⌥ pair). Pane ▸: Separate from Split View · — · Share · Mute · Copy Link · Copy link as Markdown · — · Archive Item | the same, plus Reset Name and Icon immediately before Change Icon… when customized (S12 C12-D2-2) | none; saved name/icon and Reset implemented |
-| Multi-selection (S8 item 6) | tabs: Copy Links · — · Share N Items… · — · Change Icon… (disabled) · Mute · — · Open in Split View · Duplicate · Move to ▸ · New Folder with N Items · — · Archive Tabs (⌥ pair for Today tabs). With a folder: Copy Links · — · Share N Items… · — · Open in Split View (disabled) · Move to ▸ · New Folder with N Items · — · Delete | the same; Open adds ⌥ alternates "Copy links as Markdown" and "Pin Tabs" / "Unpin Tabs"; with a folder Open keeps "Archive Tabs" beside "Delete" | Open additions (behind ⌥); Delete with a folder: what it does to the tabs is not captured |
+| Multi-selection (S8 item 6; S13 C13-D2-6) | tabs: Copy Links · Share N Items… · — · Change Icon… (disabled) · Mute · — · Open in Split View · Duplicate · Move to ▸ · New Folder with N Items · — · Archive Tabs (⌥ pair for Today tabs). Normal folder + Today tab: Copy Links · Share 2 Items… · — · Open in Split View (disabled) · Move to ▸ · New Folder with 2 Items · — · Delete · — | the same for the captured normal mixed case; Open adds ⌥ "Copy links as Markdown" and "Pin Tabs" / "Unpin Tabs" | Option, Manager, nested/split/Note/Easel and larger mixed selections remain uncaptured and keep their existing behavior |
 | Easel row (S4E) | Copy Link · — · Change Icon… · Rename… · — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar · Delete Easel | adds "Save as Web Page…" after Copy Link | Open addition (lead ruling LEAD 04:05 S4); keep |
 | URL field (S3D, S8 item 1) | Copy URL · Share ▸ · Capture… · Capture Full Page · Capture in Portrait Mode · — · Show as Toolbar · Disable Shared Quotes | the same ("Enable Shared Quotes" when off) | none |
 | Library button, right click (S3D) | Show media from: (disabled) · Documents · Desktop · Screenshots · Arc Captures · Downloads | the same ("Captures" for "Arc Captures") | none |
@@ -107,3 +107,19 @@ and `split-rename-focus.focused.json`; icon-only presentation is
 `v21/105-d2-both-focused/custom-split-{light,dark}.png`; persistence and final Reset
 are `v21/104-d2-persist-reset/split-{custom-relaunch,final-reset}.png`.
 These are local reference facts; no reference assets are shipped.
+
+## 6. Mixed folder and Today-tab Delete (session 13 C13-D2-6)
+
+Session 13 C13-D2-6 selects an ordinary folder with two direct tab children and a separate Today
+tab, then invokes the normal menu's Delete. The confirmation reads **Delete your “C13 Folder”
+folder?**, **Deleting this folder will archive the tabs inside it.**, with Cancel and Delete Folder.
+After confirmation the folder and the three tabs leave the sidebar; Archive has three individual
+tab rows and no folder record. Normal quit/relaunch preserves that result. Evidence:
+`.re/capture/s13/m1/arc/v8/210-mixed-delete/mixed-{sidebar-baseline,archive-baseline,delete-menu,delete-confirmation,delete-sidebar,delete-archive}.{png,ax.json}`
+and `v8/211-mixed-relaunch/mixed-relaunch-{sidebar,archive}.{png,ax.json}`.
+
+Open applies that result to the normal sidebar menu for one nonempty ordinary root folder of direct
+tabs and one separate Today tab in the same Space. The existing confirmation guard, Cancel path and one-step Undo
+remain. Keyboard deletion, held-Option menus, Manager menus, nested folders, splits, Notes,
+Easels, empty folders and larger mixed selections retain their existing behavior because this
+capture does not settle them. Existing folder-only deletion still creates a folder Archive record.

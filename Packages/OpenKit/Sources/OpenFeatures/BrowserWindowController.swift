@@ -1330,7 +1330,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .deleteLiveFolder(let id): return confirmDeleteLiveFolder(id)
         case .setLiveRepository(let id, let repository, let hidden):
             model.setLiveRepository(folderID: id, repository: repository, hidden: hidden); changed(); return true
-        case .deleteFolders(let ids): return confirmDeleteFolders(ids)
+        case .deleteFolders(let ids, let archiveFolderTabs): return confirmDeleteFolders(ids, archiveFolderTabs: archiveFolderTabs)
         case .clearToday(let space), .clearTodayKeeping(let space, _):
             let before = model.space(id: space)?.today.count ?? 0
             guard ModelSidebarActions(context: context).perform(intent) else { return false }
@@ -1545,10 +1545,10 @@ extension BrowserWindowController {
         return shown
     }
 
-    /// Delete folder(s): the alert first; "Delete Folder" archives the selection (folders as
-    /// folder records) in one undo step, then the toast with Undo.
-    func confirmDeleteFolders(_ ids: [ItemID]) -> Bool {
-        guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids) else { return false }
+    /// Delete folder(s): alert, one undo step, then the toast. The captured normal mixed menu
+    /// archives each contained tab separately; other callers retain folder records.
+    func confirmDeleteFolders(_ ids: [ItemID], archiveFolderTabs: Bool = false) -> Bool {
+        guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids, quoteTitle: archiveFolderTabs) else { return false }
         let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
         let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
         pendingConfirmation = alert
@@ -1557,7 +1557,7 @@ extension BrowserWindowController {
             self.pendingConfirmation = nil
             guard confirmed else { return }
             var archived = 0
-            self.keepingSelection { archived = self.model.archiveNodes(ids: ids) }
+            self.keepingSelection { archived = self.model.archiveNodes(ids: ids, archiveFolderTabs: archiveFolderTabs) }
             guard archived > 0 else { return }
             self.refresh(); restoreKeyboardFocus(); self.changed()
             self.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))

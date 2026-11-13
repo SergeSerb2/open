@@ -102,7 +102,9 @@ public enum SidebarIntent: Equatable, Sendable {
     case moveNodesToSpace(ids: [ItemID], space: SpaceID)
     case moveNodesToNewSpace(ids: [ItemID])
     case archiveNodes(ids: [ItemID])
-    case deleteFolders(ids: [ItemID])
+    /// C13-D2-6 normal mixed menu archives folder contents as individual tab records.
+    /// Keyboard, Option and Manager callers retain folder records by default.
+    case deleteFolders(ids: [ItemID], archiveFolderTabs: Bool = false)
     case newFolderFromSelection(ids: [ItemID])
     /// Selection menu "Open in Split View": the selected tabs become one split (2…4 tabs).
     case splitNodes(ids: [ItemID])

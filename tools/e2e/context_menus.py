@@ -952,7 +952,7 @@ def context_menu_checks(factory, results, tmp, h):
                                                   'Move to ▸', 'New Folder with 2 Items', '—', 'Archive Tabs', 'Archive Tabs Below'],
                         'tabs_disabled': set(tabs['disabled']) == {'Change Icon…', 'Mute', 'Archive Tabs Below'},
                         'mixed': mixed['items'] == ['Copy Links', 'Share 2 Items…', '—', 'Open in Split View', 'Move to ▸', 'New Folder with 2 Items',
-                                                    '—', 'Archive Tabs', 'Delete'],
+                                                    '—', 'Delete', '—'],
                         'mixed_split_disabled': 'Open in Split View' in mixed['disabled']}
                 # Behaviour: Open in Split View joins the two selected tabs into one split; undo restores them.
                 app.call('sidebar-click', node=made[0]); app.call('sidebar-click', node=made[1], modifiers=['cmd'])

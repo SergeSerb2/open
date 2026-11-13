@@ -1502,14 +1502,14 @@ public final class BrowserModel {
     }
 
     @discardableResult
-    public func archiveNodes(ids: [ItemID]) -> Int {
+    public func archiveNodes(ids: [ItemID], archiveFolderTabs: Bool = false) -> Int {
         for id in ids { noteLiveRowLeaving(id) }
-        let result = archiveMany(ids)
-        if let revert = result.revert { registerUndo(revert, reapply: { $0.archiveMany(ids).revert ?? Self.noRevert }) }
+        let result = archiveMany(ids, archiveFolderTabs: archiveFolderTabs)
+        if let revert = result.revert { registerUndo(revert, reapply: { $0.archiveMany(ids, archiveFolderTabs: archiveFolderTabs).revert ?? Self.noRevert }) }
         return result.count
     }
 
-    private func archiveMany(_ ids: [ItemID]) -> (count: Int, revert: Revert?) {
+    private func archiveMany(_ ids: [ItemID], archiveFolderTabs: Bool = false) -> (count: Int, revert: Revert?) {
         let selected = topLevelSelection(ids)
         // Stable parent grouping; remove the highest indexes first in each list.
         var parents: [NodeParent] = []
@@ -1535,8 +1535,8 @@ public final class BrowserModel {
             guard let node = index[id], let originalParent = sources[id] else { continue }
             // Preserve the original location before a pane collapse, but publish
             // archive records only after this node actually leaves the tree.
-            let nodeEntries = node.folder == nil ? archiveEntries(for: node, in: originalParent, reason: .closed, at: now, ownership: ownership[originalParent]) : []
-            let folder = node.folder.map { folderEntry($0, parent: originalParent, archivedAt: now) }
+            let nodeEntries = node.folder == nil || archiveFolderTabs ? archiveEntries(for: node, in: originalParent, reason: .closed, at: now, ownership: ownership[originalParent]) : []
+            let folder = archiveFolderTabs ? nil : node.folder.map { folderEntry($0, parent: originalParent, archivedAt: now) }
             let revert: Revert?
             if case .splitPane(let splitID)? = parentByID[id], let split = index[splitID]?.split,
                let taken = takePane(id, from: split) { revert = taken }
