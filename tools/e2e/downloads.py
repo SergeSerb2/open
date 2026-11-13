@@ -323,7 +323,13 @@ def checks(factory, results, tmp, config, harness):
             wait(lambda: item(key).get('received', 0) > 0)
             path = capture_root / ('mark-theme-' + label + '.png')
             app.call('snapshot', path=str(path))
-            w, h, bpp, pixels = png_pixels(str(path))
+            # Window snapshots carry the display's ICC profile (Display P3 on
+            # the M1). The byte reader does not apply it; the chroma cutoff
+            # below is in sRGB, where the captured red accent exceeds 150.
+            srgb = path.with_stem(path.stem + '-srgb')
+            subprocess.run(['/usr/bin/sips', '--matchTo', '/System/Library/ColorSync/Profiles/sRGB Profile.icc',
+                            str(path), '--out', str(srgb)], check=True, capture_output=True)
+            w, h, bpp, pixels = png_pixels(str(srgb))
             scale = w / app.call('window-state')['frame'][2]
             x, y, width, height = state()['badge']['markFrame']
             # The window content view is flipped, matching the PNG's top-origin rows.
