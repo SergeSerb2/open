@@ -31,6 +31,16 @@ final class SidebarRowLayerMotion {
                 point.y += view.layer?.presentation()?.transform.m42 ?? 0
                 self.previous[ObjectIdentifier(item)] = Previous(origin: point, view: view, opacity: view.layer?.presentation()?.opacity ?? view.layer?.opacity ?? 1)
             }
+        } else {
+            // An immediate edit can interrupt a prior animated edit (including
+            // a Reduce Motion change). Do not carry its offset into new rows.
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            outline.enumerateAvailableRowViews { view, _ in
+                view.layer?.removeAnimation(forKey: "row.structure.position")
+                view.layer?.removeAnimation(forKey: "row.structure.opacity")
+                view.layer?.transform = CATransform3DIdentity; view.layer?.opacity = 1
+            }
+            CATransaction.commit()
         }
         NSAnimationContext.beginGrouping()
         NSAnimationContext.current.duration = 0
