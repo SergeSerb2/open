@@ -173,9 +173,34 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         app.call("window-frame", frame=[80,60,1200,800])
         persisted = wait_until(lambda: (lambda s:s if s["ids"]==expected_order else None)(hover()), timeout=10)
         pin_result("X2_relaunch", {"ok":bool(persisted), "strip":persisted})
-        hidden = hover(False); shown = hover(True)
+        # Rebuilding native tracking areas can re-enter the sidebar under the
+        # unmoved hardware pointer (M1), independently of our tagged pointer.
+        # Sample this exit with the hardware pointer outside the sidebar, then
+        # restore the window before the remaining geometry/capture checks.
+        window = app.call("window-state")
+        original_frame = window["frame"]
+        cursor_x, cursor_y = window["cursor"]
+        sidebar_x, _, sidebar_width, _ = window["sidebarFrame"]
+        sample_frame = original_frame
+        if sidebar_x <= cursor_x < sidebar_x + sidebar_width and 0 <= cursor_y < original_frame[3]:
+            hardware_x = original_frame[0] + cursor_x
+            screen_x, _, screen_width, _ = window["screenFrame"]
+            candidates = [screen_x, screen_x + screen_width - original_frame[2]]
+            sample_x = next((x for x in candidates
+                if not x + sidebar_x <= hardware_x < x + sidebar_x + sidebar_width), None)
+            if sample_x is None:
+                raise RuntimeError("no on-screen window position isolates sidebar hover from the hardware pointer")
+            sample_frame = [sample_x, *original_frame[1:]]
+        try:
+            if sample_frame != original_frame:
+                app.call("window-frame", frame=sample_frame)
+            hidden = hover(False); shown = hover(True)
+        finally:
+            if sample_frame != original_frame:
+                app.call("window-frame", frame=original_frame)
         results["X3_hover"] = {"ok": not hidden["visible"] and shown["visible"] and len(shown["ids"]) == 3,
-                                 "away": hidden, "over": shown}
+                                 "away": hidden, "over": shown, "originalFrame": original_frame,
+                                 "sampleFrame": sample_frame, "hardwareCursor": window["cursor"]}
         # Select a stable local page before capturing Open's own window.
         blank = new_tab(app, "about:blank")
         for appearance in ("light", "dark"):
