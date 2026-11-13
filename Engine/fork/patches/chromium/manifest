@@ -35,6 +35,9 @@ paths: chrome/browser/notifications/mac/notification_platform_bridge_mac.cc
 # 0507-page-protocol-handler-request.patch
 paths: chrome/browser/custom_handlers/chrome_protocol_handler_registry_delegate.cc components/custom_handlers/register_protocol_handler_permission_request.h
 
+# 0508-open-password-auth-product-name.patch
+paths: chrome/app/chromium_strings.grd
+
 # 0305-open-extension-prompts.patch
 paths: chrome/browser/ui/views/extensions/extension_install_dialog_view.cc chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc
 # 0306-open-extension-windows-tabs.patch
