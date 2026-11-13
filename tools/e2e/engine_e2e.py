@@ -10005,14 +10005,12 @@ def space_manager_route_checks(app, results, space, library_key, tmp, manager_re
     copied = app.call('pasteboard')
     # Record both regressions before stopping: old routing breaks both in one run.
     results['manager_copy_link_pasteboard'] = {'ok': copied == pinned_url, 'expected': pinned_url, 'actual': copied}
-    # Reopening the native panel focuses its rail. Reach the card's outline
-    # through real Tab navigation before Down focuses its first pinned row.
-    outline_focused = False
-    for _ in range(32):
-        library_key(app, 'tab')
-        if app.call('library').get('firstResponder') == 'SidebarOutlineView':
-            outline_focused = True
-            break
+    # A modifier-click focuses the real outline without activating the row
+    # (plain selection closes Library in #350). Down then focuses the pin.
+    pin_point = row(pin)['point']
+    app.call('mouse', action='click', window=app.call('space-manager-state')['window'],
+             x=pin_point[0], y=pin_point[1], modifiers=['cmd'])
+    outline_focused = app.call('library').get('firstResponder') == 'SidebarOutlineView'
     require('manager_pinned_outline_keyboard_focus', outline_focused, panel=app.call('library'))
     library_key(app, 'down')
     library_key(app, 'delete')
