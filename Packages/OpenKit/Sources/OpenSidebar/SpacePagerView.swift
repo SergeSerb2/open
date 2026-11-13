@@ -133,6 +133,7 @@ final class SpacePagerView: NSView {
         placeStrip()
         let style = context.style(for: focused)
         guard animated, context.animatesChanges, previous != nil, animatesSidebarChanges, !Motion.reducesMotion else {
+            slideGeneration += 1
             strip.layer?.removeAnimation(forKey: "slide")
             lastSlideAnimation = nil
             animating = false
@@ -181,7 +182,12 @@ final class SpacePagerView: NSView {
         let from = presentationOffset
         layoutPages(); offset = CGFloat(spaces.count) * bounds.width; placeStrip()
         if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwitch) }
-        else { animating = false; finishSlide() }
+        else {
+            slideGeneration += 1
+            strip.layer?.removeAnimation(forKey: "slide")
+            lastSlideAnimation = nil
+            animating = false; finishSlide()
+        }
     }
 
     func endCreation() {
