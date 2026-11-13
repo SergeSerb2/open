@@ -325,26 +325,48 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         }
         return menu
     }
-    /// Window geometry is already final. Only the render-server opacity moves;
-    /// subsequent MRU resurfacing must not restart the initial fade.
+    private func presentationLayer() -> CALayer? {
+        // Include the native frame and its background, not only our content.
+        // Fading the content alone leaves an opaque empty window until close.
+        let frame = root.superview ?? root
+        frame.wantsLayer = true
+        return frame.layer
+    }
+    /// Paint the final geometry once before revealing the native window layer.
+    /// Subsequent MRU resurfacing must not restart the initial fade.
     func presentWindow() {
         guard !closed, let window else { return }
         let first = !hasPresented; hasPresented = true
+        let layer = first && !Motion.reducesMotion ? presentationLayer() : nil
+        if let layer {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            layer.opacity = 0
+            CATransaction.commit()
+        }
         window.makeKeyAndOrderFront(nil)
-        guard first, !Motion.reducesMotion, let layer = root.layer else { return }
+        guard let layer else { return }
+        window.displayIfNeeded(); CATransaction.flush()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.opacity = 1
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1; fade.duration = Motion.littleOpenFade
         fade.timingFunction = Motion.easeOut
         layer.add(fade, forKey: "littleOpen.opacity")
+        CATransaction.commit()
     }
     /// Retain the live page through the exit fade. The coordinator has already
     /// removed the session, so a second close cannot schedule another teardown.
     func closeWindow() {
         let finish = { [self] in
-            commandBar.dismiss(reason: .programmatic)
-            container.closeAll(); window?.delegate = nil; window?.close()
+            // Page teardown can take several display intervals. Remove the
+            // finished window first, then release its hosts on the next turn.
+            window?.orderOut(nil)
+            DispatchQueue.main.async { [self] in
+                commandBar.dismiss(reason: .programmatic)
+                container.closeAll(); window?.delegate = nil; window?.close()
+            }
         }
-        guard window?.isVisible == true, !Motion.reducesMotion, let layer = root.layer else { finish(); return }
+        guard window?.isVisible == true, !Motion.reducesMotion, let layer = presentationLayer() else { finish(); return }
         window?.ignoresMouseEvents = true
         let start = layer.presentation()?.opacity ?? layer.opacity
         CATransaction.begin(); CATransaction.setDisableActions(true)
