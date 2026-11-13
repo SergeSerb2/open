@@ -8927,10 +8927,19 @@ def routing_checks(factory, results, tmp):
     def loaded_document(url):
         # Model selection alone can leave an external tab as a placeholder.
         # Observe the real page without selecting it again through automation.
-        tab = wait_until(lambda: next((t for t in app.call('tabs')
-                         if t['url'] == url and t['selected'] and t['hasWebContent'] and t['loaded']), None),
-                         timeout=8, step=.05)
-        return bool(tab and app.eval(tab['id'], 'location.href') == url)
+        def loaded():
+            tab = next((t for t in app.call('tabs')
+                        if t['url'] == url and t['selected'] and t['hasWebContent'] and t['loaded']), None)
+            if not tab:
+                return False
+            try:
+                return app.eval(tab['id'], 'location.href') == url
+            except RuntimeError as error:
+                # Chrome can attach its host before its browser handle is ready.
+                if '(app.open.engine error 4.)' not in str(error):
+                    raise
+                return False
+        return bool(wait_until(loaded, timeout=8, step=.05))
 
     try:
         # Capture actual persisted values, including absence, before resetting.
@@ -9195,21 +9204,33 @@ def routing_checks(factory, results, tmp):
         app.call('policy', permissions='grant')
         mail_tab = new_tab(app, origin + '/mail-home')
         template = origin + '/compose?to=%s'
+        app.call('events')
         app.eval(mail_tab, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
         registered = wait_until(lambda: any(h['scheme'] == 'mailto' and h['default'] for h in app.call('protocol-handlers')['handlers']), timeout=8, step=.1)
         mail_before = app.call('mailto-state')['handled']
         expected_mail = origin + '/compose?to=mailto%3Asomeone%40example.org'
+        mail_page = app.page(mail_tab)
+        handlers = app.call('protocol-handlers', translate='mailto:someone@example.org')
+        prompts = [event for event in app.call('events') if event['type'] == 'permission']
         sent_mail = deliver('mailto:someone@example.org')
         mail_landed = landed(expected_mail)
+        mail_loaded = loaded_document(expected_mail) if mail_landed else False
         mail_state = app.call('mailto-state')
-        app.call('protocol-handlers', removeScheme='mailto', removeURLTemplate=template)
+        removed = app.call('protocol-handlers', removeScheme='mailto', removeURLTemplate=template,
+                           translate='mailto:someone@example.org')
         tabs_before_none = len(app.call('tabs'))
         sent_none = deliver('mailto:nobody@example.org')
         none_state = wait_until(lambda: (lambda st: st if st['handled'] >= mail_before + 2 else None)(app.call('mailto-state')), timeout=8, step=.1)
         record('routing_mailto_handler', bool(registered) and sent_mail.returncode == 0 and mail_landed
-               and mail_state['translated'] == expected_mail and sent_none.returncode == 0 and bool(none_state)
+               and mail_page['style'] == 'chrome' and handlers['translated'] == expected_mail
+               and len(prompts) == 1 and prompts[0]['kinds'] == 1 << 12
+               and prompts[0].get('protocolScheme') == 'mailto' and prompts[0].get('protocolURLTemplate') == template
+               and mail_loaded and mail_state['translated'] == expected_mail
+               and removed == {'removed': True, 'handlers': [], 'translated': None}
+               and sent_none.returncode == 0 and bool(none_state)
                and none_state['translated'] == '' and len(app.call('tabs')) == tabs_before_none,
-               state=mail_state, noHandler=none_state)
+               state=mail_state, noHandler=none_state, registered=registered, runtimeStyle=mail_page['style'],
+               handlers=handlers, prompts=prompts, loadedDocument=mail_loaded, removed=removed)
         # restart: the same executable and options come back after this process exits.
         # The harness stops talking to the old App (it exits on purpose); the relaunched
         # instance answers on the same automation socket and is driven with short raw calls.
@@ -13403,7 +13424,7 @@ def main():
     global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", choices=["alloy", "chrome"],
-                    help="runtime style (default: chrome for context-menus, alloy for other suites)")
+                    help="runtime style (default: chrome for context-menus/routing, alloy for other suites)")
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
     ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
@@ -13465,7 +13486,9 @@ def main():
     # Context menus assert Chrome's full model and extension contributions, as
     # used by normal Open launches. Alloy has CEF's shorter, different menu.
     if opts.style is None:
-        opts.style = "chrome" if opts.only == "context-menus" else "alloy"
+        # Routing includes web protocol registration, which requires the
+        # shipping Chrome runtime's BrowserWebContentsDelegate.
+        opts.style = "chrome" if opts.only in ("context-menus", "routing") else "alloy"
     if opts.page_site_data_only and opts.only != "page":
         ap.error("--page-site-data-only requires --only page")
     if opts.sitecontrol_final_only and opts.only != "sitecontrol":
