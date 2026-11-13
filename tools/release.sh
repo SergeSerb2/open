@@ -790,6 +790,13 @@ dmg() {
     install -m 0644 "$ROOT/assets/release/dmg-background.png" "$staging/.background/background.png"
     log 'DMG background/icon layout: Open-owned placeholder; Finder geometry/positions are not configured in v1'
     hdiutil create -volname "Open $VERSION" -srcfolder "$staging" -ov -format UDZO "$DMG"
+    # Sign the disk image itself (Developer ID + secure timestamp in production),
+    # before its notarization: Gatekeeper's open check (A-5) needs a DMG signature;
+    # a stapled ticket alone reads "no usable signature".
+    local dmg_args=(--force --sign "$IDENTITY")
+    if [[ $DRY == 1 ]]; then dmg_args+=(--timestamp=none); else dmg_args+=(--timestamp); fi
+    codesign "${dmg_args[@]}" "$DMG"
+    codesign --verify --strict --verbose=2 "$DMG"
     if [[ $DRY == 1 || $SKIP_NOTARY == 1 ]]; then
         log "SKIP DMG notarization/stapling: $MODE"
     else

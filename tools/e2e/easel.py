@@ -556,6 +556,36 @@ def run(factory, results, tmp, api):
             app.call('appearance', name='dark'); time.sleep(.6)
             snapshot('l01-library-easels-dark')
             app.call('appearance', name='light')
+            # S01 (EZ GAPS G6): the command bar finds an Easel that is only in the Library by its title,
+            # as a normal row ("Easel"); choosing it opens the Easel with a sidebar row again.
+            library(action='close')
+            b_url = board_b['url']
+            def bar_query(text):
+                app.call('key', key='t', modifiers=['cmd'], route='app')
+                api.wait_until(lambda: app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
+                app.call('key', text=text)
+                return api.wait_until(lambda: (lambda s: s if s.get('text') == text and s.get('final') else None)(app.call('commandbar-state')),
+                                      timeout=8, step=.1) or app.call('commandbar-state')
+            found = bar_query('Board B')
+            if not any(r['url'] == b_url for r in found.get('rows', [])):
+                # The catalog refreshes off the main thread when the bar opens: ask once more.
+                app.call('key', key='escape'); time.sleep(.5); found = bar_query('Board B')
+            bar_rows = found.get('rows', [])
+            row = next((r for r in bar_rows if r['url'] == b_url), {})
+            before = [t['id'] for t in app.call('tabs') if t['url'] == b_url]
+            for _ in range(bar_rows.index(row) if row in bar_rows else 0): app.call('key', key='down')
+            app.call('key', key='return')
+            reopened = api.wait_until(lambda: [t for t in app.call('tabs') if t['url'] == b_url] or None, timeout=8, step=.1)
+            record('S01_commandbar_finds_library_easel', bool(row) and row.get('kind') == 'navigate' and row.get('title') == 'Board B'
+                   and row.get('subtitle') == 'Easel' and not before and bool(reopened)
+                   and sum(1 for r in bar_rows if r['url'] == b_url) == 1,
+                   row=row, rows=[(r['title'], r['kind'], r.get('subtitle')) for r in bar_rows[:6]])
+            # S02: an Easel that is a sidebar tab comes once, as its Switch to Tab row (no second Easel row).
+            same = [r for r in bar_query('Board B').get('rows', []) if r['url'] == b_url]
+            record('S02_sidebar_easel_once', len(same) == 1 and same[0]['kind'] == 'switchToTab', rows=[(r['title'], r['kind']) for r in same])
+            app.call('key', key='escape')
+            library(action='open', section='easels')
+            api.wait_until(lambda: library().get('rows') or None, timeout=8, step=.2)
             b_row = rows.get('Board B', {}).get('id', '')
             menu = library(action='row-menu', id=b_row)['items'] if b_row else []
             library(action='row-action', id=b_row, name='open')
@@ -598,7 +628,7 @@ def run(factory, results, tmp, api):
         app.call('menu-perform', id='view-easels-notes')
         opened = api.wait_until(lambda: (lambda x: x if x.get('open') and x.get('section') == 'easels' else None)(app.call('library')), timeout=8, step=.2)
         record('L06_view_easels_and_notes', bool(opened) and menu.get('view-easels-notes', {}).get('enabled') is True
-               and menu['view-easels-notes'].get('title') == 'View Easels & Notes',
+               and menu['view-easels-notes'].get('title') == 'View Easels & Notes…',  # 1.172.2 ellipsis (#506)
                menu=menu, section=(opened or app.call('library')).get('section'))
         app.call('library-close')
         app.call('library', action='open', section='easels')

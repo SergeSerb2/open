@@ -95,6 +95,7 @@ final class AppStores: ProfileDataOwner {
     let engine = SuggestEngine(model: app.model, historyStore: { [weak self] in self?.history(for: $0) },
       actions: CommandRegistry.makeSuggestRegistry())
     engine.providers.append(SettingsSuggestionsProvider())
+    engine.providers.append(EaselsProvider(catalog: app.easelSearch.catalog))
     currentProfile = profileID; currentSuggest = engine
     return engine
   }
