@@ -3,6 +3,8 @@
 import argparse
 import base64
 import json
+import plistlib
+import subprocess
 from pathlib import Path
 import tempfile
 import time
@@ -15,6 +17,9 @@ def run(output, config):
     output.mkdir(parents=True, exist_ok=True)
     checks = {}
     app = None
+    root = Path(__file__).resolve().parents[2]
+    probe = output/'icon-readback'
+    subprocess.run(['xcrun', 'swiftc', str(root/'tools/release-icon.swift'), '-o', str(probe)], check=True)
     def check(name, ok, **evidence):
         checks[name] = dict(ok=bool(ok), **evidence)
         print(('PASS ' if ok else 'FAIL ') + name, flush=True)
@@ -27,6 +32,11 @@ def run(output, config):
             return Open(config, 'alloy', str(Path(tmp)/'data'), [], str(Path(tmp)/'app.log'), urls=())
         try:
             app = launch()
+            info = plistlib.loads((Path(app.bundle)/'Contents/Info.plist').read_bytes())
+            check('bundle_icon_declared', info.get('CFBundleIconName') == 'AppIcon' and bool(info.get('CFBundleIconFile')))
+            baseline = app.call('settings-icon', exportImage=True)
+            before = output/'default-before.png'
+            before.write_bytes(base64.b64decode(baseline['applicationIconPNG']))
             app.call('settings-pane', pane='appIcon')
             for option in ['openDefault', 'openDark', 'openLight', 'openMono', 'openColor', 'openRetro']:
                 state = app.call('settings-icon', select=option)
@@ -35,14 +45,21 @@ def run(output, config):
             first = app.call('settings-icon', select='openDark')
             again = app.call('settings-icon', select='openDark')
             check('cached_alternate', first['imageObject'] == again['imageObject'])
-            reset = app.call('settings-icon', select='openDefault')
-            check('reset_bundle_pixels', reset['matchesApplication'] and reset['imageObject'] == 'bundle', state=reset)
+            reset = app.call('settings-icon', select='openDefault', exportImage=True)
+            after = output/'default-after-reset.png'
+            after.write_bytes(base64.b64decode(reset.pop('applicationIconPNG')))
+            compare = subprocess.run([str(probe), 'compare', str(after), str(before)], capture_output=True, text=True)
+            check('reset_bundle_pixels', compare.returncode == 0 and reset['imageObject'] == 'bundle',
+                  state=reset, pixels=compare.stdout)
             time.sleep(.3)
             capture_window(app.call('settings-state')['settings'], output/'app-icon-settings.png')
             app.quit(); app = launch()
-            state = app.call('settings-icon')
+            state = app.call('settings-icon', exportImage=True)
+            relaunched = output/'default-after-relaunch.png'
+            relaunched.write_bytes(base64.b64decode(state.pop('applicationIconPNG')))
+            compare = subprocess.run([str(probe), 'compare', str(relaunched), str(before)], capture_output=True, text=True)
             check('default_relaunch', state['selected'] == 'openDefault' and state['applied'] == 'openDefault'
-                  and state['matchesApplication'] and state['restoreStartedMs'] is None, state=state)
+                  and compare.returncode == 0 and state['restoreStartedMs'] is None, state=state, pixels=compare.stdout)
             # The picker refuses an unknown option through its public socket action.
             try:
                 app.call('settings-icon', select='not-an-icon')

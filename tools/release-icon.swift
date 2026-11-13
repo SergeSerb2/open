@@ -20,16 +20,21 @@ func difference(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Double {
 }
 let args = CommandLine.arguments
 func fail(_ message: String) -> Never { print("FAIL: \(message)"); exit(1) }
-guard (args.count == 4 || args.count == 5), let expected = NSImage(contentsOfFile: args[3]) else { fail("usage: release-icon set|check path icon.icns [proof.png]") }
+guard (args.count == 4 || args.count == 5), let expected = NSImage(contentsOfFile: args[3]) else { fail("usage: release-icon set|check|compare path icon.icns [proof.png]") }
 if args[1] == "set" {
     guard NSWorkspace.shared.setIcon(expected, forFile: args[2], options: []) else { fail("NSWorkspace.setIcon") }
-} else if args[1] != "check" { fail("unknown operation") }
-let actual = bitmap(NSWorkspace.shared.icon(forFile: args[2]))
+} else if args[1] != "check" && args[1] != "compare" { fail("unknown operation") }
+let actualImage: NSImage
+if args[1] == "compare" {
+    guard let loaded = NSImage(contentsOfFile: args[2]) else { fail("cannot read icon image") }
+    actualImage = loaded
+} else { actualImage = NSWorkspace.shared.icon(forFile: args[2]) }
+let actual = bitmap(actualImage)
 let generic = bitmap(NSWorkspace.shared.icon(for: .application))
 let delta = difference(actual, bitmap(expected)), genericDelta = difference(actual, generic)
 if args.count == 5 {
     try actual.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: args[4]))
 }
 print("NSWorkspace icon: expected mean pixel delta=\(delta); generic application delta=\(genericDelta)")
-guard delta < 3, genericDelta > 5 else { fail("icon does not match Open artwork or is the generic app icon") }
+guard (args[1] == "compare" ? delta == 0 : delta < 3), genericDelta > 5 else { fail("icon does not match Open artwork or is the generic app icon") }
 print("PASS: Open icon read back through NSWorkspace")

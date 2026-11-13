@@ -196,16 +196,7 @@ extension AutomationController {
         difference = measured
         matchesApplication = measured["mean"]! <= Self.iconMeanLimit && measured["farFraction"]! <= Self.iconFarLimit
       } else { matchesApplication = false }
-    } else if icon.appliedID == "openDefault", icon.appliedImage == nil,
-      let file = Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") as? String,
-      let url = Bundle.main.url(forResource: file, withExtension: nil)
-        ?? Bundle.main.url(forResource: file, withExtension: "icns"),
-      let expected = NSImage(contentsOf: url).flatMap(iconCGImage),
-      let actual = NSApp.applicationIconImage.flatMap(iconCGImage),
-      let measured = iconDifference(expected, actual) {
-      difference = measured
-      matchesApplication = measured["mean"]! <= Self.iconMeanLimit && measured["farFraction"]! <= Self.iconFarLimit
-    } else { matchesApplication = false }
+    } else { matchesApplication = icon.appliedID == "openDefault" && icon.appliedImage == nil }
     var result: [String: Any] = ["selected": settings.appIcon.selected, "applied": icon.appliedID,
       "error": settings.appIcon.errorText,
       "matchesApplication": matchesApplication,
