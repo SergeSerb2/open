@@ -38,7 +38,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
     config.runtimeStyle = .chrome
     let page = OEWebContent(configuration: config, url: url)
     pages[key] = page; page.delegate = self
-    owner.insert(page, at: owner.webContents.count)
+    owner.insert(page, at: UInt(owner.webContents.count))
     owner.activeWebContent = page
     window.contentView = page.view
     window.makeKeyAndOrderFront(nil)
@@ -130,7 +130,7 @@ extension AutomationController {
         let target = proof.browsers[args["to"] as? String ?? ""],
         let index = args["index"] as? Int, index >= 0 else { throw Failure(message: "invalid transfer") }
       proof.inTransfer = true
-      let moved = target.transfer(page, from: source, at: index)
+      let moved = target.transfer(page, from: source, at: UInt(index))
       proof.inTransfer = false
       if moved {
         page.view.removeFromSuperview()
