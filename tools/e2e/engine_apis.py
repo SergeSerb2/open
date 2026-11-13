@@ -1,19 +1,32 @@
 """Real-App callers of live transfer and HTTP/proxy authentication APIs."""
 import base64
 import http.server
+import io
 import threading
+import wave
 from loopback_http import LoopbackHTTPServer
 
 
 def run(factory, results, wait):
     credential = 'Basic ' + base64.b64encode(b'open-fixture:synthetic-only').decode()
     attempts = {}
+    audio = io.BytesIO()
+    with wave.open(audio, 'wb') as wav:
+        wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(8000)
+        wav.writeframes(b'\0' * 160000)  # Ten seconds of synthetic silence.
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *_):
             pass
 
         def do_GET(self):
+            if self.path == '/tone.wav':
+                body = audio.getvalue()
+                self.send_response(200)
+                self.send_header('Content-Type', 'audio/wav')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers(); self.wfile.write(body)
+                return
             proxy = self.path.startswith('http://')
             protected = proxy or self.path.startswith('/auth')
             accepted = self.headers.get('Proxy-Authorization' if proxy else 'Authorization') == credential
@@ -80,10 +93,14 @@ def run(factory, results, wait):
         assert loaded('p'), 'live fixture did not load'
         evaluate('document.querySelector("#form").value="retained form";'
                  'history.pushState({},"","/history");scrollTo(0,420);true')
-        script = '({nonce,form:document.querySelector("#form").value,scroll:scrollY,history:history.length})'
+        evaluate('window.media=new Audio(%r);media.loop=true;media.play().then(()=>true)' % (base + '/tone.wav'))
+        assert wait(lambda: evaluate('media.currentTime') > .05, timeout=10)
+        script = ('({nonce,form:document.querySelector("#form").value,scroll:scrollY,history:history.length,'
+                  'mediaPaused:media.paused,mediaLoop:media.loop})')
         before = evaluate(script)
         identity = call()['pages']['p']
         for source, target in [('a', 'b'), ('b', 'a')]:
+            media_before = evaluate('media.currentTime')
             moved = call('transfer', page='p', **{'from': source, 'to': target, 'index': 0})
             after = evaluate(script)
             state = call()
@@ -92,6 +109,7 @@ def run(factory, results, wait):
                 moved['moved'] and before == after and all(page[k] == identity[k] for k in ('id', 'tabID', 'view'))
                 and state['browsers'][source]['tabs'] == []
                 and state['browsers'][target]['tabs'] == [page['id']]
+                and evaluate('media.currentTime') >= media_before
                 and state['synchronousCallbacks'] == 0, preserved=before == after, identity=page,
                 sourceTabs=state['browsers'][source]['tabs'], targetTabs=state['browsers'][target]['tabs'])
 
@@ -102,6 +120,15 @@ def run(factory, results, wait):
             current = call()
             row('refuse_' + name, not refused['moved'] and old['pages'] == current['pages']
                 and old['browsers'] == current['browsers'] and evaluate(script) == before)
+        call('add', page='q', browser='d', url=base + '/neighbor')
+        assert loaded('q')
+        call('pin', page='p', pinned=True)
+        moved = call('transfer', page='p', **{'from': 'a', 'to': 'd', 'index': 1})
+        row('transfer_pinned_into_nonempty', moved['moved'] and call()['pages']['p']['pinned']
+            and evaluate(script) == before)
+        moved = call('transfer', page='p', **{'from': 'd', 'to': 'a', 'index': 0})
+        row('transfer_nonlast_source', moved['moved'] and len(call()['browsers']['d']['tabs']) == 1
+            and call()['pages']['p']['pinned'] and evaluate(script) == before)
         call('close-browser', browser='b')
         row('close_emptied_source', call()['pages']['p']['live'] and evaluate(script) == before)
         refused = call('transfer', page='p', **{'from': 'a', 'to': 'b', 'index': 0})

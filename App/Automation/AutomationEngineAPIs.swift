@@ -19,7 +19,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
 
   init(context: OEBrowserContext, other: OEBrowserContext) {
     super.init()
-    for key in ["a", "b", "c"] {
+    for key in ["a", "b", "c", "d"] {
       let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 800, height: 600),
         styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
       window.isReleasedWhenClosed = false
@@ -68,6 +68,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
       ["id": page.identifier, "tabID": page.chromeTabIdentifier,
        "live": page.isLive, "loading": page.isLoading,
        "url": page.url?.absoluteString ?? "",
+       "pinned": page.browser?.isPinned(page) ?? false,
        "view": String(describing: ObjectIdentifier(page.view)),
        "browser": page.browser?.identifier ?? -1] as [String: Any]
     }, "browsers": browsers.mapValues {
@@ -133,7 +134,9 @@ extension AutomationController {
       proof.inTransfer = false
       if moved {
         page.view.removeFromSuperview()
-        proof.windows[args["to"] as? String ?? ""]?.contentView = page.view
+        let window = proof.windows[args["to"] as? String ?? ""]
+        window?.contentView = page.view
+        window?.makeKeyAndOrderFront(nil)
         target.activeWebContent = page
       }
       return ["moved": moved, "state": proof.state()] as [String: Any]
@@ -164,6 +167,11 @@ extension AutomationController {
         throw Failure(message: "invalid page")
       }
       page.stopLoading()
+    case "pin":
+      guard let page = proof.pages[args["page"] as? String ?? ""], let browser = page.browser else {
+        throw Failure(message: "invalid page")
+      }
+      browser.setPinned(args["pinned"] as? Bool ?? false, for: page)
     case "cleanup":
       proof.close(); engineAPIProof = nil
       return ["remainingWindows": NSApp.windows.filter { $0.isVisible && $0.title == "Engine API proof" }.count,
