@@ -49,7 +49,11 @@ def run(factory, results, wait):
                 self.send_header('Proxy-Authenticate' if proxy else 'WWW-Authenticate', 'Basic realm="%s"' % realm)
             else:
                 body = (b'<!doctype html><title>Engine API fixture</title>'
-                        b'<input id="form"><div style="height:3000px">fixture</div>'
+                        # Keep the input visible at the asserted scroll offset.
+                        # Native window activation may focus it; scrolling an
+                        # offscreen input into view is a separate browser behavior.
+                        b'<input id="form" style="position:absolute;top:500px">'
+                        b'<div style="height:3000px">fixture</div>'
                         b'<script>window.nonce=globalThis.crypto?.randomUUID?.()||String(Math.random());'
                         b'window.accepted=true;</script>')
                 self.send_response(200)
@@ -113,6 +117,7 @@ def run(factory, results, wait):
                 and state['synchronousCallbacks'] == 0, preserved=before == after, identity=page,
                 before=before, after=after, moved=moved['moved'], originalIdentity=identity,
                 synchronousCallbacks=state['synchronousCallbacks'],
+                focusedElement=evaluate('document.activeElement?.id||document.activeElement?.tagName'),
                 sourceTabs=state['browsers'][source]['tabs'], targetTabs=state['browsers'][target]['tabs'])
 
         for name, source, target, index in [('context', 'a', 'c', 0), ('owner', 'b', 'a', 0),
