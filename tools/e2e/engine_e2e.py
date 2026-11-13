@@ -11193,9 +11193,9 @@ def library_capture_checks(app, require, root, evidence):
             if section == 'history':
                 working = wait_until(lambda: app.call('settings-state')['historyRows'] > 0, timeout=5)
             elif section == 'downloads':
-                # Empty Downloads: "No downloads yet", or "No matches" while a search or Profile filter is active
-                # (LibraryPanelView.updateEmptyCopy). Either one is the working empty list, not the capture error.
-                working = current and not current['items'] and any(t in ('No downloads yet', 'No matches') for t in current['text'])
+                # Empty Downloads with no search: "No downloads yet". The owner-Profile scope set on every outside
+                # entry is not a user filter (#480, LibraryPanelView.updateEmptyCopy).
+                working = current and not current['items'] and 'No downloads yet' in current['text'] and 'No matches' not in current['text']
             else: working = app.call('space-manager-state')['hostedManagers'] == 1
             require('library_corrupt_index_' + section, current and working and no_error(current) and current['status'] == '', state=state())
         # The native Library has no Captures section: captures show in Media, and the index is read when Media

@@ -295,6 +295,23 @@ copies the code. No code xref was found. **Needs capture.**
 6. Join Meeting (⌘⌃J) and the command-bar action with and without an upcoming meeting.
 7. Peek Email (⌘⇧E) on a page with a focused code field.
 
+## 8. Open's design where no capture is possible (LEAD 20:45, 2026-11-12)
+
+These are **Open's own designs**, not captured Arc facts. The items needed a GitHub account, real sites or
+macOS folder consent, so no capture session could settle them (C-LF-1..5). Each rests on the static evidence
+cited in §2–§3 above; anything not listed there is a choice made by Open.
+
+| Item | Open's design | Arc evidence it rests on |
+|---|---|---|
+| C-LF-1 PR row icon | Open's own 16 pt PR-state glyph family in place of the favicon. Inks: open = system green, draft = secondary label grey, merged = system purple, closed = system red. Never GitHub's octicon art | Status values from octicon class names `S:131406–131411` (§2.3) |
+| C-LF-1 PR row hover popover | Folder-card family, 240 pt wide. Title = PR title; subtitle "#N · owner/repo"; a third line "‹author› needs your review" only when my review is awaited. No extra fetch per PR (no diff stats, no checks) | `LiveItemPopoverViewModel {title, subtitle, icon, width}`, "%@ needs your review" (`G:FUN_100c8b050`, §2.2) |
+| C-LF-2 "Show More" | The first 10 PR rows, then one "Show More" row in the sidebar's secondary row style. A click shows the rest (up to the 50-row cap). The expanded state resets when the folder collapses. The row count of 10 is Open's choice | "Cell that reveals more items in a live folder" `S:116300` (§2.2) |
+| C-LF-3 toasts | None. Refresh failures show only as the folder header state | Titles `S:131750–131780` are not proven user-visible; capture s5 showed no toast on creation |
+| C-LF-3 Single Sign-On ▸ Required | A read-only state checkmark (on when the last fetch saw the SSO banner). A click opens the organization's SSO URL in a new tab. Nothing is stored | `githubLiveFolderSSOPreferences` `S:113733`; SSO banner and `sso_organizations` `S:131395–131399` (§2.4) |
+| C-LF-3 refresh timing | Triggers as in §2.5 (foreground, Space focus, PR created or reviewed, sign-in or sign-out) with the 10 s throttle. No periodic timer | §2.5; no timer period found |
+| C-LF-4 Recents and Gmail cards | Unchanged: the measured folder-card family. Header height, row count and "+" size remain GUESS until a capture | §3.3–§3.4 strings |
+| C-LF-5 Library ▸ Media first-use card | Body "Allow Open to show your Documents, Desktop, and Download Folders to see them here alongside your Captures."; the Choose Folders button's tooltip and accessibility help "Quickly grab screenshots, images, and videos from your computer by showing them in the Open Library!". The folder prompt appears only on the user's click | LB-1 strings (features-advanced.md), with "Open" in place of "Arc" |
+
 ## Sources
 
 - W1: Arc for Windows release notes, 2024-06-06 and 2024-07-18,

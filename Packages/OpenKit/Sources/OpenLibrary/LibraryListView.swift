@@ -28,6 +28,9 @@ struct LibraryRowItem {
     var hoverActions: [LibraryRowAction] = []
     /// False: a right-click opens no menu (Arc's Downloads rows); the More button still opens it.
     var contextMenu = true
+    /// Boost rows: on or off. Not drawn (Arc's card shows only the name and the host); it sets the gallery
+    /// toggle and the row's accessibility label.
+    var isOn: Bool? = nil
     var moreTooltip = "More"
 }
 
@@ -495,7 +498,7 @@ private final class LibraryItemView: NSView {
             button.toolTip = action.title; button.setAccessibilityLabel(action.title); button.setAccessibilityRole(.button); button.isEnabled = action.enabled; button.needsDisplay = true
         }
         if gallery {
-            for (index,choice) in [("edit","Edit Boost","Edit…"),("enabled",item.subtitle.hasSuffix(" · on") ? "Turn Off" : "Turn On",item.subtitle.hasSuffix(" · on") ? "On" : "Off")].enumerated() {
+            for (index,choice) in [("edit","Edit Boost","Edit…"),("enabled",item.isOn == true ? "Turn Off" : "Turn On",item.isOn == true ? "On" : "Off")].enumerated() {
                 let (suffix,name,label) = choice, button = buttons[index]
                 let action = item.actions.first(where: { $0.title == name })
                 button.title = label; button.glyph = nil; button.labelSize = 12; button.toolTip = nil
@@ -504,14 +507,14 @@ private final class LibraryItemView: NSView {
                 button.identifier = .init("boosts.\(item.id).\(suffix)"); button.setAccessibilityLabel(name)
                 button.isEnabled = action?.enabled == true; button.onPress = action?.run
                 button.setAccessibilityRole(suffix == "enabled" ? .checkBox : .button)
-                button.selected = suffix == "enabled" && item.subtitle.hasSuffix(" · on")
+                button.selected = suffix == "enabled" && item.isOn == true
             }
             let more = buttons[2]; more.title = ""; more.glyph = .dots; more.isChip = false; more.selected = false
             more.baseAlpha = 0; more.isEnabled = true; more.toolTip = nil; more.foreground = foreground; more.overlay = overlay
             more.setAccessibilityLabel("More options"); more.identifier = .init("boosts.\(item.id).more")
             more.setAccessibilityRole(.button); more.onPress = { [weak self] in self?.onMenu?() }
         }
-        setAccessibilityElement(!gallery); setAccessibilityRole(gallery ? .group : .row); setAccessibilityLabel(item.title+". "+item.subtitle)
+        setAccessibilityElement(!gallery); setAccessibilityRole(gallery ? .group : .row); setAccessibilityLabel(item.title+". "+item.subtitle+(item.isOn.map { $0 ? " · on" : " · off" } ?? ""))
         setAccessibilityCustomActions(item.hoverActions.map { action in NSAccessibilityCustomAction(name:action.title) { action.run(); return true } })
         hovered = false; buttons.forEach { $0.isHidden = !gallery }; needsLayout = true; needsDisplay = true
     }
