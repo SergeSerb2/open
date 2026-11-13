@@ -9957,7 +9957,7 @@ def space_manager_engine_provenance(config):
 
 
 
-def space_manager_route_checks(app, results, space, library_key, tmp):
+def space_manager_route_checks(app, results, space, library_key, tmp, manager_ready):
     """Use real manager row keys, controls, menus, engine hosts and pasteboard."""
     def require(name, condition, **detail):
         results[name] = dict(detail, ok=bool(condition))
@@ -9967,9 +9967,19 @@ def space_manager_route_checks(app, results, space, library_key, tmp):
         state = app.call('space-manager-state')
         return next(r for col in state['columns'] if col['id'] == space for r in col['rows'] if r['id'] == tab)
 
+    def open_manager():
+        app.call('library-open')
+        if not manager_ready(app): raise AssertionError('native Manager input did not settle')
+
     def click_row(tab):
+        open_manager()
         point = row(tab)['point']
         app.call('mouse', action='click', window=app.call('space-manager-state')['window'], x=point[0], y=point[1])
+        # PR #350 selects in the owning browser and closes its embedded Library.
+        if not wait_until(lambda: app.call('window-state')['selected'] == tab
+                          and not app.call('space-manager-lifecycle')['visible'], timeout=5):
+            raise AssertionError('native Manager row did not select and close Library')
+        open_manager()
 
     def click_control(tab, label, favicon=False):
         info = app.call('space-manager-row-controls', space=space, node=tab)
@@ -9995,7 +10005,16 @@ def space_manager_route_checks(app, results, space, library_key, tmp):
     copied = app.call('pasteboard')
     # Record both regressions before stopping: old routing breaks both in one run.
     results['manager_copy_link_pasteboard'] = {'ok': copied == pinned_url, 'expected': pinned_url, 'actual': copied}
-    library_key(app, 'down')  # Native keyboard focus starts at the first (pinned) row.
+    # Reopening the native panel focuses its rail. Reach the card's outline
+    # through real Tab navigation before Down focuses its first pinned row.
+    outline_focused = False
+    for _ in range(32):
+        library_key(app, 'tab')
+        if app.call('library').get('firstResponder') == 'SidebarOutlineView':
+            outline_focused = True
+            break
+    require('manager_pinned_outline_keyboard_focus', outline_focused, panel=app.call('library'))
+    library_key(app, 'down')
     library_key(app, 'delete')
     wait_until(lambda: any(t['id'] == pin and not t['hasWebContent'] for t in app.call('tabs')), timeout=2)
     retained = next((t for t in app.call('tabs') if t['id'] == pin), None)
@@ -11770,8 +11789,12 @@ def space_manager_checks(results, tmp, config, style):
         row = next(row for col in rebound['columns'] if col['id'] == s2 for row in col['rows'] if row['id'] == tab)
         app.call('mouse', action='click', window=rebound['window'], x=row['point'][0], y=row['point'][1])
         selected = state_when(app, lambda s: s['id'] == second and s['selected'] == tab and s['shownPages'] == [tab])
-        require('rebound_manager_intents', selected and state(app)['contextWindow'] == second, browser=selected, actualBrowser=app.call('window-state', id=second), manager=state(app), point=row['point'], tab=tab, png=capture(app, 'manager-rebound-click'))
-        pin = space_manager_route_checks(app, results, s2, library_key, tmp)
+        # Native Library closes after selection (#350, ec9b4055). Its passive
+        # cache must still belong to the surviving browser, with no stale A context.
+        selected_cache = app.call('space-manager-lifecycle')
+        require('rebound_manager_intents', selected and selected_cache['contextWindow'] == second and not selected_cache['visible'],
+                browser=selected, actualBrowser=app.call('window-state', id=second), manager=selected_cache, point=row['point'], tab=tab)
+        pin = space_manager_route_checks(app, results, s2, library_key, tmp, manager_ready)
         if not results['manager_today_archive_selects_neighbor']['ok']: raise AssertionError('manager_today_archive_selects_neighbor')
         # #124 review: a URL dropped on another Space's column lands in that Space
         # (not the browser's focused one) and the browser shows it there.
