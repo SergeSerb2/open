@@ -43,13 +43,21 @@ final class EngineWebProfile: WebProfile {
   }
 
   func addUserScript(_ script: UserScript) {
+    context.addUserScript(Self.engineScript(script))
+  }
+
+  func replaceUserScripts(removing ids: [String], adding scripts: [UserScript]) {
+    context.replaceUserScripts(removing: ids, adding: scripts.map(Self.engineScript))
+  }
+
+  private static func engineScript(_ script: UserScript) -> OEUserScript {
     let value = OEUserScript(
         identifier: script.id, source: script.world == .open && script.kind == .javaScript ? OpenWorldPrelude.source + "\n" + script.source : script.source,
         kind: script.kind == .styleSheet ? .styleSheet : .javaScript,
         injectionTime: script.injectionTime == .documentEnd ? .documentEnd : .documentStart,
         matchPatterns: script.matchPatterns, mainFrameOnly: script.mainFrameOnly)
     value.world = script.world == .open ? .open : .page
-    context.addUserScript(value)
+    return value
   }
 
   func removeUserScript(id: String) { context.removeUserScript(identifier: id) }

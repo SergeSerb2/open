@@ -367,8 +367,8 @@ def run(factory, results, tmp, env):
                 wait_until(lambda: app.call("settings-state")["librarySection"] == "boosts",timeout=5,step=.05)
                 def shown_text():
                     return [v for w in app.call("windows",accessibility=True) if w["visible"] for v in w.get("text",[])]
-                # #520 intentionally puts the Boost name over its host; native AX adds its on/off state.
-                # LibraryListView label = name + ". " + domain + " · on|off".
+                # #520 (ed623f30d) deliberately puts the Boost name above its host.
+                # LibraryListView exposes title + ". " + subtitle + the on/off state.
                 live=lambda v: v == "My Boost. 127.0.0.1 · on"
                 wait_until(lambda: any(live(v) for v in shown_text()),timeout=5,step=.1)
                 text=shown_text()

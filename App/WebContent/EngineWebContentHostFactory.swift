@@ -687,6 +687,43 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     mirror.sync(); return true
   }
   func didSyncMirror() { mirrorSyncCount += 1 }
+  /// A cross-model move commits the real engine owner before either model's
+  /// tree observers run. Refusal keeps the existing reload path available.
+  func transferLiveTab(_ id: ItemID, from source: EngineWebContentHostFactory,
+                       to parent: NodeParent, at index: Int) -> Bool {
+    #if OPEN_ENGINE_WEB_CONTENT_TRANSFER
+    guard source !== self, !isClosing, !source.isClosing, !isIncognito, !source.isIncognito,
+      let sourceController = source.controller, let controller,
+      let host = source.hosts[id], !host.closed, host.content.isLive,
+      sourceController.container.host(for: id) === host, hosts[id] == nil,
+      let from = source.mirror.browser(for: host.profileID, create: false),
+      let to = mirror.browser(for: host.profileID), from.context === to.context,
+      from.webContents.contains(where: { $0 === host.content }) else { return false }
+    return model.transferTab(id: id, from: source.model, to: parent, at: index) {
+      let position = tabs(in: host.profileID).prefix { $0.id != id }.filter { hosts[$0.id] != nil }.count
+      guard to.transfer(host.content, from: from, at: UInt(position)) else { return false }
+      // Engine guarantees no synchronous lifecycle callbacks. All shell owners
+      // change in this same main-actor turn; no close or load is performed.
+      _ = sourceController.container.takeHost(for: id)
+      host.view.removeFromSuperview()
+      source.savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
+      source.pageChrome.cancel(host.content)
+      if source.pageContextMenu?.belongs(to: host.content) == true { source.pageContextMenu?.cancel(); source.pageContextMenu = nil }
+      source.translate.contentDidClose(host.content); source.findController?.hostClosed(id)
+      source.commandBarNavigationFocus.remove(id); source.typedNavigationTabs.remove(id)
+      source.developerPanel.forget(id)
+      source.hosts[id] = nil; source.modelHostIDs.remove(id); source.queuedNavigations[id] = nil
+      host.owner = self; hosts[id] = host; modelHostIDs.insert(id)
+      host.content.historySwipeEnabled = historySwipeAllowed
+      host.rebind(tabID: id, spaceID: space(for: id)?.id)
+      controller.container.adopt(host, for: id)
+      app.tabSleep.contentCreated(tabID: id, host: host)
+      return true
+    }
+    #else
+    return false
+    #endif
+  }
   func remainingLiveState(for tabID: ItemID) -> WebContentLiveState? {
     app.hostFactories.values.compactMap { $0.hosts[tabID] }.first { !$0.closed }?.liveState
   }
