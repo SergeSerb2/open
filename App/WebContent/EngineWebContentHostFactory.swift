@@ -53,6 +53,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var pendingLittleOpenExtensionTabs: [Int: OEWebContent] = [:]
   var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
   private(set) var savePrompts: SavePromptPresenter?
+  #if OPEN_HTTP_AUTH
+  var httpAuth: HTTPAuthPresenter?
+  #endif
   var autofillToastCenter: ToastCenter?
   func attachSavePrompts() {
     guard savePrompts == nil, let window else { return }
@@ -72,6 +75,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func savePromptFocusChanged() {
     savePrompts?.pageDidBecomeFocused(AnyHashable((standaloneSurface?.surfacePage ?? selectedContent)?.identifier ?? 0))
+    #if OPEN_HTTP_AUTH
+    httpAuth?.focusChanged()
+    #endif
   }
   let model: BrowserModel
   let incognitoSession: IncognitoSession?
@@ -259,6 +265,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     littleOpenBrowser = browser; browser.window = controller.window; browser.delegate = self
     controller.onCloseRequested = { [weak self] in
       self?.savePrompts?.cancelAll()
+      #if OPEN_HTTP_AUTH
+      self?.httpAuth?.cancelAll()
+      #endif
       guard let self, let window = self.window else { return }; self.app.extensionPrompts.cancel(window: window)
     }
     controller.extensionsUI = extensions.context
@@ -346,6 +355,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     controller.onCloseRequested = { [weak self] in
       self?.savePrompts?.cancelAll()
+      #if OPEN_HTTP_AUTH
+      self?.httpAuth?.cancelAll()
+      #endif
       guard let self, let window = self.window else { return }
       self.app.extensionPrompts.cancel(window: window)
     }
@@ -643,6 +655,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func hostDidClose(_ host: EngineWebContentHost) {
     app.stores.boosts.hostClosed(host)
     savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
+    #if OPEN_HTTP_AUTH
+    httpAuth?.pageDidClose(AnyHashable(host.content.identifier))
+    #endif
     pageChrome.cancel(host.content)
     if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
     translate.contentDidClose(host.content)
@@ -1021,6 +1036,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
     savePrompts?.cancelAll()
+    #if OPEN_HTTP_AUTH
+    httpAuth?.cancelAll()
+    #endif
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
     privateDownloads.close()

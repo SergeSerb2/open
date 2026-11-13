@@ -116,6 +116,12 @@ enum MainMenu {
       if event.modifierFlags.contains(.command), ["t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       return false
     }
+    #if OPEN_HTTP_AUTH
+    if let sheet = event.window as? HTTPAuthSheet, sheet.isVisible {
+      if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
+      return false
+    }
+    #endif
     if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
       if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before
