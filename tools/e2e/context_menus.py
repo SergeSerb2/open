@@ -898,6 +898,43 @@ def context_menu_checks(factory, results, tmp, h):
                 h._try(focus)
         run('cm_split_menu_order', split_menu_order)
 
+        # Session 13 C13-D2-5: two-Profile matrix, menu membership only; no transfer was captured.
+        def cross_profile_move_menu():
+            focus()
+            a1 = app.call('space-create', title='Matrix A1', profile='Menu Profile A')
+            a2 = app.call('space-create', title='Matrix A2', profile='Menu Profile A')
+            b1 = app.call('space-create', title='Matrix B1', profile='Menu Profile B')
+            spaces = app.call('spaces')
+            fixture = {s['id']: s for s in spaces if s['id'] in (a1, a2, b1)}
+            rows = {'profiles': fixture[a1]['profile'] == fixture[a2]['profile'] != fixture[b1]['profile'],
+                    'fixture_dock_order': [s['id'] for s in spaces if s['id'] in fixture] == [a1, a2, b1]}
+            expected = [s['title'] for s in spaces] + ['—', 'New Space…']
+            menus = {}
+            try:
+                app.call('space', space=a1)
+                made = [app.call('open', url=origin + '/target.html?matrix=%d' % i, background=True)['id'] for i in range(5)]
+                app.call('pin', tab=made[1])
+                folder = app.call('folder', tabs=[made[2]], title='Matrix Folder', section='pinned')
+                app.call('select', tab=made[3])
+                app.call('sidebar-menu', node=made[4], item='Open in Split View')
+                split = next(n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+                for name, node, current in [('today', made[0], a1), ('pin', made[1], a1),
+                                             ('folder', folder, a1), ('split', split, a1), ('reciprocal', None, b1)]:
+                    if node is None:
+                        app.call('space', space=b1)
+                        node = app.call('open', url=origin + '/target.html?matrix=b1')['id']
+                    listed = wait(lambda: app.call('sidebar-menu-items', node=node, path='Move to'), timeout=5)
+                    states = [app.call('sidebar-menu-state', node=node, item='Move to/' + s['title']) for s in spaces]
+                    new = app.call('sidebar-menu-state', node=node, item='Move to/New Space…')
+                    rows[name] = (listed['items'] == expected and not listed['disabled']
+                                  and all(s['enabled'] and s['checked'] == (dest['id'] == current)
+                                          for s, dest in zip(states, spaces)) and new['enabled'])
+                    menus[name] = {'listed': listed, 'states': states, 'new': new}
+                return {'ok': all(rows.values()), 'rows': rows, 'menus': menus}
+            finally:
+                h._try(focus)
+        run('cm_cross_profile_move_menu', cross_profile_move_menu)
+
         # D2c multi-selection (capture session 8 item 6): drawn order for 2 Today tabs and for a tab + a folder.
         def selection_menu_order():
             focus()
