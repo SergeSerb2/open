@@ -84,7 +84,7 @@ struct SidebarMenus {
         }
         let folders = ids.filter { context.model.node(id: $0)?.folder != nil }
         let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
-        // C13-D2-6 captured the normal sidebar menu for one ordinary folder of tabs plus one
+        // C13-D2-6 captured the normal sidebar menu for one ordinary root folder of tabs plus one
         // separate Today tab. Keep Option, Manager, nested/split/Note/Easel and larger selections
         // on their existing paths until captured.
         let archiveFolderTabs: Bool = {
@@ -93,7 +93,9 @@ struct SidebarMenus {
                   let folder = context.model.node(id: folders[0])?.folder, folder.live == nil,
                   !folder.children.isEmpty,
                   let tab = context.model.tab(id: tabs[0]), !Self.isNote(tab), !Self.isEasel(tab),
-                  case .spaceToday? = context.model.parent(of: tab.id) else { return false }
+                  case .spaceToday(let space)? = context.model.parent(of: tab.id),
+                  let parent = context.model.parent(of: folder.id),
+                  parent == .spacePinned(space) || parent == .spaceToday(space) else { return false }
             return folder.children.allSatisfy {
                 guard case .tab(let child) = $0 else { return false }
                 return !Self.isNote(child) && !Self.isEasel(child)

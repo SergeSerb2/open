@@ -92,8 +92,8 @@ tab rows and no folder record. Normal quit/relaunch preserves that result. Evide
 `.re/capture/s13/m1/arc/v8/210-mixed-delete/mixed-{sidebar-baseline,archive-baseline,delete-menu,delete-confirmation,delete-sidebar,delete-archive}.{png,ax.json}`
 and `v8/211-mixed-relaunch/mixed-relaunch-{sidebar,archive}.{png,ax.json}`.
 
-Open applies that result to the normal sidebar menu for one nonempty ordinary folder of direct
-tabs and one separate Today tab. The existing confirmation guard, Cancel path and one-step Undo
+Open applies that result to the normal sidebar menu for one nonempty ordinary root folder of direct
+tabs and one separate Today tab in the same Space. The existing confirmation guard, Cancel path and one-step Undo
 remain. Keyboard deletion, held-Option menus, Manager menus, nested folders, splits, Notes,
 Easels, empty folders and larger mixed selections retain their existing behavior because this
 capture does not settle them. Existing folder-only deletion still creates a folder Archive record.
