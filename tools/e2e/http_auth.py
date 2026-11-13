@@ -32,12 +32,12 @@ def run(factory, results, tmp, h, guard, row_ids=None):
         assert wait(lambda: not state().get('visible'), timeout=5, step=.05), 'auth sheet did not close'
 
     def key(name, **kw):
-        app.call('key', key=name, route='app', **kw)
+        app.call('key', window=state()['window'], key=name, route='app', **kw)
 
     def type_field(field, value):
         app.call('http-auth', focus=field)
         key('a', modifiers=['command'])
-        app.call('key', text=value, route='app')
+        app.call('key', window=state()['window'], text=value, route='app')
 
     def enter_credentials(correct=True):
         type_field('username', username)
