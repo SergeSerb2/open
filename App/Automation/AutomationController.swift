@@ -2844,15 +2844,20 @@
       let (manager, target) = try realSpaceManager()
       guard let id = args["space"] as? String,
         let source = manager.columnOrder.first(where: { $0.description == id }),
+        let sourceIndex = manager.columnOrder.firstIndex(of: source),
         let index = args["to"] as? Int, manager.columnOrder.indices.contains(index),
         let grabber = manager.controls(spaceID: source)?.grabber,
-        let destination = manager.controls(spaceID: manager.columnOrder[index])?.grabber
+        let destinationControls = manager.controls(spaceID: manager.columnOrder[index])
       else { throw Failure(message: "invalid Space reorder") }
       try await activateForInput(target)
+      let destination = destinationControls.grabber
       let startRect = grabber.convert(grabber.bounds, to: nil)
       let endRect = destination.convert(destination.bounds, to: nil)
       let start = NSPoint(x: startRect.midX, y: startRect.midY)
-      let end = NSPoint(x: endRect.midX, y: endRect.midY)
+      // PR #350 moved the grabber to the card's left edge. Reordering crosses
+      // card midpoints, so finish just beyond the destination midpoint.
+      let destinationRect = destinationControls.convert(destinationControls.bounds, to: nil)
+      let end = sourceIndex == index ? start : NSPoint(x: destinationRect.midX + (sourceIndex < index ? 1 : -1), y: endRect.midY)
       guard grabber.visibleRect.contains(NSPoint(x: grabber.bounds.midX, y: grabber.bounds.midY)),
         destination.visibleRect.contains(NSPoint(x: destination.bounds.midX, y: destination.bounds.midY))
       else { throw Failure(message: "Space grabber is outside the visible Library") }
