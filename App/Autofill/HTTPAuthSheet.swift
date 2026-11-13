@@ -23,6 +23,14 @@ struct HTTPAuthSheetText {
   let cancel: String
 }
 
+@MainActor
+private final class HTTPAuthFieldBackdrop: NSView {
+  weak var field: NSTextField?
+  override func mouseDown(with event: NSEvent) {
+    if let field { window?.makeFirstResponder(field) }
+  }
+}
+
 /// C13-AUTH: 413×257 pt, two labeled fields, Cancel and Sign in without key hints.
 /// Layout evidence and capture paths are in docs/re/passwords-autofill.md PW-11.
 @MainActor
@@ -36,7 +44,7 @@ final class HTTPAuthView: NSView {
   var cancelButton: NSButton? { buttons.first }
   var primaryButton: NSButton? { buttons.last }
   var onPress: ((DialogSheetButton.Role) -> Void)?
-  private let fieldBackgrounds = [NSView(), NSView()]
+  private let fieldBackgrounds = [HTTPAuthFieldBackdrop(), HTTPAuthFieldBackdrop()]
   private let fieldLabels: [NSTextField]
   override var isFlipped: Bool { true }
 
@@ -59,6 +67,7 @@ final class HTTPAuthView: NSView {
     for (index, field) in [usernameField, passwordField].enumerated() {
       let y = 98 + CGFloat(index) * 55
       let backdrop = fieldBackgrounds[index]
+      backdrop.field = field
       backdrop.frame = CGRect(x: 93, y: y, width: 300, height: 30)
       backdrop.wantsLayer = true; backdrop.layer?.cornerRadius = 5
       addSubview(backdrop)
@@ -221,6 +230,8 @@ final class HTTPAuthSheet: NSPanel, NSTextFieldDelegate {
   override func close() { finish(accept: false); super.close() }
   override func cancelOperation(_ sender: Any?) { finish(accept: false) }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    // Return must first commit an in-progress input-method composition.
+    if let editor = firstResponder as? NSTextView, editor.hasMarkedText() { return false }
     let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
     if modifiers.isEmpty, event.keyCode == 36 || event.keyCode == 76 { finish(accept: true); return true }
     if modifiers.isEmpty, event.keyCode == 53 { finish(accept: false); return true }
