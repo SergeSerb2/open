@@ -81,7 +81,12 @@ extension LibraryActions { public func flushHistoryWrites() async {} }
             // refuses a file that grows between opening and reading it.
             let file: FileHandle
             do { file = try FileHandle(forReadingFrom: indexURL) }
-            catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile { return [] }
+            catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+                // Foundation can report an existing directory as a missing file.
+                // Only an absent index is an empty Library; existing paths fail.
+                guard !FileManager.default.fileExists(atPath: indexURL.path) else { throw error }
+                return []
+            }
             defer { try? file.close() }
             let data = try file.read(upToCount: 16 * 1024 * 1024 + 1) ?? Data()
             guard data.count <= 16 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
