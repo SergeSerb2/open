@@ -49,7 +49,7 @@ def boost(name, css='body{outline:3px solid rgb(1,2,3)}', **extra):
     components = dict(css=css, js="document.body.dataset.exampleBoost='1'", font={'family': 'Georgia'},
                       textTransform='uppercase', zaps=['#example-promo'], textZoom={'level': 125},
                       colorScheme={'colorWheelDriven': {'_0': dict(primaryHueDegrees=90, primarySaturation=.4,
-                                                                  secondaryHueOffset=30, invertLightness=False,
+                                                                  secondaryHueOffset=45, invertLightness=False,
                                                                   baseAppearance={'light': {}}, advancedSettings={})}})
     components.update(extra)
     return dict(title='Example ' + name, hostPattern='example.com', creatorID='synthetic-creator',
@@ -180,7 +180,10 @@ def write(root, sidebar=True):
         fields = boost(name, futureFixtureField='unknown') if name == 'enabled' else boost(name)
         if name == 'disabled':
             # A level no Arc editor writes (the sizes are 90, 110, 125, 150): the importer drops it.
-            fields = boost(name, textZoom={'level': 2})
+            fields = boost(name, textZoom={'level': 2},
+                           # An offset other than Arc's fixed 45 (capture C11) has no Open input: dropped.
+                           colorScheme={'colorWheelDriven': {'_0': dict(primaryHueDegrees=90, primarySaturation=.4,
+                                        secondaryHueOffset=30, invertLightness=False, baseAppearance={'light': {}}, advancedSettings={})}})
             fields['forkedFromBoostID'] = IDS['enabled']
             fields['data'] = json.dumps(dict(json.loads(fields['data']),
                 css='body{border-top:7px solid rgb(9,8,7)!important}'))

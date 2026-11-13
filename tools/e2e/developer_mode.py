@@ -11,6 +11,7 @@ import http.server
 import os
 import threading
 import time
+from loopback_http import LoopbackHTTPServer
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -37,7 +38,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def run(factory, results, tmp, h):
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = 'http://127.0.0.1:%d' % server.server_port
     def row(name, ok, **detail): results[name] = dict(ok=bool(ok), **detail)

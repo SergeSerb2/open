@@ -20,6 +20,7 @@ import json
 import threading
 import urllib.parse
 from pathlib import Path
+from loopback_http import LoopbackHTTPServer
 
 EXTRA_RULES = b'''
 ! Open PB2 row 1 synthetic extras (e2e only)
@@ -90,7 +91,7 @@ def run(factory, results, wait):
             except (BrokenPipeError, ConnectionResetError): pass
         def log_message(self, *_): pass
 
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     port = server.server_port

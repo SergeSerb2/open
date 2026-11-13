@@ -7,6 +7,7 @@ import os
 import struct
 import time
 import zlib
+from loopback_http import LoopbackHTTPServer
 
 
 def png_pixels(path):
@@ -67,7 +68,7 @@ def github_fixture():
             self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.send_header('Content-Length', str(len(data)))
             self.end_headers(); self.wfile.write(data)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1], state
 
@@ -257,7 +258,7 @@ def gmail_fixture():
             self.send_response(200); self.send_header('Content-Type', kind); self.send_header('Content-Length', str(len(body)))
             self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1], state
 
@@ -439,7 +440,9 @@ def run(factory, results, tmp, harness):
         survived = app.call('glance-state', wait=False).get('shown') is True
         if not survived:
             hover(linear)
-            app.call('glance-state')
+            # Under load the card can show after the hover's 800 ms read (one suite error on a
+            # loaded rented Mac: "glance-open: no Recents card"). Wait for it before opening a row.
+            wait_until(lambda: app.call('glance-state').get('shown') is True, timeout=3, step=.05)
         results['live_recents_card_after_snapshot'] = {'ok': True, 'info': 'card survived the window snapshot: %s' % survived}
         opened = app.call('glance-open', row=0)
         first_state = app.call('peek-state')
@@ -465,6 +468,10 @@ def run(factory, results, tmp, harness):
 
         app.call('defaults', key=key, value=False)
         off = hover(linear)
+        # The page card shows after the hover delay; under load it can land after the 800 ms read
+        # (one FAIL on a loaded rented Mac). Wait for the shown card; a glance card still fails.
+        if off['kind'] == 'none':
+            off = wait_until(lambda: (lambda st: st if st['kind'] != 'none' else None)(app.call('preview-state')), timeout=3, step=.05) or off
         results['live_recents_switch_off_gives_page_card'] = {'ok': off['kind'] == 'page' and app.call('glance-state').get('shown') is False, 'hover': off}
         app.call('defaults', key='open.general.previewsPages', value=False)
         none = hover(linear)
