@@ -1059,19 +1059,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func finishCardHide(_ generation: Int) {
         guard generation == cardGeneration, cardState == .hiding else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         cardState = .off
         sidebar.isHidden = true
         cardShadow.isHidden = true
-        CATransaction.begin(); CATransaction.setDisableActions(true)
         for layer in [sidebar.layer, cardShadow.layer, dimmedLights.layer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
             layer.removeAnimation(forKey: "reveal")
-            layer.setValue(0, forKeyPath: "transform.translation.x")
         }
+        // Keep the offscreen model transforms until the next show or anchored
+        // layout. Resetting them before AppKit commits button visibility briefly
+        // draws the three dimmed circles over the page at the hide endpoint.
+        positionTrafficLights()
         CATransaction.commit()
         // Keep the hidden card's prepared geometry. Re-anchoring every dismissal
         // lays out all sidebar rows twice per reveal, although the page never moves.
         // An actual anchored layout restores the sidebar's presentation once.
-        positionTrafficLights()
     }
 
     /// Drops the card at once, without the slide (the sidebar becomes anchored, the window closes).
