@@ -326,6 +326,7 @@
       case "welcome": return try welcome(a)
       case "easel": return try easel(a)
       case "note": return try note(a)
+      case "blank-window": return try blankWindowState()
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -513,7 +514,8 @@
         guard let value = a["text"] as? String else { throw Failure(message: "missing clipboard text") }
         NSPasteboard.general.clearContents(); return NSPasteboard.general.setString(value, forType: .string)
       case "shell-windows":
-        return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0] as [String: Any] }
+        return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0,
+          "title": $0.window?.title ?? "", "level": $0.window?.level.rawValue ?? 0] as [String: Any] }
       case "window-reopen":
         _ = app.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
         return true
@@ -652,7 +654,7 @@
       case "page-selection", "swipe", "swipe-indicator":
         // Engine page API (EP-1, EP-2, EP-3); App/Automation/AutomationPageEngine.swift.
         return try await runPageEngineCommand(cmd, try content(a, try window), a)
-      case "capture", "capture-state", "capture-action", "captures":
+      case "capture", "capture-state", "capture-action", "captures", "capture-portrait":
         // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
         return try await runCaptureCommand(cmd, a)
       case "toast-undo":
@@ -736,7 +738,7 @@
         guard let controller = app.frontWindowController, let path = (a["items"] as? [String])?.joined(separator: "\u{1F}") ?? a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
         let node: ItemID?
         if let raw = a["node"] {
-          guard let text = raw as? String, let uuid = UUID(uuidString: text), app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+          guard let text = raw as? String, let uuid = UUID(uuidString: text), (app.hostFactories[controller.windowID]?.model ?? app.model).node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
           node = ItemID(rawValue: uuid)
         } else { node = nil }
         let separator: Character = a["items"] != nil ? "\u{1F}" : "/"
@@ -936,7 +938,7 @@
         return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x })] as [String: Any]
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
-      case "handoff-state", "handoff-continue", "deep-link-state":
+      case "handoff-state", "handoff-continue", "deep-link-state", "mailto-state":
         return try await runHandoffCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)
@@ -2869,7 +2871,15 @@
           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
         else { throw Failure(message: "could not create row menu event") }
         menu = outline.menu(for: event)
+      } else if args["header"] as? Bool == true, let controls = manager.controls(spaceID: id) {
+        // A right-click on the card header (Library › Spaces), through the view's own menu(for:).
+        let point = controls.convert(NSPoint(x: controls.bounds.midX, y: 12), to: nil)
+        guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        else { throw Failure(message: "could not create header menu event") }
+        menu = controls.menu(for: event)
       } else { menu = manager.controls(spaceID: id)?.makeMenu() }
+      if title == "?" { return menu?.items.map { $0.isSeparatorItem ? "separator" : $0.title } ?? [] }
       // "Turn into Folder/<Space>" walks one submenu level per path component.
       var level = menu
       let path = title.split(separator: "/").map(String.init)

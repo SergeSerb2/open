@@ -47,7 +47,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         peekStorage = peek
         root.addSubview(peek.overlay.backdrop, positioned: .below, relativeTo: sidebar)
         root.addSubview(peek.overlay, positioned: .below, relativeTo: toastOverlay)
-        peek.onChange = { [weak self] in self?.changed() }
+        // F6: a shown Peek makes every Site Control button unavailable; refresh both kinds.
+        peek.onChange = { [weak self] in self?.changed(); self?.scheduleSiteControlButtonsRefresh() }
         peek.toasts = toasts
         peek.onPageChange = { [weak self] in self?.syncPeekSidebar() }
         if let space = context.focusedSpace {
@@ -155,6 +156,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         capture.onOverlayChange = { [weak self] up in self?.onCaptureOverlayChange?(up) }
         capture.library = captureLibrary
         capture.addToEasel = captureAddToEasel
+        capture.wallpaperData = { [weak self] in await self?.captureWallpaperData?() }
         capture.pageTarget = { [weak self] in self?.capturePageTarget() }
         capture.anchor = { [weak self] in
             guard let self else { return .zero }
@@ -184,6 +186,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public weak var captureLibrary: (any CaptureLibrary)? { didSet { captureStorage?.library = captureLibrary } }
     /// Capture → Easel (the App's Easel menu); nil hides the card's Add to Easel button.
     public var captureAddToEasel: ((CaptureController.Result, NSView) -> Void)? { didSet { captureStorage?.addToEasel = captureAddToEasel } }
+    /// Portrait Mode "Use Desktop Wallpaper": the wallpaper bytes for this window's screen (App).
+    public var captureWallpaperData: (@MainActor () async -> Data?)?
     /// The capture overlay shows: history swipes must not navigate (EP-1 reads this, §4.4).
     public var captureOverlayActive: Bool { captureStorage?.isOverlayActive == true }
     /// The page a capture takes: the top Peek page while Peek shows, else the focused pane.
@@ -291,7 +295,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.
     public var lastToastTitle: String { toasts.lastTitle }
-    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, incognitoTitle: String? = nil, siteControlSource: (any SiteControlDataSource)? = nil, siteControlActions: (any SiteControlActions)? = nil) {
+    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, incognitoTitle: String? = nil, windowOnlyTitle: String? = nil, siteControlSource: (any SiteControlDataSource)? = nil, siteControlActions: (any SiteControlActions)? = nil) {
         WindowSpeedTrace.mark("controllerInitBody")
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
@@ -301,7 +305,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root = BrowserRootView(frame: CGRect(origin: .zero, size: dimensions))
         // Only the frame follows the Space; private content keeps its fixed dark appearance.
         root.appearance = incognitoTitle == nil ? NSApp.effectiveAppearance : NSAppearance(named: .darkAqua)
-        context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
+        context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle, windowOnlyTitle: windowOnlyTitle)
         context.systemAppearance = context.isIncognito ? .dark : ContentAppearance(NSApp.effectiveAppearance)
         context.increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         WindowSpeedTrace.mark("sidebarInitBegin")
@@ -432,6 +436,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             controller.onDismiss = { [weak self] _ in self?.refreshSiteControlButtons() }
             siteControlToken = siteControlSource.observeChanges { [weak self] _ in self?.scheduleSiteControlButtonsRefresh() }
             container.onSiteControls = { [weak self] id in self?.toggleSiteControls(anchor: .paneBar(id), tabID: id) }
+            container.siteControlsAvailable = { [weak self] id in self?.siteControlsAvailable(tabID: id) ?? false }
         }
         root.addSubview(toastOverlay)
         root.onLayout = { [weak self] in self?.layoutContent() }

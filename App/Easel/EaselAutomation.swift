@@ -68,7 +68,10 @@ extension AutomationController {
       var rows: [[String: Any]] = []
       for space in app.model.spaces {
         for tab in factory.flattened(space.pinned + space.today) where EaselTab.matches(tab.url) {
-          rows.append(["tab": tab.id.description, "url": tab.url.absoluteString, "title": tab.title, "space": space.id.description])
+          var emoji = ""
+          if case .emoji(let value)? = tab.iconOverride { emoji = value }
+          rows.append(["tab": tab.id.description, "url": tab.url.absoluteString, "title": tab.title, "space": space.id.description,
+                       "iconEmoji": emoji])
         }
       }
       return rows

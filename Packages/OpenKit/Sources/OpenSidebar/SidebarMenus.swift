@@ -43,6 +43,11 @@ struct SidebarMenus {
     /// "Move to ▸": every other Space, a separator, "New Space…".
     private func moveTo(_ nodeID: ItemID) -> NSMenuItem {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
+        if context.isWindowOnly {
+            // A Blank Window's tab moves into one of the browser's Spaces (the App handles the intent).
+            parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, .moveToSpace(nodeID: nodeID, space: $0.id)) })
+            return parent
+        }
         let current = context.model.parent(of: nodeID).flatMap(spaceID(of:))
         // One row per Space in dock order, the current one checked (capture session 8 item 2).
         var items: [NSMenuItem] = context.model.spaces.map { space in
@@ -81,7 +86,8 @@ struct SidebarMenus {
         let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
         func hasLinks(_ node: SidebarNode) -> Bool {
             switch node {
-            case .tab: return true
+            // A Note has no shareable address in Open (its own row menu disables Copy Link).
+            case .tab(let tab): return !Self.isNote(tab)
             case .split(let split): return !split.panes.isEmpty
             case .folder(let folder): return folder.children.contains(where: hasLinks)
             }
@@ -125,7 +131,14 @@ struct SidebarMenus {
         if !tabs.isEmpty {
             // With a folder Arc draws only "Delete" (nothing was executed in the capture); Open keeps the
             // tabs' archive item beside it until a capture shows what Delete does to the tabs.
-            items.append(item("Archive Tabs", .archiveNodes(ids: tabs)))
+            // Arc STR has the plurals "Remove Notes from Sidebar" / "Remove Easels from Sidebar" beside the rows'
+            // singulars (easels-notes.md §3.2, §4.3); used when every selected row is a Note, or every one an Easel.
+            // GUESS: their place in this menu. A Note row cannot be captured (Arc 1.172); the Easel selection
+            // menu can (capture item C-EZ1 in PB4-questions.md).
+            let only = folders.isEmpty && !tabObjects.isEmpty && tabObjects.count == ids.count
+            let title = only && tabObjects.allSatisfy(Self.isNote) ? "Remove Notes from Sidebar"
+                : only && tabObjects.allSatisfy(Self.isEasel) ? "Remove Easels from Sidebar" : "Archive Tabs"
+            items.append(item(title, .archiveNodes(ids: tabs)))
             let spaces = Set(ids.map { context.model.parent(of: $0) }.map { parent -> SpaceID? in
                 if case .spaceToday(let id)? = parent { id } else { nil }
             })
@@ -499,7 +512,9 @@ struct SidebarMenus {
     }
 
     /// Space: right-click on the Space title or on empty sidebar space (F0117, A0414).
-    func space(_ space: Space) -> NSMenu {
+    /// `inLibrary`: Library › Spaces card header and footer "…" show the same menu without "Manage Spaces…"
+    /// (capture session 8 item 13, `v13/34-item-13`).
+    func space(_ space: Space, inLibrary: Bool = false) -> NSMenu {
         let profile = NSMenuItem(title: "Set Profile", action: nil, keyEquivalent: "")
         profile.submenu = self.profile(space)
 
@@ -530,8 +545,7 @@ struct SidebarMenus {
             item("Share Space…", enabled: false, .shareSpace(space.id)),
             export,
             .separator(),
-            item("Manage Spaces…", .manageSpaces),
-            .separator(),
+        ] + (inLibrary ? [] : [item("Manage Spaces…", .manageSpaces), .separator()]) + [
             item("Delete Space", enabled: context.model.spaces.count > 1, .deleteSpace(space.id)),
         ])
     }

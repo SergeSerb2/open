@@ -532,6 +532,7 @@ final class AppImportRunner: ProfileDataOwner {
     catch { failures["Arc settings"] = "Could not be read"; return }
     guard prefs.found else { return }
     var writes: [String: Any] = ArcPreferenceMapping.openSettings(prefs)
+    writes.merge(ArcPreferenceMapping.openValues(prefs)) { _, new in new }
     var reminders = 0
     for (arcKey, arcValue) in prefs.reminderIntervals {
       guard let value = ArcPreferenceMapping.openInterval(arcValue) else { continue }
@@ -579,6 +580,7 @@ final class AppImportRunner: ProfileDataOwner {
         throw BrowserModel.ProfileImportError.invalidProfile
       }
       live.favorites = profile.favorites
+      live.favoritesEmptyStateDismissed = profile.favoritesEmptyStateDismissed
       try app.directories.ensureProfileDirectories(for: live)
     }
     destination.spaces = source.spaces

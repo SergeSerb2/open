@@ -198,7 +198,7 @@ initial U-7 commit, then return to Pages settings. Until that commit, a 404 is
 expected.
 
 Set `OPEN_RELEASE_FEED_URL` to the full stable feed URL chosen under U-8.
-The default is `https://sergeserb2.github.io/open/appcast.xml`. Beta runs use
+The default is `https://sergeserb2.github.io/open-releases/appcast.xml`. Beta runs use
 `appcast-beta.xml` in the same directory. The pipeline sets the staged app's
 `SUFeedURL` before signing. It leaves the source plist unchanged.
 
@@ -321,8 +321,8 @@ Set the URLs for the chosen host. The download prefix is the complete URL of
 The defaults below are proposals until the user selects that location:
 
 ```bash
-export OPEN_RELEASE_FEED_URL='https://sergeserb2.github.io/open/appcast.xml'
-export OPEN_RELEASE_DOWNLOAD_PREFIX='https://github.com/SergeSerb2/open/releases/download/v<marketing>/'
+export OPEN_RELEASE_FEED_URL='https://sergeserb2.github.io/open-releases/appcast.xml'
+export OPEN_RELEASE_DOWNLOAD_PREFIX='https://github.com/SergeSerb2/open-releases/releases/download/v<marketing>/'
 ```
 
 Also fill `Public MPL source location:` and the exact source-offer links in
@@ -391,3 +391,14 @@ Then the passwords P-20 passkey run without the virtual authenticator
 After the source work, user setup, and review gates pass, the production command is:
 
 `tools/release.sh`
+
+## Status (2026-11-12, user-approved, done by the lead)
+
+| Step | State |
+|---|---|
+| U-1, U-2 | Done before: "Developer ID Application" identity for team 78A5P57U23 is in the M5 login Keychain. |
+| U-3 | Done: Keychain profile `open-notary` stored on the M5; `notarytool history` passes. |
+| U-4 | Done: the existing Sparkle key (Keychain account `ed25519`) is used; its public key is in `App/Info.plist`. The private-key backup to a password manager is still the user's step. |
+| U-8 | Decided: public repository `SergeSerb2/open-releases` (releases, feed, MPL sources). The development repository stays private. Feed: `https://sergeserb2.github.io/open-releases/appcast.xml`. |
+| U-5 | Open: enable Pages on `gh-pages` after the first approved feed commit. |
+| U-6, U-7 | Open: per-release review and approval. |

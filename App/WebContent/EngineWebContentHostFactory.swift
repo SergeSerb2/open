@@ -226,7 +226,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   lazy var pageChrome = PageChromeCoordinator(owner: self)
   var pendingDialogs: [OEJavaScriptDialog] { pageChrome.dialogs.pendingDialogs }
 
-  init(app: AppDelegate, state: BrowserWindowState, model: BrowserModel? = nil, incognitoSession: IncognitoSession? = nil) {
+  /// A Blank Window (App/BlankWindow.swift): its own in-memory model with one Space, a real Profile's data.
+  let isBlankWindow: Bool
+  init(app: AppDelegate, state: BrowserWindowState, model: BrowserModel? = nil, incognitoSession: IncognitoSession? = nil, blankWindow: Bool = false) {
+    isBlankWindow = blankWindow
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("factory.create")
     defer { pacingRegion?.end() }
@@ -370,6 +373,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     controller.onLayout = { [weak self] in self?.findController?.sync() }
     controller.captureLibrary = app.captureLibrary
+    controller.captureWallpaperData = { [weak controller] in await PortraitWallpaper.read(screen: controller?.window?.screen) }
     if !isIncognito { controller.captureAddToEasel = { [weak self] result, anchor in self?.showAddToEaselMenu(result, anchor: anchor) } }
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
@@ -760,7 +764,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
-    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
+    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
     // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
     // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
     if focus, commandBarSession?.isPresented != true {
@@ -851,6 +855,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .deleteEasel(let id): return confirmDeleteEasel(tabID: id)
     case .exportNote(let id): return exportNote(tabID: id)
     case .deleteNote(let id): return confirmDeleteNote(tabID: id)
+    case .moveToSpace(let id, let space) where isBlankWindow: return moveBlankWindowTab(id, toSpace: space)
     case .rename(let id, let title) where model.tab(id: id).map({ NoteTab.matches($0.url) }) == true:
       return renameNote(tabID: id, title: title)
     case .copyLink(let id, _) where model.tab(id: id).map({ NoteTab.matches($0.url) }) == true:
@@ -929,6 +934,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
     case .manageExtensions: openExtensionsPage(nil); return true
     case .performCommand(let id): app.performCommand(id); return true
+    case .performWindowCommand(let id): controller?.performCommand(id); return controller != nil
     case .setSharedQuotes(let on): UserDefaults.standard.set(on, forKey: SidebarContext.sharedQuotesKey); return true
     case .showTranslation(let anchor): return translate.showPopover(anchor: anchor)
     case .shareQuote: return copyURLQuote()
@@ -997,6 +1003,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
     } else { controller?.refresh(); mirror.sync(); scheduleSave() }
+    // Capture C10: ⌘W on a Blank Window's last tab closes the whole window, with no prompt.
+    if isBlankWindow, orderedTabs.isEmpty { DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) } }
   }
   func closeAll() {
     guard !isClosing else { return }
@@ -1611,7 +1619,6 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 
   func webContent(_ webContent: OEWebContent, didReceiveDevToolsEvent method: String, parameters: [String: Any]) {
     pageChrome.event(method, parameters: parameters, page: webContent)
-    developerPanel.event(method, parameters: parameters, page: webContent)
     record("devtools", webContent, ["method": method, "params": parameters])
   }
 

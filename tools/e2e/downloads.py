@@ -228,6 +228,14 @@ def checks(factory, results, tmp, config, harness):
         failed = start('/fail'); library()
         check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed', 30), item=item(failed), row=row(failed))
         dismiss_library()
+        # PB1-b wiring: the download started above got a flight record when it was created: played to the
+        # Library button, or skipped for a known reason (the Library covers the sidebar at that point of the
+        # suite; Reduce Motion on the rented Macs). Read only now: an early downloads-state call changes the
+        # rows the checks above read. The motion itself is features-render DF1–DF8.
+        flight = next((f for f in state().get('flights', []) if f['id'] == known), None)
+        played = bool(flight) and 'duration' in flight and 0.2 < flight['duration'] < 2.5 \
+            and flight['target'][0] < flight['start'][0] and flight['target'][1] > flight['start'][1]
+        check('download_flight', played or (bool(flight) and flight.get('skipped') in ('Library open', 'Reduce Motion')), flight=flight)
 
 
     def files_flow():
@@ -237,8 +245,9 @@ def checks(factory, results, tmp, config, harness):
         paths = [item(v).get('path') for v in (fast, fast2)]
         check('folder_unique', len(set(paths)) == 2 and all(Path(v).parent == first and Path(v).stat().st_size == 131072 for v in paths) and sentinel.read_text() == 'do not overwrite', paths=paths)
         library()
-        completed = row(fast2)
-        check('completed_subtitle', completed.get('subtitle', '').startswith('Completed · '), row=completed)
+        # The open Library may still show its previous rows; wait for this download's row.
+        completed = wait(lambda: row(fast2) or None) or {}
+        check('completed_subtitle', completed.get('subtitle') == 'Download', row=completed)  # Arc: the kind word, else "Download" (C3 s8 item 9); .txt has none
         titles = [v['title'] for v in menu(fast2)]
         check('finished_menu_order', len(titles) == 6 and titles[0].startswith('Open ') and titles[1].startswith('Copy ') and titles[2:] == ['Show in Finder', 'separator', 'Hide from Open', 'Move to Trash'], titles=titles)
         app.call('download-policy', openApp=str(opener))

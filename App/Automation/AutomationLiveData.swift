@@ -87,7 +87,7 @@ extension AutomationController {
         "intro": intro ?? NSNull(), "stateMessage": live.stateMessage ?? NSNull(), "expanded": folder.isExpanded, "peeked": folder.peekedChildID?.description ?? NSNull(),
         "stateGlyph": app.frontWindowController.flatMap { $0.sidebar.liveFolderStateGlyph(nodeID: folder.id) }.map { ["tooltip": $0.tooltip] } ?? NSNull(),
         "hiddenItems": Array(live.hiddenItems).sorted(), "hiddenRepositories": Array(live.hiddenRepositories).sorted(),
-        "autoCreated": app.liveFolders.autoCreated, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
+        "autoCreated": app.liveFolders.autoCreated, "signInRefreshes": app.liveFolders.signInRefreshes, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
         "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
         "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":
@@ -154,6 +154,8 @@ extension AutomationController {
   private func liveSpace(_ a: [String: Any]) throws -> Space {
     if let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }) { return space }
     guard let space = app.frontWindowController?.context.focusedSpace else { throw Failure(message: "no Space") }
+    // After a relaunch the front window can show another Space: use the one with a Live Folder.
+    if app.model.liveFolder(in: space.id) == nil, let owner = app.model.spaces.first(where: { app.model.liveFolder(in: $0.id) != nil }) { return owner }
     return space
   }
 

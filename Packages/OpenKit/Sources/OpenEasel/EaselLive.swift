@@ -40,8 +40,11 @@ extension EaselCanvasView {
         guard let object = document.object(id), case .webCard(var card) = object.content, card.isLive != live else { return }
         if live, !confirmed, !UserDefaults.standard.bool(forKey: Self.liveEduKey), let window {
             let alert = NSAlert()
-            alert.messageText = "Show the live website?"
-            alert.informativeText = "The card becomes an interactive view of the page. Some sites do not allow this. You can switch back to the screenshot at any time."
+            // Arc's text (docs/re/easels-notes.md §3.5). Arc's body ends "…by pressing <shortcut>"; the
+            // shortcut and the button titles are not captured (C3-EZ-1), so Open ends with its own
+            // menu wording and keeps its own buttons.
+            alert.messageText = "Replace this screenshot with the live website?"
+            alert.informativeText = "See an up-to-date, interactive view of whatever you've captured. This does not work on all sites. You can always flip back to the screenshot with Show Screenshot in the card's menu."
             alert.addButton(withTitle: "Show Live Website")
             alert.addButton(withTitle: "Cancel")
             alert.beginSheetModal(for: window) { [weak self] response in

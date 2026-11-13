@@ -87,10 +87,19 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                 if open_after:
                     state(action='open',section='downloads');assert wait(lambda:row(value['id']))
                 return value['id']
+            # An outside entry scopes Downloads to the owner Profile; with no downloads that is "No downloads yet",
+            # not "No matches" (no search or filter of the user's; IMC 12:35).
+            state(action='open',section='downloads')
+            check('downloads_empty_copy',wait(lambda:not rows() and state()['emptyState']['title']=='No downloads yet'),empty=state().get('emptyState'),header=state().get('header'))
+            state(action='close')
             complete=start('/file');check('completed_download_row',wait(lambda:item(complete).get('state')=='completed') and wait(lambda:row(complete)['subtitle']=='Download'),row=row(complete))
             # Arc's download menu (D2c #394): "Open ‹ext›", "Copy ‹ext›", then the fixed items.
             titles=[m['title'] for m in menu(complete)]
+            # Capture C3 s8 item 9: a right click on a Downloads row opens no menu and only selects; the … button tooltip is "More Options".
+            rc=state(action='row-right-click',id=complete);check('download_right_click_no_menu',rc['menu'] is None and rc['selected'],result=rc)
+            state(action='hover-row',id=complete);check('download_more_options_tooltip',wait(lambda:'More Options' in (row(complete) or {}).get('buttonToolTips',[])),tooltips=(row(complete) or {}).get('buttonToolTips'))
             check('completed_native_menu', len(titles)==6 and titles[0].startswith('Open') and titles[1].startswith('Copy') and titles[2:]==['Show in Finder','separator','Hide from Open','Move to Trash'],items=menu(complete))
+            check('completed_no_right_click_menu',row(complete).get('contextMenu') is False,row=row(complete))  # Arc: right-click only selects (C3 s8 item 9)
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
             menu(complete,titles[1]);check('download_copy_file',wait(lambda:app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt')))
             payload=state(action='row-drag',id=complete);check('download_drag_file', 'public.file-url' in payload['types'] and payload['url'].endswith('/sample.txt'),payload=payload)
@@ -131,12 +140,15 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='chip',id='profile:'+profile);check('profile_chip_selected',state()['filterActive'] and state()['profiles']['downloads']==profile);capture('downloads-profile-filter')
             key('escape');check('escape_closes_filter',not state()['header']['filterOpen'] and state()['open'])
             state(action='filter',open=True);state(action='chip',id='profile:'+profile);state(action='filter',open=False)
-            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)][2:]==['Show in Finder','separator','Cancel Download','separator','Hide from Open'],items=menu(slow));capture('downloads-running')
+            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)][2:]==['Show in Finder','separator','Cancel Download','separator','Hide from Open'] and [m['enabled'] for m in menu(slow)][:3]==[True,False,False],items=menu(slow));capture('downloads-running')
             state(action='row-action',id=slow,name='Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused') and wait(lambda:'Resume' in row(slow).get('actions',[])));capture('downloads-paused')
             state(action='row-action',id=slow,name='Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
             menu(slow,'Cancel Download');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
+            cancelled_ok=lambda m:[x['title'] for x in m][2:]==['Show in Finder','separator','Hide from Open'] and not any(x['enabled'] for x in m[:3]) and m[0]['title'].startswith('Open') and m[1]['title'].startswith('Copy')
+            # The row redraws a moment after the model turns cancelled; wait for its menu.
+            wait(lambda:cancelled_ok(menu(slow)));cancelled_menu=menu(slow);check('cancelled_menu',cancelled_ok(cancelled_menu),items=cancelled_menu)
             failed=start('/fail');check('failed_real_transfer',wait(lambda:item(failed).get('state')=='failed'))
-            check('failed_menu',[m['title'] for m in menu(failed)]==['Retry','separator','Hide from Open']);capture('downloads-failed')
+            check('failed_menu',[m['title'] for m in menu(failed)][2:]==['Show in Finder','separator','Hide from Open'] and not any(m['enabled'] for m in menu(failed)[:3]) and 'Retry' in row(failed).get('actions',[]));capture('downloads-failed')
             # History is populated by real engine navigation.
             state(action='close');app.call('navigate',tab=tab,url=base+'/arm');app.call('wait',tab=tab);app.call('history-state')
             key('y',['cmd']);check('cmd_y_history',state()['open'] and state()['section']=='history')
@@ -176,7 +188,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             # Closing an ordinary real tab archives it through the existing path.
             other=app.call('tabs')[-1]['id'];app.call('select',tab=other);app.call('command',id='archive-tab')
             state(action='open',section='archive');check('archive_real_rows',wait(lambda:bool(rows())),rows=rows())
-            archived=rows()[0];state(action='hover-row',id=archived['id']);check('archive_hover_actions',row(archived['id'])['actions']==['Delete','Restore']);capture('archive-hover')
+            archived=rows()[0];state(action='hover-row',id=archived['id']);check('archive_hover_actions',row(archived['id'])['actions']==['Delete','Restore']);check('archive_tooltip_and_url',row(archived['id'])['toolTip']==archived['title'] and '://' not in archived['subtitle'],row=row(archived['id']));capture('archive-hover')
+            # Capture C3 s8 item 11: a right click on an Archived Tabs row opens no menu (it only selects).
+            rc=state(action='row-right-click',id=archived['id']);check('archive_right_click_no_menu',rc['menu'] is None and rc['selected'],result=rc)
             state(action='filter',open=True);check('archive_filters',len(state()['header']['chips'])>=4);capture('archive-filters')
             state(action='chip',id='reason:auto');check('archive_reason_empty',wait(lambda:not rows()))
             state(action='chip',id='reason:auto');state(action='chip',id='reason:manual');check('archive_manual_filter',wait(lambda:bool(row(archived['id']))))
@@ -205,6 +219,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('menu-perform',id='new-boost');check('boost_real_editor',wait(lambda:app.call('boost-editor').get('colorsReady')))
             app.call('boost-editor',action='tap',id='font.Avenir');boost=app.call('boost-editor')['boost']['id'];app.call('boost-editor',action='close')
             state(action='open',section='boosts');check('boost_real_row',wait(lambda:row(boost)),rows=rows())
+            check('boost_no_right_click_menu',row(boost).get('contextMenu') is False,row=row(boost))  # Arc: no card menu (C3 s8 item 14)
             state(action='hover-row',id=boost);check('boost_menu',[m['title'] for m in menu(boost)]==['Edit Boost','Turn Off','separator','Delete']);capture('boosts-list-hover')
             menu(boost,'Turn Off');check('boost_toggle_live',wait(lambda:not app.eval(boost_tab,'getComputedStyle(document.querySelector("h1")).fontFamily').startswith('Avenir')))
             menu(boost,'Turn On');check('boost_toggle_on',wait(lambda:app.eval(boost_tab,'getComputedStyle(document.querySelector("h1")).fontFamily').startswith('Avenir')))
@@ -223,6 +238,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             app.call('boost-gallery-ui',action='profile',name=profile_name);check('boost_profile_restored',wait(lambda:bool(row(boost))))
             state(action='select',section='spaces');manager=app.call('space-manager-state')
             check('spaces_second_card',len(manager['columns'])==2)
+            # Capture session 8 item 13: the card header right-click and the footer "…" show the Space menu without Manage Spaces….
+            footer_menu=app.call('space-manager-menu',space=second_space,item='?');header_menu=app.call('space-manager-menu',space=second_space,item='?',header=True)
+            check('space_card_menu_order',footer_menu==header_menu and 'Manage Spaces…' not in footer_menu and footer_menu[-2:]==['separator','Delete Space'] and footer_menu[-3].startswith('Export ') and footer_menu[0]=='Change Space Icon…',footer=footer_menu,header=header_menu)
             app.call('space-manager-menu',space=second_space,item='Rename Space…');key('a',['cmd']);app.call('key',text='Reading List',route='app');key('return')
             check('space_visible_rename',wait(lambda:any(s['id']==second_space and s['title']=='Reading List' for s in app.call('spaces'))))
             check('space_rename_returns_focus',state()['firstResponder']!='NSTextView',responder=state()['firstResponder'])

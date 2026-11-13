@@ -1,8 +1,11 @@
-"""PB3 row 5: Developer Mode's content panel (developer bar) and its network list, through the real App.
+"""PB3 row 5: Developer Mode's toolbar and sidebar marks, through the real App (capture PB3-a).
 
 A synthetic loopback server serves every page. Rows: the bar shows only for a Developer Mode site and replaces the
-page area's top 40 pt; its nine buttons; the network list records the page's requests (200 and 404) from DevTools
-protocol events; a navigation starts a new list; Close and Developer Mode off remove it.
+page area's top 40 pt; Arc's nine controls in order with Arc's names; its light and dark colours; the sidebar
+outline and host subtitle; Console / Network / Inspect toggle the standard DevTools on that panel; the sidebar
+toolbar's reload chevron (capture PB3-a) and its menu; capture s10 (C-report-s10 PB3-a1…a3): hover plate and tooltip pill
+with key caps, the Capture Window hover entry, the Extensions and Split View menus (and one split), and with View ▸ Show
+Toolbar on, the developer bar is the toolbar and only the sidebar URL field goes away.
 """
 import http.server
 import os
@@ -11,9 +14,11 @@ import time
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    page_loads = 0
     def log_message(self, *args): pass
 
     def do_GET(self):
+        if self.path.split('?')[0] == '/a': Handler.page_loads += 1
         pages = {
             '/a': b'<!doctype html><title>Example A</title><h1>A</h1><img src="/pixel.png"><script src="/app.js"></script>'
                   b'<script>fetch("/missing.json")</script>',
@@ -42,21 +47,93 @@ def run(factory, results, tmp, h):
         tab = next(t['id'] for t in tabs if '/a' in t.get('url', ''))
         app.call('wait', tab=tab, timeout=30)
         def state(): return app.call('developer-panel')
+        def press(button):
+            app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+            app.call('developer-panel', action='press', button=button)
         off = state()
         row('bar_hidden_without_developer_mode', off.get('shown') is False, state={k: off.get(k) for k in ('shown', 'toolbar')})
 
         app.call('command', id='toggle-developer-mode')
-        assert h.wait_until(lambda: state().get('shown'), timeout=10, step=.05), state()
+        # The bar gets its frame on the slot's next layout pass.
+        assert h.wait_until(lambda: state().get('shown') and state().get('frame', [0, 0, 0, 0])[3] > 0, timeout=10, step=.05), state()
         on = state()
         frame, page = on.get('frame', [0, 0, 0, 0]), on.get('pageFrame', [0, 0, 0, 0])
         buttons = {b['id']: b for b in on.get('buttons', [])}
         row('bar_shown_for_site', on.get('url') == base + '/a' and frame[3] == 40 and abs(page[1] + page[3] - frame[1]) < .5
             and len(buttons) == 9 and all(b['frame'][2] == 28 and b['frame'][3] == 28 for b in buttons.values())
-            and buttons['siteSettings']['frame'][0] < buttons['copyURL']['frame'][0] < buttons['capture']['frame'][0]
-            < buttons['console']['frame'][0] < buttons['network']['frame'][0] < buttons['inspect']['frame'][0]
-            < buttons['extensions']['frame'][0] < buttons['splitMenu']['frame'][0]
-            and buttons['network']['label'] == 'Toggle Network Panel',
-            url=on.get('url'), frame=frame, page=page, buttons=sorted(buttons))
+            and [b['label'] for b in sorted(buttons.values(), key=lambda b: b['frame'][0])] == [
+                'Site Settings', 'Copy Link', 'Capture Window', 'Capture', 'Toggle Console', 'Toggle Network Panel',
+                'Inspect Element', 'Extensions Menu', 'Split View Menu'],
+            url=on.get('url'), frame=frame, page=page,
+            labels=[b['label'] for b in sorted(buttons.values(), key=lambda b: b['frame'][0])])
+
+        # Capture PB3-a: in Developer Mode a ▾ right of Reload opens the reload options; Reload moves 6.25 pt left.
+        assert h.wait_until(lambda: state().get('sidebarToolbar', {}).get('chevronShown'), timeout=10, step=.05), state().get('sidebarToolbar')
+        tb = state()['sidebarToolbar']; w = tb['sidebarWidth']; rf, cf = tb['reloadFrame'], tb['chevronFrame']
+        row('toolbar_reload_chevron', abs(rf[0] + rf[2] / 2 - (w - 28.25)) < .5 and abs(cf[0] + cf[2] / 2 - (w - 11.75)) < .5
+            and tb['menu'] == ['Refresh the Page', 'Force Refresh the Page', 'Clear Cache and Refresh'], toolbar=tb)
+        app.call('eval', tab=tab, js='window.openReloadMark = 1')
+        loads = Handler.page_loads
+        # A click on the sidebar's menu happens in the key window; page commands go to the key window.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('developer-panel', action='reload-menu', item='Force Refresh the Page')
+        reloaded = h.wait_until(lambda: Handler.page_loads > loads and app.call('eval', tab=tab, js='typeof window.openReloadMark') == 'undefined',
+                                timeout=15, step=.1)
+        app.call('wait', tab=tab, timeout=30)
+        row('toolbar_reload_menu_force_refresh', bool(reloaded), loads=[loads, Handler.page_loads])
+        tips = {b['id']: b.get('tooltip') for b in buttons.values()}
+        row('bar_tooltips_from_capture', tips == {
+            'siteSettings': [], 'copyLink': ['Copy Link', '⇧', '⌘', 'C'], 'captureWindow': [],
+            'capture': ['Capture a portion of this page', '⇧', '⌘', '2'], 'console': ['Toggle Console', '⌥', '⌘', 'J'],
+            'network': ['Toggle Network Panel'], 'inspect': ['Inspect Element', '⌥', '⌘', 'C'], 'extensionsMenu': ['Extensions'],
+            'splitMenu': ['Split View Options']}, tooltips=tips)
+        # Hover (h-copy, h-site): a grey plate (light: black 9 %) and the tooltip pill with key caps; Site Settings: plate only.
+        app.call('appearance', name='light'); time.sleep(.3)
+        app.call('developer-panel', action='hover', button='copyLink')
+        copy = state()
+        app.call('developer-panel', action='hover', button='copyLink', inside=False)
+        left = state()
+        app.call('developer-panel', action='hover', button='siteSettings')
+        site = state()
+        app.call('developer-panel', action='hover', button='siteSettings', inside=False)
+        app.call('appearance', name='system')
+        row('hover_plate_and_tooltip_pill', copy.get('hovered') == 'copyLink' and copy.get('hoverPlate') == '#000000/0.09'
+            and copy.get('tooltip') == ['Copy Link', '⇧', '⌘', 'C'] and left.get('hovered') == '' and 'tooltip' not in left
+            and site.get('hovered') == 'siteSettings' and site.get('hoverPlate') == '#000000/0.09' and 'tooltip' not in site,
+            copy={k: copy.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')}, left={k: left.get(k) for k in ('hovered', 'tooltip')},
+            site={k: site.get(k) for k in ('hovered', 'hoverPlate', 'tooltip')})
+        # PB3-a2: the puzzle button opens the Extensions card (`m-ext.png`: 250 × 96 pt plus the 6 pt arrow, tip under
+        # the button 10.5 pt below it); a second press closes it. The split button opens the split menu.
+        press('extensionsMenu')
+        card = h.wait_until(lambda: state().get('extensionsCard'), timeout=5, step=.05) or {}
+        if os.environ.get('OPEN_E2E_DEVMODE_FRAMES'):  # look frame for the lead, not asserted
+            time.sleep(4); app.call('appearance', name='light'); time.sleep(.5)
+            app.call('snapshot', path=os.path.join(os.environ['OPEN_E2E_DEVMODE_FRAMES'], 'extensions-card-light.png'))
+            app.call('appearance', name='system')
+        press('extensionsMenu')
+        closed_card = h.wait_until(lambda: 'extensionsCard' not in state(), timeout=5, step=.05)
+        row('extensions_card', card.get('rows') == ['Add Extension…', 'Manage Extensions…'] and card.get('size') == [250, 102]
+            and abs(card.get('arrowGap', 0) - 10.5) < .5 and abs(card.get('arrowOffset', 9)) < .5 and card.get('label') == 'Extensions'
+            and card.get('highlighted') == 'Add Extension…'
+            and bool(closed_card), card=card, closed=bool(closed_card))
+        tabs_before = len(app.call('tabs'))
+        press('extensionsMenu')
+        h.wait_until(lambda: state().get('extensionsCard'), timeout=5, step=.05)
+        app.call('developer-panel', cardItem='Manage Extensions…')
+        opened = h.wait_until(lambda: len(app.call('tabs')) == tabs_before + 1 and 'extensionsCard' not in state(), timeout=10, step=.1)
+        row('extensions_card_manage_opens_page', bool(opened), tabs=[tabs_before, len(app.call('tabs'))],
+            newest=[t.get('url') for t in app.call('tabs')][-3:])
+        app.call('select', tab=tab)
+        h.wait_until(lambda: state().get('shown') is True, timeout=10, step=.05)
+        split_menu = app.call('developer-panel', menu='splitMenu').get('menu')
+        row('split_menu_titles', split_menu == ['Add Right Split', 'Add Left Split', '-', 'Add Top Split', 'Add Bottom Split'], split=split_menu)
+        # Capture s10: resting on Capture Window opens the Portrait Mode popover. Hover reaches the one entry; until
+        # EZ's popover lands it does nothing else (a click still runs the portrait capture).
+        before = state()['devtools'].get('portraitCaptureRequests', 0)
+        app.call('developer-panel', action='hover', button='captureWindow')
+        after = state()['devtools'].get('portraitCaptureRequests', 0)
+        app.call('developer-panel', action='hover', button='captureWindow', inside=False)
+        row('capture_window_hover_reaches_portrait_entry', after == before + 1, requests=[before, after])
 
         # Pane 2: the sidebar marks a Developer Mode site. A second tab on "localhost" (another site) stays plain.
         other = h.new_tab(app, base.replace('127.0.0.1', 'localhost') + '/b')
@@ -74,50 +151,86 @@ def run(factory, results, tmp, h):
             and moved[base.replace('127.0.0.1', 'localhost') + '/b']['outline'] is False, rows=moved)
         app.call('select', tab=tab)
 
-        app.call('developer-panel', action='press', button='network')
-        assert h.wait_until(lambda: state().get('networkPressed'), timeout=10, step=.05), state()
-        app.call('navigate', tab=tab, url=base + '/a')
-        def entries():
-            # The browser's own favicon fetch is not page traffic; it is ignored by name.
-            return [e for e in next(iter(state().get('logs', {}).get('logs', {}).values()), []) if not e['url'].endswith('/favicon.ico')]
-        assert h.wait_until(lambda: any(e['url'].endswith('/missing.json') and e['status'] == 404 for e in entries()), timeout=20, step=.1), entries()
-        listed = entries(); shown = state()
-        frames = os.environ.get('OPEN_E2E_DEVMODE_FRAMES')
-        if frames:  # look frames for the lead, not asserted: the real browser window with the bar and the list
-            for mode in ('light', 'dark'):
-                app.call('appearance', name=mode); time.sleep(.8)
-                app.call('snapshot', path=os.path.join(frames, 'devmode-network-%s.png' % mode))
-            app.call('appearance', name='system')
-        urls = sorted(e['url'].replace(base, '') for e in listed)
-        row('network_list_records_requests', urls == ['/a', '/app.js', '/missing.json', '/pixel.png']
-            and {e['url'].replace(base, ''): e['status'] for e in listed} == {'/a': 200, '/app.js': 200, '/missing.json': 404, '/pixel.png': 200}
-            and all(e['method'] == 'GET' for e in listed) and shown.get('networkRows') == 4
-            and abs(shown['pageFrame'][1] - shown['networkFrame'][3]) < .5,
-            urls=urls, rows=shown.get('networkRows'), networkFrame=shown.get('networkFrame'), pageFrame=shown.get('pageFrame'))
+        # Capture PB3-a: Console, Network and Inspect toggle the standard Chromium DevTools on that panel.
+        def selected():
+            try: return app.call('devtools-frontend', tab=tab, js=h._DEVTOOLS_SELECTED_TABS) or []
+            except RuntimeError: return None  # no DevTools for this page
+        def wait_panel(tab_id):
+            return h.wait_until(lambda: (lambda ids: ids if ids and tab_id in ids else None)(selected()), timeout=20, step=.25)
+        press('console')
+        console = wait_panel('tab-console'); pressed_console = state().get('activePanel')
+        frames = os.environ.get('OPEN_E2E_DEVMODE_FRAMES')  # look frames for the lead, not asserted
+        press('network')
+        network = wait_panel('tab-network'); pressed_network = state().get('activePanel')
+        row('console_and_network_open_devtools_panel', bool(console) and pressed_console == 'console'
+            and bool(network) and pressed_network == 'network' and state()['devtools']['hasDevTools'] is True,
+            console=console, network=network, pressed=[pressed_console, pressed_network])
+        press('network')
+        closed = h.wait_until(lambda: selected() is None, timeout=10, step=.25)
+        after_close = state()
+        row('same_button_closes_devtools', bool(closed) and after_close.get('activePanel') == ''
+            and after_close['devtools']['hasDevTools'] is False, state=after_close.get('devtools'))
+        press('inspect')
+        inspect = wait_panel('tab-elements'); pressed_inspect = state().get('activePanel')
+        row('inspect_opens_elements', bool(inspect) and pressed_inspect == 'inspect', tabs=inspect, pressed=pressed_inspect)
+        press('inspect'); h.wait_until(lambda: selected() is None, timeout=10, step=.25)
 
-        app.call('navigate', tab=tab, url=base + '/b')
-        assert h.wait_until(lambda: any('/app.js?b' in e['url'] for e in entries()), timeout=20, step=.1), entries()
-        time.sleep(.5)
-        after = sorted(e['url'].replace(base, '') for e in entries())
-        row('navigation_starts_new_list', after == ['/app.js?b', '/b'] and state().get('url') == base + '/b', urls=after)
+        # The bar's colours follow the appearance (Arc's measured default-theme values).
+        palettes = {}
+        if frames: time.sleep(4)  # the "Developer Mode On" toast is gone before the look frames
+        for mode in ('light', 'dark'):
+            app.call('appearance', name=mode); time.sleep(.5)
+            palettes[mode] = state().get('palette')
+            if frames: app.call('snapshot', path=os.path.join(frames, 'devbar-%s.png' % mode))
+        app.call('appearance', name='system')
+        row('bar_palette_light_dark', palettes['light'] == {'stripeA': '#EFF1F5', 'stripeB': '#F4F5F8', 'glyph': '#212AFB', 'text': '#242526', 'line': '#D8D9DD'}
+            and palettes['dark'] == {'stripeA': '#3E43CA', 'stripeB': '#4247CB', 'glyph': '#ECEDFE', 'text': '#D8D9F4', 'line': '#5155CF'}, palettes=palettes)
 
-        app.call('developer-panel', action='press', button='network')
-        assert h.wait_until(lambda: not state().get('networkPressed'), timeout=10, step=.05), state()
-        closed = state()
-        row('network_list_closes', 'networkRows' not in closed and closed.get('logs', {}).get('shown') == []
-            and abs(closed['pageFrame'][1]) < .5, state={k: closed.get(k) for k in ('networkPressed', 'pageFrame')})
+        # PB3-a3 (`v11/d2…/t-1-toolbar-on`): with View ▸ Show Toolbar on, the developer bar is the toolbar; the sidebar
+        # keeps back / forward / reload ▾ and only its URL field goes away. Another site gets the normal toolbar.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('command', id='toggle-toolbar')
+        h.wait_until(lambda: (lambda t: t.get('urlFieldShown') is False and t.get('navigationShown') is True)(state().get('sidebarToolbar', {})),
+                     timeout=10, step=.05)
+        dev_tb = state()
+        app.call('select', tab=other)
+        # The sidebar toolbar lays out on its next pass, after the content toolbar appears: wait for both.
+        h.wait_until(lambda: (lambda s: s.get('toolbar') is True and s.get('sidebarToolbar', {}).get('navigationShown') is False)(state()),
+                     timeout=10, step=.05)
+        plain_tb = state()
+        app.call('select', tab=tab)
+        h.wait_until(lambda: state().get('shown') is True, timeout=10, step=.05)
+        app.call('command', id='toggle-toolbar')
+        h.wait_until(lambda: state().get('sidebarToolbar', {}).get('urlFieldShown') is True, timeout=10, step=.05)
+        st, pt = dev_tb.get('sidebarToolbar', {}), plain_tb.get('sidebarToolbar', {})
+        row('show_toolbar_developer_bar_is_toolbar', dev_tb.get('shown') is True and dev_tb.get('toolbar') is False
+            and st.get('urlFieldShown') is False and st.get('navigationShown') is True and st.get('chevronShown') is True
+            and plain_tb.get('shown') is False and plain_tb.get('toolbar') is True and pt.get('navigationShown') is False,
+            developer={k: dev_tb.get(k) for k in ('shown', 'toolbar', 'sidebarToolbar')},
+            other={k: plain_tb.get(k) for k in ('shown', 'toolbar', 'sidebarToolbar')})
 
-        app.call('developer-panel', action='press', button='network')
-        assert h.wait_until(lambda: state().get('networkPressed'), timeout=10, step=.05)
+        # PB3-a2: "Add Bottom Split" splits the page top / bottom with an empty pane; the developer bar leaves a split.
+        app.call('developer-panel', menu='splitMenu', item='Add Bottom Split')
+        split_state = h.wait_until(lambda: (lambda s: s if s.get('splitPanes') == 2 else None)(state()), timeout=10, step=.05) or state()
+        row('split_menu_adds_bottom_split', split_state.get('splitPanes') == 2 and split_state.get('splitOrientation') == 'vertical',
+            panes=split_state.get('splitPanes'), orientation=split_state.get('splitOrientation'))
+        app.call('command', id='close-split-pane')
+        h.wait_until(lambda: state().get('splitPanes') == 1, timeout=10, step=.05)
+        app.call('select', tab=tab)
+        h.wait_until(lambda: state().get('shown') is True, timeout=10, step=.05)
+
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         app.call('command', id='toggle-developer-mode')
         assert h.wait_until(lambda: not state().get('shown'), timeout=10, step=.05), state()
         # The sidebar row redraws on its next layout pass, after the bar is gone: wait for it, then assert.
-        h.wait_until(lambda: {r['url']: r for r in state().get('rows', [])}.get(base + '/b', {}).get('outline') is False, timeout=10, step=.05)
+        h.wait_until(lambda: {r['url']: r for r in state().get('rows', [])}.get(base + '/a', {}).get('outline') is False, timeout=10, step=.05)
         gone = state()
-        unmarked = {r['url']: r for r in gone.get('rows', [])}.get(base + '/b', {})
+        unmarked = {r['url']: r for r in gone.get('rows', [])}.get(base + '/a', {})
         row('sidebar_unmarks_after_off', unmarked.get('subtitle') == '' and unmarked.get('titleBaseline') == 25 and unmarked.get('outline') is False,
             row=unmarked)
-        row('developer_mode_off_removes_bar_and_list', gone.get('shown') is False and 'networkRows' not in gone
-            and gone.get('logs', {}).get('shown') == [], state={k: gone.get(k) for k in ('shown', 'logs')})
+        off_tb = gone.get('sidebarToolbar', {}); orf = off_tb.get('reloadFrame', [0, 0, 0, 0])
+        row('developer_mode_off_removes_bar', gone.get('shown') is False and off_tb.get('chevronShown') is False
+            and abs(orf[0] + orf[2] / 2 - (off_tb.get('sidebarWidth', 0) - 22)) < .5,
+            state={k: gone.get(k) for k in ('shown', 'toolbar', 'sidebarToolbar')})
     finally:
         server.shutdown(); server.server_close()

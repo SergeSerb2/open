@@ -11,11 +11,15 @@ public struct ArcPreferences: Sendable {
     /// Values Open maps, copied out of the property list (Sendable).
     public private(set) var bools: [String: Bool] = [:]
     public private(set) var strings: [String: String] = [:]
+    public private(set) var numbers: [String: Double] = [:]
     /// Arc's per-Profile Live Calendar reminder times (`liveCalendarNotificationPreferences`): Arc Profile key →
     /// Arc raw value (`never`, `onStart`, `twoMinutesBefore`, `fiveMinutesBefore`, `tenMinutesBefore`; strings next to
     /// `BaseModels/LiveCalendar.swift` in the Arc 1.172.2 binary). The container format is not known (no Arc data on
     /// this Mac has the key); the reader accepts a dictionary or JSON data of one. GUESS — capture pending.
     public private(set) var reminderIntervals: [String: String] = [:]
+    /// Favorites empty-state card (A3): Arc Profile keys in `topAppsEmptyStateDismissedForProfiles`
+    /// (an array of strings such as "Profile 2"; C-report-s10 (a) 5 and item 6). At most 256 kept.
+    public private(set) var favoritesEmptyDismissedProfiles: [String] = []
     /// Arc's Favorite tile host lists (`topAppsBadgingDisabledHosts`, `topAppsSubtitleDisabledHosts`; audit A2).
     /// The stored type is not known (no Arc data on this Mac has the keys): the reader accepts a list of host
     /// strings. GUESS — capture pending.
@@ -49,11 +53,20 @@ public struct ArcPreferences: Sendable {
             if let value = root[key] as? Bool { prefs.bools[key] = value }
             else if let value = root[key] as? NSNumber { prefs.bools[key] = value.boolValue }
         }
+        if let value = root[ArcPreferenceMapping.portraitColorKey] as? NSNumber, value.doubleValue.isFinite {
+            prefs.numbers[ArcPreferenceMapping.portraitColorKey] = min(1, max(0, value.doubleValue))
+        }
+        if let value = root[ArcPreferenceMapping.portraitBackgroundKey] as? String, value.utf8.count <= 64 {
+            prefs.strings[ArcPreferenceMapping.portraitBackgroundKey] = value
+        }
         for key in ArcPreferenceMapping.favoriteHostLists.map(\.arc) {
             guard let list = root[key] as? [String] else { continue }
             prefs.hostLists[key] = Array(Set(list.prefix(1_000).map { $0.lowercased() }.filter { !$0.isEmpty && $0.utf8.count <= 253 })).sorted()
         }
         if let value = root[ArcPreferenceMapping.reminderKey] { prefs.reminderIntervals = Self.intervals(from: value) }
+        if let ids = root[ArcPreferenceMapping.favoritesEmptyDismissedProfilesKey] as? [Any] {
+            prefs.favoritesEmptyDismissedProfiles = ids.prefix(256).compactMap { $0 as? String }.filter { !$0.isEmpty && $0.utf8.count <= 255 }
+        }
         return prefs
     }
 
@@ -103,6 +116,9 @@ public enum ArcPreferenceMapping {
     public static let reminderKey = "liveCalendarNotificationPreferences"
     /// Live Folders (live-data §2.2, `S:113734–113737`): Arc's "turned off" flag is the inverse of
     /// Open's automatic-creation switch; "seen education" means the intro card already showed.
+    /// Favorites empty-state card (A3): per-Profile array of Arc Profile keys, and an older global flag.
+    public static let favoritesEmptyDismissedProfilesKey = "topAppsEmptyStateDismissedForProfiles"
+    public static let favoritesEmptyDismissedKey = "topAppsEmptyStateDismissed"
     public static let liveFolderOffKey = "hasTurnedOffGithubLiveFolder"
     public static let liveFolderIntroKey = "hasSeenGithubLiveFolderEducation"
     public static let openLiveFolderAutoCreateKey = "open.liveFolders.githubAutoCreate"
@@ -116,8 +132,22 @@ public enum ArcPreferenceMapping {
         ("topAppsBadgingDisabledHosts", "open.favorites.badgingDisabledHosts"),
         ("topAppsSubtitleDisabledHosts", "open.favorites.subtitleDisabledHosts"),
     ]
+    /// Capture in Portrait Mode (PB2 row 4, docs/re/portrait-capture.md). The stored type of
+    /// `portraitCaptureBackground` is not known (no Arc data here has it): a string is mapped by the
+    /// words it contains (GUESS). The other two are a number 0…1 and a Bool.
+    public static let portraitBackgroundKey = "portraitCaptureBackground"
+    public static let portraitColorKey = "portraitCaptureColorPercentage"
+    public static let portraitWatermarkKey = "portraitCaptureHidesWatermark"
+    public static func openPortraitSource(_ arc: String) -> String? {
+        let value = arc.lowercased()
+        if value.contains("wallpaper") || value.contains("desktop") { return "wallpaper" }
+        if value.contains("website") || value.contains("tint") || value.contains("site") { return "website" }
+        if value.contains("color") || value.contains("colour") || value.contains("custom") || value.contains("slider") { return "color" }
+        return nil
+    }
     static var boolKeys: [String] {
-        previews.map(\.arc) + Array(unmapped.keys) + favoriteBadgeSwitches.map(\.arc) + [meetRouteKey, liveFolderOffKey, liveFolderIntroKey]
+        previews.map(\.arc) + Array(unmapped.keys) + favoriteBadgeSwitches.map(\.arc)
+            + [meetRouteKey, liveFolderOffKey, liveFolderIntroKey, favoritesEmptyDismissedKey, portraitWatermarkKey]
     }
 
     /// Open's raw value for an Arc reminder raw value (`LiveCalendar.ReminderInterval`).
@@ -138,6 +168,15 @@ public enum ArcPreferenceMapping {
         if let off = prefs.bools[liveFolderOffKey] { out[openLiveFolderAutoCreateKey] = !off }
         if prefs.bools[liveFolderIntroKey] == true { out[openLiveFolderIntroKey] = true }
         for (arc, open) in favoriteBadgeSwitches { if let value = prefs.bools[arc] { out[open] = value } }
+        if let hides = prefs.bools[portraitWatermarkKey] { out["open.capture.portraitHidesWatermark"] = hides }
+        return out
+    }
+
+    /// Non-Bool Open settings from Arc (Portrait Mode colour position and background source).
+    public static func openValues(_ prefs: ArcPreferences) -> [String: Any] {
+        var out: [String: Any] = [:]
+        if let value = prefs.numbers[portraitColorKey] { out["open.capture.portraitColorPercentage"] = value }
+        if let raw = prefs.strings[portraitBackgroundKey], let source = openPortraitSource(raw) { out["open.capture.portraitBackground"] = source }
         return out
     }
 }

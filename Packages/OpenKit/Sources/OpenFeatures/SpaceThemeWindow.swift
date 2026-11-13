@@ -21,6 +21,16 @@ class SpaceThemeWindow: NSWindow, WindowContentAppearanceHost {
         "Open", "OpenDesign", "OpenFeatures", "OpenSpaceEditor", "OpenSiteControl", "OpenExtensionsUI"
     ]
 
+    /// Window ▸ Stay On Top (Arc 1.172.2 runtime menu, `didClickStayOnTopWithMenuItem:`): this window
+    /// floats above other windows until chosen again. GUESS: the floating level and the checkmark
+    /// (the capture shows the item, not its effect).
+    @objc func toggleStayOnTop(_ sender: Any?) { level = level == .floating ? .normal : .floating }
+
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleStayOnTop(_:)) { menuItem.state = level == .floating ? .on : .off; return true }
+        return super.validateMenuItem(menuItem)
+    }
+
     override func beginSheet(_ sheetWindow: NSWindow, completionHandler handler: ((NSApplication.ModalResponse) -> Void)? = nil) {
         preserveAppearance(of: sheetWindow)
         super.beginSheet(sheetWindow) { [weak self, weak sheetWindow] response in

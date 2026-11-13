@@ -132,12 +132,28 @@ enum CaptureChecks {
         case "card": image = OffscreenRenderer().render(card(saved: true).0, scale: scale)
         case "card-private": image = OffscreenRenderer().render(card(saved: false).0, scale: scale)
         case "card-full-page": image = OffscreenRenderer().render(card(saved: true, area: false, note: "Page cut at 32,768 px.").0, scale: scale)
-        case "portrait-theme", "portrait-white", "portrait-black":
-            let background = CaptureComposer.PortraitBackground(rawValue: String(scene.dropFirst("portrait-".count)))!
-            let job = CaptureComposer.Job(kind: .portrait, png: pagePNG(size: CGSize(width: 640, height: 400), scale: scale), viewSize: CGSize(width: 640, height: 400),
-                                          portraitBackground: background, themeStyle: .defaultTheme(system: .dark))
-            let output = try CaptureComposer.compose(job)
-            image = CaptureComposer.decode(output.png)!
+        case "portrait-color", "portrait-website", "portrait-wallpaper":
+            let source = PortraitStyle.Source(rawValue: String(scene.dropFirst("portrait-".count)))!
+            let job = CaptureComposer.Job(kind: .portrait, png: pagePNG(size: CGSize(width: 640, height: 480), scale: scale), viewSize: CGSize(width: 640, height: 480),
+                                          portrait: PortraitStyle(source: source, colorPercentage: 0.88, hidesWatermark: false),
+                                          wallpaper: source == .wallpaper ? pagePNG(size: CGSize(width: 400, height: 250), scale: 1, band: 25) : nil)
+            image = CaptureComposer.decode(try CaptureComposer.compose(job).png)!
+        case "portrait-popover":
+            // The real chrome (the App's panel draws the same view): card, arrow toward the page, shadow.
+            let view = PortraitCaptureView(style: .standard)
+            let page = CaptureComposer.decode(pagePNG(size: CGSize(width: 640, height: 480), scale: 1))!
+            view.preview = CaptureComposer.portrait(page, style: .standard)
+            let chrome = PortraitPopoverChrome(content: view)
+            let root = NSView(frame: CGRect(x: 0, y: 0, width: chrome.frame.width + 60, height: chrome.frame.height + 20)); root.wantsLayer = true
+            let dark = NSApp.appearance?.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            // Left: a sidebar-coloured field; right of the arrow: a white page.
+            let sidebar = NSView(frame: CGRect(x: 0, y: 0, width: chrome.frame.width - 24, height: root.frame.height)); sidebar.wantsLayer = true
+            sidebar.layer?.backgroundColor = (dark ? NSColor(srgbRed: 0.16, green: 0.15, blue: 0.2, alpha: 1) : NSColor(srgbRed: 0.88, green: 0.86, blue: 0.94, alpha: 1)).cgColor
+            let pageField = NSView(frame: CGRect(x: chrome.frame.width - 24, y: 0, width: 84, height: root.frame.height)); pageField.wantsLayer = true
+            pageField.layer?.backgroundColor = (dark ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.97, alpha: 1)).cgColor
+            root.addSubview(sidebar); root.addSubview(pageField)
+            chrome.setFrameOrigin(CGPoint(x: 0, y: 10)); root.addSubview(chrome); root.layoutSubtreeIfNeeded()
+            image = OffscreenRenderer().render(root, scale: scale)
         default: throw CLIError(description: "unknown capture scene \(scene)")
         }
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out)); print("rendered \(out)")
@@ -244,26 +260,52 @@ enum CaptureChecks {
               "C1 area crop: 300 × 200 pt at 2x is 600 × 400 px with the bands at their page offsets")
         let thumb = CaptureComposer.pixelSize(area.thumbnailPNG)!
         check(max(thumb.width, thumb.height) == CaptureComposer.thumbnailMaxPixels, "thumbnail long side \(CaptureComposer.thumbnailMaxPixels): \(thumb)")
-        let layout = CaptureComposer.portraitLayout(imageSize: CGSize(width: 1600, height: 1000))
-        check(abs(layout.canvas.width / layout.canvas.height - 0.8) < 0.002 && abs(layout.image.width / layout.canvas.width - 0.86) < 0.001
+        // Portrait: the popover preview's proportions (239 × 127; page card 96 tall).
+        let aspect = Double(CaptureMetrics.portraitAspect)
+        let layout = CaptureComposer.portraitLayout(imageSize: CGSize(width: 1000, height: 760))
+        check(abs(layout.canvas.width / layout.canvas.height - aspect) < 0.003 && abs(layout.image.height / layout.canvas.height - 96.0 / 127.0) < 0.003
               && abs(layout.image.midX - layout.canvas.width / 2) <= 0.5 && abs(layout.image.midY - layout.canvas.height / 2) <= 0.5,
-              "R-C3 portrait: 4:5 canvas, image 86 % wide and centered: \(layout)")
-        let tallLayout = CaptureComposer.portraitLayout(imageSize: CGSize(width: 600, height: 1400))
-        check(abs(tallLayout.canvas.width / tallLayout.canvas.height - 0.8) < 0.002 && tallLayout.image.height <= tallLayout.canvas.height * 0.86 + 1,
-              "R-C3 a tall page grows the canvas from its height: \(tallLayout)")
+              "R-C3 portrait: 239:127 canvas, page 96/127 of its height and centred: \(layout)")
+        let wideLayout = CaptureComposer.portraitLayout(imageSize: CGSize(width: 2400, height: 600))
+        check(abs(wideLayout.canvas.width / wideLayout.canvas.height - aspect) < 0.003 && wideLayout.image.width <= wideLayout.canvas.width * 0.86 + 1,
+              "R-C3 a wide page sets the canvas from its width (86 %): \(wideLayout)")
         var corners: [String: [Int]] = [:]
-        for background in CaptureComposer.PortraitBackground.allCases {
-            let output = try CaptureComposer.compose(.init(kind: .portrait, png: page, viewSize: viewSize, portraitBackground: background))
+        let wallpaper = pagePNG(size: CGSize(width: 300, height: 200), scale: 1, band: 20)
+        let cases: [(String, PortraitStyle, Data?)] = [
+            ("color-start", PortraitStyle(source: .color, colorPercentage: 0, hidesWatermark: true), nil),
+            ("color-end", PortraitStyle(source: .color, colorPercentage: 1, hidesWatermark: true), nil),
+            ("website", PortraitStyle(source: .website, colorPercentage: 1, hidesWatermark: true), nil),
+            ("wallpaper", PortraitStyle(source: .wallpaper, colorPercentage: 1, hidesWatermark: true), wallpaper),
+            ("wallpaper-unreadable", PortraitStyle(source: .wallpaper, colorPercentage: 1, hidesWatermark: true), Data("not an image".utf8)),
+        ]
+        for (name, style, data) in cases {
+            let output = try CaptureComposer.compose(.init(kind: .portrait, png: page, viewSize: viewSize, portrait: style, wallpaper: data))
             let px = Pixels(CaptureComposer.decode(output.png)!)
-            corners[background.rawValue] = px.rgb(4, 4)
-            let center = px.rgb(px.width / 2, px.height / 2)
-            check(abs(Double(px.width) / Double(px.height) - 0.8) < 0.002 && center != px.rgb(4, 4),
-                  "R-C3 \(background.rawValue) background: \(px.width) × \(px.height), corner \(px.rgb(4, 4)), page at the center \(center)")
+            corners[name] = px.rgb(2, 2)
+            check(abs(Double(px.width) / Double(px.height) - aspect) < 0.003 && px.rgb(px.width / 2, px.height / 2) != px.rgb(2, 2),
+                  "R-C3 \(name) background: \(px.width) × \(px.height), corner \(px.rgb(2, 2))")
         }
-        check(corners["white"] == [255, 255, 255] && corners["black"] == [0, 0, 0] && corners["theme"] != corners["white"] && corners["theme"] != corners["black"],
-              "R-C3 three backgrounds differ: \(corners)")
-        check(CaptureComposer.PortraitBackground(defaultsValue: "nonsense") == .theme && CaptureComposer.PortraitBackground(defaultsValue: "black") == .black,
-              "R-C3 open.capture.portraitBackground falls back to theme")
+        check(Set([corners["color-start"]!, corners["color-end"]!, corners["website"]!, corners["wallpaper"]!]).count == 4
+              && corners["wallpaper-unreadable"] == corners["website"],
+              "R-C3 colour ends, website and wallpaper differ; an unreadable wallpaper gives the website colour: \(corners)")
+        // The watermark tile at the bottom left changes those pixels; hidden, it does not.
+        let marked = Pixels(CaptureComposer.decode(try CaptureComposer.compose(.init(kind: .portrait, png: page, viewSize: viewSize,
+            portrait: PortraitStyle(source: .color, colorPercentage: 0.5, hidesWatermark: false))).png)!)
+        let plain = Pixels(CaptureComposer.decode(try CaptureComposer.compose(.init(kind: .portrait, png: page, viewSize: viewSize,
+            portrait: PortraitStyle(source: .color, colorPercentage: 0.5, hidesWatermark: true))).png)!)
+        let tile = Double(marked.width) * Double(CaptureMetrics.portraitWatermarkFraction), inset = Double(marked.width) * Double(CaptureMetrics.portraitWatermarkInsetFraction)
+        let tx = Int(inset + tile / 2), ty = marked.height - Int(inset + tile / 2)
+        check(marked.rgb(tx, ty) != plain.rgb(tx, ty) && marked.rgb(4, 4) == plain.rgb(4, 4),
+              "R-C3 watermark tile at the bottom left: \(marked.rgb(tx, ty)) vs hidden \(plain.rgb(tx, ty))")
+        let suite = UserDefaults(suiteName: "open.features-render.portrait")!
+        suite.removePersistentDomain(forName: "open.features-render.portrait")
+        suite.set("theme", forKey: PortraitStyle.sourceKey)
+        let migrated = PortraitStyle(defaults: suite)
+        PortraitStyle(source: .wallpaper, colorPercentage: 0.25, hidesWatermark: true).save(to: suite)
+        let saved = PortraitStyle(defaults: suite)
+        suite.removePersistentDomain(forName: "open.features-render.portrait")
+        check(migrated == .standard && saved == PortraitStyle(source: .wallpaper, colorPercentage: 0.25, hidesWatermark: true),
+              "R-C3 open.capture.portrait* keys: old values give the standard style; the three keys round-trip")
         var components = DateComponents(); components.year = 2026; components.month = 3; components.day = 7; components.hour = 15; components.minute = 4
         let gmt = TimeZone(identifier: "GMT")!
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = gmt
@@ -383,12 +425,18 @@ enum CaptureChecks {
         // C7 (offscreen): an incognito page saves nothing; the card offers Copy, Save…, Share.
         isPrivate = true
         let savedRows = library.rows.count
+        let completedBefore = capture.completedCount
         capture.start(.portrait)
+        await wait { capture.portraitView?.preview != nil }
+        // Offscreen windows do not order a popover in (`isShown`); the e2e row checks that on screen.
+        check(capture.portraitPopover != nil && capture.portraitView?.preview != nil && capture.phase != .capturing && capture.completedCount == completedBefore,
+              "C3 Portrait Mode makes the popover with a preview and captures nothing yet (preview \(capture.portraitView?.preview != nil), phase \(capture.phase))")
+        capture.portraitView?.captureButton.performClick(nil)
         await wait { capture.phase == .showing }
         let portrait = capture.lastResult
         check(portrait?.savedID == nil && library.rows.count == savedRows && capture.card?.actions == [.copy, .save, .share]
-              && abs(Double(portrait?.pixelWidth ?? 0) / Double(portrait?.pixelHeight ?? 1) - 0.8) < 0.002,
-              "C3/C7 incognito portrait: a 4:5 PNG, no Library row, Copy/Save…/Share only")
+              && abs(Double(portrait?.pixelWidth ?? 0) / Double(portrait?.pixelHeight ?? 1) - Double(CaptureMetrics.portraitAspect)) < 0.003,
+              "C3/C7 incognito portrait (popover, then its button): a 239:127 PNG, no Library row, Copy/Save…/Share only")
         isPrivate = false
         content.fullPage = FullPagePNG(data: pagePNG(size: CGSize(width: 400, height: 1200), scale: 2), truncated: true)
         capture.start(.fullPage)

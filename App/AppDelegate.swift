@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var directories: ProfileDirectories!
   /// Easel documents (`<data root>/Easels`); made on the first Easel open, never at launch.
   private var easelStore: EaselStore?
+  var hasEaselStore: Bool { easelStore != nil }
+  /// Command bar search over every Easel (made on the first command bar open).
+  private(set) lazy var easelSearch = EaselSearch(app: self)
   var easels: EaselStore {
     if let easelStore { return easelStore }
     let store = EaselStore(root: directories.root); easelStore = store; return store
@@ -96,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var deepLinks = DeepLinkRouter(app: self)
+  lazy var mailto = MailtoRouter(app: self)
   lazy var linkIntake: ExternalLinkIntake = {
     let intake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
     let meet = MeetRoute(app: self)
@@ -115,7 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var liveFetch = LiveFetchHost(app: self)
   lazy var liveFolders = LiveFolderService(app: self)
   /// Calendar data for Join Meeting, the calendar card and Live Calendar; first use only (plan NS §2 CAL).
-  lazy var calendar = CalendarService()
+  var calendar: CalendarService {
+    if let loadedCalendar { return loadedCalendar }
+    let made = CalendarService(); loadedCalendar = made; return made
+  }
+  /// The calendar service if a calendar feature already created it. Menu validation reads only this.
+  private(set) var loadedCalendar: CalendarService?
   /// Live Calendar Favorite tiles (LD §4); idle until a calendar Favorite tile appears.
   lazy var liveCalendar = LiveCalendarCoordinator(app: self)
   var keyBindings = KeyBindingStore.empty
@@ -499,7 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   @discardableResult
-  private func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil) -> BrowserWindowController {
+  func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil, blankWindow: Bool = false) -> BrowserWindowController {
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("browser.windowAndFactory.create")
     defer { pacingRegion?.end() }
@@ -507,11 +516,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.phase("windowCreateBegin")
     let windowModel = privateModel ?? model!
     windowModel.setWindowContentVisible(windowID: state.id, visible: true)
-    let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session)
+    let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session, blankWindow: blankWindow)
     hostFactories[state.id] = factory
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
-      snapshotStore: session == nil && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title,
+      snapshotStore: session == nil && !blankWindow && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title,
+      windowOnlyTitle: blankWindow ? BlankWindow.sidebarTitle : nil,
       siteControlSource: factory.siteControlSource, siteControlActions: factory.siteControlSource)
     LaunchTiming.shared.phase("windowControllerCreated")
     if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay {
@@ -1126,6 +1136,8 @@ extension AppDelegate: CommandDispatcher {
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
+    // Arc 1.172.2 (capture, C-questions "_NS:451"): "View Library" with no browser window, else "Open Library…".
+    if id == "view-library", frontStandardWindowController == nil { return CommandMenuState(title: "View Library") }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
@@ -1153,7 +1165,7 @@ extension AppDelegate: CommandDispatcher {
     // New Note with no browser window key (a Little Open window, Settings, no key window):
     // the Note goes to the front browser window (NoteTab.create).
     if ["new-note", "new-note-in-split"].contains(id) { return frontStandardWindowController != nil }
-    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
+    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-easels-notes", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
     guard allowsFirstRunCommand(id) else { return }
@@ -1179,7 +1191,8 @@ extension AppDelegate: CommandDispatcher {
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }
     switch id {
     case "new-incognito-window": makeIncognitoWindow()
-    case "new-window", "blank-window": makeUserWindow()
+    case "new-window": makeUserWindow()
+    case "blank-window": makeBlankWindow()
     case "new-tab":
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
@@ -1201,6 +1214,7 @@ extension AppDelegate: CommandDispatcher {
     // Arc's View Media runs viewScreenshotsAndCaptures: (docs/re/menus-and-hotkeys.md): the Library's
     // Media grid (Captures + Screenshots), not playback.
     case "view-media": settingsPresenter.showLibrary(section: .media)
+    case "view-easels-notes": settingsPresenter.showLibraryEasels()
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history":
       settingsPresenter.showLibrary(section: .history)

@@ -95,13 +95,19 @@ public final class SpaceControlsView: NSView {
         profile.frame = CGRect(x: 41, y: 23, width: min(max(0, bounds.width - 103), profile.textWidth + 6), height: 18)
         profile.layer?.backgroundColor = GrayScale.a(4).cgColor(context.appearance(for: space))
     }
+    /// Library › Spaces: a right-click on the card header opens the card's Space menu (capture session 8 item 13).
+    public override func menu(for event: NSEvent) -> NSMenu? {
+        guard libraryLayout else { return super.menu(for: event) }
+        let point = convert(event.locationInWindow, from: nil)
+        return point.y <= SpaceManagerMetrics.headerHeight ? makeMenu() : super.menu(for: event)
+    }
     @objc private func moreSpace() { makeMenu().popUp(positioning:nil,at:CGPoint(x:libraryMore.frame.minX,y:libraryMore.frame.maxY),in:self) }
     @objc private func editSpace() {
         let menu = SidebarMenus(context:context,beginRename:{ [weak self] _ in self?.beginRename() }).space(space)
         menu.popUp(positioning:nil,at:CGPoint(x:edit.frame.minX,y:edit.frame.maxY),in:self)
     }
     public func beginRename() {
-        guard !context.isIncognito else { return }
+        guard !context.hidesSpaceChrome else { return }
         context.suppressPreviews(.rename,true)
         let field = RenameField(frame:title.frame.insetBy(dx:-2,dy:-1))
         field.stringValue = context.title(of:space); field.font = title.font
@@ -125,7 +131,7 @@ public final class SpaceControlsView: NSView {
     public var displayedTitle: String { title.text() }
     public var displayedProfile: String? { showsProfileChip ? profile.text() : nil }
     public func makeMenu() -> NSMenu {
-        if libraryLayout { return SidebarMenus(context:context,beginRename:{ [weak self] _ in self?.beginRename() }).space(space) }
+        if libraryLayout { return SidebarMenus(context:context,beginRename:{ [weak self] _ in self?.beginRename() }).space(space, inLibrary: true) }
         let menu = NSMenu(); menu.autoenablesItems = false
         let turn = NSMenuItem(title: "Turn into Folder", action: nil, keyEquivalent: "")
         let destinations = NSMenu(); destinations.autoenablesItems = false

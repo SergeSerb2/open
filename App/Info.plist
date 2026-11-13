@@ -86,6 +86,16 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>Email Address URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mailto</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
 			<string>Open Browser</string>
@@ -96,9 +106,9 @@
 		</dict>
 	</array>
 	<key>SUFeedURL</key>
-	<string>https://sergeserb2.github.io/open/appcast.xml</string>
+	<string>https://sergeserb2.github.io/open-releases/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>PASTE_PUBLIC_KEY_FROM_GENERATE_KEYS</string>
+	<string>l5TeW3rm91P90ir4nixwGZuXX6MkoX8AjqFgNHnjd4U=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUAutomaticallyUpdate</key>

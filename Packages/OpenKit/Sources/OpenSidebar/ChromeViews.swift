@@ -12,6 +12,8 @@ final class ToolbarView: NSView {
     let back = PlateButton(glyph: .back)
     let forward = PlateButton(glyph: .forward)
     let reload = PlateButton(glyph: .reload)
+    /// Developer Mode only: the ▾ right of Reload with the reload options (capture PB3-a, LEAD 12:18).
+    let reloadMenu = PlateButton(glyph: nil)
     /// Compact toolbar only (width < 219): a menu with Reload / Stop Loading and Hide Sidebar.
     let more = PlateButton(glyph: .spaceMore)
 
@@ -54,6 +56,12 @@ final class ToolbarView: NSView {
             }
         }
         toggle.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+        setup(reloadMenu, .reloadMenu) { Tooltip(title: "Reload options", style: style()) }
+        reloadMenu.glyphView.image = { ToolbarView.chevron }
+        reloadMenu.isEnabled = { [unowned context] in context.hasPage }
+        reloadMenu.glyphTint = reload.glyphTint
+        reloadMenu.menuProvider = { [weak self] in self?.makeReloadMenu() }
+        reloadMenu.isHidden = true
         setup(more, .more) { Tooltip(title: "More options", style: style()) }
         more.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
         more.action = { [weak self] in self?.toggleMorePopover() }
@@ -99,6 +107,35 @@ final class ToolbarView: NSView {
         return view === self ? nil : view
     }
 
+    /// The Developer Mode reload options. GUESS: Arc's menu was not captured (C-report-s10 lists no reload menu);
+    /// these are Open's existing reload commands (LEAD 12:18), with the View menu's titles and keys.
+    func makeReloadMenu() -> NSMenu {
+        let menu = NSMenu(); menu.autoenablesItems = false
+        let page = context.hasPage
+        let reload = ClosureMenuItem("Refresh the Page", enabled: page) { [unowned context] in context.send(.reload) }
+        reload.keyEquivalent = "r"; reload.keyEquivalentModifierMask = .command
+        let force = ClosureMenuItem("Force Refresh the Page", enabled: page) { [unowned context] in context.send(.performWindowCommand("force-reload")) }
+        force.keyEquivalent = "r"; force.keyEquivalentModifierMask = [.command, .shift]
+        let cache = ClosureMenuItem("Clear Cache and Refresh", enabled: page) { [unowned context] in context.send(.performWindowCommand("clear-cache-and-refresh")) }
+        for item in [reload, force, cache] { menu.addItem(item) }
+        return menu
+    }
+
+    /// Our own ▾: two 1 pt strokes, 8.5 × 4.5 pt ink (Arc's measured box), drawn in Reload's grey.
+    static let chevron: NSImage = {
+        let size = ChromeMetrics.reloadMenuGlyph, line: CGFloat = 1
+        let image = NSImage(size: NSSize(width: size.width + line, height: size.height + line), flipped: true) { _ in
+            let path = NSBezierPath(), h = line / 2
+            path.move(to: CGPoint(x: h, y: h)); path.line(to: CGPoint(x: h + size.width / 2, y: h + size.height))
+            path.line(to: CGPoint(x: h + size.width, y: h))
+            path.lineWidth = line; path.lineCapStyle = .round; path.lineJoinStyle = .round
+            NSColor.black.setStroke(); path.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
+
     /// True while the toolbar shows Back, Forward, and "More options" only.
     var isCompact: Bool { ChromeMetrics.isCompact(sidebarWidth: bounds.width) }
 
@@ -113,7 +150,10 @@ final class ToolbarView: NSView {
         // A selected split moves back, forward, and reload into each pane's bar: the
         // sidebar toolbar keeps only the toggle (F0081, F0082: AX and pixels).
         // The content toolbar holds them too (§4.6.3, derived from CC-36 "Show as Toolbar").
-        let split = tracked({ context.isSplitSelected || context.isToolbarShown }) { [weak self] in self?.needsLayout = true }
+        // On a Developer Mode page the developer bar is the toolbar (capture s10 `v11/d2…/t-1-toolbar-on`): it has no
+        // navigation, so back, forward and reload stay in the sidebar; only the URL field goes away.
+        let split = tracked({ context.isSplitSelected || (context.isToolbarShown && !context.pageIsDeveloperMode) }) { [weak self] in self?.needsLayout = true }
+        let developer = tracked({ context.pageIsDeveloperMode }) { [weak self] in self?.needsLayout = true }
         let compact = isCompact
         if compact != lastCompact { lastCompact = compact; SidebarDiagnostics.compactToolbarSwaps += 1 }
         if compact {
@@ -124,16 +164,21 @@ final class ToolbarView: NSView {
             more.frame = CGRect(origin: CGPoint(x: c.moreX(sidebarWidth: w), y: c.y), size: size)
             // Arc's compact arrows are smaller than the full toolbar's (ink 13 × 10 vs 15 × 12).
             back.glyphView.glyph = .compactBack; forward.glyphView.glyph = .compactForward
-            toggle.isHidden = true; reload.isHidden = true; more.isHidden = false
+            toggle.isHidden = true; reload.isHidden = true; reloadMenu.isHidden = true; more.isHidden = false
             for b in [back, forward] { b.isHidden = split }
         } else {
             toggle.frame = CGRect(origin: CGPoint(x: ChromeMetrics.sidebarToggleX, y: y), size: s)
             back.frame = CGRect(origin: CGPoint(x: ChromeMetrics.backX(sidebarWidth: w), y: y), size: s)
             forward.frame = CGRect(origin: CGPoint(x: ChromeMetrics.forwardX(sidebarWidth: w), y: y), size: s)
-            reload.frame = CGRect(origin: CGPoint(x: ChromeMetrics.reloadX(sidebarWidth: w), y: y), size: s)
+            let shift = developer ? ChromeMetrics.developerReloadShift : 0
+            reload.frame = CGRect(origin: CGPoint(x: ChromeMetrics.reloadX(sidebarWidth: w) - shift, y: y), size: s)
+            // GUESS: the chevron's hit area (16 pt) overlaps Reload's 32 pt frame by a few points; it sits on top.
+            let menuWidth = ChromeMetrics.reloadMenuWidth
+            reloadMenu.frame = CGRect(x: w - ChromeMetrics.reloadMenuCenterInset - menuWidth / 2, y: y, width: menuWidth, height: s.height)
             back.glyphView.glyph = .back; forward.glyphView.glyph = .forward
             toggle.isHidden = false; more.isHidden = true
             for b in [back, forward, reload] { b.isHidden = split }
+            reloadMenu.isHidden = split || !developer
         }
     }
     private var lastCompact: Bool?

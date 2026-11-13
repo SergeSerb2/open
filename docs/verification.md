@@ -96,7 +96,7 @@ Namespace Macs 1 and 2). Allowed: every suite listed in `RENTED_ALLOWED_E2E`
 |---|---|
 | actions | the suite refuses: "intentional renderer faults require the M1" |
 | incognito | passed (34 rows), but its native captures are display-keyed: M1-only |
-| firstrun | `first-run` command fails: `Foundation._GenericObjCError error 0` (2 of 2 runs) |
+| firstrun | M1/M5 only. Its `first-run action=inspect` reads the rendered text with Vision `VNRecognizeTextRequest` at the `.accurate` level, and that level fails on the virtual Mac with `Foundation._GenericObjCError error 0` (also in a standalone program on a generated PNG, outside Open; the `.fast` level works there, and both levels work on a real Mac). The suite keeps `.accurate`: its copy and geometry rows need it. |
 | onboarding | `phases_reached_in_order` fails (2 of 2) |
 | welcome | `W02_insert_native_today` fails, state null (2 of 2) |
 | import-robust | first-run launch killed (launcher exit -9), automation not ready in 60 s |
@@ -1671,7 +1671,7 @@ process-start clock are unchanged.
 | Workload | Existing measurement and limits |
 |---|---|
 | Existing-profile launch | `engine_e2e.py` `warm_existing_profile`, extracted from S16 `run_launch.py`: seven launches; sidebar median ≤250 ms, first paint median ≤700 ms. Also main ≤50 ms and modelLoaded ≤120 ms intermediate marks from the app-shell plan. Kernel process birth and a confirmed sidebar frame are required. Process-cold, warm file caches. |
-| First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh first-run roots, median first confirmed Intro content frame ≤250 ms, selected imported-tab renderer FCP from `firstRunLandingStarted` ≤700 ms. Intro skip/handoff uses the real onboarding actions with silent playback; capture imported paint before native Welcome replaces the selection. See the definition and review note above. |
+| First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh first-run roots; the first confirmed Intro content frame is reported as INFO with its phase split and the intro sound decision (no 250 ms budget for the one-time first run, lead ruling 2026-11-12; the 250 ms budget is for a normal launch), selected imported-tab renderer FCP from `firstRunLandingStarted` ≤700 ms. Intro skip/handoff uses the real onboarding actions with silent playback; capture imported paint before native Welcome replaces the selection. See the definition and review note above. |
 | Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. Lead ruling, 2026-11-08 09:30: static total CPU ≤0.5%; always print and retain its measured value. The animated row has no numeric ceiling and shows `NO NUMERIC BUDGET` with measured CPU. Missing data or failed cleanup still fails in either row. See `docs/architecture.md` performance budgets. |
 | Site Control | Full `sitecontrol-render check`: cold-open CPU p95 <8 ms; simple-editor CPU p95 <12 ms using the required full-check procedure; both instruction gates; idle <10 ms CPU/2 s; ten-page refresh <100 ms; pad CPU p95 <2 ms; off-main hue <15 ms; ≤61 previews/120 inputs; code highlight CPU p95 <2 ms. Unknown instruction baselines fail closed. |
 | SM6 and mini-player | `sidebar-render check`: one declared warm-up and five fresh processes, accepted instruction ceiling, first-layout wall median ≤120 ms, structural gates, MC8 paused idle CPU ≤0.5%. |
@@ -1815,3 +1815,11 @@ The lead ruled them load-induced. They do not block a PR. Do not spend screen ti
 The rented Macs are a separate case: they have no audio output and no real display animation, so 13
 `onboarding` rows fail there every time (list in PR #383). Those are not flakes. `onboarding` stays off
 `RENTED_ALLOWED_E2E`.
+
+Intro sound and the first first-run frame (measured 2026-11-12 on a rented Mac, main 431a7bb7). The first frame
+waits for the intro sound, up to the 0.3 s `soundDeadline`. The App already starts the sound preparation before
+`engine.start` (109–241 ms after launch), and it is normally ready in 52–149 ms, long before the request; the file
+load itself is about 6 ms and `prepareToPlay` 37 ms (94–111 ms in total on the M5's real output device). A timeout
+(`failed/timeout` in `firstrun/F12_first_content.soundDecisions`) therefore means the system audio stack was slow:
+on the first launch of a new binary on the virtual device the worker took 2.6 s. It is not our loading, and there is
+no earlier point to preload at.

@@ -10,6 +10,8 @@
 
 - Public settings link scheme: not registered; decide name and consent model before adding (lead)
 
+- Split suite rows `snapshot_two_panes` and `speed_idle_after_drag` (LEAD 12:18, 2026-11-12): rented-Mac display/timing rows, judge on M1. On the rented Mac 1 (2026-11-12, #446 proof runs), `snapshot_two_panes` failed with and without the change (a rented Mac has no reference for its display key), and `speed_idle_after_drag` failed in one run and passed in the next (a timing row; INFO only on a rented Mac). Neither row was investigated.
+
 - First onboarding frame waits for engine.start, 0.1–2.4 s observed on the same binary; final cold/repeat proof measured 2.552/2.498/2.416 s for engine.start and 3.435/3.295/3.230 s from launch to the first onboarding frame (INFO). Owner: launch budget (Section 8 item 13 / Section 16). Dyld/signature checks are a hypothesis; the attributed work is synchronous engine.start.
 - Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
   `onboarding` measures main-thread display-link intervals, not render-server
@@ -596,3 +598,37 @@ change a user's live preferences. Today the real-App suites (for example
 in the shared `io.github.sergeserb2.open` domain and restore them in `finally`.
 A user's running Open session can see those values while a suite runs.
 - **Favorites empty-state card in older e2e suites (A3, 2026-11-12).** The e2e harness launches with `--favorites-empty-state=hidden` (automation builds only), so suites and visual references written before the card keep their sidebar geometry; only `favorites-empty` runs with the card shown. At the next reference refresh, move the suites to the product default (card shown on a fresh Profile) and drop the launch option.
+
+## Library Downloads shows "No matches" in the corrupt-index flow (IMC, 2026-11-12)
+
+In `sidebar-completion`, the Downloads section of the corrupt capture-index
+flow shows "No matches" instead of "No downloads yet". "No matches" means
+that a search query or a Profile filter is active (`LibraryPanelView.updateEmptyCopy`).
+Why one is active at that step is not known. It may be a leftover from an
+earlier step of the suite. The row `library_corrupt_index_downloads` accepts
+both titles until this is settled. Owner: D2 (lead routes).
+
+Cause found (D2, 2026-11-12): every outside entry into the Library sets the
+Downloads Profile filter to the window owner's Profile, so the filter is
+always active. Fix: #480 (Downloads shows "No downloads yet" when no Profile
+has a download). After #480, `library_corrupt_index_downloads` can expect
+"No downloads yet" only.
+
+## Menu items deferred from the D2c menu work (LEAD 12:32, 2026-11-12)
+
+No work on these until the lead schedules them (`docs/re/sidebar-menus-parity.md`):
+- Split row: "Rename…", "Change Icon…" and "Reset Name and Icon" from Arc's code (MH). The split-row menu was not captured in 1.172.2 (C3 item 5).
+- Library › Media: "Open Source URL" and "Copy Source URL". Open's capture index stores only the source host, so it needs the full source URL first. The Media menu order and separators stay marked GUESS (session 8 item 12 was skipped).
+- Pinned tab row: "Customize Page…" is Open's own item and not in Arc's menu (S3D). Keep it or move it; this needs a decision.
+
+## Easels: not capturable without an Arc account (LEAD 15:25 ruling)
+Arc makes no Easel without an Arc account, and captures use no account or sign-in, so these Arc behaviours
+cannot be observed. Open keeps its current behaviour and builds no guessed surface (PB2-questions "EZ GAPS"):
+- G3: Export All Easels progress sheet ("Saving your Easels", "%d of %d") and result sheet. Open shows a toast.
+- G4: object-menu rows known only as string comments (Easel title, "Set as Easel thumbnail", "Edit Alt Text",
+  copy a Capture's URL). Open has the captured rows only.
+- G5: the third palette, `theme`, in Color Palette ▸. Open offers Vibrant and Chill.
+- G7: the zoom maximum and canvas panning. Open stops at 400 % (GUESS) and scrolls vertically.
+- G8: the image tool's open panel and the size a picture lands at. Open places pictures ≤ 400 pt wide (GUESS).
+- The live web card dialog's closing shortcut and button titles (C3-EZ-1). Open uses its own last sentence and buttons.
+

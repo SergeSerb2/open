@@ -385,7 +385,9 @@ def run(factory, results, tmp, api):
             s = api.wait_until(lambda: (lambda x: x if x['livePages'] == 1 else None)(easel(tab=e2)), timeout=8, step=.1)
             live = next(x for x in objects(s) if x['id'] == card['id']) if s else {}
             record('E29_live_card', 'Show Live Website' in menu and 'Open Page in New Tab' in menu and sheet.get('shown')
-                   and sheet['buttons'][:2] == ['Show Live Website', 'Cancel'] and live.get('live') and live.get('liveAttached'),
+                   and sheet['buttons'][:2] == ['Show Live Website', 'Cancel'] and live.get('live') and live.get('liveAttached')
+                   and 'Replace this screenshot with the live website?' in sheet.get('texts', [])
+                   and any(t.startswith("See an up-to-date, interactive view of whatever you've captured. This does not work on all sites.") for t in sheet.get('texts', [])),
                    menu=menu, sheet=sheet, card=live)
             time.sleep(1.5)
             snapshot('e29-live-card-light')
@@ -462,6 +464,25 @@ def run(factory, results, tmp, api):
                    and 'Doing so will delete the Easel permanently.' in alert['texts'] and sorted(alert['buttons']) == ['Cancel', 'Delete']
                    and gone and not folder.exists(), alert=alert, folderExists=folder.exists())
 
+            # E38b: a selection of only Easels ends with Arc's plural "Remove Easels from Sidebar" (STR, easels-notes.md
+            # §3.2); Copy Links stays (an Easel has an address). A web tab in the selection keeps "Archive Tabs".
+            pair = [easel(action='create')['tab'] for _ in range(2)]
+            web_row = next(t['id'] for t in app.call('tabs') if not t['url'].startswith('open://'))
+            app.call('sidebar-click', node=pair[0]); app.call('sidebar-click', node=pair[1], modifiers=['cmd'])
+            only = app.call('sidebar-menu-items', node=pair[0])
+            app.call('sidebar-key', key='escape')
+            app.call('sidebar-click', node=pair[0]); app.call('sidebar-click', node=web_row, modifiers=['cmd'])
+            mixed = app.call('sidebar-menu-items', node=pair[0])
+            app.call('sidebar-key', key='escape')
+            app.call('sidebar-click', node=pair[0]); app.call('sidebar-click', node=pair[1], modifiers=['cmd'])
+            # Without the item (old code) the call is refused: the row then FAILs instead of stopping the suite.
+            api._try(lambda: app.call('sidebar-menu', node=pair[0], item='Remove Easels from Sidebar'))
+            removed = api.wait_until(lambda: all(t['id'] not in pair for t in app.call('tabs')) or None, timeout=5, step=.1)
+            record('E38b_selection_of_easels_menu', 'Remove Easels from Sidebar' in only['items'] and 'Archive Tabs' not in only['items']
+                   and 'Copy Links' not in only['disabled'] and 'Archive Tabs' in mixed['items']
+                   and 'Remove Easels from Sidebar' not in mixed['items'] and bool(removed),
+                   only=only, mixed=mixed['items'], removed=bool(removed))
+
             # ---- I1: Arc "Export All Easels" folder → Open Easels ----
             export = Path(tmp) / 'Arc Easels - synthetic'
             def easel_json(folder, doc):
@@ -534,6 +555,36 @@ def run(factory, results, tmp, api):
             app.call('appearance', name='dark'); time.sleep(.6)
             snapshot('l01-library-easels-dark')
             app.call('appearance', name='light')
+            # S01 (EZ GAPS G6): the command bar finds an Easel that is only in the Library by its title,
+            # as a normal row ("Easel"); choosing it opens the Easel with a sidebar row again.
+            library(action='close')
+            b_url = board_b['url']
+            def bar_query(text):
+                app.call('key', key='t', modifiers=['cmd'], route='app')
+                api.wait_until(lambda: app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
+                app.call('key', text=text)
+                return api.wait_until(lambda: (lambda s: s if s.get('text') == text and s.get('final') else None)(app.call('commandbar-state')),
+                                      timeout=8, step=.1) or app.call('commandbar-state')
+            found = bar_query('Board B')
+            if not any(r['url'] == b_url for r in found.get('rows', [])):
+                # The catalog refreshes off the main thread when the bar opens: ask once more.
+                app.call('key', key='escape'); time.sleep(.5); found = bar_query('Board B')
+            bar_rows = found.get('rows', [])
+            row = next((r for r in bar_rows if r['url'] == b_url), {})
+            before = [t['id'] for t in app.call('tabs') if t['url'] == b_url]
+            for _ in range(bar_rows.index(row) if row in bar_rows else 0): app.call('key', key='down')
+            app.call('key', key='return')
+            reopened = api.wait_until(lambda: [t for t in app.call('tabs') if t['url'] == b_url] or None, timeout=8, step=.1)
+            record('S01_commandbar_finds_library_easel', bool(row) and row.get('kind') == 'navigate' and row.get('title') == 'Board B'
+                   and row.get('subtitle') == 'Easel' and not before and bool(reopened)
+                   and sum(1 for r in bar_rows if r['url'] == b_url) == 1,
+                   row=row, rows=[(r['title'], r['kind'], r.get('subtitle')) for r in bar_rows[:6]])
+            # S02: an Easel that is a sidebar tab comes once, as its Switch to Tab row (no second Easel row).
+            same = [r for r in bar_query('Board B').get('rows', []) if r['url'] == b_url]
+            record('S02_sidebar_easel_once', len(same) == 1 and same[0]['kind'] == 'switchToTab', rows=[(r['title'], r['kind']) for r in same])
+            app.call('key', key='escape')
+            library(action='open', section='easels')
+            api.wait_until(lambda: library().get('rows') or None, timeout=8, step=.2)
             b_row = rows.get('Board B', {}).get('id', '')
             menu = library(action='row-menu', id=b_row)['items'] if b_row else []
             library(action='row-action', id=b_row, name='open')
@@ -568,6 +619,17 @@ def run(factory, results, tmp, api):
         # L05: a profile with no Easels shows the empty state (docs/re/easels.md copy).
         app.quit(); app = None
         app = factory(urls=('about:blank',), fresh=True)
+        # L06: Window ▸ View Easels & Notes (Arc's `viewEaselsAndNotes:`) opens the Library at Easels,
+        # also when the Library last showed another page.
+        app.call('library', action='open', section='downloads')
+        app.call('library-close')
+        menu = {r['id']: r for r in app.call('menu-state') if r['id'] == 'view-easels-notes'}
+        app.call('menu-perform', id='view-easels-notes')
+        opened = api.wait_until(lambda: (lambda x: x if x.get('open') and x.get('section') == 'easels' else None)(app.call('library')), timeout=8, step=.2)
+        record('L06_view_easels_and_notes', bool(opened) and menu.get('view-easels-notes', {}).get('enabled') is True
+               and menu['view-easels-notes'].get('title') == 'View Easels & Notes…',  # 1.172.2 ellipsis (#506)
+               menu=menu, section=(opened or app.call('library')).get('section'))
+        app.call('library-close')
         app.call('library', action='open', section='easels')
         empty = api.wait_until(lambda: (lambda x: x if x.get('section') == 'easels' and x.get('emptyVisible') else None)(app.call('library')), timeout=8, step=.2)
         record('L05_library_empty', empty and empty['emptyState']['title'] == 'No Easels yet'
@@ -581,7 +643,8 @@ def run(factory, results, tmp, api):
         sidebar = json.loads(sidebar_file.read_text())
         for item in sidebar['sidebar']['containers'][1]['items']:
             if isinstance(item, dict) and item.get('id') == ids['easel']:
-                item['data'] = {'easel': {'easelID': 'arc-easel-a', 'title': 'Board A', 'shareStatus': 'creatorOnly'}}
+                item['data'] = {'easel': {'easelID': 'arc-easel-a', 'title': 'Board A', 'shareStatus': 'creatorOnly',
+                                          'customInfo': {'iconType': {'emoji_v2': '\U0001F3A8'}}}}
         sidebar_file.write_text(json.dumps(sidebar))
         app = factory(urls=(), fresh=True, extra_args=['--host-resolver-rules=MAP * ~NOTFOUND'])
         def fr():
@@ -611,6 +674,12 @@ def run(factory, results, tmp, api):
                and report.get('settingsOutcome', {}).get('Easels') == 3 and a_tab and a_tab['title'] == 'Board A'
                and len(a_objects) == 7 and len(imported_tabs) == 3, beforePick=before_pick, chosen=chosen,
                outcome=report.get('settingsOutcome'), tabs=[t['title'] for t in imported_tabs])
+        # W01b: `SidebarEasel.customInfo.iconType` (easels-notes.md §3.2) becomes the Easel row's custom icon.
+        # `easel rows` covers every Space (the imported row sits in an imported Space).
+        a_icon = (a_tab or {}).get('iconEmoji')
+        others = [t.get('iconEmoji') for t in imported_tabs if not a_tab or t['tab'] != a_tab['tab']]
+        record('W01b_easel_custom_icon', a_icon == '\U0001F3A8' and others and all(i == '' for i in others),
+               icon=a_icon, others=others)
         a_doc = Path(app.call('easel', action='store', document=a_url.rsplit('/', 1)[1])['path'])
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         app.call('sidebar-key', key='z', modifiers=['command'])
