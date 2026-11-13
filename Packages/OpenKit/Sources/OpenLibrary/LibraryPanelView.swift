@@ -305,19 +305,23 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         renderRows()
         needsDisplay = true
     }
+    static let folderSourcesBody = "Allow Open to show your Documents, Desktop, and Download Folders to see them here alongside your Captures."
+    static let folderSourcesPitch = "Quickly grab screenshots, images, and videos from your computer by showing them in the Open Library!"
     func updateEmptyCopy() {
         // Downloads: every outside entry sets the Profile filter to the window owner's Profile, so a filter alone
         // does not mean the user narrowed anything. With no download in any Profile the copy stays "No downloads yet".
         let noMatches = !viewModel.query.isEmpty || (hasActiveFilters && !(section == .downloads && viewModel.downloads.downloads.isEmpty))
         let folderSources = section == .media && viewModel.mediaFolders.map { !$0.onboarded } == true
-        let copy = folderSources ? (title:"Show your media here",body:"Screenshots, images and videos from this Mac, ready to drag into any page.",button:Optional("Choose Folders…")) : section.emptyCopy
+        // C-LF-5 (LEAD 20:45, Open's design): Arc's two first-use strings with "Open" (LB-1). The permission ask is
+        // the body beside the button; the "Quickly grab…" line is the button's tooltip and accessibility help.
+        let copy = folderSources ? (title:"Show your media here",body:LibraryPanelView.folderSourcesBody,button:Optional("Choose Folders…")) : section.emptyCopy
         emptyGlyph.glyph = LibraryGlyph(rawValue:section.rawValue) ?? .media
         emptyTitle.stringValue = noMatches ? "No matches" : copy.title
         emptyBody.stringValue = noMatches ? "Try another word." : copy.body
         emptyButton.title = copy.button ?? ""; emptyButton.isHidden = noMatches || copy.button == nil
         emptyButton.isEnabled = folderSources
-        emptyButton.toolTip = nil
-        if section == .media { emptyButton.setAccessibilityHelp(folderSources ? "Shows images and videos from your Documents, Desktop, Downloads and screenshots" : nil) }
+        emptyButton.toolTip = folderSources && !noMatches ? LibraryPanelView.folderSourcesPitch : nil
+        if section == .media { emptyButton.setAccessibilityHelp(folderSources ? LibraryPanelView.folderSourcesPitch : nil) }
     }
     func refreshTheme() {
         let style = context.focusedSpace.map { context.style(for:$0) } ?? .defaultTheme(system:context.systemAppearance)
@@ -397,8 +401,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         func frame(_ x: CGFloat,_ y: CGFloat,_ w: CGFloat,_ h: CGFloat)->CGRect { CGRect(x:x,y:content.bounds.height-(y-56)-h,width:w,height:h) }
         emptyGlyph.frame=frame(centerX-24,top,48,48)
         emptyTitle.frame=frame(centerX-148,top+64,296,22)
-        emptyBody.frame=frame(centerX-118,top+92,236,56)
         let lines = ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:236,height:100),options:[.usesLineFragmentOrigin,.usesFontLeading]).height)
+        emptyBody.frame=frame(centerX-118,top+92,236,max(56,lines))
         let buttonWidth = (emptyButton.title as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:13,weight:.semibold)]).width+24
         emptyButton.frame=frame(centerX-buttonWidth/2,top+92+max(17,lines)+14,buttonWidth,28)
     }
@@ -470,7 +474,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             "header":["searchFrame":section == .spaces ? [] : rect(header),"filterFrame":section.hasFilter ? rect(filter) : [],"filterOpen":filterOpen,"chips":filterOpen ? filterEditor.state(in:self) : []] as [String:Any],
             "providers":Dictionary(uniqueKeysWithValues:hosts.map { ($0.key.rawValue,["generation":$0.value.providerGeneration,"loaded":$0.value.loaded,"running":$0.value.provider != nil] as [String:Any]) }),
             "profiles":["history":viewModel.historyProfileID.description,"downloads":viewModel.downloadProfileFilter?.description ?? "all"],
-            "dragSession":listView.dragSession,"search":viewModel.query,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden],
+            "dragSession":listView.dragSession,"search":viewModel.query,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden,"bodyFrame":rect(emptyBody),"buttonFrame":rect(emptyButton),"bodyNeededHeight":ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:emptyBody.frame.width,height:200),options:[.usesLineFragmentOrigin,.usesFontLeading]).height),"buttonToolTip":emptyButton.toolTip ?? "","buttonHelp":emptyButton.accessibilityHelp() ?? ""],
             "easels":easelsState, "notes":noteItems.count,
             "menuOpen":listView.activeMenu != nil,"menuLifecycle":listView.menuLifecycle,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? ""]
     }
