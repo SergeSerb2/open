@@ -19,8 +19,8 @@ enum PeekHostSnapshot {
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0, width <= 8192, height <= 8192,
               width <= 16 * 1024 * 1024 / height else { return nil }
-        // At most 16M pixels × 4 = 64MiB per decoded image; at most two retained
-        // viewport images (old cover and destination) during preparation.
+        // At most 16M pixels × 4 = 64MiB per decoded Chromium RGBA8 image. Preparation retains the old and
+        // destination images; promotion may also retain one fresh capture.
         return PeekMotionTrace.region("snapshot.decode") {
             CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
         }
@@ -63,8 +63,9 @@ extension PeekOverlayView {
     }
 
     /// Leave the old pixels live while the render server receives the image.
-    /// A constant layer animation is a one-refresh commit fence, not a timer or
-    /// a per-frame geometry driver. Motion starts only after this completes.
+    /// A constant layer animation gives the commit one refresh before hiding
+    /// the live view. It is not a physical-presentation receipt; native movie
+    /// frames verify the handoff. It never drives geometry on the main thread.
     func stageHostSnapshot(_ view: NSView, image: CGImage, ready: @escaping @MainActor () -> Void) {
         freezeHost(view, image: image, hide: false)
         guard let snapshot = motionSnapshotLayer else { ready(); return }

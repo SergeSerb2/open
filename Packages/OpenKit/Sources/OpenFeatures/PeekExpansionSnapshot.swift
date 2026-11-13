@@ -26,6 +26,7 @@ extension PeekOverlayView {
         guard let parent = layer else { ready(); return }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let card = CALayer(), clip = CALayer(), pixels = CALayer()
+        card.zPosition = 2
         card.anchorPoint = .zero; card.position = panel.frame.origin
         card.bounds = CGRect(origin: .zero, size: panel.bounds.size)
         card.shadowColor = panel.layer?.shadowColor; card.shadowOpacity = PeekMetrics.shadowOpacity

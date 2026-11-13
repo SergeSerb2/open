@@ -349,6 +349,7 @@ public final class PeekController {
         guard stack.last?.id == item.id, model.space(id: target) != nil else { return false }; isExpanding = false
         // Favorites cannot be split, even when another tab is now selected.
         if split, case .favorites? = model.parent(of: item.sourceTabID) { NSSound.beep(); return false }
+        isPromotionHandoff = !split && overlay.expansionCard != nil
         let currentURL = item.host?.currentURL ?? item.url
         let tab = model.newTab(in: target, url: currentURL, title: item.host?.title ?? "", at: 0); tab.live.sleepPhase = .live
         if split {
@@ -366,7 +367,6 @@ public final class PeekController {
             model.focusSpace(windowID: splitController.windowID, spaceID: target)
             model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
         }
-        isPromotionHandoff = !split && overlay.expansionCard != nil
         stack.removeLast(); item.host?.view.removeFromSuperview()
         // Bind before show, so showing a new tab cannot create and load a replacement host.
         if let host = item.host {

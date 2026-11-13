@@ -14,7 +14,7 @@ extension OEWebContent: @retroactive WebContent {
   public func snapshotPNG() async throws -> Data { try await takeSnapshot() }
   public func motionSnapshotPNG() async throws -> Data {
     let result = try await sendDevToolsMethod("Page.captureScreenshot", parameters: [
-      "format": "png", "fromSurface": false, "captureBeyondViewport": false,
+      "format": "png", "fromSurface": true, "captureBeyondViewport": false, "optimizeForSpeed": true,
     ])
     guard let encoded = result["data"] as? String, encoded.utf8.count <= 90 * 1024 * 1024,
       let data = Data(base64Encoded: encoded), data.count <= 64 * 1024 * 1024
