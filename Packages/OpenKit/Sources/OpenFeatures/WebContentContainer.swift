@@ -20,6 +20,7 @@ public final class PaneSlotView: NSView {
     public private(set) var swipeIndicator: SwipeIndicatorView?
     private var style: SpaceThemeStyle = .defaultTheme(system: .light)
     private var lastHostWindowRect: CGRect?
+    fileprivate var defersWebLayout = false
     let clip = NSView()
     public let focusRing = CAShapeLayer()
     var isFocused = false
@@ -124,7 +125,7 @@ public final class PaneSlotView: NSView {
         // A cached slot can move while the page's local frame stays equal: keep
         // that window-coordinate change so Chrome's child window still follows.
         let hostWindowRect = clip.convert(page, to: nil)
-        if contentHostView?.frame != page || lastHostWindowRect != hostWindowRect {
+        if !defersWebLayout && (contentHostView?.frame != page || lastHostWindowRect != hostWindowRect) {
             contentHostView?.frame = page; lastHostWindowRect = hostWindowRect
         }
         if placeholderView?.frame != page { placeholderView?.frame = page }
@@ -227,6 +228,10 @@ public final class WebContentContainer: NSView {
     public let dropOverlay = SplitDropOverlayView()
     private var monitor: Any?
     private var transitioning = false
+    private var paneMotionGeneration = 0
+    private var paneMotionTargets: [ItemID: CGRect] = [:]
+    private var retiringSlots: [ItemID: PaneSlotView] = [:]
+    private var enteringPaneIDs = Set<ItemID>()
 
     public init(factory: any WebContentHostFactory) {
         self.factory = factory; super.init(frame: .zero); wantsLayer = true
@@ -246,22 +251,36 @@ public final class WebContentContainer: NSView {
         if let currentProfile, currentProfile != profileID { closeAll() }
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
         let old = ids, previousFocus = focused
-        for id in old where !tabIDs.contains(id) { cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
+        let structureChanged = old != tabIDs && !Set(old).isDisjoint(with: tabIDs)
+        let animateStructure = structureChanged && window?.isVisible == true && !Motion.reducesMotion
+        if structureChanged { enteringPaneIDs = Set(tabIDs).subtracting(old) }
+        // Keep only the outgoing panes of this transition. Rapid selection cannot
+        // accumulate parked visible pages while earlier completions are pending.
+        for (id, slot) in retiringSlots where !tabIDs.contains(id) {
+            retire(slot); retiringSlots[id] = nil
+        }
+        for id in old where !tabIDs.contains(id) {
+            hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id)
+            if !animateStructure { cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview() }
+        }
         for slot in slots where !tabIDs.contains(slot.tabID) {
-            slot.removeFromSuperview()
-            if cache[slot.tabID] != nil { parkedSlots[slot.tabID] = slot }
+            if animateStructure { retiringSlots[slot.tabID] = slot }
+            else { retire(slot) }
         }
         let byID = Dictionary(uniqueKeysWithValues: slots.map { ($0.tabID, $0) })
         slots = tabIDs.map { id in
             let parked = parkedSlots.removeValue(forKey: id)
-            return byID[id] ?? parked ?? PaneSlotView(tabID: id)
+            return byID[id] ?? retiringSlots.removeValue(forKey: id) ?? parked ?? PaneSlotView(tabID: id)
         }
-        for slot in slots { slot.fullBleed = fullBleed }
+        for slot in slots {
+            slot.fullBleed = fullBleed
+            if animateStructure && old.contains(slot.tabID) { slot.defersWebLayout = true }
+        }
         for slot in slots where slot.superview == nil { addSubview(slot, positioned: .below, relativeTo: dropOverlay) }
         ids = tabIDs; focused = focusedTabID; self.orientation = orientation
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
         hiddenLRU.removeAll { tabIDs.contains($0) }
-        ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: old != ids)
+        ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: structureChanged)
         if previousFocus != focusedTabID { focusContent(focusedTabID) }
         let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
         if !pending.isEmpty {
@@ -373,6 +392,7 @@ public final class WebContentContainer: NSView {
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }
     public func clearSelection() {
+        finishPaneMotion()
         onReturnPreviewHost?()
         showGeneration += 1
         for id in ids {
@@ -457,6 +477,7 @@ public final class WebContentContainer: NSView {
     public override func mouseDown(with event: NSEvent) { observeClick(event) }
     public func setLivePaneFrames(_ frames: [CGRect]) {
         guard frames.count == slots.count else { return }
+        finishPaneMotion()
         for (slot, frame) in zip(slots, frames) where slot.frame != frame {
             slot.frame = frame; slot.layoutContents(); slot.paneChrome?.layoutSubtreeIfNeeded()
         }
@@ -469,21 +490,103 @@ public final class WebContentContainer: NSView {
         slot.showHistorySwipe(event); return true
     }
 
+    private func retire(_ slot: PaneSlotView) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        slot.layer?.removeAnimation(forKey: "split.geometry")
+        slot.layer?.removeAnimation(forKey: "split.opacity")
+        slot.layer?.transform = CATransform3DIdentity
+        slot.layer?.opacity = 1; slot.defersWebLayout = false
+        cache[slot.tabID]?.view.isHidden = true
+        cache[slot.tabID]?.view.removeFromSuperview()
+        slot.removeFromSuperview()
+        if cache[slot.tabID] != nil { parkedSlots[slot.tabID] = slot }
+    }
+
+    /// The web subtree stays at its original size throughout the render-server
+    /// motion. Commit its final frame once, after the layer reaches its target.
+    private func finishPaneMotion() {
+        paneMotionGeneration += 1
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        for slot in slots {
+            slot.layer?.removeAnimation(forKey: "split.geometry")
+            slot.layer?.removeAnimation(forKey: "split.opacity")
+            slot.layer?.transform = CATransform3DIdentity; slot.layer?.opacity = 1
+            slot.defersWebLayout = false
+            if let target = paneMotionTargets[slot.tabID], slot.frame != target { slot.frame = target }
+            slot.layoutContents()
+        }
+        for slot in retiringSlots.values { retire(slot) }
+        retiringSlots.removeAll(); paneMotionTargets.removeAll(); enteringPaneIDs.removeAll(); transitioning = false
+        layoutDividers()
+        CATransaction.commit()
+    }
+
     public func layoutPanes(animated: Bool) {
         let frames = SplitLayout.frames(content: bounds, orientation: orientation, fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
-        let animate = animated && window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        transitioning = animate
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = animate ? Motion.splitExpand : 0; context.timingFunction = Motion.easeInOut
-            for (slot, frame) in zip(slots, frames) {
-                slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID
-                let target = maximizedTabID == slot.tabID ? bounds : frame
-                if slot.frame != target {
-                    if animate { slot.animator().frame = target } else { slot.frame = target }
-                }
+        let targets = Dictionary(uniqueKeysWithValues: zip(slots, frames).map { slot, frame in
+            (slot.tabID, maximizedTabID == slot.tabID ? bounds : frame)
+        })
+        // Metadata and parent layout can refresh the same selection during a
+        // transition. Neither may restart it or resize a page halfway through.
+        if transitioning, targets == paneMotionTargets { return }
+        let animate = animated && window?.isVisible == true && !Motion.reducesMotion
+        if !animate {
+            paneMotionTargets = targets
+            for slot in slots { slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID }
+            finishPaneMotion()
+            return
+        }
+        paneMotionGeneration += 1; let generation = paneMotionGeneration
+        paneMotionTargets = targets; transitioning = true
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.paneMotionGeneration == generation else { return }
+                self.finishPaneMotion()
             }
-        } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
-        layoutDividers()
+        }
+        for slot in slots {
+            guard let target = targets[slot.tabID], let layer = slot.layer else { continue }
+            slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID
+            let incoming = enteringPaneIDs.contains(slot.tabID) || slot.frame.width <= 0 || slot.frame.height <= 0
+            let start = layer.presentation()?.transform ?? layer.transform
+            let opacity = layer.presentation()?.opacity ?? layer.opacity
+            layer.removeAnimation(forKey: "split.geometry"); layer.removeAnimation(forKey: "split.opacity")
+            if incoming {
+                slot.frame = target; slot.layoutContents()
+                layer.transform = CATransform3DIdentity
+            } else {
+                // Account for AppKit's backing-layer anchor without changing it.
+                let source = slot.frame, anchor = layer.anchorPoint
+                var end = CATransform3DMakeTranslation(target.minX - source.minX + anchor.x * (target.width - source.width),
+                                                       target.minY - source.minY + anchor.y * (target.height - source.height), 0)
+                end = CATransform3DScale(end, target.width / source.width, target.height / source.height, 1)
+                layer.transform = end
+                let motion = CABasicAnimation(keyPath: "transform")
+                motion.fromValue = NSValue(caTransform3D: start); motion.toValue = NSValue(caTransform3D: end)
+                motion.duration = Motion.splitExpand; motion.timingFunction = Motion.easeInOut
+                layer.add(motion, forKey: "split.geometry")
+            }
+            layer.opacity = 1
+            if incoming || opacity < 1 {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = incoming ? 0 : opacity; fade.toValue = 1
+                fade.duration = Motion.splitExpand; fade.timingFunction = Motion.easeInOut
+                layer.add(fade, forKey: "split.opacity")
+            }
+        }
+        for slot in retiringSlots.values {
+            guard let layer = slot.layer else { continue }
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = layer.presentation()?.opacity ?? layer.opacity; fade.toValue = 0
+            fade.duration = Motion.splitExpand; fade.timingFunction = Motion.easeInOut
+            layer.opacity = 0; layer.add(fade, forKey: "split.opacity")
+        }
+        // Dividers use the final layout only when the single completion commits.
+        // They cannot route input against the old NSView hit regions in flight.
+        for divider in dividers { divider.isEnabled = false; divider.isHidden = true }
+        CATransaction.commit()
     }
     public override func layout() { super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false) }
     private func layoutDividers() {
