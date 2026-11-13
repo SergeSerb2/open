@@ -40,7 +40,7 @@ struct SidebarMenus {
         return m
     }
 
-    /// "Move to ▸": every other Space, a separator, "New Space…".
+    /// "Move to ▸": all Spaces in dock order, a separator, "New Space…".
     private func moveTo(_ nodeID: ItemID) -> NSMenuItem {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
         if context.isWindowOnly {
@@ -49,7 +49,8 @@ struct SidebarMenus {
             return parent
         }
         let current = context.model.parent(of: nodeID).flatMap(spaceID(of:))
-        // One row per Space in dock order, the current one checked (capture session 8 item 2).
+        // Session 13 C13-D2-5 confirms other Profiles are included and every row, including the
+        // checked current Space, stays enabled. The capture did not execute a cross-Profile move.
         var items: [NSMenuItem] = context.model.spaces.map { space in
             let row = space.id == current ? ClosureMenuItem(context.title(of: space)) {}
                 : item(context.title(of: space), .moveToSpace(nodeID: nodeID, space: space.id))
