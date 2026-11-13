@@ -11256,7 +11256,15 @@ def library_capture_checks(app, require, root, evidence):
         media_error = 'Could not load media'
         def media_when(predicate):
             opened = open_section('media')
-            return wait_until(lambda: (lambda s: s if s.get('section') == 'media' and predicate(s) else None)(state()), timeout=10, step=.05) if opened else None
+            def loaded():
+                provider = app.call('library').get('providers', {}).get('media', {})
+                if not provider.get('loaded') or provider.get('running'): return None
+                current = state()
+                error_visible = any(media_error in text for text in current.get('text', []))
+                return current if current.get('section') == 'media' and current.get('loadFailed') == error_visible and predicate(current) else None
+            # A previous read can have the same error flag. Join the current
+            # provider and native empty state before accepting its result.
+            return wait_until(loaded, timeout=10, step=.05) if opened else None
         current = media_when(lambda s: s['loadFailed'])
         path = os.path.join(evidence, 'media-index-error.png')
         if current: app.call('snapshot', path=path, window=current['window'])
@@ -11268,7 +11276,11 @@ def library_capture_checks(app, require, root, evidence):
         unreadable = media_when(lambda s: s['loadFailed'])
         require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
                 and any(media_error in text for text in unreadable['text']), state=unreadable or state())
-        os.rmdir(index)
+        app.call('library-close'); os.rmdir(index)
+        missing = media_when(lambda s: not s['loadFailed'])
+        require('library_missing_index_empty', missing and not missing['loadFailed']
+                and missing['captureCount'] == 0 and not missing['items']
+                and not any(media_error in text for text in missing['text']), state=missing or state())
         # Exercise the reader's limits through actual Library reopen, including
         # the valid boundary. Keep the large fixture out of the visible grid.
         for extra in (0, 1):
