@@ -11242,6 +11242,16 @@ def library_capture_checks(app, require, root, evidence):
     def index_rows():
         with open(index) as stream: return json.load(stream)
 
+    def replace_index(data):
+        # The live native provider may read during fixture setup. Expose only
+        # complete files, just as the App's capture writer does.
+        descriptor, staged = tempfile.mkstemp(prefix='.capture-index-', dir=os.path.dirname(index))
+        try:
+            with os.fdopen(descriptor, 'wb') as stream: stream.write(data)
+            os.replace(staged, index)
+        finally:
+            if os.path.exists(staged): os.unlink(staged)
+
     error_copy = ['Captures could not be loaded.', 'Open will try again next time you open the Library.']
     if mode != 'keyboard':
         server, origin = _fixture_server('Library')
@@ -11314,7 +11324,7 @@ def library_capture_checks(app, require, root, evidence):
         # the valid boundary. Keep the large fixture out of the visible grid.
         for extra in (0, 1):
             app.call('library-close')
-            with open(index, 'wb') as stream: stream.write(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
+            replace_index(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
             boundary = media_when(lambda s: s['loadFailed'] == bool(extra)) or state()
             require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary.get('loadFailed') == bool(extra)
                     and boundary.get('captureCount') == 0, state=boundary)
@@ -11322,7 +11332,7 @@ def library_capture_checks(app, require, root, evidence):
                       kind='area', sourceHost='example.com') for i in range(50_001)]
         for count in (50_000, 50_001):
             app.call('library-close')
-            with open(index, 'w') as stream: json.dump(large[:count], stream)
+            replace_index(json.dumps(large[:count]).encode())
             expected = count if count == 50_000 else 0
             boundary = media_when(lambda s: s['loadFailed'] == (count > 50_000) and s['captureCount'] == expected) or state()
             require('library_index_row_limit_' + ('at' if count == 50_000 else 'over'),
@@ -11343,7 +11353,7 @@ def library_capture_checks(app, require, root, evidence):
         name = 'Example Capture %d.png' % number
         with open(os.path.join(directory, name), 'wb') as stream: stream.write(png)
         rows.append(dict(id=ident, fileName=name, createdAt=1800000000-number, kind=kind, sourceHost='example.com'))
-    with open(index, 'w') as stream: json.dump(rows, stream)
+    replace_index(json.dumps(rows).encode())
     app.call('library-close')
     # The native Library (#350) shows captures in Media: one list row per capture, newest first, screenshots
     # included (Media's "All" kind). Title "Capture of <host>", subtitle "Capture · <host> · <date>".
@@ -11429,7 +11439,7 @@ def library_capture_checks(app, require, root, evidence):
     require('library_media_delete_file_and_index', deleted and len(index_rows()) == 6 and capture_ids[0] not in gone['selected']
             and capture_ids[0] not in [r['id'] for r in media_rows()], state=gone)
     with open(first_file, 'wb') as stream: stream.write(png)
-    with open(index, 'w') as stream: json.dump(rows, stream)
+    replace_index(json.dumps(rows).encode())
     app.call('library-close')
 
     # Browser shortcuts keep their owners while the list has focus: Escape closes the Library (native panel:
