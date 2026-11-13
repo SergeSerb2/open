@@ -62,12 +62,12 @@ def main():
         if not condition:
             raise AssertionError(name)
 
-    def launch(label, blank=False):
+    def launch(label, blank=False, empty=False):
         app = e.Open('Release', 'chrome', str(root / label), ['--use-mock-keychain'],
-                     str(args.out / (label + '.log')), urls=('about:blank' if blank else FIXTURE,),
+                     str(args.out / (label + '.log')), urls=() if empty else ('about:blank' if blank else FIXTURE,),
                      extra_env={'OPEN_E2E_APP_BUNDLE': str(args.bundle)})
         apps.append(app)
-        if not blank:
+        if not blank and not empty:
             tab = app.call('tabs')[0]['id']
             app.call('wait', tab=tab)
             assert e.wait_until(lambda: app.call('timing').get('firstContentfulPaint'), timeout=15, step=.05)
@@ -160,6 +160,14 @@ def main():
             try:
                 check('blank_launch_cleanup', e.wait_until(lambda: not blank_stale.exists(), timeout=30) is not None)
                 check('blank_keeps_current', identity(current) == before)
+            finally:
+                stop(app)
+            empty_stale = seed('empty-stale')
+            app = launch('empty', empty=True)
+            try:
+                check('empty_native_window_has_no_tabs', not app.call('tabs'))
+                check('empty_native_window_cleanup', e.wait_until(lambda: not empty_stale.exists(), timeout=30) is not None)
+                check('empty_keeps_current', identity(current) == before)
             finally:
                 stop(app)
         if args.compare:
