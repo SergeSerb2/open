@@ -5,6 +5,7 @@ import OpenExtensionsUI
 
 @MainActor
 public final class PaneSlotView: NSView {
+    var libraryMotionHidesContent = false
     var fullBleed = false {
         didSet { if fullBleed != oldValue { clip.layer?.cornerRadius = fullBleed ? 0 : PanelMetrics.cornerRadius; layer?.shadowOpacity = fullBleed ? 0 : PanelMetrics.shadowOpacity } }
     }
@@ -84,7 +85,7 @@ public final class PaneSlotView: NSView {
             sadTabView?.removeFromSuperview(); sadTabView = nil
             if contentHostView !== host.view { contentHostView?.removeFromSuperview(); lastHostWindowRect = nil }
             placeholderView?.removeFromSuperview(); placeholderView = nil
-            contentHostView = host.view; host.view.isHidden = false
+            contentHostView = host.view; host.view.isHidden = libraryMotionHidesContent
             if host.view.superview !== clip { clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome) }
             if hadPageFocus && wasSad { host.focus() }
         } else {
@@ -148,6 +149,14 @@ public final class PaneSlotView: NSView {
 public final class WebContentContainer: NSView {
     var librarySnapshotReadInFlight = false
     public internal(set) var librarySnapshotStatus = "idle"
+    private var libraryMotionHidesContent = false
+    public func setLibraryMotionHidesContent(_ hidden: Bool) {
+        libraryMotionHidesContent = hidden
+        for slot in slots {
+            slot.libraryMotionHidesContent = hidden
+            slot.contentHostView?.isHidden = hidden
+        }
+    }
     public static let maxCachedHiddenHosts = 8
     public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
     public var extensionsUI: ExtensionsUIContext? { didSet { for slot in slots { slot.paneChrome?.extensionsUI = extensionsUI } } }
@@ -351,6 +360,7 @@ public final class WebContentContainer: NSView {
     private func updateSlots() {
         for slot in slots {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
+            slot.libraryMotionHidesContent = libraryMotionHidesContent
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },

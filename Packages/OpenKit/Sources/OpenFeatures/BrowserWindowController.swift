@@ -755,7 +755,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         CATransaction.setDisableActions(true)
         librarySnapshotViews = snapshots.compactMap { $0.install() }
         libraryHiddenLiveViews = snapshots.map(\.source)
-        libraryHiddenLiveViews.forEach { $0.isHidden = true }
+        container.setLibraryMotionHidesContent(!libraryHiddenLiveViews.isEmpty)
         isLibraryOpen = false
         layoutContent()
         animateLibrary(opening: false, duration: 0.20, animated: animated)
@@ -814,6 +814,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         libraryClosePreparation?.cancel(); libraryClosePreparation = nil
     }
     private func removeLibrarySnapshots() {
+        container.setLibraryMotionHidesContent(false)
         libraryHiddenLiveViews.forEach { $0.isHidden = false }
         libraryHiddenLiveViews.removeAll()
         librarySnapshotViews.forEach { $0.removeFromSuperview() }
