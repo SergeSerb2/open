@@ -72,6 +72,9 @@ extension AutomationController {
       case "row-menu":
         guard let id = args["id"] as? String, let menu = panel.rowMenu(id,select:args["select"] as? String) else { throw Failure(message:"row menu unavailable") }
         return ["items":menu]
+      case "row-right-click":
+        guard let id = args["id"] as? String, let result = panel.rightClickRow(id) else { throw Failure(message:"unknown row") }
+        return ["menu": result.titles.map { $0 as Any } ?? NSNull(), "selected": result.selected]
       case "show-row-menu":
         guard let id = args["id"] as? String, panel.showRowMenu(id,escapeOnOpen:args["escape"] as? Bool ?? false) else { throw Failure(message:"row menu unavailable") }
       case "row-drag-session":
