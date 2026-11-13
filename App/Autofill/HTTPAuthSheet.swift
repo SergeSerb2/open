@@ -36,6 +36,7 @@ final class HTTPAuthSheet: DialogSheetPanel, NSTextFieldDelegate {
   let passwordField = NSSecureTextField()
   private(set) var request: (any HTTPAuthRequest)?
   var onFinished: (() -> Void)?
+  private(set) var didAutofill = false
   private var userEdited = false
 
   init(request: any HTTPAuthRequest, text: HTTPAuthSheetText) {
@@ -72,6 +73,20 @@ final class HTTPAuthSheet: DialogSheetPanel, NSTextFieldDelegate {
     dialogView.primaryButton?.isEnabled = credentialsWithinLimit
   }
 
+  func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+    guard !textView.hasMarkedText() else { return false }
+    switch NSStringFromSelector(selector) {
+    case "insertNewline:", "insertNewlineIgnoringFieldEditor:":
+      control.validateEditing()
+      dialogView.primaryButton?.performClick(nil)
+      return true
+    case "cancelOperation:":
+      dialogView.cancelButton?.performClick(nil)
+      return true
+    default: return false
+    }
+  }
+
   private var credentialsWithinLimit: Bool {
     usernameField.stringValue.utf8.count <= Self.maximumCredentialBytes
       && passwordField.stringValue.utf8.count <= Self.maximumCredentialBytes
@@ -84,9 +99,11 @@ final class HTTPAuthSheet: DialogSheetPanel, NSTextFieldDelegate {
           password.utf8.count <= Self.maximumCredentialBytes else { return }
     usernameField.stringValue = username
     passwordField.stringValue = password
+    didAutofill = true
   }
 
   private func finish(accept: Bool) {
+    usernameField.validateEditing(); passwordField.validateEditing()
     guard let request, !accept || credentialsWithinLimit else { return }
     self.request = nil
     let username = accept ? usernameField.stringValue : ""

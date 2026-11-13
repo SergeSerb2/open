@@ -294,6 +294,9 @@
       case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
+      #if OPEN_HTTP_AUTH
+      case "http-auth": return try await httpAuthentication(a)
+      #endif
       case "events":
         // Keep Section 11's Little Open routing. Every event, including password
         // offers and Manage links, is recorded by the factory that owns its page.

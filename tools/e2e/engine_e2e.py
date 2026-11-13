@@ -13394,11 +13394,12 @@ def main():
     if opts.only in ('passwords-probe', 'passwords', 'secrets-import') and opts.style != 'chrome':
         ap.error('passwords suites and secrets-import require --style chrome')
     if opts.passwords_rows is not None:
+        from http_auth import ROWS as http_auth_rows
         allowed = {'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
-                   'PW-HF4-window-close', 'PW-HF5-navigate', 'PW-HF6-space', 'PW-HF7-quit'}
+                   'PW-HF4-window-close', 'PW-HF5-navigate', 'PW-HF6-space', 'PW-HF7-quit'} | http_auth_rows
         selected = opts.passwords_rows.split(',')
         if opts.only != 'passwords' or not set(selected) <= allowed or len(set(selected)) != len(selected):
-            ap.error('--passwords-rows requires passwords and unique HTTPS-First lifetime row ids')
+            ap.error('--passwords-rows requires passwords and unique HTTPS-First or HTTP-auth row ids')
     if opts.passwords_m_only and (opts.only != 'passwords' or opts.passwords_rows is not None):
         ap.error('--passwords-m-only requires passwords without --passwords-rows')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or

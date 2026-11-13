@@ -5,6 +5,7 @@ booleans, counts, fixture hosts and public UI text only.
 """
 import os
 import json
+import runpy
 import signal
 import sqlite3
 import time
@@ -1307,9 +1308,15 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
 
 def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids=None, m_only=False):
     guard = PasswordGuard(factory, results, harness)
+    auth = runpy.run_path(str(Path(harness['ROOT']) / 'tools/e2e/http_auth.py'))
+    if row_ids is not None and set(row_ids) <= auth['ROWS']:
+        auth['run'](guard.launch, guard, tmp, harness, guard, row_ids)
+        return
     if row_ids is None:
         run_save_prompts(guard.launch, guard, tmp, harness)
         if m_only:
             return
         run_manage_pages(guard.launch, guard, tmp, harness)
     run_engine(guard.launch, guard, tmp, harness, guard, engine_distribution_sha256, row_ids)
+    if row_ids is None or set(row_ids).intersection(auth['ROWS']):
+        auth['run'](guard.launch, guard, tmp, harness, guard, row_ids)
