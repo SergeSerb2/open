@@ -11604,27 +11604,26 @@ def space_manager_checks(results, tmp, config, style):
         with open(snapshot_path) as stream: saved = json.load(stream)
         app.call('library-close'); app.quit()
         app = launch()
-        # An automatically opened command bar is a separate input owner. Close
-        # it through the real App key route before testing a Library tile click.
-        if app.call('commandbar-state').get('presented'):
-            app.call('key', key='escape', route='app')
         app.call('menu-perform', id='view-archive')
         # A menu action returning is not a Library composition/layout barrier.
         # Settle the actual window before reading coordinates, then poll the
         # cache-empty Archive state. Never accept an eagerly created cache.
         library_window = 0
-        last_uncached = {}
+        last_uncached, click_panel = {}, {}
         def archive_ready():
-            nonlocal last_uncached, library_window
+            nonlocal last_uncached, library_window, click_panel
             # state() lays out the current Library window. Sample its row points
             # afterwards, in the same deadline poll, rather than before layout.
             library_window = state(app)['window']
             last_uncached = app.call('space-manager-lifecycle')
+            click_panel = app.call('library')
+            # PR #350 fades the old sidebar out before hiding its views. The
+            # native tile must own hit testing before a real click can reach it.
+            spaces_tile = next((r for r in click_panel.get('rail', []) if r['id'] == 'spaces'), {})
             has_row = any(r['section'] == 'spaces' for r in last_uncached['sectionRows'])
-            return last_uncached if library_window and has_row and last_uncached['visible'] and last_uncached['section'] == 'archive' and last_uncached['identity'] == '' else None
+            return last_uncached if library_window and has_row and spaces_tile.get('hitClass') == 'LibraryControl' and last_uncached['visible'] and last_uncached['section'] == 'archive' and last_uncached['identity'] == '' else None
         uncached = wait_until(archive_ready, timeout=5)
         click_bar = app.call('commandbar-state')
-        click_panel = app.call('library')
         if uncached:
             section = next(r for r in uncached['sectionRows'] if r['section'] == 'spaces')
             app.call('mouse', action='click', window=library_window, x=section['point'][0], y=section['point'][1])
