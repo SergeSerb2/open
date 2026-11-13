@@ -501,15 +501,14 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func syncExpansion(animated: Bool, initial: Bool = false, changedFolder: ItemID? = nil) {
         guard !syncingExpansion else { return }
         syncingExpansion = true
-        let expanding = changedFolder.flatMap { context.model.node(id: $0)?.folder }?.isExpanded ?? true
-        rowMotion.begin(outline, animated: animated && !initial,
-                        duration: expanding ? Motion.folderExpand : Motion.folderCollapse,
-                        timing: expanding ? Motion.folderExpandTiming : Motion.folderCollapseTiming)
-        defer { rowMotion.end(outline) }
         let measuring = SidebarDiagnostics.measuresFolderTransitions
         let started = measuring ? CACurrentMediaTime() : 0
         let cpuStarted = measuring ? clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) : 0
         var phaseStart = started
+        let expanding = changedFolder.flatMap { context.model.node(id: $0)?.folder }?.isExpanded ?? true
+        rowMotion.begin(outline, animated: animated && !initial,
+                        duration: expanding ? Motion.folderExpand : Motion.folderCollapse,
+                        timing: expanding ? Motion.folderExpandTiming : Motion.folderCollapseTiming)
         func phase(_ name: String) {
             guard measuring else { return }
             let now = CACurrentMediaTime()
@@ -517,6 +516,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             phaseStart = now
         }
         defer {
+            rowMotion.end(outline)
+            phase("layer-motion")
             syncingExpansion = false
             if measuring {
                 SidebarDiagnostics.folderReconcileSeconds += CACurrentMediaTime() - started

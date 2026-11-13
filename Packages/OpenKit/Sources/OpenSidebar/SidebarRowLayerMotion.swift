@@ -6,7 +6,7 @@ import OpenDesign
 /// never on a display timer. At most 256 visible rows and 8 MiB of bitmaps survive.
 @MainActor
 final class SidebarRowLayerMotion {
-    private struct Previous { let origin: CGPoint; let view: NSTableRowView }
+    private struct Previous { let origin: CGPoint; let view: NSTableRowView; let opacity: Float }
     private var previous: [ObjectIdentifier: Previous] = [:]
     private var depth = 0
     private var enabled = false
@@ -29,7 +29,7 @@ final class SidebarRowLayerMotion {
                 guard self.previous.count < 256, let item = outline.item(atRow: row) as AnyObject? else { return }
                 var point = view.convert(NSPoint.zero, to: outline)
                 point.y += view.layer?.presentation()?.transform.m42 ?? 0
-                self.previous[ObjectIdentifier(item)] = Previous(origin: point, view: view)
+                self.previous[ObjectIdentifier(item)] = Previous(origin: point, view: view, opacity: view.layer?.presentation()?.opacity ?? view.layer?.opacity ?? 1)
             }
         }
         NSAnimationContext.beginGrouping()
@@ -51,6 +51,7 @@ final class SidebarRowLayerMotion {
         let copy = CALayer(); copy.contents = image; copy.contentsScale = scale
         copy.name = String(describing: ObjectIdentifier(item))
         copy.frame = CGRect(origin: old.origin, size: view.bounds.size)
+        copy.opacity = old.opacity
         departing.append(copy)
     }
 
@@ -92,16 +93,17 @@ final class SidebarRowLayerMotion {
                 move.fromValue = delta; move.toValue = 0; move.duration = self.duration; move.timingFunction = self.timing
                 layer.add(move, forKey: "row.structure.position")
             }
-            if old == nil {
+            let opacity = old?.opacity ?? 0
+            if opacity < 1 {
                 let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = 0; fade.toValue = 1; fade.duration = self.duration; fade.timingFunction = self.timing
+                fade.fromValue = opacity; fade.toValue = 1; fade.duration = self.duration; fade.timingFunction = self.timing
                 layer.add(fade, forKey: "row.structure.opacity")
             }
         }
         for layer in departing {
             outline.layer?.addSublayer(layer)
             let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = 1; fade.toValue = 0; fade.duration = duration; fade.timingFunction = timing
+            fade.fromValue = layer.opacity; fade.toValue = 0; fade.duration = duration; fade.timingFunction = timing
             layer.opacity = 0; layer.add(fade, forKey: "row.structure.opacity")
         }
         CATransaction.commit()
