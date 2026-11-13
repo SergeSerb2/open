@@ -236,6 +236,8 @@ targets:
         PRODUCT_NAME: Open
         PRODUCT_BUNDLE_IDENTIFIER: io.github.sergeserb2.open
         INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        OPEN_APP_ICON_FILE: Open.icns
         CODE_SIGN_ENTITLEMENTS: App/Open.entitlements
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
