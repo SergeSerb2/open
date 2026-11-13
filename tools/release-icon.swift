@@ -35,6 +35,7 @@ let delta = difference(actual, bitmap(expected)), genericDelta = difference(actu
 if args.count == 5 {
     try actual.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: args[4]))
 }
-print("NSWorkspace icon: expected mean pixel delta=\(delta); generic application delta=\(genericDelta)")
+let origin = args[1] == "compare" ? "Native app icon pixels" : "NSWorkspace icon"
+print("\(origin): expected mean pixel delta=\(delta); generic application delta=\(genericDelta)")
 guard (args[1] == "compare" ? delta == 0 : delta < 3), genericDelta > 5 else { fail("icon does not match Open artwork or is the generic app icon") }
-print("PASS: Open icon read back through NSWorkspace")
+print("PASS: \(origin) verified")
