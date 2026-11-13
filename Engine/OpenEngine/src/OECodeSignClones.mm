@@ -35,9 +35,10 @@ bool HashName(const std::string& name) {
 bool CacheEntry(const std::string& name) {
   if (HashName(name)) return true;
   // Interrupted deletions are retried. The producer never opens these names.
-  return name.size() == 6 + 64 + 1 + 36 && name.starts_with(".prune-") &&
-      HashName(name.substr(6, 64)) && name[70] == '-' &&
-      name.substr(71).find_first_not_of("0123456789ABCDEFabcdef-") == std::string::npos;
+  constexpr size_t prefix = sizeof(".prune-") - 1;
+  return name.size() == prefix + 64 + 1 + 36 && name.starts_with(".prune-") &&
+      HashName(name.substr(prefix, 64)) && name[prefix + 64] == '-' &&
+      name.substr(prefix + 65).find_first_not_of("0123456789ABCDEFabcdef-") == std::string::npos;
 }
 
 bool PrivateDirectory(int fd) {
@@ -70,7 +71,12 @@ NSDictionary<NSString*, NSNumber*>* Prune(NSString* path, NSString* bundle) {
   }
   // Stream one name at a time: no allocation proportional to the cache size.
   // Each path is one dirent name (NAME_MAX), not an unbounded decoded list.
-  while (struct dirent* entry = readdir(entries)) {
+  uint64_t previous;
+  do {
+    previous = removed;
+    leased = failed = 0;
+    rewinddir(entries);
+    while (struct dirent* entry = readdir(entries)) {
     @autoreleasepool {
       std::string name(entry->d_name);
       if (!CacheEntry(name) || name == current) continue;
@@ -105,7 +111,10 @@ NSDictionary<NSString*, NSNumber*>* Prune(NSString* path, NSString* bundle) {
       close(lease);
       close(directory);
     }
-  }
+    }
+    // Directory mutation can change readdir's cursor. A final pass without a
+    // removal proves no unleased entry was skipped; storage stays constant.
+  } while (removed != previous);
   closedir(entries);
   close(root);
   return @{ @"removed": @(removed), @"leased": @(leased), @"failed": @(failed) };
