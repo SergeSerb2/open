@@ -532,7 +532,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func layoutContent(animated: Bool = false) {
         defer { updateThemeEditorAnchor() }
         if isLibraryOpen, let libraryPanel {
-            finishSidebarPanelLayout()
             let size = root.bounds.size
             if background.frame != root.bounds { background.frame = root.bounds }
             let edge = libraryUsesWideLayout ? size.width - 56 : min(libraryWidth, size.width - 56)
@@ -541,6 +540,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // engine does not reflow into a tiny 46-point viewport.
             let pageWidth = libraryUsesWideLayout ? size.width - 427 : size.width - edge - 10
             let panel = CGRect(x: edge, y: 10, width: max(46, pageWidth), height: max(0, size.height - 20))
+            finishSidebarPanelLayout(at: panel)
             let libraryFrame = CGRect(x: 0, y: 0, width: edge, height: size.height)
             if libraryPanel.frame != libraryFrame { libraryPanel.frame = libraryFrame; libraryPanel.needsLayout = true }
             if container.frame != panel { container.frame = panel }
@@ -603,7 +603,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 sidebarPanelTarget = panelFrame
                 sidebarPanelRootSize = size
             } else if !continuingPanelMotion {
-                finishSidebarPanelLayout()
+                finishSidebarPanelLayout(at: panelFrame)
                 if container.frame != panelFrame { container.frame = panelFrame }
                 if emptyPanel.frame != panelFrame { emptyPanel.frame = panelFrame }
             }
@@ -690,15 +690,19 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         onLayout?()
     }
     /// Commit the viewport once, after the render-server spring (or an interruption).
-    private func finishSidebarPanelLayout() {
-        guard let target = sidebarPanelTarget else { return }
+    private func finishSidebarPanelLayout(at finalFrame: CGRect? = nil) {
+        guard let pending = sidebarPanelTarget else { return }
+        let target = finalFrame ?? pending
         sidebarPanelTarget = nil; sidebarPanelRootSize = nil
         CATransaction.begin(); CATransaction.setDisableActions(true)
         container.layer?.removeAnimation(forKey: "sidebarToggle")
         emptyPanel.removeAnimation(forKey: "sidebarToggle")
         container.layer?.transform = CATransform3DIdentity
         emptyPanel.transform = CATransform3DIdentity
-        if container.frame != target { container.frame = target; sidebarGeometryChanges += 1 }
+        if container.frame != target {
+            container.frame = target
+            if finalFrame == nil { sidebarGeometryChanges += 1 }
+        }
         if emptyPanel.frame != target { emptyPanel.frame = target }
         container.layoutSubtreeIfNeeded()
         CATransaction.commit()
