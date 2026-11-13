@@ -264,6 +264,19 @@ OE_EXPORT @interface OEProcessMetrics : NSObject
 @property(nonatomic, readonly) double cpuUsage;
 @end
 
+NS_SWIFT_UI_ACTOR
+@interface OEEngine (CodeSignClones)
+
+/// Call after the first content frame (or the native frame for an empty window).
+/// Once per process, removes obsolete code-sign clones on a utility worker.
+/// Keeps the current install and any clone leased by another live process.
+/// Completion runs on the main thread and reports counts, never cache paths.
+- (void)pruneUnusedCodeSignClonesWithCompletion:
+    (void (^NS_SWIFT_UI_ACTOR)(NSDictionary<NSString*, NSNumber*>* counts))completion
+    NS_SWIFT_NAME(pruneUnusedCodeSignClones(completion:));
+
+@end
+
 /// The NSApplication subclass that Chromium's message pump needs. Set it as
 /// NSPrincipalClass and create it with `OEApplication.shared` before any other
 /// AppKit call.

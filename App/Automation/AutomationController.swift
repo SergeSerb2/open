@@ -2969,6 +2969,7 @@
 
     private func timing(_ w: EngineWebContentHostFactory) async -> [String: Any] {
       var out: [String: Any] = LaunchTiming.shared.report
+      if let counts = app.cloneCleanupCounts { out["cloneCleanup"] = counts }
       out["clock"] = "mach_continuous_time; kernel ri_proc_start_abstime"
       out["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
       if let page = w.selectedContent {
