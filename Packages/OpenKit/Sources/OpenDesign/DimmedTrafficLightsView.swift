@@ -6,6 +6,9 @@ import AppKit
 /// Clicks pass through.
 @MainActor
 public final class DimmedTrafficLightsView: NSView {
+    /// Explicit motion belongs to this child layer. AppKit synchronizes the
+    /// view's backing layer when it lays out the native title bar.
+    public let motionLayer = CALayer()
     /// Button centers in this view's coordinates.
     public var centers: [CGPoint] = [] { didSet { if centers != oldValue { rebuild() } } }
     /// Light or dark content (the Space's text appearance, as for the sidebar).
@@ -41,11 +44,22 @@ public final class DimmedTrafficLightsView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .never
+        motionLayer.anchorPoint = .zero
+        layer?.addSublayer(motionLayer)
         setAccessibilityElement(false)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    public override func layout() {
+        super.layout()
+        let size = bounds.size
+        guard motionLayer.bounds.size != size else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        motionLayer.bounds = CGRect(origin: .zero, size: size)
+        CATransaction.commit()
+    }
 
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -87,7 +101,7 @@ public final class DimmedTrafficLightsView: NSView {
     }
 
     private func rebuild() {
-        guard let layer else { return }
+        let layer = motionLayer
         CATransaction.begin(); CATransaction.setDisableActions(true)
         circles.forEach { $0.fill.removeFromSuperlayer(); $0.ring.removeFromSuperlayer() }
         circles = []
