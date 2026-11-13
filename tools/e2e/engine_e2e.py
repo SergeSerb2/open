@@ -8924,6 +8924,13 @@ def routing_checks(factory, results, tmp):
         return subprocess.run(['/usr/bin/open', '-a', app.bundle, url], capture_output=True, text=True, timeout=15)
     def landed(url, count=1):
         return wait_until(lambda: len([t for t in app.call('tabs') if t['url'] == url]) == count, timeout=8, step=.05)
+    def loaded_document(url):
+        # Model selection alone can leave an external tab as a placeholder.
+        # Observe the real page without selecting it again through automation.
+        tab = wait_until(lambda: next((t for t in app.call('tabs')
+                         if t['url'] == url and t['selected'] and t['hasWebContent'] and t['loaded']), None),
+                         timeout=8, step=.05)
+        return bool(tab and app.eval(tab['id'], 'location.href') == url)
 
     try:
         # Capture actual persisted values, including absence, before resetting.
@@ -8957,6 +8964,10 @@ def routing_checks(factory, results, tmp):
         default_tab = new_tab(app, origin + '/default-context')
         app.eval(default_tab, 'document.cookie="atc_default=1; max-age=3600"; 1')
         app.call('space', space=target['id'])
+        empty_url = origin + '/empty-space-external'
+        sent = deliver(empty_url)
+        record('routing_empty_space_document', sent.returncode == 0 and loaded_document(empty_url),
+               tabs=app.call('tabs'), log=log())
         existing_url = origin + '/existing-today'
         work_tab = new_tab(app, existing_url)
         app.eval(work_tab, 'document.cookie="atc_work=1; max-age=3600"; 1')
@@ -9122,6 +9133,7 @@ def routing_checks(factory, results, tmp):
         fast_cold = origin + '/cold-fast'
         app = factory(urls=(), snapshot=fixture_path, delivery_urls=(fast_cold,))
         fast_reached = landed(fast_cold)
+        fast_loaded = loaded_document(fast_cold)
         fast_log = log()
         app.quit()
         cold = origin + '/cold-launch'
@@ -9138,6 +9150,8 @@ def routing_checks(factory, results, tmp):
                and len(entries(cold)) == 1 and app.call('tabs')[0]['selected'], log=cold_log,
                pending=pending, fastLaunch=fast_log,
                command='open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...')
+        record('routing_cold_launch_document', fast_loaded and loaded_document(cold),
+               fastLoaded=fast_loaded, tabs=app.call('tabs'))
         app.call('command', id='air-traffic-control')
         settings = wait_until(lambda: (lambda row: row if row['settingsVisible'] and row['pane'] == 'links'
                               and row['scrollTarget'] == 'links/rules' else None)(app.call('settings-state')),
