@@ -1132,9 +1132,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
-    public var canExitModal: Bool { (isLibraryOpen && !isCommandBarPresented) || (spaceCreationController != nil && !isCommandBarPresented) || peekStorage?.isShown == true || container.maximizedTabID != nil }
+    public var canExitModal: Bool { !isCommandBarPresented && (isLibraryOpen || spaceCreationController != nil || peekStorage?.isShown == true || container.maximizedTabID != nil) }
     /// View > Exit and Esc share this priority. The App validates the key standard window.
     @discardableResult public func exitModal() -> Bool {
+        // Its field editor owns Esc; an underlying Peek must not enable Exit.
+        guard !isCommandBarPresented else { return false }
         if isLibraryOpen, peekStorage?.isShown != true, !isCommandBarPresented, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53), libraryKeyHandler?(event) == true { return true }
         if !isCommandBarPresented, let creation = spaceCreationController { creation.cancel(); return true }
         if let peek = peekStorage, peek.isShown { peek.escape(); return true }

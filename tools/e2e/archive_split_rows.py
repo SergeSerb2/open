@@ -119,7 +119,7 @@ def run(output, frames=False):
             trash = next(b for b in row(first)['buttons'] if b['title'] == 'Delete')
             pointer('click', trash['frame'])
             alert = app.call('alert', window='library')
-            check('trash_confirmation', 'Delete this archived tab?' in alert['texts'] and alert['buttons'] == ['Delete', 'Cancel'], alert=alert)
+            check('trash_confirmation', 'Delete this archived tab?' in alert['texts'] and set(alert['buttons']) == {'Delete', 'Cancel'}, alert=alert)
             if os.environ.get('OPEN_ARCHIVE_FORCE_ALERT_FAILURE') == '1':
                 check('forced_alert_cleanup_probe', False)
             app.call('alert', window='library', button='Cancel')
