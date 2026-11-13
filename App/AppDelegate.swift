@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var directories: ProfileDirectories!
   /// Easel documents (`<data root>/Easels`); made on the first Easel open, never at launch.
   private var easelStore: EaselStore?
+  var hasEaselStore: Bool { easelStore != nil }
+  /// Command bar search over every Easel (made on the first command bar open).
+  private(set) lazy var easelSearch = EaselSearch(app: self)
   var easels: EaselStore {
     if let easelStore { return easelStore }
     let store = EaselStore(root: directories.root); easelStore = store; return store
@@ -1133,6 +1136,8 @@ extension AppDelegate: CommandDispatcher {
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
+    // Arc 1.172.2 (capture, C-questions "_NS:451"): "View Library" with no browser window, else "Open Library…".
+    if id == "view-library", frontStandardWindowController == nil { return CommandMenuState(title: "View Library") }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }

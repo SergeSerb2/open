@@ -97,6 +97,10 @@ extension LibraryPanelView {
     @discardableResult public func hoverRow(_ id:String,hovered:Bool) -> Bool { listView.hover(id:id,value:hovered) }
     @discardableResult public func performRow(_ id:String,action:String) -> Bool { listView.perform(id:id,action:action) }
     public func rowMenu(_ id:String,select:String? = nil) -> [[String:Any]]? { listView.menuState(id:id,select:select) }
+    /// Automation: the row's right-click result (menu item titles, or nil for no menu) and its selection.
+    public func rightClickRow(_ id: String) -> (titles: [String]?, selected: Bool)? {
+        listView.rightClickMenu(id: id).map { ($0.menu?.items.map { $0.isSeparatorItem ? "separator" : $0.title }, $0.selected) }
+    }
     @discardableResult public func showRowMenu(_ id:String,escapeOnOpen:Bool = false) -> Bool { listView.showMenu(id:id,escapeOnOpen:escapeOnOpen) }
     public func dragPayload(_ id:String) -> [String:Any]? { listView.dragState(id:id) }
     public func selectRow(_ id:String) -> Bool {
@@ -433,6 +437,8 @@ extension LibraryPanelView {
                 image:symbol(row.kind == .folder ? "folder" : "globe"),loadImage:row.kind == .folder ? nil : { [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.kind == .folder ? nil : row.url,activate:restore,
                 hoverActions:[.init(title:"Delete",glyph:.trash,run:remove),.init(title:"Restore",glyph:.undo,run:restore)])
             item.toolTip = title
+            // Arc: a right click on an Archived Tabs row opens no menu (capture C3 s8 item 11).
+            item.contextMenu = false
             return item
           }
         }

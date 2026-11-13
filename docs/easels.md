@@ -15,6 +15,10 @@ Easels are free-form canvases that sit in the sidebar like tabs (Arc parity; fac
 
 ## Entry points
 - File ▸ New Easel ⌃⇧E, the sidebar "+" menu, and the command bar.
+- Window ▸ View Easels & Notes opens Library › Easels.
+- The command bar (⌘T) finds every Easel by title. An Easel with a sidebar row comes as its Switch to Tab row;
+  any other (only in the Library) comes as a row titled with the Easel, subtitle "Easel", which opens it and
+  gives it a sidebar row (Open's design for Arc's `EaselCandidateProvider`, LEAD 15:25).
 - Capture card ▸ Add to Easel: New Easel, or each Easel of the Profile.
 - Library ▸ Easels lists every Easel document. This includes Easels whose row or Space is gone, as in Arc. The page
   has the "Your Easels are yours to keep" card with Export All Easels, per-row Delete, and the empty state.

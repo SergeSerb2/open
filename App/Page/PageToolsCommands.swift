@@ -34,6 +34,8 @@ enum PageTools {
     switch id {
     case "allow-js-apple-events": return CommandMenuState(isChecked: UserDefaults.standard.bool(forKey: allowJavaScriptFromAppleEventsKey))
     case "cast": return CommandMenuState(isHidden: true)
+    // Arc 1.172.2 shows Cancel Trace only while a trace records (absent from every runtime capture).
+    case "cancel-trace": return CommandMenuState(isHidden: !TroubleshootingActions.shared.isRecording)
     default: return nil
     }
   }
@@ -119,6 +121,17 @@ extension EngineWebContentHostFactory {
   /// Window menu state: page tools plus the focused page's Developer Mode title (§4.10.3).
   func pageMenuState(for id: String) -> CommandMenuState? {
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: selectedContent?.url) }
+    // Arc 1.172.2 runtime titles (capture AX union): "Pin Tab" / "Unpin Tab" for the current tab and
+    // "Pin Tabs" for a sidebar selection; "New Folder from Selection…" for a selection. Both commands
+    // already act on the selection (`performSelectionAppCommand`). GUESS: "Unpin Tabs" when every
+    // selected tab is pinned (not seen in a capture; Arc's sidebar menu has that title).
+    if id == "pin-unpin-tab" || id == "new-folder", let context = controller?.context {
+      let ids = context.selection.ids
+      if id == "new-folder" { return ids.count >= 2 ? CommandMenuState(title: "New Folder from Selection…") : nil }
+      if ids.count >= 2 { return CommandMenuState(title: ids.allSatisfy { model.isPinned(tabID: $0) } ? "Unpin Tabs" : "Pin Tabs") }
+      guard let tab = selectedTab else { return nil }
+      return CommandMenuState(title: model.isPinned(tabID: tab.id) ? "Unpin Tab" : "Pin Tab")
+    }
     return PageTools.menuState(for: id)
   }
 }
