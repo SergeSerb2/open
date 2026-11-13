@@ -189,7 +189,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             other=app.call('tabs')[-1]['id'];app.call('select',tab=other);app.call('command',id='archive-tab')
             state(action='open',section='archive');check('archive_real_rows',wait(lambda:bool(rows())),rows=rows())
             archived=rows()[0];state(action='hover-row',id=archived['id'])
-            check('archive_no_hover_glyphs',not row(archived['id'])['actions'] and not row(archived['id'])['buttonToolTips'],row=row(archived['id']))
+            check('archive_hover_controls',row(archived['id'])['actions']==['Delete','Restore'] and row(archived['id'])['buttonToolTips']==['Delete','Restore'],row=row(archived['id']))
             check('archive_tooltip_and_url',row(archived['id'])['toolTip']==archived['title'] and '://' not in archived['subtitle'],row=row(archived['id']));capture('archive-hover')
             state(action='row-select',id=archived['id']);key('delete',['cmd']);app.call('alert',window='library',button='Cancel')
             check('archive_keyboard_delete_cancel',bool(row(archived['id'])))
