@@ -132,7 +132,7 @@ extension AutomationController {
       proof.inTransfer = true
       let moved = target.transfer(page, from: source, at: UInt(index))
       proof.inTransfer = false
-      if moved {
+      if moved && args["attach"] as? Bool != false {
         page.view.removeFromSuperview()
         let window = proof.windows[args["to"] as? String ?? ""]
         window?.contentView = page.view
@@ -140,6 +140,20 @@ extension AutomationController {
         target.activeWebContent = page
       }
       return ["moved": moved, "state": proof.state()] as [String: Any]
+    case "attach":
+      guard let page = proof.pages[args["page"] as? String ?? ""],
+        let key = args["browser"] as? String, let owner = proof.browsers[key],
+        let window = proof.windows[key], page.browser === owner else {
+        throw Failure(message: "invalid attachment")
+      }
+      if page.view.window !== window {
+        page.view.removeFromSuperview()
+        window.contentView = page.view
+      }
+      if args["focus"] as? Bool != false {
+        window.makeKeyAndOrderFront(nil)
+        owner.activeWebContent = page
+      }
     case "close-browser":
       guard let key = args["browser"] as? String, let browser = proof.browsers[key] else {
         throw Failure(message: "invalid browser")
