@@ -836,7 +836,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 }
                 try await render(LibraryPreview(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts.png"))
                 let texts = try await renderedTexts()
-                let expectedRows: Set<String> = ["example.com. Calm docs · on", "example.org. Reading · off"]
+                let expectedRows: Set<String> = ["Calm docs. example.com · on", "Reading. example.org · off"]
                 try require(expectedRows.isSubset(of:texts), "Boost rows did not render: \(texts)")
                 env.defaults.set(false, forKey: BoostPreferences.globallyEnabledKey)
                 try await withAccessibleHost(LibraryPreview(viewModel: library), size: CGSize(width: 684, height: 600)) { host in
