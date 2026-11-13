@@ -51,6 +51,8 @@ def run(output, config):
             compare = subprocess.run([str(probe), 'compare', str(after), str(before)], capture_output=True, text=True)
             check('reset_bundle_pixels', compare.returncode == 0 and reset['imageObject'] == 'bundle',
                   state=reset, pixels=compare.stdout)
+            app.call('settings-ui', action='link', url='open://settings/appearance/app-icon')
+            check('app_icon_section', app.call('settings-state')['scrollTarget'] == 'appearance/app-icon')
             time.sleep(.3)
             capture_window(app.call('settings-state')['settings'], output/'app-icon-settings.png')
             app.quit(); app = launch()

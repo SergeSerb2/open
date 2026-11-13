@@ -802,18 +802,10 @@ dmg() {
     hdiutil create -volname "Open $VERSION" -srcfolder "$staging" -ov -format UDRW "$writable"
     MOUNT_DIR=$(mktemp -d "$STAGE/icon-mount.XXXXXX")
     hdiutil attach -nobrowse -mountpoint "$MOUNT_DIR" "$writable"
-    # kHasCustomIcon is bit 10 of the big-endian Finder flags. Preserve all
-    # other FinderInfo bytes; the icon is embedded in the volume filesystem.
-    python3 - "$MOUNT_DIR" <<'PYICON'
-import os,sys
-p=sys.argv[1]
-try:info=bytearray(os.getxattr(p,'com.apple.FinderInfo'))
-except OSError:info=bytearray(32)
-if len(info)!=32:raise SystemExit('invalid volume FinderInfo')
-info[8]|=4
-os.setxattr(p,'com.apple.FinderInfo',bytes(info))
-assert os.getxattr(p,'com.apple.FinderInfo')[8]&4
-PYICON
+    # Set only kHasCustomIcon, preserving the volume's other Finder flags.
+    # These tools ship with Xcode; macOS Python has no os.getxattr/setxattr.
+    xcrun SetFile -a C "$MOUNT_DIR"
+    [[ "$(xcrun GetFileInfo -aC "$MOUNT_DIR")" == 1 ]] || die 'volume custom-icon flag was not set'
     hdiutil detach "$MOUNT_DIR"
     rmdir "$MOUNT_DIR"; MOUNT_DIR=
     hdiutil convert "$writable" -format UDZO -o "$DMG" -ov
