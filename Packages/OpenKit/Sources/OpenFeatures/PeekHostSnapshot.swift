@@ -41,7 +41,9 @@ extension PeekOverlayView {
         snapshot.contents = image
         snapshot.contentsScale = window?.backingScaleFactor ?? 1
         snapshot.contentsGravity = .resize
-        snapshot.backgroundColor = pageClip.layer?.backgroundColor
+        // Preserve the engine's initial plate when no viewport image exists;
+        // the clip's black backing is only a mask implementation detail.
+        snapshot.backgroundColor = view.layer?.backgroundColor ?? parent.backgroundColor
         parent.addSublayer(snapshot)
         // The captured page, rounded clip, and fixed shadow are static while
         // only this ancestor's transform/position/opacity change. Cache that
