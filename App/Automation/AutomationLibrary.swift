@@ -151,6 +151,7 @@ extension AutomationController {
     state["motion"]=["page":motion(controller.container.layer),"panel":motion(session.panel?.layer),
       "sidebar":motion(controller.sidebar.layer),"occlusion":controller.window?.occlusionState.rawValue ?? 0,
       "snapshotCount":controller.libraryMotionSnapshotCount,
+      "snapshotStatus":controller.container.librarySnapshotStatus,
       "preparingClose":controller.isPreparingLibraryClose,
       "timing":["start":controller.libraryMotionStartedAt,"end":controller.libraryMotionEndsAt,
         "layoutCommit":controller.libraryLayoutCommittedAt,"opening":controller.libraryMotionOpening] as [String:Any]] as [String:Any]

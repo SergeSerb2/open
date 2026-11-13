@@ -201,7 +201,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             closed = state(action='close')
             assert wait_until(lambda:not state()['open'], timeout=2), 'close snapshot did not finish preparing'
             closed = state()
-            check('close_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
+            check('close_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'], motion=closed['motion'])
             timing = closed['motion']['timing']
             check('close_commits_width_before_motion', closed['motion']['page']['frame'] == closed_frame
                   and not timing['opening'] and 0 < timing['layoutCommit'] <= timing['start'],

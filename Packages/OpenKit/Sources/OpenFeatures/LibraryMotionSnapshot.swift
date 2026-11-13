@@ -44,22 +44,31 @@ extension WebContentContainer {
     /// No window-server capture or permission request. Chromium supplies its
     /// own visible pixels; native chrome stays live above these temporary views.
     func prepareLibraryMotionSnapshots() async -> [LibraryMotionSnapshot]? {
-        guard !librarySnapshotReadInFlight else { return nil }
+        guard !librarySnapshotReadInFlight else { librarySnapshotStatus = "busy"; return nil }
+        librarySnapshotStatus = "preflight"
         let originalBounds = bounds
         let deadline = CACurrentMediaTime() + 0.25
         var snapshots: [LibraryMotionSnapshot] = []
         var pixels = 0
+        var decodedBytes = 0
         for slot in slots {
             guard let host = host(for: slot.tabID), let view = slot.contentHostView,
                   !view.isHiddenOrHasHiddenAncestor,
                   let content = (host as? WebContentProviding)?.webContent else { continue }
             let frame = view.frame, url = host.currentURL
+            let scale = view.window?.backingScaleFactor ?? 1
+            let expectedWidth = ceil(view.bounds.width * scale), expectedHeight = ceil(view.bounds.height * scale)
+            guard expectedWidth > 0, expectedHeight > 0, expectedWidth <= 8192, expectedHeight <= 8192,
+                  expectedWidth * expectedHeight <= Double(16 * 1024 * 1024 - pixels) else { return nil }
             let remaining = deadline - CACurrentMediaTime()
-            guard remaining > 0,
-                  let png = await librarySnapshotPNG(content, deadline: remaining), !Task.isCancelled,
+            guard remaining > 0 else { librarySnapshotStatus = "deadline"; return nil }
+            guard let png = await librarySnapshotPNG(content, deadline: remaining) else { return nil }
+            librarySnapshotStatus = "geometry"
+            guard !Task.isCancelled,
                   bounds == originalBounds, self.host(for: slot.tabID) === host,
-                  view === slot.contentHostView, view.frame == frame, host.currentURL == url,
-                  png.count <= 64 * 1024 * 1024,
+                  view === slot.contentHostView, view.frame == frame, host.currentURL == url else { return nil }
+            librarySnapshotStatus = "image"
+            guard png.count <= 64 * 1024 * 1024,
                   let source = CGImageSourceCreateWithData(png as CFData, nil),
                   let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
                   let width = properties[kCGImagePropertyPixelWidth as String] as? Int,
@@ -68,26 +77,31 @@ extension WebContentContainer {
                   width * height <= 16 * 1024 * 1024 - pixels,
                   let image = CGImageSourceCreateImageAtIndex(source, 0,
                     [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
-                  image.bitsPerPixel <= 32, image.bytesPerRow * image.height <= 64 * 1024 * 1024
+                  image.bitsPerPixel <= 32, image.bytesPerRow * image.height <= 64 * 1024 * 1024 - decodedBytes
             else { return nil }
             // At most 16M decoded pixels across all panes, 64 MiB at 32 bpp.
             // The usual 1200x800 pt, 2x page uses less than 15 MiB.
             pixels += width * height
+            decodedBytes += image.bytesPerRow * image.height
             snapshots.append(.init(source: view, frame: frame, image: image))
         }
         guard bounds == originalBounds, snapshots.allSatisfy({
             $0.source.frame == $0.frame && $0.source.isDescendant(of: self) && !$0.source.isHiddenOrHasHiddenAncestor
         }) else { return nil }
+        librarySnapshotStatus = "ready"
         return snapshots
     }
 
     private func librarySnapshotPNG(_ content: any WebContent, deadline: Double) async -> Data? {
         guard !librarySnapshotReadInFlight else { return nil }
         librarySnapshotReadInFlight = true
+        librarySnapshotStatus = "capture"
         return await withCheckedContinuation { continuation in
             let reply = LibrarySnapshotReply(continuation)
             Task { @MainActor [weak self] in
-                let png = try? await content.snapshotPNG()
+                let png: Data?
+                do { png = try await content.snapshotPNG() }
+                catch { self?.librarySnapshotStatus = "engine"; png = nil }
                 self?.librarySnapshotReadInFlight = false
                 reply.finish(png)
             }
@@ -96,6 +110,7 @@ extension WebContentContainer {
             // in flight, even after this deadline or an interrupted close.
             reply.deadline = Task { @MainActor in
                 do { try await Task.sleep(for: .seconds(deadline)) } catch { return }
+                self.librarySnapshotStatus = "timeout"
                 reply.finish(nil)
             }
         }

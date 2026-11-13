@@ -147,6 +147,7 @@ public final class PaneSlotView: NSView {
 @MainActor
 public final class WebContentContainer: NSView {
     var librarySnapshotReadInFlight = false
+    public internal(set) var librarySnapshotStatus = "idle"
     public static let maxCachedHiddenHosts = 8
     public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
     public var extensionsUI: ExtensionsUIContext? { didSet { for slot in slots { slot.paneChrome?.extensionsUI = extensionsUI } } }
