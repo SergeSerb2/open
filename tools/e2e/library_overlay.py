@@ -199,7 +199,8 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             time.sleep(.25)
             open_frame = state()['motion']['page']['frame']
             closed = state(action='close')
-            assert wait_until(lambda:not state()['open'], timeout=2, step=.005), 'close snapshot did not finish preparing'
+            assert wait_until(lambda:not state()['open'] and not state()['motion']['preparingClose'],
+                              timeout=2, step=.005), 'close preparation did not finish committing'
             closed = state()
             check('close_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'], motion=closed['motion'])
             timing = closed['motion']['timing']

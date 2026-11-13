@@ -41,11 +41,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var libraryPageMotion: (source: CGRect, target: CGRect?)?
     private var libraryClosePreparation: Task<Void, Never>?
     private var libraryClosePreparationGeneration = 0
+    private var libraryCloseCommitPending = false
     private var librarySnapshotViews: [NSView] = []
     private var libraryHiddenLiveViews: [NSView] = []
     public var libraryMotionSnapshotCount: Int { librarySnapshotViews.count }
     public var libraryMotionLiveViewsHidden: Bool { !libraryHiddenLiveViews.isEmpty && libraryHiddenLiveViews.allSatisfy(\.isHidden) }
-    public var isPreparingLibraryClose: Bool { libraryClosePreparation != nil }
+    public var isPreparingLibraryClose: Bool { libraryClosePreparation != nil || libraryCloseCommitPending }
     public private(set) var libraryMotionStartedAt: CFTimeInterval = 0
     public private(set) var libraryMotionEndsAt: CFTimeInterval = 0
     public private(set) var libraryLayoutCommittedAt: CFTimeInterval = 0
@@ -749,8 +750,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         libraryMotionGeneration += 1
         let generation = libraryMotionGeneration
         prepareLibraryPageMotion(from: oldFrame, animated: animated)
-        // Commit pixels, visibility and the one viewport resize together. The
-        // render-server slide starts one refresh later, after this preparation.
+        // Present stationary snapshot pixels and the one hidden viewport resize
+        // before submitting the moving frames in a separate transaction.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         librarySnapshotViews = snapshots.compactMap { $0.install() }
@@ -758,8 +759,46 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.setLibraryMotionHidesContent(!libraryHiddenLiveViews.isEmpty)
         isLibraryOpen = false
         layoutContent()
-        animateLibrary(opening: false, duration: 0.20, animated: animated)
+        if let motion = libraryPageMotion, let target = motion.target {
+            let pageGeneration = libraryPageMotionGeneration
+            libraryPageMotion = nil
+            layoutPageFrame(target)
+            container.needsLayout = true
+            container.layoutSubtreeIfNeeded()
+            libraryPageMotion = motion
+            libraryLayoutCommittedAt = CACurrentMediaTime()
+            libraryCloseCommitPending = true
+            libraryMotionStartedAt = 0
+            libraryMotionEndsAt = 0
+            let refresh = 1 / Double(max(1, window?.screen?.maximumFramesPerSecond ?? 60))
+            // The stationary render-server animation holds the source origin
+            // while the final model frame is committed. Its completion follows
+            // that submitted frame, rather than a main-queue delay from setup.
+            for layer in [container.layer, Optional(emptyPanel)].compactMap({ $0 }) {
+                layer.removeAnimation(forKey: "libraryFrame")
+                let hold = CABasicAnimation(keyPath: "position")
+                let point = NSValue(point: CGPoint(
+                    x: motion.source.minX + layer.bounds.width * layer.anchorPoint.x,
+                    y: motion.source.minY + layer.bounds.height * layer.anchorPoint.y))
+                hold.fromValue = point; hold.toValue = point
+                hold.duration = refresh
+                hold.fillMode = .both; hold.isRemovedOnCompletion = false
+                layer.add(hold, forKey: "libraryPreparation")
+            }
+            CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
+                guard let self, self.libraryMotionGeneration == generation,
+                      self.libraryPageMotionGeneration == pageGeneration,
+                      !self.isLibraryOpen, self.libraryCloseCommitPending else { return }
+                self.libraryCloseCommitPending = false
+                self.animateLibraryClose(animated: animated, generation: generation)
+            } }
+        } else {
+            animateLibraryClose(animated: animated, generation: generation)
+        }
         CATransaction.commit()
+    }
+    private func animateLibraryClose(animated: Bool, generation: Int) {
+        animateLibrary(opening: false, duration: 0.20, animated: animated)
         guard let panel = libraryPanel else { return }
         if animated, window?.isVisible == true {
             let duration = Motion.reducesMotion ? 0.10 : 0.20
@@ -793,6 +832,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// the end; closing reflows once at the start, behind fixed-size page pixels.
     private func prepareLibraryPageMotion(from source: CGRect, animated: Bool) {
         cancelLibraryClosePreparation()
+        libraryCloseCommitPending = false
+        container.layer?.removeAnimation(forKey: "libraryPreparation")
+        emptyPanel.removeAnimation(forKey: "libraryPreparation")
         removeLibrarySnapshots()
         libraryPageMotionGeneration += 1
         if animated, !Motion.reducesMotion, window?.isVisible == true {
@@ -803,11 +845,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     private func cancelLibraryPageMotion() {
         cancelLibraryClosePreparation()
+        libraryCloseCommitPending = false
         removeLibrarySnapshots()
         libraryPageMotionGeneration += 1
         libraryPageMotion = nil
         container.layer?.removeAnimation(forKey: "libraryFrame")
         emptyPanel.removeAnimation(forKey: "libraryFrame")
+        container.layer?.removeAnimation(forKey: "libraryPreparation")
+        emptyPanel.removeAnimation(forKey: "libraryPreparation")
     }
     private func cancelLibraryClosePreparation() {
         libraryClosePreparationGeneration += 1
@@ -840,17 +885,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             let generation = libraryPageMotionGeneration
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            libraryLayoutCommittedAt = 0
-            if !opening {
-                // The snapshot is already above the old page. Reflow the live
-                // viewport once, then slide its fixed-size layer below it.
-                libraryPageMotion = nil
-                layoutPageFrame(target)
-                container.needsLayout = true
-                container.layoutSubtreeIfNeeded()
-                libraryPageMotion = motion
-                libraryLayoutCommittedAt = CACurrentMediaTime()
-            }
+            if opening { libraryLayoutCommittedAt = 0 }
             CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
                 guard let self, self.libraryPageMotionGeneration == generation,
                       self.libraryPageMotion != nil else { return }
@@ -875,6 +910,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             libraryMotionOpening = opening
             for layer in [container.layer, Optional(emptyPanel)].compactMap({ $0 }) {
                 layer.removeAnimation(forKey: "sidebarToggle")
+                layer.removeAnimation(forKey: "libraryPreparation")
                 layer.removeAnimation(forKey: "libraryFrame")
                 guard layer.bounds.width > 0, layer.bounds.height > 0 else { continue }
                 let old = motion.source
