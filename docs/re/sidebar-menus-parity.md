@@ -16,15 +16,15 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 
 | Surface | Arc (order) | Open (main 243b511a) | Gap |
 |---|---|---|---|
-| Today tab row (S3D, S8 items 1, 3) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · — · Open in Split View · Duplicate · Move to ▸ · — · Archive Tab · Archive Tabs Below (⌥ Archive Other Tabs, Archive Tabs Above). Selected tab: Copy Link shows ⌘⇧C and "Add Split View" replaces "Open in Split View". Mute is disabled on a silent tab; "Unmute" on a muted one | the same | none. S8 saw "Customize Page…" after Mute in one run only (condition not established); Open does not show it |
-| Pinned tab row (S3D, S8 item 1) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ · — · Remove Pin | the same | none (the "Customize Page…" note above applies) |
+| Today tab row (S3D, S8 items 1, 3) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · — · Open in Split View · Duplicate · Move to ▸ · — · Archive Tab · Archive Tabs Below (⌥ Archive Other Tabs, Archive Tabs Above). Selected tab: Copy Link shows ⌘⇧C and "Add Split View" replaces "Open in Split View". Mute is disabled on a silent tab; "Unmute" on a muted one | the same | C12-D2-3: Customize Page… appears after Mute for pages loaded in this launch; restored pages omit it before their first load. The App routes it to the existing Boost editor |
+| Pinned tab row (S3D, S8 item 1) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ · — · Remove Pin | the same | C12-D2-3: the loaded-page rule above applies; Customize Page… sits immediately before Edit Pinned Page |
 | Favourite tile (S3D, S8 item 1) | the pinned menu, last item "Remove Favorite" | the same; before it, Open's Live Calendar items and Top App switches (Show Meeting Link ▸, Meeting Reminder ▸, Show Unread Badge, Show Time to Next Meeting) for matching tiles | the place of the Live Calendar and Top App items is a GUESS (capture pending, F2 item 7) |
 | Share ▸ (S8 item 1) | the Mac's share services (AirDrop · Mail · Messages · Notes · …), each with its icon; the same list in tab rows and the URL field | the same (`ShareServices`; Reading List left out) | none |
 | Move to ▸ (S8 item 2; S13 C13-D2-5) | every Space in dock order, including other Profiles; current Space checked and enabled; every destination enabled · — · New Space… (enabled) | the same | cross-Profile transfer results were not captured; existing move behavior is retained |
 | Folder row (S3D, S8 item 4) | Share Folder… · — · New Nested Folder… · Turn "‹name›" into Space · Copy All Links · Copy All Links as Markdown · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Delete; an empty folder has no Copy items | the same | none |
 | Live Folder row (code, live-data §2.2) | not captured | header · Repositories · Single Sign-On ▸ · Refresh · — · Copy All Links · — · Delete Live Folder | order is a GUESS (F2 item 3) |
 | Space menu: title, empty area, Clear row, Space dot, title "…" button (S3D, S8 item 8) | Change Space Icon… · Rename Space… · Edit Theme Color… · Set Profile ▸ · — · New Folder · Live Folders ▸ · — · Share Space… · Export "‹name›" into Folder ▸ · — · Manage Spaces… · — · Delete Space | the same (Share Space… disabled: no account) | none |
-| Split row (S8 item 5) | Share Split View… · — · Separate All Tabs · Add Tab… · Convert to … Split View · — · Tab Options (disabled) · ‹pane› ▸ … · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Archive Item · Archive Tabs Below (⌥ pair). Pane ▸: Separate from Split View · — · Share · Mute · Copy Link · Copy link as Markdown · — · Archive Item | the same without Change Icon… and Rename… | Change Icon… / Rename… need a split name and icon in the model (deferred, `docs/followups.md`) |
+| Split row (S8 item 5) | Share Split View… · — · Separate All Tabs · Add Tab… · Convert to … Split View · — · Tab Options (disabled) · ‹pane› ▸ … · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Archive Item · Archive Tabs Below (⌥ pair). Pane ▸: Separate from Split View · — · Share · Mute · Copy Link · Copy link as Markdown · — · Archive Item | the same, plus Reset Name and Icon immediately before Change Icon… when customized (S12 C12-D2-2) | none; saved name/icon and Reset implemented |
 | Multi-selection (S8 item 6) | tabs: Copy Links · — · Share N Items… · — · Change Icon… (disabled) · Mute · — · Open in Split View · Duplicate · Move to ▸ · New Folder with N Items · — · Archive Tabs (⌥ pair for Today tabs). With a folder: Copy Links · — · Share N Items… · — · Open in Split View (disabled) · Move to ▸ · New Folder with N Items · — · Delete | the same; Open adds ⌥ alternates "Copy links as Markdown" and "Pin Tabs" / "Unpin Tabs"; with a folder Open keeps "Archive Tabs" beside "Delete" | Open additions (behind ⌥); Delete with a folder: what it does to the tabs is not captured |
 | Easel row (S4E) | Copy Link · — · Change Icon… · Rename… · — · Add Split View · Move to ▸ · — · Remove Easel from Sidebar · Delete Easel | adds "Save as Web Page…" after Copy Link | Open addition (lead ruling LEAD 04:05 S4); keep |
 | URL field (S3D, S8 item 1) | Copy URL · Share ▸ · Capture… · Capture Full Page · Capture in Portrait Mode · — · Show as Toolbar · Disable Shared Quotes | the same ("Enable Shared Quotes" when off) | none |
@@ -58,7 +58,7 @@ multi-selection submenu behavior, which were not captured.
 
 The build order of the first inventory is done: sidebar row menus, URL field, "+" popover, then the Library sections
 (one PR each). Open items: the two C3 captures above (C-D2-1 Media menus, C-D2-2 Archive hover glyphs), the deferred
-items in `docs/followups.md` (split Change Icon / Rename, Media Source URL), and the GUESS rows marked in the tables.
+items in `docs/followups.md` (Media Source URL), and the GUESS rows marked in the tables.
 
 ## 4. Library file menus from Arc's code (2026-11-12, Arc 1.172.2 build 90755)
 
@@ -90,3 +90,20 @@ this change does not alter transfer retries or persistence. The failed-row menu 
 C12-PB1-3 report separately records that this failed row was absent after relaunch, including an exact-name search
 showing "No results found" (`.re/capture/s12/m1/arc/v11/36-failure-relaunch/failed-after-relaunch.{png,ax.json}`).
 The PB1 lane tracks that relaunch behavior; this change covers the subtitle.
+
+C12-D2-3 evidence: capture report session 12, `v19/111-d2-customize-pinned/`, `v20/112-d2-customize-relaunch/`, `v25/116-d2-favorite-matrix/`, and `v26/117-d2-customize-invoke/`. The bounded matrix is a visible behavior rule, not a claim about Arc internals. Escape leaves the main editor open; Done closes it. Open preserves the existing Escape paths for text editing, advanced controls and code mode. Open uses runtime-only load state and the existing non-private HTTP(S) Boost eligibility guard.
+### Split name and icon (session 12, C12-D2-2)
+
+Rename opens the native inline Title field with the initial text `2 Tabs` selected.
+A custom name replaces the pane titles; Escape leaves the saved name unchanged.
+A name-only row uses a pane-count badge. An icon-only row uses that icon and the
+count title `2 Tabs`. The shared emoji picker supplies the icon. Both values survive
+relaunch. `Reset Name and Icon` appears immediately before `Change Icon…` only
+while either value is customized; it restores the individual titles and favicons.
+
+Evidence: `.re/capture/s12/m1/arc/v18/101-d2-rename-reset/split-{rename-editor,renamed,rename-cancel,reset}.png`
+and `split-rename-focus.focused.json`; icon-only presentation is
+`v20/103-d2-icon-both/icon-only-picked.png`; light/dark custom states are
+`v21/105-d2-both-focused/custom-split-{light,dark}.png`; persistence and final Reset
+are `v21/104-d2-persist-reset/split-{custom-relaunch,final-reset}.png`.
+These are local reference facts; no reference assets are shipped.

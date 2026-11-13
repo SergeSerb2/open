@@ -10,6 +10,8 @@ public enum SleepPhase: Sendable { case placeholder, live, frozen, sleeping }
 public final class TabLiveState {
     /// Engine-owned: true only while this tab has live web content. Never persisted.
     public var hasWebContent: Bool = false
+    /// A completed page load in this process. Restored tabs start false (C12-D2-3).
+    public var hasLoadedInThisLaunch: Bool = false
     public var sleepPhase: SleepPhase = .placeholder
     public var isCapturing: Bool = false
     public var devToolsOpen: Bool = false
@@ -146,15 +148,20 @@ public enum SplitOrientation: String, Codable, Sendable {
 @Observable
 public final class Split {
     public let id: ItemID
+    public var customTitle: String?
+    public var iconOverride: SpaceIcon?
+    public var isCustomized: Bool { customTitle != nil || iconOverride != nil }
+    public var displayTitle: String { customTitle ?? "\(panes.count) Tabs" }
     public var orientation: SplitOrientation
     /// One fraction per pane, normalized to sum 1. Empty means equal panes.
     public var fractions: [Double]
     public var panes: [Tab]
     public var focusedPaneID: ItemID?
 
-    public init(id: ItemID = ItemID(), orientation: SplitOrientation = .horizontal, fractions: [Double] = [], panes: [Tab] = [], focusedPaneID: ItemID? = nil) {
+    public init(id: ItemID = ItemID(), orientation: SplitOrientation = .horizontal, fractions: [Double] = [], panes: [Tab] = [], focusedPaneID: ItemID? = nil, customTitle: String? = nil, iconOverride: SpaceIcon? = nil) {
         self.id = id; self.orientation = orientation; self.fractions = fractions
         self.panes = panes; self.focusedPaneID = focusedPaneID
+        self.customTitle = customTitle; self.iconOverride = iconOverride
     }
 }
 

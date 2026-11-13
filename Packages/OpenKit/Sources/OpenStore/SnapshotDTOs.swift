@@ -150,6 +150,8 @@ public struct SplitDTO: Codable, Sendable {
     public var fractions: [Double]
     public var panes: [TabDTO]
     public var focusedPaneID: String?
+    public var customTitle: String? = nil
+    public var iconOverride: SpaceIconDTO? = nil
 }
 
 public struct WindowDTO: Codable, Sendable {
@@ -372,7 +374,7 @@ public enum SnapshotMapper {
         switch node {
         case .tab(let t): return .tab(tabDTO(t))
         case .folder(let f): return .folder(FolderDTO(peekedChildID: f.peekedChildID?.description, id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }, live: f.live))
-        case .split(let s): return .split(SplitDTO(id: s.id.rawValue.uuidString, orientation: s.orientation.rawValue, fractions: s.fractions, panes: s.panes.map { tabDTO($0) }, focusedPaneID: s.focusedPaneID?.rawValue.uuidString))
+        case .split(let s): return .split(SplitDTO(id: s.id.rawValue.uuidString, orientation: s.orientation.rawValue, fractions: s.fractions, panes: s.panes.map { tabDTO($0) }, focusedPaneID: s.focusedPaneID?.rawValue.uuidString, customTitle: s.customTitle, iconOverride: iconDTO(s.iconOverride)))
         }
     }
 
@@ -391,7 +393,7 @@ public enum SnapshotMapper {
             let folder = Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }, peekedChildID: f.peekedChildID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) })
             folder.live = f.live
             return .folder(folder)
-        case .split(let s): return .split(Split(id: ItemID(uuidString: s.id), orientation: SplitOrientation(rawValue: s.orientation) ?? .horizontal, fractions: s.fractions, panes: s.panes.map { tab(from: $0) }, focusedPaneID: s.focusedPaneID.map { ItemID(uuidString: $0) }))
+        case .split(let s): return .split(Split(id: ItemID(uuidString: s.id), orientation: SplitOrientation(rawValue: s.orientation) ?? .horizontal, fractions: s.fractions, panes: s.panes.map { tab(from: $0) }, focusedPaneID: s.focusedPaneID.map { ItemID(uuidString: $0) }, customTitle: s.customTitle, iconOverride: icon(from: s.iconOverride)))
         }
     }
 

@@ -219,6 +219,7 @@ struct SidebarMenus {
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
             rename,
             mute(tab),
+        ] + customizeItems(tab) + [
             .separator(),
             splitItem(tab),
             item("Duplicate", .duplicate(nodeID: tab.id)),
@@ -253,6 +254,12 @@ struct SidebarMenus {
         item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id))
     }
 
+    /// Capture session 12's loaded-page matrix; the App also enforces Profile and URL eligibility.
+    private func customizeItems(_ tab: Tab) -> [NSMenuItem] {
+        guard !context.isIncognito, context.canCustomizePage?(tab.id) == true else { return [] }
+        return [item("Customize Page…", .customizePage(tabID: tab.id))]
+    }
+
     /// "Edit Pinned Page ▸" (pinned tabs and favourites, F0116, S3D).
     private func editPinnedPage(_ tab: Tab) -> NSMenuItem {
         let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
@@ -271,8 +278,8 @@ struct SidebarMenus {
     }
 
     /// The shared pinned / favourite list up to the last separator (S3D: the favourite menu is
-    /// the pinned menu with "Remove Favorite" last). Arc has no "Customize Page…" here; Boosts
-    /// open from Site Controls (C-report-s3 Part G).
+    /// the pinned menu with "Remove Favorite" last). C12-D2-3 adds Customize Page… after
+    /// Mute only for pages loaded in this launch, immediately before Edit Pinned Page.
     private func pinnedItems(_ tab: Tab) -> [NSMenuItem] {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         return [
@@ -282,6 +289,7 @@ struct SidebarMenus {
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
             rename,
             mute(tab),
+        ] + customizeItems(tab) + [
             editPinnedPage(tab),
             .separator(),
             splitItem(tab),
@@ -399,21 +407,13 @@ struct SidebarMenus {
         return items
     }
 
-    /// Split row. Not captured; the items and their order follow Arc's split-row
-    /// menu builder (Arc 1.170.0 arm64, function at 0x102eccc9c; docs/re/menus-and-hotkeys.md).
-    /// Left out: "Share Split View" (account link), "Reset Name and Icon", "Change Icon…",
-    /// and "Rename…" (Open's splits have no custom name or icon), and staff-only items.
-    /// guess: "Move to" sits before the last separator, as in the captured tab menus.
+    /// Session 12 C12-D2-2: the reset row appears only while the split has a custom name or icon.
     func split(_ split: Split) -> NSMenu {
         let convert: NSMenuItem = split.orientation == .horizontal
             ? item("Convert to Vertical Split View", .setSplitOrientation(splitID: split.id, orientation: .vertical))
             : item("Convert to Horizontal Split View", .setSplitOrientation(splitID: split.id, orientation: .horizontal))
         let header = NSMenuItem(title: "Tab Options", action: nil, keyEquivalent: "")
         header.isEnabled = false
-        // Capture session 8 item 5 (`v6/32-d2-item-5b`): Share Split View… · — · Separate All Tabs · Add Tab… ·
-        // Convert … · — · Tab Options · panes ▸ · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — ·
-        // Archive Item · Archive Tabs Below (⌥ alternates). Change Icon… / Rename… need a split name and
-        // icon in the model and a capture of a renamed split row: follow-up (C3 item 15).
         var items: [NSMenuItem] = []
         if !context.isIncognito { items += [item("Share Split View…", .shareSplit(splitID: split.id)), .separator()] }
         items += [
@@ -424,7 +424,11 @@ struct SidebarMenus {
             header,
         ]
         items += split.panes.map { pane(of: split, $0) }
-        items += [.separator(), item("Duplicate", .duplicate(nodeID: split.id))]
+        items.append(.separator())
+        if split.isCustomized { items.append(item("Reset Name and Icon", .resetSplitCustomization(splitID: split.id))) }
+        items += [item("Change Icon…", .changeIcon(nodeID: split.id)),
+                  ClosureMenuItem("Rename…") { [beginRename] in beginRename(split.id) },
+                  .separator(), item("Duplicate", .duplicate(nodeID: split.id))]
         if !context.isIncognito { items.append(moveTo(split.id)) }
         items += [.separator(), item(context.isIncognito ? "Close Split View" : "Archive Item", .close(nodeID: split.id))]
         if !context.isIncognito { items += archiveAlternates(split.id) }

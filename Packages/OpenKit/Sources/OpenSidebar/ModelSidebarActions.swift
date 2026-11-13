@@ -72,6 +72,8 @@ public struct ModelSidebarActions {
             model.unpinTab(id: id)
         case .rename(let id, let title):
             model.renameNode(id: id, title: title)
+        case .resetSplitCustomization(let id):
+            return model.resetSplitCustomization(id: id)
         case .renameSpace(let id, let title):
             model.updateSpace(id: id, title: title)
         case .move(let id, let parent, let index):
