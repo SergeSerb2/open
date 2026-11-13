@@ -377,8 +377,8 @@ diff --git a/cef/include/views/cef_browser_view_delegate.h b/cef/include/views/c
    /// for the new popup BrowserView.
    ///
 -  /*--cef(optional_param=client)--*/
-+  // Open: a hosted tab has no opener BrowserView. Its dock delegate still
-+  // receives the DevTools popup through the C API.
++  /// Open: a hosted tab has no opener BrowserView. Its dock delegate still
++  /// receives the DevTools popup through the C API.
 +  /*--cef(optional_param=browser_view,optional_param=client)--*/
    virtual CefRefPtr<CefBrowserViewDelegate> GetDelegateForPopupBrowserView(
        CefRefPtr<CefBrowserView> browser_view,
@@ -388,7 +388,7 @@ diff --git a/cef/include/views/cef_browser_view_delegate.h b/cef/include/views/c
    /// will be created for the popup.
    ///
 -  /*--cef()--*/
-+  // Open: |browser_view| is null for DevTools of a hosted tab.
++  /// Open: |browser_view| is null for DevTools of a hosted tab.
 +  /*--cef(optional_param=browser_view)--*/
    virtual bool OnPopupBrowserViewCreated(
        CefRefPtr<CefBrowserView> browser_view,
