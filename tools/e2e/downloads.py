@@ -71,7 +71,7 @@ def server():
             self.send_response(200)
             self.send_header('Content-Type', 'application/octet-stream')
             name = ('open-e2e-fallback-%d.txt' % os.getpid() if route == '/fallback'
-                    else 'private-history.txt' if route == '/private' else 'sample.txt')
+                    else 'private-history.txt' if route == '/private' else urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('name', ['sample.txt'])[0])
             self.send_header('Content-Disposition', 'attachment; filename="%s"' % name)
             if not unknown: self.send_header('Content-Length', str(length if route != '/fail' else length * 100))
             self.send_header('Connection', 'close')
@@ -195,7 +195,7 @@ def checks(factory, results, tmp, config, harness):
         running = wait(lambda: (lambda v: v if LIVE_SUBTITLE.match(v.get('subtitle', '')) else None)(row(known)))
         check('live_subtitle', live and running, item=live, row=running or row(known))
         badge = state()['badge']
-        check('home_progress', badge.get('running', 0) > 0 and 0 < badge.get('progress', 0) < 1 and badge.get('trackOpacity') == 1 and badge.get('ringOpacity') == 1 and badge.get('ringBounds') == [3, 3, 26, 26] and badge.get('lineWidth') == 2, badge=badge)
+        check('home_progress', badge.get('running', 0) > 0 and 0 < badge.get('progress', 0) < 1 and badge.get('trackOpacity') == 1 and badge.get('ringOpacity') == 1 and badge.get('ringBounds') == [1, 1, 18, 18] and badge.get('lineWidth') == 2, badge=badge)
         titles = [v['title'] for v in menu(known)]
         check('running_menu_order', len(titles) == 7 and titles[0].startswith('Open ') and titles[1].startswith('Copy ') and titles[2:] == ['Show in Finder', 'separator', 'Cancel Download', 'separator', 'Hide from Open'], titles=titles)
         app.call('download-row', id=known, action='Pause')
@@ -271,6 +271,40 @@ def checks(factory, results, tmp, config, harness):
         menu(fast, 'Move to Trash')
         check('trash', wait(lambda: not item(fast)) and not Path(paths[0]).exists())
         dismiss_library()
+
+
+    def captured_kinds_flow():
+        for ext, expected in [('zip', 'Zip Archive'), ('dmg', 'Disk Image'), ('png', 'Image'),
+                              ('jpg', 'Image'), ('mp4', 'Movie'), ('mp3', 'Audio'),
+                              ('docx', 'Download'), ('csv', 'Download'), ('json', 'Download'),
+                              ('txt', 'Download'), ('', 'Download')]:
+            name = 'kind-probe' + ('.' + ext if ext else '')
+            key = start('/fast?name=' + name)
+            wait(lambda: item(key).get('fileExists'))
+            library()
+            check('captured_kind_' + (ext or 'none'), wait(lambda: row(key).get('subtitle') == expected), row=row(key))
+            dismiss_library()
+
+    def captured_mark_flow():
+        for appearance in ('light', 'dark'):
+            app.call('appearance', name=appearance)
+            key = start('/finish?name=mark-' + appearance + '.txt')
+            live = wait(lambda: state()['badge'] if item(key).get('received', 0) > 0 and state()['badge'].get('running', 0) > 0 else None)
+            check('captured_mark_running_' + appearance, live and live['ringBounds'] == [1, 1, 18, 18] and live['stackCount'] == 0, badge=live)
+            app.call('snapshot', path=str(root / ('mark-running-' + appearance + '.png')))
+            box = state()['badge']['markFrame']
+            app.call('mouse', action='click', queued=True, window=app.call('library-state')['window'], x=box[0]+box[2]/2, y=box[1]+box[3]/2)
+            opened = wait(lambda: app.call('library-state').get('open') and app.call('library-state').get('section') == 'downloads')
+            check('captured_mark_click_' + appearance, opened and app.call('library-state')['windowID'] == app.call('shell-windows')[0]['id'])
+            dismiss_library()
+            wait(lambda: item(key).get('fileExists'))
+            time.sleep(5.1)
+            badge = state()['badge']
+            check('captured_mark_five_after_' + appearance, badge['stackCount'] == 1 and badge['thumbnailSize'] == 32 and badge['files'][0]['id'] == key, badge=badge)
+            app.call('snapshot', path=str(root / ('mark-completed-' + appearance + '.png')))
+            library(); dismiss_library()
+            check('captured_mark_library_keeps_' + appearance, state()['badge']['stackCount'] == 1 and state()['badge']['files'][0]['id'] == key, badge=state()['badge'])
+            app.call('snapshot', path=str(root / ('mark-after-library-' + appearance + '.png')))
 
 
     def fallback_flow():
@@ -372,7 +406,29 @@ def checks(factory, results, tmp, config, harness):
         app.call('download-row', id=cancelled, action='Cancel')
         wait(lambda: item(cancelled).get('state') == 'cancelled')
         dismiss_library()
-        before_first = {key: item(key) for key in (completed, old, failed, cancelled)}
+        library()
+        # Retry must re-download its recorded URL under its original Profile. Since the native Library only a
+        # failed row offers Retry (a hover control; Arc has none), so the live failed row of the first
+        # Profile is retried. "/fail" fails again by design: the receipt is a new transfer of the same URL.
+        before_retry = set(v['id'] for v in state()['items'])
+        before_retry_tabs = {v['id'] for v in app.call('tabs')}
+        source = item(failed)['source']
+        offered = wait(lambda: 'Retry' in row(failed).get('buttons', []))
+        if offered: app.call('download-row', id=failed, action='Retry')
+        dismiss_library()
+        retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['source'] == source), None), 30)
+        # Publish it last so a Retry failure cannot prevent independent history/quit checks.
+        retry_result = dict(ok=bool(offered and retried and retried['profile'] == profile), item=retried, offered=bool(offered),
+              items=state()['items'], tabs=app.call('tabs'), sheets=state()['sheets'],
+              detachedPages=state()['detachedPages'], engineEvents=app.call('events'),
+              reason='' if retried else 'no new transfer of the recorded URL after Retry')
+        # Preserve the raw assertion even if a later independent check fails.
+        # The normal checked assignment at the end still fails the suite.
+        dict.__setitem__(results, 'history_retry', retry_result)
+        for new_tab in app.call('tabs'):
+            if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
+        dismiss_library()
+        before_first = {key: item(key) for key in (completed, old, cancelled)}
 
         app.call('space-create', title='History Second', profile='History Second')
         profile2 = next(v['profile'] for v in app.call('spaces') if v['focused'])
@@ -412,6 +468,7 @@ def checks(factory, results, tmp, config, harness):
             return records
         disk = stored_rows()
         required = set(before_first) | {other}
+        check('history_failed_absent_store', failed not in {r['id'] for r in disk})
         check('history_terminal_store', required <= {r['id'] for r in disk}
               and all(r['endedAt'] >= r['startedAt'] and r['sourceURL'] and r['profileID'] for r in disk), rows=disk)
         check('history_private_absent_store', not any('private-history' in json.dumps(v) or 'history=private' in json.dumps(v) for v in disk))
@@ -444,6 +501,7 @@ def checks(factory, results, tmp, config, harness):
 
         restart(required)
         restored = {v['id']: v for v in state()['items']}
+        check('history_failed_absent_relaunch', failed not in restored and not any(v['state'] == 'failed' for v in restored.values()), items=list(restored.values()))
         check('history_relaunch_two_profiles', required <= set(restored)
               and len(restored) == len(state()['items']) and all(restored[k]['historical'] for k in required)
               and all(restored[k]['state'] == before_first[k]['state'] for k in before_first)
@@ -503,26 +561,6 @@ def checks(factory, results, tmp, config, harness):
               and any(v['title'] == 'Hide from Open' and v['enabled'] for v in missing_menu), row=row(completed), menu=missing_menu)
         menu(completed, 'Hide from Open'); wait(lambda: not item(completed))
 
-        # Retry must re-download its recorded URL under its original Profile. Since the native Library only a
-        # failed row offers Retry (a hover control; Arc has none), so the historical failed row of the first
-        # Profile is retried. "/fail" fails again by design: the receipt is a new transfer of the same URL.
-        before_retry = set(v['id'] for v in state()['items'])
-        before_retry_tabs = {v['id'] for v in app.call('tabs')}
-        source = before_first[failed]['source']
-        offered = wait(lambda: 'Retry' in row(failed).get('buttons', []))
-        if offered: app.call('download-row', id=failed, action='Retry')
-        dismiss_library()
-        retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['source'] == source), None), 30)
-        # Publish it last so a Retry failure cannot prevent independent history/quit checks.
-        retry_result = dict(ok=bool(offered and retried and retried['profile'] == profile), item=retried, offered=bool(offered),
-              items=state()['items'], tabs=app.call('tabs'), sheets=state()['sheets'],
-              detachedPages=state()['detachedPages'], engineEvents=app.call('events'),
-              reason='' if retried else 'no new transfer of the recorded URL after Retry')
-        # Preserve the raw assertion even if a later independent check fails.
-        # The normal checked assignment at the end still fails the suite.
-        dict.__setitem__(results, 'history_retry', retry_result)
-        for new_tab in app.call('tabs'):
-            if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
         survivor = None
         if survivor is None:
             # A real completed transfer is the independent second-Profile
@@ -961,7 +999,7 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
+                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')

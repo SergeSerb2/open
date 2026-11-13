@@ -70,8 +70,7 @@ final class BottomBarView: NSView {
         super.layout()
         let m = BottomBarMetrics.self
         let w = bounds.width
-        let badge = context.downloadBadge?.files.isEmpty == false
-        home.frame = CGRect(x:m.homeX-(badge ? 3.5 : 0),y:m.buttonY-(badge ? 3.5 : 0),width:badge ? 39 : 32,height:badge ? 39 : 32)
+        home.frame = CGRect(x:m.homeX,y:m.buttonY,width:32,height:32)
         plus.frame = CGRect(origin: CGPoint(x: w - m.plusTrailingInset - m.buttonSize.width, y: m.buttonY), size: m.buttonSize)
         let stripRect = CGRect(x: m.switcherLeading, y: 0, width: max(0, w - m.switcherLeading - m.switcherTrailing), height: m.height)
         strip.frame = stripRect
