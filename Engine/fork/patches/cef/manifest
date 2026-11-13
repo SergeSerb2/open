@@ -4,6 +4,8 @@
 # paths: <space-separated pathspecs>
 # 0001-open-distrib-build-dir.patch
 paths: cef/tools/make_distrib.py
+# 0002-open-framework-thinlto.patch
+paths: cef/BUILD.gn
 # 0101-mem-visibility.patch
 paths: cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 # 0104-mem-navigation-history.patch

@@ -1,0 +1,15 @@
+diff --git a/cef/BUILD.gn b/cef/BUILD.gn
+--- a/cef/BUILD.gn
++++ b/cef/BUILD.gn
+@@ -1922,6 +1922,11 @@
+       ":libcef_includes_config",
+     ]
+ 
++    # Match Chromium's browser targets: the default ThinLTO config links at O0.
++    # Let thin_lto_enable_optimizations select the optimized release link.
++    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
++    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
++
+     # We don't link the framework so just use the path from the main executable.
+     ldflags = [
+       "-Wl,-install_name,@executable_path/../Frameworks/$output_name.framework/$output_name",
