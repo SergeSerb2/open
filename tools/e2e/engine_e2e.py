@@ -11291,10 +11291,20 @@ def library_capture_checks(app, require, root, evidence):
                 and any(media_error in text for text in current['text']), state=current or state(), png=path)
         # A directory at the index path is a real unreadable-file case, including
         # when the suite runs as the file owner (chmod alone would be unreliable).
-        app.call('library-close'); os.unlink(index); os.mkdir(index)
+        app.call('library-close')
+        # Native idle preparation (#350) can read the index while this fixture
+        # changes. Swap file/directory atomically: unlink + mkdir exposes a
+        # missing path, which the real provider correctly accepts as empty.
+        staged_directory = tempfile.mkdtemp(prefix='.unreadable-index-', dir=os.path.dirname(index))
+        libc = ctypes.CDLL('/usr/lib/libSystem.B.dylib', use_errno=True)
+        swap = libc.renamex_np
+        swap.argtypes, swap.restype = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint], ctypes.c_int
+        if swap(os.fsencode(index), os.fsencode(staged_directory), 2) != 0:  # Darwin RENAME_SWAP
+            raise OSError(ctypes.get_errno(), 'could not install unreadable index fixture')
+        os.unlink(staged_directory)  # The previous corrupt file, now outside the live path.
         unreadable = media_when(lambda s: s['loadFailed'])
         require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
-                and any(media_error in text for text in unreadable['text']), state=unreadable or state())
+                and any(media_error in text for text in unreadable['text']), state=unreadable or state(), provider=app.call('library').get('providers', {}).get('media', {}))
         app.call('library-close'); os.rmdir(index)
         missing = media_when(lambda s: not s['loadFailed'])
         require('library_missing_index_empty', missing and not missing['loadFailed']
