@@ -368,22 +368,41 @@ def gear_checks(app, results, wait_until, cal, fav, live):
         and gear.get('items') == ['Refresh', '-', 'Disable Live Calendar'] and gear.get('enabled') == [True, True]
         and gear.get('refreshing') is False, 'gear': gear}
 
-    # Refresh: new events arrive slowly (fixture delay); the spinner stands where the gear was until they land.
-    cal(action='fixture', access='granted', delayMs=900,
-        events=[sync, {'id': 'g2', 'title': 'Added before refresh', 'start': 20, 'end': 50}])
-    tracking = choose('glance-open', control='gear', item='Refresh')
-    during = glance(wait=False).get('gear') or {}
-    done = wait_until(lambda: (lambda s: s if (s.get('gear') or {}).get('refreshing') is False else None)(glance(wait=False)),
-                      timeout=6, step=.05) or glance(wait=False)
-    frame, spin = during.get('frame') or [0, 0, 0, 0], during.get('spinnerFrame') or [0, 0, 0, 0]
-    centred = abs((frame[0] + frame[2] / 2) - (spin[0] + spin[2] / 2)) <= 1 and abs((frame[1] + frame[3] / 2) - (spin[1] + spin[3] / 2)) <= 1
-    after_gear = done.get('gear') or {}
-    refreshes = cal().get('refreshes', 0)
-    results['cal_card_gear_refresh'] = {'ok': tracking.get('tracked') is True and tracking.get('cardStayedVisible') is True
-        and tracking.get('opened') is True and during.get('refreshing') is True and during.get('spinner') is True
-        and during.get('shown') is False and centred and after_gear.get('shown') is True and after_gear.get('spinner') is False
-        and 'g2' in [e['id'] for e in done.get('events', [])] and refreshes == 1,
-        'tracking': tracking, 'during': during, 'after': after_gear, 'events': [e['id'] for e in done.get('events', [])], 'refreshes': refreshes}
+    # Keep the same native-menu acceptance at two window origins. AppKit's
+    # hardware cursor can be elsewhere than the socket pointer; menu teardown
+    # must not replace the socket's Favorite hover with that unrelated position.
+    original_frame = app.call('window-state')['frame']
+    refresh_cases = []
+    try:
+        for window_frame in [None, [0, 0, *original_frame[2:]]]:
+            if window_frame is not None:
+                app.call('hover', leave=True, ms=300)
+                app.call('window-frame', frame=window_frame)
+                cal(action='fixture', access='granted', events=[sync])
+                wait_until(lambda: live().get('tiles'), timeout=5, step=.05)
+                hover(fav)
+                glance()
+            # Refresh: new events arrive slowly (fixture delay); the spinner stands where the gear was until they land.
+            cal(action='fixture', access='granted', delayMs=900,
+                events=[sync, {'id': 'g2', 'title': 'Added before refresh', 'start': 20, 'end': 50}])
+            tracking = choose('glance-open', control='gear', item='Refresh')
+            during = glance(wait=False).get('gear') or {}
+            done = wait_until(lambda: (lambda s: s if (s.get('gear') or {}).get('refreshing') is False else None)(glance(wait=False)),
+                              timeout=6, step=.05) or glance(wait=False)
+            frame, spin = during.get('frame') or [0, 0, 0, 0], during.get('spinnerFrame') or [0, 0, 0, 0]
+            centred = abs((frame[0] + frame[2] / 2) - (spin[0] + spin[2] / 2)) <= 1 and abs((frame[1] + frame[3] / 2) - (spin[1] + spin[3] / 2)) <= 1
+            after_gear = done.get('gear') or {}
+            refreshes = cal().get('refreshes', 0)
+            refresh_cases.append({'ok': tracking.get('tracked') is True and tracking.get('cardStayedVisible') is True
+                and tracking.get('opened') is True and during.get('refreshing') is True and during.get('spinner') is True
+                and during.get('shown') is False and centred and after_gear.get('shown') is True and after_gear.get('spinner') is False
+                and 'g2' in [e['id'] for e in done.get('events', [])] and refreshes == 1,
+                'tracking': tracking, 'during': during, 'after': after_gear, 'events': [e['id'] for e in done.get('events', [])], 'refreshes': refreshes,
+                'windowOrigin': (window_frame or original_frame)[:2]})
+    finally:
+        app.call('window-frame', frame=original_frame)
+    representative = next((case for case in refresh_cases if not case['ok']), refresh_cases[0])
+    results['cal_card_gear_refresh'] = {**representative, 'ok': all(case['ok'] for case in refresh_cases), 'windowOrigins': refresh_cases}
 
     # Disable Live Calendar: the card closes; the Favorite becomes plain (no card, no countdown, no Live Calendar
     # items) and the choice is stored for this Favorite.
