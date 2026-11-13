@@ -17,11 +17,13 @@ public enum SidebarConfirmations {
 
     /// One titled folder: "Delete your <title> folder?"; an untitled folder or several folders:
     /// "Are you sure?" (Arc's fallback, `FUN_102a75b50`; plural is lead decision Q15).
-    public static func deleteFoldersAlert(model: BrowserModel, ids: [ItemID]) -> NSAlert? {
+    public static func deleteFoldersAlert(model: BrowserModel, ids: [ItemID], quoteTitle: Bool = false) -> NSAlert? {
         let folders = ids.compactMap { model.node(id: $0)?.folder }
         guard !folders.isEmpty else { return nil }
+        // Curly quotes are observed on the normal mixed-selection sheet (C13-D2-6).
+        let name = quoteTitle ? "“\(folders[0].title)”" : folders[0].title
         let title = folders.count == 1 && !(folders[0].title.trimmingCharacters(in: .whitespaces).isEmpty)
-            ? "Delete your \(folders[0].title) folder?" : "Are you sure?"
+            ? "Delete your \(name) folder?" : "Are you sure?"
         return alert(title: title, text: "Deleting this folder will archive the tabs inside it.", destructive: "Delete Folder")
     }
 
