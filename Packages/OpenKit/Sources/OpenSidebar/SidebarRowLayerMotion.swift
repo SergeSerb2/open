@@ -15,6 +15,20 @@ final class SidebarRowLayerMotion {
     private var departing: [CALayer] = []
     private var bitmapPixels = 0
     private var generation = 0
+    private struct Rasterized {
+        let layer: CALayer
+        let enabled: Bool
+        let scale: CGFloat
+    }
+    private var rasterized: [Rasterized] = []
+
+    private func restoreRasterization() {
+        for saved in rasterized {
+            saved.layer.shouldRasterize = saved.enabled
+            saved.layer.rasterizationScale = saved.scale
+        }
+        rasterized.removeAll(keepingCapacity: true)
+    }
 
     func begin(_ outline: NSOutlineView, animated: Bool, duration: CFTimeInterval, timing: CAMediaTimingFunction) {
         depth += 1
@@ -22,6 +36,7 @@ final class SidebarRowLayerMotion {
         enabled = animated && !Motion.reducesMotion
         self.duration = duration; self.timing = timing
         generation += 1
+        restoreRasterization()
         departing.forEach { $0.removeFromSuperlayer() }; departing.removeAll(); bitmapPixels = 0
         previous.removeAll(keepingCapacity: true)
         if enabled {
@@ -89,12 +104,27 @@ final class SidebarRowLayerMotion {
             MainActor.assumeIsolated {
                 guard let self, self.generation == token else { return }
                 self.departing.forEach { $0.removeFromSuperlayer() }; self.departing.removeAll()
+                self.restoreRasterization()
             }
         }
         outline.enumerateAvailableRowViews { view, row in
             guard let item = outline.item(atRow: row) as AnyObject?, let layer = view.layer else { return }
             let old = self.previous[ObjectIdentifier(item)]
             let delta = old.map { $0.origin.y - view.convert(NSPoint.zero, to: outline).y } ?? -min(16, view.bounds.height)
+            let opacity = old?.opacity ?? 0
+            if abs(delta) > 0.01 || opacity < 1 {
+                // Cache the static AppKit/text subtree only while it moves. The
+                // departing images and these caches share a 2,097,152-pixel
+                // budget (8 MiB at RGBA8; Core Animation owns cache storage).
+                let scale = view.window?.backingScaleFactor ?? 1
+                let width = ceil(view.bounds.width * scale), height = ceil(view.bounds.height * scale)
+                if self.rasterized.count < 256, width > 0, height > 0, width <= 2048, height <= 1024,
+                   self.bitmapPixels + Int(width * height) <= 2_097_152 {
+                    self.bitmapPixels += Int(width * height)
+                    self.rasterized.append(Rasterized(layer: layer, enabled: layer.shouldRasterize, scale: layer.rasterizationScale))
+                    layer.rasterizationScale = scale; layer.shouldRasterize = true
+                }
+            }
             layer.removeAnimation(forKey: "row.structure.position")
             layer.removeAnimation(forKey: "row.structure.opacity")
             layer.transform = CATransform3DIdentity; layer.opacity = 1
@@ -103,7 +133,6 @@ final class SidebarRowLayerMotion {
                 move.fromValue = delta; move.toValue = 0; move.duration = self.duration; move.timingFunction = self.timing
                 layer.add(move, forKey: "row.structure.position")
             }
-            let opacity = old?.opacity ?? 0
             if opacity < 1 {
                 let fade = CABasicAnimation(keyPath: "opacity")
                 fade.fromValue = opacity; fade.toValue = 1; fade.duration = self.duration; fade.timingFunction = self.timing
