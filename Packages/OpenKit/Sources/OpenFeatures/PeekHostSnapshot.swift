@@ -43,6 +43,13 @@ extension PeekOverlayView {
         snapshot.contentsGravity = .resize
         snapshot.backgroundColor = pageClip.layer?.backgroundColor
         parent.addSublayer(snapshot)
+        // The captured page, rounded clip, and fixed shadow are static while
+        // only this ancestor's transform/position/opacity change. Cache that
+        // subtree at this window's real scale until motion finishes.
+        if let panelLayer = panel.layer {
+            panelLayer.rasterizationScale = window?.backingScaleFactor ?? 1
+            panelLayer.shouldRasterize = true
+        }
         motionHostView = view; motionHostWasHidden = view.isHidden
         motionSnapshotLayer = snapshot; motionRevealPending = false
         view.isHidden = true
@@ -58,6 +65,7 @@ extension PeekOverlayView {
             view.isHidden = motionHostWasHidden
         }
         snapshot.removeFromSuperlayer()
+        panel.layer?.shouldRasterize = false
         motionSnapshotLayer = nil; motionHostView = nil; motionRevealPending = false
         PeekMotionTrace.region("snapshot.explicitCommit") { CATransaction.commit() }
     }
