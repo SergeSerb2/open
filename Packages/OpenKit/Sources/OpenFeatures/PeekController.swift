@@ -100,9 +100,9 @@ public final class PeekController {
         let profile = profileID ?? space.profileID
         dismissGeneration += 1; isDismissing = false
         expandingGeneration += 1; isExpanding = false
-        if stack.count >= 5 { stack.last?.host?.load(url); return }
+        if stack.count >= 5 { overlay.resetMotion(); stack.last?.host?.load(url); return }
         let hostID = ItemID()
-        guard let host = factory.makeHost(tabID: hostID, profileID: profile, url: nil) else { return }
+        guard let host = factory.makeHost(tabID: hostID, profileID: profile, url: nil) else { overlay.resetMotion(); return }
         let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, librarySpaceID: librarySpaceID, profileID: profile, host: host)
         stack.append(item)
         let itemID = item.id

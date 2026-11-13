@@ -4610,6 +4610,19 @@ def peek_checks(factory, results, tmp):
         time.sleep(.3)
         results['peek_close_during_expand_cancels_promotion'] = {'ok': not app.call('peek-state')['stack']
             and len(app.call('tabs')) == tabs_before}
+        # At the nesting cap, opening reuses the top page. It must also cancel
+        # a close already in flight, rather than leave that page transparent.
+        for i in range(5):
+            app.call('peek-open', tab=source, url=fixture('Peek cap ' + str(i)))
+        time.sleep(.25)
+        app.call('key', key='escape')
+        app.call('peek-open', tab=source, url=fixture('Peek cap reopened'))
+        time.sleep(.25)
+        capped = app.call('peek-motion')
+        results['peek_capped_reopen_cancels_close'] = {'ok': len(app.call('peek-state')['stack']) == 5
+            and capped['shown'] and capped['overlay']['opacity'] == 1
+            and capped['panel']['scale'] == [1, 1], 'settled': capped}
+        app.call('peek-close')
         # The process-local Reduce Motion switch reaches this same public UI.
         app.call('window-motion', reduced=True)
         try:
