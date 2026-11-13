@@ -76,10 +76,23 @@ def run(output, config='Release', frames=False):
 
             state(action='open', section='media')
             empty = wait_until(lambda: (lambda s: s if s.get('emptyVisible') else None)(state()), timeout=8, step=.05) or state()
-            check('first_use_card', empty['emptyState']['title'] == 'Show your media here'
-                  and empty['emptyState']['buttonVisible'] and empty['emptyState']['buttonEnabled'] and not rows(),
-                  state=empty['emptyState'])
+            # C-LF-5 (LEAD 20:45): Arc's two first-use strings with "Open"; the whole body shows and the button sits below it.
+            es = empty['emptyState']
+            body_y, button_y = sorted([es['bodyFrame'], es['buttonFrame']], key=lambda r: r[1])
+            check('first_use_card', es['title'] == 'Show your media here'
+                  and es['body'] == 'Allow Open to show your Documents, Desktop, and Download Folders to see them here alongside your Captures.'
+                  and es['buttonToolTip'] == es['buttonHelp'] == 'Quickly grab screenshots, images, and videos from your computer by showing them in the Open Library!'
+                  and es['bodyFrame'][3] >= es['bodyNeededHeight'] and body_y[1] + body_y[3] <= button_y[1]
+                  and 'Arc' not in es['body'] + es['buttonToolTip']
+                  and es['buttonVisible'] and es['buttonEnabled'] and not rows(),
+                  state=es)
 
+            if frames:
+                # Look STOP frames of the first-use card (C-LF-5), light and dark, before Choose Folders.
+                for name in ('light', 'dark'):
+                    app.call('appearance', name=name); time.sleep(.6)
+                    capture_window(state()['window'], output / ('media-first-use-' + name + '.png'))
+                app.call('appearance', name='system')
             state(action='empty-button')
             expected = ['Screen Shot fixture.png', 'clip.mp4', 'desk-photo.png', 'doc-photo.png']
             listed = wait_until(lambda: names() == expected, timeout=8, step=.1)
