@@ -164,6 +164,7 @@ class OEDevToolsClient;
 - (instancetype)initOEForExtensionPopupInBrowser:(OEBrowser*)browser
                                        extension:(NSString*)extensionIdentifier;
 - (CefRefPtr<CefDictionaryValue>)oe_extraInfo;
+- (CefRefPtr<CefDictionaryValue>)oe_extraInfoWithScripts:(CefRefPtr<CefListValue>)scripts;
 - (CefBrowserSettings)oe_browserSettings;
 @property(nonatomic, copy, nullable) NSString* oe_popupExtension;
 /// Prepares this (not yet created) content to receive a popup browser from

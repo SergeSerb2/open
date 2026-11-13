@@ -632,8 +632,24 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 
 - (void)addUserScript:(OEUserScript*)script {
   if (_state == OEBrowserContextStateClosed || _oe_closing) return;
-  [self removeUserScriptWithIdentifier:script.identifier broadcast:NO];
-  [_scripts addObject:[script copy]];
+  [self replaceUserScriptsWithIdentifiers:@[script.identifier] scripts:@[script]];
+}
+
+- (void)replaceUserScriptsWithIdentifiers:(NSArray<NSString*>*)identifiers
+                                 scripts:(NSArray<OEUserScript*>*)scripts {
+  if (_state == OEBrowserContextStateClosed || _oe_closing) return;
+  NSMutableSet<NSString*>* replaced = [NSMutableSet setWithArray:identifiers];
+  for (OEUserScript* script in scripts) [replaced addObject:script.identifier];
+  NSIndexSet* old = [_scripts indexesOfObjectsPassingTest:
+      ^BOOL(OEUserScript* script, NSUInteger index, BOOL* stop) {
+        return [replaced containsObject:script.identifier];
+      }];
+  [_scripts removeObjectsAtIndexes:old];
+  for (OEUserScript* script in scripts) {
+    // Match repeated addUserScript calls when a batch contains duplicate IDs.
+    [self removeUserScriptWithIdentifier:script.identifier broadcast:NO];
+    [_scripts addObject:[script copy]];
+  }
   [self oe_broadcastScripts];
 }
 
@@ -684,16 +700,21 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 // renderers receive it before document start; OnRenderViewReady also resends it.
 - (void)oe_broadcastScripts {
   if (_state == OEBrowserContextStateClosed || _oe_closing) return;
+  // Serialize the Profile snapshot once. Each browser still gets its own
+  // stored extra-info copy (including its per-page styles) and renderer message.
+  // Rebuilding the full list twice per browser made ten-page Boost edits slow.
+  CefRefPtr<CefListValue> scripts = [self oe_scriptsValue];
   // OTR web contents have their own context. Match that exact owner, so updates
   // cover its browsers without installing a parent profile's scripts there.
   for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
     if (webContent.context != self || !webContent.oe_browser) {
       continue;
     }
-    CefSetBrowserExtraInfo(webContent.oe_browser, [webContent oe_extraInfo]);
+    CefSetBrowserExtraInfo(webContent.oe_browser,
+                           [webContent oe_extraInfoWithScripts:scripts]);
     CefRefPtr<CefProcessMessage> msg =
         CefProcessMessage::Create(kOEMsgScriptsUpdate);
-    msg->GetArgumentList()->SetList(0, [self oe_scriptsValue]);
+    msg->GetArgumentList()->SetList(0, scripts->Copy());
     webContent.oe_browser->GetMainFrame()->SendProcessMessage(PID_RENDERER,
                                                               msg);
   }
