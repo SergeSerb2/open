@@ -1664,7 +1664,7 @@ cleanup even when a check fails.
 
 The `card` object reports its relative luminance, text-color choice and converted frame, plus the native circle-button frames and labels. `confettiBehindCard` and `confettiLifetime` record the emitter's actual layer order and cell lifetime when created. The setup suite checks saved yellow/blue card text pixels through the real Save panel and uses the opposite-color export as each negative proof. It removes any older export before saving. Reduce Motion captures use separate names, so they do not replace the ordinary Ready light/dark pair.
 
-In automation builds, `--reduce-motion` and `OPEN_E2E_REDUCE_MOTION=1` apply to the intro, setup and Welcome page. The onboarding suite follows `--reduce-motion` through all three surfaces and checks that Welcome has no animation or pending playlist completion. Normal builds use the system preference.
+In automation builds, `--reduce-motion` and `OPEN_E2E_REDUCE_MOTION=1` apply to the intro, setup and Welcome page. `OPEN_E2E_REDUCE_MOTION=0` selects normal motion unless `--reduce-motion` is present. The onboarding and Welcome suites select normal motion per process, then explicitly launch their reduced-motion cases; they do not change the machine's setting. The onboarding suite follows `--reduce-motion` through all three surfaces and checks that Welcome has no animation or pending playlist completion. Normal builds use the system preference.
 
 Actions: `next`, `back`, `skip`, `set-name name=…` (at most 40 characters), `toggle-favorite index=0…11`, `set-theme preset=…`, `set-blocker on=true|false`, `choose-default yes=true|false`, `shuffle-card`, and `get-started` on Ready. Intro actions remain `skip-intro`, `get-started` (Continue), and `replay-intro`.
 

@@ -15,6 +15,8 @@ import time
 
 
 def run(factory, results, tmp, h):
+    # Reduced-motion launches below still opt in with their real launch flag.
+    os.environ.setdefault('OPEN_E2E_REDUCE_MOTION', '0')
     if os.environ.get('OPEN_E2E_ONBOARDING_STEPS_ONLY') == '1':
         return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/onboarding_steps.py'))['run'](factory, results, tmp, h)
     source = Path(tmp)/'intro-arc-synthetic'

@@ -81,7 +81,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     // Same App and scene, only these two render-server filters differ.
     useScreenBlend = ProcessInfo.processInfo.environment["OPEN_INTRO_NORMAL_BLEND"] != "1"
     #endif
-    intro = IntroView(reduceMotion: options.reduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+    intro = IntroView(reduceMotion: options.resolvedReduceMotion,
       scale: screen?.backingScaleFactor ?? 2, increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,
       useScreenBlend: useScreenBlend)
     intro.frame = NSRect(origin: .zero, size: size); intro.autoresizingMask = [.width, .height]

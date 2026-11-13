@@ -205,6 +205,10 @@ def run(factory, results, tmp, h):
         app.call('key', key='t', modifiers=['command']); app.call('key', key='escape')
         # A new ordinary tab hides Welcome and must cancel its pending work.
         app.call('open', url='about:blank')
+        background = next(t['id'] for t in app.call('tabs') if t.get('selected'))
+        app.call('wait', tab=background)
+        app.eval(background, 'onbeforeunload=()=>{};true')
+        until(lambda: app.call('engine-sleep', tab=background)['unloadHandlers'])
         hidden = app.call('welcome')
         gate('welcome_hidden_stops', lambda s: not s.get('visible') and s.get('animationCount')==0
             and not any(x['animating'] for x in s.get('hosts',[])), hidden, active)
