@@ -448,8 +448,14 @@ def checks(factory, results, tmp, config, harness):
               and len(restored) == len(state()['items']) and all(restored[k]['historical'] for k in required)
               and all(restored[k]['state'] == before_first[k]['state'] for k in before_first)
               and restored[other]['profile'] == profile2, items=list(restored.values()))
-        check('history_profile_filter_menu', state()['profileFilter'].get('titles', [])[0:1] == ['All Profiles']
-              and 'History Second' in state()['profileFilter'].get('titles', []), filter=state()['profileFilter'])
+        # The in-window Library's Profile filter is a chip group in the filter editor (no "All Profiles" item:
+        # pressing the selected chip clears the filter), not the retired Library window's pop-up.
+        app.call('library', action='filter', open=True)
+        chips = app.call('library')['header']['chips']
+        app.call('library', action='filter', open=False)
+        chip_ids = {c.get('id') for c in chips}
+        check('history_profile_filter_menu', {'profile:' + profile, 'profile:' + profile2} <= chip_ids
+              and any(c.get('title') == 'History Second' for c in chips), chips=chips)
         for selected, wanted in [(profile, set(before_first)), (profile2, {other})]:
             app.call('download-profile-filter', profile=selected)
             filtered = wait(lambda: wanted <= set(state()['visibleItems'])
@@ -479,34 +485,36 @@ def checks(factory, results, tmp, config, harness):
               and urllib.parse.unquote(urllib.parse.urlparse(state()['copiedFileURL']).path) == before_second['path'], actions=actions, receipt=opened)
 
         Path(before_first[completed]['path']).unlink()
-        app.call('download-profile-filter', profile=profile)
+        # Every outside entry scopes Downloads to the window owner's Profile: filter after the Library reopens.
         dismiss_library(); library()
+        app.call('download-profile-filter', profile=profile)
         missing = wait(lambda: row(completed).get('subtitle') == 'File moved or deleted.')
         missing_menu = menu(completed)
         check('history_missing_file_safe', missing and all(not v['enabled'] for v in missing_menu[:3])
               and any(v['title'] == 'Hide from Open' and v['enabled'] for v in missing_menu), row=row(completed), menu=missing_menu)
         menu(completed, 'Hide from Open'); wait(lambda: not item(completed))
 
-        # Retry must re-download its recorded URL under its original Profile.
+        # Retry must re-download its recorded URL under its original Profile. Since the native Library only a
+        # failed row offers Retry (a hover control; Arc has none), so the historical failed row of the first
+        # Profile is retried. "/fail" fails again by design: the receipt is a new transfer of the same URL.
         before_retry = set(v['id'] for v in state()['items'])
         before_retry_tabs = {v['id'] for v in app.call('tabs')}
-        app.call('download-profile-filter', profile=profile2)
-        wait(lambda: bool(row(other)))
-        menu(other, 'Retry'); dismiss_library()
-        retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['state'] == 'completed'), None))
-        # Keep the same Retry predicate and raw failure. Publish it last so
-        # the known engine gap cannot prevent independent history/quit checks.
-        retry_result = dict(ok=bool(retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
-              and Path(retried['path']).exists()), item=retried, items=state()['items'],
-              tabs=app.call('tabs'), sheets=state()['sheets'],
+        source = before_first[failed]['source']
+        offered = wait(lambda: 'Retry' in row(failed).get('buttons', []))
+        if offered: app.call('download-row', id=failed, action='Retry')
+        dismiss_library()
+        retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['source'] == source), None), 30)
+        # Publish it last so a Retry failure cannot prevent independent history/quit checks.
+        retry_result = dict(ok=bool(offered and retried and retried['profile'] == profile), item=retried, offered=bool(offered),
+              items=state()['items'], tabs=app.call('tabs'), sheets=state()['sheets'],
               detachedPages=state()['detachedPages'], engineEvents=app.call('events'),
-              reason='' if retried else 'engine: download callbacks end when the originating tab closes (CEF download_manager_delegate_impl.cc:331-344, 483-492)')
+              reason='' if retried else 'no new transfer of the recorded URL after Retry')
         # Preserve the raw assertion even if a later independent check fails.
         # The normal checked assignment at the end still fails the suite.
         dict.__setitem__(results, 'history_retry', retry_result)
         for new_tab in app.call('tabs'):
             if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
-        survivor = retried
+        survivor = None
         if survivor is None:
             # A real completed transfer is the independent second-Profile
             # survivor for clear/retirement checks. It is never counted as Retry.
