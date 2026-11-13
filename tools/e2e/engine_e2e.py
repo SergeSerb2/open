@@ -8927,10 +8927,19 @@ def routing_checks(factory, results, tmp):
     def loaded_document(url):
         # Model selection alone can leave an external tab as a placeholder.
         # Observe the real page without selecting it again through automation.
-        tab = wait_until(lambda: next((t for t in app.call('tabs')
-                         if t['url'] == url and t['selected'] and t['hasWebContent'] and t['loaded']), None),
-                         timeout=8, step=.05)
-        return bool(tab and app.eval(tab['id'], 'location.href') == url)
+        def loaded():
+            tab = next((t for t in app.call('tabs')
+                        if t['url'] == url and t['selected'] and t['hasWebContent'] and t['loaded']), None)
+            if not tab:
+                return False
+            try:
+                return app.eval(tab['id'], 'location.href') == url
+            except RuntimeError as error:
+                # Chrome can attach its host before its browser handle is ready.
+                if '(app.open.engine error 4.)' not in str(error):
+                    raise
+                return False
+        return bool(wait_until(loaded, timeout=8, step=.05))
 
     try:
         # Capture actual persisted values, including absence, before resetting.
