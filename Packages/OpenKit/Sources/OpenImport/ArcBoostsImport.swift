@@ -174,8 +174,13 @@ public struct ArcBoostsReader: Sendable {
             // centre, 0° = right, clockwise on screen (Open's `hue`), and saturation in 0…1.
             // `secondaryHueOffset` was 45 in every captured state, which is Open's fixed second
             // knob (45° clockwise): 45 maps, any other offset is counted as dropped.
-            // Every other leaf (base appearance, advanced settings, theme-driven schemes)
-            // has no proven Open input: counted, not invented.
+            // Capture session 11 (C-report-s11 §2): the three "Advanced color controls" sliders
+            // (0…100, default 50) are stored once one moves, replacing `baseAppearance`:
+            // lightnessShift = (Brightness − 50) / 50, preservedLightness = Contrast / 100,
+            // preservedSaturation = Original Saturation / 100. Open's sliders store brightness and
+            // contrast as 0.5 + value / 100 and original saturation as value / 50, so they map back
+            // exactly. `baseAppearance {"light":{}}` is the untouched state (it stayed so in Dark
+            // mode too): Open's defaults, mapped. Theme-driven schemes (never seen) stay dropped.
             let colorKeys: Set<String> = ["colorWheelDriven", "themeDriven", "_0", "primaryHueDegrees", "primarySaturation", "secondaryHueOffset", "invertLightness", "baseAppearance", "advancedSettings", "light", "dark", "preservedSaturation", "preservedLightness", "lightnessShift", "secondarySaturation", "primaryLightness", "secondaryLightness", "primaryColorModel", "secondaryColorModel"]
             func dropped(_ value: Any, path: String) {
                 if let object = value as? [String: Any], !object.isEmpty {
@@ -198,6 +203,29 @@ public struct ArcBoostsReader: Sendable {
                     report.mappedFields += 1
                     for key in ["primaryHueDegrees", "primarySaturation", "invertLightness"] { scheme[key] = nil }
                     if number("secondaryHueOffset") == 45 { scheme["secondaryHueOffset"] = nil; report.mappedFields += 1 }
+                    if let advanced = scheme["advancedSettings"] as? [String: Any], !advanced.isEmpty {
+                        func value(_ key: String) -> Double? {
+                            guard let n = advanced[key] as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.doubleValue.isFinite else { return nil }
+                            return n.doubleValue
+                        }
+                        let known = ["lightnessShift", "preservedLightness", "preservedSaturation"]
+                        if known.contains(where: { value($0) != nil }) {
+                            if let shift = value("lightnessShift") { wheel?.brightness = 1 + shift / 2 }        // 0.5 + (50 + 50·shift) / 100
+                            if let lightness = value("preservedLightness") { wheel?.contrast = 0.5 + lightness } // 0.5 + (100·l) / 100
+                            if let saturation = value("preservedSaturation") { wheel?.originalSaturation = 2 * saturation } // (100·s) / 50
+                            wheel = wheel?.clamped()
+                            report.mappedFields += known.filter { value($0) != nil }.count
+                            // Schema keys without an Open input (not seen in the capture) are dropped, others unknown.
+                            let schema: Set<String> = ["secondarySaturation", "primaryLightness", "secondaryLightness", "primaryColorModel", "secondaryColorModel"]
+                            report.unknownFields += advanced.keys.filter { !known.contains($0) && !schema.contains($0) }.count
+                            report.fieldsDropped["colorScheme.advancedSettings", default: 0] += known.filter { advanced[$0] != nil && value($0) == nil }.count
+                                + advanced.keys.filter { schema.contains($0) }.count
+                            scheme["advancedSettings"] = nil
+                        }
+                    }
+                    if let base = scheme["baseAppearance"] as? [String: Any], base.count == 1, (base["light"] as? [String: Any])?.isEmpty == true {
+                        scheme["baseAppearance"] = nil; report.mappedFields += 1
+                    }
                     // Prune emptied containers so mapped leaves are not counted as dropped.
                     driven["_0"] = scheme.isEmpty ? nil : scheme
                     object["colorWheelDriven"] = driven.isEmpty ? nil : driven

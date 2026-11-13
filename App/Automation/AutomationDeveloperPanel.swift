@@ -71,7 +71,7 @@ extension AutomationController {
       let gap = host.isFlipped ? f.minY - a.maxY : a.minY - f.maxY
       state["extensionsCard"] = ["rows": card.rowTitles, "size": [f.width, f.height], "arrowGap": gap,
                                  "arrowOffset": f.minX + card.arrowTipX - a.midX, "label": card.accessibilityLabel() ?? "",
-                                 "highlighted": card.highlightedTitle ?? ""]
+                                 "highlighted": card.highlightedTitle ?? "", "colors": card.colorsDescription]
     }
     state["splitPanes"] = controller.splitController.split?.panes.count ?? 1
     state["splitOrientation"] = controller.splitController.split.map { $0.orientation == .horizontal ? "horizontal" : "vertical" } ?? ""

@@ -16,7 +16,7 @@ import OpenDesign
 /// A themed Space tints the bar (capture s3 `s7/12-devoff/d-devmode-on`: #76859C on a blue-grey Space). The tint
 /// rule is a GUESS (LEAD 12:18): the Space's accent colour, with the ink chosen by its brightness.
 /// Hover (capture s10 `v10/d1-devbar-hover-menus`, C-report-s10 PB3-a1): a grey rounded plate fills the hovered
-/// 28 pt button (light: black 9 % over the stripes, `h-copy-95895.png` #F4F5F8 → #DEE0E4), and after the usual delay
+/// 28 pt button (light black 7 %, dark white 8 %, C3 session 11 `c3-bar-hover-plate-*`), and after the usual delay
 /// the Space's tooltip pill shows below it, with key caps where a shortcut exists. Site Settings shows the plate
 /// only (`h-site`); Capture Window shows no tooltip, because resting on it opens the Portrait Mode popover.
 /// Extensions Menu and Split View Menu open menus (PB3-a2); the App builds them.
@@ -178,14 +178,16 @@ final class DeveloperHoverButton: NSButton {
 /// The bar's colours for one appearance.
 struct DeveloperPanelPalette {
     var stripeA: NSColor, stripeB: NSColor, glyph: NSColor, text: NSColor, line: NSColor
-    /// The hover plate. Light: black 9 % (measured, `h-copy-95895.png`). Dark and tinted: GUESS (no dark hover frame).
-    var plate: NSColor = NSColor(white: 0, alpha: 0.09)
+    /// The hover plate over the full 28 pt button, radius 6: light black 7 %, dark white 8 % (C3 session 11
+    /// `c3-bar-hover-plate-{light,dark}.png`: #F7F8FF → #E6E6ED, #3E43CA → #4D51CE). Tinted Spaces: GUESS, same rule by
+    /// the fill's brightness.
+    var plate: NSColor = NSColor(white: 0, alpha: 0.07)
     static func hex(_ value: UInt32) -> NSColor {
         NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255, blue: CGFloat(value & 0xFF) / 255, alpha: 1)
     }
     static let light = DeveloperPanelPalette(stripeA: hex(0xEFF1F5), stripeB: hex(0xF4F5F8), glyph: hex(0x212AFB), text: hex(0x242526), line: hex(0xD8D9DD))
     static let dark = DeveloperPanelPalette(stripeA: hex(0x3E43CA), stripeB: hex(0x4247CB), glyph: hex(0xECEDFE), text: hex(0xD8D9F4), line: hex(0x5155CF),
-                                            plate: NSColor(white: 1, alpha: 0.14))
+                                            plate: NSColor(white: 1, alpha: 0.08))
     /// GUESS: a themed Space's bar. The second stripe is the fill moved 3 % toward white, as in the capture.
     static func tinted(_ fill: NSColor) -> DeveloperPanelPalette {
         let rgb = fill.usingColorSpace(.sRGB) ?? fill
@@ -193,7 +195,7 @@ struct DeveloperPanelPalette {
         let ink = bright ? NSColor(white: 0, alpha: 0.72) : NSColor(white: 1, alpha: 0.92)
         return DeveloperPanelPalette(stripeA: rgb, stripeB: rgb.blended(withFraction: 0.03, of: .white) ?? rgb, glyph: ink, text: ink,
                                      line: (bright ? rgb.blended(withFraction: 0.10, of: .black) : rgb.blended(withFraction: 0.10, of: .white)) ?? rgb,
-                                     plate: bright ? NSColor(white: 0, alpha: 0.09) : NSColor(white: 1, alpha: 0.14))
+                                     plate: bright ? NSColor(white: 0, alpha: 0.07) : NSColor(white: 1, alpha: 0.08))
     }
 }
 

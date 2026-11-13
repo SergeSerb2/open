@@ -12,7 +12,8 @@ import OpenDesign
 /// Developer Mode's Extensions Menu uses the same card (`Layout.extensions`, C-report-s10 PB3-a2), measured on
 /// `v10/d1-devbar-hover-menus/m-ext.png` (2x, light): card 250 × 96 pt plus the arrow, arrow tip under the button's
 /// center 10.5 pt below its bottom edge, two 40 pt rows with no gap and 8 pt padding, titles 19 pt from the card's
-/// left, no icons and no shortcuts; same card #FDFDFF and hovered row #D3D4FD.
+/// left, no icons and no shortcuts. C3 session 11 confirms the "+" popover colours in light and dark; the App
+/// supplies `PlusPopoverColors` for that card, with a 10 pt row highlight radius.
 @MainActor
 public final class ToolbarMorePopover: NSView {
     /// Row icons, drawn here to Arc's shapes (measured on the capture, 2 pt strokes): `sidebar` is a 20 × 15 pt
@@ -34,12 +35,14 @@ public final class ToolbarMorePopover: NSView {
         var width: CGFloat, rowHeight: CGFloat, rowGap: CGFloat, titleX: CGFloat, anchorGap: CGFloat, label: String
         /// The card opens with its first row highlighted until the pointer enters a row (`m-ext.png`).
         var highlightsFirstRow = false
+        /// Row highlight radius (More options: 8; Extensions: 10, C3 session 11 `c3-ext-popover-*`).
+        var rowRadius: CGFloat = Metrics.rowRadius
         /// The compact toolbar's More options card (capture session 9).
         public static let more = Layout(width: Metrics.width, rowHeight: Metrics.rowHeight, rowGap: Metrics.rowGap,
                                         titleX: Metrics.titleX, anchorGap: Metrics.anchorGap, label: "More options")
         /// Developer Mode's Extensions Menu card (capture session 10, `m-ext.png`).
         public static let extensions = Layout(width: 250, rowHeight: 40, rowGap: 0, titleX: 19, anchorGap: 10.5, label: "Extensions",
-                                              highlightsFirstRow: true)
+                                              highlightsFirstRow: true, rowRadius: 10)
     }
     enum Metrics {
         static let width: CGFloat = 200
@@ -61,9 +64,20 @@ public final class ToolbarMorePopover: NSView {
     let rows: [Row]
     let cardLayout: Layout
     public var dark = false { didSet { needsDisplay = true; rowViews.forEach { $0.dark = dark } } }
+    /// The "+" popover's colours (C3 session 11: the Extensions card uses that style, light and dark). Nil keeps
+    /// the More options card's own colours.
+    public var colors: PlusPopoverColors? { didSet { needsDisplay = true; rowViews.forEach { $0.colors = colors } } }
     /// Arrow tip x in this view's coordinates.
     var arrowX: CGFloat = Metrics.width / 2 { didSet { needsDisplay = true } }
     public var onDismiss: (@MainActor () -> Void)?
+    /// The card fill and row highlight as sRGB hex (verification).
+    public var colorsDescription: [String: String] {
+        func hex(_ color: NSColor?) -> String {
+            guard let c = color?.usingColorSpace(.sRGB) else { return "" }
+            return String(format: "#%02X%02X%02X", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()), Int((c.blueComponent * 255).rounded()))
+        }
+        return ["fill": hex(colors?.fill.nsColor), "highlight": hex(colors?.highlight.nsColor)]
+    }
     /// The highlighted row's title (verification).
     public var highlightedTitle: String? { rowViews.first { $0.isShownHighlighted }?.row.title }
     /// Row titles (verification).
@@ -82,6 +96,7 @@ public final class ToolbarMorePopover: NSView {
         layer?.shadowOpacity = 0.18; layer?.shadowRadius = 14; layer?.shadowOffset = CGSize(width: 0, height: -4)
         for (index, row) in rows.enumerated() {
             let view = ToolbarMoreRowView(row: row, titleX: cardLayout.titleX)
+            view.rowRadius = cardLayout.rowRadius
             view.onPress = { [weak self] in self?.choose(index) }
             view.onHover = { [weak self] in self?.rowViews.forEach { $0.forcedHover = false } }
             rowViews.append(view); addSubview(view)
@@ -119,7 +134,7 @@ public final class ToolbarMorePopover: NSView {
         arrow.line(to: CGPoint(x: x + Metrics.arrowWidth / 2, y: Metrics.arrowHeight + 0.5))
         arrow.close()
         path.append(arrow)
-        (dark ? NSColor(srgbRed: 0.165, green: 0.165, blue: 0.18, alpha: 1) : NSColor(srgbRed: 0.992, green: 0.992, blue: 1, alpha: 1)).setFill()
+        (colors?.fill.nsColor ?? (dark ? NSColor(srgbRed: 0.165, green: 0.165, blue: 0.18, alpha: 1) : NSColor(srgbRed: 0.992, green: 0.992, blue: 1, alpha: 1))).setFill()
         path.fill()
     }
 
@@ -190,6 +205,8 @@ final class ToolbarMoreRowView: NSView {
     let row: ToolbarMorePopover.Row
     let titleX: CGFloat
     var dark = false { didSet { needsDisplay = true } }
+    var colors: PlusPopoverColors? { didSet { needsDisplay = true } }
+    var rowRadius: CGFloat = ToolbarMorePopover.Metrics.rowRadius
     var onPress: (@MainActor () -> Void)?
     var onHover: (@MainActor () -> Void)?
     var isShownHighlighted: Bool { isHighlighted }
@@ -210,6 +227,7 @@ final class ToolbarMoreRowView: NSView {
     override func accessibilityPerformPress() -> Bool { guard row.isEnabled else { return false }; onPress?(); return true }
 
     private var ink: NSColor {
+        if let colors { return (row.isEnabled ? colors.label : colors.disabled).nsColor }
         if !row.isEnabled { return dark ? NSColor(white: 1, alpha: 0.30) : NSColor(srgbRed: 0.698, green: 0.698, blue: 0.698, alpha: 1) }
         return dark ? NSColor(white: 1, alpha: 0.92) : .black
     }
@@ -253,8 +271,8 @@ final class ToolbarMoreRowView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let m = ToolbarMorePopover.Metrics.self
         if isHighlighted {
-            (dark ? NSColor(white: 1, alpha: 0.12) : NSColor(srgbRed: 0.827, green: 0.831, blue: 0.992, alpha: 1)).setFill()
-            NSBezierPath(roundedRect: bounds, xRadius: m.rowRadius, yRadius: m.rowRadius).fill()
+            (colors?.highlight.nsColor ?? (dark ? NSColor(white: 1, alpha: 0.12) : NSColor(srgbRed: 0.827, green: 0.831, blue: 0.992, alpha: 1))).setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: rowRadius, yRadius: rowRadius).fill()
         }
         drawIcon()
         let title: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: ink]

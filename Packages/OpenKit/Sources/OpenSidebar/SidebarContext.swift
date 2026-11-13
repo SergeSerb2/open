@@ -23,6 +23,12 @@ public final class SidebarContext {
     public var isWindowOnly: Bool { windowOnlyTitle != nil }
     /// The browser's Spaces, for a Blank Window row's "Move to ▸" (its own model has no Spaces to offer).
     @ObservationIgnored public var windowOnlyMoveSpaces: (@MainActor () -> [(id: SpaceID, title: String)])?
+    /// Tabs dragged in from another window whose model does not hold them (a Blank Window and a
+    /// normal window, capture C-report-s11 1(a)). `perform: false` only asks whether the drop is
+    /// accepted; `true` moves them in at `parent` / `index`.
+    @ObservationIgnored public var foreignNodeDrop: (@MainActor (_ ids: [ItemID], _ parent: NodeParent, _ index: Int, _ perform: Bool) -> Bool)?
+    /// Native tab-drag lifetime. The App opens destination rails only during a drag.
+    @ObservationIgnored public var tabDragChanged: (@MainActor (_ ids: [ItemID]?) -> Void)?
     /// Incognito and Blank Windows show no Favorites, pinned section, Space dots or Space header controls.
     public var hidesSpaceChrome: Bool { isIncognito || isWindowOnly }
     public var extensionsUI: ExtensionsUIContext?
@@ -463,10 +469,19 @@ public final class SidebarContext {
     /// Shared by native acceptDrop and automation of the production drop intent.
     @discardableResult
     public func performNodeDrop(ids: [ItemID], to parent: NodeParent, index: Int) -> Bool {
+        if index >= 0, !ids.isEmpty, ids.allSatisfy({ model.node(id: $0) == nil }) {
+            return foreignNodeDrop?(ids, parent, index, true) ?? false
+        }
         guard index >= 0, !ids.isEmpty, Set(ids).count == ids.count,
               ids.allSatisfy({ model.node(id: $0) != nil }),
               ids.contains(where: { model.canMoveNode(id: $0, to: parent) }) else { return false }
         return send(.moveNodes(ids: ids, to: parent, index: index))
+    }
+
+    /// Whether a drop of `ids` at `parent` is accepted: this window's nodes, or another window's tabs.
+    public func acceptsNodeDrop(ids: [ItemID], to parent: NodeParent, index: Int) -> Bool {
+        if !ids.isEmpty, ids.allSatisfy({ model.node(id: $0) == nil }) { return foreignNodeDrop?(ids, parent, index, false) ?? false }
+        return ids.contains { model.canMoveNode(id: $0, to: parent) }
     }
 
     public func canMoveNodesToNewSpace(_ ids: [ItemID]) -> Bool {

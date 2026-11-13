@@ -200,7 +200,15 @@ points match `atan2` with y down to 0.01°); Open's `hue` uses the same conventi
 0.741; the exact curve needs more points, capture item C-NT5). `secondaryHueOffset` stayed 45
 in every state; Open's second knob is fixed at 45°, so the importer maps 45 and counts any
 other value as dropped. `invertLightness` maps by name. `baseAppearance` and
-`advancedSettings` have no Open input and stay counted as dropped.
+`advancedSettings` are mapped since capture session 11 (`C-report-s11.md` §2): the "Advanced
+color controls" popover (250 × 232 pt) holds three sliders, each 0…100, default 50, moving in
+steps of 10: Contrast, Brightness, Original Saturation. Once one moves, `baseAppearance` is
+replaced by `advancedSettings {lightnessShift: (Brightness − 50) / 50, preservedLightness:
+Contrast / 100, preservedSaturation: Original Saturation / 100}`; `baseAppearance {"light":{}}`
+is the untouched state (it stayed so in Dark mode). Open's sliders store brightness and contrast
+as 0.5 + value / 100 and original saturation as value / 50, so the importer maps all three
+back exactly and treats `{"light":{}}` as Open's defaults. The other schema keys of
+`AdvancedSettings` were never written in the capture and are counted as dropped.
 
 The CLI writes through `OpenBoosts` into the existing per-Profile layout while
 holding `OpenDataRoot.prepare()`'s lock. Existing stable IDs are preserved on
