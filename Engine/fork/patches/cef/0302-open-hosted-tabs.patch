@@ -369,3 +369,27 @@ index 8f0c3140a..113d8ce95 100644
  }
  
  void ChromeBrowserHostImpl::Invalidate(PaintElementType type) {
+diff --git a/cef/include/views/cef_browser_view_delegate.h b/cef/include/views/cef_browser_view_delegate.h
+--- a/cef/include/views/cef_browser_view_delegate.h
++++ b/cef/include/views/cef_browser_view_delegate.h
+@@ -82,7 +82,9 @@
+   /// popup will be a DevTools browser. Return the delegate that will be used
+   /// for the new popup BrowserView.
+   ///
+-  /*--cef(optional_param=client)--*/
++  // Open: a hosted tab has no opener BrowserView. Its dock delegate still
++  // receives the DevTools popup through the C API.
++  /*--cef(optional_param=browser_view,optional_param=client)--*/
+   virtual CefRefPtr<CefBrowserViewDelegate> GetDelegateForPopupBrowserView(
+       CefRefPtr<CefBrowserView> browser_view,
+       const CefBrowserSettings& settings,
+@@ -100,7 +102,8 @@
+   /// yourself and return true. Otherwise return false and a default CefWindow
+   /// will be created for the popup.
+   ///
+-  /*--cef()--*/
++  // Open: |browser_view| is null for DevTools of a hosted tab.
++  /*--cef(optional_param=browser_view)--*/
+   virtual bool OnPopupBrowserViewCreated(
+       CefRefPtr<CefBrowserView> browser_view,
+       CefRefPtr<CefBrowserView> popup_browser_view,

@@ -95,7 +95,7 @@ class OEDockBrowserViewDelegate : public CefBrowserViewDelegate {
                                  CefRefPtr<CefBrowserView> popup_browser_view,
                                  bool is_devtools) override {
     OEDevToolsDock* dock = dock_;
-    NSLog(@"E3DBG dock popup created is_devtools=%d dock=%d", is_devtools, dock != nil);
+
     if (!is_devtools || !dock) {
       return false;  // CEF opens its own window.
     }
@@ -179,7 +179,6 @@ class OEDockBrowserViewDelegate : public CefBrowserViewDelegate {
 }
 
 - (void)oe_windowReady:(NSWindow*)window {
-  NSLog(@"E3DBG dock window ready ns=%@ frame=%@ viewWindow=%@", window, NSStringFromRect(window.frame), _view.window);
   _window = window;
   [self oe_sync];
   // Views applies its own initial bounds after Show(); place it again.
@@ -229,7 +228,6 @@ class OEDockBrowserViewDelegate : public CefBrowserViewDelegate {
     _observedWindow = host;
   }
   NSWindow* child = _window;
-  NSLog(@"E3DBG dock sync child=%d host=%d hidden=%d", child != nil, host != nil, _view.isHiddenOrHasHiddenAncestor);
   if (!child) {
     return;
   }

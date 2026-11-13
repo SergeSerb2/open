@@ -18,6 +18,7 @@
 0506-page-automation-notification-guard.patch  # Automation: skip native macOS dispatchers before they force-start the Alerts provider; normal launches unchanged
 0507-page-protocol-handler-request.patch  # Page: expose a pending registerProtocolHandler request's handler to the embedder's prompt; never change or follow the system default app for a scheme
 0508-open-password-auth-product-name.patch  # macOS password auth prompt names Open, not Chromium (IMF 20:15)
+0509-open-macos-product-strings.patch  # macOS English browser product labels (upstream credits kept)
 0601-open-script-world.patch  # P7: reserve Open world; keep queued frame actions in the main context
 0801-open-password-prompt-routing.patch  # H-1: route password prompts to Open
 0802-open-address-bubble-handler-lookup.patch  # H-3: find address handlers without a BrowserView
