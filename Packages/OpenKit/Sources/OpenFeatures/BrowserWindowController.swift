@@ -940,7 +940,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func setRevealCard(_ shown: Bool) {
         let size = root.bounds.size
         let card = WindowMetrics.revealCardFrame(windowSize: size, sidebarWidth: context.sidebarWidth)
-        let away = -(card.maxX - PanelMetrics.inset)
+        // Move the whole card and its shadow past the window edge. Leaving the
+        // panel inset visible makes the later native hide pop those pixels away.
+        let away = -(card.maxX + WindowMetrics.revealCardShadowOutset)
         let animate = window?.isVisible == true && !Motion.reducesMotion
         let from = cardState == .off ? away : currentCardOffset()
         cardGeneration += 1
