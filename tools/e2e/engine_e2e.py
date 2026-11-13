@@ -11720,6 +11720,11 @@ def space_manager_checks(results, tmp, config, style):
                 and state(app)['contextValid'] and app.call('space-manager-lifecycle')['undoRegistrationEnabled'],
                 order=order(app), expectedOrder=order_before_window, snapshotWindows=after_create['windows'], shellWindows=app.call('shell-windows'),
                 undoBefore=undo_before_window, undoAfter=state(app)['modelUndoCount'])
+        # Three 240 pt cards fit the native full-width panel (#350). Use a
+        # narrow real browser so this row actually has horizontal overflow.
+        second_frame = app.call('window-state')['frame']
+        app.call('library', action='resize', width=800, height=second_frame[3])
+        manager_ready(app)
         scrolled = app.call('space-manager-scroll', x=32)
         app.call('window-focus', id=original_window, activate=True)
         app.call('library-open'); first_manager = manager_ready(app)
@@ -11736,6 +11741,7 @@ def space_manager_checks(results, tmp, config, style):
                 and abs(second_origin[0] - scrolled['origin'][0]) < 0.5
                 and second_again['identity'] == second_manager['identity'],
                 before=scrolled['origin'], first=first_origin, second=second_origin)
+        app.call('library', action='resize', width=second_frame[2], height=second_frame[3])
         app.call('window-focus', id=original_window, activate=True)
         app.call('library-open'); manager_ready(app)
         app.call('space-manager-scroll', x=0)
