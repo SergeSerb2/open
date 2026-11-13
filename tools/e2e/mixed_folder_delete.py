@@ -70,15 +70,30 @@ def checks(h, factory, results, tmp):
         record('separate_archive_rows', valid, archive=rows, sidebar=app.call('sidebar-tree'))
         app.call('toast-undo')
         record('one_undo', sidebar_ids() == before and app.call('archive-list', profile=profile)['rows'] == archive_before)
+        def visible_archive(name):
+            expected = {first: 'C13 F1', second: 'C13 F2', today: 'C13 T1'}
+            app.call('library', action='open', section='archive')
+            try:
+                h.wait_until(lambda: set(expected) <= {r['id'] for r in app.call('library').get('rows', [])}, timeout=5, step=.05)
+                rows = app.call('library').get('rows', [])
+                actual = {r['id']: r for r in rows}
+                record(name, folder not in actual and set(expected) <= actual.keys()
+                       and all(actual[node]['kind'] == 'archive' and actual[node]['title'] == title
+                               for node, title in expected.items()), rows=rows)
+            finally:
+                app.call('library', action='close')
+
         # Repeat the same captured action after Undo, then prove normal quit/relaunch persistence.
         delete()
         app.call('alert', button='Delete Folder')
+        visible_archive('visible_archive_rows')
         app.call('save')
         app.quit()
         app = factory(urls=(), fresh=False)
         app.call('space', space=space)
         valid, rows = archived_result()
         record('relaunch', valid, archive=rows, sidebar=app.call('sidebar-tree'))
+        visible_archive('relaunch_archive_rows')
     finally:
         if not app.closed:
             if h._try(lambda: app.call('window-state')['confirmation']):
