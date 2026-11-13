@@ -3,6 +3,7 @@ import AppKit
 import ObjectiveC
 import OpenSettings
 import OpenLibrary
+import OpenOnboarding
 
 extension AutomationController {
   func libraryPanelAction(_ args: [String:Any]) throws -> [String:Any] {
@@ -14,6 +15,23 @@ extension AutomationController {
       controller.window?.makeKeyAndOrderFront(nil)
     }
     switch action {
+    case "trace-start":
+      IntroPacingTrace.current?.finish()
+      let trace = IntroPacingTrace()
+      trace.start(at:CACurrentMediaTime())
+      IntroPacingTrace.current = trace
+      return ["started":true]
+    case "trace-stop":
+      let now = CACurrentMediaTime()
+      guard let intervals = args["intervals"] as? [[Double]], intervals.count <= 128,
+        intervals.allSatisfy({ $0.count == 2 && $0.allSatisfy(\.isFinite) && $0[0] >= now-60 && $0[0] < $0[1] && $0[1] <= now })
+      else { throw Failure(message:"expected at most 128 recent frame intervals") }
+      guard let trace = IntroPacingTrace.current else { throw Failure(message:"Library trace is not active") }
+      for interval in intervals { trace.recordInterval(start:interval[0],end:interval[1],nominal:1/120,callback:now) }
+      trace.finish()
+      let state = trace.state
+      IntroPacingTrace.current = nil
+      return state
     case "prebuild-state":
       let controller = app.frontStandardWindowController
       return ["ready":adapter.activeLibrarySession?.panel?.prebuiltReady ?? false,
@@ -151,6 +169,7 @@ extension AutomationController {
     state["motion"]=["page":motion(controller.container.layer),"panel":motion(session.panel?.layer),
       "sidebar":motion(controller.sidebar.layer),"occlusion":controller.window?.occlusionState.rawValue ?? 0,
       "snapshotCount":controller.libraryMotionSnapshotCount,
+      "snapshotLiveViewsHidden":controller.libraryMotionLiveViewsHidden,
       "snapshotStatus":controller.container.librarySnapshotStatus,
       "preparingClose":controller.isPreparingLibraryClose,
       "timing":["start":controller.libraryMotionStartedAt,"end":controller.libraryMotionEndsAt,

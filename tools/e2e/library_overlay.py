@@ -207,6 +207,9 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
                   and not timing['opening'] and 0 < timing['layoutCommit'] <= timing['start'],
                   before=open_frame, during=closed['motion']['page']['frame'], timing=timing)
             check('close_uses_page_snapshot', closed['motion']['snapshotCount'] > 0, motion=closed['motion'])
+            check('close_hides_live_views', closed['motion']['snapshotLiveViewsHidden'], motion=closed['motion'])
+            check('close_separates_preparation_commit', timing['start'] - timing['layoutCommit'] >= 1/240,
+                  timing=timing)
             second = state()['motion']
             check('close_keeps_final_viewport_fixed', second['page']['frame'] == closed['motion']['page']['frame'], motion=second)
             time.sleep(.25)

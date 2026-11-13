@@ -487,7 +487,11 @@ public final class WebContentContainer: NSView {
         } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
         layoutDividers()
     }
-    public override func layout() { super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false) }
+    public override func layout() {
+        let region = WindowSpeedTrace.begin("webContainer.layout")
+        defer { region?() }
+        super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false)
+    }
     private func layoutDividers() {
         while dividers.count > max(0, slots.count - 1) { dividers.removeLast().removeFromSuperview() }
         while dividers.count < max(0, slots.count - 1) {

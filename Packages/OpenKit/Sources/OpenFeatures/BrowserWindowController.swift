@@ -42,7 +42,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var libraryClosePreparation: Task<Void, Never>?
     private var libraryClosePreparationGeneration = 0
     private var librarySnapshotViews: [NSView] = []
+    private var libraryHiddenLiveViews: [NSView] = []
     public var libraryMotionSnapshotCount: Int { librarySnapshotViews.count }
+    public var libraryMotionLiveViewsHidden: Bool { !libraryHiddenLiveViews.isEmpty && libraryHiddenLiveViews.allSatisfy(\.isHidden) }
     public var isPreparingLibraryClose: Bool { libraryClosePreparation != nil }
     public private(set) var libraryMotionStartedAt: CFTimeInterval = 0
     public private(set) var libraryMotionEndsAt: CFTimeInterval = 0
@@ -478,6 +480,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
     }
     public func refresh() {
+        let region = WindowSpeedTrace.begin("browser.refresh")
+        defer { region?() }
         updateWindowAppearance()
         spaceCreationController?.closeThemeEditorIfSpaceChanged()
         if let editor = themeEditor, let id = editor.session?.spaceID,
@@ -539,6 +543,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         background.prepareForSnapshot()
     }
     public func layoutContent(animated: Bool = false) {
+        let region = WindowSpeedTrace.begin("browser.layoutContent")
+        defer { region?() }
         defer { updateThemeEditorAnchor() }
         if isLibraryOpen, let libraryPanel {
             let size = root.bounds.size
@@ -743,15 +749,23 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         libraryMotionGeneration += 1
         let generation = libraryMotionGeneration
         prepareLibraryPageMotion(from: oldFrame, animated: animated)
+        // Commit pixels, visibility and the one viewport resize together. The
+        // render-server slide starts one refresh later, after this preparation.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         librarySnapshotViews = snapshots.compactMap { $0.install() }
+        libraryHiddenLiveViews = snapshots.map(\.source)
+        libraryHiddenLiveViews.forEach { $0.isHidden = true }
         isLibraryOpen = false
         layoutContent()
         animateLibrary(opening: false, duration: 0.20, animated: animated)
+        CATransaction.commit()
         guard let panel = libraryPanel else { return }
         if animated, window?.isVisible == true {
             let duration = Motion.reducesMotion ? 0.10 : 0.20
-            fadeLibrary(panel, from: 1, to: 0, duration: duration)
-            DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self, weak panel] in
+            let delay = max(0, libraryMotionStartedAt - CACurrentMediaTime())
+            fadeLibrary(panel, from: 1, to: 0, duration: duration, beginAt: delay > 0 ? libraryMotionStartedAt : nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay + duration) { [weak self, weak panel] in
                 guard let self, self.libraryMotionGeneration == generation, !self.isLibraryOpen else { return }
                 panel?.isHidden = true
             }
@@ -761,13 +775,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard !isLibraryOpen else { return }
         libraryPanel?.removeFromSuperview(); libraryPanel = nil; libraryKeyHandler = nil
     }
-    private func fadeLibrary(_ view: NSView, from: Float, to: Float, duration: Double) {
+    private func fadeLibrary(_ view: NSView, from: Float, to: Float, duration: Double, beginAt: CFTimeInterval? = nil) {
         view.wantsLayer = true
         let source = view.layer?.animation(forKey: "libraryFade") != nil ? view.layer?.presentation()?.opacity ?? from : from
         view.layer?.removeAnimation(forKey: "libraryFade")
         view.alphaValue = CGFloat(to)
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = source; fade.toValue = to; fade.duration = duration
+        if let beginAt {
+            fade.beginTime = view.layer?.convertTime(beginAt, from: nil) ?? beginAt
+            fade.fillMode = .backwards
+        }
         fade.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
         view.layer?.add(fade, forKey: "libraryFade")
     }
@@ -796,6 +814,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         libraryClosePreparation?.cancel(); libraryClosePreparation = nil
     }
     private func removeLibrarySnapshots() {
+        libraryHiddenLiveViews.forEach { $0.isHidden = false }
+        libraryHiddenLiveViews.removeAll()
         librarySnapshotViews.forEach { $0.removeFromSuperview() }
         librarySnapshotViews.removeAll()
     }
@@ -813,6 +833,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if emptyPanel.frame != frame { emptyPanel.frame = frame }
     }
     private func animateLibrary(opening: Bool, duration: Double, animated: Bool) {
+        let region = WindowSpeedTrace.begin("library.animation.setup")
+        defer { region?() }
         if let motion = libraryPageMotion, let target = motion.target {
             let generation = libraryPageMotionGeneration
             CATransaction.begin()
@@ -845,7 +867,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 self.emptyPanel.removeAnimation(forKey: "libraryFrame")
                 CATransaction.commit()
             } }
-            let startedAt = CACurrentMediaTime()
+            let refresh = 1 / Double(max(1, window?.screen?.maximumFramesPerSecond ?? 60))
+            let startedAt = CACurrentMediaTime() + (opening ? 0 : refresh)
             libraryMotionStartedAt = startedAt
             libraryMotionEndsAt = startedAt + duration
             libraryMotionOpening = opening
@@ -860,12 +883,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 let group = CAAnimationGroup(); group.animations = [position]; group.duration = duration
                 group.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
                 group.beginTime = layer.convertTime(startedAt, from: nil)
-                group.fillMode = .forwards; group.isRemovedOnCompletion = false
+                group.fillMode = .both; group.isRemovedOnCompletion = false
                 layer.add(group, forKey: "libraryFrame")
             }
             CATransaction.commit()
         }
-        if !opening, animated, !sidebar.isHidden { fadeLibrary(sidebar, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : duration) }
+        if !opening, animated, !sidebar.isHidden {
+            fadeLibrary(sidebar, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : duration,
+                        beginAt: libraryPageMotion != nil ? libraryMotionStartedAt : nil)
+        }
     }
     private func frameSpring(_ key: String, from: NSValue, to: NSValue) -> CASpringAnimation {
         let spring = Motion.sidebarToggle.animation(keyPath: key)
