@@ -1174,7 +1174,12 @@
           let width = (a["width"] as? Double).map { CGFloat($0) } ?? 360
           dock.frame = NSRect(x: host.frame.maxX - width, y: host.frame.minY, width: width, height: host.frame.height)
         }
-        if a["remove"] as? Bool == true, let dock = page.devToolsView(panel: .default) { dock.removeFromSuperview() }
+        if a["remove"] as? Bool == true {
+          // Removing a test host must not open a fresh DevTools frontend.
+          for dock in page.view.superview?.subviews.filter({ $0.className.contains("DevToolsDock") }) ?? [] {
+            dock.removeFromSuperview()
+          }
+        }
         let window = page.view.window
         let dock = page.hasDevTools ? page.view.superview?.subviews.first { $0.className.contains("DevToolsDock") } : nil
         let dockScreen = dock.flatMap { d in d.window.map { $0.convertToScreen(d.convert(d.bounds, to: nil)) } }
