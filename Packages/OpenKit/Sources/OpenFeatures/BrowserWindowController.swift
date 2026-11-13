@@ -821,6 +821,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     private func fadeLibrary(_ view: NSView, from: Float, to: Float, duration: Double, beginAt: CFTimeInterval? = nil) {
         view.wantsLayer = true
+        view.layer?.allowsGroupOpacity = false
         let source = view.layer?.animation(forKey: "libraryFade") != nil ? view.layer?.presentation()?.opacity ?? from : from
         view.layer?.removeAnimation(forKey: "libraryFade")
         view.alphaValue = CGFloat(to)
@@ -914,6 +915,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             libraryMotionEndsAt = startedAt + duration
             libraryMotionOpening = opening
             for layer in [container.layer, Optional(emptyPanel)].compactMap({ $0 }) {
+                layer.allowsGroupOpacity = false
                 layer.removeAnimation(forKey: "sidebarToggle")
                 layer.removeAnimation(forKey: "libraryPreparation")
                 layer.removeAnimation(forKey: "libraryFrame")

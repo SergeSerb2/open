@@ -17,6 +17,7 @@ struct LibraryMotionSnapshot {
         view.layer?.contents = image
         view.layer?.contentsGravity = .resize
         view.layer?.contentsScale = source.window?.backingScaleFactor ?? 1
+        view.layer?.allowsGroupOpacity = false
         parent.addSubview(view, positioned: .above, relativeTo: source)
         return view
     }
@@ -83,13 +84,32 @@ extension WebContentContainer {
             // The usual 1200x800 pt, 2x page uses less than 15 MiB.
             pixels += width * height
             decodedBytes += image.bytesPerRow * image.height
-            snapshots.append(.init(source: view, frame: frame, image: image))
+            // Bake the pane's rounded clip into stationary pixels. Closing can
+            // then move a plain image instead of a rounded, masked subtree.
+            guard let rounded = libraryRoundedImage(image, view: view) else { return nil }
+            snapshots.append(.init(source: view, frame: frame, image: rounded))
         }
         guard bounds == originalBounds, snapshots.allSatisfy({
             $0.source.frame == $0.frame && $0.source.isDescendant(of: self) && !$0.source.isHiddenOrHasHiddenAncestor
         }) else { return nil }
         librarySnapshotStatus = "ready"
         return snapshots
+    }
+
+    private func libraryRoundedImage(_ image: CGImage, view: NSView) -> CGImage? {
+        guard let clip = view.superview, let layer = clip.layer,
+              layer.masksToBounds, layer.cornerRadius > 0 else { return image }
+        guard let context = CGContext(data: nil, width: image.width, height: image.height,
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.scaleBy(x: CGFloat(image.width) / view.bounds.width,
+                        y: CGFloat(image.height) / view.bounds.height)
+        let pane = clip.bounds.offsetBy(dx: -view.frame.minX, dy: -view.frame.minY)
+        context.addPath(CGPath(roundedRect: pane, cornerWidth: layer.cornerRadius,
+                              cornerHeight: layer.cornerRadius, transform: nil))
+        context.clip()
+        context.draw(image, in: view.bounds)
+        return context.makeImage()
     }
 
     private func librarySnapshotPNG(_ content: any WebContent, deadline: Double) async -> Data? {

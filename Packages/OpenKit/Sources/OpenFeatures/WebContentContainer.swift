@@ -26,6 +26,7 @@ public final class PaneSlotView: NSView {
     var isFocused = false
     init(tabID: ItemID) {
         self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
+        layer?.allowsGroupOpacity = false; clip.layer?.allowsGroupOpacity = false
         layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = PanelMetrics.shadowOpacity
         layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
         clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.cornerCurve = .continuous; clip.layer?.masksToBounds = true; addSubview(clip)
@@ -155,6 +156,9 @@ public final class WebContentContainer: NSView {
         for slot in slots {
             slot.libraryMotionHidesContent = hidden
             slot.contentHostView?.isHidden = hidden
+            // The closing snapshot already contains the pane's rounded edge.
+            // Keep the ordinary live clip for opening and restore it on cancel.
+            slot.clip.layer?.masksToBounds = !hidden
         }
     }
     public static let maxCachedHiddenHosts = 8
