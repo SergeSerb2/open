@@ -49,7 +49,7 @@ def context_menu_checks(factory, results, tmp, h):
                   extra_args=['--host-resolver-rules=' + resolver, '--ignore-certificate-errors', '--no-proxy-server', '--load-extension=' + os.path.join(h.ROOT, 'tools/e2e/fixtures/context-menu-probe'),
                               '--disable-features=DisableLoadExtensionCommandLineSwitch'])
     saved = {}
-    only_case = os.environ.get('OPEN_CONTEXT_MENU_CASE')
+    only_cases = set(filter(None, os.environ.get('OPEN_CONTEXT_MENU_CASE', '').split(',')))
     ran_cases = set()
     tab = app.call('tabs')[0]['id']
     home = app.call('window-state')['id']
@@ -57,7 +57,7 @@ def context_menu_checks(factory, results, tmp, h):
     wait = h.wait_until
 
     def run(name, fn):
-        if only_case and name != only_case:
+        if only_cases and name not in only_cases:
             return
         ran_cases.add(name)
         try:
@@ -995,8 +995,8 @@ def context_menu_checks(factory, results, tmp, h):
                         h._try(lambda t=identifier: app.call('close', tab=t))
         run('cm_customize_page_matrix', customize_page_matrix)
 
-        if only_case and not ran_cases:
-            raise RuntimeError('Unknown context-menu case: ' + only_case)
+        if only_cases - ran_cases:
+            raise RuntimeError('Unknown context-menu cases: ' + ', '.join(sorted(only_cases - ran_cases)))
     finally:
         try:
             if not app.closed:
