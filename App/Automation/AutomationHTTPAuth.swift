@@ -35,7 +35,8 @@ extension AutomationController {
       "parent": sheet.sheetParent?.windowNumber ?? 0, "queueLength": presenter.queuedCount,
       "usernamePresent": !sheet.usernameField.stringValue.isEmpty,
       "passwordPresent": !sheet.passwordField.stringValue.isEmpty,
-      "autofilled": sheet.didAutofill] as [String: Any]
+      "autofilled": sheet.didAutofill,
+      "credentialLookupFinished": sheet.credentialLookupFinished] as [String: Any]
   }
 }
 #endif

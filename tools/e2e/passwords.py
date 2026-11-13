@@ -1306,7 +1306,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
             if app: app.quit()
 
 
-def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids=None, m_only=False):
+def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids=None, m_only=False, include_http_auth=False):
     guard = PasswordGuard(factory, results, harness)
     auth = runpy.run_path(str(Path(harness['ROOT']) / 'tools/e2e/http_auth.py'))
     if row_ids is not None and set(row_ids) <= auth['ROWS']:
@@ -1318,5 +1318,7 @@ def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids
             return
         run_manage_pages(guard.launch, guard, tmp, harness)
     run_engine(guard.launch, guard, tmp, harness, guard, engine_distribution_sha256, row_ids)
-    if row_ids is None or set(row_ids).intersection(auth['ROWS']):
+    # The auth surface is compiled out of the default build until adoption.
+    # An explicit row selector still fails if its required surface is absent.
+    if (row_ids is None and include_http_auth) or (row_ids is not None and set(row_ids).intersection(auth['ROWS'])):
         auth['run'](guard.launch, guard, tmp, harness, guard, row_ids)

@@ -17,6 +17,7 @@ from loopback_http import LoopbackHTTPServer
 ROOT = Path(__file__).resolve().parent
 USERNAME = 'fixture-user'
 PASSWORD = 'fixture-password-1'
+UPDATED_PASSWORD = 'fixture-password-2'
 MAX_BODY = 8192
 PAGES = {name + '.html' for name in ('login', 'change', 'signup', 'iframe', 'address', 'card', 'webauthn')}
 
@@ -76,18 +77,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # Deliberately never inspect or reflect the Authorization header.
             self.reply(401, b'<!doctype html><title>Basic auth fixture</title><p>Authentication required.</p>',
                        headers=[('WWW-Authenticate', 'Basic realm="Open fixture"')])
-        elif path in ('/basic-login', '/basic-other-realm'):
+        elif path in ('/basic-login', '/basic-other-realm', '/basic-updated'):
             # Only this synthetic route checks credentials. Never reflect or
             # log the Authorization header, even when it is wrong or too long.
             authorization = self.headers.get('Authorization', '')
             if len(authorization) > MAX_BODY:
                 self.reply(431, b'Authorization header too large', 'text/plain')
                 return
-            expected = 'Basic ' + base64.b64encode((USERNAME + ':' + PASSWORD).encode()).decode()
+            password = UPDATED_PASSWORD if path == '/basic-updated' else PASSWORD
+            expected = 'Basic ' + base64.b64encode((USERNAME + ':' + password).encode()).decode()
             if hmac.compare_digest(authorization.encode('utf-8'), expected.encode('ascii')):
                 self.reply(200, b'<!doctype html><title>Authenticated fixture</title><h1 id="authenticated">Signed in</h1>')
             else:
-                realm = 'Open fixture' if path == '/basic-login' else 'Other Open fixture'
+                realm = 'Other Open fixture' if path == '/basic-other-realm' else 'Open fixture'
                 self.reply(401, b'<!doctype html><title>Basic auth fixture</title><p>Authentication required.</p>',
                            headers=[('WWW-Authenticate', 'Basic realm="' + realm + '"')])
         else:

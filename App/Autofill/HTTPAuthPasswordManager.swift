@@ -13,7 +13,10 @@ struct HTTPAuthProtectionSpace: Equatable {
 
   @MainActor
   init?(_ request: any HTTPAuthRequest) {
-    guard [request.origin, request.realm, request.scheme].allSatisfy({
+    // E3 exposes the page origin separately from the proxy host/port. Until
+    // the store bridge supplies a proxy protection space, never fill a proxy
+    // challenge with credentials selected for its target page.
+    guard !request.isProxy, [request.origin, request.realm, request.scheme].allSatisfy({
       $0.utf8.count <= HTTPAuthSheet.maximumMetadataBytes
     }), let url = URLComponents(string: request.origin),
        let transport = url.scheme?.lowercased(),

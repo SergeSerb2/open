@@ -13429,6 +13429,7 @@ def main():
     ap.add_argument('--passwords-probe-dialog-free', action='store_true', help='observe safe Step 0 rows; report card, WebAuthn and HTTP Basic as BLOCKED')
     ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
     ap.add_argument('--passwords-m-only', action='store_true', help='run only the real-App save-sheet M rows')
+    ap.add_argument('--passwords-http-auth', action='store_true', help='include guarded HTTP-auth rows; requires the adopted HTTP-auth engine and both auth compile flags')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument('--expected-display-key', help='require this exact scale/ICC/mode before and after the suite')
@@ -13973,7 +13974,8 @@ def main():
             results["passwords"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](
                 factory, results["passwords"], tmp, globals(), results['engine']['distributionSHA256'],
-                row_ids=opts.passwords_rows.split(',') if opts.passwords_rows else None, m_only=opts.passwords_m_only)
+                row_ids=opts.passwords_rows.split(',') if opts.passwords_rows else None,
+                m_only=opts.passwords_m_only, include_http_auth=opts.passwords_http_auth)
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)

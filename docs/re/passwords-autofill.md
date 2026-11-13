@@ -161,6 +161,9 @@ there is no capture-based exception to omit it. `OPEN_HTTP_AUTH` guards the
 sheet and the shell's credential-result handoff. That handoff checks transport,
 host, effective port, realm, authentication scheme, and proxy flag, and ignores
 late results after typing, answer, withdrawal, or sheet replacement.
+Proxy fill stays disabled until the engine supplies the proxy's own protection
+space; a target-page origin must not select a proxy password. Rejected saved
+credentials must not refill a retry in the same authentication attempt.
 `OPEN_HTTP_AUTH_ENGINE` additionally guards the request/answer/cancel adapter.
 Normal-tab delegates forward to the same factory as standalone pages.
 

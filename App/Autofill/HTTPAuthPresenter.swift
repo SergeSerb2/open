@@ -155,9 +155,11 @@ final class HTTPAuthPresenter {
     guard let source = request as? any HTTPAuthPasswordManagerRequest,
           let protectionSpace = HTTPAuthProtectionSpace(request) else { return }
     source.fetchSavedCredential { [weak self, weak request, weak sheet] credential in
-      guard let self, let request, let sheet, let credential,
+      guard let self, let request, let sheet,
             self.active === sheet, self.activeEntry?.request === request,
-            !self.closing, !self.activeInvalid, !request.isAnswered,
+            !self.closing, !self.activeInvalid, !request.isAnswered else { return }
+      sheet.credentialLookupFinished = true
+      guard let credential,
             credential.protectionSpace == protectionSpace,
             HTTPAuthProtectionSpace(request) == protectionSpace else { return }
       // HTTPAuthSheet also refuses a late result after the user starts typing.

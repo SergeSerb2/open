@@ -4,11 +4,13 @@ No request values, field values or server headers enter the result receipt.
 """
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 
 ROWS = {
     'PW-AUTH-submit', 'PW-AUTH-return', 'PW-AUTH-cancel', 'PW-AUTH-retry',
     'PW-AUTH-tab-close', 'PW-AUTH-navigate', 'PW-AUTH-window-close',
     'PW-AUTH-quit', 'PW-AUTH-save-refill', 'PW-AUTH-cleanup',
+    'PW-AUTH-update', 'PW-AUTH-realm-isolation', 'PW-AUTH-origin-isolation',
 }
 
 
@@ -24,6 +26,7 @@ def run(factory, results, tmp, h, guard, row_ids=None):
     fixture = source.read_text()
     username = re.search(r"^USERNAME = '([^']+)'", fixture, re.M).group(1)
     password = re.search(r"^PASSWORD = '([^']+)'", fixture, re.M).group(1)
+    updated_password = re.search(r"^UPDATED_PASSWORD = '([^']+)'", fixture, re.M).group(1)
 
     def state():
         return app.call('http-auth', state=True)
@@ -47,15 +50,15 @@ def run(factory, results, tmp, h, guard, row_ids=None):
         assert wait(lambda: app.eval(tab, '!!document.getElementById("authenticated")'),
                     timeout=10, step=.1), 'server did not accept authentication'
 
-    def show(origin):
-        tab = app.call('open', url=origin + '/basic-login')['id']
+    def show(origin, path='/basic-login'):
+        tab = app.call('open', url=origin + path)['id']
         sheet = wait(lambda: (s if (s := state()).get('visible') else None), timeout=10, step=.05)
         assert sheet, 'Open HTTP authentication sheet did not appear'
         windows = app.call('windows')
         matches = [w for w in windows if w.get('visible') and w['number'] == sheet['window']
                    and w.get('class', '').endswith('HTTPAuthSheet')]
         assert len(matches) == 1 and sheet['parent'] > 0, 'specific Open sheet is not attached'
-        assert sheet['title'] == 'Sign in to 127.0.0.1', 'auth heading differs from C13-AUTH'
+        assert sheet['title'] == 'Sign in to ' + urlsplit(origin).hostname, 'auth heading differs from C13-AUTH'
         assert sheet['body'] == 'Your connection to this site is private.', 'auth message differs from C13-AUTH'
         assert sheet['buttons'] == ['Cancel', 'Sign in'], 'auth button copy/order differs from C13-AUTH'
         parent = next(w for w in windows if w['number'] == sheet['parent'])
@@ -137,7 +140,7 @@ def run(factory, results, tmp, h, guard, row_ids=None):
                         app.quit()
                 app.quit()
                 return {'quitWithChallengeOpen': True}
-            if name == 'PW-AUTH-save-refill':
+            if name in ('PW-AUTH-save-refill', 'PW-AUTH-update', 'PW-AUTH-realm-isolation', 'PW-AUTH-origin-isolation'):
                 enter_credentials(); key('return'); gone(); authenticated(tab)
                 save = wait(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None),
                             timeout=10, step=.1)
@@ -145,6 +148,36 @@ def run(factory, results, tmp, h, guard, row_ids=None):
                 app.call('save-prompt', answer='save')
                 assert wait(lambda: app.call('credentials')['logins'] == 1, timeout=10, step=.1), 'password was not stored'
                 app.quit(); launch(fresh=False)
+                if name in ('PW-AUTH-realm-isolation', 'PW-AUTH-origin-isolation'):
+                    # Restart removes the network auth cache. The next real
+                    # challenge must not borrow a different protection space.
+                    other = origin if name.endswith('realm-isolation') else origin.replace('127.0.0.1', 'localhost')
+                    path = '/basic-other-realm' if name.endswith('realm-isolation') else '/basic-login'
+                    tab, _ = show(other, path)
+                    # Complete the real lookup before asserting absence; this
+                    # state is set only by the guarded presenter, never a mock.
+                    assert wait(lambda: state().get('credentialLookupFinished'), timeout=10, step=.1), 'credential lookup did not finish'
+                    empty = state()
+                    assert not empty['autofilled'] and not empty['usernamePresent'] and not empty['passwordPresent'], 'credentials crossed a protection space'
+                    key('escape'); gone()
+                    assert app.call('credentials')['logins'] == 1, 'cancel changed saved credentials'
+                    return {'restarted': True, 'isolatedProtectionSpace': True, 'cancelDidNotSave': True}
+                if name == 'PW-AUTH-update':
+                    tab, _ = show(origin, '/basic-updated')
+                    assert wait(lambda: state().get('autofilled'), timeout=10, step=.1), 'existing credential did not fill before update'
+                    type_field('password', updated_password)
+                    key('return'); gone(); authenticated(tab)
+                    update = wait(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=10, step=.1)
+                    assert update and update.get('kind') == 'passwordUpdate', 'changed HTTP credential did not offer update'
+                    app.call('save-prompt', answer='save')
+                    assert wait(lambda: not app.call('save-prompt', state=True).get('visible'), timeout=5, step=.1)
+                    assert app.call('credentials')['logins'] == 1, 'update added a duplicate login'
+                    app.quit(); launch(fresh=False)
+                    tab, _ = show(origin, '/basic-updated')
+                    assert wait(lambda: state().get('autofilled'), timeout=10, step=.1), 'updated credential did not fill after restart'
+                    key('return'); gone(); authenticated(tab)
+                    assert not app.call('save-prompt', state=True).get('visible'), 'unchanged credential offered save again'
+                    return {'savedLoginCount': 1, 'updated': True, 'restarted': True, 'networkAcceptedAfterRefill': True}
                 tab, _ = show(origin)
                 assert wait(lambda: (lambda s: s.get('autofilled') and s.get('usernamePresent') and s.get('passwordPresent'))(state()),
                             timeout=10, step=.1), 'saved HTTP credentials did not fill the real auth sheet'

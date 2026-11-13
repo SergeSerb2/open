@@ -145,6 +145,7 @@ final class HTTPAuthSheet: NSPanel, NSTextFieldDelegate {
   private(set) var request: (any HTTPAuthRequest)?
   var onFinished: (() -> Void)?
   private(set) var didAutofill = false
+  var credentialLookupFinished = false
   private var userEdited = false
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { false }
