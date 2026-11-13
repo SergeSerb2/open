@@ -83,6 +83,7 @@ def run(factory, results, tmp, h):
     app = None
     all_copy = []
     ocr_retries = []
+    copy_sources = []
     def launch(fresh=False, directory=source, **env):
         nonlocal app
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir=' + str(directory)], extra_env=env)
@@ -98,10 +99,26 @@ def run(factory, results, tmp, h):
         app.call('snapshot', path=path)
         return path
     def copy():
-        inspection = app.call('first-run', action='inspect', timeout=180)
-        ocr_retries.append(inspection['ocrRetries'])
-        rows = inspection['renderedText']
-        text = '\n'.join(row['text'] for row in rows)
+        try:
+            inspection = app.call('first-run', action='inspect', timeout=180)
+        except RuntimeError as error:
+            if 'first-run OCR unavailable after 2 captures:' not in str(error):
+                raise
+            # Copy-only checks can read the actual visible window's AX text.
+            # Geometry and Boost glyph/pixel inspections still require OCR.
+            current = state()
+            windows = app.call('windows', accessibility=True)
+            window = next(w for w in windows if w['number'] == current['window']
+                          and w['visible'] and w['class'] == 'OnboardingWindow')
+            text = '\n'.join(window['text'])
+            assert text, 'OCR unavailable and visible FirstRun AX text is empty'
+            ocr_retries.append(1)
+            copy_sources.append(dict(step=current['step'], source='AX', error=str(error)))
+        else:
+            ocr_retries.append(inspection['ocrRetries'])
+            text = '\n'.join(row['text'] for row in inspection['renderedText'])
+            copy_sources.append(dict(source='OCR', errors=inspection.get('ocrErrors', [])))
+        print('firstrun copy source:', copy_sources[-1], flush=True)
         all_copy.append(text)
         return text
     def row(name, ok, **detail): results[name] = dict(ok=bool(ok), load=os.getloadavg(), **detail)
@@ -490,7 +507,7 @@ def run(factory, results, tmp, h):
         import re
         forbidden = [text for text in all_copy if re.search(r'\b(?:sign in|account|Little Arc)\b', text, re.I)]
         row('F13_copy', not forbidden and 'Arc' not in welcome_copy.replace('Import from Arc', '')
-            and 'What should we call you?' in binary_strings, checkedScreens=len(all_copy), ocrRetries=sum(ocr_retries))
+            and 'What should we call you?' in binary_strings, checkedScreens=len(all_copy), ocrRetries=sum(ocr_retries), copySources=copy_sources)
     finally:
         if app is not None:
             h._restore_defaults(app, saved)

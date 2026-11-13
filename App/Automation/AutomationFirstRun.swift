@@ -8,6 +8,13 @@ private struct FirstRunTextLine: Sendable {
   let frame: [Double]
 }
 
+private struct FirstRunOCRUnavailable: LocalizedError {
+  let failures: [String]
+  var errorDescription: String? {
+    "first-run OCR unavailable after 2 captures: " + failures.joined(separator: ", ")
+  }
+}
+
 extension AutomationController {
   /// One surface for the real flow and the Settings wizard which shares its runner.
   func runFirstRun(_ args: [String: Any]) async throws -> [String: Any] {
@@ -199,6 +206,7 @@ extension AutomationController {
         if action == "inspect" {
           let inspection = try await firstRunRenderedText(window)
           state["renderedText"] = inspection.lines; state["ocrRetries"] = inspection.retries
+          state["ocrErrors"] = inspection.failures
         }
       }
     }
@@ -266,36 +274,41 @@ extension AutomationController {
   /// Inspect pixels from our own native window. SwiftUI's in-process AX tree
   /// can be empty unless an outside assistive client has activated it. OCR
   /// proves the displayed copy and its geometry without such a client or input.
-  func firstRunRenderedText(_ window: NSWindow) async throws -> (lines: [[String: Any]], retries: Int) {
+  func firstRunRenderedText(_ window: NSWindow) async throws -> (lines: [[String: Any]], retries: Int, failures: [String]) {
     try await Task.sleep(for: .milliseconds(250)) // allow the normal step fade to finish
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("open-firstrun-\(UUID()).png")
-    defer { try? FileManager.default.removeItem(at: url) }
-    _ = try await WindowSnapshot.capture(window, to: url)
     let width = Double(window.frame.width), height = Double(window.frame.height)
-    let inspected = try await Task.detached(priority: .utility) {
-      func recognize() throws -> [FirstRunTextLine] {
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = false
-        try VNImageRequestHandler(url: url).perform([request])
-        return (request.results ?? []).prefix(128).compactMap { observation -> FirstRunTextLine? in
-          guard let line = observation.topCandidates(1).first else { return nil }
-          let r = observation.boundingBox
-          return FirstRunTextLine(text: String(line.string.prefix(512)), frame:
-            [r.minX * width, (1 - r.maxY) * height, r.width * width, r.height * height])
-        }
-      }
-      do { return (try recognize(), 0) }
-      catch {
+    var failures: [String] = []
+    for attempt in 0..<2 {
+      try Task.checkCancellation()
+      // Capture again on retry: a second decode of the same image cannot
+      // recover from a transient capture/reader failure. Capture errors still
+      // propagate directly; only Vision failures enter the bounded retry.
+      let url = FileManager.default.temporaryDirectory.appendingPathComponent("open-firstrun-\(UUID()).png")
+      defer { try? FileManager.default.removeItem(at: url) }
+      _ = try await WindowSnapshot.capture(window, to: url)
+      do {
+        let lines = try await Task.detached(priority: .utility) {
+          let request = VNRecognizeTextRequest()
+          request.recognitionLevel = .accurate
+          request.usesLanguageCorrection = false
+          try VNImageRequestHandler(url: url).perform([request])
+          return (request.results ?? []).prefix(128).compactMap { observation -> FirstRunTextLine? in
+            guard let line = observation.topCandidates(1).first else { return nil }
+            let r = observation.boundingBox
+            return FirstRunTextLine(text: String(line.string.prefix(512)), frame:
+              [r.minX * width, (1 - r.maxY) * height, r.width * width, r.height * height])
+          }
+        }.value
+        return (lines.map { ["text": $0.text, "frame": $0.frame] }, attempt, failures)
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
         let failure = error as NSError
-        guard failure.domain == "TextRecognition.CRImageReaderError", failure.code == 1 else { throw error }
-        // One retry of Vision's transient decoder failure, on the same native
-        // capture. Keep all copy/geometry assertions and the client deadline.
-        try await Task.sleep(for: .milliseconds(250))
-        return (try recognize(), 1)
+        failures.append("\(failure.domain.prefix(128)):\(failure.code)")
+        if attempt == 0 { try await Task.sleep(for: .milliseconds(250)) }
       }
-    }.value
-    return (inspected.0.map { ["text": $0.text, "frame": $0.frame] }, inspected.1)
+    }
+    throw FirstRunOCRUnavailable(failures: failures)
   }
 }
 #endif
