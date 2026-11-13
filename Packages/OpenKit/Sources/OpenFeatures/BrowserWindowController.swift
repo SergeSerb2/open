@@ -765,6 +765,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             layoutPageFrame(target)
             container.needsLayout = true
             container.layoutSubtreeIfNeeded()
+            container.reassertLibrarySnapshotVisibility()
             libraryPageMotion = motion
             libraryLayoutCommittedAt = CACurrentMediaTime()
             libraryCloseCommitPending = true

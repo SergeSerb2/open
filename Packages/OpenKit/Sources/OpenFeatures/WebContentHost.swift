@@ -31,6 +31,9 @@ public protocol WebContentHost: AnyObject {
     func goBack()
     func goForward()
     func focus()
+    /// A stationary snapshot covers the page while its host moves. Inform the
+    /// engine directly, then restore its actual view visibility on release.
+    func setPageCoveredBySnapshot(_ covered: Bool)
     func close()
     var onURLChange: ((URL) -> Void)? { get set }
     var onTitleChange: ((String) -> Void)? { get set }
@@ -50,6 +53,7 @@ public protocol WebContentHost: AnyObject {
 }
 
 public extension WebContentHost {
+    func setPageCoveredBySnapshot(_ covered: Bool) {}
     var liveState: WebContentLiveState { WebContentLiveState(isLoading: isLoading, canGoBack: canGoBack, canGoForward: canGoForward) }
 }
 

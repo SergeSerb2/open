@@ -152,15 +152,31 @@ public final class WebContentContainer: NSView {
     var librarySnapshotReadInFlight = false
     public internal(set) var librarySnapshotStatus = "idle"
     private var libraryMotionHidesContent = false
+    private var librarySnapshotHiddenHosts: [any WebContentHost] = []
     public func setLibraryMotionHidesContent(_ hidden: Bool) {
         libraryMotionHidesContent = hidden
+        let previouslyCovered = librarySnapshotHiddenHosts
+        if !hidden { librarySnapshotHiddenHosts.removeAll() }
         for slot in slots {
             slot.libraryMotionHidesContent = hidden
             slot.contentHostView?.isHidden = hidden
             // The closing snapshot already contains the pane's rounded edge.
             // Keep the ordinary live clip for opening and restore it on cancel.
             slot.clip.layer?.masksToBounds = !hidden
+            if hidden, let host = host(for: slot.tabID) { coverLibraryHost(host) }
         }
+        if !hidden { previouslyCovered.forEach { $0.setPageCoveredBySnapshot(false) } }
+    }
+    private func coverLibraryHost(_ host: any WebContentHost) {
+        if !librarySnapshotHiddenHosts.contains(where: { $0 === host }) {
+            librarySnapshotHiddenHosts.append(host)
+        }
+        host.setPageCoveredBySnapshot(true)
+    }
+    /// Geometry updates can replay the engine host's visibility. Reassert the
+    /// cover after the single endpoint layout, before submitting any motion.
+    public func reassertLibrarySnapshotVisibility() {
+        librarySnapshotHiddenHosts.forEach { $0.setPageCoveredBySnapshot(true) }
     }
     public static let maxCachedHiddenHosts = 8
     public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
@@ -383,6 +399,7 @@ public final class WebContentContainer: NSView {
                            developerAction: { [weak self] action, view in self?.onDeveloperAction?(id, action, view) },
                            developerHover: { [weak self] action, view in self?.onDeveloperHover?(id, action, view) })
             slot.paneChrome?.extensionsUI = extensionsUI
+            if libraryMotionHidesContent, let host = cache[id] { coverLibraryHost(host) }
             slot.paneChrome?.onSiteControls = onSiteControls.map { handler in { handler(id) } }
             slot.paneChrome?.siteControlsAvailable = siteControlsAvailable?(id) ?? false
             slot.paneChrome?.update()

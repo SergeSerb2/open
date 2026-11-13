@@ -198,6 +198,8 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             check('spaces_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
             time.sleep(.25)
             open_frame = state()['motion']['page']['frame']
+            motion_tab = app.call('window-state')['selected']
+            app.eval(motion_tab, "window.libraryVisibility=[]; document.addEventListener('visibilitychange',()=>libraryVisibility.push(document.visibilityState)); true")
             closed = state(action='close')
             assert wait_until(lambda:not state()['open'] and not state()['motion']['preparingClose'],
                               timeout=2, step=.005), 'close preparation did not finish committing'
@@ -216,6 +218,10 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             time.sleep(.25)
             motion = state()['motion']
             check('closed_motion_stops', settled(motion), motion=motion)
+            visibility = app.eval(motion_tab, '({state:document.visibilityState,events:window.libraryVisibility})')
+            events = visibility['events']
+            check('close_engine_hidden_then_resumed', visibility['state'] == 'visible'
+                  and 'hidden' in events and events[-1] == 'visible', visibility=visibility)
             for section in ['downloads', 'spaces', 'downloads']:
                 state(action='open', section=section)
                 time.sleep(.025)
