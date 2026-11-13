@@ -29,6 +29,8 @@ struct LibraryRowItem {
     /// False: a right-click opens no menu (Arc's Downloads rows); the More button still opens it.
     var contextMenu = true
     var moreTooltip = "More"
+    /// Some rows keep keyboard/context actions without drawing an ellipsis button.
+    var showsMoreButton = true
 }
 
 /// Native, reusable rows. The model owns snapshots and mutations; this view
@@ -480,7 +482,7 @@ private final class LibraryItemView: NSView {
             }) }
         }
         var actions = item.hoverActions
-        if !item.actions.isEmpty { actions.append(.init(title:item.moreTooltip,glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
+        if item.showsMoreButton && !item.actions.isEmpty { actions.append(.init(title:item.moreTooltip,glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
         // The table's reuse identifier stays "row". Item identity belongs to AX,
         // not the viewport reuse pool.
         setAccessibilityIdentifier(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")
@@ -512,7 +514,8 @@ private final class LibraryItemView: NSView {
             more.setAccessibilityRole(.button); more.onPress = { [weak self] in self?.onMenu?() }
         }
         setAccessibilityElement(!gallery); setAccessibilityRole(gallery ? .group : .row); setAccessibilityLabel(item.title+". "+item.subtitle)
-        setAccessibilityCustomActions(item.hoverActions.map { action in NSAccessibilityCustomAction(name:action.title) { action.run(); return true } })
+        let accessibleActions = !item.contextMenu && !item.showsMoreButton ? item.actions : item.hoverActions
+        setAccessibilityCustomActions(accessibleActions.map { action in NSAccessibilityCustomAction(name:action.title) { action.run(); return true } })
         hovered = false; buttons.forEach { $0.isHidden = !gallery }; needsLayout = true; needsDisplay = true
     }
     override func updateTrackingAreas() {

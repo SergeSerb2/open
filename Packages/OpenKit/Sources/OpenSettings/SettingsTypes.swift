@@ -62,8 +62,11 @@ public struct CaptureItemSnapshot: Identifiable, Codable, Sendable {
     public var kind: CaptureKind
     public var sourceHost: String
     public var title: String?
-    public init(id: UUID, fileName: String, createdAt: Date, kind: CaptureKind, sourceHost: String, title: String? = nil) {
-        self.id = id; self.fileName = fileName; self.createdAt = createdAt; self.kind = kind; self.sourceHost = sourceHost; self.title = title
+    /// The original page address; older indexes contain only sourceHost.
+    public var sourceURL: URL?
+    public static let maxSourceURLBytes = 8192
+    public init(id: UUID, fileName: String, createdAt: Date, kind: CaptureKind, sourceHost: String, title: String? = nil, sourceURL: URL? = nil) {
+        self.id = id; self.fileName = fileName; self.createdAt = createdAt; self.kind = kind; self.sourceHost = sourceHost; self.title = title; self.sourceURL = sourceURL
     }
 }
 public extension AutoArchiveInterval {

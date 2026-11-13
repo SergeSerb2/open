@@ -1,0 +1,32 @@
+# Library capture menus and Archive hover state
+
+Evidence: Arc 1.172.2, C3 capture session 11, C-D2-1 and C-D2-2.
+The capture menu is visible in
+`.re/capture/s11/m1/arc/v16/d3-media-menus/m1-card-right-w-101791.png`.
+Archive hover observations are in the same session's `v14/d2` capture sequence.
+These observations replace the earlier menu-order guess for saved captures.
+Folder-file menus remain outside this finding: C3 could not capture them without
+a folder grant.
+
+A capture saved to the Library appears in Media before folder access is granted.
+Its right-click menu is Copy Image, Copy Source URL, Open Source URL, separator,
+Send via iMessage, AirDrop, separator, Delete. There is no ellipsis button on
+hover; the card shows its title tooltip. iMessage and AirDrop use the native
+`NSSharingService` services `composeMessage` and `sendViaAirDrop` in Open.
+
+Open stores the original page URL with each new capture. The field is optional
+so existing indexes remain readable. Older captures without it disable the two
+Source URL actions. Open does not reconstruct an address from a hostname. The
+URL field is limited to 8192 bytes; the complete index retains its 16 MiB limit.
+
+Manually archived tab rows showed no Delete or Restore glyphs on hover, including
+when selected and with the pointer over either half of the row. Only the title
+tooltip appeared. Activating the row restored the tab and closed the Library.
+The glyph condition reported in session 1 was not reproduced; other archived
+item kinds and automatic archives were not settled by this capture.
+
+Open removes these hover buttons. Row activation still restores the tab, and
+keyboard delete and accessibility actions still use the existing confirmation
+and restore paths. `tools/e2e/library_content.py` exercises the real capture
+pipeline, saved source URL, exact menu, copy/open actions, optional-field and
+URL-limit cases, and Archive keyboard actions through the App socket.

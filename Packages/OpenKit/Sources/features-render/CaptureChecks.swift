@@ -90,7 +90,7 @@ enum CaptureChecks {
 
     final class MemoryLibrary: CaptureLibrary {
         var rows: [UUID: (Data, CaptureComposer.Kind, String)] = [:], shown: [UUID] = []
-        func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String, title: String) async throws -> UUID { let id = UUID(); rows[id] = (png, kind, sourceHost); return id }
+        func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String, title: String, sourceURL: URL?) async throws -> UUID { let id = UUID(); rows[id] = (png, kind, sourceHost); return id }
         func delete(id: UUID) throws { rows[id] = nil }
         func showInLibrary(id: UUID) { shown.append(id) }
         func fileURL(id: UUID) -> URL? { nil }

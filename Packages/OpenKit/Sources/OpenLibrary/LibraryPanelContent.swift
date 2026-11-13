@@ -435,7 +435,8 @@ extension LibraryPanelView {
             let scheme = (row.url.scheme ?? "") + "://"
             var item = LibraryRowItem(id:id.description,title:title,subtitle:url.hasPrefix(scheme) && scheme != "://" ? String(url.dropFirst(scheme.count)) : url,kind:"archive",day:"",
                 image:symbol(row.kind == .folder ? "folder" : "globe"),loadImage:row.kind == .folder ? nil : { [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.kind == .folder ? nil : row.url,activate:restore,
-                hoverActions:[.init(title:"Delete",glyph:.trash,run:remove),.init(title:"Restore",glyph:.undo,run:restore)])
+                // Session 11 C-D2-2: no hover glyphs. Keep keyboard/VoiceOver actions.
+                actions:[.init(title:"Delete",run:remove),.init(title:"Restore",run:restore)],showsMoreButton:false)
             item.toolTip = title
             // Arc: a right click on an Archived Tabs row opens no menu (capture C3 s8 item 11).
             item.contextMenu = false
@@ -492,21 +493,24 @@ extension LibraryPanelView {
               let title = (item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
               return LibraryRowText(title:title.isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : title,subtitle:"Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted))
           }) { [unowned self] prepared in
-            let id = item.id, actions = viewModel.actions
-            return LibraryRowItem(id:id.uuidString,title:(item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!,subtitle:prepared?.subtitle ?? "Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:"",
+            let id = item.id, actions = viewModel.actions, sourceURL = item.sourceURL
+            let title = prepared?.title ?? ((item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!)
+            return LibraryRowItem(id:id.uuidString,title:title,subtitle:prepared?.subtitle ?? "Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",toolTip:title,day:"",
                 fileURL:viewModel.captureURL(item),dragURL:viewModel.captureURL(item),activate:{ actions.openCapture(id:id) },
-                // Arc's Media menu, from the code that builds it (`HomeButton/MediaReducer.swift`, 1.172.2 at 0x102804e74…0x102806608,
-                // small-string immediates in code order: Open in Preview · AirDrop · Copy … · Show in Finder · Hide from Arc ·
-                // Open Source URL · Copy Source URL · Delete; plus the long string "Send via iMessage"). Order = code order (guess);
-                // separators are a guess; no populated Media capture exists (C3 item 12 skipped). "Save As…" is Open's own.
-                // Open Source URL / Copy Source URL need the capture's page URL, which the capture index does not store yet (follow-up).
-                actions:[.init(title:"Open in Preview",run:{ actions.openCapture(id:id) })]
+                // Arc capture session 11 C-D2-1, v16/d3-media-menus/m1-card-right-w-101791.png:
+                // the capture menu order and separators; hover shows only the title tooltip.
+                actions:[.init(title:"Copy Image",run:{ actions.copyCapture(id:id) }),
+                    .init(title:"Copy Source URL",enabled:sourceURL != nil,run:{
+                        guard let sourceURL else { return }
+                        let board = NSPasteboard.general; board.clearContents()
+                        board.writeObjects([sourceURL as NSURL]); board.setString(sourceURL.absoluteString,forType:.string)
+                    }),.init(title:"Open Source URL",enabled:sourceURL != nil,run:{
+                        guard let sourceURL else { return }; actions.openHistoryItem(url:sourceURL)
+                    }),.init(title:"-",run:{})]
                     + Self.shareActions(viewModel.captureURL(item))
-                    + [.init(title:"Copy Image",run:{ actions.copyCapture(id:id) }),
-                    .init(title:"Show in Finder",run:{ actions.revealCapture(id:id) }),.init(title:"Save As…",run:{ [weak self] in self?.saveCapture(item) }),
-                    .init(title:"-",run:{}),.init(title:"Delete",run:{ [weak self] in self?.confirm("Delete this capture?",message:"This permanently deletes the file.") { [weak self] in
+                    + [.init(title:"-",run:{}),.init(title:"Delete",run:{ [weak self] in self?.confirm("Delete this capture?",message:"This permanently deletes the file.") { [weak self] in
                         self?.viewModel.pendingCaptureDelete = id; self?.viewModel.deleteCaptureConfirmed(); self?.renderRows()
-                    } })])
+                    } })],showsMoreButton:false)
           }
         }
     }
