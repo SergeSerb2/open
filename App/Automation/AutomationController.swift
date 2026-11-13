@@ -2913,18 +2913,17 @@
       let adapter = app.settingsPresenter
       let manager = adapter.library?.spaceManagerView as? SpaceManagerView
       let target = adapter.libraryWindow
-      var sectionRows: [[String: Any]] = [], visited = 0
-      func findSections(_ view: NSView, depth: Int) {
-        guard depth <= 24, visited < 512 else { return }; visited += 1
-        if let table = view as? NSTableView, table.tableColumns.contains(where: { $0.identifier.rawValue == "section" }) {
-          for (row, section) in LibrarySection.allCases.enumerated() where row < table.numberOfRows {
-            let rect = table.convert(table.rect(ofRow: row), to: nil)
-            sectionRows.append(["section": section.rawValue, "point": [rect.midX, (target?.frame.height ?? 0) - rect.midY]])
-          }
+      var sectionRows: [[String: Any]] = []
+      // PR #350 replaced the table rail with native tiles. Use the same real
+      // controls as Library automation; the harness still clicks via sendEvent.
+      if let panel = adapter.activeLibrarySession?.panel, let target,
+        let tiles = panel.automationState()["rail"] as? [[String: Any]] {
+        for tile in tiles {
+          guard let section = tile["id"] as? String, let frame = tile["frame"] as? [CGFloat], frame.count == 4 else { continue }
+          let point = panel.convert(CGPoint(x: frame[0] + frame[2] / 2, y: frame[1] + frame[3] / 2), to: nil)
+          sectionRows.append(["section": section, "point": [point.x, target.frame.height - point.y]])
         }
-        for child in view.subviews.prefix(512) { findSections(child, depth: depth + 1) }
       }
-      if let content = target?.contentView { findSections(content, depth: 0) }
       return ["identity": manager.map { String(describing: ObjectIdentifier($0)) } ?? "",
         "contextWindow": manager?.context.windowID.description ?? "", "builtColumns": manager?.builtColumnIDs.count ?? 0,
         "origin": [manager?.scrollView.contentView.bounds.origin.x ?? 0, manager?.scrollView.contentView.bounds.origin.y ?? 0],
