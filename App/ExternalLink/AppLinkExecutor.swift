@@ -40,10 +40,11 @@ final class AppLinkExecutor: LinkDestinationExecutor {
       }
       controller = app.makeWindow(focusedSpaceID: spaceID)
     }
-    guard let controller else { return }
+    guard let controller, let factory = app.hostFactories[controller.windowID] else { return }
     app.model.focusSpace(windowID: controller.windowID, spaceID: spaceID)
     let tab = app.model.newTab(in: spaceID, url: url, at: 0)
-    app.model.selectNode(windowID: controller.windowID, spaceID: spaceID, nodeID: tab.id)
+    // Selection must make the tab live and attach its page, just like Cmd+T.
+    factory.select(nodeID: tab.id)
     app.focusWindow(controller.windowID, activate: true)
     app.scheduleSave()
   }
