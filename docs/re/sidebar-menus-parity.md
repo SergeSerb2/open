@@ -38,8 +38,8 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | Downloads, completed (S1L, S8 item 9) | More button "More Options": Open ‹kind› · Copy ‹kind› · Show in Finder · — · Hide from Arc · Move to Trash; ‹kind› is the file-kind word, else the extension; subtitle: the kind word, else "Download"; right-click opens no menu | the same ("Hide from Open") | a file with no extension: "Open" / "Copy" is a GUESS |
 | Downloads, in progress / paused (S8 item 10) | Open ‹kind› · Copy (disabled) · Show in Finder (disabled) · — · Cancel Download · — · Hide | the same; Pause/Resume and Cancel stay as hover controls (Arc has no pause, resume or retry menu strings) | none |
 | Downloads, failed / cancelled (S8 item 10) | Open, Copy, Show in Finder all disabled · — · Hide from Arc | the same; failed rows keep the Retry hover control | none |
-| Archived Tabs (S1L; S8 item 11) | right-click opens no menu; hover shows a tooltip with the tab title; rows show the title and the URL without its scheme | the same; hover Delete / Restore kept | when Arc shows the Delete / Restore glyphs is not established (S1L saw them, S8 did not): C3 item C-D2-2 |
-| Media (code, §4) | not captured (S8 item 12 skipped) | capture and folder-file menus from Arc's code titles | order and separators are GUESS: C3 item C-D2-1; Open/Copy Source URL deferred (`docs/followups.md`) |
+| Archived Tabs (S1L; S8 item 11; S11 C-D2-2) | right-click opens no menu; hover shows only a tooltip with the tab title, with no Delete / Restore glyphs on manually archived tabs; rows show the title and the URL without its scheme | the same; keyboard delete and row activation remain | other archived item kinds were not settled by S11 |
+| Media captures (S11 C-D2-1) | Copy Image · Copy Source URL · Open Source URL · — · Send via iMessage · AirDrop · — · Delete; title tooltip on hover, no ellipsis button; saved captures appear without a folder grant | the same; native system share services; new captures retain the full source URL | older Open captures without a saved source URL disable its two source actions; folder-file order and separators remain GUESS |
 | Easels (S4) | card menu: a single "Delete" | the same | none |
 | Spaces (S8 item 13) | card header right-click and footer "…": the sidebar Space menu without "Manage Spaces…" and its separator; a tab row keeps the row menu | the same (`SidebarMenus.space(_:inLibrary:)`) | none |
 | Boosts (S8 item 14) | the card has no right-click menu; a click opens the editor, whose title menu is Rename this Boost… · Shuffle · Reset all Edits · Delete this Boost · — · All Boosts… | no right-click menu; the More button keeps Edit Boost · Turn On/Off · — · Delete; the editor title menu adds Open's "— · Apply to ▸" (its only route to the scope menu) | card text: Arc shows the Boost name over its host, with no on/off text (`v13/33-boost-menu-delete/i14-boosts.png`); Open follows it with the D2c Boost card PR |
@@ -64,7 +64,8 @@ addresses. Order below is address order inside each builder; **menu order = code
 | Item preview (`HomeBadging/ItemPreviewPresenter.swift`, 0x10270f2e8 … 0x10270fd8c) | Open in Preview · AirDrop · Open Source URL · Copy Source URL · Show in Finder | |
 | Shared capture / download items (0x1026b9aa8 … 0x1026bb378) | Copy Image · AirDrop · Open Source URL · Copy Source URL · Delete; "Copy " + ‹ext› · AirDrop; Show in Finder · Hide from Arc · Move to Trash · "Open " + ‹ext›; Cancel Download | confirms the download titles "Open ‹ext›" / "Copy ‹ext›" and "Cancel Download" |
 
-Open builds: captures: Open in Preview · Send via iMessage · AirDrop · Copy Image · Show in Finder · Save As… (Open's own)
-· — · Delete; folder files: Open in Preview · Send via iMessage · AirDrop · Copy ‹Image|Video› · Show in Finder · — ·
-Hide from Open. Not built: Open Source URL / Copy Source URL (Open's capture index stores the source host only).
-Separators are a guess. No populated Media menu was captured (C3 session 8 item 12 skipped).
+The saved-capture order and separators are now measured by session 11 C-D2-1:
+Copy Image · Copy Source URL · Open Source URL · — · Send via iMessage · AirDrop · — · Delete.
+Evidence and the optional source-URL field are recorded in [library-session11.md](library-session11.md).
+Open's folder-file menu remains Open in Preview · Send via iMessage · AirDrop · Copy ‹Image|Video› ·
+Show in Finder · — · Hide from Open. Its order and separators remain a guess; the folder-grant capture is still open.

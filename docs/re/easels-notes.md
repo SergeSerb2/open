@@ -45,7 +45,7 @@ Editor engine answer: **both editors are native AppKit.** Evidence: `ArcRichText
 | Sidebar plus menu | "New Easel ⌃⇧E" row | interaction-states.md S2 01 (captured, 0093) |
 | Command bar | Description "Creates a new Easel — your scrapbook for the web. Capture, create, and share stuff you find on websites in Arc." | STR |
 | Capture | Capture result can save to an Easel: action ids `saveToEasel`, `newEasel`; "See Older Easels"; string "Capture a part of the page, then save it or add it to an Easel."; `EaselDestination {easelID, title, lastActive, shareStatus, creatorID}`; `createEasel(type:title:insertionStrategy:addToLastSavedDestination:presentationDisposition:)`; `EaselClient._addImageAndCreateEaselIfNeeded` | STR, FM |
-| Window ▸ View Easels & Notes | selector `viewEaselsAndNotes:` (opens the Library page, guess) | NIB |
+| Window ▸ View Easels & Notes | selector `viewEaselsAndNotes:`. Arc 1.172.2 title "View Easels…": opens the Library on its Easels section in the current window; while it shows, the item reads "Hide Easels" and closes it; with no browser window it does nothing (capture C-NT1, `C-report-s11.md`). No "View all Easels" / "Hide all Easels" item exists in 1.172.2 (C-NT2) | NIB, capture |
 | Library | Easels category tile (captured as one of six tiles in Arc 1.170 C session) and Library card "Your Easels are yours to keep" (172 only, §3.8) | library-overlay.md; STR |
 | Command bar search | `EaselCandidateProvider`, `SearchableEasel {id, title, creatorID, lastModified}` — Easels are searchable by title | STR, FM |
 | Folder description | "Creates a new folder for your tabs, Easels, Notes, and everything else you can squeeze in." | STR |
@@ -197,7 +197,7 @@ type ExportContent = { type: "text"; string; fontFamily; paragraphStyle }
 | File ▸ New Note | ⌃⇧N, `newNote:`; search aliases "Create Note; Note; Scratchpad" | NIB |
 | File ▸ New Note (in Split) | ⌃⌥N, `newNoteInSplitView:`; aliases "Create Note in Split View; Note Split; Scratchpad Split"; command bar "Creates a new Note beside your current page." | NIB, STR |
 | Command bar | "Creates a new note. Document types can be set in the Profiles tab."; "Action to open new Arc Note"; "Action to create a new document; e.g. 'New Google Doc'" | STR |
-| Help ▸ Export Arc Notes | `exportArcNotes:`; aliases "Export Notes; Backup Notes; Download Notes" | NIB |
+| Help ▸ Export Arc Notes | `exportArcNotes:`; aliases "Export Notes; Backup Notes; Download Notes". 1.172.2 with no Notes (C-NT3): the phase-out alert first ("We've phased out Arc Notes", Cancel · Export), then no save panel and a light-red toast at the window's top right, "No Notes found to export. Click to report a bug." Open keeps Notes: no alert, and the toast says "No Notes found to export." only (LEAD 20:15) | NIB, capture |
 | Window ▸ View Easels & Notes | shared with Easels | NIB |
 | Plus menu | Not present in the 1.170 capture (S2 01 lists no New Note); flags hide it (§4.6) | interaction-states.md |
 | Help link | `…/19233788518039-Notes-Quickly-Jot-to-an-Arc-Note-or-Your-Favorite-Notes-App` (403) | STR |

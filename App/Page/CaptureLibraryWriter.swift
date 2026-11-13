@@ -9,7 +9,7 @@ import OpenSettings
 /// never interleave. The index is replaced atomically (a temporary file, then rename(2)).
 @MainActor
 final class CaptureLibraryWriter: CaptureLibrary {
-  /// The index is refused over this size (about 80,000 rows), and appending stops at `maxRows`.
+  /// The index is refused over this size, and appending stops at `maxRows`.
   static let maxIndexBytes = 16 * 1024 * 1024
   static let maxRows = 50_000
   unowned let app: AppDelegate
@@ -21,17 +21,19 @@ final class CaptureLibraryWriter: CaptureLibrary {
   init(app: AppDelegate, root: URL) { self.app = app; self.root = root }
 
   enum Failure: Error, CustomStringConvertible {
-    case indexTooLarge, indexFull, indexUnreadable
+    case indexTooLarge, indexFull, indexUnreadable, sourceURLTooLong
     var description: String {
       switch self {
       case .indexTooLarge: "The capture index is too large."
       case .indexFull: "The Library holds too many captures."
       case .indexUnreadable: "The capture index could not be read."
+      case .sourceURLTooLong: "The capture source URL is too long."
       }
     }
   }
 
-  func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String, title: String) async throws -> UUID {
+  func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String, title: String, sourceURL: URL?) async throws -> UUID {
+    guard (sourceURL?.absoluteString.utf8.count ?? 0) <= CaptureItemSnapshot.maxSourceURLBytes else { throw Failure.sourceURLTooLong }
     let id = UUID(), folder = directory, file = directory.appendingPathComponent("\(id.uuidString).png")
     try await Task.detached(priority: .utility) {
       try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -41,7 +43,7 @@ final class CaptureLibraryWriter: CaptureLibrary {
       var rows = try readIndex()
       guard rows.count < Self.maxRows else { throw Failure.indexFull }
       rows.append(CaptureItemSnapshot(id: id, fileName: file.lastPathComponent, createdAt: Date(),
-        kind: CaptureKind(rawValue: kind.rawValue) ?? .area, sourceHost: sourceHost, title: String(title.prefix(4096))))
+        kind: CaptureKind(rawValue: kind.rawValue) ?? .area, sourceHost: sourceHost, title: String(title.prefix(4096)), sourceURL: sourceURL))
       try writeIndex(rows)
     } catch {
       try? FileManager.default.removeItem(at: file)
@@ -67,6 +69,7 @@ final class CaptureLibraryWriter: CaptureLibrary {
   private func writeIndex(_ rows: [CaptureItemSnapshot]) throws {
     let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .secondsSince1970; encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(rows)
+    guard data.count <= Self.maxIndexBytes else { throw Failure.indexTooLarge }
     let folder = indexURL.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let temporary = folder.appendingPathComponent(".captures.json.\(UUID().uuidString).tmp")

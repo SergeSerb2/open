@@ -245,7 +245,7 @@ extension AutomationController {
 /// The only substituted object is drag transport. The live App's pasteboard decoding,
 /// zone hit testing, overlay, model mutation, host ownership and persistence all run.
 @MainActor
-private final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
+final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
     let draggingDestinationWindow: NSWindow?
     let draggingSource: Any?
     let draggingLocation: NSPoint
