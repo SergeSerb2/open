@@ -631,7 +631,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 container.setSidebarSliding(false)
                 sidebarAnimations = [:]
                 sidebar.isHidden = animate ? false : hidden
-                positionTrafficLights()
+                positionTrafficLights(placeMoving: true)
                 CATransaction.begin(); CATransaction.setDisableActions(true)
                 CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
                     guard let self, self.sidebarAnimationGeneration == generation else { return }
@@ -841,7 +841,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
     }
 
-    private func positionTrafficLights() {
+    private func positionTrafficLights(placeMoving: Bool = false) {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         observeTrafficLights(window)
         let hidden = trafficLightsHidden
@@ -857,11 +857,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if isLibraryOpen { button.layer?.removeAnimation(forKey: "sidebarToggle"); button.layer?.setValue(0, forKeyPath: "transform.translation.x") }
         }
         if isLibraryOpen { dimmedLights.layer?.removeAnimation(forKey: "sidebarToggle"); dimmedLights.layer?.setValue(0, forKeyPath: "transform.translation.x") }
-        if !hidden { placeTrafficLights() }
+        if !hidden { placeTrafficLights(whileMoving: placeMoving) }
     }
 
-    private func placeTrafficLights() {
+    private func placeTrafficLights(whileMoving: Bool = false) {
         guard !placingTrafficLights, !trafficLightsHidden, let window, !window.styleMask.contains(.fullScreen) else { return }
+        // AppKit can lay out its title bar after the explicit animations were
+        // installed. Keep its NSView frame synchronization from replacing their
+        // model transforms. The start of a new motion places controls once.
+        guard whileMoving || (!anchoredSliding && sidebar.layer?.animation(forKey: "reveal") == nil) else { return }
         placingTrafficLights = true
         defer { placingTrafficLights = false }
         let inset = cardState == .off ? 0 : WindowMetrics.revealCardInset
@@ -1007,7 +1011,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             cardShadow.layoutSubtreeIfNeeded()
             sidebar.isHidden = false
             cardShadow.isHidden = false
-            positionTrafficLights()
+            positionTrafficLights(placeMoving: true)
             slideCard(from: animate ? from : 0, to: 0, generation: generation, completion: nil)
             if samplesCardMotion {
                 cardSampleTask?.cancel(); cardMotionSamples = []
