@@ -206,7 +206,7 @@ extension AutomationController {
       difference = measured
       matchesApplication = measured["mean"]! <= Self.iconMeanLimit && measured["farFraction"]! <= Self.iconFarLimit
     } else { matchesApplication = false }
-    return ["selected": settings.appIcon.selected, "applied": icon.appliedID,
+    var result: [String: Any] = ["selected": settings.appIcon.selected, "applied": icon.appliedID,
       "error": settings.appIcon.errorText,
       "matchesApplication": matchesApplication,
       "applicationDifference": difference,
@@ -218,6 +218,14 @@ extension AutomationController {
       "restorePreparationMs": icon.restorePreparationMs ?? NSNull(),
       "restoreSetterMs": icon.restoreSetterMs ?? NSNull(),
       "restoreElapsedMs": icon.restoreElapsedMs ?? NSNull()]
+    // Explicit icon readback only: at most a 1024 px RGBA bitmap (4 MiB).
+    if args["exportImage"] as? Bool == true,
+      let image = NSApp.applicationIconImage.flatMap(iconCGImage),
+      image.width <= 1024, image.height <= 1024,
+      let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+      result["applicationIconPNG"] = png.base64EncodedString()
+    }
+    return result
   }
 
   private func iconCGImage(_ image: NSImage) -> CGImage? {

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real App Icon picker, reset and relaunch. Socket actions only; no OS events."""
 import argparse
+import base64
 import json
 from pathlib import Path
 import tempfile
@@ -17,6 +18,9 @@ def run(output, config):
     def check(name, ok, **evidence):
         checks[name] = dict(ok=bool(ok), **evidence)
         print(('PASS ' if ok else 'FAIL ') + name, flush=True)
+        if not ok and app:
+            image = app.call('settings-icon', exportImage=True).get('applicationIconPNG')
+            if image: (output/'application-icon-failure.png').write_bytes(base64.b64decode(image))
         assert ok, (name, evidence)
     with tempfile.TemporaryDirectory(prefix='open-icons-') as tmp:
         def launch():
