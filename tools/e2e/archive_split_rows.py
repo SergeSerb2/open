@@ -33,6 +33,9 @@ def run(output, frames=False):
     def row(id): return next((r for r in state().get('rows', []) if r['id'] == id), {})
     def key(name, mods=()): return app.call('key', key=name, modifiers=list(mods), route='app')
     def pointer(action, box, dx=None):
+        # Library's cached rows can arrive before its sidebar fade finishes.
+        # Wait for the real hit surface, rather than clicking through that sidebar.
+        assert wait(lambda: not app.call('window-state')['sidebarVisible']), 'Library sidebar fade did not finish'
         x, y, w, h = box
         return app.call('mouse', action=action, queued=True, window=state()['window'], x=x+(w/2 if dx is None else dx), y=y+h/2)
     def archive_rows(): return app.call('archive-list')['rows']
