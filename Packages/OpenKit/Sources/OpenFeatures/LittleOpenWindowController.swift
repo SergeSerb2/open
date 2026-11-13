@@ -70,6 +70,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private let bannerLabel = NSTextField(labelWithString: LittleOpenMetrics.bannerText)
     private let bannerButton = NSButton(title: "Got it", target: nil, action: nil)
     private var closed = false
+    private var hasPresented = false
     private var opening = true
     private var placingTrafficLights = false
     private var systemAppearanceObservation: NSKeyValueObservation?
@@ -169,16 +170,19 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         coordinator?.onChange?()
     }
     private func layoutContent() {
+        // Metadata, root layout and window notifications may request the same
+        // layout. Equal frame writes still enter the engine geometry bridge.
+        func setFrame(_ view: NSView, _ frame: CGRect) { if view.frame != frame { view.frame = frame } }
         let m = LittleOpenMetrics.self, w = root.bounds.width, h = root.bounds.height
         let isPage = state == .page
         titleBar.isHidden = !isPage; container.isHidden = !isPage
-        titleBar.frame = CGRect(x: 0, y: h - m.titleBarHeight, width: w, height: m.titleBarHeight)
+        setFrame(titleBar, CGRect(x: 0, y: h - m.titleBarHeight, width: w, height: m.titleBarHeight))
         let introHeight = isPage && !banner.isHidden ? m.bannerHeight : 0
-        banner.frame = CGRect(x: 0, y: h - m.titleBarHeight - introHeight, width: w, height: introHeight)
-        bannerLabel.frame = CGRect(x: m.bannerInset, y: m.bannerLabelY, width: max(0, w - 3 * m.bannerInset - m.bannerButtonWidth), height: m.hostHeight)
-        bannerButton.frame = CGRect(x: w - m.bannerInset - m.bannerButtonWidth, y: m.bannerButtonY, width: m.bannerButtonWidth, height: m.bannerHeight - 2 * m.bannerButtonY)
-        container.frame = CGRect(x: 0, y: 0, width: w, height: max(0, h - m.titleBarHeight - introHeight))
-        commandBar.view.frame = root.bounds
+        setFrame(banner, CGRect(x: 0, y: h - m.titleBarHeight - introHeight, width: w, height: introHeight))
+        setFrame(bannerLabel, CGRect(x: m.bannerInset, y: m.bannerLabelY, width: max(0, w - 3 * m.bannerInset - m.bannerButtonWidth), height: m.hostHeight))
+        setFrame(bannerButton, CGRect(x: w - m.bannerInset - m.bannerButtonWidth, y: m.bannerButtonY, width: m.bannerButtonWidth, height: m.bannerHeight - 2 * m.bannerButtonY))
+        setFrame(container, CGRect(x: 0, y: 0, width: w, height: max(0, h - m.titleBarHeight - introHeight)))
+        setFrame(commandBar.view, root.bounds)
         commandBar.view.overlayPanelWidth = isPage ? min(CommandBarMetrics.panelWidth, max(0, w - 2 * m.screenInset)) : nil
         placeTrafficLights()
     }
@@ -320,6 +324,36 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             })
         }
         return menu
+    }
+    /// Window geometry is already final. Only the render-server opacity moves;
+    /// subsequent MRU resurfacing must not restart the initial fade.
+    func presentWindow() {
+        guard !closed, let window else { return }
+        let first = !hasPresented; hasPresented = true
+        window.makeKeyAndOrderFront(nil)
+        guard first, !Motion.reducesMotion, let layer = root.layer else { return }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0; fade.toValue = 1; fade.duration = Motion.littleOpenFade
+        fade.timingFunction = Motion.easeOut
+        layer.add(fade, forKey: "littleOpen.opacity")
+    }
+    /// Retain the live page through the exit fade. The coordinator has already
+    /// removed the session, so a second close cannot schedule another teardown.
+    func closeWindow() {
+        let finish = { [self] in
+            container.closeAll(); window?.delegate = nil; window?.close()
+        }
+        guard window?.isVisible == true, !Motion.reducesMotion, let layer = root.layer else { finish(); return }
+        let start = layer.presentation()?.opacity ?? layer.opacity
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
+        layer.removeAnimation(forKey: "littleOpen.opacity")
+        layer.opacity = 0
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = start; fade.toValue = 0; fade.duration = Motion.littleOpenFade
+        fade.timingFunction = Motion.easeInOut
+        layer.add(fade, forKey: "littleOpen.opacity")
+        CATransaction.commit()
     }
     func prepareToClose() {
         onCloseDownloads?(); onCloseDownloads = nil; onDownloadsKey = nil
