@@ -158,7 +158,8 @@ final class PlusPopover {
         window.addChildWindow(panel, ordered: .above)
         self.panel = panel; self.view = view
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { [weak self] event in
-            let type = event.type, code = event.keyCode, number = event.windowNumber
+            // keyCode throws for non-key events (crash when a click picks New Easel).
+            let type = event.type, code = type == .keyDown ? event.keyCode : 0, number = event.windowNumber
             nonisolated(unsafe) let location = event
             let consumed = MainActor.assumeIsolated { self?.consumes(type: type, keyCode: code, windowNumber: number, event: location) ?? false }
             return consumed ? nil : event
