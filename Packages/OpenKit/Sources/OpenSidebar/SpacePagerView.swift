@@ -20,6 +20,8 @@ final class SpacePagerView: NSView {
     private var shownSpaceID: SpaceID?
     private var animating = false
     private var slideGeneration = 0
+    private var movingStrip: CALayer?
+    private var movingPageIDs: Set<SpaceID> = []
     private(set) var lastSlideAnimation: CAAnimation?
     private var swipe: SwipeState?
     private var loop: ObservationLoop?
@@ -99,6 +101,7 @@ final class SpacePagerView: NSView {
         let frame = CGRect(x: commitOffset ? -offset : strip.frame.minX, y: 0, width: max(CGFloat(spaces.count + (creationPage == nil ? 0 : 1)), 1) * bounds.width, height: bounds.height)
         if strip.frame != frame { strip.frame = frame }
         strip.layer?.setValue(-offset - frame.minX, forKeyPath: "transform.translation.x")
+        movingStrip?.setValue(-offset, forKeyPath: "transform.translation.x")
         CATransaction.commit()
     }
 
@@ -116,6 +119,7 @@ final class SpacePagerView: NSView {
             if animating, offset == CGFloat(focusedIndex) * bounds.width { return }
             slideGeneration += 1
             strip.layer?.removeAnimation(forKey: "slide")
+            movingStrip?.removeAnimation(forKey: "slide")
             animating = false
             offset = CGFloat(focusedIndex) * bounds.width
             placeStrip(); finishSlide()
@@ -130,8 +134,9 @@ final class SpacePagerView: NSView {
         shownSpaceID = focused.id
         let presentationX = presentationOffset
         offset = CGFloat(target) * w
-        let animate = animated && context.animatesChanges && previous != nil
+        var animate = animated && context.animatesChanges && previous != nil
             && animatesSidebarChanges && !Motion.reducesMotion
+        if animate { animate = prepareMovingStrip(indices: min(from, target)...max(from, target)) }
         placeStrip(commitOffset: !animate)
         let style = context.style(for: focused)
         guard animate else {
@@ -147,8 +152,67 @@ final class SpacePagerView: NSView {
         themeBackground?.crossfade(to: style, animated: true)
     }
 
+    /// AppKit culls pages outside the native viewport. Prepare their pixels once,
+    /// so translating a layer never reveals an unpainted native page mid-slide.
+    @discardableResult
+    private func prepareMovingStrip(indices: ClosedRange<Int>) -> Bool {
+        guard let layer, bounds.width > 0, bounds.height > 0 else { return false }
+        let scale = min(window?.backingScaleFactor ?? 2, 2)
+        // Bound all temporary pixels to 64 MiB, with no single image above it.
+        // Large ranges switch immediately rather than allocating more or sliding blanks.
+        let pixels = ceil(bounds.width * scale) * ceil(bounds.height * scale)
+        let missing = indices.filter { !movingPageIDs.contains(spaces[$0].id) }
+        let count = movingPageIDs.count + missing.count
+        guard count > 0, pixels.isFinite, pixels > 0, pixels <= 16_777_216 / CGFloat(count) else { return false }
+        let images = movingStrip ?? CALayer()
+        images.anchorPoint = .zero
+        images.frame = CGRect(origin: .zero, size: strip.frame.size)
+        images.isGeometryFlipped = layer.isGeometryFlipped
+        var prepared: [(SpaceID, CALayer)] = []
+        for index in missing {
+            let view = page(for: spaces[index])
+            view.layoutSubtreeIfNeeded()
+            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            guard let image = bitmap.cgImage else { return false }
+            let tile = CALayer()
+            tile.frame = view.frame
+            tile.contents = image
+            tile.contentsScale = scale
+            prepared.append((spaces[index].id, tile))
+        }
+        for (id, tile) in prepared {
+            images.addSublayer(tile)
+            movingPageIDs.insert(id)
+        }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        images.setValue(-offset, forKeyPath: "transform.translation.x")
+        if movingStrip == nil { layer.addSublayer(images) }
+        movingStrip = images
+        strip.layer?.opacity = 0
+        CATransaction.commit()
+        return true
+    }
+
+    private func removeMovingStrip() {
+        guard let movingStrip else { movingPageIDs.removeAll(keepingCapacity: true); return }
+        // Make the live target paint before removing the prepared strip.
+        strip.layoutSubtreeIfNeeded()
+        strip.displayIfNeeded()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        strip.layer?.opacity = 1
+        movingStrip.removeFromSuperlayer()
+        self.movingStrip = nil
+        movingPageIDs.removeAll(keepingCapacity: true)
+        CATransaction.commit()
+    }
+
     private var presentationOffset: CGFloat {
-        strip.frame.minX + (strip.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
+        if let movingStrip {
+            return movingStrip.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
+                ?? movingStrip.value(forKeyPath: "transform.translation.x") as? CGFloat ?? -offset
+        }
+        return strip.frame.minX + (strip.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
             ?? strip.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0)
     }
 
@@ -156,30 +220,34 @@ final class SpacePagerView: NSView {
         animating = true
         slideGeneration += 1
         let generation = slideGeneration
+        let motionLayer = movingStrip ?? strip.layer
+        let origin = movingStrip == nil ? strip.frame.minX : 0
         let spring = token.animation(keyPath: "transform.translation.x")
-        spring.fromValue = x - strip.frame.minX
-        spring.toValue = -offset - strip.frame.minX
+        spring.fromValue = x - origin
+        spring.toValue = -offset - origin
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
             guard let self, self.slideGeneration == generation else { return }
             self.animating = false; self.placeStrip(); self.finishSlide()
         } }
         let request = requestedAt ?? CACurrentMediaTime()
-        spring.beginTime = strip.layer?.convertTime(CACurrentMediaTime(), from: nil) ?? CACurrentMediaTime()
-        spring.setValue(strip.layer?.convertTime(request, from: nil) ?? request, forKey: "openRequestedAt")
-        strip.layer?.add(spring, forKey: "slide")
-        lastSlideAnimation = strip.layer?.animation(forKey: "slide")
+        spring.beginTime = motionLayer?.convertTime(CACurrentMediaTime(), from: nil) ?? CACurrentMediaTime()
+        spring.setValue(motionLayer?.convertTime(request, from: nil) ?? request, forKey: "openRequestedAt")
+        motionLayer?.add(spring, forKey: "slide")
+        lastSlideAnimation = motionLayer?.animation(forKey: "slide")
         CATransaction.commit()
     }
 
     private func finishSlide() {
         guard !animating, swipe == nil else { return }
+        removeMovingStrip()
         let focused = context.focusedSpace?.id
         for (id, p) in pages { p.isHidden = creationPage != nil || id != focused }
     }
 
     func beginCreation(page: NSView) {
         guard creationPage == nil else { return }
+        removeMovingStrip()
         swipe = nil; creationPage = page; strip.addSubview(page)
         let from = presentationOffset
         layoutPages(); offset = CGFloat(spaces.count) * bounds.width; placeStrip()
@@ -215,6 +283,7 @@ final class SpacePagerView: NSView {
             guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return false }
             context.suppressPreviews(.swipe, true)
             let start = -presentationOffset
+            movingStrip?.removeAnimation(forKey: "slide")
             slideGeneration += 1
             strip.layer?.removeAnimation(forKey: "slide")
             animating = false
@@ -224,6 +293,7 @@ final class SpacePagerView: NSView {
             for p in pages.values { p.isHidden = false }
             for i in max(0, base - 1)...min(spaces.count - 1, base + 1) { _ = page(for: spaces[i]) }
             layoutPages()
+            if !Motion.reducesMotion { prepareMovingStrip(indices: max(0, base - 1)...min(spaces.count - 1, base + 1)) }
             return true
         case .changed:
             guard var s = swipe else { return false }
@@ -239,7 +309,7 @@ final class SpacePagerView: NSView {
             let direction = offset > base ? 1 : -1
             if past, !s.pastThreshold, spaces.indices.contains(s.baseIndex + direction) { context.haptics.perform(.levelChange) }
             s.pastThreshold = past
-            if !Motion.reducesMotion { placeStrip(commitOffset: false) }
+            if !Motion.reducesMotion, movingStrip != nil { placeStrip(commitOffset: false) }
             let dir = offset >= base ? 1 : -1
             let n = s.baseIndex + dir
             if spaces.indices.contains(n) {
@@ -269,7 +339,7 @@ final class SpacePagerView: NSView {
             shownSpaceID = context.focusedSpace?.id
             let from = -offset
             offset = CGFloat(landed) * w
-            let animate = animatesSidebarChanges && !Motion.reducesMotion
+            let animate = animatesSidebarChanges && !Motion.reducesMotion && movingStrip != nil
             placeStrip(commitOffset: !animate)
             if animate { slide(from: from, spring: Motion.spaceSwipeSnap) }
             else { lastSlideAnimation = nil; animating = false; finishSlide() }
