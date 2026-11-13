@@ -560,11 +560,18 @@ extension LibraryPanelView {
           }
         }
     }
-    func confirm(_ title:String,message:String = "",action:@escaping @MainActor () -> Void) {
+    func confirm(_ title:String,message:String = "",button:String = "Delete",action:@escaping @MainActor () -> Void) {
         guard let window, window.attachedSheet == nil else { return }
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = message
-        alert.addButton(withTitle:"Delete"); alert.addButton(withTitle:"Cancel")
+        alert.addButton(withTitle:button); alert.addButton(withTitle:"Cancel")
         alert.beginSheetModal(for:window) { response in if response == .alertFirstButtonReturn { action() } }
+    }
+    /// The Archive menu shares the native panel's sheet and current store set.
+    public func requestClearArchive() {
+        confirm("Are you sure you'd like to Clear Archive?",message:"This deletes every archived tab. This cannot be undone.",button:"Clear Archive") { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in await self.viewModel.clearArchiveConfirmed(); self.renderRows() }
+        }
     }
     func confirmClearHistory() {
         let profile = viewModel.historyProfileID

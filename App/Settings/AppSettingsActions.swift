@@ -199,10 +199,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     activeLibrarySession?.close()
     app.scheduleMenuRebuild()
   }
-  /// Use the Library button's view model and confirmation dialog unchanged.
+  /// Present the native Library confirmation; the old SwiftUI flag has no observer.
   func requestClearArchive() {
     showLibrary(section: .archive)
-    library?.requestClearArchive()
+    activeLibrarySession?.panel?.requestClearArchive()
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
   @ObservationIgnored private weak var spaceManager: SpaceManagerView?
