@@ -367,14 +367,14 @@ def run(factory, results, tmp, env):
                 wait_until(lambda: app.call("settings-state")["librarySection"] == "boosts",timeout=5,step=.05)
                 def shown_text():
                     return [v for w in app.call("windows",accessibility=True) if w["visible"] for v in w.get("text",[])]
-                # The native in-window Library (#350) names a Boost row "<domain>. <name> · on|off"
-                # (LibraryListView row label = title + ". " + subtitle); the old SwiftUI card said "Made for <domain>".
-                live=lambda v: v.startswith("127.0.0.1") and v.endswith("My Boost · on")
+                # #520 intentionally puts the Boost name over its host; native AX adds its on/off state.
+                # LibraryListView label = name + ". " + domain + " · on|off".
+                live=lambda v: v == "My Boost. 127.0.0.1 · on"
                 wait_until(lambda: any(live(v) for v in shown_text()),timeout=5,step=.1)
                 text=shown_text()
                 # Negative from the same real flow: the row must not read as turned off. (The window text also
                 # holds other sections' hidden empty-state labels, so an empty-state text proves nothing here.)
-                negative=not any(v.endswith("My Boost · off") for v in text)
+                negative="My Boost. 127.0.0.1 · off" not in text
                 return dict(positive=any(live(v) for v in text),negative=negative,text=text)
             row("B13_library_live",b13)
             def b14():
