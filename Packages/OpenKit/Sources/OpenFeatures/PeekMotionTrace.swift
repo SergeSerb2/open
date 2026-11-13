@@ -25,9 +25,9 @@ public enum PeekMotionTrace {
         guard armed, watchedViews.count < 1024, !watchedViews.contains(where: { $0.0 === view }) else { return }
         watchedViews.append((view, view.postsFrameChangedNotifications))
         view.postsFrameChangedNotifications = true
-        let token = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: view, queue: .main) { note in
+        let token = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: view, queue: .main) { [weak view] _ in
             MainActor.assumeIsolated {
-                guard let view = note.object as? NSView else { return }
+                guard let view else { return }
                 mark("nativeFrame." + NSStringFromClass(type(of: view)), value: view.frame.width)
                 mark("nativeHeight", value: view.frame.height)
             }
