@@ -5,12 +5,13 @@ public enum MatchQuality {
     public static let exact: Double = 100
     public static let prefix: Double = 80
     public static let wordPrefix: Double = 60
-    /// Every query word starts a word somewhere in the row ("des rev" → "Design Review").
+    /// Every query word starts a word: title words adjacent and in order ("des rev" → "Design Review"),
+    /// host/URL words anywhere.
     public static let allWordsPrefix: Double = 50
     /// Actions only: the query is the initials of the title ("ts" → "Toggle Sidebar").
     public static let initials: Double = 50
     public static let substring: Double = 40
-    /// Every query word occurs somewhere in the row.
+    /// Every query word occurs: title words as above, at least one word only mid-word in the host or URL.
     public static let allWordsSubstring: Double = 30
     /// A mid-word substring needs at least this many bytes. Shorter queries match only at word starts.
     public static let minSubstringLength = 3
@@ -96,22 +97,86 @@ public enum TextMatching {
         query.withUnsafeBufferPointer { q in field.withUnsafeBufferPointer { f in quality(q, in: f) } }
     }
 
-    /// Best quality of a query over several weighted fields, with the multi-word fallback.
-    /// `fields` holds (bytes, factor). Used for history, remote, and site rows; tabs use the index fast path.
-    public static func rowQuality(_ query: FoldedQuery, fields: [([UInt8], Double)]) -> Double {
+    /// Best quality of a query over a row's titles and URL fields (host, URL text; with their factor).
+    ///
+    /// A multi-word query must hit title word starts of adjacent words, in order (capture PB1-h: in Arc
+    /// "new g" finds "New Google Doc", "new d" does not). So for a multi-word query a mid-word title match
+    /// does not count, and the multi-word fallback needs the title words to line up (`startsAdjacentWords`).
+    /// Host and URL fields keep the old rules: a query word they match counts wherever it is.
+    /// A one-word query is scored exactly as before.
+    public static func rowQuality(_ query: FoldedQuery, titles: [[UInt8]], urls: [([UInt8], Double)] = []) -> Double {
+        let multi = query.tokens.count > 1
         var best = 0.0
-        for (bytes, factor) in fields {
-            best = max(best, quality(query.bytes, in: bytes) * factor)
+        for title in titles {
+            let q = quality(query.bytes, in: title)
+            if !multi || q >= MatchQuality.wordPrefix { best = max(best, q) }
         }
-        guard query.tokens.count > 1, best < MatchQuality.allWordsPrefix else { return best }
+        for (bytes, factor) in urls { best = max(best, quality(query.bytes, in: bytes) * factor) }
+        guard multi, best < MatchQuality.allWordsPrefix, query.tokens.count <= 64 else { return best }
+        // Query words that a URL field matches; the rest must start adjacent title words.
+        var urlTokens: UInt64 = 0
         var allWordPrefix = true
-        for token in query.tokens {
-            var t = 0.0
-            for (bytes, _) in fields { t = max(t, quality(token, in: bytes)) }
-            if t == 0 { return best }
-            if t < MatchQuality.wordPrefix { allWordPrefix = false }
+        for (k, token) in query.tokens.enumerated() {
+            var u = 0.0
+            for (bytes, _) in urls { u = max(u, quality(token, in: bytes)) }
+            guard u > 0 else { continue }
+            urlTokens |= 1 &<< UInt64(k)
+            if u < MatchQuality.wordPrefix { allWordPrefix = false }
         }
+        let flat = query.tokens.flatMap { $0 }
+        var ranges: [(Int, Int)] = []
+        var cursor = 0
+        for t in query.tokens { ranges.append((cursor, t.count)); cursor += t.count }
+        let found: Bool = flat.withUnsafeBufferPointer { tokens in
+            // Every word in one title: the best case, whatever the URL fields say.
+            for title in titles where title.withUnsafeBufferPointer({ startsAdjacentWords(tokens, ranges, skip: 0, in: $0) }) {
+                allWordPrefix = true
+                return true
+            }
+            if urlTokens == 0 { return false }
+            if urlTokens == (UInt64.max >> UInt64(64 - ranges.count)) { return true }
+            return titles.contains { $0.withUnsafeBufferPointer { startsAdjacentWords(tokens, ranges, skip: urlTokens, in: $0) } }
+        }
+        guard found else { return best }
         return max(best, allWordPrefix ? MatchQuality.allWordsPrefix : MatchQuality.allWordsSubstring)
+    }
+
+    /// True when the query words (ranges into `tokens`, except those in the `skip` bit set) start adjacent
+    /// words of `f`, in order: the first word at any word start, each next word at the next word start
+    /// after the end of the previous one ("new g" → "New Google Doc"; "new d" ✗; "google d" ✓).
+    /// A query word that does not begin with a word byte ("#tag", "c++") may start anywhere.
+    @inline(__always)
+    static func startsAdjacentWords(_ tokens: UnsafeBufferPointer<UInt8>, _ ranges: [(Int, Int)], skip: UInt64,
+                                    in f: UnsafeBufferPointer<UInt8>) -> Bool {
+        guard let tb = tokens.baseAddress, let fb = f.baseAddress else { return false }
+        let m = f.count
+        @inline(__always) func matches(_ k: Int, at i: Int) -> Bool {
+            let (start, n) = ranges[k]
+            return n > 0 && i + n <= m && memcmp(fb + i, tb + start, n) == 0
+        }
+        @inline(__always) func wordStart(_ i: Int) -> Bool { isWordByte(fb[i]) && (i == 0 || !isWordByte(fb[i - 1])) }
+        guard let first = ranges.indices.first(where: { skip & (1 &<< UInt64($0)) == 0 }) else { return true }
+        let firstIsWord = isWordByte(tb[ranges[first].0])
+        var i = 0
+        while i < m {
+            if (!firstIsWord || wordStart(i)) && matches(first, at: i) {
+                var pos = i + ranges[first].1
+                var ok = true
+                for k in (first + 1)..<ranges.count where skip & (1 &<< UInt64(k)) == 0 {
+                    let (start, _) = ranges[k]
+                    if isWordByte(tb[start]) {
+                        while pos < m && !wordStart(pos) { pos += 1 }
+                    } else {
+                        while pos < m && fb[pos] == 32 { pos += 1 }
+                    }
+                    if !matches(k, at: pos) { ok = false; break }
+                    pos += ranges[k].1
+                }
+                if ok { return true }
+            }
+            i += 1
+        }
+        return false
     }
 
     /// Initials of the words in `title` ("Toggle Sidebar" → "ts"), folded.

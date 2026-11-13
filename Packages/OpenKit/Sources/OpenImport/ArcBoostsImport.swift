@@ -170,8 +170,12 @@ public struct ArcBoostsReader: Sendable {
             // PB4 row 4: the knob inputs Open stores are Arc's stored knob fields
             // (docs/plans/boost-color-remap.md §7.2: `primaryHueDegrees` = stored `hue`,
             // `primarySaturation` = stored `intensity`; `invertLightness` the same name).
-            // Every other leaf (secondary offset, base appearance, advanced settings,
-            // theme-driven schemes) has no proven Open input: counted, not invented.
+            // Capture C11 (Arc 1.172.2) confirms the hue convention: the knob angle from the pad
+            // centre, 0° = right, clockwise on screen (Open's `hue`), and saturation in 0…1.
+            // `secondaryHueOffset` was 45 in every captured state, which is Open's fixed second
+            // knob (45° clockwise): 45 maps, any other offset is counted as dropped.
+            // Every other leaf (base appearance, advanced settings, theme-driven schemes)
+            // has no proven Open input: counted, not invented.
             let colorKeys: Set<String> = ["colorWheelDriven", "themeDriven", "_0", "primaryHueDegrees", "primarySaturation", "secondaryHueOffset", "invertLightness", "baseAppearance", "advancedSettings", "light", "dark", "preservedSaturation", "preservedLightness", "lightnessShift", "secondarySaturation", "primaryLightness", "secondaryLightness", "primaryColorModel", "secondaryColorModel"]
             func dropped(_ value: Any, path: String) {
                 if let object = value as? [String: Any], !object.isEmpty {
@@ -193,6 +197,7 @@ public struct ArcBoostsReader: Sendable {
                     wheel = BoostColorWheel(hue: hue, intensity: saturation, invertLightness: invert).clamped()
                     report.mappedFields += 1
                     for key in ["primaryHueDegrees", "primarySaturation", "invertLightness"] { scheme[key] = nil }
+                    if number("secondaryHueOffset") == 45 { scheme["secondaryHueOffset"] = nil; report.mappedFields += 1 }
                     // Prune emptied containers so mapped leaves are not counted as dropped.
                     driven["_0"] = scheme.isEmpty ? nil : scheme
                     object["colorWheelDriven"] = driven.isEmpty ? nil : driven

@@ -6,6 +6,7 @@ from pathlib import Path
 import threading
 import time
 import traceback
+from loopback_http import LoopbackHTTPServer
 
 
 def run(factory, results, tmp, h):
@@ -22,7 +23,7 @@ def run(factory, results, tmp, h):
             body = ('<!doctype html><title>Little fixture</title><button id=arm onclick="onbeforeunload=e=>{e.preventDefault();e.returnValue=1}">Arm</button><script>' + script + '</script>').encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     # MIDI is hardware-free and never requests macOS notification authorization.

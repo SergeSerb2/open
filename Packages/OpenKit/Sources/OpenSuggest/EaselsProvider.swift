@@ -24,7 +24,9 @@ public final class EaselCatalog {
     fileprivate func matches(_ query: FoldedQuery) -> [(Entry, Double)] {
         var out: [(Entry, Double)] = []
         for (i, title) in folded.enumerated() {
-            let q = TextMatching.quality(query.bytes, in: title)
+            // Same title rule as the other providers: multi-word queries start adjacent title words, in order
+            // (capture PB1-h); a one-word query scores as `quality`.
+            let q = TextMatching.rowQuality(query, titles: [title])
             if q > 0 { out.append((entries[i], q)) }
         }
         return out

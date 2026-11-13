@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import runpy
 import shutil
 from pathlib import Path
+from loopback_http import LoopbackHTTPServer
 
 
 def run(factory, results, tmp, h):
@@ -283,7 +284,7 @@ def fixture_server():
             self.send_header('Content-Length', str(len(body)))
             self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

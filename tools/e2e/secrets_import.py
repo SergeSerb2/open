@@ -16,6 +16,7 @@ import ssl
 import subprocess
 import threading
 import time
+from loopback_http import LoopbackHTTPServer
 
 
 @contextlib.contextmanager
@@ -32,7 +33,7 @@ def fixture_server(h, tmp):
     public_key = subprocess.check_output(['openssl', 'x509', '-in', cert, '-pubkey', '-noout'], timeout=10)
     spki = subprocess.check_output(['openssl', 'pkey', '-pubin', '-outform', 'DER'], input=public_key, timeout=10)
     pin = base64.b64encode(hashlib.sha256(spki).digest()).decode('ascii')
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    server = LoopbackHTTPServer(handler)
     server.daemon_threads = True
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     tls.load_cert_chain(cert, key)

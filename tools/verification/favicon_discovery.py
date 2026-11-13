@@ -5,7 +5,10 @@ import sqlite3
 import struct
 import threading
 import zlib
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+import sys as _sys
+_sys.path.append(str(Path(__file__).resolve().parents[1] / 'e2e'))  # loopback_http; appended, so the stdlib wins
+from loopback_http import LoopbackHTTPServer
 
 
 def run(cli, snapshot, site, origin, env, invoke, require):
@@ -118,7 +121,7 @@ def run(cli, snapshot, site, origin, env, invoke, require):
             else:
                 self.send_response(404); self.end_headers()
     original = (Path(snapshot)/'State/browser.json').read_bytes()
-    http = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    http = LoopbackHTTPServer(Handler)
     worker = threading.Thread(target=http.serve_forever, daemon=True); worker.start()
     try:
         data = json.loads(original)

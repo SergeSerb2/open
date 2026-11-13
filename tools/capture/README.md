@@ -326,3 +326,4 @@ guessing.
 
 Menus of the Library sections have no AX items. Read their titles from the `*-window-<id>.png` frames.
 Keep Arc 1080 pt wide (right edge at x 1100) when a target is near the macOS alert at the screen's top right.
+- `drag_ax` `kind: "cross_window"` (LEAD 13:15) — drag a sidebar tab into the tab list of another owned Arc window, at least 20 pt from that list's edges and not under the source window. The destination window's own drop rails are accepted during the drag. Target lookup keeps the visible sidebar of every window, not only the leftmost.

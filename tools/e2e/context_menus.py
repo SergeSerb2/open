@@ -8,6 +8,7 @@ import threading
 import time
 import traceback
 import urllib.parse
+from loopback_http import LoopbackHTTPServer
 
 
 LINK_ITEMS = ['Open Link in Incognito Window', 'Open Link in New Tab', 'Open Link in Split View', 'Open Link in Peek',
@@ -33,7 +34,7 @@ def context_menu_checks(factory, results, tmp, h):
             self.wfile.write(payload)
         def log_message(self, *args):
             pass
-    mail_server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), MailHandler)
+    mail_server = LoopbackHTTPServer(MailHandler)
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     tls.load_cert_chain(cert, key)
     mail_server.socket = tls.wrap_socket(mail_server.socket, server_side=True)
