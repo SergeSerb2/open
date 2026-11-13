@@ -796,7 +796,7 @@
         let clip = manager.scrollView.contentView
         var bounds = clip.bounds; bounds.origin.x = x
         clip.scroll(to: clip.constrainBoundsRect(bounds).origin); manager.scrollView.reflectScrolledClipView(clip)
-        return spaceManagerLifecycle()
+        return try spaceManagerLifecycle([:])
       default: break
       }
       let w: EngineWebContentHostFactory
