@@ -359,12 +359,12 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     func closeWindow() {
         let finish = { [self] in
             // Page teardown can take several display intervals. Remove the
-            // finished window first, then release its hosts on the next turn.
+            // finished window first. Still cancel deferred host creation on
+            // this turn: an immediate close must never create a Browser.
             window?.orderOut(nil)
-            DispatchQueue.main.async { [self] in
-                commandBar.dismiss(reason: .programmatic)
-                container.closeAll(); window?.delegate = nil; window?.close()
-            }
+            CATransaction.flush()
+            commandBar.dismiss(reason: .programmatic)
+            container.closeAll(); window?.delegate = nil; window?.close()
         }
         guard window?.isVisible == true, !Motion.reducesMotion, let layer = presentationLayer() else { finish(); return }
         window?.ignoresMouseEvents = true
