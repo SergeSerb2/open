@@ -23,6 +23,10 @@ def run(output, frames=False):
         result['checks'][name] = dict(ok=bool(ok), **evidence)
         print(('PASS ' if ok else 'FAIL ') + name, flush=True)
         if not ok:
+            if app:
+                for label, command in [('library', 'library'), ('peek', 'peek-state'), ('bar', 'commandbar-state'), ('focus', 'focus-state')]:
+                    try: result[label] = app.call(command)
+                    except Exception as error: result[label] = repr(error)
             raise AssertionError(name + ': ' + repr(evidence))
     def wait(fn): return wait_until(fn, timeout=8, step=.05)
     def state(**kw): return app.call('library', **kw)
@@ -82,8 +86,12 @@ def run(output, frames=False):
             for name in ['t', 'l']:
                 check('cmd_'+name+'_preview_open', open_preview(first))
                 key(name, ['cmd'])
-                check('cmd_'+name+'_command_bar', wait(lambda: app.call('commandbar-state')['presented']))
-                key('escape'); app.call('peek-close')
+                check('cmd_'+name+'_command_bar', wait(lambda: app.call('commandbar-state')['presented'])
+                      and app.call('commandbar-state')['mode'] == ('newTab' if name == 't' else 'editCurrentURL'))
+                key('escape')
+                check('cmd_'+name+'_bar_escape', wait(lambda: not app.call('commandbar-state')['presented']
+                      and app.call('commandbar-state')['hidden']) and state()['open'])
+                app.call('peek-close')
             check('return_preview_open', open_preview(first)); key('return')
             check('return_does_not_restore_behind_peek', state()['open'] and archive_rows() == before_records)
             app.call('peek-close')
@@ -110,6 +118,8 @@ def run(output, frames=False):
             pointer('hover', row(first)['frame'], 80)
             trash = next(b for b in row(first)['buttons'] if b['title'] == 'Delete')
             pointer('click', trash['frame'])
+            alert = app.call('alert', window='library')
+            check('trash_confirmation', 'Delete this archived tab?' in alert['texts'] and alert['buttons'] == ['Delete', 'Cancel'], alert=alert)
             if os.environ.get('OPEN_ARCHIVE_FORCE_ALERT_FAILURE') == '1':
                 check('forced_alert_cleanup_probe', False)
             app.call('alert', window='library', button='Cancel')
