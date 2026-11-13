@@ -135,10 +135,9 @@ final class BoostEngineAdapter {
     let scripts = makeScripts(profile: profile, ephemeral: context.isEphemeral)
     let previous = registrations[key]?.scripts ?? []
     guard previous != scripts else { return }
-    // OpenEngine has no batch setter. This synchronous main-actor transaction
-    // has no suspension point; only our namespace is replaced.
-    for script in previous { web.removeUserScript(id: script.id) }
-    for script in scripts { web.addUserScript(script) }
+    // Publish the complete Boost namespace once. Existing renderers and future
+    // documents must not observe an intermediate list with all Boosts removed.
+    web.replaceUserScripts(removing: previous.map(\.id), adding: scripts)
     registrations[key]?.scripts = scripts
     registrations[key]?.documentStartMatcher = boosts.boostsGloballyEnabled && boosts.app.model.profile(id: profile) != nil
       ? boosts.matcher(for: profile) : BoostMatcher(boosts: [])
