@@ -165,6 +165,7 @@ def run(factory, results, tmp, harness):
             app.call('defaults', key='open.links.didSetDefaultMeetRoute', value=None)
             for key in ARC_PREF_KEYS: app.call('defaults', key=key, value=None)
             app.call('defaults', key='open.favorites.subtitleDisabledHosts', value=None)
+            app.call('defaults', key='open.favorites.liveCalendarDisabled', value=None)
         finally:
             app.quit()
     # Audit A2: Favorite unread badges (own launch: app hosts map to a local server).
@@ -202,6 +203,11 @@ def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
             and [e['title'] for e in state.get('events', [])] == ['Standup', 'Design review', 'Event']
             and len(state.get('card', [])) == 4 and state['card'][2] == 240,
         'hover': shown, 'state': state}
+    # CG1 (Open's design, LEAD 19:30): a Pinned calendar tab has no Live Calendar, so its gear menu is Refresh only.
+    gear = state.get('gear') or {}
+    results['cal_card_gear_pinned'] = {'ok': gear.get('shown') is True and gear.get('items') == ['Refresh']
+        and gear.get('enabled') == [True] and len(gear.get('frame', [])) == 4 and gear['frame'][0] < state['card'][0] + state['card'][2],
+        'gear': gear}
 
     seq, n_tabs = join_seq(), len(tabs())
     app.call('glance-open', control='join')
@@ -319,11 +325,87 @@ def live_checks(app, results, wait_until, new_tab, cal, fav):
         and item().get('checked') is True and app.call('defaults', key='open.favorites.subtitleDisabledHosts', persistent=True) == [],
         'stored': stored, 'checked': [checked_before, checked_off]}
 
+    gear_checks(app, results, wait_until, cal, fav, live)
+
     # Without a calendar Favorite the coordinator stops: no tiles, no timer.
     app.call('sidebar-menu', node=fav, item='Remove Favorite')
     stopped = at(0)
     results['cal_live_stops_without_favorite'] = {'ok': stopped.get('active') is False and stopped.get('nextFireIn') is None
         and not stopped.get('tiles'), 'state': stopped}
+
+
+def gear_checks(app, results, wait_until, cal, fav, live):
+    """CG1, Open's design (LEAD 19:30; Arc's effect was never captured): the calendar card's gear menu, Refresh
+    with a spinner in the gear's place, and Disable / Enable Live Calendar stored per Favorite."""
+    key = 'open.favorites.liveCalendarDisabled'
+    def hover(node, ms=800):
+        app.call('hover', leave=True, ms=300)
+        return app.call('hover', node=node, ms=ms)
+    def glance(wait=True): return app.call('glance-state', wait=wait)
+    def has_item(title):
+        try:
+            app.call('sidebar-menu-state', node=fav, item=title)
+            return True
+        except RuntimeError:
+            return False
+    def stored(): return [s.lower() for s in (app.call('defaults', key=key, persistent=True) or [])]
+    sync = {'id': 'g1', 'title': 'Gear sync', 'start': 10, 'end': 40, 'url': MEET}
+    cal(action='fixture', access='granted', events=[sync])
+    cal(action='clock', minutes=0)
+    wait_until(lambda: live().get('tiles'), timeout=5, step=.05)
+    hover(fav)
+    card = glance()
+    gear = card.get('gear') or {}
+    results['cal_card_gear_menu'] = {'ok': card.get('kind') == 'calendar' and gear.get('shown') is True
+        and gear.get('items') == ['Refresh', '-', 'Disable Live Calendar'] and gear.get('enabled') == [True, True]
+        and gear.get('refreshing') is False, 'gear': gear}
+
+    # Refresh: new events arrive slowly (fixture delay); the spinner stands where the gear was until they land.
+    cal(action='fixture', access='granted', delayMs=900,
+        events=[sync, {'id': 'g2', 'title': 'Added before refresh', 'start': 20, 'end': 50}])
+    app.call('glance-open', control='gear', item='Refresh')
+    during = glance(wait=False).get('gear') or {}
+    done = wait_until(lambda: (lambda s: s if (s.get('gear') or {}).get('refreshing') is False else None)(glance(wait=False)),
+                      timeout=6, step=.05) or glance(wait=False)
+    frame, spin = during.get('frame') or [0, 0, 0, 0], during.get('spinnerFrame') or [0, 0, 0, 0]
+    centred = abs((frame[0] + frame[2] / 2) - (spin[0] + spin[2] / 2)) <= 1 and abs((frame[1] + frame[3] / 2) - (spin[1] + spin[3] / 2)) <= 1
+    after_gear = done.get('gear') or {}
+    refreshes = cal().get('refreshes', 0)
+    results['cal_card_gear_refresh'] = {'ok': during.get('refreshing') is True and during.get('spinner') is True
+        and during.get('shown') is False and centred and after_gear.get('shown') is True and after_gear.get('spinner') is False
+        and 'g2' in [e['id'] for e in done.get('events', [])] and refreshes == 1,
+        'during': during, 'after': after_gear, 'events': [e['id'] for e in done.get('events', [])], 'refreshes': refreshes}
+
+    # Disable Live Calendar: the card closes; the Favorite becomes plain (no card, no countdown, no Live Calendar
+    # items) and the choice is stored for this Favorite.
+    cal(action='fixture', access='granted', events=[sync])
+    wait_until(lambda: live().get('tiles'), timeout=5, step=.05)
+    hover(fav)
+    glance()
+    app.call('glance-open', control='gear', item='Disable Live Calendar')
+    closed = wait_until(lambda: glance(wait=False).get('shown') is False, timeout=3, step=.05)
+    plain = wait_until(lambda: (lambda s: s if not s.get('tiles') and s.get('active') is False else None)(live()), timeout=3, step=.05)
+    saved = stored()
+    hover(fav)
+    again = glance(wait=False)
+    menu = {t: has_item(t) for t in ('Enable Live Calendar', 'Disable Live Calendar', 'Show Time to Next Meeting', 'Meeting Reminder')}
+    plate = app.call('favorite-badge', favorite=fav).get('subtitleShown')
+    app.call('hover', leave=True, ms=300)
+    results['cal_live_disable_per_favorite'] = {'ok': bool(closed) and bool(plain) and saved == [fav.lower()]
+        and again.get('kind') != 'calendar' and not plate
+        and menu == {'Enable Live Calendar': True, 'Disable Live Calendar': False, 'Show Time to Next Meeting': False, 'Meeting Reminder': False},
+        'stored': saved, 'hoverAgain': again.get('kind'), 'menu': menu, 'plate': plate, 'live': plain}
+
+    # Enable Live Calendar (the tile menu): countdown, card and Live Calendar items come back; the stored list empties.
+    app.call('sidebar-menu', node=fav, item='Enable Live Calendar')
+    back = wait_until(lambda: (lambda s: s if s.get('tiles') and s.get('active') else None)(live()), timeout=5, step=.05)
+    hover(fav)
+    card_back = glance()
+    menu_back = {t: has_item(t) for t in ('Enable Live Calendar', 'Disable Live Calendar', 'Meeting Reminder')}
+    app.call('hover', leave=True, ms=300)
+    results['cal_live_enable_per_favorite'] = {'ok': bool(back) and card_back.get('kind') == 'calendar' and stored() == []
+        and menu_back == {'Enable Live Calendar': False, 'Disable Live Calendar': True, 'Meeting Reminder': True},
+        'card': card_back.get('kind'), 'menu': menu_back, 'stored': stored()}
 
 
 def meet_route_checks(app, results, wait_until, cal):

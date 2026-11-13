@@ -296,7 +296,9 @@ final class FavoriteTileView: NSView {
         didSet {
             favicon.tab = tab; needsDisplay = true
             // A calendar Favorite starts Live Calendar (LD §4); the App checks access and never prompts.
-            if let tab, CalendarProvider.match(url: tab.url) != nil { context?.liveCalendar?.tileAppeared(tab.url) }
+            if let tab, CalendarProvider.match(url: tab.url) != nil, context?.liveCalendarEnabled(for: tab) != false {
+                context?.liveCalendar?.tileAppeared(tab.url)
+            }
         }
     }
     /// Live Calendar countdown ("in 5m", "Now", "3m ago"), shown under the icon.
@@ -372,7 +374,7 @@ final class FavoriteTileView: NSView {
         }
         CATransaction.commit()
         let (calendar, settings, title, url) = tracked({ (context.liveCalendarTiles[tab.id], context.favoriteTileSettings, tab.title, tab.url) }) { [weak self] in self?.needsDisplay = true }
-        let live = settings.showsSubtitle(url: url) ? calendar : nil
+        let live = settings.showsSubtitle(url: url) && settings.isLiveCalendarEnabled(tabID: tab.id.description) ? calendar : nil
         let count = context.favoriteBadgesEnabled && settings.showsBadge(url: url) ? FavoriteBadgeCount.parse(title) : nil
         let label = count.map(FavoriteBadgeCount.label)
         let badgeHidden = label == nil || hovered

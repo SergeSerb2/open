@@ -155,13 +155,23 @@ public final class SidebarContext {
         next.save(to: previewPreferences)
         NotificationCenter.default.post(name: FavoriteTileSettings.didChange, object: previewPreferences)
     }
+    /// False for a calendar Favorite whose Live Calendar the user turned off ("Disable Live Calendar"): the tile
+    /// then acts as a plain Favorite (no calendar card, no countdown, no reminder). Other tabs: always true.
+    public func liveCalendarEnabled(for tab: Tab) -> Bool {
+        guard !favoriteTileSettings.isLiveCalendarEnabled(tabID: tab.id.description) else { return true }
+        return favoritesProfile?.favorites.contains(where: { $0.id == tab.id }) != true
+    }
+    /// Turns Live Calendar on or off for one calendar Favorite; stored with the other Favorite tile switches.
+    public func setLiveCalendarEnabled(_ on: Bool, for tab: Tab) {
+        updateFavoriteTileSettings { $0.setLiveCalendarEnabled(on, tabID: tab.id.description) }
+    }
     /// Live Calendar actions for the tile menu and the reminder; nil keeps tiles plain.
     @ObservationIgnored public var liveCalendar: LiveCalendarActions?
     public func glanceKind(for tab: Tab) -> GlanceKind? {
         guard let kind = GlanceKind.match(url: tab.url, aliases: glanceHostAliases, mailHosts: glanceMailHosts) else { return nil }
         switch kind {
         case .recents: guard recentPagesSource != nil else { return nil }
-        case .calendar: guard calendarGlance != nil else { return nil }
+        case .calendar: guard calendarGlance != nil, liveCalendarEnabled(for: tab) else { return nil }
         case .gmail: guard mailGlanceSource != nil else { return nil }
         }
         let key = kind.preferenceKey

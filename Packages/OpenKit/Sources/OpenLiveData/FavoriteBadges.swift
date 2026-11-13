@@ -82,6 +82,9 @@ public struct FavoriteTileSettings: Equatable, Sendable {
     public static let subtitleDisabledHostsKey = "open.favorites.subtitleDisabledHosts"
     public static let twitterBadgeKey = "open.favorites.twitterBadgeEnabled"
     public static let whatsAppBadgeKey = "open.favorites.whatsAppBadgeEnabled"
+    /// Calendar Favorites whose Live Calendar the user turned off (tab IDs). Open's design (LEAD 19:30, CG1):
+    /// Arc's "Disable Live Calendar" exists (`S:110792–110804`) but its effect was never captured.
+    public static let liveCalendarDisabledKey = "open.favorites.liveCalendarDisabled"
     /// Posted (object: the UserDefaults) after any window changes a switch.
     public static let didChange = Notification.Name("OpenFavoriteTileSettingsDidChange")
     static let maxHosts = 1_000
@@ -91,6 +94,8 @@ public struct FavoriteTileSettings: Equatable, Sendable {
     /// Arc keeps separate switches for Twitter and WhatsApp. Default on: GUESS — capture pending.
     public var twitterBadgeEnabled = true
     public var whatsAppBadgeEnabled = true
+    /// Tab IDs (`ItemID.description`) of calendar Favorites with Live Calendar off.
+    public var liveCalendarDisabled: Set<String> = []
 
     public init() {}
 
@@ -102,6 +107,7 @@ public struct FavoriteTileSettings: Equatable, Sendable {
         subtitleDisabledHosts = hosts(Self.subtitleDisabledHostsKey)
         twitterBadgeEnabled = defaults.object(forKey: Self.twitterBadgeKey) as? Bool ?? true
         whatsAppBadgeEnabled = defaults.object(forKey: Self.whatsAppBadgeKey) as? Bool ?? true
+        liveCalendarDisabled = Set((defaults.stringArray(forKey: Self.liveCalendarDisabledKey) ?? []).prefix(Self.maxHosts))
     }
 
     public func save(to defaults: UserDefaults) {
@@ -109,6 +115,14 @@ public struct FavoriteTileSettings: Equatable, Sendable {
         defaults.set(subtitleDisabledHosts.sorted().prefix(Self.maxHosts).map { $0 }, forKey: Self.subtitleDisabledHostsKey)
         defaults.set(twitterBadgeEnabled, forKey: Self.twitterBadgeKey)
         defaults.set(whatsAppBadgeEnabled, forKey: Self.whatsAppBadgeKey)
+        defaults.set(liveCalendarDisabled.sorted().prefix(Self.maxHosts).map { $0 }, forKey: Self.liveCalendarDisabledKey)
+    }
+
+    /// Live Calendar is on for a calendar Favorite unless the user turned it off for that Favorite.
+    public func isLiveCalendarEnabled(tabID: String) -> Bool { !liveCalendarDisabled.contains(tabID) }
+
+    public mutating func setLiveCalendarEnabled(_ on: Bool, tabID: String) {
+        if on { liveCalendarDisabled.remove(tabID) } else { liveCalendarDisabled.insert(tabID) }
     }
 
     public static func host(of url: URL) -> String? {

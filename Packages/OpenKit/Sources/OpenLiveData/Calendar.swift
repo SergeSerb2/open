@@ -207,10 +207,13 @@ public struct CalendarGlanceSource {
     public var requestAccess: @MainActor () async -> CalendarAccess
     /// Opens a call link (Join): the same route as Join Meeting.
     public var join: @MainActor (MeetingLink) -> Void
+    /// The card's gear ▸ Refresh: asks the source to sync now and drops cached events (Open's design, CG1).
+    public var refresh: @MainActor () -> Void
 
     public init(access: @escaping @MainActor () -> CalendarAccess, events: @escaping @MainActor () async -> [CalendarEvent],
                 now: @escaping @MainActor () -> Date, requestAccess: @escaping @MainActor () async -> CalendarAccess,
-                join: @escaping @MainActor (MeetingLink) -> Void) {
+                join: @escaping @MainActor (MeetingLink) -> Void, refresh: @escaping @MainActor () -> Void = {}) {
         self.access = access; self.events = events; self.now = now; self.requestAccess = requestAccess; self.join = join
+        self.refresh = refresh
     }
 }

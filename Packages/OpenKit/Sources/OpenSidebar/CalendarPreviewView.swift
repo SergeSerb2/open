@@ -17,6 +17,12 @@ public final class CalendarPreviewView: NSView {
     public let tab: Tab
     public let provider: CalendarProvider
     public let newButton = RecentsNewButton()
+    /// Gear (Open's design, LEAD 19:30, CG1): Arc's card has a settings button (`clickedSettings`) and a menu with
+    /// "Refresh" and "Disable Live Calendar" (LD §3.2, `S:110792–110804`); its place and look were never captured.
+    /// Open: left of "+", the same button style; while Refresh loads, a small spinner takes its place.
+    public let gearButton = RecentsNewButton()
+    public let spinner = NSProgressIndicator()
+    public private(set) var isRefreshing = false
     public let joinButton = CalendarPillButton()
     public let accessButton = CalendarPillButton()
     public let timeline = CalendarTimelineView()
@@ -57,6 +63,12 @@ public final class CalendarPreviewView: NSView {
         newButton.toolTip = CalendarProvider.newLabel
         newButton.setAccessibilityLabel(CalendarProvider.newLabel)
         newButton.onPress = { [weak self] in self?.openNew() }
+        gearButton.symbolName = "gearshape"
+        gearButton.toolTip = "Calendar Settings"
+        gearButton.setAccessibilityLabel("Calendar Settings")
+        gearButton.onPress = { [weak self] in self?.showGearMenu() }
+        spinner.style = .spinning; spinner.controlSize = .small; spinner.isDisplayedWhenStopped = false
+        spinner.setAccessibilityLabel("Refreshing")
         separator.wantsLayer = true
         joinTitle.font = .systemFont(ofSize: 12, weight: .semibold); joinTitle.baseline = 20
         joinTitle.color = { Core.foregroundPrimary.nsColor }
@@ -72,7 +84,7 @@ public final class CalendarPreviewView: NSView {
         }
         scroll.drawsBackground = false; scroll.borderType = .noBorder; scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true; scroll.scrollerStyle = .overlay; scroll.documentView = timeline
-        for view in [header, newButton, separator, joinTitle, joinSubtitle, joinButton, message, accessButton, scroll] as [NSView] { addSubview(view) }
+        for view in [header, gearButton, spinner, newButton, separator, joinTitle, joinSubtitle, joinButton, message, accessButton, scroll] as [NSView] { addSubview(view) }
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }; _ = self.context.systemAppearance; _ = self.context.increaseContrast; _ = self.context.focusedSpace?.theme
         }) { [weak self] in self?.applyAppearance() })
@@ -109,6 +121,7 @@ public final class CalendarPreviewView: NSView {
         loadTask = Task { [weak self] in
             let events = await source.events()
             guard !Task.isCancelled, let self else { return }
+            self.setRefreshing(false)
             let now = source.now()
             self.events = events
             self.joinable = NextMeeting.pick(events, now: now).flatMap { $0.event.start.timeIntervalSince(now) <= Self.joinLead ? $0 : nil }
@@ -177,7 +190,7 @@ public final class CalendarPreviewView: NSView {
         separator.layer?.backgroundColor = (appearance == .dark ? NSColor.white : NSColor.black).withAlphaComponent(0.10).cgColor
         var ink = NSColor.secondaryLabelColor
         appearance.nsAppearance.performAsCurrentDrawingAppearance { ink = Core.foregroundSecondary.nsColor.usingColorSpace(.sRGB) ?? ink }
-        newButton.ink = ink
+        newButton.ink = ink; gearButton.ink = ink
         message.textColor = Core.foregroundSecondary.nsColor
         for view in [header, joinTitle, joinSubtitle, timeline, joinButton, accessButton] as [NSView] { view.needsDisplay = true }
     }
@@ -185,8 +198,11 @@ public final class CalendarPreviewView: NSView {
     public override func layout() {
         super.layout()
         let h = Self.headerHeight, w = bounds.width
-        header.frame = CGRect(x: 14, y: 0, width: max(0, w - 60), height: h)
+        header.frame = CGRect(x: 14, y: 0, width: max(0, w - 88), height: h)
         newButton.frame = CGRect(x: w - 10 - 24, y: (h - 24) / 2, width: 24, height: 24)
+        gearButton.frame = newButton.frame.offsetBy(dx: -28, dy: 0)
+        let spin = spinner.fittingSize
+        spinner.frame = CGRect(x: gearButton.frame.midX - spin.width / 2, y: gearButton.frame.midY - spin.height / 2, width: spin.width, height: spin.height)
         separator.frame = CGRect(x: 0, y: h - 1, width: w, height: 1)
         var y = h
         if !joinButton.isHidden {
@@ -209,6 +225,57 @@ public final class CalendarPreviewView: NSView {
     }
     private func messageBlockHeight(width: CGFloat) -> CGFloat {
         messageTextHeight(width: width) + (accessButton.isHidden ? 0 : 14 + 26)
+    }
+
+    /// The gear menu: "Refresh", then, for a calendar Favorite, a separator and "Disable Live Calendar".
+    /// A Pinned calendar tab has no Live Calendar, so its menu has "Refresh" only.
+    public func gearMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let refresh = ClosureMenuItem("Refresh") { [weak self] in self?.refresh() }
+        refresh.isEnabled = source.access() == .granted && !isRefreshing
+        menu.addItem(refresh)
+        if isLiveCalendarFavorite {
+            menu.addItem(.separator())
+            menu.addItem(ClosureMenuItem("Disable Live Calendar") { [weak self] in self?.disableLiveCalendar() })
+        }
+        return menu
+    }
+
+    /// This card belongs to a calendar Favorite that Live Calendar runs on.
+    public var isLiveCalendarFavorite: Bool {
+        context.liveCalendar != nil && context.favoritesProfile?.favorites.contains(where: { $0.id == tab.id }) == true
+    }
+
+    private func showGearMenu() {
+        // Keep the card while the menu tracks: the pointer leaves the card for the menu.
+        context.hoverPreviews.setPointerInsidePreview(true)
+        gearMenu().popUp(positioning: nil, at: CGPoint(x: gearButton.frame.minX, y: gearButton.frame.maxY + 4), in: self)
+        // The menu has closed (synchronous tracking): report where the pointer really is now.
+        guard superview != nil, let window else { return }
+        context.hoverPreviews.setPointerInsidePreview(bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)))
+    }
+
+    /// Gear ▸ Refresh: the source syncs, then the card reloads its events; the spinner shows meanwhile.
+    public func refresh() {
+        guard source.access() == .granted, !isRefreshing else { return }
+        loadTask?.cancel()
+        setRefreshing(true)
+        source.refresh()
+        load()
+    }
+
+    private func setRefreshing(_ on: Bool) {
+        guard isRefreshing != on else { return }
+        isRefreshing = on
+        gearButton.isHidden = on
+        if on { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
+    }
+
+    /// Gear ▸ Disable Live Calendar: the card closes and this Favorite becomes a plain Favorite (stored per Favorite).
+    public func disableLiveCalendar() {
+        context.existingHoverPreviews?.dismiss()
+        context.setLiveCalendarEnabled(false, for: tab)
     }
 
     @objc public func openNew() {

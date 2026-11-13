@@ -155,6 +155,8 @@ public final class RecentsPreviewView: NSView, NSTableViewDataSource, NSTableVie
 public final class RecentsNewButton: NSView {
     var onPress: (@MainActor () -> Void)?
     var ink: NSColor = .secondaryLabelColor { didSet { needsDisplay = true } }
+    /// The SF Symbol drawn: "plus" (New …) or "gearshape" (the calendar card's settings).
+    var symbolName = "plus" { didSet { needsDisplay = true } }
     private var hovered = false
     private var tracking: NSTrackingArea?
     public override var isFlipped: Bool { true }
@@ -167,7 +169,7 @@ public final class RecentsNewButton: NSView {
             ink.withAlphaComponent(0.12).setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
         }
-        guard let symbol = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)?
+        guard let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .medium).applying(.init(paletteColors: [ink]))) else { return }
         let size = symbol.size
         symbol.draw(in: CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height))

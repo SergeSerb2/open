@@ -136,6 +136,13 @@ extension AutomationController {
           calendar.join()
         case "access": guard !calendar.accessButton.isHidden else { throw Failure(message: "no access button") }
           calendar.askAccess()
+        case "gear":
+          // Performs one item of the gear menu (the menu a gear click pops up).
+          let title = a["item"] as? String ?? ""
+          let menu = calendar.gearMenu()
+          guard let index = menu.items.firstIndex(where: { $0.title == title && !$0.isSeparatorItem }), menu.items[index].isEnabled
+          else { throw Failure(message: "gear menu has no enabled item \(title)") }
+          menu.performActionForItem(at: index)
         case "event":
           let index = a["row"] as? Int ?? 0
           guard calendar.timeline.blocks.indices.contains(index) else { throw Failure(message: "no event block \(index)") }
@@ -175,7 +182,12 @@ extension AutomationController {
         "subtitle": view.joinable.map { CalendarPreviewView.subtitle(for: $0.event, now: Date()) } ?? ""] as [String: Any],
       "access": view.accessButton.isHidden ? NSNull() : view.accessButton.title,
       "events": view.timeline.blocks.map { ["id": $0.event.id, "title": $0.event.displayTitle, "frame": [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height]] },
-      "card": controller.hoverPreview.card.map(rect) ?? [], "privacyOpened": CalendarPrivacySettings.openedForAutomation] as [String: Any]
+      "card": controller.hoverPreview.card.map(rect) ?? [], "privacyOpened": CalendarPrivacySettings.openedForAutomation,
+      // Gear (CG1): the menu it opens is the same NSMenu object model as a click shows ("-" = separator).
+      "gear": ["shown": !view.gearButton.isHidden, "frame": rect(view.gearButton), "refreshing": view.isRefreshing,
+        "spinner": !view.spinner.isHidden && view.isRefreshing, "spinnerFrame": rect(view.spinner),
+        "items": view.gearMenu().items.map { $0.isSeparatorItem ? "-" : $0.title },
+        "enabled": view.gearMenu().items.filter { !$0.isSeparatorItem }.map(\.isEnabled)] as [String: Any]] as [String: Any]
   }
 
   private func glanceController(_ a: [String: Any]) throws -> BrowserWindowController {
