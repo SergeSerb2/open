@@ -984,6 +984,9 @@ def context_menu_checks(factory, results, tmp, h):
                 rows['favorite_placement'] = label in order and order[order.index(label) + 1] == 'Edit Pinned Page ▸'
                 app.call('sidebar-menu', node=a, item=label)
                 editor = wait(lambda: (lambda x: x if x.get('open') else None)(app.call('boost-editor')), timeout=5) or {}
+                if editor.get('interstitial'):
+                    app.call('boost-editor', action='tap', id='firstRun.makeABoost')
+                editor = wait(lambda: (lambda x: x if x.get('open') and not x.get('interstitial') and x.get('colorsReady') else None)(app.call('boost-editor')), timeout=10) or {}
                 rows['editor_targets_a'] = editor.get('tab') == a and editor.get('boost', {}).get('siteMatch', {}).get('domain') == '127.0.0.1'
                 after_escape = app.call('boost-editor', action='key', key='escape')
                 rows['escape_keeps_editor'] = after_escape.get('open') is True and after_escape.get('tab') == a

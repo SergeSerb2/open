@@ -82,4 +82,4 @@ C12-PB1-3 report separately records that this failed row was absent after relaun
 showing "No results found" (`.re/capture/s12/m1/arc/v11/36-failure-relaunch/failed-after-relaunch.{png,ax.json}`).
 The PB1 lane tracks that relaunch behavior; this change covers the subtitle.
 
-C12-D2-3 evidence: capture report session 12, `v19/111-d2-customize-pinned/`, `v20/112-d2-customize-relaunch/`, `v25/116-d2-favorite-matrix/`, and `v26/117-d2-customize-invoke/`. The bounded matrix is a visible behavior rule, not a claim about Arc internals. Escape leaves the editor open. Open uses runtime-only load state and the existing non-private HTTP(S) Boost eligibility guard.
+C12-D2-3 evidence: capture report session 12, `v19/111-d2-customize-pinned/`, `v20/112-d2-customize-relaunch/`, `v25/116-d2-favorite-matrix/`, and `v26/117-d2-customize-invoke/`. The bounded matrix is a visible behavior rule, not a claim about Arc internals. Escape leaves the main editor open; Done closes it. Open preserves the existing Escape paths for text editing, advanced controls and code mode. Open uses runtime-only load state and the existing non-private HTTP(S) Boost eligibility guard.
