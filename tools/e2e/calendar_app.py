@@ -393,11 +393,15 @@ def gear_checks(app, results, wait_until, cal, fav, live):
             centred = abs((frame[0] + frame[2] / 2) - (spin[0] + spin[2] / 2)) <= 1 and abs((frame[1] + frame[3] / 2) - (spin[1] + spin[3] / 2)) <= 1
             after_gear = done.get('gear') or {}
             refreshes = cal().get('refreshes', 0)
+            # Keeping the card through native tracking must not pin it open.
+            app.call('hover', leave=True, ms=300)
+            left_closes = glance(wait=False).get('shown') is False
             refresh_cases.append({'ok': tracking.get('tracked') is True and tracking.get('cardStayedVisible') is True
                 and tracking.get('opened') is True and during.get('refreshing') is True and during.get('spinner') is True
                 and during.get('shown') is False and centred and after_gear.get('shown') is True and after_gear.get('spinner') is False
-                and 'g2' in [e['id'] for e in done.get('events', [])] and refreshes == 1,
+                and 'g2' in [e['id'] for e in done.get('events', [])] and refreshes == 1 and left_closes,
                 'tracking': tracking, 'during': during, 'after': after_gear, 'events': [e['id'] for e in done.get('events', [])], 'refreshes': refreshes,
+                'leftCloses': left_closes,
                 'windowOrigin': (window_frame or original_frame)[:2]})
     finally:
         app.call('window-frame', frame=original_frame)
