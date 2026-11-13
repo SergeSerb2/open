@@ -16,7 +16,7 @@ struct HTTPAuthProtectionSpace: Equatable {
     // E3 exposes the page origin separately from the proxy host/port. Until
     // the store bridge supplies a proxy protection space, never fill a proxy
     // challenge with credentials selected for its target page.
-    guard !request.isProxy, [request.origin, request.realm, request.scheme].allSatisfy({
+    guard !request.isProxyAuthentication, [request.origin, request.realm, request.scheme].allSatisfy({
       $0.utf8.count <= HTTPAuthSheet.maximumMetadataBytes
     }), let url = URLComponents(string: request.origin),
        let transport = url.scheme?.lowercased(),
@@ -28,7 +28,7 @@ struct HTTPAuthProtectionSpace: Equatable {
     let port = url.port ?? (transport == "https" ? 443 : 80)
     guard (1...65535).contains(port) else { return nil }
     self.transport = transport; self.host = host; self.port = port
-    realm = request.realm; self.scheme = scheme; isProxy = request.isProxy
+    realm = request.realm; self.scheme = scheme; isProxy = request.isProxyAuthentication
   }
 }
 

@@ -8,7 +8,7 @@ protocol HTTPAuthRequest: AnyObject {
   var origin: String { get }
   var realm: String { get }
   var scheme: String { get }
-  var isProxy: Bool { get }
+  var isProxyAuthentication: Bool { get }
   var isAnswered: Bool { get }
   func accept(username: String, password: String)
   func cancel()
