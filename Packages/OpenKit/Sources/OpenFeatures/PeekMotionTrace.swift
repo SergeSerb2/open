@@ -79,7 +79,7 @@ public enum PeekMotionTrace {
         guard armed, records.count < 8192 else { return try body() }
         let index = records.count, start = CACurrentMediaTime()
         records.append(Record(name: name, start: start, end: start, value: 0))
-        let id = OSSignpostID(rawValue: UInt64(index + 1))
+        let id = OSSignpostID(UInt64(index + 1))
         os_signpost(.begin, log: log, name: "PeekRegion", signpostID: id, "%{public}@", name as NSString)
         defer {
             records[index].end = CACurrentMediaTime()
