@@ -617,7 +617,7 @@ has a download). After #480, `library_corrupt_index_downloads` can expect
 ## Menu items deferred from the D2c menu work (LEAD 12:32, 2026-11-12)
 
 No work on these until the lead schedules them (`docs/re/sidebar-menus-parity.md`):
-- Split row: "Rename…", "Change Icon…" and "Reset Name and Icon" from Arc's code (MH). The split-row menu was not captured in 1.172.2 (C3 item 5).
+- **Done (C12-D2-2):** split row Rename…, Change Icon…, and conditional Reset Name and Icon; session 12 captured initial text, cancel, icon-only/name-only, light/dark, and relaunch. Saved fields and native controls now follow those facts; see `docs/re/sidebar-menus-parity.md`.
 - Library › Media: **resolved after LEAD 20:15 scheduled C-D2-1**. New captures retain their full source URL; the two source actions and exact saved-capture menu follow session 11. Older captures without a URL disable these actions. Only folder-file menu order and separators remain unmeasured. See [library-session11.md](re/library-session11.md).
 - Pinned tab row: "Customize Page…" is Open's own item and not in Arc's menu (S3D). Keep it or move it; this needs a decision.
 

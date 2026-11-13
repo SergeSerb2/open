@@ -398,21 +398,13 @@ struct SidebarMenus {
         return items
     }
 
-    /// Split row. Not captured; the items and their order follow Arc's split-row
-    /// menu builder (Arc 1.170.0 arm64, function at 0x102eccc9c; docs/re/menus-and-hotkeys.md).
-    /// Left out: "Share Split View" (account link), "Reset Name and Icon", "Change Icon…",
-    /// and "Rename…" (Open's splits have no custom name or icon), and staff-only items.
-    /// guess: "Move to" sits before the last separator, as in the captured tab menus.
+    /// Session 12 C12-D2-2: the reset row appears only while the split has a custom name or icon.
     func split(_ split: Split) -> NSMenu {
         let convert: NSMenuItem = split.orientation == .horizontal
             ? item("Convert to Vertical Split View", .setSplitOrientation(splitID: split.id, orientation: .vertical))
             : item("Convert to Horizontal Split View", .setSplitOrientation(splitID: split.id, orientation: .horizontal))
         let header = NSMenuItem(title: "Tab Options", action: nil, keyEquivalent: "")
         header.isEnabled = false
-        // Capture session 8 item 5 (`v6/32-d2-item-5b`): Share Split View… · — · Separate All Tabs · Add Tab… ·
-        // Convert … · — · Tab Options · panes ▸ · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — ·
-        // Archive Item · Archive Tabs Below (⌥ alternates). Change Icon… / Rename… need a split name and
-        // icon in the model and a capture of a renamed split row: follow-up (C3 item 15).
         var items: [NSMenuItem] = []
         if !context.isIncognito { items += [item("Share Split View…", .shareSplit(splitID: split.id)), .separator()] }
         items += [
@@ -423,7 +415,11 @@ struct SidebarMenus {
             header,
         ]
         items += split.panes.map { pane(of: split, $0) }
-        items += [.separator(), item("Duplicate", .duplicate(nodeID: split.id))]
+        items.append(.separator())
+        if split.isCustomized { items.append(item("Reset Name and Icon", .resetSplitCustomization(splitID: split.id))) }
+        items += [item("Change Icon…", .changeIcon(nodeID: split.id)),
+                  ClosureMenuItem("Rename…") { [beginRename] in beginRename(split.id) },
+                  .separator(), item("Duplicate", .duplicate(nodeID: split.id))]
         if !context.isIncognito { items.append(moveTo(split.id)) }
         items += [.separator(), item(context.isIncognito ? "Close Split View" : "Archive Item", .close(nodeID: split.id))]
         if !context.isIncognito { items += archiveAlternates(split.id) }
