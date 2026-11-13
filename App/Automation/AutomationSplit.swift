@@ -258,7 +258,7 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
     let draggingDestinationWindow: NSWindow?
     let draggingSource: Any?
     let draggingLocation: NSPoint
-    let draggingPasteboard = NSPasteboard.withUniqueName()
+    let draggingPasteboard = NSPasteboard(name: .init("open.automation.split.\(UUID().uuidString)"))
     private(set) var payloadWritten = false
     let draggingSourceOperationMask: NSDragOperation = .move
     let draggingSequenceNumber = 1
