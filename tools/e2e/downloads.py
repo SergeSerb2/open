@@ -326,9 +326,9 @@ def checks(factory, results, tmp, config, harness):
             w, h, bpp, pixels = png_pixels(str(path))
             scale = w / app.call('window-state')['frame'][2]
             x, y, width, height = state()['badge']['markFrame']
-            # AppKit's content coordinates start at the bottom; PNG rows start at the top.
+            # The window content view is flipped, matching the PNG's top-origin rows.
             # Sample only the 20 pt ring's outer annulus, not the sidebar or arrow.
-            cx, cy = (x+width/2)*scale, h-(y+height/2)*scale
+            cx, cy = (x+width/2)*scale, (y+height/2)*scale
             colors = [tuple(pixels[py][px*bpp:px*bpp+3])
                       for py in range(max(0, int(cy-10*scale)), min(h, int(cy+10*scale)))
                       for px in range(max(0, int(cx-10*scale)), min(w, int(cx+10*scale)))
