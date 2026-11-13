@@ -61,7 +61,8 @@ def initial_checks(process, output, ids):
         # PB4 row 4: hue, saturation and invert map (3 leaves per Boost); the rest stays counted.
         # PB4 row 4, zoom part (capture C11): textZoom.level is the percent, mapped too (1 leaf per Boost).
         # The second Boost's level 2 is outside 50…200: dropped, not clamped.
-        'boost_cli_dropped': counts.get('droppedFields') == 13 and counts.get('mappedFields') == 24,
+        # Capture C11: secondaryHueOffset 45 (Arc's fixed second knob) maps; the second Boost's 30 is dropped.
+        'boost_cli_dropped': counts.get('droppedFields') == 12 and counts.get('mappedFields') == 25,
         'boost_cli_text_zoom': enabled.get('textZoom') == 1.25 and disabled.get('textZoom') is None,
         'boost_cli_color': enabled.get('colorWheel', {}).get('hue') == 90 and enabled.get('colorWheel', {}).get('intensity') == .4
             and enabled.get('colorWheel', {}).get('invertLightness') is False and disabled.get('colorWheel', {}).get('hue') == 90

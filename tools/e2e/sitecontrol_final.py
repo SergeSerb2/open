@@ -11,7 +11,7 @@ import ssl
 import subprocess
 import threading
 
-from sitecontrol_fixtures import LoopbackHTTPServer
+from loopback_http import LoopbackHTTPServer
 
 
 @contextmanager

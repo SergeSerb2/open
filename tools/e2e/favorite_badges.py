@@ -24,6 +24,7 @@ import ssl
 import subprocess
 import tempfile
 import threading
+from loopback_http import LoopbackHTTPServer
 
 HOSTS = ('x.com', 'web.whatsapp.com', 'mail.google.com', 'example.com')
 KEYS = ('open.favorites.badgingDisabledHosts', 'open.favorites.subtitleDisabledHosts',
@@ -45,7 +46,7 @@ def run(factory, results, harness):
             except (BrokenPipeError, ConnectionResetError): pass
         def log_message(self, *_): pass
 
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     server.daemon_threads = True
     folder = tempfile.mkdtemp(prefix='open-favorite-badges-')
     cert, key = os.path.join(folder, 'cert.pem'), os.path.join(folder, 'key.pem')

@@ -2,6 +2,7 @@
 import http.server
 import threading
 import time
+from loopback_http import LoopbackHTTPServer
 
 NUX = 'open.links.littleOpenNUXSeen'
 
@@ -29,7 +30,7 @@ def run(app, script, results, wait_until, quote, key, off_message, prefix=''):
 
         def log_message(self, *args): pass
 
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     saved = {name: app.call('defaults', key=name, persistent=True) for name in (key, NUX)}

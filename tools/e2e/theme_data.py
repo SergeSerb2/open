@@ -15,6 +15,7 @@ import threading
 import time
 
 from engine_e2e import Open, wait_until, new_tab
+from loopback_http import LoopbackHTTPServer
 
 KEY = 'open.advanced.allowSitesThemeData'
 READ = "(() => { const cs = getComputedStyle(document.documentElement); const out = {};" \
@@ -34,7 +35,7 @@ def run(output, config='Release'):
             body = ('<!doctype html><title>Theme %s</title><p>theme data</p>' % self.path).encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *a): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     app = None

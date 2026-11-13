@@ -8,6 +8,9 @@ import threading
 from pathlib import Path
 from http.cookies import SimpleCookie, CookieError
 from urllib.parse import urlsplit
+import sys as _sys
+_sys.path.append(str(Path(__file__).resolve().parents[2]))  # loopback_http; appended, so the stdlib wins
+from loopback_http import LoopbackHTTPServer
 
 ROOT = Path(__file__).resolve().parent
 USERNAME = 'fixture-user'
@@ -104,13 +107,13 @@ def main():
         parser.error('port must be between 0 and 65535')
     if bool(args.cert) != bool(args.key):
         parser.error('cert and key must be supplied together')
-    with http.server.ThreadingHTTPServer(('127.0.0.1', args.port), Handler) as server:
+    with LoopbackHTTPServer(Handler, args.port) as server:
         server.daemon_threads = True
         secure = None
         worker = None
         try:
             if args.cert:
-                secure = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+                secure = LoopbackHTTPServer(Handler)
                 secure.daemon_threads = True
                 tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 tls.load_cert_chain(args.cert, args.key)

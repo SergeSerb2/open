@@ -10,7 +10,8 @@ import runpy
 import statistics
 import time
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from loopback_http import LoopbackHTTPServer
 
 pack_probe = runpy.run_path(str(Path(__file__).with_name("extensions_p3.py")))["pack_probe"]
 
@@ -263,7 +264,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                 body=b"<!doctype html><title>Extension badge burst</title><p>Local extension acceptance</p>"
                 self.send_response(200);self.send_header("Content-Type","text/html");self.end_headers();self.wfile.write(body)
             def log_message(self,*args): pass
-        server=ThreadingHTTPServer(("127.0.0.1",0),LocalPage)
+        server=LoopbackHTTPServer(LocalPage)
         threading.Thread(target=server.serve_forever,daemon=True).start()
         local_origin="http://127.0.0.1:"+str(server.server_port)
         ubo_page=new_tab(app,"chrome-extension://"+extensions["ublock"]+"/dashboard.html")

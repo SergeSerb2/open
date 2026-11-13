@@ -11,6 +11,7 @@ import runpy
 import subprocess
 import time
 from pathlib import Path
+from loopback_http import LoopbackHTTPServer
 
 
 def make_png(path, width, height, rgb):
@@ -33,7 +34,7 @@ def fixture_server(root):
             super().__init__(*a, directory=str(root), **kw)
         def log_message(self, *a):
             pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
