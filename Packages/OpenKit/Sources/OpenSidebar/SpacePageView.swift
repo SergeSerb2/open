@@ -914,7 +914,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard let dest = dropDestination(item: item, childIndex: index) else { return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
-            let allowed = ids.contains { context.model.canMoveNode(id: $0, to: dest.parent) }
+            let allowed = context.acceptsNodeDrop(ids: ids, to: dest.parent, index: dest.index)
             if allowed { context.haptics.insertionChanged(parent: dest.parent, index: dest.index) }
             return allowed ? .move : []
         }
@@ -1176,6 +1176,16 @@ final class SpaceHeaderView: NSView {
     var iconFrameInWindow: CGRect { icon.convert(icon.bounds, to: nil) }
     let chevron = PlateButton(glyph: .disclosureDown)
     let more = PlateButton(glyph: .spaceMore)
+    /// Blank Window header "Move to…" (C-report-s11 1(a): AX button "Move to...", small grey text at
+    /// the header's right). GUESS: its menu lists the browser's Spaces and moves all of this
+    /// window's tabs there (capture item C-NT6); the look (11 pt semibold, 55 % title colour) is
+    /// read from the frame `v7/e1b-drag-back/e2-hold.png`.
+    private(set) lazy var moveTo: NSButton = {
+        let button = NSButton(title: "Move to…", target: self, action: #selector(showMoveToMenu(_:)))
+        button.isBordered = false
+        button.setAccessibilityLabel("Move to...")
+        return button
+    }()
     let profileIndicator: ProfileIndicatorButton
     var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; needsLayout = true } } }
 
@@ -1208,6 +1218,26 @@ final class SpaceHeaderView: NSView {
         chevron.context = context
         more.context = context
         addSubview(icon); addSubview(title); addSubview(chevron); addSubview(more); addSubview(profileIndicator)
+        if context.isWindowOnly { addSubview(moveTo) }
+    }
+
+    /// The Spaces of the browser; choosing one moves every tab of this window there (top first).
+    func moveToMenu() -> NSMenu {
+        let menu = NSMenu(title: "Move to")
+        let ids = space.today.flatMap { node -> [ItemID] in
+            switch node { case .tab(let tab): [tab.id]; case .split(let split): split.panes.map(\.id); case .folder: [] }
+        }
+        for target in context.windowOnlyMoveSpaces?() ?? [] {
+            menu.addItem(ClosureMenuItem(target.title) { [weak self] in
+                // Bottom first: each tab lands on top of the Space's Today list, so the order stays.
+                for id in ids.reversed() { _ = self?.context.send(.moveToSpace(nodeID: id, space: target.id)) }
+            })
+        }
+        return menu
+    }
+
+    @objc private func showMoveToMenu(_ sender: NSButton) {
+        moveToMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -1250,6 +1280,15 @@ final class SpaceHeaderView: NSView {
         more.frame = CGRect(x: w - m.headerMoreTrailing - s, y: (m.headerHeight - s) / 2, width: s, height: s)
         more.isHidden = !hovered || context.hidesSpaceChrome
         var right = hovered ? more.frame.minX - 2 : w - 17
+        if context.isWindowOnly {
+            let color = spaceTitleColor.withAlphaComponent(0.55)
+            moveTo.attributedTitle = NSAttributedString(string: "Move to…", attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: color])
+            let size = moveTo.attributedTitle.size()
+            moveTo.frame = CGRect(x: w - m.headerMoreTrailing - ceil(size.width), y: (m.headerHeight - ceil(size.height)) / 2,
+                                  width: ceil(size.width), height: ceil(size.height))
+            right = moveTo.frame.minX - 6
+        }
         let hasProfiles = tracked({ !context.hidesSpaceChrome && context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
         profileIndicator.isHidden = !hasProfiles
         if hasProfiles {

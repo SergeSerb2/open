@@ -908,6 +908,19 @@ extension SidebarView {
         let titles = header.more.menuProvider?()?.items.filter { !$0.isAlternate }.map { $0.isSeparatorItem ? "—" : $0.title } ?? []
         return (header.more.frame, header.more.isHidden, titles)
     }
+    /// A Blank Window header's "Move to…" button: shown, its title and its menu (C-report-s11 1(a)).
+    public var blankHeaderMoveTo: (shown: Bool, title: String, frame: CGRect, menu: [String])? {
+        guard let header = pager.currentPage?.header else { return nil }
+        header.layoutSubtreeIfNeeded()
+        let shown = header.moveTo.superview != nil && !header.moveTo.isHidden
+        return (shown, header.moveTo.title, header.moveTo.frame, header.moveToMenu().items.map(\.title))
+    }
+    /// Chooses a Space in the Blank Window header's "Move to…" menu (the same item a click picks).
+    @discardableResult
+    public func chooseBlankHeaderMoveTo(_ title: String) -> Bool {
+        guard let menu = pager.currentPage?.header.moveToMenu(), let index = menu.items.firstIndex(where: { $0.title == title }) else { return false }
+        menu.performActionForItem(at: index); return true
+    }
     /// Read actual private-window view visibility for real-App acceptance.
     public var incognitoChrome: [String: Bool] {
         ["favoritesHidden": favorites.isHidden, "libraryHidden": bottomBar.home.isHidden,

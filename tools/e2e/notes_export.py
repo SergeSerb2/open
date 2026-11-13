@@ -31,6 +31,15 @@ def run(factory, results, tmp, h):
         empty_zip = os.path.join(tmp, 'empty.zip')
         state = app.call('note', action='export', path=empty_zip)
         row('export_without_notes_writes_nothing', state['last'] == 'none' and not os.path.exists(empty_zip), state=state)
+        # C-NT3 (C-report-s11): Help ▸ Export Notes with no Notes: no phase-out alert (Open keeps Notes),
+        # a toast at the window's top right with the text only (no "Click to report a bug.").
+        app.call('menu-perform', id='export-notes')
+        toast = h.wait_until(lambda: next((t for t in app.call('toasts')['toasts'] if t['title'].startswith('No Notes')), None), timeout=5, step=.1) or {}
+        win = app.call('window-state')['frame']
+        tf = toast.get('frame') or [0, 0, 0, 0]
+        row('export_no_notes_toast_top_right', toast.get('title') == 'No Notes found to export.' and not toast.get('subtitle')
+            and tf[0] + tf[2] > win[2] * 0.6 and tf[1] < 120 and not any(w.get('sheet') for w in [app.call('window-state')]),
+            toast=toast, window=win)
 
         # 2. A Note with every kind of format, and a second one with the same title.
         app.call('note', action='create')

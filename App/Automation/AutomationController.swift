@@ -326,7 +326,14 @@
       case "welcome": return try welcome(a)
       case "easel": return try easel(a)
       case "note": return try note(a)
-      case "blank-window": return try blankWindowState()
+      case "blank-window":
+        // action=move-to space=‹title›: the header's "Move to…" menu item (front window).
+        if a["action"] as? String == "move-to" {
+          guard let title = a["space"] as? String, let controller = try window.controller else { throw Failure(message: "no window") }
+          return controller.sidebar.chooseBlankHeaderMoveTo(title)
+        }
+        if a["action"] as? String == "saved-file" { return app.blankWindowsFile.path }
+        return try blankWindowState()
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)

@@ -1259,9 +1259,14 @@ purpose.
    menu is the ordinary Today-tab menu (with Move to ▸), ⌘W on the last tab
    closes the window with no prompt, and it was not restored at relaunch (with
    "restore windows" off). ⇧⌘T reopens a closed tab in that window and does not
-   bring a closed Blank Window back. Not captured: tab drag between windows, the
-   Archive entry of a closed tab.
-   Verify.
+   bring a closed Blank Window back. Capture session 11 (`C-report-s11.md`): a tab
+   drags both ways between a Blank Window and a normal window (the destination
+   shows its blue drop line; Arc also opens its invisible drop-rail windows, 80 pt
+   at the window edge and 30 pt at the sidebar edge, during any tab drag); the
+   header has a small "Move to…" button (what it does is not captured); ⌘W puts
+   a tab in Library ▸ Archived Tabs, but the last tab that closes the window is
+   not archived; with "restore windows" **on**, the Blank Window comes back at
+   relaunch with its tabs, at a default frame (not the saved one).
 3. **New Incognito Window** opens a window on the hidden incognito context
    (§5.2 rule 6): distinct sidebar header for its Today list, no history/
    cookies persist, extensions off by default ("can't be installed or used
