@@ -58,7 +58,11 @@ public final class HoverPreviewController {
             }
             CATransaction.begin(); CATransaction.setDisableActions(true)
             CATransaction.setCompletionBlock { [weak card] in
-                MainActor.assumeIsolated { card?.layer?.shouldRasterize = false }
+                MainActor.assumeIsolated {
+                    if card?.layer?.animation(forKey: "previewOut") == nil {
+                        card?.layer?.shouldRasterize = false
+                    }
+                }
             }
             layer.add(fade, forKey: "previewIn")
             CATransaction.commit()
