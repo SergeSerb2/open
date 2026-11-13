@@ -132,7 +132,7 @@ final class SpacePagerView: NSView {
         let target = focusedIndex
         let w = bounds.width
         let from = previous.flatMap { id in spaces.firstIndex { $0.id == id } } ?? target
-        for i in min(from, target)...max(from, target) { page(for: spaces[i]).isHidden = false }
+        for i in min(from, target)...max(from, target) { setPage(page(for: spaces[i]), visible: true) }
         layoutPages()
         shownSpaceID = focused.id
         let presentationX = presentationOffset
@@ -183,7 +183,18 @@ final class SpacePagerView: NSView {
     private func finishSlide() {
         guard !animating, swipe == nil else { return }
         let focused = context.focusedSpace?.id
-        for (id, p) in pages { p.isHidden = creationPage != nil || id != focused }
+        for (id, p) in pages { setPage(p, visible: creationPage == nil && id == focused) }
+    }
+
+    private func setPage(_ page: SpacePageView, visible: Bool) {
+        // The native pages overlap in the viewport. Hiding an outgoing NSView
+        // invalidates its still-visible sibling at the spring endpoint. Keep
+        // visibility in the layer tree so the resting page needs no repaint.
+        // Accessibility follows the same visibility, and PagerStrip owns input.
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        page.layer?.isHidden = !visible
+        page.setAccessibilityHidden(!visible)
+        CATransaction.commit()
     }
 
     func beginCreation(page: NSView) {
@@ -229,7 +240,7 @@ final class SpacePagerView: NSView {
             let base = focusedIndex
             swipe = SwipeState(baseIndex: base, startOffset: start)
             offset = swipe!.startOffset
-            for p in pages.values { p.isHidden = false }
+            for p in pages.values { setPage(p, visible: true) }
             for i in max(0, base - 1)...min(spaces.count - 1, base + 1) { _ = page(for: spaces[i]) }
             layoutPages()
             return true
@@ -311,7 +322,7 @@ final class PagerStrip: NSView {
     // The layers move independently of native page origins. Route input to the
     // model's focused page, including while a reversed slide is still visible.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHiddenOrHasHiddenAncestor, let inputPage, !inputPage.isHidden else { return nil }
+        guard !isHiddenOrHasHiddenAncestor, let inputPage, !inputPage.isHidden, inputPage.layer?.isHidden != true else { return nil }
         return inputPage.hitTest(convert(point, from: superview))
     }
 
