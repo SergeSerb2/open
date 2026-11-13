@@ -168,6 +168,7 @@ def run(factory, results, tmp, harness):
             app.call('defaults', key='open.favorites.liveCalendarDisabled', value=None)
         finally:
             app.quit()
+    live_persistence_checks(factory, results, wait_until, new_tab)
     # Audit A2: Favorite unread badges (own launch: app hosts map to a local server).
     badges(factory, results, harness)
 
@@ -350,6 +351,12 @@ def gear_checks(app, results, wait_until, cal, fav, live):
         except RuntimeError:
             return False
     def stored(): return [s.lower() for s in (app.call('defaults', key=key, persistent=True) or [])]
+    def choose(command, **arguments):
+        # Keep recording each missing behavior on the pre-CG1 App, instead of aborting at its missing menu.
+        try:
+            app.call(command, **arguments)
+        except RuntimeError:
+            pass
     sync = {'id': 'g1', 'title': 'Gear sync', 'start': 10, 'end': 40, 'url': MEET}
     cal(action='fixture', access='granted', events=[sync])
     cal(action='clock', minutes=0)
@@ -364,7 +371,7 @@ def gear_checks(app, results, wait_until, cal, fav, live):
     # Refresh: new events arrive slowly (fixture delay); the spinner stands where the gear was until they land.
     cal(action='fixture', access='granted', delayMs=900,
         events=[sync, {'id': 'g2', 'title': 'Added before refresh', 'start': 20, 'end': 50}])
-    app.call('glance-open', control='gear', item='Refresh')
+    choose('glance-open', control='gear', item='Refresh')
     during = glance(wait=False).get('gear') or {}
     done = wait_until(lambda: (lambda s: s if (s.get('gear') or {}).get('refreshing') is False else None)(glance(wait=False)),
                       timeout=6, step=.05) or glance(wait=False)
@@ -383,7 +390,7 @@ def gear_checks(app, results, wait_until, cal, fav, live):
     wait_until(lambda: live().get('tiles'), timeout=5, step=.05)
     hover(fav)
     glance()
-    app.call('glance-open', control='gear', item='Disable Live Calendar')
+    choose('glance-open', control='gear', item='Disable Live Calendar')
     closed = wait_until(lambda: glance(wait=False).get('shown') is False, timeout=3, step=.05)
     plain = wait_until(lambda: (lambda s: s if not s.get('tiles') and s.get('active') is False else None)(live()), timeout=3, step=.05)
     saved = stored()
@@ -398,7 +405,7 @@ def gear_checks(app, results, wait_until, cal, fav, live):
         'stored': saved, 'hoverAgain': again.get('kind'), 'menu': menu, 'plate': plate, 'live': plain}
 
     # Enable Live Calendar (the tile menu): countdown, card and Live Calendar items come back; the stored list empties.
-    app.call('sidebar-menu', node=fav, item='Enable Live Calendar')
+    choose('sidebar-menu', node=fav, item='Enable Live Calendar')
     back = wait_until(lambda: (lambda s: s if s.get('tiles') and s.get('active') else None)(live()), timeout=5, step=.05)
     hover(fav)
     card_back = glance()
@@ -407,6 +414,52 @@ def gear_checks(app, results, wait_until, cal, fav, live):
     results['cal_live_enable_per_favorite'] = {'ok': bool(back) and card_back.get('kind') == 'calendar' and stored() == []
         and menu_back == {'Enable Live Calendar': False, 'Disable Live Calendar': True, 'Meeting Reminder': True},
         'card': card_back.get('kind'), 'menu': menu_back, 'stored': stored()}
+
+
+def live_persistence_checks(factory, results, wait_until, new_tab):
+    """Disable one of two Google Calendar Favorites, then restart the real App on the same data."""
+    key = 'open.favorites.liveCalendarDisabled'
+    app = None
+    try:
+        app = factory(urls=('about:blank',), fresh=True, extra_args=ENGINE_SWITCHES)
+        app.call('defaults', key=key, value=None)
+        first = new_tab(app, 'https://calendar.google.com/calendar/u/0/r/day')
+        app.call('favorite', tab=first)
+        second = new_tab(app, 'https://calendar.google.com/calendar/u/1/r/week')
+        app.call('favorite', tab=second)
+        new_tab(app, 'about:blank')
+        app.call('calendar', action='fixture', access='granted', events=[{'id': 'persist', 'title': 'Restart sync', 'start': 5, 'end': 35, 'url': MEET}])
+        wait_until(lambda: len(app.call('calendar', action='live').get('tiles', [])) == 2, timeout=5, step=.05)
+        app.call('sidebar-menu', node=first, item='Disable Live Calendar')
+        saved = app.call('defaults', key=key, persistent=True)
+        app.quit()
+        app = None
+        app = factory(urls=(), fresh=False, extra_args=ENGINE_SWITCHES)
+        app.call('calendar', action='fixture', access='granted', events=[{'id': 'persist', 'title': 'Restart sync', 'start': 5, 'end': 35, 'url': MEET}])
+        live = wait_until(lambda: (lambda state: state if state.get('active') and len(state.get('tiles', [])) == 1 else None)(app.call('calendar', action='live')),
+                          timeout=5, step=.05) or {}
+        app.call('hover', favorite=first, ms=800)
+        first_card = app.call('glance-state', wait=False).get('kind')
+        app.call('hover', leave=True, ms=300)
+        app.call('hover', favorite=second, ms=800)
+        second_card = app.call('glance-state').get('kind')
+        app.call('hover', leave=True, ms=300)
+        first_menu = app.call('sidebar-menu-state', node=first, item='Enable Live Calendar')
+        second_menu = app.call('sidebar-menu-state', node=second, item='Disable Live Calendar')
+        stored = app.call('defaults', key=key, persistent=True) or []
+        tiles = {tile['tab'].lower() for tile in live.get('tiles', [])}
+        results['cal_live_disable_restart_isolation'] = {'ok': [s.lower() for s in saved or []] == [first.lower()]
+            and stored == saved and first_card != 'calendar' and second_card == 'calendar'
+            and second.lower() in tiles and first.lower() not in tiles and bool(first_menu) and bool(second_menu),
+            'saved': saved, 'restored': stored, 'cards': [first_card, second_card], 'tiles': list(tiles)}
+    except RuntimeError as error:
+        results['cal_live_disable_restart_isolation'] = {'ok': False, 'error': str(error)}
+    finally:
+        if app is not None:
+            try:
+                app.call('defaults', key=key, value=None)
+            finally:
+                app.quit()
 
 
 def meet_route_checks(app, results, wait_until, cal):

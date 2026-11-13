@@ -34,7 +34,9 @@ final class LiveCalendarCoordinator {
     // "Disable / Enable Live Calendar" on a Favorite (Open's design, CG1): recompute at once; turning one back on
     // starts Live Calendar again if it had stopped.
     settingsObserver = NotificationCenter.default.addObserver(forName: FavoriteTileSettings.didChange, object: nil, queue: .main) { [weak self] _ in
-      MainActor.assumeIsolated {
+      // Every window reloads its settings from this notification. Wait until all those callbacks have run
+      // before reading their settings, so another window cannot keep the disabled Favorite live.
+      Task { @MainActor [weak self] in
         guard let self else { return }
         if self.isActive { self.update() } else if self.hasLiveFavorite() { self.tileAppeared() }
       }
