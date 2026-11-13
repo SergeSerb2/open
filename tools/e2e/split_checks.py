@@ -87,7 +87,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         app.call('suggest-remote', enabled=False)
         if not functional_only and lane != 'merge':
             app.call('split', op='observe')
-        app.call('window-frame', frame=[60, 60, 1360, 860])
+        app.call('window-frame', frame=[60, 60, 1360, 860], unconstrained=True)
         empty_menu = app.call('split', op='plus')
         row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split'), menu=empty_menu)
         a = opened('a'); original_page = app.page(a)['identifier']; app.call('focus', tab=a)
@@ -168,7 +168,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         captures = []
         for appearance in ('light','dark'):
             app.call('appearance',name=appearance)
-            path = Path(tmp) / ('split-custom-' + appearance + '.png')
+            path = Path(h.ROOT) / '.re/s9-split' / ('split-custom-' + appearance + '.png')
             app.call('snapshot',path=str(path))
             captures.append(str(path))
         app.call('appearance',name='system')
@@ -307,7 +307,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         widths = [p['frame'][2] for p in narrow['panes']]
         row('narrow_equal_scaling', narrow['container'][2] < 800 and max(widths)-min(widths) <= 1
             and max(widths) < 200 and geometry(narrow, 'horizontal', 4), state=narrow)
-        app.call('window-frame', frame=[60, 60, 1360, 860]); settled(4)
+        app.call('window-frame', frame=[60, 60, 1360, 860], unconstrained=True); settled(4)
         # Closing the focused third pane keeps a split with a valid focused survivor.
         closed = state()['focused']; key('-'); s = settled(3)
         row('close_focused_pane', closed not in [p['id'] for p in s['panes']] and s['focused'] == s['panes'][0]['id']
