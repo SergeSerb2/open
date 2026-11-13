@@ -89,7 +89,7 @@ enum EditorFlows {
         check("F15 Delete closes editor and deletes from the real store", stage.controller.panel == nil && store.boost(id: id) == nil)
         for changed in [false,true] {
             let s = EditorStage(isNew: true); let newID = s.session.boost.id
-            if changed { s.tap("editor.tool.case") }; s.key(53,"\u{1b}")
+            if changed { s.tap("editor.tool.case") }; s.tap("editor.done")
             check("F16 close new Boost changed=\(changed)", (s.host.boostStore.boost(id: newID) != nil) == changed && s.host.exits == 1)
         }
         let welcome = EditorStage(state: "editor-first-run"); welcome.tap("editor.make")
@@ -133,7 +133,11 @@ enum EditorFlows {
         func check(_ name: String,_ pass: Bool) { checks.append(.init(name: name,pass: pass)) }
         let durable = EditorStage(); let id = durable.session.boost.id
         durable.tap("editor.tool.case"); let committed = durable.session.boost
+        let durablePanel = durable.panel
+        // #552 / C12-D2-3: Escape keeps the main editor open; Done closes and flushes it.
         durable.key(53,"\u{1b}")
+        check("F16 Escape keeps the main Boost editor open",durable.controller.panel === durablePanel && durable.controller.session?.isClosed == false && durable.host.exits == 0)
+        durable.tap("editor.done")
         let fresh = BoostStore(root: durable.host.root,profileID: durable.host.profileID)
         let diskValue = fresh.load().first { $0.id == id }
         check("103-1 commit then close flushes to a fresh store without caller saveNow",diskValue?.textTransform == committed.textTransform && diskValue?.textTransform == "capitalize" && diskValue?.siteMatch == committed.siteMatch && diskValue?.name == committed.name)
