@@ -129,7 +129,7 @@ The field is computed on the CPU into a 64×64 float image (extended sRGB) and s
 1. Two linear gradients in window uv space: base (angle 111°, length × 1.015, center offset 0.021) and overlay (angle 146.3°, length × 0.332). Each gradient parameter is computed at the 4 window corners, clamped to 0…1, and interpolated over the 2 triangles of the window quad (bottom-left to top-right diagonal), like a per-vertex varying.
 2. Colors mix in OKLab. The base parameter is scaled by 4/3, so the base reaches its end color at 75 % of its line. An overlay whose first stop is clear fades in the second stop's own color, not black.
 3. The overlay composites over the base in linear light. The result is encoded to sRGB with a sign-preserving transfer, so extended components stay valid.
-4. The result is drawn at alpha 0.64 over a neutral underlay: gray 0.694 when the window is active, 0.83 when inactive (`translucencyStyle: light`).
+4. In the static fit, the result is drawn at alpha 0.64 over a neutral underlay: gray 0.694 when the window is active, 0.83 when inactive (`translucencyStyle: light`).
 
 Evidence for the structure: Arc's theme shader library (`ARC_WindowThemeUI`, `default.metallib`) has entry points `gradientVertex`, `gradientFragment`, `overlayVertex`, `overlayFragment`, `renderVertex`, `renderFragment`. The vertex stage uses `dot`, `clamp`, and `sqrt` (the per-vertex projection). The fragment stage holds the published OKLab constants: the LMS to linear sRGB matrix (4.0767417, −3.3077116, 0.2309699, −1.2684380, 2.6097574, −0.3413194, −0.7034186, 1.7076147) and the inverse cube matrix (0.3963378, 0.2158038, −0.1055613, −0.0894842, −1.2914855). It also holds the sRGB exponent 1/2.4 with `sign`, and `pow`. The angles, scales, alpha, and underlay grays are our fits to the captures. Our code is our own implementation of these facts. No shader code was copied.
 
@@ -628,7 +628,7 @@ The two rewritten checks failed in about one run of two before (docs/followups.m
 
 ### 16.6 Window material: translucent card and inactive window (Section 5, 2026-11-06)
 
-One model now draws the window background in every state (`OpenDesign/WindowMaterial.swift`, interaction-states §13.1):
+The original static fit and the page card use this tint/backdrop model (`OpenDesign/WindowMaterial.swift`, interaction-states §13.1); live browser windows use the system material described in §3.3:
 
 ```text
 pixel = (1 − w) × tint + w × backdrop        w = 0.115

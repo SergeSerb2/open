@@ -249,7 +249,7 @@ public final class ThemeBackgroundView: NSView {
         if commit { finish(to: incoming, duration: duration) } else {
             animateOpacity(incoming, to: 0, duration: duration) { [weak self] in
                 incoming.removeFromSuperlayer()
-                if self?.incoming === incoming { self?.incoming = nil }
+                if self?.incoming === incoming { self?.incoming = nil; self?.refresh() }
             }
         }
     }
@@ -275,6 +275,7 @@ public final class ThemeBackgroundView: NSView {
             self.current.removeFromSuperlayer()
             self.current = layer
             self.incoming = nil
+            self.refresh()
         }
     }
 
