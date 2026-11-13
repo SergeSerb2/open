@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 from profiles_first_navigation import run as first_navigation
 from profiles_pending_navigation import run as pending_navigation, DELAY_KEY, DELAY_MS
+from loopback_http import LoopbackHTTPServer
 
 
 def run(factory, results, tmp, api, defaults_before):
@@ -233,7 +234,7 @@ def run(factory, results, tmp, api, defaults_before):
             def log_message(self, *_):
                 pass
 
-        lists = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Lists)
+        lists = LoopbackHTTPServer(Lists)
         thread = threading.Thread(target=lists.serve_forever, daemon=True)
         thread.start()
         env = {'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % lists.server_port,

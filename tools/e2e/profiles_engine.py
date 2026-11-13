@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import threading
 import time
+from loopback_http import LoopbackHTTPServer
 
 
 def run(factory, results, tmp, config, new_tab, wait_until):
@@ -25,7 +26,7 @@ def run(factory, results, tmp, config, new_tab, wait_until):
             self.end_headers()
             self.wfile.write(body)
 
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     port = server.server_address[1]
     base = 'http://127.0.0.1:%d/' % port

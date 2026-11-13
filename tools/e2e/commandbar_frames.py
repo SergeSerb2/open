@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import zlib
+from loopback_http import LoopbackHTTPServer
 
 ROOT = Path(__file__).resolve().parents[2]
 PAGES = {'lisbon': ('Lisbon weather', (63, 122, 92)), 'lemon': ('Lemon pasta', (168, 80, 44)),
@@ -67,7 +68,7 @@ def serve(name):
             self.send_response(200); self.send_header('Content-Type', kind); self.send_header('Cache-Control', 'max-age=3600')
             self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 

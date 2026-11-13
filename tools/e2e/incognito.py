@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+from loopback_http import LoopbackHTTPServer
 
 
 def checks(factory, results, tmp, harness):
@@ -31,7 +32,7 @@ def checks(factory, results, tmp, harness):
             self.send_header('Content-Length', str(len(body)))
             self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = 'http://127.0.0.1:%d' % server.server_address[1]
     app = None; saved = {}

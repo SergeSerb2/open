@@ -7,6 +7,7 @@ import os
 import struct
 import time
 import zlib
+from loopback_http import LoopbackHTTPServer
 
 
 def png_pixels(path):
@@ -67,7 +68,7 @@ def github_fixture():
             self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.send_header('Content-Length', str(len(data)))
             self.end_headers(); self.wfile.write(data)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1], state
 
@@ -257,7 +258,7 @@ def gmail_fixture():
             self.send_response(200); self.send_header('Content-Type', kind); self.send_header('Content-Length', str(len(body)))
             self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1], state
 
