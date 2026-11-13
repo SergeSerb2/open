@@ -1,10 +1,10 @@
 {
- "status": "candidate for live tab transfer and shell HTTP authentication; adoption pending lead GO",
+ "status": "adopted 1.0.1 code-sign clone lease inode guard",
  "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
  "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
  "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",
- "framework_sha256": "267b0ad890f198be79cb7c485f075a8c65f1cf18f744383c14b6121ecc8a2b59",
- "framework_uuid": "4C4C4438-5555-3144-A1FF-1604F5C948AD",
+ "framework_sha256": "61709cc0c07de5a6c489ef692c0491bc6a303cc08fcdecf94ea9d8c06abf8121",
+ "framework_uuid": "4C4C44D5-5555-3144-A137-FBAB1476EFFE",
  "chromium_version": "156.0.8078.48",
  "cef_version": "156.0.14+g4fa4ab5",
  "chromium_head": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
@@ -17,14 +17,19 @@
  "pgo_profile": "chrome-mac-arm-8078-1791925243-b77c87a12380c6212a5d36737d1c76576eaaa85d-8bf8e95f3aaaafc23171beddc0ee3f397abd1e12.profdata",
  "pgo_profile_sha256": "15fbc265a780b68bd943e5a2f2c89b58a006c45e28435257e4d927f1c7ee0c20",
  "open_patches": "all 51 active (Engine/fork/patches/*/series), including CEF 0302 optional hosted-popup opener, CEF 0601 user-origin sheets, Chromium 0508 password authentication prompt, and 0509 macOS English product labels; 148 overlay files; hosted-tab TransferTab API and mutable platform-delegate strip ownership are overlay changes",
- "built_at": "2026-11-13 01:43 local; OFFLINE incremental build, 1282 steps in 5m22.29s, at most 4 local jobs; shared tree/output restored to b0cb685a, strict status 8/0/0",
- "symbols": "matching arm64 dSYM archived at ~/Developer/open-engine-night13/symbols/Chromium Embedded Framework.dSYM; UUID 4C4C4438-5555-3144-A1FF-1604F5C948AD",
+ "built_at": "2026-11-13 08:30 local; OFFLINE incremental build, 51 executed steps in 2m06.52s, at most 4 local jobs; shared tree/output restored to 267b0ad8 before qualification",
+ "symbols": "matching arm64 dSYM archived at ~/Developer/open-engine-clone101/symbols/Chromium Embedded Framework.dSYM; UUID 4C4C44D5-5555-3144-A137-FBAB1476EFFE",
  "known_limits": [
   "CEF framework links with --lto-O0 (thinlto_optimize_default); no link-time optimization",
   "HTTP authentication request/answer/cancel is in OpenEngine; it does not provide Chromium password-manager save/fill or every network-side withdrawal. The shell owns its sheet lifetime."
  ],
  "widevine": "enable_widevine=true, bundle_widevine_cdm=false (release.args.gn); CDM component registers only with --open-enable-widevine (Advanced setting \"Play DRM-protected video\", off by default)",
  "superseded": [
+  {
+   "framework_sha256": "267b0ad890f198be79cb7c485f075a8c65f1cf18f744383c14b6121ecc8a2b59",
+   "framework_uuid": "4C4C4438-5555-3144-A1FF-1604F5C948AD",
+   "reason": "before lease inode guard for concurrent stale-clone cleanup"
+  },
   {
    "framework_sha256": "b0cb685a5b425d53aecfb34daff641c069368bfcfd1f84507fc0ae8559bfe7e8",
    "framework_uuid": "4C4C448C-5555-3144-A165-19CFB06AD149",
