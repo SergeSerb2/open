@@ -4175,7 +4175,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         settled(); key(); toggle_show = app.call("window-motion")
         motions = [hide_motion, show_motion, toggle_hide, toggle_show]
         results["motion_sidebar_toggle"] = {"ok": all(spring(m["sidebar"].get("sidebar", {}), .1, .95, "transform.translation.x")
-            and spring(m["sidebar"].get("panel", {}), .1, .95, "transform")
+            and spring(m["sidebar"].get("panel", {}), .1, .95, "transform.translation.x")
             and 0<=m["sidebar"].get("panel",{}).get("scheduledDelay",-1)<=1/60
             and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95} for m in motions),
             "scheduled": [m["sidebar"] for m in motions]}
