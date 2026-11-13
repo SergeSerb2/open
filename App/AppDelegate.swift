@@ -11,6 +11,7 @@ import QuartzCore
 import OpenCommands
 import OpenSettings
 import OpenLibrary
+import OpenSidebar
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -58,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// The engine layout step's outcome (and the data root lock).
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
+  var sidebarDropRails: [SidebarDropRails] = []
   private(set) var windowControllers: [BrowserWindowController] = []
   let incognitoSessions = IncognitoSessions()
   // CEF pumps AppKit without a normal per-event undo group boundary. The
@@ -65,6 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
   private(set) var engineReady = false
   private(set) var terminationRequested = false
+  /// The Blank Windows open when quit started (C-report-s11 1(c)); written by saveState.
+  var blankWindowsAtQuit: [SavedBlankWindow]?
   private var faviconShutdownTask: Task<Void, Never>?
   private var historyQuitTask: Task<Void, Never>?
   /// Uptime of the last quit-time history flush. A quit cancelled later (downloads alert,
@@ -249,6 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     let icons = wasEngineReady && !windowControllers.isEmpty ? stores.sidebarFavicons : nil
     terminationRequested = true
+    blankWindowsAtQuit = currentBlankWindows()
     deepLinks.relaunchIfRequested()
     preparedOnboardingSound?.stop(); preparedOnboardingSound = nil
     if let onboardingStartObserver { CFRunLoopObserverInvalidate(onboardingStartObserver); self.onboardingStartObserver = nil }
@@ -415,6 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
       createWindowController(state: state)
     }
+    restoreBlankWindows()
     todayAutoArchive?.finishStartupComposition()
     LaunchTiming.shared.mark("windowShown")
   }
@@ -529,6 +535,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       controller.window?.alphaValue = 0
     }
     if session == nil {
+      // Tab drag between a Blank Window and a normal window (capture C-report-s11 1(a)).
+      controller.context.foreignNodeDrop = { [weak self, weak factory] ids, parent, index, perform in
+        guard let self, let factory else { return false }
+        return self.dropTabs(ids, fromAnotherWindowInto: factory, parent: parent, index: index, perform: perform)
+      }
+      controller.context.tabDragChanged = { [weak self] ids in self?.sidebarDragChanged(ids) }
       controller.context.storedFavicons = stores.sidebarFavicons
       // Favorites empty-state card (A3): on in the product; a launch option turns it off for older suites.
       controller.context.showsFavoritesEmptyState = !options.hideFavoritesEmptyState
@@ -678,6 +690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    sidebarDragChanged(nil)
     libraryFirstSidebarDraws.removeValue(forKey:id)
     settingsPresenter.libraryWindowClosed(id)
     guard let factory = hostFactories[id] else { return }
@@ -758,6 +771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     archiveSink.flushAll()
     notes.flush()
+    if let blankWindowsAtQuit { writeBlankWindows(blankWindowsAtQuit) }
   }
 
   /// Used after import (including an E-5 save error) so the imported items are
@@ -1134,10 +1148,13 @@ extension AppDelegate: CommandDispatcher {
     catch { hotkeyError = String(describing: error); Self.commandLog("Little Open hotkey registration failed: \(error)") }
   }
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
+  var libraryShowsEasels: Bool { settingsPresenter.libraryWindow != nil && settingsPresenter.activeLibrarySession?.panel?.section == .easels }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
     // Arc 1.172.2 (capture, C-questions "_NS:451"): "View Library" with no browser window, else "Open Library…".
     if id == "view-library", frontStandardWindowController == nil { return CommandMenuState(title: "View Library") }
+    // C-NT1 (C-report-s11): while the Library shows Easels, the item reads "Hide Easels" in Arc.
+    if id == "view-easels-notes", libraryShowsEasels { return CommandMenuState(title: "Hide Easels & Notes") }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
@@ -1165,6 +1182,8 @@ extension AppDelegate: CommandDispatcher {
     // New Note with no browser window key (a Little Open window, Settings, no key window):
     // the Note goes to the front browser window (NoteTab.create).
     if ["new-note", "new-note-in-split"].contains(id) { return frontStandardWindowController != nil }
+    // C-NT1: with no browser window open, Arc's View Easels… does nothing.
+    if id == "view-easels-notes" { return frontStandardWindowController != nil }
     return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-easels-notes", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
@@ -1214,7 +1233,9 @@ extension AppDelegate: CommandDispatcher {
     // Arc's View Media runs viewScreenshotsAndCaptures: (docs/re/menus-and-hotkeys.md): the Library's
     // Media grid (Captures + Screenshots), not playback.
     case "view-media": settingsPresenter.showLibrary(section: .media)
-    case "view-easels-notes": settingsPresenter.showLibraryEasels()
+    case "view-easels-notes":
+      // C-NT1: the item toggles; choosing "Hide Easels & Notes" closes the Library again.
+      if libraryShowsEasels { settingsPresenter.closeLibrary() } else if frontStandardWindowController != nil { settingsPresenter.showLibraryEasels() }
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history":
       settingsPresenter.showLibrary(section: .history)

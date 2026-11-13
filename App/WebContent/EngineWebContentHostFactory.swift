@@ -1004,7 +1004,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
     } else { controller?.refresh(); mirror.sync(); scheduleSave() }
     // Capture C10: ⌘W on a Blank Window's last tab closes the whole window, with no prompt.
-    if isBlankWindow, orderedTabs.isEmpty { DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) } }
+    // C-report-s11 1(b): the other closed tabs are in the Archive, this last one is not.
+    if isBlankWindow, orderedTabs.isEmpty {
+      model.archiveSink?.discardArchived(ids: [id])
+      DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) }
+    }
   }
   func closeAll() {
     guard !isClosing else { return }
