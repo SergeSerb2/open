@@ -74,10 +74,12 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
     }, "browsers": browsers.mapValues {
       ["id": $0.identifier, "windowID": $0.chromeWindowIdentifier,
        "tabs": $0.webContents.map(\.identifier)] as [String: Any]
-    }, "requests": requests.keys.sorted().map { id in
+    }, "requests": requests.keys.sorted().map { id -> [String: Any] in
       let r = requests[id]!
-      return ["id": id, "pending": r.isPending, "origin": r.originURL?.absoluteString ?? "",
-        "realm": r.realm, "scheme": r.scheme, "proxy": r.isProxy,
+      let pending: Bool = r.isPending
+      let proxy: Bool = r.isProxy
+      return ["id": id, "pending": pending, "origin": r.originURL?.absoluteString ?? "",
+        "realm": r.realm, "scheme": r.scheme, "proxy": proxy,
         "host": r.host, "port": r.port] as [String: Any]
     }, "received": received, "cancelled": cancelled,
      "synchronousCallbacks": synchronousCallbacks,

@@ -580,8 +580,8 @@ OE_EXPORT @interface OEAuthenticationRequest : NSObject
 @property(nonatomic, readonly) NSInteger port;
 @property(nonatomic, readonly, copy) NSString* realm;
 @property(nonatomic, readonly, copy) NSString* scheme;
-@property(nonatomic, readonly, getter=isProxy) BOOL proxy;
-@property(nonatomic, readonly, getter=isPending) BOOL pending;
+@property(nonatomic, readonly, getter=isProxy) BOOL proxy NS_SWIFT_NAME(isProxy);
+@property(nonatomic, readonly, getter=isPending) BOOL pending NS_SWIFT_NAME(isPending);
 - (void)continueWithUsername:(NSString*)username password:(NSString*)password
     NS_SWIFT_NAME(continue(username:password:));
 - (void)cancel;
