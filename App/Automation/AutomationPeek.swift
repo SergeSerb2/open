@@ -49,6 +49,11 @@ extension AutomationController {
       }
       return ["shown": peek.isShown, "expanding": peek.isExpanding, "kind": overlay.motionKind,
         "snapshot": overlay.hasMotionSnapshot,
+        "openingHandoff": overlay.isOpeningHandoff, "promotionHandoff": peek.isPromotionHandoff,
+        "expandedImage": overlay.hasExpansionImage,
+        "expandedImageFrame": overlay.expandedImageFrame.map(rect) ?? [],
+        "expandedImageScale": overlay.expandedImageScale ?? 0,
+        "expandedImagePixels": overlay.expandedImagePixels.map { [$0.width, $0.height] } ?? [],
         "hostHidden": peek.stack.last?.host?.view.isHiddenOrHasHiddenAncestor ?? true,
         "hostAttached": peek.stack.last?.host?.view.window != nil,
         "backingScale": overlay.window?.backingScaleFactor ?? 1,
@@ -56,7 +61,7 @@ extension AutomationController {
         "layouts": overlay.layoutCount, "hostFrameChanges": overlay.hostFrameChangeCount,
         "panelFrame": rect(overlay.panel.frame), "clipFrame": rect(overlay.pageClip.frame),
         "hostFrame": peek.stack.last?.host.map { rect($0.view.frame) } ?? [],
-        "panel": motion(overlay.panel.layer), "overlay": motion(overlay.layer), "backdrop": motion(overlay.backdrop.layer)] as [String: Any]
+        "panel": motion(overlay.motionPanelLayer), "overlay": motion(overlay.layer), "backdrop": motion(overlay.backdrop.layer)] as [String: Any]
     case "peek-ui":
       controller.contentView.layoutSubtreeIfNeeded()
       let visible = app.media.visibility.sleepVisibility().visibleTabIDs(in: app.model).map(\.description).sorted()

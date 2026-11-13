@@ -64,6 +64,7 @@ public final class PeekController {
     @ObservationIgnored private var dismissGeneration = 0
     @ObservationIgnored private var motionGeneration = 0
     @ObservationIgnored private var snapshotTask: Task<Void, Never>?
+    public private(set) var isPromotionHandoff = false
     public var onChange: (() -> Void)?
     /// The window's toasts: "Peek closed" with Undo (M4).
     @ObservationIgnored public weak var toasts: ToastCenter?
@@ -102,6 +103,7 @@ public final class PeekController {
         guard let space = splitController.space else { return }
         let profile = profileID ?? space.profileID
         motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
+        isPromotionHandoff = false; overlay.clearExpansionCard(); overlay.restoreExpansionViewport()
         overlay.endHostSnapshot()
         dismissGeneration += 1; isDismissing = false
         expandingGeneration += 1; isExpanding = false
@@ -124,7 +126,8 @@ public final class PeekController {
             PeekMotionTrace.mark("host.loading", value: loading ? 1 : 0)
             PeekMotionTrace.region("host.onPageChange") { self.onPageChange?() }
             if !loading {
-                self.overlay.revealHost(host.view, duration: self.duration(0.12))
+                if self.overlay.openingHandoff { self.finishOpeningHandoff(itemID: itemID, host: host) }
+                else { self.overlay.revealHost(host.view, duration: self.duration(0.12)) }
             }
         }
         host.onLiveStateChange = { [weak self, weak host] state in
@@ -151,12 +154,25 @@ public final class PeekController {
         let focusAfterFreeze = overlay.window?.firstResponder
         overlay.animatePresentation(true, duration: interval) { [weak self, weak host] in
             guard let self, let host, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
-            self.overlay.endHostSnapshot()
+            self.overlay.attachOpeningHost(host.view)
             self.refresh()
             if self.isShown, self.overlay.window?.isKeyWindow == true,
                self.overlay.window?.firstResponder === focusAfterFreeze { host.focus() }
         }
         PeekMotionTrace.region("open.onChange") { onChange?() }
+    }
+    private func finishOpeningHandoff(itemID: UUID, host: any WebContentHost) {
+        guard snapshotTask == nil else { return }
+        let generation = motionGeneration
+        snapshotTask = Task { @MainActor [weak self, weak host] in
+            guard let host else { return }
+            let image = await PeekHostSnapshot.capture(host)
+            guard !Task.isCancelled, let self, self.motionGeneration == generation,
+                  self.stack.last?.id == itemID, self.overlay.openingHandoff else { return }
+            self.snapshotTask = nil
+            guard !host.isLoading else { return }
+            self.overlay.finishOpeningHandoff(image: image) { [weak self] in self?.refresh() }
+        }
     }
     private func duration(_ value: Double) -> Double { overlay.window?.isVisible == true && !Motion.reducesMotion ? value : 0 }
     private func installKeys() {
@@ -176,6 +192,7 @@ public final class PeekController {
     public func refresh() {
         PeekMotionTrace.mark("refresh.begin")
         defer { PeekMotionTrace.mark("refresh.end") }
+        if isPromotionHandoff { return }
         guard let item = stack.last else { overlay.isHidden = true; overlay.clearHost(); return }
         let sourceIsVisible: Bool
         if let space = item.librarySpaceID {
@@ -210,7 +227,13 @@ public final class PeekController {
         if isExpanding {
             motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
             expandingGeneration += 1; isExpanding = false
-            overlay.cancelExpansion(duration: duration(Motion.peekOpen)); refresh()
+            let item = stack.last
+            overlay.cancelExpansion(duration: duration(Motion.peekOpen)) { [weak self] in
+                guard let self, let item, let host = item.host, self.stack.last?.id == item.id else { return }
+                self.overlay.attachOpeningHost(host.view)
+                self.finishOpeningHandoff(itemID: item.id, host: host)
+            }
+            refresh()
         }
         else { dismissTop() }
     }
@@ -237,8 +260,12 @@ public final class PeekController {
             let image = await PeekHostSnapshot.capture(host)
             guard !Task.isCancelled, let self, self.motionGeneration == generation, self.stack.last?.id == item.id else { return }
             self.snapshotTask = nil
-            if let image { self.overlay.freezeHost(host.view, image: image) }
-            action()
+            if let image {
+                self.overlay.stageHostSnapshot(host.view, image: image) { [weak self] in
+                    guard let self, self.motionGeneration == generation, self.stack.last?.id == item.id else { return }
+                    action()
+                }
+            } else { action() }
         }
     }
     private func finishDismiss() {
@@ -267,6 +294,7 @@ public final class PeekController {
     }
     public func dismissAll() {
         motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
+        isPromotionHandoff = false
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
         undoTask?.cancel(); undoItem = nil; undoToast?.dismiss(); undoToast = nil
         for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; overlay.resetMotion(); overlay.clearHost(); removeKeys(); onChange?()
@@ -281,9 +309,32 @@ public final class PeekController {
         if interval == 0 { promote(item, into: target, split: false); return }
         prepareMotionSnapshot(for: item) { [weak self] in
             guard let self, self.expandingGeneration == generation, self.stack.last?.id == item.id else { return }
-            self.overlay.animateExpansion(to: self.overlay.contentRect, duration: interval) { [weak self] in
-                guard let self, self.expandingGeneration == generation, self.stack.last?.id == item.id else { return }
-                self.promote(item, into: target, split: false)
+            self.prepareExpandedImage(item, target: target, generation: generation, duration: interval)
+        }
+    }
+    private func prepareExpandedImage(_ item: PeekItem, target: SpaceID, generation: Int, duration: Double) {
+        guard let host = item.host else { return }
+        let rect = overlay.contentRect, motion = motionGeneration
+        overlay.prepareExpansionViewport(rect)
+        snapshotTask = Task { @MainActor [weak self, weak host] in
+            guard let host else { return }
+            let image = await PeekHostSnapshot.capture(host)
+            guard !Task.isCancelled, let self, self.motionGeneration == motion,
+                  self.expandingGeneration == generation, self.stack.last?.id == item.id else { return }
+            self.snapshotTask = nil
+            guard let image else {
+                self.overlay.restoreExpansionViewport(); self.isExpanding = false
+                self.overlay.attachOpeningHost(host.view)
+                self.finishOpeningHandoff(itemID: item.id, host: host)
+                return
+            }
+            self.overlay.stageExpansionImage(image, target: rect) { [weak self] in
+                guard let self, self.motionGeneration == motion, self.expandingGeneration == generation,
+                      self.stack.last?.id == item.id else { return }
+                self.overlay.animateExpansionCard(to: rect, duration: duration) { [weak self] in
+                    guard let self, self.expandingGeneration == generation, self.stack.last?.id == item.id else { return }
+                    self.promote(item, into: target, split: false)
+                }
             }
         }
     }
@@ -315,6 +366,7 @@ public final class PeekController {
             model.focusSpace(windowID: splitController.windowID, spaceID: target)
             model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
         }
+        isPromotionHandoff = !split && overlay.expansionCard != nil
         stack.removeLast(); item.host?.view.removeFromSuperview()
         // Bind before show, so showing a new tab cannot create and load a replacement host.
         if let host = item.host {
@@ -324,7 +376,26 @@ public final class PeekController {
             else { splitController.container.adopt(host, for:tab.id) }
         }
         splitController.refresh(); splitController.container.focus(tabID: tab.id)
-        overlay.resetMotion(); refresh(); if stack.isEmpty { removeKeys() }; onChange?(); return true
+        if isPromotionHandoff, let host = item.host {
+            finishPromotionHandoff(host, tabID: tab.id)
+        } else { overlay.resetMotion(); refresh() }
+        if stack.isEmpty { removeKeys() }; onChange?(); return true
+    }
+    private func finishPromotionHandoff(_ host: any WebContentHost, tabID: ItemID) {
+        let generation = motionGeneration
+        snapshotTask = Task { @MainActor [weak self, weak host] in
+            guard let host else { return }
+            let image = await PeekHostSnapshot.capture(host)
+            guard !Task.isCancelled, let self, self.motionGeneration == generation,
+                  self.isPromotionHandoff, self.model.tab(id: tabID) != nil,
+                  let card = self.overlay.expansionCard else { return }
+            self.snapshotTask = nil
+            if let image { self.overlay.expansionImage?.contents = image }
+            self.overlay.afterSnapshotCommit(card) { [weak self] in
+                guard let self, self.motionGeneration == generation, self.isPromotionHandoff else { return }
+                self.isPromotionHandoff = false; self.overlay.resetMotion(); self.refresh(); self.onChange?()
+            }
+        }
     }
     public func linkMenu(url: URL, source: ItemID) -> NSMenu {
         let menu = NSMenu(); menu.autoenablesItems = false

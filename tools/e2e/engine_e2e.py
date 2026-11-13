@@ -4543,15 +4543,19 @@ def peek_checks(factory, results, tmp):
         active = [s for s in sampled if s.get('expanding')]
         geometry = [a for a in expansion.get('panel', {}).get('animations', []) if a['key'] == 'peekGeometry']
         results['peek_expand_keeps_live_viewport_fixed'] = {'ok': bool(active) and bool(geometry)
-            and set(geometry[0]['paths']) == {'position', 'transform'}
+            and set(geometry[0]['paths']) == {'position', 'bounds', 'shadowPath'}
             and all(s['panelFrame'] == motion_before['panelFrame'] and s['clipFrame'] == motion_before['clipFrame']
-                    and s['hostFrame'] == motion_before['hostFrame']
-                    and s['layouts'] == motion_before['layouts']
-                    and s['hostFrameChanges'] == motion_before['hostFrameChanges'] for s in active),
+                    and s['hostFrame'] == active[0]['hostFrame']
+                    and s['layouts'] == active[0]['layouts']
+                    and s['hostFrameChanges'] == active[0]['hostFrameChanges'] for s in active)
+            and active[0]['hostFrameChanges'] == motion_before['hostFrameChanges'] + 1,
             'before': motion_before, 'samples': sampled}
         results['peek_expand_freezes_live_compositor'] = {'ok': bool(active)
-            and all(s.get('snapshot') and s.get('hostHidden') and s['panel'].get('rasterized')
-                    and s['panel'].get('rasterScale') == s.get('backingScale') for s in active), 'samples': sampled}
+            and all(s.get('snapshot') and s.get('hostHidden') and s.get('expandedImage')
+                    and s.get('expandedImageScale') == s.get('backingScale')
+                    and s['expandedImageFrame'][2:] == s['hostFrame'][2:]
+                    and s['expandedImagePixels'] == [v * s['backingScale'] for v in s['hostFrame'][2:]]
+                    and s['panel']['scale'] == [1, 1] for s in active), 'samples': sampled}
         wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
         promoted = next(t["id"] for t in app.call("tabs") if t["selected"])
         counts = app.call("host-counts")
@@ -4606,6 +4610,7 @@ def peek_checks(factory, results, tmp):
         time.sleep(.25)
         reverse_before = app.call('peek-motion')
         app.call('peek-expand')
+        wait_until(lambda: app.call('peek-motion').get('kind') == 'expand', timeout=5, step=.005)
         press = app.call('key', key='escape')
         reverse = app.call('peek-motion')
         time.sleep(.3)
@@ -4614,7 +4619,7 @@ def peek_checks(factory, results, tmp):
             and settled['shown'] and not settled['expanding']
             and settled['panelFrame'] == reverse_before['panelFrame']
             and settled['hostFrame'] == reverse_before['hostFrame']
-            and settled['hostFrameChanges'] == reverse_before['hostFrameChanges']
+            and settled['hostFrameChanges'] <= reverse_before['hostFrameChanges'] + 2
             and settled['panel']['scale'] == [1, 1], 'before': reverse_before, 'reverse': reverse, 'settled': settled}
         app.call('peek-close')
         # Close twice while expansion owns a completion: it must not promote a
