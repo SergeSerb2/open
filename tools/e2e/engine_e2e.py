@@ -11604,6 +11604,10 @@ def space_manager_checks(results, tmp, config, style):
         with open(snapshot_path) as stream: saved = json.load(stream)
         app.call('library-close'); app.quit()
         app = launch()
+        # An automatically opened command bar is a separate input owner. Close
+        # it through the real App key route before testing a Library tile click.
+        if app.call('commandbar-state').get('presented'):
+            app.call('key', key='escape', route='app')
         app.call('menu-perform', id='view-archive')
         # A menu action returning is not a Library composition/layout barrier.
         # Settle the actual window before reading coordinates, then poll the
@@ -11619,6 +11623,8 @@ def space_manager_checks(results, tmp, config, style):
             has_row = any(r['section'] == 'spaces' for r in last_uncached['sectionRows'])
             return last_uncached if library_window and has_row and last_uncached['visible'] and last_uncached['section'] == 'archive' and last_uncached['identity'] == '' else None
         uncached = wait_until(archive_ready, timeout=5)
+        click_bar = app.call('commandbar-state')
+        click_panel = app.call('library')
         if uncached:
             section = next(r for r in uncached['sectionRows'] if r['section'] == 'spaces')
             app.call('mouse', action='click', window=library_window, x=section['point'][0], y=section['point'][1])
@@ -11628,9 +11634,9 @@ def space_manager_checks(results, tmp, config, style):
             # Keep the actual timeout state as well as the failed ready result.
             # A None from wait_until otherwise hides the reason it never settled.
             print('library_section_click_fills_cache FAIL ' + json.dumps(dict(
-                uncached=last_uncached, reopened=state(app), ready=reopened), sort_keys=True), flush=True)
+                uncached=last_uncached, reopened=state(app), ready=reopened, panel=click_panel, commandbar=click_bar), sort_keys=True), flush=True)
         require('library_section_click_fills_cache', cache_ok,
-                uncached=last_uncached, reopened=reopened, after=app.call('space-manager-lifecycle'))
+                uncached=last_uncached, reopened=reopened, after=app.call('space-manager-lifecycle'), panel=click_panel, commandbar=click_bar)
         require('E6_relaunch_preserves_ids', order(app) == reordered and [row['id'] for row in saved['spaces']] == reordered
                 and reopened and [c['id'] for c in reopened['columns']] == reordered, expected=reordered, state=state(app))
         # The manager's real tab menu archives into the App's existing store.
