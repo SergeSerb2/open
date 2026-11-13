@@ -2,6 +2,7 @@
 import AppKit
 import UniformTypeIdentifiers
 
+// Fixed 128 px RGBA readback: 65,536 bytes per bitmap. Inputs are local build artifacts.
 func bitmap(_ image: NSImage) -> NSBitmapImageRep {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 128, pixelsHigh: 128,
         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -19,7 +20,7 @@ func difference(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Double {
 }
 let args = CommandLine.arguments
 func fail(_ message: String) -> Never { print("FAIL: \(message)"); exit(1) }
-guard args.count >= 4, let expected = NSImage(contentsOfFile: args[3]) else { fail("usage: release-icon set|check path icon.icns [proof.png]") }
+guard (args.count == 4 || args.count == 5), let expected = NSImage(contentsOfFile: args[3]) else { fail("usage: release-icon set|check path icon.icns [proof.png]") }
 if args[1] == "set" {
     guard NSWorkspace.shared.setIcon(expected, forFile: args[2], options: []) else { fail("NSWorkspace.setIcon") }
 } else if args[1] != "check" { fail("unknown operation") }
