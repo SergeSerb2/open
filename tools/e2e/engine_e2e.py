@@ -10564,7 +10564,7 @@ def sidebar_completion_archive_checks(app, launch, results, require, evidence, t
         except RuntimeError as error: errors.append(str(error))
     invalid_after = state()
     require('AA_APP_invalid_clock_refused', len(errors) == 5 and all(invalid_before[k] == invalid_after[k]
-            for k in ['offsetSeconds', 'timerGeneration', 'sweepCount', 'nextExpiry']), errors=errors, state=invalid_after)
+            for k in ['offsetSeconds', 'timerGeneration', 'sweepCount', 'nextExpiry']), errors=errors, before=invalid_before, state=invalid_after)
     app.call('archive-clock', reset=True)
     # Verify all-Profile scope, then restore Never before the idle interval.
     all_profiles = setting(never_profile, 'thirtyDays', scope='all')
