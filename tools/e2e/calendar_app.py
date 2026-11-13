@@ -338,9 +338,10 @@ def gear_checks(app, results, wait_until, cal, fav, live):
     """CG1, Open's design (LEAD 19:30; Arc's effect was never captured): the calendar card's gear menu, Refresh
     with a spinner in the gear's place, and Disable / Enable Live Calendar stored per Favorite."""
     key = 'open.favorites.liveCalendarDisabled'
-    def hover(node, ms=800):
+    def hover(favorite, ms=800):
+        # A Favorite tile is addressed with `favorite`, not `node`.
         app.call('hover', leave=True, ms=300)
-        return app.call('hover', node=node, ms=ms)
+        return app.call('hover', favorite=favorite, ms=ms)
     def glance(wait=True): return app.call('glance-state', wait=wait)
     def has_item(title):
         try:
