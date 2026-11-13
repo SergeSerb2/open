@@ -837,21 +837,31 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// back when one is moved. So the buttons are placed after AppKit's layout pass and before
     /// the window draws (`BrowserWindow.onLayoutPass`), where AppKit leaves them be; frame
     /// observers place a moved button at once as well.
+    private var trafficLightsHidden: Bool {
+        !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
+    }
+
     private func positionTrafficLights() {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         observeTrafficLights(window)
-        let hidden = !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
+        let hidden = trafficLightsHidden
+        if hidden {
+            // A native frame write can replace an NSView's backing-layer
+            // transform. Retire visibility before AppKit lays out the hidden
+            // controls; their next show places them at the new native endpoint.
+            if !dimmedLights.isHidden { dimmedLights.isHidden = true }
+        }
         for kind in Self.trafficLightKinds {
             guard let button = window.standardWindowButton(kind) else { continue }
             if button.isHidden != hidden { button.isHidden = hidden }
             if isLibraryOpen { button.layer?.removeAnimation(forKey: "sidebarToggle"); button.layer?.setValue(0, forKeyPath: "transform.translation.x") }
         }
         if isLibraryOpen { dimmedLights.layer?.removeAnimation(forKey: "sidebarToggle"); dimmedLights.layer?.setValue(0, forKeyPath: "transform.translation.x") }
-        placeTrafficLights()
+        if !hidden { placeTrafficLights() }
     }
 
     private func placeTrafficLights() {
-        guard !placingTrafficLights, let window, !window.styleMask.contains(.fullScreen) else { return }
+        guard !placingTrafficLights, !trafficLightsHidden, let window, !window.styleMask.contains(.fullScreen) else { return }
         placingTrafficLights = true
         defer { placingTrafficLights = false }
         let inset = cardState == .off ? 0 : WindowMetrics.revealCardInset
@@ -913,7 +923,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let buttonAlpha: CGFloat = dim ? Self.restButtonAlpha : 1, circlesAlpha: CGFloat = dim ? 1 : 0
         let changed = appliedTrafficLightDim != dim
         appliedTrafficLightDim = dim
-        if animated && changed && window.isVisible && !Motion.reducesMotion {
+        if animated && changed && window.isVisible && !dimmedLights.isHiddenOrHasHiddenAncestor && !Motion.reducesMotion {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Motion.hoverFade
                 for button in buttons { button.animator().alphaValue = buttonAlpha }
