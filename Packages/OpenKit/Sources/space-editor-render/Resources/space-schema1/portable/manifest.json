@@ -24,14 +24,14 @@
       },
       "pngSHA256": {
         "legacy": {
-          "window-0.png": "876d001d7710b495b496dd99a9e72205d3887fb2e4d03445ff8f48439526d42e",
-          "window-1.png": "d2b696a41d3092884509f640be748798a0968c3142a1d18b370d3120722866e5",
-          "window-2.png": "3fba3a440da06d579d0cea8404cd8b8d26a595193c12b19350aa5ba96f2c4294"
+          "window-0.png": "793da091ab94897954beceeba5ee5718d906779b355f7d5da70bb1577d8727f1",
+          "window-1.png": "2dd46498b068ab88ac0e58354f5074b36b1ce2d9da0a385f293eb662c31349bd",
+          "window-2.png": "d9cdf8cb0d188dc6c913434bd45b6864d8a49d8faea6bf8ad1a0dd45d9aea3c4"
         },
         "editor": {
-          "window-0.png": "ff3e0fc088000d40a93310762c9af67cbb5e8560c50bf982413705ba6ad7775a",
-          "window-1.png": "654258308c0207bfe5ff2d8a1b0e4c10c0f7232209b20de7a504d3fa7be82512",
-          "window-2.png": "3dbedd0806b9f433eb7c78ea0b10866e6cd02b52ebc01b87b7da28656b34192d"
+          "window-0.png": "8bec35021d431cdf5a9eef21676daac90f0d0d83462aac13cfdfb9ff92d7f14b",
+          "window-1.png": "3282b3c04a42ebb98b17033c7fb0c29285d0ff781c27ca558dd053f5b49d0a11",
+          "window-2.png": "332878a65311b783f49f5941ef206a04bc2c58c10eca7459d9b763780e6b1362"
         }
       },
       "reason": "Same-scale 2x render from unchanged trusted main. AppKit text and symbol rasterization follows the main backing scale and ICC profile. Existing 1x references stay byte-for-byte unchanged.",
@@ -56,23 +56,225 @@
           "sidebar-render": "8f490f8b768be665f2ef0627c768c89047aad8bc05b359c096b53eab4673e517",
           "space-editor-render": "f33dbcf83b80f0f2118269d1907cdaf2497a6019f140aad359560908c7456ea1"
         }
+      },
+      "legacyGlyphRerecord": {
+        "commit": "2f0c80f8435b6570e3e49e0fa7487046f028c39b",
+        "approval": "LEAD 2026-11-13 05:55: only #543 sidebar-toggle weight and New Tab plus size; no pixels outside the two glyph rects",
+        "comparison": "unchanged PNG byte identity",
+        "files": [
+          {
+            "file": "window-0.png",
+            "oldSHA256": "876d001d7710b495b496dd99a9e72205d3887fb2e4d03445ff8f48439526d42e",
+            "newSHA256": "793da091ab94897954beceeba5ee5718d906779b355f7d5da70bb1577d8727f1",
+            "differingPixels": 584,
+            "differenceBounds": [
+              38,
+              31,
+              204,
+              1058
+            ],
+            "glyphRects": [
+              [
+                154,
+                14,
+                218,
+                78
+              ],
+              [
+                34,
+                1028,
+                70,
+                1064
+              ]
+            ],
+            "glyphPixelCounts": [
+              429,
+              155
+            ]
+          },
+          {
+            "file": "window-1.png",
+            "oldSHA256": "d2b696a41d3092884509f640be748798a0968c3142a1d18b370d3120722866e5",
+            "newSHA256": "2dd46498b068ab88ac0e58354f5074b36b1ce2d9da0a385f293eb662c31349bd",
+            "differingPixels": 584,
+            "differenceBounds": [
+              38,
+              31,
+              204,
+              778
+            ],
+            "glyphRects": [
+              [
+                154,
+                14,
+                218,
+                78
+              ],
+              [
+                34,
+                748,
+                70,
+                784
+              ]
+            ],
+            "glyphPixelCounts": [
+              429,
+              155
+            ]
+          },
+          {
+            "file": "window-2.png",
+            "oldSHA256": "3fba3a440da06d579d0cea8404cd8b8d26a595193c12b19350aa5ba96f2c4294",
+            "newSHA256": "d9cdf8cb0d188dc6c913434bd45b6864d8a49d8faea6bf8ad1a0dd45d9aea3c4",
+            "differingPixels": 583,
+            "differenceBounds": [
+              38,
+              31,
+              204,
+              942
+            ],
+            "glyphRects": [
+              [
+                154,
+                14,
+                218,
+                78
+              ],
+              [
+                34,
+                912,
+                70,
+                948
+              ]
+            ],
+            "glyphPixelCounts": [
+              429,
+              154
+            ]
+          }
+        ]
+      },
+      "editorGlyphRerecord": {
+        "commit": "8b4f75d0565b1cba5dbd11910c6b9f249525d3da",
+        "productCommit": "2f0c80f8435b6570e3e49e0fa7487046f028c39b",
+        "rendererSHA256": "f3f55ca04e5384c1085008ab4b2d820124a97805b3d479516b1907cd6f4232b2",
+        "approval": "LEAD 2026-11-13 06:12: native Space Editor P1 references; only #543 toggle/New Tab glyph pixels; no product code",
+        "comparison": "unchanged PNG byte identity",
+        "files": [
+          {
+            "file": "window-0.png",
+            "oldSHA256": "ff3e0fc088000d40a93310762c9af67cbb5e8560c50bf982413705ba6ad7775a",
+            "newSHA256": "8bec35021d431cdf5a9eef21676daac90f0d0d83462aac13cfdfb9ff92d7f14b",
+            "differingPixels": 584,
+            "differenceBounds": [
+              38,
+              31,
+              204,
+              1058
+            ],
+            "glyphRects": [
+              [
+                154,
+                14,
+                218,
+                78
+              ],
+              [
+                34,
+                1028,
+                70,
+                1064
+              ]
+            ],
+            "glyphPixelCounts": [
+              429,
+              155
+            ],
+            "outsideGlyphPixels": 0,
+            "outsideGlyphBounds": null
+          },
+          {
+            "file": "window-1.png",
+            "oldSHA256": "654258308c0207bfe5ff2d8a1b0e4c10c0f7232209b20de7a504d3fa7be82512",
+            "newSHA256": "3282b3c04a42ebb98b17033c7fb0c29285d0ff781c27ca558dd053f5b49d0a11",
+            "differingPixels": 584,
+            "differenceBounds": [
+              38,
+              31,
+              204,
+              778
+            ],
+            "glyphRects": [
+              [
+                154,
+                14,
+                218,
+                78
+              ],
+              [
+                34,
+                748,
+                70,
+                784
+              ]
+            ],
+            "glyphPixelCounts": [
+              429,
+              155
+            ],
+            "outsideGlyphPixels": 0,
+            "outsideGlyphBounds": null
+          },
+          {
+            "file": "window-2.png",
+            "oldSHA256": "3dbedd0806b9f433eb7c78ea0b10866e6cd02b52ebc01b87b7da28656b34192d",
+            "newSHA256": "332878a65311b783f49f5941ef206a04bc2c58c10eca7459d9b763780e6b1362",
+            "differingPixels": 583,
+            "differenceBounds": [
+              38,
+              31,
+              204,
+              942
+            ],
+            "glyphRects": [
+              [
+                154,
+                14,
+                218,
+                78
+              ],
+              [
+                34,
+                912,
+                70,
+                948
+              ]
+            ],
+            "glyphPixelCounts": [
+              429,
+              154
+            ],
+            "outsideGlyphPixels": 0,
+            "outsideGlyphBounds": null
+          }
+        ]
       }
     },
     "scale-1-icc-header-v1-f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56-mode-2560x1440-pixels-2560x1440-mhz-240000": {
       "original": true,
       "renderScale": 1,
       "trustedMainCommit": "d926d500c09f046faece1827252bafccec769b3d",
-      "reason": "Original references on trusted main. No PNG is regenerated. Exact original byte comparisons and render scale 1 remain in force.",
+      "reason": "Original display key. Legacy glyph-only updates are recorded in legacyGlyphRerecord; editor references remain unchanged.",
       "pngSHA256": {
         "legacy": {
-          "window-0.png": "d01d2a666b551e970aa2930db1b095af2805736d550b2f577c3deebc081aa9dc",
-          "window-1.png": "8788b7a4ba89ce4dd082815a1fc14f4cc56cf7415cd5a72ada99c55727f00a82",
-          "window-2.png": "cf3458610d9915d731763d8c9468ee5483bf2e331bc5e444d5c2741590d31099"
+          "window-0.png": "2d8ab9605943cbe2b1af730fa0e5d1dfa799a607edf5dd6f113c75f1bbf2e380",
+          "window-1.png": "342ab4b90358e604f628ba2954ebb7fb1655e94258904ab46cb3e766814d7de8",
+          "window-2.png": "c3f7501d7da1c27630c36b410c89d9af3781d68d3455e861008524f3adac5bcf"
         },
         "editor": {
-          "window-0.png": "4b367f903df1a577d35b2e22c8f254cd586295d04be503f373228123b2e83191",
-          "window-1.png": "219384a3cfc3fabddc0b56f9bbc5dc5f17c78dda792c8d719843824fd711491a",
-          "window-2.png": "31701b592a279bdd899349c2608d7e4f79cb09e39c25b3876d279ec985cdbd9e"
+          "window-0.png": "a9dafff4840a15485eb9b81dbf171c4df424ea02ecd64f382149c3a1623904b5",
+          "window-1.png": "6bf382d7c18a85ce866bcb01d8e9fbe0befeb5c1dd811b4cf699939d5ebf4272",
+          "window-2.png": "931ba38330303d3a1f3571d7eb79943cf883a465ad494a91fd6b09bc195341f7"
         }
       },
       "mode": {
@@ -95,6 +297,208 @@
           "sidebar-render": "c2234d37be9370b26ccf1139dfd2a0c918a95616e084d23cf3c0a4d60c3bfa03",
           "space-editor-render": "4308889b388c1c52c13c97ea1958dd00440ad5501d5fa46b94ed37c800d2910f"
         }
+      },
+      "legacyGlyphRerecord": {
+        "commit": "2f0c80f8435b6570e3e49e0fa7487046f028c39b",
+        "approval": "LEAD 2026-11-13 05:55: only #543 sidebar-toggle weight and New Tab plus size; no pixels outside the two glyph rects",
+        "comparison": "unchanged PNG byte identity",
+        "files": [
+          {
+            "file": "window-0.png",
+            "oldSHA256": "d01d2a666b551e970aa2930db1b095af2805736d550b2f577c3deebc081aa9dc",
+            "newSHA256": "2d8ab9605943cbe2b1af730fa0e5d1dfa799a607edf5dd6f113c75f1bbf2e380",
+            "differingPixels": 232,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              529
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                514,
+                35,
+                532
+              ]
+            ],
+            "glyphPixelCounts": [
+              160,
+              72
+            ]
+          },
+          {
+            "file": "window-1.png",
+            "oldSHA256": "8788b7a4ba89ce4dd082815a1fc14f4cc56cf7415cd5a72ada99c55727f00a82",
+            "newSHA256": "342ab4b90358e604f628ba2954ebb7fb1655e94258904ab46cb3e766814d7de8",
+            "differingPixels": 229,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              389
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                374,
+                35,
+                392
+              ]
+            ],
+            "glyphPixelCounts": [
+              159,
+              70
+            ]
+          },
+          {
+            "file": "window-2.png",
+            "oldSHA256": "cf3458610d9915d731763d8c9468ee5483bf2e331bc5e444d5c2741590d31099",
+            "newSHA256": "c3f7501d7da1c27630c36b410c89d9af3781d68d3455e861008524f3adac5bcf",
+            "differingPixels": 232,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              471
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                456,
+                35,
+                474
+              ]
+            ],
+            "glyphPixelCounts": [
+              161,
+              71
+            ]
+          }
+        ]
+      },
+      "editorGlyphRerecord": {
+        "commit": "8b4f75d0565b1cba5dbd11910c6b9f249525d3da",
+        "productCommit": "2f0c80f8435b6570e3e49e0fa7487046f028c39b",
+        "rendererSHA256": "f3f55ca04e5384c1085008ab4b2d820124a97805b3d479516b1907cd6f4232b2",
+        "approval": "LEAD 2026-11-13 06:12: native Space Editor P1 references; only #543 toggle/New Tab glyph pixels; no product code",
+        "comparison": "unchanged PNG byte identity",
+        "files": [
+          {
+            "file": "window-0.png",
+            "oldSHA256": "4b367f903df1a577d35b2e22c8f254cd586295d04be503f373228123b2e83191",
+            "newSHA256": "a9dafff4840a15485eb9b81dbf171c4df424ea02ecd64f382149c3a1623904b5",
+            "differingPixels": 232,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              529
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                514,
+                35,
+                532
+              ]
+            ],
+            "glyphPixelCounts": [
+              160,
+              72
+            ],
+            "outsideGlyphPixels": 0,
+            "outsideGlyphBounds": null
+          },
+          {
+            "file": "window-1.png",
+            "oldSHA256": "219384a3cfc3fabddc0b56f9bbc5dc5f17c78dda792c8d719843824fd711491a",
+            "newSHA256": "6bf382d7c18a85ce866bcb01d8e9fbe0befeb5c1dd811b4cf699939d5ebf4272",
+            "differingPixels": 229,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              389
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                374,
+                35,
+                392
+              ]
+            ],
+            "glyphPixelCounts": [
+              159,
+              70
+            ],
+            "outsideGlyphPixels": 0,
+            "outsideGlyphBounds": null
+          },
+          {
+            "file": "window-2.png",
+            "oldSHA256": "31701b592a279bdd899349c2608d7e4f79cb09e39c25b3876d279ec985cdbd9e",
+            "newSHA256": "931ba38330303d3a1f3571d7eb79943cf883a465ad494a91fd6b09bc195341f7",
+            "differingPixels": 232,
+            "differenceBounds": [
+              19,
+              15,
+              103,
+              471
+            ],
+            "glyphRects": [
+              [
+                77,
+                7,
+                109,
+                39
+              ],
+              [
+                17,
+                456,
+                35,
+                474
+              ]
+            ],
+            "glyphPixelCounts": [
+              161,
+              71
+            ],
+            "outsideGlyphPixels": 0,
+            "outsideGlyphBounds": null
+          }
+        ]
       }
     }
   }

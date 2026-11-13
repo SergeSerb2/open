@@ -27,6 +27,7 @@ enum RenderCLI {
                                 [--renderer offscreen|onscreen] [--blend display|fixed-p3]
     space-editor-render fit-light-glyphs --capture-root SESSIONS --out .re/DIR [--inspect]
     space-editor-render check
+    space-editor-render persistence-check
     space-editor-render bench-blend [--ticks 240]
     """
     static func value(_ args: [String], _ key: String) -> String? {
@@ -111,6 +112,12 @@ enum RenderCLI {
         case "fit-light-glyphs": try LightGlyphFit.run(rest)
         case "math": try Checks.math(rest)
         case "check": try Checks.run()
+        case "persistence-check":
+            guard rest.isEmpty else { throw CLIError(description: usage) }
+            // Run the unchanged P1 snapshot/render checks without the interactive editor/picker flows.
+            try Checks.persistence()
+            print("P1 checks: \(Checks.passed) passed, \(Checks.failed) failed")
+            if Checks.failed > 0 { throw CLIError(description: "persistence checks failed") }
         case "bench": try LiveThemeChecks.bench(); if Checks.failed > 0 { throw CLIError(description: "bench failed") }
         case "lifetime-check": try EditorChecks.releasedControllerUndo()
         case "bench-blend": try BlendBench.run(rest)
