@@ -435,7 +435,7 @@ extension LibraryPanelView {
             let scheme = (row.url.scheme ?? "") + "://"
             var item = LibraryRowItem(id:id.description,title:title,subtitle:url.hasPrefix(scheme) && scheme != "://" ? String(url.dropFirst(scheme.count)) : url,kind:"archive",day:"",
                 image:symbol(row.kind == .folder ? "folder" : "globe"),loadImage:row.kind == .folder ? nil : { [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.kind == .folder ? nil : row.url,activate:restore,
-                    actions:[.init(title:"Delete",run:remove),.init(title:"Restore",run:restore)],showsMoreButton:false)
+                actions:[.init(title:"Delete",run:remove),.init(title:"Restore",run:restore)],showsMoreButton:false)
             if row.kind == .tab {
                 // S12 C12-D2-4: ordinary single-tab rows, including split panes.
                 item.activate = { [weak self] in self?.viewModel.previewArchived(id:id) }

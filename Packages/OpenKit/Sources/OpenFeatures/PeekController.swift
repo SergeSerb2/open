@@ -228,6 +228,11 @@ public final class PeekController {
         undoToast?.dismiss(); undoToast = nil
         open(url:item.url,sourceTabID:item.source,librarySpaceID:item.librarySpace,profileID:item.librarySpace == nil ? nil : item.profile)
     }
+    /// Closing Library also expires Undo for its last dismissed preview.
+    public func closeLibraryPreviews() {
+        guard stack.contains(where: { $0.librarySpaceID != nil }) || undoItem?.librarySpace != nil else { return }
+        dismissAll()
+    }
     public func dismissAll() {
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
         undoTask?.cancel(); undoItem = nil; undoToast?.dismiss(); undoToast = nil
