@@ -111,7 +111,7 @@ final class LiveFolderService {
     return origin.appendingPathComponent(parts[0...3].joined(separator: "/"))
   }
 
-  /// Folder header action: sign in when signed out, otherwise the pulls page.
+  /// Folder header/menu action: sign in, the last banner's SSO URL, or the pulls page.
   func stateURL(folderID: ItemID) -> URL? {
     guard let folder = app.model.node(id: folderID)?.folder, let live = folder.live, live.stateMessage != nil else { return nil }
     if live.lastFetch?.outcome == .needsSSO, let url = folder.liveSSOURL { return url }

@@ -41,9 +41,10 @@ def png_pixels(path):
 
 def github_fixture():
     """A loopback stand-in for github.com/pulls (synthetic rows only). `state` drives it:
-    {'signed_in': bool, 'prs': {kind_marker: [(owner/repo, number, title, status)]}}."""
+    {'signed_in': bool, 'prs': {kind_marker: [(owner/repo, number, title, status)]},
+     'sso': None (no banner) or a list of hrefs in its banner}."""
     import http.server, threading, html, urllib.parse
-    state = {'signed_in': True, 'prs': {}, 'requests': []}
+    state = {'signed_in': True, 'prs': {}, 'requests': [], 'sso': None}
     markers = {'author:@me': 'created', 'review-requested:@me': 'review', 'review:approved': 'approved', 'review:changes_requested': 'changes'}
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -62,6 +63,9 @@ def github_fixture():
                                 '<relative-time datetime="2026-11-1%dT10:00:00Z"></relative-time></li>' % (st, repo, n, html.escape(t), n % 10)
                                 for repo, n, t, st in rows)
                 body = '<!doctype html><title>Pull requests</title><ul>%s</ul>%s' % (items, '' if rows else '<div class="blankslate">No results</div>')
+                if state['sso'] is not None:
+                    body += '<div data-testid="global-sso-banner">%s</div>' % ''.join(
+                        '<a href="%s">Authorize organization</a>' % html.escape(href, quote=True) for href in state['sso'])
             else:
                 body = '<!doctype html><title>Fixture</title>'
             data = body.encode()
@@ -293,6 +297,74 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         results['live_folder_show_more_boundary_and_empty'] = {'ok': len(exposed(boundary)) == 10 and boundary.get('showMore') is None
             and empty.get('rows') == [] and empty.get('showMore') is None and app.call('live-folder-show-more').get('pressed') is False,
             'boundary': boundary, 'empty': empty}
+        # C-LF-3: fetch the real banner, build the real menu, and deliver its NSMenu action.
+        # The checked state reports the fetch. Pressing it must not toggle a preference.
+        folder = long_folder['id']
+        origin = 'http://github.localhost:%d' % port
+        def sso_menu(): return app.call('sidebar-menu-state', node=folder, items=['Single Sign-On', 'Required'])
+        def press_sso():
+            try:
+                app.call('sidebar-menu', node=folder, items=['Single Sign-On', 'Required'])
+                return True
+            except Exception:
+                return False
+        gh['sso'] = ['/orgs/acme/sso/?return_to=private#ignored']
+        sso_refresh = app.call('live-folder-refresh')
+        sso_state, checked = app.call('live-folder-state'), sso_menu()
+        owner = next(s for s in app.call('spaces') if s['focused'])
+        prefs = {k: app.call('defaults', key=k) for k in ('open.liveFolders.githubAutoCreate', 'open.liveFolders.introSeen')}
+        tabs_before = {t['id'] for t in app.call('tabs')}
+        pressed = press_sso()
+        opened = wait_until(lambda: [t for t in app.call('tabs') if t['id'] not in tabs_before], timeout=3, step=.05) or []
+        results['live_folder_sso_menu_opens_org'] = {'ok': sso_refresh.get('outcome') == 'needsSSO'
+            and sso_state.get('ssoURL') == origin + '/orgs/acme/sso' and checked.get('checked') and checked.get('enabled') and pressed
+            and len(opened) == 1 and opened[0]['url'] == origin + '/orgs/acme/sso'
+            and opened[0]['space'] == owner['id'] and opened[0]['profile'] == owner['profile']
+            and sso_menu().get('checked') and prefs == {k: app.call('defaults', key=k) for k in prefs},
+            'state': sso_state, 'menu': checked, 'opened': opened}
+        for t in opened: app.call('close', tab=t['id'])
+        # Boundary inputs travel through page extraction and the native service, not a parser helper.
+        base_link = origin + '/orgs/a/sso?x='
+        cases = [
+            ('slug_39', ['/orgs/' + 'a' * 39 + '/sso'], origin + '/orgs/' + 'a' * 39 + '/sso'),
+            ('slug_40', ['/orgs/' + 'a' * 40 + '/sso'], None),
+            ('url_2048', [base_link + 'a' * (2048 - len(base_link))], origin + '/orgs/a/sso'),
+            ('url_2049', [base_link + 'a' * (2049 - len(base_link))], None),
+            ('link_20', ['/settings'] * 19 + ['/orgs/twenty/sso'], origin + '/orgs/twenty/sso'),
+            ('link_21', ['/settings'] * 20 + ['/orgs/twentyone/sso'], None),
+            ('cross_origin', ['https://example.invalid/orgs/acme/sso'], None),
+            ('credentials', [origin.replace('://', '://user:pass@') + '/orgs/acme/sso'], None),
+            ('bad_slug', ['/orgs/-bad/sso'], None),
+            ('wrong_path', ['/orgs/acme/settings'], None),
+            ('missing_link', [], None),
+        ]
+        boundaries = []
+        for name, links, expected in cases:
+            gh['sso'] = links
+            fetched = app.call('live-folder-refresh')
+            st, mi = app.call('live-folder-state'), sso_menu()
+            tab_ids = {t['id'] for t in app.call('tabs')}
+            refused = not press_sso() if expected is None else True
+            boundaries.append({'case': name, 'ok': fetched.get('outcome') == 'needsSSO' and st.get('ssoURL') == expected
+                and mi.get('checked') is True and mi.get('enabled') == (expected is not None)
+                and refused and tab_ids == {t['id'] for t in app.call('tabs')}, 'menu': mi, 'ssoURL': st.get('ssoURL')})
+        results['live_folder_sso_url_boundaries'] = {'ok': all(c['ok'] for c in boundaries), 'cases': boundaries}
+        gh['sso'] = ['/orgs/acme/sso']
+        app.call('live-folder-refresh')
+        # The saved last-fetch state can say SSO, but a URL is never restored from disk.
+        app.quit()
+        app = holder['app'] = factory(urls=(), fresh=False)
+        app.call('live-folder-origin', url=origin)
+        restored, restored_menu = app.call('live-folder-state'), sso_menu()
+        results['live_folder_sso_link_is_transient'] = {'ok': restored.get('outcome') == 'needsSSO'
+            and restored.get('ssoURL') is None and restored_menu.get('checked') and not restored_menu.get('enabled'),
+            'state': restored, 'menu': restored_menu}
+        app.call('live-folder-refresh')
+        gh['sso'] = None
+        cleared = app.call('live-folder-refresh')
+        clean, clean_menu = app.call('live-folder-state'), sso_menu()
+        results['live_folder_sso_clears_after_success'] = {'ok': cleared.get('outcome') == 'success' and clean.get('ssoURL') is None
+            and not clean_menu.get('checked') and not clean_menu.get('enabled') and not press_sso(), 'state': clean, 'menu': clean_menu}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:

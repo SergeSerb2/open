@@ -62,10 +62,17 @@ public enum GitHubQuery {
         return {state: 'signedOut', items: []};
       const banner = document.querySelector("[data-testid='global-sso-banner']");
       if (banner) {
-        const link = Array.from(banner.querySelectorAll('a[href]')).slice(0, 20).map(a => {
-          try { return new URL(a.getAttribute('href'), location.href); } catch { return null; }
-        }).find(u => u && u.origin === location.origin && /^\/orgs\/[^/]+\/sso\/?$/.test(u.pathname));
-        return {state: 'needsSSO', items: [], ssoURL: link?.href || null};
+        let count = 0, link = null;
+        for (const a of banner.querySelectorAll('a[href]')) {
+          if (++count > 20) break;
+          const raw = a.getAttribute('href');
+          if (raw.length > 2048) continue;
+          try {
+            const u = new URL(raw, location.href);
+            if (u.href.length <= 2048 && u.origin === location.origin && /^\/orgs\/[^/]+\/sso\/?$/.test(u.pathname)) { link = u.href; break; }
+          } catch {}
+        }
+        return {state: 'needsSSO', items: [], ssoURL: link};
       }
       const seen = new Set(), items = [];
       for (const link of document.querySelectorAll('a[href*="/pull/"]')) {

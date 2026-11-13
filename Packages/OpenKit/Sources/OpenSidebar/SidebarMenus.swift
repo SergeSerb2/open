@@ -491,7 +491,11 @@ struct SidebarMenus {
         } + [.separator(), note("This list is generated based on your currently active pull requests.")])
         repoMenu.isEnabled = true
         let sso = NSMenuItem(title: "Single Sign-On", action: nil, keyEquivalent: "")
-        let required = note("Required"); required.state = live.lastFetch?.outcome == .needsSSO ? .on : .off
+        // C-LF-3 (Open's design): the checkmark reports the last fetch; this action
+        // opens its organization link and never toggles an SSO preference.
+        let needsSSO = live.lastFetch?.outcome == .needsSSO
+        let required = item("Required", enabled: needsSSO && folder.liveSSOURL != nil, .openLiveFolderState(folder.id))
+        required.state = needsSSO ? .on : .off
         sso.submenu = menu([required, .separator(), note("SSO ensures all of your organizations' PRs appear")])
         items += [repoMenu, sso, item("Refresh", .refreshLiveFolder(folder.id)), .separator(),
                   item("Copy All Links", .copyAllLinks(folderID: folder.id, markdown: false)), .separator(),
