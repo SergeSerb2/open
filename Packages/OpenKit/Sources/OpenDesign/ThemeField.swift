@@ -288,24 +288,35 @@ public enum ThemeField {
         // Fixed 64×64 RGBA float field: largest allocation is 65,536 bytes.
         let n = 64
         let e = Evaluator(style: style, windowSize: windowSize, isActive: true)
+        let displaySpace: Bool
+        if case .blended = style.fill { displaySpace = !e.legacy && !e.mixesInSRGB }
+        else { displaySpace = false }
         var pixels = [Float](repeating: 0, count: n * n * 4)
         for y in 0..<n {
             for x in 0..<n {
                 let u = (Double(x) + 0.5) / Double(n), v = (Double(y) + 0.5) / Double(n)
+                let i = (y * n + x) * 4
+                if displaySpace {
+                    // Keep the editor's display-space composition law. Unmixing
+                    // after conversion to sRGB would change its fitted colors.
+                    let (c, a) = e.fill(u: u, v: v)
+                    pixels[i] = Float(c.r * a); pixels[i + 1] = Float(c.g * a)
+                    pixels[i + 2] = Float(c.b * a); pixels[i + 3] = Float(a)
+                    continue
+                }
                 let (r, g, b) = e.color(u: u, v: v)
                 let a: Double
                 if case .corners = style.fill { a = e.alpha } else { a = e.fill(u: u, v: v).1 }
                 // Unmix in the field's encoded space. Extended float channels
                 // retain colors outside sRGB until the window's ColorSync pass.
                 let gray = e.underlay * (1 - a)
-                let i = (y * n + x) * 4
                 pixels[i] = Float(r - gray); pixels[i + 1] = Float(g - gray)
                 pixels[i + 2] = Float(b - gray); pixels[i + 3] = Float(a)
             }
         }
         let data = pixels.withUnsafeBytes { Data($0) }
         guard let provider = CGDataProvider(data: data as CFData),
-              let space = CGColorSpace(name: CGColorSpace.extendedSRGB) else { return nil }
+              let space = CGColorSpace(name: displaySpace ? CGColorSpace.displayP3 : CGColorSpace.extendedSRGB) else { return nil }
         let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
                                 | CGBitmapInfo.floatComponents.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
         return CGImage(width: n, height: n, bitsPerComponent: 32, bitsPerPixel: 128, bytesPerRow: n * 16,
