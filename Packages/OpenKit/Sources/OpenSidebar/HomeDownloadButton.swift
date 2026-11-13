@@ -133,7 +133,7 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate, NSDraggingSour
         guard hypot(point.x-start.x,point.y-start.y)>=4 else { return }
         dragStarted = true
         let url=URL(fileURLWithPath:file.path), item=NSDraggingItem(pasteboardWriter:URL(fileURLWithPath:file.path) as NSURL)
-        item.setDraggingFrame(bounds,contents:NSWorkspace.shared.icon(forFile:url.path))
+        item.setDraggingFrame(CGRect(x:10,y:-12,width:32,height:32),contents:NSWorkspace.shared.icon(forFile:url.path))
         beginDraggingSession(with:[item],event:event,source:self)
     }
     override func mouseUp(with event:NSEvent) {
