@@ -1298,6 +1298,37 @@ public final class BrowserModel {
 
     // MARK: move / folders / rename / expand
 
+    /// Moves one plain tab between independent window models, keeping the Tab
+    /// and its ID/live state. No Archive or Undo entry: the tab still exists.
+    /// `adopt` commits external ownership synchronously, before tree observers
+    /// run. It must not mutate either model; false rolls back without events.
+    @discardableResult
+    public func transferTab(id: ItemID, from source: BrowserModel, to destination: NodeParent,
+                            at position: Int, adopt: @MainActor () -> Bool) -> Bool {
+        guard source !== self, position >= 0, index[id] == nil,
+              let node = source.index[id], node.tab != nil,
+              let parent = source.parentByID[id], source.parentExists(parent), parentExists(destination),
+              source.owner(of: parent).profile == owner(of: destination).profile else { return false }
+        if case .splitPane = parent { return false }
+        if case .splitPane = destination { return false }
+        guard let removed = source.removeChild(id, from: parent) else { return false }
+        guard let inserted = insertChild(node, into: destination, at: position) else {
+            _ = source.insertChild(node, into: parent, at: removed.index); return false
+        }
+        source.unregister(node); register(node, under: destination)
+        let pinned = applyPinnedRule(to: node, from: source.section(of: parent), to: section(of: destination))
+        guard adopt() else {
+            Self.restore(pinned); _ = removeChild(id, from: destination, at: inserted)
+            unregister(node); _ = source.insertChild(node, into: parent, at: removed.index)
+            source.register(node, under: parent); return false
+        }
+        _ = source.clearPeek(in: parent, removing: id)
+        // Both graphs and the external owner are final before either callback.
+        source.emit(.remove(parent: parent, index: removed.index, nodeID: id))
+        emit(.insert(parent: destination, index: inserted, nodeID: id))
+        return true
+    }
+
     /// Moves a node. In a same-parent reorder, `position` counts after the node's removal.
     /// Returns false, with no change and no event, when the move breaks a placement rule.
     @discardableResult
