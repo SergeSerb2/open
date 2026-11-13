@@ -30,7 +30,7 @@ public enum Glyph: String, CaseIterable, Sendable {
 
     public var spec: Spec {
         switch self {
-        case .sidebarToggle: Spec(symbol: "sidebar.left", pointSize: 16, weight: .regular, arcInk: CGSize(width: 19, height: 15), note: "toolbar; rounded rect with a lined left pane")
+        case .sidebarToggle: Spec(symbol: "sidebar.left", pointSize: 16, weight: .medium, arcInk: CGSize(width: 19, height: 15), note: "toolbar; rounded rect with a lined left pane")
         case .back: Spec(symbol: "arrow.left", pointSize: 16, weight: .regular, arcInk: CGSize(width: 15, height: 12), note: "toolbar", offset: CGSize(width: 0, height: 1))
         case .forward: Spec(symbol: "arrow.right", pointSize: 16, weight: .regular, arcInk: CGSize(width: 15, height: 12), note: "toolbar", offset: CGSize(width: 0, height: 1))
         case .compactBack: Spec(symbol: "arrow.left", pointSize: 14, weight: .regular, arcInk: CGSize(width: 13, height: 10), note: "compact toolbar (S2 06/0029 ink [82, 19, 95, 29])", offset: CGSize(width: 0, height: 1))
@@ -40,7 +40,7 @@ public enum Glyph: String, CaseIterable, Sendable {
         case .magnifier: Spec(symbol: "magnifyingglass", pointSize: 12.5, weight: .regular, arcInk: CGSize(width: 12, height: 12), note: "URL field, no page")
         case .copyLink: Spec(symbol: "link", pointSize: 14, weight: .medium, arcInk: CGSize(width: 15, height: 14), note: "URL field accessory")
         case .siteControls: Spec(symbol: "slider.horizontal.2.square", pointSize: 18, weight: .regular, arcInk: CGSize(width: 16, height: 16), note: "URL field accessory (Site Control Center)")
-        case .newTabPlus: Spec(symbol: "plus", pointSize: 13, weight: .medium, arcInk: CGSize(width: 11, height: 11), note: "\"New Tab\" row", offset: CGSize(width: -1, height: 1))
+        case .newTabPlus: Spec(symbol: "plus", pointSize: 13.5, weight: .medium, arcInk: CGSize(width: 11, height: 11), note: "\"New Tab\" row", offset: CGSize(width: -1, height: 1))
         case .rowClose: Spec(symbol: "xmark", pointSize: 13, weight: .semibold, arcInk: CGSize(width: 10, height: 10), note: "hovered or selected Today row")
         case .rowUnload: Spec(symbol: "minus", pointSize: 17, weight: .semibold, arcInk: CGSize(width: 14, height: 2), note: "selected loaded pinned row")
         case .disclosureDown: Spec(symbol: "chevron.down", pointSize: 12, weight: .bold, arcInk: nil, note: "Space header on hover (pinned shown)")
