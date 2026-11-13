@@ -980,7 +980,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 @MainActor
 final class SidebarOutlineView: NSOutlineView {
     weak var page: SpacePageView?
-    private(set) var keyboardItem: AnyObject?
+    fileprivate(set) var keyboardItem: AnyObject?
     var didActivateMouseDown = false
     var dragWasStarted = false
     var trackingMouseDown = false
