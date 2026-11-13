@@ -26,8 +26,39 @@ cd "$ROOT"
 xcodegen generate --quiet --spec project.yml
 
 extra=()
-if [[ "${OPEN_AUTOMATION:-}" == "1" && "$CONFIG" != "Debug" ]]; then
-  extra+=("SWIFT_ACTIVE_COMPILATION_CONDITIONS=OPEN_AUTOMATION")
+conditions=()
+if [[ "$CONFIG" == "Debug" ]]; then
+  conditions+=(DEBUG OPEN_AUTOMATION)
+elif [[ "${OPEN_AUTOMATION:-}" == "1" ]]; then
+  conditions+=(OPEN_AUTOMATION)
+fi
+# The shell compiles the new API only with its public marker and a matching
+# adopted distribution. A newer repository header alone is not sufficient.
+transfer=$(python3 - "$ROOT" <<'PY'
+import hashlib, json, pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+public = root / 'Engine/OpenEngine/include/OpenEngine/OEBrowser.h'
+vendor = root / 'Vendor/cef'
+header = vendor / 'include/cef_tab_strip.h'
+enabled = re.search(r'^\s*#define\s+OE_HAS_WEB_CONTENT_TRANSFER\s+1\s*$', public.read_text(), re.M)
+if enabled and header.is_file() and 'virtual bool TransferTab(' in header.read_text():
+    binary = vendor / 'Release/Chromium Embedded Framework.framework/Chromium Embedded Framework'
+    expected = json.loads((root / 'Engine/fork/official-distrib.json').read_text())['framework_sha256']
+    digest = hashlib.sha256()
+    with binary.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+    enabled = digest.hexdigest() == expected
+else:
+    enabled = False
+print('1' if enabled else '0')
+PY
+)
+if [[ "$transfer" == "1" ]]; then
+  conditions+=(OPEN_ENGINE_WEB_CONTENT_TRANSFER)
+fi
+if [[ ${#conditions[@]} -gt 0 ]]; then
+  extra+=("SWIFT_ACTIVE_COMPILATION_CONDITIONS=${conditions[*]}")
 fi
 
 LOG="$OUT/xcodebuild-$CONFIG.log"
