@@ -1126,8 +1126,8 @@ final class SplitIconView: NSView {
     override func draw(_ dirtyRect:NSRect) {
         guard let split else { return }
         let (icon,count) = tracked({ (split.iconOverride,split.panes.count) }) { [weak self] in self?.needsDisplay = true }
-        let size = SpaceListMetrics.faviconInk
-        let ink = CGRect(x:bounds.midX-size/2,y:bounds.midY-size/2,width:size,height:size)
+        let inkSize = SpaceListMetrics.faviconInk
+        let ink = CGRect(x:bounds.midX-inkSize/2,y:bounds.midY-inkSize/2,width:inkSize,height:inkSize)
         if let icon { NodeIconRenderer.draw(icon,in:ink,tint:SidebarRole.secondaryText.nsColor); return }
         NSColor.white.withAlphaComponent(0.35).setFill()
         NSBezierPath(roundedRect:ink,xRadius:4,yRadius:4).fill()
