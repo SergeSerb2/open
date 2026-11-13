@@ -199,10 +199,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     activeLibrarySession?.close()
     app.scheduleMenuRebuild()
   }
-  /// Use the Library button's view model and confirmation dialog unchanged.
+  /// Present the native Library confirmation; the old SwiftUI flag has no observer.
   func requestClearArchive() {
     showLibrary(section: .archive)
-    library?.requestClearArchive()
+    activeLibrarySession?.panel?.requestClearArchive()
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
   @ObservationIgnored private weak var spaceManager: SpaceManagerView?
@@ -538,6 +538,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func copyText(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
   func openLibrary() { settingsPresenter.window?.orderOut(nil); showLibrary(section: .archive) }
   // Library owns the durable archive/capture mutations. These are notifications.
+  func previewArchived(url: URL, profileID: ProfileID) {
+    guard app.model.profile(id:profileID) != nil,
+          let controller = activeLibrarySession?.controller, controller.isLibraryOpen else { return }
+    controller.peekController.openLibraryPreview(url:url,profileID:profileID)
+  }
   func restoreArchived(id: ItemID) { app.scheduleSave(); app.scheduleMenuRebuild() }
   func deleteArchived(id: ItemID) { app.scheduleMenuRebuild() }
   func clearArchive() { app.scheduleMenuRebuild() }
