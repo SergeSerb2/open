@@ -1,8 +1,10 @@
 """File ▸ Blank Window as its own window kind (capture C10), through the real App:
 ⌃⌘N from a normal window, the "This Window" sidebar (no Favorites, no Space dots, Library and
 "+" in the bottom bar), the command bar open, tabs newest first, the row menu with Move to ▸,
-⌘W on the last tab closing the window, and nothing of it in the session snapshot or after a
-relaunch. Socket only; loopback pages.
+⌘W on the last tab closing the window, and nothing of it in the session snapshot. Capture
+C-report-s11: tabs drag both ways between it and a normal window, the header's "Move to…",
+⌘W puts a tab in the Archive but not the last one, and it comes back at relaunch with
+"restore windows" on (not with it off). Socket only; loopback pages.
 """
 import json
 import os
@@ -28,7 +30,12 @@ def run(factory, results, tmp, h):
         app.call('window-frame', frame=[100, 220, 900, 480])
         main = blank()
         main_window = main['window']
+        main_drop_top = app.call('sidebar-row', node=main_tab)['point'][1]
         main_tabs = [t['id'] for t in app.call('tabs')]
+        main_space = next(s['id'] for s in app.call('spaces') if s['focused'])
+
+        def archived(): return [r['url'] for r in app.call('archive-list')['rows']]
+        def snapshot_text(): return json.dumps(json.loads(Path(app.call('save')).read_text()))
 
         # 1. ⌃⌘N: a second window of its own kind, same size, offset +29 / +29 pt, command bar open.
         key('n', 'control', 'command')
@@ -65,8 +72,66 @@ def run(factory, results, tmp, h):
         row('not_in_session_snapshot', not b['inSnapshotModel'] and '/one' not in text and '/two' not in text and b['window'].lower() not in text.lower(),
             windows=len(snapshot.get('windows', [])))
 
+        # C-report-s11 1(a): the header has a "Move to…" button; its menu lists the browser's Spaces.
+        mt = blank()['moveTo']
+        row('header_move_to_button', mt.get('shown') and mt.get('title') == 'Move to…' and spaces and set(spaces) <= set(mt.get('menu', [])),
+            moveTo=mt, spaces=spaces)
+
+        # C-report-s11 1(a): a tab drags from the Blank Window into the normal window's sidebar and back.
+        five = h.new_tab(app, origin + '/five')
+        bspace = blank()['space']
+        blank_drop_top = app.call('sidebar-row', node=first)['point'][1]
+        rails = app.call('sidebar-drag', op='begin', nodes=[five])['rails']
+        target_rails = [r for r in rails if r['parent'] == main_window]
+        hover = app.call('sidebar-drag', op='rail', window=main_window, rail=0, node=five, top=main_drop_top)
+        row('destination_rails_and_blue_line', len(target_rails) == 2
+            and sorted(r['frame'][2] for r in target_rails) == [30, 80]
+            and all(r['visible'] and not r['opaque'] for r in target_rails)
+            and hover['entered'] and hover['updated'] and len(hover['indicator']) == 4,
+            rails=target_rails, hover=hover)
+        # Cancel leaves the tab in its original window and removes all rail windows and feedback.
+        ended = app.call('sidebar-drag', op='end')
+        row('cancel_drag_cleans_rails', ended['rails'] == [] and any('/five' in t['url'] for t in blank()['tabs']), ended=ended)
+        app.call('sidebar-drag', op='begin', nodes=[five])
+        try:
+            out = app.call('sidebar-drag', op='rail', window=main_window, rail=0, node=five, top=main_drop_top, perform=True)['accepted']
+        finally:
+            app.call('sidebar-drag', op='end')
+        left = h.wait_until(lambda: all('/five' not in t['url'] for t in blank()['tabs']) or None, timeout=5, step=.1)
+        in_main = '/five' in snapshot_text()
+        row('drag_blank_to_normal_window', out is True and bool(left) and in_main and blank()['isBlankWindow'], dropped=out, inMain=in_main)
+        app.call('window-focus', id=main_window, activate=True)
+        moved_five = h.wait_until(lambda: [t['id'] for t in app.call('tabs') if '/five' in t['url']] or None, timeout=5, step=.1) or []
+        back = False
+        if moved_five:
+            app.call('sidebar-drag', op='begin', nodes=moved_five[:1])
+            try:
+                incoming = app.call('sidebar-drag', op='rail', window=b['window'], rail=1, node=moved_five[0], top=blank_drop_top, perform=True)
+                back = incoming['accepted'] and len(incoming['indicator']) == 4
+            finally:
+                app.call('sidebar-drag', op='end')
+        app.call('window-focus', id=b['window'], activate=True)
+        returned = h.wait_until(lambda: any('/five' in t['url'] for t in blank()['tabs']) or None, timeout=5, step=.1)
+        row('drag_normal_window_to_blank', back is True and bool(returned) and '/five' not in snapshot_text(),
+            dropped=back, blankTabs=[t['url'] for t in blank()['tabs']])
+        five_back = next((t['id'] for t in app.call('tabs') if '/five' in t['url']), None)
+        if five_back:
+            app.call('close', tab=five_back)
+            h.wait_until(lambda: all('/five' not in t['url'] for t in app.call('tabs')) or None, timeout=5, step=.1)
+
+        # C-report-s11 1(b): a tab closed with ⌘W (not the last) is in the Archive.
+        four = h.new_tab(app, origin + '/four')
+        app.call('select', tab=four)
+        key('w', 'command')
+        in_archive = h.wait_until(lambda: any('/four' in u for u in archived()) or None, timeout=8, step=.2)
+        row('closed_tab_goes_to_archive', bool(in_archive) and blank()['isBlankWindow'], archive=archived()[:5])
+
         frames = os.path.join(h.ROOT, '.re', 'nt-frames'); os.makedirs(frames, exist_ok=True)
         app.call('snapshot', path=os.path.join(frames, 'blank-window.png'))
+        for appearance in ['light', 'dark']:
+            app.call('appearance', name=appearance)
+            app.call('snapshot', path=os.path.join(frames, 'blank-window-' + appearance + '.png'))
+        app.call('appearance', name='system')
 
         # ⇧⌘T (capture C10 addition): a tab closed here reopens in this window.
         third = h.new_tab(app, origin + '/three')
@@ -100,15 +165,41 @@ def run(factory, results, tmp, h):
         row('reopen_does_not_restore_blank_window', blank()['browserWindows'] == 1 and not blank()['isBlankWindow'], state=blank())
         row('last_tab_closes_window', still_blank and closed['browserWindows'] == 1 and closed['window'] == main_window
             and len(after) == len(main_tabs) + 1 and any('/two' in t['url'] for t in after) and set(main_tabs) <= {t['id'] for t in after}, after=closed)
+        # C-report-s11 1(b): the last tab, which closed the window, is not in the Archive.
+        time.sleep(1)
+        row('last_tab_not_archived', not any('/one' in u for u in archived()), archive=archived()[:5])
+
+        # A Blank Window open at quit, with "restore windows" on (Open's default).
+        app.call('window-focus', id=main_window, activate=True)
+        key('n', 'control', 'command')
+        h.wait_until(lambda: blank()['isBlankWindow'] or None, timeout=8, step=.1)
+        key('escape')
+        h.new_tab(app, origin + '/six')
+        quit_frame = blank()['frame']
     finally:
         app.quit()
 
-    # 7. Relaunch: one normal window; the Blank Window is not restored (its moved tab stays in the Space).
+    # 7. Relaunch with "restore windows" on: the Blank Window comes back with its tab (C-report-s11 1(c)),
+    # at the default frame (GUESS, Arc restored a cascade frame, not the saved one); a closed one does not.
+    app = factory(urls=())
+    try:
+        s = h.wait_until(lambda: (lambda x: x if x['browserWindows'] == 2 else None)(app.call('blank-window')), timeout=10, step=.2) or app.call('blank-window')
+        blank_window = next((w['id'] for w in app.call('shell-windows') if w['id'] != s['window'] or s['isBlankWindow']), None)
+        if not s['isBlankWindow'] and blank_window:
+            app.call('window-focus', id=blank_window, activate=True); s = app.call('blank-window')
+        row('restored_at_relaunch_when_restore_on', s['browserWindows'] == 2 and s['isBlankWindow'] and s['headerTitle'] == 'This Window'
+            and [t['url'].rsplit('/', 1)[-1] for t in s['tabs']] == ['six'], state=s, quitFrame=quit_frame)
+        app.call('defaults', key='open.advanced.restoreWindowsOnLaunch', value=False)
+    finally:
+        app.quit()
+
+    # 8. With "restore windows" off, an open Blank Window does not come back.
     app = factory(urls=())
     try:
         s = app.call('blank-window')
-        row('not_restored_at_relaunch', s['browserWindows'] == 1 and not s['isBlankWindow']
-            and any('/two' in t['url'] for t in app.call('tabs')), state=s)
+        row('not_restored_when_restore_off', not s['isBlankWindow'] and not any(w for w in app.call('shell-windows') if w['id'] != s['window']),
+            state=s, windows=len(app.call('shell-windows')))
+        app.call('defaults', key='open.advanced.restoreWindowsOnLaunch', value=None)
     finally:
         app.quit()
         server.shutdown()
