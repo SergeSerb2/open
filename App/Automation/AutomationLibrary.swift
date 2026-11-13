@@ -149,7 +149,11 @@ extension AutomationController {
         }]
     }
     state["motion"]=["page":motion(controller.container.layer),"panel":motion(session.panel?.layer),
-      "sidebar":motion(controller.sidebar.layer),"occlusion":controller.window?.occlusionState.rawValue ?? 0] as [String:Any]
+      "sidebar":motion(controller.sidebar.layer),"occlusion":controller.window?.occlusionState.rawValue ?? 0,
+      "snapshotCount":controller.libraryMotionSnapshotCount,
+      "preparingClose":controller.isPreparingLibraryClose,
+      "timing":["start":controller.libraryMotionStartedAt,"end":controller.libraryMotionEndsAt,
+        "layoutCommit":controller.libraryLayoutCommittedAt,"opening":controller.libraryMotionOpening] as [String:Any]] as [String:Any]
     return state
   }
   /// Read the real Library and its hosted grid. The only focus setup is the

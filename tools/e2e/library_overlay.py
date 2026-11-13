@@ -50,6 +50,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
         return app.call('key', key=value, modifiers=list(modifiers), route='app')
 
     def settled(motion):
+        if motion.get('preparingClose'): return False
         # AppKit may retain an expired key until the next event/transaction.
         # Read presentation geometry and layer time to test actual movement.
         for name in ['page', 'panel', 'sidebar']:
@@ -142,7 +143,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             check('native_search_typing', state()['search'] == 'socket typing')
             key('escape')
             key('escape')
-            check('escape_closes_panel', not state()['open'])
+            check('escape_closes_panel', wait_until(lambda:not state()['open'], timeout=2))
             after = app.call('window-state')
             check('sidebar_preserved', all(before[k] == after[k] for k in ['sidebarWidth', 'sidebarMode', 'selected']),
                   before={k: before[k] for k in ['sidebarWidth','sidebarMode','selected']},
@@ -189,7 +190,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             check('open_keeps_live_page_geometry', opened['motion']['page']['frame'] == closed_frame,
                   before=closed_frame, during=opened['motion']['page']['frame'])
             properties = next(a['properties'] for a in opened['motion']['page']['animations'] if a['key'] == 'libraryFrame')
-            check('page_motion_uses_transform', sorted(properties) == ['position', 'transform'], properties=properties)
+            check('page_motion_is_position_only', properties == ['position'], properties=properties)
             time.sleep(.25)
             motion = state()['motion']
             check('open_motion_settles', settled(motion), motion=motion)
@@ -198,9 +199,16 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             time.sleep(.25)
             open_frame = state()['motion']['page']['frame']
             closed = state(action='close')
+            assert wait_until(lambda:not state()['open'], timeout=2), 'close snapshot did not finish preparing'
+            closed = state()
             check('close_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
-            check('close_keeps_live_page_geometry', closed['motion']['page']['frame'] == open_frame,
-                  before=open_frame, during=closed['motion']['page']['frame'])
+            timing = closed['motion']['timing']
+            check('close_commits_width_before_motion', closed['motion']['page']['frame'] == closed_frame
+                  and not timing['opening'] and 0 < timing['layoutCommit'] <= timing['start'],
+                  before=open_frame, during=closed['motion']['page']['frame'], timing=timing)
+            check('close_uses_page_snapshot', closed['motion']['snapshotCount'] > 0, motion=closed['motion'])
+            second = state()['motion']
+            check('close_keeps_final_viewport_fixed', second['page']['frame'] == closed['motion']['page']['frame'], motion=second)
             time.sleep(.25)
             motion = state()['motion']
             check('closed_motion_stops', settled(motion), motion=motion)
