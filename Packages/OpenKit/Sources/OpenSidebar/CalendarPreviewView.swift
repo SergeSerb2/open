@@ -248,12 +248,8 @@ public final class CalendarPreviewView: NSView {
     }
 
     private func showGearMenu() {
-        // Keep the card while the menu tracks: the pointer leaves the card for the menu.
-        context.hoverPreviews.setPointerInsidePreview(true)
-        gearMenu().popUp(positioning: nil, at: CGPoint(x: gearButton.frame.minX, y: gearButton.frame.maxY + 4), in: self)
-        // The menu has closed (synchronous tracking): report where the pointer really is now.
-        guard superview != nil, let window else { return }
-        context.hoverPreviews.setPointerInsidePreview(bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)))
+        context.hoverPreviews.popUpPreviewMenu(gearMenu(),
+            at: CGPoint(x: gearButton.frame.minX, y: gearButton.frame.maxY + 4), in: self)
     }
 
     /// Gear ▸ Refresh: the source syncs, then the card reloads its events; the spinner shows meanwhile.

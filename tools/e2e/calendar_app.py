@@ -354,9 +354,9 @@ def gear_checks(app, results, wait_until, cal, fav, live):
     def choose(command, **arguments):
         # Keep recording each missing behavior on the pre-CG1 App, instead of aborting at its missing menu.
         try:
-            app.call(command, **arguments)
-        except RuntimeError:
-            pass
+            return app.call(command, **arguments)
+        except RuntimeError as error:
+            return {'error': str(error)}
     sync = {'id': 'g1', 'title': 'Gear sync', 'start': 10, 'end': 40, 'url': MEET}
     cal(action='fixture', access='granted', events=[sync])
     cal(action='clock', minutes=0)
@@ -371,7 +371,7 @@ def gear_checks(app, results, wait_until, cal, fav, live):
     # Refresh: new events arrive slowly (fixture delay); the spinner stands where the gear was until they land.
     cal(action='fixture', access='granted', delayMs=900,
         events=[sync, {'id': 'g2', 'title': 'Added before refresh', 'start': 20, 'end': 50}])
-    choose('glance-open', control='gear', item='Refresh')
+    tracking = choose('glance-open', control='gear', item='Refresh')
     during = glance(wait=False).get('gear') or {}
     done = wait_until(lambda: (lambda s: s if (s.get('gear') or {}).get('refreshing') is False else None)(glance(wait=False)),
                       timeout=6, step=.05) or glance(wait=False)
@@ -379,10 +379,11 @@ def gear_checks(app, results, wait_until, cal, fav, live):
     centred = abs((frame[0] + frame[2] / 2) - (spin[0] + spin[2] / 2)) <= 1 and abs((frame[1] + frame[3] / 2) - (spin[1] + spin[3] / 2)) <= 1
     after_gear = done.get('gear') or {}
     refreshes = cal().get('refreshes', 0)
-    results['cal_card_gear_refresh'] = {'ok': during.get('refreshing') is True and during.get('spinner') is True
+    results['cal_card_gear_refresh'] = {'ok': tracking.get('tracked') is True and tracking.get('cardStayedVisible') is True
+        and tracking.get('opened') is True and during.get('refreshing') is True and during.get('spinner') is True
         and during.get('shown') is False and centred and after_gear.get('shown') is True and after_gear.get('spinner') is False
         and 'g2' in [e['id'] for e in done.get('events', [])] and refreshes == 1,
-        'during': during, 'after': after_gear, 'events': [e['id'] for e in done.get('events', [])], 'refreshes': refreshes}
+        'tracking': tracking, 'during': during, 'after': after_gear, 'events': [e['id'] for e in done.get('events', [])], 'refreshes': refreshes}
 
     # Disable Live Calendar: the card closes; the Favorite becomes plain (no card, no countdown, no Live Calendar
     # items) and the choice is stored for this Favorite.
