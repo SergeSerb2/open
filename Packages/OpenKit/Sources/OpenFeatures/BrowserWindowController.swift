@@ -655,7 +655,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     layer.removeAnimation(forKey: "sidebarToggle")
                     layer.setValue(targetOffset, forKeyPath: "transform.translation.x")
                     if animate {
-                        let spring = Motion.sidebarToggle.animation(keyPath: "transform.translation.x")
+                        let spring = Motion.sidebarAnimation(keyPath: "transform.translation.x", showing: !hidden)
                         spring.fromValue = oldOffset; spring.toValue = targetOffset
                         addMotion(spring, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
                         if index == 0 { sidebarAnimations["sidebar"] = layer.animation(forKey: "sidebarToggle") }
@@ -673,11 +673,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     sidebarPanelClip.cornerRadius = PanelMetrics.cornerRadius
                     sidebarPanelClip.cornerCurve = .continuous
                     layer.mask = sidebarPanelClip
-                    let move = Motion.sidebarToggle.animation(keyPath: "transform.translation.x")
+                    let move = Motion.sidebarAnimation(keyPath: "transform.translation.x", showing: !hidden)
                     move.fromValue = fromTranslation; move.toValue = targetTranslation
                     addMotion(move, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
                     sidebarAnimations["panel"] = layer.animation(forKey: "sidebarToggle")
-                    let clip = Motion.sidebarToggle.animation(keyPath: "bounds.size")
+                    let clip = Motion.sidebarAnimation(keyPath: "bounds.size", showing: !hidden)
                     clip.fromValue = NSValue(size: oldPanel.size); clip.toValue = NSValue(size: panelFrame.size)
                     addMotion(clip, to: sidebarPanelClip, key: "sidebarToggle", requestedAt: requestedAt)
                     sidebarPanelShadow.prepare(frame: panelFrame)
@@ -690,10 +690,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     // An empty panel has no live text or web surface to stretch.
                     emptyPanel.removeAnimation(forKey: "sidebarToggle")
                     let emptyGroup = CAAnimationGroup()
-                    let emptyMove = Motion.sidebarToggle.animation(keyPath: "position")
+                    let emptyMove = Motion.sidebarAnimation(keyPath: "position", showing: !hidden)
                     emptyMove.fromValue = NSValue(point: CGPoint(x: oldPanel.midX, y: oldPanel.midY))
                     emptyMove.toValue = NSValue(point: emptyPanel.position)
-                    let emptySize = Motion.sidebarToggle.animation(keyPath: "bounds.size")
+                    let emptySize = Motion.sidebarAnimation(keyPath: "bounds.size", showing: !hidden)
                     emptySize.fromValue = NSValue(size: oldPanel.size); emptySize.toValue = NSValue(size: panelFrame.size)
                     emptyGroup.animations = [emptyMove, emptySize]
                     emptyGroup.duration = max(emptyMove.duration, emptySize.duration)

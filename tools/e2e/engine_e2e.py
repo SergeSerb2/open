@@ -4174,10 +4174,21 @@ def window_chrome_followup_checks(factory, results, tmp):
         key(); toggle_hide = app.call("window-motion")
         settled(); key(); toggle_show = app.call("window-motion")
         motions = [hide_motion, show_motion, toggle_hide, toggle_show]
-        results["motion_sidebar_toggle"] = {"ok": all(spring(m["sidebar"].get("sidebar", {}), .1, .95, "transform.translation.x")
-            and spring(m["sidebar"].get("panel", {}), .1, .95, "transform.translation.x")
+        def toggle_motion(m, showing):
+            values = [m["sidebar"].get(name, {}) for name in ["sidebar", "panel"]]
+            if not showing:
+                return all(spring(v, .1, .95, "transform.translation.x") for v in values)
+            controls = [[0, 0], [.01055, .50742], [.55930, .98516], [1, 1]]
+            return m["tokens"].get("sidebarShowDuration") == .075834 and all(
+                v.get("type") == "CABasicAnimation" and v.get("keyPath") == "transform.translation.x"
+                and abs(v.get("duration", 0) - .075834) < 1e-6
+                and len(v.get("timing", [])) == 4 and all(
+                    abs(actual - expected) < 1e-5 for point, reference in zip(v["timing"], controls)
+                    for actual, expected in zip(point, reference)) for v in values)
+        results["motion_sidebar_toggle"] = {"ok": all(toggle_motion(m, showing)
             and 0<=m["sidebar"].get("panel",{}).get("scheduledDelay",-1)<=1/60
-            and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95} for m in motions),
+            and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95}
+            for m, showing in zip(motions, [False, True, False, True])),
             "scheduled": [m["sidebar"] for m in motions]}
         settled()
         app.call("window-motion", sidebarDelay=.29)
