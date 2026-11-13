@@ -11466,8 +11466,15 @@ def space_manager_checks(results, tmp, config, style):
         return [row['id'] for row in app.call('spaces')]
 
     def manager_ready(app):
-        return wait_until(lambda: (lambda s: s if s['visible'] and s['section'] == 'spaces'
-                         and s['identity'] and s['hostedManagers'] == 1 else None)(state(app)), timeout=5)
+        def ready():
+            snapshot = state(app)
+            if not (snapshot['visible'] and snapshot['section'] == 'spaces'
+                    and snapshot['identity'] and snapshot['hostedManagers'] == 1): return None
+            # The embedded panel fades in over the old sidebar (#350). Wait
+            # for its real controls before any subsequent mouse/key input.
+            rail = app.call('library').get('rail', [])
+            return snapshot if any(r['id'] == 'spaces' and r['hitClass'] == 'LibraryControl' for r in rail) else None
+        return wait_until(ready, timeout=5)
 
     def library_key(app, key, modifiers=()):
         return app.call('key', key=key, modifiers=list(modifiers), route='app', window=state(app)['window'])
@@ -11692,6 +11699,10 @@ def space_manager_checks(results, tmp, config, style):
         app.call('menu-perform', id='new-window')
         second = next(row['id'] for row in app.call('shell-windows') if row['id'] != original_window)
         app.call('window-focus', id=second, activate=True)
+        # New Window deliberately opens the command bar (#144). Finish that
+        # separate input context before exercising B's embedded Library.
+        if app.call('commandbar-state').get('presented'):
+            app.call('key', key='escape', route='app')
         app.call('window-focus', id=original_window, activate=True)
         app.call('window-focus', id=second, activate=True)
         hidden_after = app.call('space-manager-lifecycle', id=original_window)
