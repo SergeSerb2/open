@@ -119,6 +119,15 @@ public final class HoverPreviewController {
             }
             view.onResize = { [weak self] in self?.layout() }
             content = view
+        case .pullRequest:
+            // C-LF-1: the PR card; a click opens the row like a click on the row.
+            guard let info = tab.liveItem else { return false }
+            let card = PreviewCardView(content: LiveItemPreviewView(context: context, tab: tab, info: info), appearance: appearance)
+            card.onClick = { [weak self] in self?.choose(id) }
+            card.onPointer = { [weak self] inside in self?.context.hoverPreviews.setPointerInsidePreview(inside) }
+            root.addSubview(card)
+            self.card = card
+            return true
         }
         let card = PreviewCardView(content: content, appearance: appearance, clicksSelect: false)
         card.onPointer = { [weak self] inside in self?.context.hoverPreviews.setPointerInsidePreview(inside) }

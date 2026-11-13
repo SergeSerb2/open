@@ -30,6 +30,22 @@ public final class TabLiveState {
 
 // MARK: - Tab
 
+/// One Live Folder row's pull request facts (C-LF-1; fields from live-data §2.3).
+public struct LiveItemInfo: Codable, Hashable, Sendable {
+    public enum Status: String, Codable, Sendable, CaseIterable { case open, draft, merged, closed }
+    public var status: Status
+    public var number: Int
+    /// "owner/name".
+    public var repository: String
+    public var author: String
+    /// The PR asks for my review (found by the review-requested search).
+    public var awaitingMyReview: Bool
+    public init(status: Status, number: Int, repository: String, author: String, awaitingMyReview: Bool) {
+        self.status = status; self.number = number; self.repository = repository; self.author = author
+        self.awaitingMyReview = awaitingMyReview
+    }
+}
+
 @MainActor
 @Observable
 public final class Tab {
@@ -50,6 +66,9 @@ public final class Tab {
     /// The pull request a Live Folder row stands for (LF L2); nil for normal tabs. A refresh
     /// matches, adds and removes only rows that carry it, never a user's own tab.
     public var liveItemURL: URL?
+    /// What the Live Folder row shows about its pull request: status glyph and hover card
+    /// (C-LF-1, Open's design, live-data §8). Persisted, so the glyph shows before the next refresh.
+    public var liveItem: LiveItemInfo?
 
     public let live = TabLiveState()
 

@@ -11,6 +11,9 @@ public enum GlanceKind: Hashable, Sendable {
     case calendar(CalendarProvider)
     /// Unread mail of one Gmail inbox from the Profile's own session (LD §3.3, LF L6).
     case gmail(account: Int)
+    /// A Live Folder row's pull request card (C-LF-1, Open's design, live-data §8). Decided from
+    /// the row's stored facts, never from the URL; no fetch.
+    case pullRequest
 
     /// The settings key that turns this kind of card on or off (default on).
     public var preferenceKey: String {
@@ -18,6 +21,7 @@ public enum GlanceKind: Hashable, Sendable {
         case .recents: RecentsSite.preferenceKey
         case .calendar: CalendarProvider.preferenceKey
         case .gmail: GmailGlance.preferenceKey
+        case .pullRequest: "open.general.previewsEnabled"  // only the master switch
         }
     }
 
