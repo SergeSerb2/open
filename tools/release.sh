@@ -567,6 +567,14 @@ app,locales,version,build,chromium,cef,stamp,sparkle,feed_url=sys.argv[1:];a=Pat
 p=plistlib.loads((a/'Contents/Info.plist').read_bytes())
 for k,v in [('CFBundleIdentifier','io.github.sergeserb2.open'),('CFBundleShortVersionString',version),('CFBundleVersion',build),('OpenChromiumVersion',chromium),('OpenCEFCommit',cef),('OpenEngineStamp',stamp),('LSMinimumSystemVersion','26.0')]:
  if p.get(k)!=v:raise SystemExit('bundle metadata mismatch: '+k)
+if p.get('CFBundleIconName')!='AppIcon' or not p.get('CFBundleIconFile'):
+ raise SystemExit('app icon metadata missing')
+resources=a/'Contents/Resources'
+icon=resources/p['CFBundleIconFile']
+if not icon.suffix:icon=icon.with_suffix('.icns')
+for resource in [icon,resources/'Open.icns',resources/'Assets.car']:
+ if not resource.is_file() or not resource.stat().st_size:raise SystemExit('app icon resource missing: '+str(resource))
+print('AppIcon metadata, compiled asset catalog and ICNS fallback: PASS')
 if stamp!=f'Chromium {chromium} · CEF {cef[:7]}':raise SystemExit('engine display stamp differs from VERSIONS')
 if p.get('SUFeedURL')!=feed_url:raise SystemExit('bundle SUFeedURL differs from OPEN_RELEASE_FEED_URL')
 fw=a/'Contents/Frameworks/Chromium Embedded Framework.framework'
@@ -788,8 +796,24 @@ dmg() {
     ditto "$APP" "$staging/Open.app"
     ln -s /Applications "$staging/Applications"
     install -m 0644 "$ROOT/assets/release/dmg-background.png" "$staging/.background/background.png"
-    log 'DMG background/icon layout: Open-owned placeholder; Finder geometry/positions are not configured in v1'
-    hdiutil create -volname "Open $VERSION" -srcfolder "$staging" -ov -format UDZO "$DMG"
+    install -m 0644 "$APP/Contents/Resources/Open.icns" "$staging/.VolumeIcon.icns"
+    log 'DMG uses Open artwork; Finder geometry/positions retain the existing layout'
+    local writable="$REL/dmg-writable.dmg"
+    hdiutil create -volname "Open $VERSION" -srcfolder "$staging" -ov -format UDRW "$writable"
+    MOUNT_DIR=$(mktemp -d "$STAGE/icon-mount.XXXXXX")
+    hdiutil attach -nobrowse -mountpoint "$MOUNT_DIR" "$writable"
+    # Set only kHasCustomIcon, preserving the volume's other Finder flags.
+    # These tools ship with Xcode; macOS Python has no os.getxattr/setxattr.
+    xcrun SetFile -a C "$MOUNT_DIR"
+    [[ "$(xcrun GetFileInfo -aC "$MOUNT_DIR")" == 1 ]] || die 'volume custom-icon flag was not set'
+    hdiutil detach "$MOUNT_DIR"
+    rmdir "$MOUNT_DIR"; MOUNT_DIR=
+    hdiutil convert "$writable" -format UDZO -o "$DMG" -ov
+    rm "$writable"
+    "$HEAVY" xcrun swiftc "$ROOT/tools/release-icon.swift" -o "$STAGE/release-icon"
+    # This file icon is local resource-fork metadata, which download hosts may
+    # strip. The embedded volume icon survives ordinary file transfers.
+    "$STAGE/release-icon" set "$DMG" "$APP/Contents/Resources/Open.icns"
     # Sign the disk image itself (Developer ID + secure timestamp in production),
     # before its notarization: Gatekeeper's open check (A-5) needs a DMG signature;
     # a stapled ticket alone reads "no usable signature".
