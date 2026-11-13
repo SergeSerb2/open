@@ -448,8 +448,13 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 #pragma mark Creation
 
 - (CefRefPtr<CefDictionaryValue>)oe_extraInfo {
+  return [self oe_extraInfoWithScripts:[self.context oe_scriptsValue]];
+}
+
+- (CefRefPtr<CefDictionaryValue>)oe_extraInfoWithScripts:(CefRefPtr<CefListValue>)scripts {
   CefRefPtr<CefDictionaryValue> extra = CefDictionaryValue::Create();
-  extra->SetList(kOEExtraScripts, [self.context oe_scriptsValue]);
+  // Keep a broadcast's shared serialization unowned by this per-page snapshot.
+  extra->SetList(kOEExtraScripts, scripts->Copy());
   if (_userStyleSheets.count) {
     CefRefPtr<CefDictionaryValue> styles = CefDictionaryValue::Create();
     for (NSString* key in _userStyleSheets) {

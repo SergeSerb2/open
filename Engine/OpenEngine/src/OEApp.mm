@@ -7,6 +7,8 @@
 #include "include/cef_open_world.h"
 
 #include <map>
+#include <algorithm>
+#include <set>
 #include <mutex>
 
 #include "include/cef_parser.h"
@@ -15,6 +17,7 @@
 #include "include/wrapper/cef_library_loader.h"
 
 const char kOEMsgScriptsUpdate[] = "oe.scripts.update";
+const char kOEMsgScriptsPatch[] = "oe.scripts.patch";
 const char kOEExtraScripts[] = "oe.scripts";
 const char kOEMsgUserStyleSheet[] = "oe.userStyleSheet";
 const char kOEExtraUserStyles[] = "oe.userStyles";
@@ -122,6 +125,7 @@ bool OEMatchesPattern(const std::string& pattern, const std::string& url) {
 namespace {
 
 struct RendererScript {
+  std::string identifier;
   std::string source;
   bool css = false;
   bool open_world = false;
@@ -315,6 +319,11 @@ class OEApp : public CefApp,
       CefSetOpenUserStyleSheet(browser, args->GetString(0), args->GetString(1));
       return true;
     }
+    if (message->GetName() == kOEMsgScriptsPatch) {
+      auto args = message->GetArgumentList();
+      PatchScripts(browser->GetIdentifier(), args->GetList(0), args->GetList(1));
+      return true;
+    }
     if (message->GetName() == kOEMsgScriptsUpdate) {
       SetScripts(browser->GetIdentifier(),
                  message->GetArgumentList()->GetList(0));
@@ -340,11 +349,12 @@ class OEApp : public CefApp,
            JsonString(css) + ");";
   }
 
-  void SetScripts(int browser_id, CefRefPtr<CefListValue> list) {
+  static std::vector<RendererScript> ReadScripts(CefRefPtr<CefListValue> list) {
     std::vector<RendererScript> out;
     for (size_t i = 0; list && i < list->GetSize(); ++i) {
       CefRefPtr<CefDictionaryValue> d = list->GetDictionary(i);
       RendererScript s;
+      s.identifier = d->GetString("identifier");
       s.source = d->GetString("source");
       s.css = d->GetBool("css");
       s.open_world = d->GetBool("openWorld");
@@ -356,8 +366,33 @@ class OEApp : public CefApp,
       }
       out.push_back(std::move(s));
     }
+    return out;
+  }
+
+  void SetScripts(int browser_id, CefRefPtr<CefListValue> list) {
+    auto out = ReadScripts(list);
     std::lock_guard<std::mutex> lock(mutex_);
     scripts_[browser_id] = std::move(out);
+  }
+
+  void PatchScripts(int browser_id, CefRefPtr<CefListValue> removed,
+                    CefRefPtr<CefListValue> added) {
+    std::set<std::string> ids;
+    for (size_t i = 0; removed && i < removed->GetSize(); ++i) {
+      ids.insert(removed->GetString(i));
+    }
+    auto additions = ReadScripts(added);
+    for (const auto& script : additions) ids.insert(script.identifier);
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto& current = scripts_[browser_id];
+    current.erase(std::remove_if(current.begin(), current.end(),
+        [&](const RendererScript& script) { return ids.count(script.identifier) != 0; }), current.end());
+    for (auto& script : additions) {
+      // Duplicate added IDs follow the same last-addition-wins order as native.
+      current.erase(std::remove_if(current.begin(), current.end(),
+          [&](const RendererScript& old) { return old.identifier == script.identifier; }), current.end());
+      current.push_back(std::move(script));
+    }
   }
 
   std::vector<std::string> switches_;

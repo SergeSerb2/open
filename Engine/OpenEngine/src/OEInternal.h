@@ -70,7 +70,8 @@ inline bool OEIsChromeNewTabURL(NSURL* _Nullable url) {
 bool OEMatchesPattern(const std::string& pattern, const std::string& url);
 
 /// Process message names (browser <-> renderer).
-extern const char kOEMsgScriptsUpdate[];    // browser -> renderer
+extern const char kOEMsgScriptsUpdate[];    // browser -> renderer, full snapshot
+extern const char kOEMsgScriptsPatch[];     // browser -> renderer, removed IDs + additions
 extern const char kOEExtraScripts[];        // extra_info key
 extern const char kOEMsgUserStyleSheet[];   // browser -> renderer: key, css
 extern const char kOEExtraUserStyles[];     // extra_info key: {key: css}
@@ -164,6 +165,7 @@ class OEDevToolsClient;
 - (instancetype)initOEForExtensionPopupInBrowser:(OEBrowser*)browser
                                        extension:(NSString*)extensionIdentifier;
 - (CefRefPtr<CefDictionaryValue>)oe_extraInfo;
+- (CefRefPtr<CefDictionaryValue>)oe_extraInfoWithScripts:(CefRefPtr<CefListValue>)scripts;
 - (CefBrowserSettings)oe_browserSettings;
 @property(nonatomic, copy, nullable) NSString* oe_popupExtension;
 /// Prepares this (not yet created) content to receive a popup browser from
