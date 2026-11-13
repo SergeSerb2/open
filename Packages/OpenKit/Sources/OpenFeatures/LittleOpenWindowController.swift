@@ -328,21 +328,23 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         }
         return menu
     }
-    private func presentationLayer() -> CALayer? {
+    private func presentationView() -> NSView {
         // Include the native frame and its background, not only our content.
         // Fading the content alone leaves an opaque empty window until close.
         let frame = root.superview ?? root
         frame.wantsLayer = true
-        return frame.layer
+        return frame
     }
     /// Paint the final geometry once before revealing the native window layer.
     /// Subsequent MRU resurfacing must not restart the initial fade.
     func presentWindow() {
         guard !closed, let window else { return }
         let first = !hasPresented; hasPresented = true
-        let layer = first && !Motion.reducesMotion ? presentationLayer() : nil
+        let view = first && !Motion.reducesMotion ? presentationView() : nil
+        let layer = view?.layer
         if let layer {
             CATransaction.begin(); CATransaction.setDisableActions(true)
+            view?.alphaValue = 0
             layer.opacity = 0
             CATransaction.commit()
         }
@@ -350,6 +352,9 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         guard let layer else { return }
         window.displayIfNeeded(); CATransaction.flush()
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        // Keep AppKit's model alpha in sync with its backing layer. A later
+        // native display pass must not restore the unfaded window contents.
+        view?.alphaValue = 1
         layer.opacity = 1
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1; fade.duration = Motion.littleOpenFade
@@ -369,12 +374,15 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             commandBar.dismiss(reason: .programmatic)
             container.closeAll(); window?.delegate = nil; window?.close()
         }
-        guard window?.isVisible == true, !Motion.reducesMotion, let layer = presentationLayer() else { finish(); return }
+        guard window?.isVisible == true, !Motion.reducesMotion else { finish(); return }
+        let view = presentationView()
+        guard let layer = view.layer else { finish(); return }
         window?.ignoresMouseEvents = true
         let start = layer.presentation()?.opacity ?? layer.opacity
         CATransaction.begin(); CATransaction.setDisableActions(true)
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
         layer.removeAnimation(forKey: "littleOpen.opacity")
+        view.alphaValue = 0
         layer.opacity = 0
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = start; fade.toValue = 0; fade.duration = Motion.littleOpenFade
