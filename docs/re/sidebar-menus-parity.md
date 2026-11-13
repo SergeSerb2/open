@@ -47,20 +47,6 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 
 ## 3. Status
 
-Session 13 C13-D2-6 selects an ordinary folder with two direct tab children and a separate Today
-tab, then invokes the normal menu's Delete. The confirmation reads **Delete your “C13 Folder”
-folder?**, **Deleting this folder will archive the tabs inside it.**, with Cancel and Delete Folder.
-After confirmation the folder and the three tabs leave the sidebar; Archive has three individual
-tab rows and no folder record. Normal quit/relaunch preserves that result. Evidence:
-`.re/capture/s13/m1/arc/v8/210-mixed-delete/mixed-{sidebar-baseline,archive-baseline,delete-menu,delete-confirmation,delete-sidebar,delete-archive}.{png,ax.json}`
-and `v8/211-mixed-relaunch/mixed-relaunch-{sidebar,archive}.{png,ax.json}`.
-
-Open applies that result to the normal sidebar menu for one nonempty ordinary folder of direct
-tabs and one separate Today tab. The existing confirmation guard, Cancel path and one-step Undo
-remain. Keyboard deletion, held-Option menus, Manager menus, nested folders, splits, Notes,
-Easels, empty folders and larger mixed selections retain their existing behavior because this
-capture does not settle them. Existing folder-only deletion still creates a folder Archive record.
-
 The build order of the first inventory is done: sidebar row menus, URL field, "+" popover, then the Library sections
 (one PR each). Open items: the two C3 captures above (C-D2-1 Media menus, C-D2-2 Archive hover glyphs), the deferred
 items in `docs/followups.md` (split Change Icon / Rename, Media Source URL), and the GUESS rows marked in the tables.
@@ -95,3 +81,19 @@ this change does not alter transfer retries or persistence. The failed-row menu 
 C12-PB1-3 report separately records that this failed row was absent after relaunch, including an exact-name search
 showing "No results found" (`.re/capture/s12/m1/arc/v11/36-failure-relaunch/failed-after-relaunch.{png,ax.json}`).
 The PB1 lane tracks that relaunch behavior; this change covers the subtitle.
+
+## 6. Mixed folder and Today-tab Delete (session 13 C13-D2-6)
+
+Session 13 C13-D2-6 selects an ordinary folder with two direct tab children and a separate Today
+tab, then invokes the normal menu's Delete. The confirmation reads **Delete your “C13 Folder”
+folder?**, **Deleting this folder will archive the tabs inside it.**, with Cancel and Delete Folder.
+After confirmation the folder and the three tabs leave the sidebar; Archive has three individual
+tab rows and no folder record. Normal quit/relaunch preserves that result. Evidence:
+`.re/capture/s13/m1/arc/v8/210-mixed-delete/mixed-{sidebar-baseline,archive-baseline,delete-menu,delete-confirmation,delete-sidebar,delete-archive}.{png,ax.json}`
+and `v8/211-mixed-relaunch/mixed-relaunch-{sidebar,archive}.{png,ax.json}`.
+
+Open applies that result to the normal sidebar menu for one nonempty ordinary folder of direct
+tabs and one separate Today tab. The existing confirmation guard, Cancel path and one-step Undo
+remain. Keyboard deletion, held-Option menus, Manager menus, nested folders, splits, Notes,
+Easels, empty folders and larger mixed selections retain their existing behavior because this
+capture does not settle them. Existing folder-only deletion still creates a folder Archive record.
