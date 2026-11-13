@@ -251,6 +251,8 @@ extension AutomationController {
         state["fullDiskAccessRequests"] = wizard.fullDiskAccessRequests
         state["settingsCanContinue"] = wizard.canContinue
         state["settingsPasswords"] = wizard.plan.passwords
+        state["settingsPlan"] = ["bookmarks": wizard.plan.bookmarks, "history": wizard.plan.history, "openTabs": wizard.plan.openTabs]
+        state["settingsNotFound"] = ["Bookmarks", "History", "Open tabs"].filter { wizard.isNotFound($0) }
         state["settingsNeedsPrimaryPassword"] = wizard.needsPrimaryPassword
         state["settingsSafariExport"] = wizard.plan.safariFiles.exportArchive?.lastPathComponent ?? ""
         state["settingsReportCategories"] = wizard.displayedReportCategories

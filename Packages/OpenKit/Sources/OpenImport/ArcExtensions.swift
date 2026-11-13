@@ -106,14 +106,20 @@ public struct ArcExtensionsReader: Sendable {
                 }
             }
             let path = entry?["path"] as? String ?? ""
+            // The browser's own extensions have no Web Store install for Open to repeat. Chromium's
+            // `Manifest::Location` says who installed it: 5 COMPONENT and 10 EXTERNAL_COMPONENT ship with the
+            // browser; `was_installed_by_default` marks the browser's default installs (Chrome's Docs Offline is
+            // location 6 with this flag). Location 6 without it is an extension a desktop app installed: kept.
+            let location = entry?["location"] as? Int
+            let browserOwn = location == 5 || location == 10 || entry?["was_installed_by_default"] as? Bool == true
             let isInternal = path.hasPrefix("/Applications/") || (path.isEmpty && folders[id] == nil)
-                || (entry == nil && manifest == nil)
+                || (entry == nil && manifest == nil) || browserOwn
             let name = manifest?["name"] as? String
             guard id.utf8.count <= 256, (name?.utf8.count ?? 0) <= 1024 else { throw ArcExtensionsReadError.exceedsLimit }
             records.append(ArcExtensionRecord(extensionID: id, manifestName: name, version: manifest?["version"] as? String,
                                                manifestVersion: manifest?["manifest_version"] as? Int,
                                                fromWebStore: entry?["from_webstore"] as? Bool ?? false,
-                                               locationRaw: entry?["location"] as? Int, isInternal: isInternal))
+                                               locationRaw: location, isInternal: isInternal))
             report.totalRecords += 1
             if manifest == nil { report.missingManifest += 1 }
             if isInternal { report.internalRecords += 1 } else { report.reinstallCandidates += 1 }

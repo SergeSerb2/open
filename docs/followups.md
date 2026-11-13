@@ -632,3 +632,5 @@ cannot be observed. Open keeps its current behaviour and builds no guessed surfa
 - G8: the image tool's open panel and the size a picture lands at. Open places pictures ≤ 400 pt wide (GUESS).
 - The live web card dialog's closing shortcut and button titles (C3-EZ-1). Open uses its own last sentence and buttons.
 
+## Firefox `logins.db` (IMF 20:15, post-1.0)
+- Firefox 159 ships a Rust logins store (`logins.db`; off by default: `signon.storage.rust.enabled=false`). Open reads `logins.json`. Watch Mozilla's default; when it turns on, add a `logins.db` reader.

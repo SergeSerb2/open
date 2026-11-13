@@ -20,11 +20,13 @@ Before you start: quit Open. Have Chrome installed with at least one saved passw
      and which button you chose. This settles F3 question 4 (macOS data protection on other browsers' folders).
 3. Select **Chrome**, then **Next**. PASS: the Choose step shows counts ("Found: N") for Bookmarks and History.
 
-## H2 — Chrome passwords: one Keychain approval
+## H2 — Chrome passwords: one Keychain read
 1. On the Chrome Choose step, turn on **Passwords and cookies**. Choose **Next**, then **Import**.
 2. The consent step says "Import passwords and cookies from Chrome?". Choose **Import Passwords and Cookies**.
-3. macOS asks once for the Keychain item **"Chrome Safe Storage"**. Enter your login password and choose **Allow**.
-   - PASS: exactly one prompt, and it names "Chrome Safe Storage". No prompt names Arc or Chromium.
+3. macOS asks for the Keychain item **"Chrome Safe Storage"**. Enter your login password and choose **Allow**.
+   - PASS (LEAD 20:15): Open reads Chrome Safe Storage once. macOS may show up to two prompts for that one read
+     (the app list, then the team ID list), and both name "Chrome Safe Storage". No prompt names Arc or Chromium.
+     Write down how many prompts you saw.
 4. PASS: the Report shows "Passwords: N imported" with N > 0.
 5. Open **Settings ▸ Passwords**. PASS: a password that you saved in Chrome is listed.
 6. Deny path (optional): run steps 1–3 again and choose **Deny**. PASS: the Report says "Keychain access was not
@@ -124,15 +126,15 @@ were in a separate TEST keychain with a known password. Only local test pages on
 | Check | Result | Notes |
 |---|---|---|
 | H1 Chrome folder access | PASS | Chrome is in the list, no "No access", and no macOS data-protection prompt. Choose shows "Found: 2" for bookmarks, tabs and history, and "Found: 1" for passwords. Same result on DMG e. |
-| H2 Chrome Keychain approval | FAIL (prompt count) | Open reads the item once (one `SecItemCopyMatching`). macOS still shows **two** prompts, and both name "Chrome Safe Storage" (none names Arc or Chromium). 1: "Open wants to use your confidential information stored in “Chrome Safe Storage” in your keychain." 2: "Open wants to access key “Chrome Safe Storage” in your keychain." (the partition-list check). After two Allows, the Report shows "Passwords: 1 imported, 0 already in Open", and the login is in Open's store. The Deny path passes: "Keychain access was not granted. Passwords and cookies were not imported.", and a new bookmark still imports. The test item had Chrome's access list and team ID (EQHXZ8M8AV), like the item Chrome makes. **User:** count the prompts with a real Chrome item. |
+| H2 Chrome Keychain approval | PASS (LEAD 20:15 rule) | Open reads the item once (one `SecItemCopyMatching`). macOS shows **two** prompts, and both name "Chrome Safe Storage" (none names Arc or Chromium). 1: "Open wants to use your confidential information stored in “Chrome Safe Storage” in your keychain." 2: "Open wants to access key “Chrome Safe Storage” in your keychain." (the partition-list check). After two Allows, the Report shows "Passwords: 1 imported, 0 already in Open", and the login is in Open's store. The Deny path passes: "Keychain access was not granted. Passwords and cookies were not imported.", and a new bookmark still imports. The test item had Chrome's access list and team ID (EQHXZ8M8AV), like the item Chrome makes. The first run recorded FAIL against "exactly one prompt"; the lead changed the rule (two prompts for one read pass). **User:** count the prompts with a real Chrome item. |
 | H3 Brave / Edge item names | PASS | Made by Brave and Edge on first launch: Name "Brave Safe Storage", Account "Brave"; Name "Microsoft Edge Safe Storage", Account "Microsoft Edge". Both match the table. Vivaldi not checked. |
-| H4 Safari Full Disk Access | BLOCKED (user) | SIP is off on rented Macs, so macOS does not protect `~/Library/Safari`. Open read Safari's history without Full Disk Access, so the FDA prompt flow cannot appear there. The import itself works ("Import finished.", history imported). |
+| H4 Safari Full Disk Access | USER (real Mac) | SIP is off on rented Macs, so macOS does not protect `~/Library/Safari`. Open read Safari's history without Full Disk Access, so the FDA prompt flow cannot appear there. The import itself works ("Import finished.", history imported). |
 | H5 Firefox real data | PASS | Profile made by Firefox 159 (its default bookmarks, three local visits, session restore). The synthetic logins (`openkit firefox-fixture`) were copied in, because Firefox's UI cannot be automated. Choose: Bookmarks 4, History 3, Passwords 3, Open tabs 3. The Report shows the same counts; the three tabs are in the sidebar and the three logins are in Open's password store. |
 | H6 Firefox Primary Password | PASS | Open asks in a secure field (AXSecureTextField). A wrong password gives "The Primary Password is not correct"; bookmarks (6) and history still import, and no login is added. The right password imports 3 passwords. |
-| H7 Safari FDA continues by itself | BLOCKED (user) | Same reason as H4. |
+| H7 Safari FDA continues by itself | USER (real Mac) | Same reason as H4. |
 | H8 Arc Safe Storage approval | NOT RUN (user) | Needs real Arc data. |
 | H9 Keychain error path | PASS, with a naming bug | Opening a saved password shows the macOS prompt; Cancel leaves the list with no password shown, no error dialog and no crash (same pid). **Bug:** the prompt title is "Chromium is trying to show passwords" (body: "Enter your password to continue with “Open”."). It must name Open. |
-| H10 Web notifications | BLOCKED (user) | Open's site prompt "Allow 127.0.0.1 to send you notifications?" → Allow works, and the page sent its notification (page title "sent"). The rented Mac shows no banners at all: a control `osascript` notification did not show either, and usernoted kept Open at "Denied" with no visible prompt. |
+| H10 Web notifications | USER (real Mac) | Open's site prompt "Allow 127.0.0.1 to send you notifications?" → Allow works, and the page sent its notification (page title "sent"). The rented Mac shows no banners at all: a control `osascript` notification did not show either, and usernoted kept Open at "Denied" with no visible prompt. |
 | H11 Camera and microphone | NOT RUN (user) | Needs a real camera and microphone. |
 | H12 Trackpad smart zoom | NOT RUN (user) | Needs a trackpad. |
 | H13 Translation | PASS | French page → "Translation Available" → Translate → Apple's "Download Languages to Translate" sheet → French and English downloaded → the page shows in English. |
@@ -140,18 +142,30 @@ were in a separate TEST keychain with a known password. Only local test pages on
 | H15 Signed-build launch check | R | R runs it on the M1. |
 
 Other findings from this run:
-- Safari import: on a fresh Safari profile, Bookmarks is "Not found" but ticked by default, and the Report then says
-  "Some selected data could not be imported." With Bookmarks unticked there is no such line. A "Not found"
-  item should not be ticked (or should not count as a failure).
-- Chrome Report lists Chrome's built-in "Google Docs Offline" and "Chrome Web Store Payments" under Extensions.
+- Safari import: on a fresh Safari profile, Bookmarks was "Not found" but ticked by default, and the Report then said
+  "Some selected data could not be imported." Fixed: a data type with "Not found" is now unticked and disabled
+  (Settings ▸ Import and onboarding); e2e row `import_other_browsers/safari_not_found_unticked`.
+- The Chrome Report listed Chrome's built-in "Google Docs Offline" and "Chrome Web Store Payments" under Extensions.
+  Fixed: extensions with install location 5 or 10, or `was_installed_by_default`, are not offered; e2e row
+  `import_browsers/extensions_skip_browser_own`.
+- The password reveal prompt says "Chromium is trying to show passwords": an engine string, handed to E3 (LEAD 20:15).
 - First launch on rented Macs showed "Allow “Open” to access your microphone?". Log proof: coreaudiod asked TCC for
   the Open main process during onboarding. The only audio device there is BlackHole 2ch, the default output and
   input. Open only plays sounds (AVAudioPlayer: intro sound, sound effects), so playback on a device that has input
   starts the check. No prompt is expected on a Mac with normal speakers. **User:** confirm that the first launch
   shows no microphone prompt.
-- Firefox 159 ships a Rust logins store (`logins.db`, `signon.storage.rust.enabled=false` by default). Today Firefox
-  still saves logins in `logins.json`, which Open reads. If Mozilla turns the Rust store on, Open needs a reader for
-  `logins.db`.
+- Firefox 159 ships a Rust logins store (`logins.db`). Filed in `docs/followups.md`.
 
-What stays for the user: H2 prompt count with a real Chrome item, H4/H7, H8, H10, H11, H12, the first-launch
-microphone check above, and H15 (R).
+## For the user (a real Mac)
+These need SIP on, real notification banners, real data, or real hardware. Agents cannot run them on rented Macs.
+
+| Item | What to check |
+|---|---|
+| H2 prompt count | With a real Chrome item: how many prompts appear for one import (one or two pass), and that each names "Chrome Safe Storage". |
+| H4 / H7 | Safari Full Disk Access: the System Settings flow, and that the import continues by itself. |
+| H8 | Arc Safe Storage approval with real Arc data. |
+| H10 | Web notifications: the macOS prompt, the banner, and a click that opens the tab. |
+| H11 | Camera and microphone with real devices. |
+| H12 | Trackpad smart zoom. |
+| First-launch microphone | A normal first launch (onboarding with its intro sound) shows **no** "Allow “Open” to access your microphone?" prompt. |
+| H15 | R runs it. |
