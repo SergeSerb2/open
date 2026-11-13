@@ -917,10 +917,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func clearDropIndicator() { dropIndicator.isHidden = true }
     private func showDropIndicator(item: Any?, index: Int) {
-        let count = children(of: item).count
+        let items = children(of: item)
         let row: Int
-        if index < count { row = outline.row(forItem: children(of: item)[max(0, index)]) }
-        else if count > 0 { row = outline.row(forItem: children(of: item)[count - 1]) + 1 }
+        if index == NSOutlineViewDropOnItemIndex, let item { row = outline.row(forItem: item) + 1 }
+        else if items.indices.contains(index) { row = outline.row(forItem: items[index]) }
+        else if let last = items.last { row = outline.row(forItem: last) + 1 }
         else { row = 0 }
         let y = row < outline.numberOfRows ? outline.rect(ofRow: max(0, row)).minY
             : (outline.numberOfRows > 0 ? outline.rect(ofRow: outline.numberOfRows - 1).maxY : 0)
