@@ -17,6 +17,19 @@ extension AutomationController {
     let factory = try window
     guard let controller = factory.controller else { throw Failure(message: "no browser window") }
     switch cmd {
+    case "peek-motion-trace":
+      switch a["action"] as? String ?? "read" {
+      case "arm":
+        PeekMotionTrace.arm()
+        PeekMotionTrace.watch(controller.contentView)
+      case "stop": PeekMotionTrace.stop()
+      case "mark":
+        guard let name = a["name"] as? String, name.utf8.count <= 64 else { throw Failure(message: "trace name limit") }
+        PeekMotionTrace.mark(name)
+      case "read": break
+      default: throw Failure(message: "unknown trace action")
+      }
+      return PeekMotionTrace.json()
     case "peek-motion":
       guard controller.hasPeekController else { return ["shown": false] }
       let peek = controller.peekController, overlay = peek.overlay

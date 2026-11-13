@@ -96,6 +96,7 @@ public final class PeekController {
         open(url:url,sourceTabID:splitController.focusedTab?.id ?? ItemID(),librarySpaceID:space.id,profileID:profileID)
     }
     private func open(url: URL, sourceTabID: ItemID, librarySpaceID: SpaceID?, profileID: ProfileID?) {
+        PeekMotionTrace.mark("request.open")
         guard let space = splitController.space else { return }
         let profile = profileID ?? space.profileID
         dismissGeneration += 1; isDismissing = false
@@ -116,7 +117,8 @@ public final class PeekController {
         }
         host.onLoadingChange = { [weak self, weak host] loading in
             guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return }
-            self.onPageChange?()
+            PeekMotionTrace.mark("host.loading", value: loading ? 1 : 0)
+            PeekMotionTrace.region("host.onPageChange") { self.onPageChange?() }
             if !loading {
                 self.overlay.revealHost(host.view, duration: self.duration(0.12))
             }
@@ -135,7 +137,7 @@ public final class PeekController {
         }
         host.load(url); refresh(); host.focus(); installKeys()
         overlay.animatePresentation(true, duration: duration(Motion.peekOpen))
-        onChange?()
+        PeekMotionTrace.region("open.onChange") { onChange?() }
     }
     private func duration(_ value: Double) -> Double { overlay.window?.isVisible == true && !Motion.reducesMotion ? value : 0 }
     private func installKeys() {
@@ -153,6 +155,8 @@ public final class PeekController {
         }
     }
     public func refresh() {
+        PeekMotionTrace.mark("refresh.begin")
+        defer { PeekMotionTrace.mark("refresh.end") }
         guard let item = stack.last else { overlay.isHidden = true; overlay.clearHost(); return }
         let sourceIsVisible: Bool
         if let space = item.librarySpaceID {
@@ -190,6 +194,7 @@ public final class PeekController {
         else { dismissTop() }
     }
     public func dismissTop() {
+        PeekMotionTrace.mark("request.close")
         guard !isExpanding, !isDismissing, let item = stack.last else { return }
         let interval = duration(Motion.peekDismiss)
         if interval == 0 { finishDismiss(); overlay.resetMotion(); return }
@@ -231,6 +236,7 @@ public final class PeekController {
     private func removeKeys() { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil }
     public func expandTop() { expandTop(into: splitController.space?.id) }
     public func expandTop(into target: SpaceID?) {
+        PeekMotionTrace.mark("request.expand")
         guard !isExpanding, !isDismissing, let item = stack.last, let target, model.space(id: target) != nil else { return }
         expandingGeneration += 1; let generation = expandingGeneration; isExpanding = true
         overlay.animateExpansion(to: overlay.contentRect, duration: duration(Motion.peekExpand)) { [weak self] in

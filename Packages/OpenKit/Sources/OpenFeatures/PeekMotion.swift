@@ -24,7 +24,7 @@ extension PeekOverlayView {
         }
         geometry(panelLayer, from: transform, position: position, to: targetTransform, targetPosition: panelLayer.position,
                  duration: duration, holdsEnd: !shown, timing: shown ? Motion.easeOut : CAMediaTimingFunction(name: .default))
-        CATransaction.commit()
+        PeekMotionTrace.region("motion.explicitCommit") { CATransaction.commit() }
     }
 
     func animateExpansion(to target: CGRect, duration: CFTimeInterval, completion: @escaping @MainActor () -> Void) {
@@ -43,7 +43,7 @@ extension PeekOverlayView {
         for button in buttons {
             if let layer = button.layer { fade(layer, from: (layer.presentation() ?? layer).opacity, to: 0, duration: duration) }
         }
-        CATransaction.commit()
+        PeekMotionTrace.region("motion.explicitCommit") { CATransaction.commit() }
     }
 
     /// Escape during expansion reverses from the displayed geometry, without
@@ -58,7 +58,7 @@ extension PeekOverlayView {
         for button in buttons {
             if let layer = button.layer { fade(layer, from: (layer.presentation() ?? layer).opacity, to: 1, duration: duration) }
         }
-        CATransaction.commit()
+        PeekMotionTrace.region("motion.explicitCommit") { CATransaction.commit() }
     }
 
     func resetMotion() {
@@ -68,10 +68,11 @@ extension PeekOverlayView {
         }
         panel.layer?.removeAnimation(forKey: "peekGeometry")
         motionKind = ""; motionDuration = 0
-        CATransaction.commit()
+        PeekMotionTrace.region("reset.explicitCommit") { CATransaction.commit() }
     }
 
     func revealHost(_ view: NSView, duration: CFTimeInterval) {
+        PeekMotionTrace.mark("host.reveal", value: duration)
         let opacity = view.layer.map { ($0.presentation() ?? $0).opacity } ?? Float(view.alphaValue)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         view.alphaValue = 1
@@ -79,13 +80,16 @@ extension PeekOverlayView {
             if duration > 0 { fade(layer, from: opacity, to: 1, duration: duration) }
             else { layer.removeAnimation(forKey: "peekVisibility"); layer.opacity = 1 }
         }
-        CATransaction.commit()
+        PeekMotionTrace.region("host.explicitCommit") { CATransaction.commit() }
     }
 
     private func beginMotion(_ kind: String, duration: CFTimeInterval, completion: (@MainActor () -> Void)?) {
         motionKind = kind; motionDuration = duration; motionStartedAt = CACurrentMediaTime()
+        PeekMotionTrace.mark("motion." + kind, value: duration)
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        if let completion { CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } } }
+        if let completion { CATransaction.setCompletionBlock { MainActor.assumeIsolated {
+            PeekMotionTrace.region("motion.completion") { completion() }
+        } } }
     }
 
     private func fade(_ layer: CALayer, from: Float, to: Float, duration: CFTimeInterval) {

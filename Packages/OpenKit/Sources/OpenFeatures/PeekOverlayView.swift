@@ -62,11 +62,13 @@ public final class PeekOverlayView: NSView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override func layout() {
+        PeekMotionTrace.mark("overlay.layout.begin")
+        defer { PeekMotionTrace.mark("overlay.layout.end") }
         super.layout(); layoutCount += 1
         let width = round(baseWidth * PeekMetrics.widthFraction)
         let frame = CGRect(x: contentRect.minX + (baseWidth - width) / 2, y: contentRect.minY + PeekMetrics.verticalInset,
                            width: width, height: max(0, contentRect.height - 2 * PeekMetrics.verticalInset))
-        if panel.frame != frame { panel.frame = frame }
+        if panel.frame != frame { PeekMotionTrace.mark("panel.setFrame", value: frame.width); panel.frame = frame }
         layoutPanel()
         for (i, b) in buttons.enumerated() {
             b.frame = CGRect(x: panel.frame.maxX + PeekMetrics.buttonGap, y: panel.frame.maxY - PeekMetrics.buttonTop - CGFloat(i) * PeekMetrics.buttonPitch - PeekMetrics.buttonDiameter,
@@ -74,15 +76,19 @@ public final class PeekOverlayView: NSView {
         }
     }
     func layoutPanel() {
-        if pageClip.frame != panel.bounds { pageClip.frame = panel.bounds }
+        if pageClip.frame != panel.bounds { PeekMotionTrace.mark("clip.setFrame", value: panel.bounds.width); pageClip.frame = panel.bounds }
         for view in pageClip.subviews where view.frame != pageClip.bounds {
             if view === hostedView { hostFrameChangeCount += 1 }
+            PeekMotionTrace.mark("host.setFrame", value: pageClip.bounds.width)
             view.frame = pageClip.bounds
         }
-        panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
+        PeekMotionTrace.region("shadowPath") {
+            panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
+        }
     }
     func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() }; hostedView = nil; swipeIndicator = nil; sadTabView = nil }
     func showHost(_ host: any WebContentHost, close: @escaping () -> Void) {
+        PeekMotionTrace.watch(host.view)
         let wasSad = sadTabView != nil
         let hadPageFocus = (window?.firstResponder as? NSView).map { $0 === pageClip || $0.isDescendant(of: pageClip) } ?? false
         if host.liveState.isCrashed {
@@ -103,7 +109,7 @@ public final class PeekOverlayView: NSView {
             host.view.autoresizingMask = [.width, .height]
         }
         host.view.isHidden = false
-        if host.view.frame != pageClip.bounds { hostFrameChangeCount += 1; host.view.frame = pageClip.bounds }
+        if host.view.frame != pageClip.bounds { PeekMotionTrace.mark("host.setFrame", value: pageClip.bounds.width); hostFrameChangeCount += 1; host.view.frame = pageClip.bounds }
         host.view.alphaValue = host.isLoading ? 0 : 1
         if hadPageFocus && wasSad { host.focus() }
     }
