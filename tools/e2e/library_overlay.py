@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 import time
 
-from engine_e2e import Open
+from engine_e2e import Open, wait_until
 
 SECTIONS = ['media', 'downloads', 'spaces', 'boosts', 'archive', 'history']
 KEYS = ['libraryShowsEasels', 'open.library.lastSection', 'open.sidebar.hideHintShown']
@@ -103,6 +103,8 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
                   hits=[dict(id=t['id'],hit=t['hitClass'],windowDrag=t['canDragWindow']) for t in current['rail']])
             for section in SECTIONS:
                 current = state(action='select', section=section)
+                assert wait_until(lambda: settled(state()['motion']), timeout=2), 'section motion did not settle'
+                current = state()
                 expected = app.call('window-state')['frame'][2]-56 if section == 'spaces' else 417
                 check('section_' + section, current['section'] == section and current['panelFrame'][2] == expected,
                       panel=current['panelFrame'], page=current['pageCardFrame'])
@@ -180,25 +182,52 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             state(action='close')
             time.sleep(.25)
             app.call('window-motion', reduced=False)
-            state(action='open', section='downloads')
+            closed_frame = state()['motion']['page']['frame']
+            opened = state(action='open', section='downloads')
             motion = app.call('window-motion')
             check('open_moves_page', 'libraryFrame' in motion['active']['panel'], motion=motion)
+            check('open_keeps_live_page_geometry', opened['motion']['page']['frame'] == closed_frame,
+                  before=closed_frame, during=opened['motion']['page']['frame'])
+            properties = next(a['properties'] for a in opened['motion']['page']['animations'] if a['key'] == 'libraryFrame')
+            check('page_motion_uses_transform', sorted(properties) == ['position', 'transform'], properties=properties)
             time.sleep(.25)
             motion = state()['motion']
             check('open_motion_settles', settled(motion), motion=motion)
             state(action='select', section='spaces')
             check('spaces_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
             time.sleep(.25)
-            state(action='close')
+            open_frame = state()['motion']['page']['frame']
+            closed = state(action='close')
             check('close_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
+            check('close_keeps_live_page_geometry', closed['motion']['page']['frame'] == open_frame,
+                  before=open_frame, during=closed['motion']['page']['frame'])
             time.sleep(.25)
             motion = state()['motion']
             check('closed_motion_stops', settled(motion), motion=motion)
+            for section in ['downloads', 'spaces', 'downloads']:
+                state(action='open', section=section)
+                time.sleep(.025)
+                key('escape')
+            assert wait_until(lambda: settled(state()['motion']), timeout=2), 'interrupted motion did not settle'
+            interrupted = state()
+            check('rapid_open_close_restores_page', not interrupted['open'] and interrupted['pageCardFrame'] == closed_frame,
+                  page=interrupted['pageCardFrame'], expected=closed_frame)
+            original_frame = app.call('window-state')['frame']
+            state(action='open', section='downloads')
+            state(action='resize', width=1024, height=700)
+            assert wait_until(lambda: settled(state()['motion']), timeout=2), 'resized motion did not settle'
+            resized = state()
+            check('resize_cancels_stale_page_target', resized['pageCardFrame'][0] == 417 and resized['pageCardFrame'][2] == 597,
+                  page=resized['pageCardFrame'])
+            state(action='close')
+            app.call('window-frame', frame=original_frame)
+            assert wait_until(lambda: settled(state()['motion']), timeout=2), 'restored frame did not settle'
             app.call('window-motion', reduced=True)
             state(action='open', section='downloads')
             check('reduced_motion_no_page_move', 'libraryFrame' not in app.call('window-motion')['active']['panel'])
             time.sleep(.12)
             state(action='close')
+            check('reduced_motion_close_no_page_move', 'libraryFrame' not in app.call('window-motion')['active']['panel'])
             time.sleep(.12)
             app.call('window-motion', reduced=False)
             state(action='open', section='downloads')

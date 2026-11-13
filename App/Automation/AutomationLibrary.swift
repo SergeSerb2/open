@@ -144,7 +144,8 @@ extension AutomationController {
         "animations":(layer.animationKeys() ?? []).compactMap { key -> [String:Any]? in
           guard let animation=layer.animation(forKey:key) else { return nil }
           return ["key":key,"duration":animation.duration,"beginTime":animation.beginTime,
-            "speed":animation.speed,"repeatCount":animation.repeatCount,"removedOnCompletion":animation.isRemovedOnCompletion]
+            "speed":animation.speed,"repeatCount":animation.repeatCount,"removedOnCompletion":animation.isRemovedOnCompletion,
+            "properties":((animation as? CAAnimationGroup)?.animations ?? [animation]).compactMap { ($0 as? CAPropertyAnimation)?.keyPath }]
         }]
     }
     state["motion"]=["page":motion(controller.container.layer),"panel":motion(session.panel?.layer),
