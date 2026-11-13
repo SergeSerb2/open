@@ -189,8 +189,18 @@ The parser counts unmapped fields by fixed field name and unknown keys by count.
 `textZoom.level` is the percent itself (capture C11, Arc 1.172.2: the Size button
 cycles 100 → 110 → 125 → 150 → 90 → 100 % and stores 110, 125, 150, 90; at 100 %
 the `textZoom` key is absent). The importer maps it to Open's multiplier
-(level / 100); a level outside 50…200 is counted as dropped. The remaining color
-leaves are dropped pending a proven conversion (colour values not captured yet).
+(level / 100); a level outside 50…200 is counted as dropped.
+
+Colour (capture C11 retry, `C-report-s10.md` "C11 colour values", Arc 1.172.2): a click on the
+pad stores `colorScheme.colorWheelDriven._0 = {baseAppearance {"light":{}}, invertLightness,
+primaryHueDegrees, primarySaturation, secondaryHueOffset 45}`. `primaryHueDegrees` is the knob's
+angle from the pad centre with 0° at the right, increasing clockwise on screen (both captured
+points match `atan2` with y down to 0.01°); Open's `hue` uses the same convention.
+`primarySaturation` lies in 0…1 and grows with the knob radius (53.0 pt → 0.950, 42.6 pt →
+0.741; the exact curve needs more points, capture item C-NT5). `secondaryHueOffset` stayed 45
+in every state; Open's second knob is fixed at 45°, so the importer maps 45 and counts any
+other value as dropped. `invertLightness` maps by name. `baseAppearance` and
+`advancedSettings` have no Open input and stay counted as dropped.
 
 The CLI writes through `OpenBoosts` into the existing per-Profile layout while
 holding `OpenDataRoot.prepare()`'s lock. Existing stable IDs are preserved on
