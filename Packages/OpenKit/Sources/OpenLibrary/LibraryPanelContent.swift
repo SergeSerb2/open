@@ -671,7 +671,8 @@ nonisolated private func downloadSubtitle(_ item:DownloadItemSnapshot) -> String
     switch item.state {
     // Arc's subtitle is the file-kind word ("PDF", "Archive"), else "Download" (capture session 8 item 9).
     case .completed: return item.fileExists == true ? (downloadKind(item.fileName) ?? "Download") : "File moved or deleted."
-    case .failed: return "Failed"
+    // Arc 1.172.2, C12-PB1-3: truncated transfer at 30, 60 and 90 seconds.
+    case .failed: return "Failed to Download"
     case .cancelled: return "Cancelled"
     case .paused: return "Paused"
     case .inProgress:
