@@ -83,6 +83,86 @@ index 8b077f071..cede5d3fa 100644
      pending_popup->platform_delegate =
          CefBrowserPlatformDelegate::Create(create_params);
      CHECK(pending_popup->platform_delegate.get());
+diff --git a/cef/libcef/browser/browser_platform_delegate.cc b/cef/libcef/browser/browser_platform_delegate.cc
+index 167b2af62..97e74b08c 100644
+--- a/cef/libcef/browser/browser_platform_delegate.cc
++++ b/cef/libcef/browser/browser_platform_delegate.cc
+@@ -205,11 +205,14 @@ void CefBrowserPlatformDelegate::PopupWebContentsCreated(
+   }
+ 
+   CefRefPtr<CefBrowserViewDelegate> new_delegate;
+-  CefRefPtr<CefBrowserViewDelegate> opener_delegate;
++  // Open (0302): a docked DevTools popup goes to the embedder's dock delegate,
++  // not to the delegate of the window that hosts the opener tab.
++  CefRefPtr<CefBrowserViewDelegate> opener_delegate =
++      new_platform_delegate->open_popup_opener_delegate_;
+   cef_runtime_style_t opener_runtime_style = CEF_RUNTIME_STYLE_DEFAULT;
+ 
+   auto browser_view = GetBrowserView();
+-  if (browser_view) {
++  if (browser_view && !opener_delegate) {
+     // When |this| (the popup opener) is Views-hosted use the current delegate.
+     opener_delegate =
+         static_cast<CefBrowserViewImpl*>(browser_view.get())->delegate();
+@@ -223,7 +226,7 @@ void CefBrowserPlatformDelegate::PopupWebContentsCreated(
+         browser_view, settings, client, is_devtools);
+   }
+ 
+-  if (browser_view) {
++  if (browser_view && !new_platform_delegate->open_popup_opener_delegate_) {
+     opener_runtime_style = browser_view->GetRuntimeStyle();
+   } else if (opener_delegate) {
+     opener_runtime_style = opener_delegate->GetBrowserRuntimeStyle();
+@@ -255,9 +258,11 @@ void CefBrowserPlatformDelegate::PopupBrowserCreated(
+ 
+   bool popup_handled = false;
+ 
+-  CefRefPtr<CefBrowserViewDelegate> opener_delegate;
++  // Open (0302): see PopupWebContentsCreated.
++  CefRefPtr<CefBrowserViewDelegate> opener_delegate =
++      new_platform_delegate->open_popup_opener_delegate_;
+   auto browser_view = GetBrowserView();
+-  if (browser_view) {
++  if (browser_view && !opener_delegate) {
+     // When |this| (the popup opener) is Views-hosted use the current delegate.
+     opener_delegate =
+         static_cast<CefBrowserViewImpl*>(browser_view.get())->delegate();
+@@ -282,7 +287,8 @@ void CefBrowserPlatformDelegate::PopupBrowserCreated(
+ 
+ CefRefPtr<CefBrowserViewDelegate>
+ CefBrowserPlatformDelegate::GetDefaultBrowserViewDelegateForPopupOpener() {
+-  return nullptr;
++  // Open (0302): set for a docked DevTools browser; otherwise null.
++  return open_popup_opener_delegate_;
+ }
+ 
+ SkColor CefBrowserPlatformDelegate::GetBackgroundColor() const {
+diff --git a/cef/libcef/browser/browser_platform_delegate.h b/cef/libcef/browser/browser_platform_delegate.h
+index 698913fc8..42b89ccae 100644
+--- a/cef/libcef/browser/browser_platform_delegate.h
++++ b/cef/libcef/browser/browser_platform_delegate.h
+@@ -215,6 +215,13 @@ class CefBrowserPlatformDelegate {
+   virtual CefRefPtr<CefBrowserViewDelegate>
+   GetDefaultBrowserViewDelegateForPopupOpener();
+ 
++  // Open (0302): the BrowserView delegate that places this Views-hosted
++  // DevTools popup when its opener (a hosted tab) has no BrowserView.
++  void set_open_popup_opener_delegate(
++      CefRefPtr<CefBrowserViewDelegate> delegate) {
++    open_popup_opener_delegate_ = delegate;
++  }
++
+   // Returns the background color for the browser. The alpha component will be
+   // either SK_AlphaTRANSPARENT or SK_AlphaOPAQUE (e.g. fully transparent or
+   // fully opaque). SK_AlphaOPAQUE will always be returned for windowed
+@@ -371,6 +378,7 @@ class CefBrowserPlatformDelegate {
+   cef::BrowserConfig GetBrowserConfig() const;
+ 
+  protected:
++  CefRefPtr<CefBrowserViewDelegate> open_popup_opener_delegate_;
+   // Allow deletion via std::unique_ptr only.
+   friend std::default_delete<CefBrowserPlatformDelegate>;
+ 
 diff --git a/cef/libcef/browser/browser_platform_delegate_create.cc b/cef/libcef/browser/browser_platform_delegate_create.cc
 index b2f30ae0a..1f4e475a1 100644
 --- a/cef/libcef/browser/browser_platform_delegate_create.cc
@@ -112,7 +192,7 @@ index b2f30ae0a..1f4e475a1 100644
        // CefWindowInfo should only be set if a parent handle was specified.
        DCHECK(chrome_child_window::HasParentHandle(window_info));
 diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.cc b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
-index 3c4eead6f..974f1ccbf 100644
+index 3c4eead6f..e5c70a3d3 100644
 --- a/cef/libcef/browser/chrome/chrome_browser_delegate.cc
 +++ b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
 @@ -6,6 +6,7 @@
@@ -123,17 +203,46 @@ index 3c4eead6f..974f1ccbf 100644
  #include "cef/libcef/browser/browser_contents_delegate.h"
  #include "cef/libcef/browser/browser_host_base.h"
  #include "cef/libcef/browser/browser_info_manager.h"
-@@ -26,6 +27,9 @@
+@@ -26,6 +27,10 @@
  #include "chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h"
  #include "chrome/browser/ui/window_feature_controller/window_feature_controller.h"
  #include "content/public/browser/global_routing_id.h"
 +#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/open_devtools_dock.h"
 +#include "open/browser/tab_strip/open_tab_strip.h"
 +#endif
  #include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
  
  ChromeBrowserDelegate::ChromeBrowserDelegate(
-@@ -253,7 +257,15 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+@@ -151,8 +156,27 @@ Browser* ChromeBrowserDelegate::CreateDevToolsBrowser(
+                                                           use_default_window);
+   create_params.popup_with_alloy_style_opener = false;
+ 
++#if BUILDFLAG(IS_MAC)
++  // Open: DevTools docked in the embedder's view. A hosted tab has no
++  // BrowserView, so the DevTools browser becomes a Views-hosted popup whose
++  // BrowserView goes to the delegate the embedder registered
++  // (CefSetOpenDevToolsDockDelegate); still Chrome style.
++  CefRefPtr<CefBrowserViewDelegate> open_dock_delegate =
++      open_engine::TakeDevToolsDockDelegate(opener_browser_host->GetIdentifier());
++  if (open_dock_delegate && !create_params.window_info) {
++    create_params.popup_with_views_hosted_opener = true;
++  } else {
++    open_dock_delegate = nullptr;
++  }
++#endif
++
+   auto platform_delegate = CefBrowserPlatformDelegate::Create(create_params);
+   CHECK(platform_delegate);
++#if BUILDFLAG(IS_MAC)
++  if (open_dock_delegate) {
++    platform_delegate->set_open_popup_opener_delegate(open_dock_delegate);
++  }
++#endif
+ 
+   // Expect runtime style to match.
+   CHECK(platform_delegate->IsChromeStyle());
+@@ -253,7 +277,15 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
    // CreateDevToolsBrowser should have already created the browser host.
    DCHECK(!is_devtools_popup || !opener_host_);
  
@@ -150,7 +259,7 @@ index 3c4eead6f..974f1ccbf 100644
    CHECK(platform_delegate);
  
    // Expect runtime style to match.
-@@ -261,14 +273,14 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+@@ -261,14 +293,14 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
  
    auto browser_info = CefBrowserInfoManager::GetInstance()->CreateBrowserInfo(
        is_devtools_popup, platform_delegate->GetBrowserConfig(),
@@ -260,3 +369,32 @@ index 8f0c3140a..113d8ce95 100644
  }
  
  void ChromeBrowserHostImpl::Invalidate(PaintElementType type) {
+diff --git a/cef/include/views/cef_browser_view_delegate.h b/cef/include/views/cef_browser_view_delegate.h
+--- a/cef/include/views/cef_browser_view_delegate.h
++++ b/cef/include/views/cef_browser_view_delegate.h
+@@ -80,9 +80,10 @@
+   /// from |browser_view|. |settings| and |client| are the values returned from
+   /// CefLifeSpanHandler::OnBeforePopup(). |is_devtools| will be true if the
+   /// popup will be a DevTools browser. Return the delegate that will be used
+-  /// for the new popup BrowserView.
++  /// for the new popup BrowserView. Open: |browser_view| may be null for
++  /// DevTools of a hosted tab, which has no opener BrowserView.
+   ///
+-  /*--cef(optional_param=client)--*/
++  /*--cef(optional_param=browser_view,optional_param=client)--*/
+   virtual CefRefPtr<CefBrowserViewDelegate> GetDelegateForPopupBrowserView(
+       CefRefPtr<CefBrowserView> browser_view,
+       const CefBrowserSettings& settings,
+@@ -98,9 +99,10 @@
+   /// |browser_view|. |is_devtools| will be true if the popup is a DevTools
+   /// browser. Optionally add |popup_browser_view| to the views hierarchy
+   /// yourself and return true. Otherwise return false and a default CefWindow
+-  /// will be created for the popup.
++  /// will be created for the popup. Open: |browser_view| may be null for
++  /// DevTools of a hosted tab, which has no opener BrowserView.
+   ///
+-  /*--cef()--*/
++  /*--cef(optional_param=browser_view)--*/
+   virtual bool OnPopupBrowserViewCreated(
+       CefRefPtr<CefBrowserView> browser_view,
+       CefRefPtr<CefBrowserView> popup_browser_view,

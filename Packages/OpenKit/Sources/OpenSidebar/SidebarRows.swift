@@ -9,6 +9,11 @@ import OpenModel
 @MainActor final class SpacerItem {}
 @MainActor final class DividerItem {}
 @MainActor final class NewTabItem {}
+/// One per Live Folder and Space page; not a saved sidebar node (C-LF-2, Open's design).
+@MainActor final class LiveFolderMoreItem {
+    let folderID: ItemID
+    init(folderID: ItemID) { self.folderID = folderID }
+}
 
 // MARK: - Row view (fill, hover, selection)
 
@@ -200,7 +205,7 @@ final class SidebarRowView: NSTableRowView {
     }
     var showsDeveloperOutline: Bool { developerOutline.first.map { !$0.isHidden } ?? false }
 
-    override func isAccessibilityElement() -> Bool { itemID(of: representedItem) != nil || representedItem is NewTabItem }
+    override func isAccessibilityElement() -> Bool { itemID(of: representedItem) != nil || representedItem is NewTabItem || representedItem is LiveFolderMoreItem }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func accessibilityLabel() -> String? {
         switch representedItem {
@@ -208,6 +213,7 @@ final class SidebarRowView: NSTableRowView {
         case let folder as Folder: folder.title
         case let split as Split: "Split View: " + split.panes.map(\.displayTitle).joined(separator: ", ")
         case is NewTabItem: "New Tab"
+        case is LiveFolderMoreItem: "Show More"
         default: nil
         }
     }
@@ -1072,6 +1078,29 @@ final class SplitCellView: SidebarCellView {
             }
         }
         CATransaction.commit()
+    }
+}
+
+/// Live Folder's secondary action row, using the existing sidebar text metrics and ink.
+@MainActor
+final class LiveFolderMoreCellView: SidebarCellView {
+    static let identifier = NSUserInterfaceItemIdentifier("liveFolderMore")
+    private let title = TextLabel()
+    required init(frame: NSRect) {
+        super.init(frame: frame)
+        identifier = Self.identifier
+        title.font = Typography.newTab.font
+        title.baseline = SpaceListMetrics.titleBaselineOffset
+        title.inset = SpaceListMetrics.textInset
+        title.trailingInset = SpaceListMetrics.textTrailingInset
+        title.text = { "Show More" }
+        title.color = { [weak self] in self?.page?.roles.newTabLabel.nsColor ?? SidebarRole.secondaryText.nsColor }
+        addSubview(title)
+    }
+    override func layout() {
+        super.layout()
+        let m = SpaceListMetrics.self, x = m.titleX + indent
+        title.frame = CGRect(x: x, y: 0, width: max(0, bounds.width - x - m.titleTrailingInset), height: m.rowHeight)
     }
 }
 

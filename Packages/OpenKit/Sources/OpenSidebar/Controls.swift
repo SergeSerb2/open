@@ -173,8 +173,9 @@ final class FaviconView: NSView {
         lastDrawnImage = nil; lastDrawnSource = "placeholder"
         guard let tab else { return }
         if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderFaviconDraws += 1 }
-        let (override, icon, resolved, host, tint) = tracked({
-            (tab.iconOverride, tab.customIcon, resolvedImage(for: tab), tab.displayHost, fallbackTint())
+        let (override, icon, resolved, host, tint, pullRequest) = tracked({
+            (tab.iconOverride, tab.customIcon, resolvedImage(for: tab), tab.displayHost, fallbackTint(),
+             tab.liveItemURL == nil ? nil : tab.liveItem?.status)
         }) { [weak self] in
             self?.needsDisplay = true
         }
@@ -194,6 +195,12 @@ final class FaviconView: NSView {
             } else {
                 EmojiRenderer.draw(icon, in: ink)
             }
+            return
+        }
+        // A Live Folder row with PR facts draws Open's PR-state glyph, not the site favicon (C-LF-1).
+        if let pullRequest {
+            lastDrawnSource = "pullRequest." + pullRequest.rawValue
+            PullRequestStatusGlyph.draw(pullRequest, in: ink)
             return
         }
         if let image = resolved.0 {

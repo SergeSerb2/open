@@ -24,6 +24,7 @@ public final class HoverPreviewTracker {
     private var hideTask: DispatchWorkItem?
     private var lastHidden: TimeInterval?
     private var insideCard = false
+    private weak var previewMenu: NSMenu?
     private var previewFrameInWindow: CGRect?
     public func setPreviewFrameInWindow(_ frame: CGRect?) { previewFrameInWindow = frame }
     private var suppressed: Set<Suppression> = []
@@ -137,9 +138,21 @@ public final class HoverPreviewTracker {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
     public func setPointerInsidePreview(_ inside: Bool) {
-        insideCard = inside
-        if inside { hideTask?.cancel(); hideTask = nil; scheduledHideDelay = nil }
+        insideCard = inside || previewMenu != nil
+        if insideCard { hideTask?.cancel(); hideTask = nil; scheduledHideDelay = nil }
         else if candidate == nil { leaveTarget() }
+    }
+    /// A menu opened by the card belongs to that card. Keep it while AppKit tracks the menu, including when
+    /// the pointer leaves the card. Other menus retain the normal hover-preview suppression behavior.
+    public func popUpPreviewMenu(_ menu: NSMenu, at point: CGPoint, in view: NSView) {
+        previewMenu = menu
+        setPointerInsidePreview(true)
+        defer {
+            previewMenu = nil
+            let inside = view.window.map { view.bounds.contains(view.convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? false
+            setPointerInsidePreview(inside)
+        }
+        menu.popUp(positioning: nil, at: point, in: view)
     }
     public func setSuppressed(_ reason: Suppression, _ value: Bool) {
         if value { suppressed.insert(reason); dismiss() } else { suppressed.remove(reason) }
@@ -165,11 +178,21 @@ public final class HoverPreviewTracker {
             guard let self, let target = self.candidate ?? self.request else { return }
             if !self.valid(target) { self.dismiss() }
         }
-        observers.append(center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.setSuppressed(.menu, true) }
+        observers.append(center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] note in
+            let menuID = (note.object as? NSMenu).map(ObjectIdentifier.init)
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let menu = self.previewMenu, menuID == ObjectIdentifier(menu) { return }
+                self.setSuppressed(.menu, true)
+            }
         })
-        observers.append(center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.setSuppressed(.menu, false) }
+        observers.append(center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] note in
+            let menuID = (note.object as? NSMenu).map(ObjectIdentifier.init)
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let menu = self.previewMenu, menuID == ObjectIdentifier(menu) { return }
+                self.setSuppressed(.menu, false)
+            }
         })
         observers.append(center.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] note in
             let resignedWindow = note.object as? NSWindow

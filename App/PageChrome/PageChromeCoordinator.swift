@@ -116,6 +116,12 @@ final class PageQuitCoordinator {
   private var running = false
   private var accepted = false
   private var remaining: [(EngineWebContentHostFactory, OEWebContent)] = []
+  private struct Selection {
+    weak var owner: EngineWebContentHostFactory?
+    let focusedSpaceID: SpaceID
+    let selectedNodeBySpace: [SpaceID: ItemID]
+  }
+  private var selections: [Selection] = []
   init(app: AppDelegate) { self.app = app }
   func shouldTerminate() -> Bool {
     if app.quitWarning.withoutPrompts { return true }
@@ -127,15 +133,34 @@ final class PageQuitCoordinator {
     if accepted { return true }
     if running { return false }
     var seen: Set<ObjectIdentifier> = []
-    let owners = Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner)
-    remaining = owners.filter { !$0.isIncognito && seen.insert(ObjectIdentifier($0)).inserted }.flatMap { owner in
+    let owners = (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
+      .filter { !$0.isIncognito && seen.insert(ObjectIdentifier($0)).inserted }
+    remaining = owners.flatMap { owner in
       owner.contents.values.filter(\.hasUnloadHandlers).map { (owner, $0) }
     }
     if remaining.isEmpty { return true }
+    selections = owners.map { Selection(owner: $0, focusedSpaceID: $0.windowState.focusedSpaceID,
+      selectedNodeBySpace: $0.windowState.selectedNodeBySpace) }
     running = true; next(); return false
   }
   private func next() {
-    guard !remaining.isEmpty else { running = false; accepted = true; NSApp.terminate(nil); return }
+    guard !remaining.isEmpty else {
+      // Preflight selects background pages to show their dialogs. Persist the
+      // user's selection, without rebuilding an engine page already closed by
+      // Page.close. The final quit snapshot follows this restoration.
+      for selection in selections {
+        guard let owner = selection.owner,
+          owner.model.windows.contains(where: { $0 === owner.windowState }) else { continue }
+        owner.windowState.selectedNodeBySpace = selection.selectedNodeBySpace.filter {
+          owner.model.space(id: $0.key) != nil && owner.model.node(id: $0.value) != nil
+        }
+        if owner.model.space(id: selection.focusedSpaceID) != nil {
+          owner.windowState.focusedSpaceID = selection.focusedSpaceID
+        }
+      }
+      selections.removeAll()
+      running = false; accepted = true; NSApp.terminate(nil); return
+    }
     let (owner, page) = remaining.removeFirst()
     if let window = owner.standaloneSurface?.surfaceWindow { window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged() }
     if let id = owner.tabID(for: page), let space = owner.space(containing: id) { owner.focus(space: space); owner.select(nodeID: id) }
@@ -164,7 +189,7 @@ final class PageQuitCoordinator {
         }
         self.next()
       } else {
-        self.running = false; self.remaining.removeAll()
+        self.running = false; self.remaining.removeAll(); self.selections.removeAll()
         self.app.quitWarning.resetApproval()
       }
     }

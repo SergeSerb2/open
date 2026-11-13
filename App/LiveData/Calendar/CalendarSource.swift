@@ -12,6 +12,8 @@ protocol CalendarSource: AnyObject {
   func events(from start: Date, to end: Date) async -> [CalendarEvent]
   /// The clock the source's consumers use (a debug override in automation builds).
   var now: Date { get }
+  /// Asks the source to sync with its accounts now (the calendar card's gear ▸ Refresh).
+  func refresh()
 }
 
 /// The system Calendar store (Google, Exchange / Microsoft 365 and iCloud accounts in macOS Internet Accounts).
@@ -49,6 +51,13 @@ final class EventKitCalendarSource: CalendarSource {
       MainActor.assumeIsolated { self?.onChange?() }
     }
     return made
+  }
+
+  /// EventKit syncs remote accounts on its own schedule; Refresh asks it to sync now. A change arrives as
+  /// `EKEventStoreChanged` (→ `onChange`). Without a store yet there is nothing to sync.
+  func refresh() {
+    guard access == .granted else { return }
+    box?.store.refreshSourcesIfNecessary()
   }
 
   func requestAccess() async -> CalendarAccess {

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 
+#include "include/cef_open_browser_info.h"
 #include "include/cef_parser.h"
 
 #pragma mark - OEWebContentConfiguration
@@ -282,6 +283,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   OEWebContent* __weak _pendingChromePopup;
   // Chrome style hosting.
   CefRefPtr<CefWindowDelegate> _chromeHost;
+  OEDevToolsDock* _devToolsDock;
+  NSMutableDictionary<NSString*, NSString*>* _userStyleSheets;
+  NSNumber* _devToolsDockPendingPanel;
   CefRefPtr<CefBrowserView> _adoptedBrowserView;
   NSWindow* __weak _chromeWindow;
   NSWindow* __weak _observedWindow;
@@ -446,7 +450,41 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 - (CefRefPtr<CefDictionaryValue>)oe_extraInfo {
   CefRefPtr<CefDictionaryValue> extra = CefDictionaryValue::Create();
   extra->SetList(kOEExtraScripts, [self.context oe_scriptsValue]);
+  if (_userStyleSheets.count) {
+    CefRefPtr<CefDictionaryValue> styles = CefDictionaryValue::Create();
+    for (NSString* key in _userStyleSheets) {
+      styles->SetString(OECef(key), OECef(_userStyleSheets[key]));
+    }
+    extra->SetDictionary(kOEExtraUserStyles, styles);
+  }
   return extra;
+}
+
+- (void)setUserStyleSheet:(NSString*)css forKey:(NSString*)key {
+  if (key.length == 0 || key.length > 256 || css.length > 1024 * 1024) {
+    return;
+  }
+  if (!_userStyleSheets) _userStyleSheets = [NSMutableDictionary dictionary];
+  if ((css.length ? [_userStyleSheets[key] isEqualToString:css]
+                  : _userStyleSheets[key] == nil)) {
+    return;
+  }
+  if (css.length) {
+    _userStyleSheets[key] = [css copy];
+  } else {
+    [_userStyleSheets removeObjectForKey:key];
+  }
+  if (!_browser) {
+    return;  // Delivered with the extra info when the browser is created.
+  }
+  // A later renderer process (cross-site navigation) gets it from the extra
+  // info; the current one from the message.
+  CefSetBrowserExtraInfo(_browser, [self oe_extraInfo]);
+  CefRefPtr<CefProcessMessage> msg =
+      CefProcessMessage::Create(kOEMsgUserStyleSheet);
+  msg->GetArgumentList()->SetString(0, OECef(key));
+  msg->GetArgumentList()->SetString(1, OECef(css ?: @""));
+  _browser->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
 }
 
 - (CefBrowserSettings)oe_browserSettings {
@@ -719,6 +757,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 }
 
 - (void)oe_browserClosed {
+  [_devToolsDock unregisterForBrowser:_browser];
+  _devToolsDockPendingPanel = nil;
+  [_devToolsDock close];
   _browser = nullptr;
   _hasSelection = NO;
   _devToolsRegistration = nullptr;
@@ -1780,6 +1821,19 @@ static double OEPNGPixelWidth(NSData* png) {
   if (_devToolsFrontend.get() == frontend) {
     _devToolsFrontend = nullptr;
   }
+  [_devToolsDock close];
+  NSNumber* pending = _devToolsDockPendingPanel;
+  _devToolsDockPendingPanel = nil;
+  if (pending && _browser) {
+    // -devToolsViewForPanel: closed the window-mode DevTools; open it docked.
+    __weak OEWebContent* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      OEWebContent* strongSelf = weakSelf;
+      if (strongSelf && !strongSelf.hasDevTools) {
+        [strongSelf showDevToolsPanel:(OEDevToolsPanel)pending.integerValue];
+      }
+    });
+  }
 }
 
 - (void)evaluateJavaScriptInDevToolsFrontend:(NSString*)script
@@ -1799,7 +1853,32 @@ static double OEPNGPixelWidth(NSData* png) {
   frontend->Evaluate(script, completion);
 }
 
+- (NSView*)devToolsViewForPanel:(OEDevToolsPanel)panel {
+  if (!_browser || _configuration.runtimeStyle != OERuntimeStyleChrome) {
+    return nil;
+  }
+  if (!_devToolsDock) {
+    _devToolsDock = [[OEDevToolsDock alloc] init];
+  }
+  if (!_devToolsDock.isHostingFrontend) {
+    if (self.hasDevTools) {
+      // Open in its own window: CEF has one DevTools per page. Reopen docked
+      // once that window has closed (OEDevToolsClient::OnBeforeClose).
+      _devToolsDockPendingPanel = @(panel);
+      [_devToolsDock registerForBrowser:_browser];
+      _browser->GetHost()->CloseDevTools();
+      return _devToolsDock.view;
+    }
+    [_devToolsDock registerForBrowser:_browser];
+  }
+  [self showDevToolsPanel:panel];
+  return _devToolsDock.view;
+}
+
 - (void)closeDevTools {
+  _devToolsDockPendingPanel = nil;
+  [_devToolsDock unregisterForBrowser:_browser];
+  [_devToolsDock close];
   if (_browser) _browser->GetHost()->CloseDevTools();
 }
 

@@ -9,7 +9,7 @@ import OpenSidebar
 /// open paths. `glance-alias` lets a fixture host count as a Recents site so e2e runs without
 /// the real sites or any account; `history-record` seeds the Profile's real history store.
 extension AutomationController {
-  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record", "live-fetch", "live-folder-state", "live-folder-refresh", "live-folder-origin", "live-folder-state-press"]
+  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record", "live-fetch", "live-folder-state", "live-folder-refresh", "live-folder-origin", "live-folder-state-press", "live-folder-show-more"]
 
   func runLiveDataCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     switch cmd {
@@ -28,6 +28,7 @@ extension AutomationController {
       case .recents(let site)?: return ["kind": "recents", "site": site.rawValue]
       case .calendar(let provider)?: return ["kind": "calendar", "provider": provider.rawValue]
       case .gmail(let account)?: return ["kind": "gmail", "account": account]
+      case .pullRequest?: return ["kind": "pullRequest"]
       case nil: return ["kind": "none"]
       }
     case "history-record":
@@ -63,6 +64,10 @@ extension AutomationController {
       guard let folder = app.model.liveFolder(in: space.id) else { throw Failure(message: "no Live Folder") }
       let outcome = await app.liveFolders.refresh(folderID: folder.id, manual: a["manual"] as? Bool ?? true)
       return ["outcome": outcome?.rawValue ?? NSNull(), "throttled": app.liveFolders.throttledCount]
+    case "live-folder-show-more":
+      let space = try liveSpace(a)
+      guard let folder = app.model.liveFolder(in: space.id), let controller = app.frontWindowController else { throw Failure(message: "no Live Folder") }
+      return ["pressed": controller.sidebar.pressLiveFolderMore(folderID: folder.id)]
     case "live-folder-state":
       let space = try liveSpace(a)
       if a["wait"] as? Bool == true {
@@ -75,7 +80,11 @@ extension AutomationController {
       let rows: [[String: Any]] = folder.children.compactMap { node in
         guard case .tab(let tab) = node else { return nil }
         return ["id": tab.id.description, "url": tab.url.absoluteString, "title": tab.title, "live": tab.liveItemURL?.absoluteString ?? "",
-                "unread": tab.isUnread]
+                "unread": tab.isUnread, "status": tab.liveItem?.status.rawValue ?? "", "number": tab.liveItem?.number ?? 0,
+                "repository": tab.liveItem?.repository ?? "", "author": tab.liveItem?.author ?? "",
+                "awaitingMyReview": tab.liveItem?.awaitingMyReview ?? false,
+                "glyph": app.frontWindowController?.sidebar.drawnFaviconSource(tabID: tab.id) ?? "",
+                "exposed": app.frontWindowController?.sidebar.rowFrame(nodeID: tab.id) != nil]
       }
       let index = space.pinned.firstIndex { $0.id == folder.id } ?? -1
       let intro = app.frontWindowController?.liveFolderIntro.map { v -> [String: Any] in
@@ -83,16 +92,24 @@ extension AutomationController {
         return ["frame": [f.minX, f.minY, f.width, f.height], "title": LiveFolderIntroView.title, "body": LiveFolderIntroView.body]
       }
       let row = app.frontWindowController.flatMap { c in c.sidebar.rowFrame(nodeID: folder.id).map { c.contentView.convert($0, from: c.sidebar) } }
+      let more = app.frontWindowController.flatMap { c in c.sidebar.liveFolderMoreFrame(folderID: folder.id, reveal: a["revealMore"] as? Bool ?? false).map { c.contentView.convert($0, from: c.sidebar) } }
       return ["exists": true, "id": folder.id.description, "title": folder.title, "pinnedIndex": index, "pinnedCount": space.pinned.count, "rows": rows,
         "intro": intro ?? NSNull(), "stateMessage": live.stateMessage ?? NSNull(), "expanded": folder.isExpanded, "peeked": folder.peekedChildID?.description ?? NSNull(),
         "stateGlyph": app.frontWindowController.flatMap { $0.sidebar.liveFolderStateGlyph(nodeID: folder.id) }.map { ["tooltip": $0.tooltip] } ?? NSNull(),
         "hiddenItems": Array(live.hiddenItems).sorted(), "hiddenRepositories": Array(live.hiddenRepositories).sorted(),
         "autoCreated": app.liveFolders.autoCreated, "signInRefreshes": app.liveFolders.signInRefreshes, "rowFrame": row.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? NSNull(),
-        "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
+        "showMore": more.map { ["title": "Show More", "frame": [$0.minX, $0.minY, $0.width, $0.height]] } ?? NSNull(),
+        "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "ssoURL": folder.liveSSOURL?.absoluteString ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
         "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":
       let controller = try glanceController(a)
       guard case .glance(let id)? = controller.hoverPreview.request?.kind else { return ["shown": false] }
+      if let pr = controller.hoverPreview.card?.content as? LiveItemPreviewView {
+        let card = controller.hoverPreview.card.map { $0.convert($0.bounds, to: nil) } ?? .zero
+        return ["shown": true, "kind": "pullRequest", "tab": pr.tab.id.description, "title": pr.tab.displayTitle,
+          "status": pr.info.status.rawValue, "subtitle": pr.subtitle, "reviewLine": pr.reviewLine ?? NSNull(),
+          "card": [card.minX, card.minY, card.width, card.height]] as [String: Any]
+      }
       if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
         return try await calendarGlanceState(calendar, controller: controller, tab: id, wait: a["wait"] as? Bool != false)
       }
@@ -136,6 +153,8 @@ extension AutomationController {
           calendar.join()
         case "access": guard !calendar.accessButton.isHidden else { throw Failure(message: "no access button") }
           calendar.askAccess()
+        case "gear":
+          return try trackCalendarGear(calendar, controller: controller, item: a["item"] as? String ?? "")
         case "event":
           let index = a["row"] as? Int ?? 0
           guard calendar.timeline.blocks.indices.contains(index) else { throw Failure(message: "no event block \(index)") }
@@ -149,6 +168,23 @@ extension AutomationController {
       return ["opened": true]
     default: throw Failure(message: "unknown live-data command")
     }
+  }
+
+  /// Press the real gear and choose an item inside AppKit's menu tracking loop. No system input.
+  private func trackCalendarGear(_ calendar: CalendarPreviewView, controller: BrowserWindowController, item title: String) throws -> Any {
+    guard calendar.gearMenu().items.contains(where: { $0.title == title && !$0.isSeparatorItem && $0.isEnabled })
+    else { throw Failure(message: "gear menu has no enabled item \(title)") }
+    let receipt = CalendarGearTrackingReceipt(calendar: calendar, controller: controller, item: title)
+    let observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { note in
+      nonisolated(unsafe) let trackingMenu = note.object as? NSMenu
+      MainActor.assumeIsolated {
+        guard let trackingMenu else { return }
+        receipt.beginTracking(trackingMenu)
+      }
+    }
+    defer { NotificationCenter.default.removeObserver(observer); receipt.stop() }
+    _ = calendar.gearButton.accessibilityPerformPress()
+    return ["opened": receipt.selected, "tracked": receipt.tracked, "cardStayedVisible": receipt.cardStayedVisible]
   }
 
   private func liveSpace(_ a: [String: Any]) throws -> Space {
@@ -175,7 +211,12 @@ extension AutomationController {
         "subtitle": view.joinable.map { CalendarPreviewView.subtitle(for: $0.event, now: Date()) } ?? ""] as [String: Any],
       "access": view.accessButton.isHidden ? NSNull() : view.accessButton.title,
       "events": view.timeline.blocks.map { ["id": $0.event.id, "title": $0.event.displayTitle, "frame": [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height]] },
-      "card": controller.hoverPreview.card.map(rect) ?? [], "privacyOpened": CalendarPrivacySettings.openedForAutomation] as [String: Any]
+      "card": controller.hoverPreview.card.map(rect) ?? [], "privacyOpened": CalendarPrivacySettings.openedForAutomation,
+      // Gear (CG1): the menu it opens is the same NSMenu object model as a click shows ("-" = separator).
+      "gear": ["shown": !view.gearButton.isHidden, "frame": rect(view.gearButton), "refreshing": view.isRefreshing,
+        "spinner": !view.spinner.isHidden && view.isRefreshing, "spinnerFrame": rect(view.spinner),
+        "items": view.gearMenu().items.map { $0.isSeparatorItem ? "-" : $0.title },
+        "enabled": view.gearMenu().items.filter { !$0.isSeparatorItem }.map(\.isEnabled)] as [String: Any]] as [String: Any]
   }
 
   private func glanceController(_ a: [String: Any]) throws -> BrowserWindowController {
@@ -183,5 +224,42 @@ extension AutomationController {
     guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
     return controller
   }
+}
+
+@MainActor
+private final class CalendarGearTrackingReceipt {
+  var tracked = false
+  var cardStayedVisible = false
+  var selected = false
+  private weak var calendar: CalendarPreviewView?
+  private weak var controller: BrowserWindowController?
+  private var menu: NSMenu?
+  private let item: String
+  private var timer: Timer?
+
+  init(calendar: CalendarPreviewView, controller: BrowserWindowController, item: String) {
+    self.calendar = calendar; self.controller = controller; self.item = item
+  }
+
+  func beginTracking(_ menu: NSMenu) {
+    self.menu = menu; tracked = true
+    timer = Timer(timeInterval: 0.05, repeats: false) { [weak self] _ in
+      MainActor.assumeIsolated { self?.choose() }
+    }
+    if let timer { RunLoop.main.add(timer, forMode: .eventTracking) }
+  }
+
+  private func choose() {
+    guard let menu else { return }
+    defer { menu.cancelTrackingWithoutAnimation() }
+    guard let calendar, let controller else { return }
+    cardStayedVisible = controller.hoverPreview.card?.content === calendar && controller.context.hoverPreviews.request != nil
+    if cardStayedVisible, let index = menu.items.firstIndex(where: { $0.title == item && !$0.isSeparatorItem && $0.isEnabled }) {
+      menu.performActionForItem(at: index)
+      selected = true
+    }
+  }
+
+  func stop() { timer?.invalidate(); timer = nil; menu = nil }
 }
 #endif

@@ -1293,6 +1293,46 @@ def feature_checks(app, style, results, tmp):
                 "before": before, "prompts": prompts, "granted": granted, "landed": landed,
                 "deniedPrompts": denied_prompts, "denied": denied, "removed": removed}
 
+    def user_style_sheet():
+        # PB1 11:05: a user-origin sheet per page. Computed values change, but the page sees no
+        # <style> node and no document.styleSheets entry; it survives navigation, updates live,
+        # is removed by nil, and a srcdoc iframe does not get it.
+        probe = ('(() => { const r = document.documentElement; const f = document.querySelector("iframe");'
+                 ' return {v: getComputedStyle(r).getPropertyValue("--open-test").trim(),'
+                 ' margin: getComputedStyle(document.body).marginLeft, sheets: document.styleSheets.length,'
+                 ' styles: document.querySelectorAll("style").length,'
+                 ' frame: f && f.contentDocument ? getComputedStyle(f.contentDocument.documentElement).getPropertyValue("--open-test").trim() : null}; })()')
+        import urllib.parse
+        page = '<!doctype html><title>uss</title><body>x<iframe srcdoc="<p>in</p>"></iframe>'
+        w = new_tab(app, "data:text/html," + urllib.parse.quote(page))
+        try:
+            time.sleep(0.5)
+            before = app.eval(w, probe)
+            app.call("user-style-sheet", tab=w, key="theme", css=":root{--open-test:7px} body{margin-left:7px}")
+            live = wait_until(lambda: (lambda r: r if r["v"] == "7px" else None)(app.eval(w, probe)), timeout=5) or app.eval(w, probe)
+            app.call("navigate", tab=w, url="https://example.com/")
+            app.call("wait", tab=w)
+            navigated = app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
+            # example.com's own <style> elements: the baseline is a second tab without the sheet.
+            plain = new_tab(app, "https://example.com/")
+            baseline = app.eval(plain, probe.replace('document.querySelector("iframe")', 'null'))
+            app.call("close", tab=plain)
+            app.call("user-style-sheet", tab=w, key="theme", css=":root{--open-test:9px}")
+            updated = wait_until(lambda: (lambda r: r if r["v"] == "9px" else None)(app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))), timeout=5) \
+                or app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
+            app.call("user-style-sheet", tab=w, key="theme")
+            removed = wait_until(lambda: (lambda r: r if r["v"] == "" else None)(app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))), timeout=5) \
+                or app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
+        finally:
+            app.call("close", tab=w)
+        return {"ok": before["v"] == "" and live["v"] == "7px" and live["margin"] == "7px"
+                      and live["sheets"] == before["sheets"] and live["styles"] == before["styles"] and live["frame"] in ("", None)
+                      and navigated["v"] == "7px" and baseline["v"] == ""
+                      and navigated["styles"] == baseline["styles"] and navigated["sheets"] == baseline["sheets"]
+                      and updated["v"] == "9px" and removed["v"] == "",
+                "before": before, "live": live, "navigated": navigated, "baseline": baseline,
+                "updated": updated, "removed": removed}
+
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
@@ -1361,7 +1401,7 @@ def feature_checks(app, style, results, tmp):
                      ("context_menu", context_menu), ("audio_state", audio), ("fullscreen", fullscreen),
                      ("picture_in_picture", pip), ("pdf_viewer", pdf), ("print_to_pdf", print_to_pdf),
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
-                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("protocol_handler", protocol_handler), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
+                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("protocol_handler", protocol_handler), ("user_style_sheet", user_style_sheet), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
     def sad_tab():
         return runpy.run_path(os.path.join(ROOT, "tools/e2e/sad_tab.py"))["run"](
@@ -7657,6 +7697,19 @@ def page_checks(factory, results, tmp, style="alloy"):
     if os.environ.get("OPEN_E2E_PAGE_TRANSLATE_ONLY") == "1":
         page_translate_checks(factory, results, tmp)
         return
+    if os.environ.get("OPEN_E2E_PAGE_DEVTOOLS_ONLY") == "1":
+        # Touched-row run: only the DevTools rows (D1, D2, D4 docked) of the tools group.
+        server, port = page_tools_fixture_server()
+        app = factory(urls=("http://127.0.0.1:%d/cookies.html" % port,), fresh=True)
+        try:
+            app.call("window-frame", frame=[80, 60, 1360, 860])
+            app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+            app.call("wait", tab=app.call("tabs")[0]["id"])
+            page_tools_devtools_checks(app, results, port, style)
+        finally:
+            app.quit()
+            server.shutdown()
+        return
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)
@@ -11203,7 +11256,15 @@ def library_capture_checks(app, require, root, evidence):
         media_error = 'Could not load media'
         def media_when(predicate):
             opened = open_section('media')
-            return wait_until(lambda: (lambda s: s if s.get('section') == 'media' and predicate(s) else None)(state()), timeout=10, step=.05) if opened else None
+            def loaded():
+                provider = app.call('library').get('providers', {}).get('media', {})
+                if not provider.get('loaded') or provider.get('running'): return None
+                current = state()
+                error_visible = any(media_error in text for text in current.get('text', []))
+                return current if current.get('section') == 'media' and current.get('loadFailed') == error_visible and predicate(current) else None
+            # A previous read can have the same error flag. Join the current
+            # provider and native empty state before accepting its result.
+            return wait_until(loaded, timeout=10, step=.05) if opened else None
         current = media_when(lambda s: s['loadFailed'])
         path = os.path.join(evidence, 'media-index-error.png')
         if current: app.call('snapshot', path=path, window=current['window'])
@@ -11215,7 +11276,11 @@ def library_capture_checks(app, require, root, evidence):
         unreadable = media_when(lambda s: s['loadFailed'])
         require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
                 and any(media_error in text for text in unreadable['text']), state=unreadable or state())
-        os.rmdir(index)
+        app.call('library-close'); os.rmdir(index)
+        missing = media_when(lambda s: not s['loadFailed'])
+        require('library_missing_index_empty', missing and not missing['loadFailed']
+                and missing['captureCount'] == 0 and not missing['items']
+                and not any(media_error in text for text in missing['text']), state=missing or state())
         # Exercise the reader's limits through actual Library reopen, including
         # the valid boundary. Keep the large fixture out of the visible grid.
         for extra in (0, 1):
@@ -11370,6 +11435,7 @@ def _safe_alert(app):
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
+    geometry_only = os.environ.get('OPEN_SPACE_MANAGER_GEOMETRY_ONLY') == '1'
     token = '%d-%s' % (os.getpid(), os.urandom(4).hex())
     suite_config = 'SpaceManager-' + token
     bundle_dir = os.path.join(ROOT, 'build', suite_config)
@@ -11426,7 +11492,7 @@ def space_manager_checks(results, tmp, config, style):
         info['CFBundleIdentifier'] = bundle_id
         with open(info_path, 'wb') as stream: plistlib.dump(info, stream)
         subprocess.run(['codesign', '--force', '--sign', '-', bundle], check=True, capture_output=True)
-        if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY') != 'keyboard' and os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') != '1':
+        if not geometry_only and os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY') != 'keyboard' and os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') != '1':
             os.makedirs(os.path.join(root, 'State'), exist_ok=True)
             with open(os.path.join(root, 'State', 'captures.json'), 'w') as stream: stream.write('{deliberately corrupt capture index')
         app = launch((fixture('Manager One'),))
@@ -11434,13 +11500,14 @@ def space_manager_checks(results, tmp, config, style):
         if os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') == '1':
             sidebar_intents_menu_checks(app, results, require, tmp)
             return
-        library_capture_checks(app, require, root, evidence)
+        if not geometry_only: library_capture_checks(app, require, root, evidence)
         if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY'): return
         s1 = order(app)[0]
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
-        sidebar_a1_checks(app, results, require, evidence)
-        sidebar_a2_checks(app, results, require, evidence, tmp)
+        if not geometry_only:
+            sidebar_a1_checks(app, results, require, evidence)
+            sidebar_a2_checks(app, results, require, evidence, tmp)
         app.call('space', space=s1)
         original = [s1, s2, s3]
         # The rest capture shows the loaded page title, not a title still in flight.
@@ -11456,29 +11523,32 @@ def space_manager_checks(results, tmp, config, style):
         require('E5_menu_real_manager', ready and ready['section'] == 'spaces' and ready['managerClass'] == 'OpenSidebar.SpaceManagerView'
                 and ready['sameModel'] and ready['sameUndoManager'] and not ready['previewsEnabled'] and ready['globalPreviewsEnabled'],
                 state=state(app), png=rest, preferenceDomain=bundle_id)
-        # No Arc frame of the Manager exists (capture C2 is pending), so the real
-        # Library page is compared with the plan's spec: §3.2 columns (inset 16,
-        # width 244, gap 12, header 44) and the S4 R1 header (icon 13/9, title
-        # x 41, grabber W − 58, "…" W − 32; docs/design.md §20). Target ≤ 1 pt.
+        # PR #350 (ec9b4055) replaced the S4 header layout with the approved D1
+        # Library cards: 24/48 insets, 240 width, 24 gap, footer controls.
+        # Card height follows the real viewport, including smaller rented displays.
+        # Compare the independent design values within 1 pt, not the old S4 spec.
         def spec_rows(snapshot):
             rows = []
             for index, column in enumerate(snapshot['columns']):
-                width = 244
-                expected = {'column': [16 + index * 256, 16, 244, column['managerSize'][1] - 32],
-                            'icon': [13, 9, 26, 26], 'grabber': [width - 58, 10, 24, 24], 'more': [width - 32, 10, 24, 24]}
+                width, height = 240, max(0, column['managerSize'][1] - 96)
+                expected = {'column': [24 + index * 264, 48, width, height],
+                            'icon': [13, 12, 26, 26], 'title': [44, 12, width - 86, 26],
+                            'edit': [width - 39, 9, 30, 30],
+                            'grabber': [9, height - 39, 30, 30], 'more': [width - 39, height - 39, 30, 30]}
                 actual = dict(column['header'], column=column['column'])
                 for part, frame in expected.items():
                     error = max(abs(a - e) for a, e in zip(actual.get(part, [1e9] * 4), frame))
                     rows.append({'space': column['id'], 'part': part, 'expected': frame, 'actual': actual.get(part), 'error': error})
-                title = actual.get('title', [1e9] * 4)
-                rows.append({'space': column['id'], 'part': 'title.x', 'expected': [41], 'actual': [title[0]], 'error': abs(title[0] - 41)})
             return rows
         geometry = spec_rows(ready)
         worst = max((row['error'] for row in geometry), default=1e9)
         require('E5_manager_spec_geometry', len(ready['columns']) == 3 and worst <= 1, worst=worst, rows=geometry,
-                reference='plan §3.2 + docs/design.md §20 S4 R1; no Arc capture (C2 pending)')
+                reference='PR #350 (ec9b4055), approved D1 Library cards; viewport-relative height')
         if os.environ.get('OPEN_SPACE_MANAGER_EARLY_FAILURE') == '1':
             raise AssertionError('deliberate early failure with Library open')
+        if geometry_only:
+            results['geometry_only_scope'] = {'status': 'INFO', 'reason': 'OPEN_SPACE_MANAGER_GEOMETRY_ONLY=1; real Library composition and E5 geometry only'}
+            return
         library = ready['window']
         app.call('library-close')
         command = app.call('library-open', entry='command')
@@ -11504,7 +11574,7 @@ def space_manager_checks(results, tmp, config, style):
         app.call('mouse', action='hover', window=library, x=point[0], y=point[1])
         hovered = capture(app, 'manager-hovered')
         results['manager_captures'] = {'rest': rest, 'hovered': hovered,
-            'comparison': 'no Arc Manager capture exists (C2 pending); geometry compared with the plan spec in E5_manager_spec_geometry'}
+            'comparison': 'geometry compared with the approved D1 Library cards (PR #350) in E5_manager_spec_geometry'}
         refused = []
         for invalid in (-1, len(original)):
             try: app.call('space-manager-drag', space=s1, to=invalid)
@@ -12360,6 +12430,44 @@ def page_tools_devtools_checks(app, results, port, style):
     finally:
         _try(lambda: app.call("devtools-close", tab=tab))
         _try(lambda: app.call("dismiss"))
+    if style != "alloy":
+        # D4 (IMC 10:55): DevTools docked in an embedder view (CEF 0302 dock delegate). It opens on
+        # the panel inside the view's child window, not in its own window; it follows a resize;
+        # close removes it; window mode still works afterwards.
+        try:
+            focus_browser()
+            top_before = app.call("devtools-dock", tab=tab)["appWindows"]
+            app.call("devtools-dock", tab=tab, panel="console", width=360)
+            console = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            docked = wait_until(lambda: (lambda s: s if s["dockScreenFrame"] and s["dockScreenFrame"] in s["childWindows"] else None)(
+                app.call("devtools-dock", tab=tab)), timeout=5, step=.2) or app.call("devtools-dock", tab=tab)
+            app.call("devtools-dock", tab=tab, panel="network", width=480)
+            network = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            resized = wait_until(lambda: (lambda s: s if s["dockScreenFrame"] in s["childWindows"] else None)(
+                app.call("devtools-dock", tab=tab)), timeout=5, step=.2) or app.call("devtools-dock", tab=tab)
+            app.call("devtools-close", tab=tab)
+            gone = wait_until(lambda: (lambda s: s if not s["hasDevTools"] and s["dockScreenFrame"] not in s["childWindows"] else None)(
+                app.call("devtools-dock", tab=tab)), timeout=10, step=.25) or app.call("devtools-dock", tab=tab)
+            app.call("devtools-dock", tab=tab, remove=True)
+            focus_browser()
+            app.call("command", id="javascript-console")
+            window_mode = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            window_state = app.call("devtools-dock", tab=tab)
+            results["D4_devtools_docked_" + style] = {
+                "ok": bool(console) and docked["dockScreenFrame"] in docked["childWindows"]
+                      and docked["appWindows"] == top_before
+                      and bool(network) and resized["dockScreenFrame"] in resized["childWindows"]
+                      and resized["dockScreenFrame"] != docked["dockScreenFrame"]
+                      and not gone["hasDevTools"] and gone["dockScreenFrame"] not in gone["childWindows"]
+                      and bool(window_mode) and window_state["appWindows"] == top_before + 1,
+                "docked": docked, "console": console, "network": network, "resized": resized,
+                "closed": gone, "windowMode": window_state, "topLevelBefore": top_before}
+        finally:
+            _try(lambda: app.call("devtools-close", tab=tab))
+            _try(lambda: app.call("devtools-dock", tab=tab, remove=True))
     app.call("close", tab=tab)
 
 

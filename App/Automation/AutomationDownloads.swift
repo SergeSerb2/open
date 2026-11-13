@@ -7,13 +7,19 @@ import OpenSettings
 
 extension AutomationController {
   static let downloadCommands: Set<String> = ["download-badge-lifetime", "downloads-state", "download-settings", "download-row", "download-menu", "download-save", "download-policy", "download-home", "download-idle", "download-library-close", "download-start-age", "settings-clear-data", "download-profile-filter", "download-history-flush"]
-  private func downloadProfileControl() -> NSPopUpButton? {
-    func find(_ view: NSView) -> NSPopUpButton? {
-      if let button = view as? NSPopUpButton, button.identifier?.rawValue == "download-profile-filter" { return button }
-      for child in view.subviews { if let found = find(child) { return found } }
-      return nil
+  private func downloadProfileFilterState() -> [String:Any] {
+    // #350 replaced the separate Library window's popup with native filter chips.
+    guard let panel = app.settingsPresenter.activeLibrarySession?.panel,
+      panel.isPresented, panel.section == .downloads else { return [:] }
+    let snapshot = panel.automationState()
+    let header = snapshot["header"] as? [String:Any] ?? [:]
+    let chips = (header["chips"] as? [[String:Any]] ?? []).filter {
+      ($0["id"] as? String)?.hasPrefix("profile:") == true
     }
-    return app.settingsPresenter.libraryWindow?.contentView.flatMap(find)
+    let profiles = snapshot["profiles"] as? [String:String] ?? [:]
+    return ["visible":header["filterOpen"] as? Bool ?? false,
+      "titles":chips.compactMap { $0["title"] as? String }, "chips":chips,
+      "selected":profiles["downloads"] ?? "all"]
   }
   private func overlayDownloadRows() -> [[String:Any]]? {
     guard let panel = app.settingsPresenter.activeLibrarySession?.panel, panel.isPresented, panel.section == .downloads else { return nil }
@@ -38,12 +44,7 @@ extension AutomationController {
       if let panel = app.settingsPresenter.activeLibrarySession?.panel, let selection = args["profile"] as? String {
         guard panel.filterDownloadProfile(selection) else { throw Failure(message:"unknown Profile") }; return true
       }
-      guard let button = downloadProfileControl(), let selection = args["profile"] as? String else { throw Failure(message: "Downloads Profile filter is not visible") }
-      let index = selection == "all" ? 0 : button.itemArray.firstIndex { ($0.representedObject as? String) == selection }
-      guard let index else { throw Failure(message: "unknown Downloads Profile filter") }
-      button.selectItem(at: index)
-      guard button.sendAction(button.action, to: button.target) else { throw Failure(message: "Downloads Profile filter action unavailable") }
-      return true
+      throw Failure(message: "Downloads Profile filter is not visible")
     case "download-start-age":
       guard let key = args["id"] as? String, let age = args["seconds"] as? Double,
         center.setStartForAutomation(key, age: age) else { throw Failure(message: "expected an existing download and age in 0...31536000 seconds") }
@@ -91,8 +92,7 @@ extension AutomationController {
        "queued": center.queued, "updates": center.updateCount, "publishes": center.publishCount,
        "detachedPages": center.detachedPageCountForAutomation,
        "openerPID": center.fileOpenerPID, "historyError": center.downloadHistoryError, "historyLoaded": center.historyLoaded,
-       "profileFilter": downloadProfileControl().map { ["visible": !$0.isHidden, "titles": $0.itemTitles,
-         "selected": ($0.selectedItem?.representedObject as? String) ?? "all"] as [String: Any] } ?? [:],
+       "profileFilter": downloadProfileFilterState(),
        "visibleItems": app.settingsPresenter.library?.downloadItems.map(\.id) ?? [],
        "copiedFileURL": NSPasteboard.general.string(forType: .fileURL) ?? "",
        "fallbacks": center.fallbackCount, "error": center.lastFileError, "fileActions": center.fileActions, "quitAlerts": center.quitAlerts,

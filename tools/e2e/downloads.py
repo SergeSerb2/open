@@ -227,7 +227,7 @@ def checks(factory, results, tmp, config, harness):
         check('menu_cancel', wait(lambda: row(unknown).get('subtitle') == 'Cancelled'))
         dismiss_library()
         failed = start('/fail'); library()
-        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed', 30), item=item(failed), row=row(failed))
+        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed to Download', 30), item=item(failed), row=row(failed))
         dismiss_library()
         # PB1-b wiring: the download started above got a flight record when it was created: played to the
         # Library button, or skipped for a known reason (the Library covers the sidebar at that point of the
@@ -449,21 +449,30 @@ def checks(factory, results, tmp, config, harness):
               and all(restored[k]['state'] == before_first[k]['state'] for k in before_first)
               and restored[other]['profile'] == profile2, items=list(restored.values()))
         # The in-window Library's Profile filter is a chip group in the filter editor (no "All Profiles" item:
-        # pressing the selected chip clears the filter), not the retired Library window's pop-up.
+        # pressing the selected chip clears the filter), not the retired Library window's pop-up (#350).
+        # #524 fixed the menu predicate. Also prove downloads-state reads back those same real controls.
         app.call('library', action='filter', open=True)
         chips = app.call('library')['header']['chips']
+        filter_state = state()['profileFilter']
         app.call('library', action='filter', open=False)
         chip_ids = {c.get('id') for c in chips}
+        selected_chip = next((c['id'].split(':', 1)[1] for c in chips if c.get('selected')), 'all')
         check('history_profile_filter_menu', {'profile:' + profile, 'profile:' + profile2} <= chip_ids
-              and any(c.get('title') == 'History Second' for c in chips), chips=chips)
+              and any(c.get('title') == 'History Second' for c in chips)
+              and filter_state.get('visible') is True and filter_state.get('chips') == chips
+              and filter_state.get('titles') == [c['title'] for c in chips]
+              and filter_state.get('selected') == selected_chip, chips=chips, filter=filter_state)
         for selected, wanted in [(profile, set(before_first)), (profile2, {other})]:
             app.call('download-profile-filter', profile=selected)
             filtered = wait(lambda: wanted <= set(state()['visibleItems'])
                             and all(v['profile'] == selected for v in state()['items'] if v['id'] in state()['visibleItems']))
-            check('history_profile_filter_' + ('first' if selected == profile else 'second'), filtered,
+            check('history_profile_filter_' + ('first' if selected == profile else 'second'), filtered
+                  and state()['profileFilter'].get('selected') == selected
+                  and state()['profileFilter'].get('visible') is False,
                   visible=state()['visibleItems'], filter=state()['profileFilter'])
         app.call('download-profile-filter', profile='all')
-        check('history_profile_filter_all', required <= set(state()['visibleItems']))
+        check('history_profile_filter_all', required <= set(state()['visibleItems'])
+              and state()['profileFilter'].get('selected') == 'all')
         check('history_private_absent_relaunch', not any('history=private' in v['source'] for v in state()['items']))
 
         # Historical rows use the same native menu and real file opener as live rows.

@@ -36,6 +36,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var folderChildren: [ObjectIdentifier: [AnyObject]] = [:]
     private var displayedExpansion: [ObjectIdentifier: FolderExpansion] = [:]
     private var displayedChildCounts: [ObjectIdentifier: Int] = [:]
+    /// C-LF-2 (Open's design): reveal the first 10 PRs, then Show More. Never saved.
+    private var revealedLiveFolders: Set<ItemID> = []
+    private var liveFolderMoreItems: [ItemID: LiveFolderMoreItem] = [:]
     private var rootPinnedCount = 0
     private var rootTodayCount = 0
     private var rootPinnedCollapsed = false
@@ -345,13 +348,33 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     private func displayedChildren(of folder: Folder) -> [AnyObject] {
+        if folder.expansion != .expanded { revealedLiveFolders.remove(folder.id) }
         switch folder.expansion {
-        case .expanded: return folder.children.map(\.object)
+        case .expanded:
+            guard folder.live != nil, !revealedLiveFolders.contains(folder.id) else { return folder.children.map(\.object) }
+            var count = 0, hidden = false
+            let rows: [AnyObject] = folder.children.compactMap { node in
+                // A user's own rows remain visible; only fetched PRs use the limit.
+                if case .tab(let tab) = node, tab.liveItemURL != nil {
+                    count += 1
+                    if count > 10 { hidden = true; return nil }
+                }
+                return node.object
+            }
+            guard hidden else { return rows }
+            let more = liveFolderMoreItems[folder.id] ?? LiveFolderMoreItem(folderID: folder.id)
+            liveFolderMoreItems[folder.id] = more
+            return rows + [more]
         case .collapsed: return []
         case .peeked(let id):
             guard context.model.parent(of: id) == .folder(folder.id), let node = context.model.node(id: id), node.folder == nil else { return [] }
             return [node.object]
         }
+    }
+
+    func liveFolderMoreItem(folderID: ItemID) -> LiveFolderMoreItem? {
+        guard let item = liveFolderMoreItems[folderID], outline.row(forItem: item) >= 0 else { return nil }
+        return item
     }
 
     private func target(for d: Displayed) -> [AnyObject] {
@@ -452,6 +475,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     private func dropCache(_ folder: Folder) {
+        revealedLiveFolders.remove(folder.id)
+        liveFolderMoreItems[folder.id] = nil
         folderLoops.removeValue(forKey: ObjectIdentifier(folder))?.cancel()
         displayedExpansion[ObjectIdentifier(folder)] = nil
         displayedChildCounts[ObjectIdentifier(folder)] = nil
@@ -741,6 +766,15 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         case let f as Folder:
             let expansion = f.expansion == .collapsed ? FolderExpansion.expanded : context.folderExpansion(folderID: f.id, expanded: false)
             return context.send(.setFolderExpansion(folderID: f.id, expansion: expansion))
+        case let more as LiveFolderMoreItem:
+            guard let folder = context.model.node(id: more.folderID)?.folder,
+                  folder.live != nil, folder.isExpanded, liveFolderMoreItem(folderID: folder.id) === more else { return false }
+            let hidden = folder.children.first { node in !children(of: folder).contains { $0 === node.object } }
+            revealedLiveFolders.insert(folder.id)
+            syncExpansion(animated: animatesChanges, changedFolder: folder.id)
+            if outline.keyboardItem === more { outline.keyboardItem = hidden?.object }
+            updateRowStates(animated: false)
+            return true
         case is NewTabItem: return context.send(.openCommandBar(.newTabRow))
         default: return false
         }
@@ -840,6 +874,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         case let f as Folder: let v = make(FolderCellView.self, FolderCellView.identifier); v.folder = f; return v
         case let s as Split: let v = make(SplitCellView.self, SplitCellView.identifier); v.split = s; return v
         case is NewTabItem: return make(NewTabCellView.self, NewTabCellView.identifier)
+        case is LiveFolderMoreItem: return make(LiveFolderMoreCellView.self, LiveFolderMoreCellView.identifier)
         case is DividerItem: return make(DividerCellView.self, DividerCellView.identifier)
         default: return nil
         }
@@ -892,6 +927,12 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             if case .peeked(let id) = f.expansion {
                 guard (0...1).contains(childIndex), let index = f.children.firstIndex(where: { $0.id == id }) else { return nil }
                 return (.folder(f.id), index + childIndex, nil)
+            }
+            if f.live != nil, !revealedLiveFolders.contains(f.id) {
+                let visible = children(of: f)
+                guard (0...visible.count).contains(childIndex) else { return nil }
+                let index = childIndex < visible.count ? itemID(of: visible[childIndex]).flatMap { id in f.children.firstIndex { $0.id == id } } : nil
+                return (.folder(f.id), index ?? f.children.count, nil)
             }
             return (.folder(f.id), childIndex, nil)
         case nil:
@@ -968,7 +1009,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 @MainActor
 final class SidebarOutlineView: NSOutlineView {
     weak var page: SpacePageView?
-    private(set) var keyboardItem: AnyObject?
+    fileprivate(set) var keyboardItem: AnyObject?
     var didActivateMouseDown = false
     var dragWasStarted = false
     var trackingMouseDown = false
@@ -1069,7 +1110,7 @@ final class SidebarOutlineView: NSOutlineView {
         guard let page, page.context.model.space(id: page.space.id) === page.space,
               row(forItem: item) >= 0 else { return false }
         if let id = itemID(of: item) { return page.context.model.node(id: id)?.object === item }
-        return item is NewTabItem
+        return item is NewTabItem || item is LiveFolderMoreItem
     }
 
     override func keyDown(with event: NSEvent) {
@@ -1095,7 +1136,7 @@ final class SidebarOutlineView: NSOutlineView {
             }
         }
         guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { super.keyDown(with: event); return }
-        let rows = (0..<numberOfRows).filter { itemID(of: item(atRow: $0)) != nil || item(atRow: $0) is NewTabItem }
+        let rows = (0..<numberOfRows).filter { itemID(of: item(atRow: $0)) != nil || item(atRow: $0) is NewTabItem || item(atRow: $0) is LiveFolderMoreItem }
         let current = keyboardItem.map { row(forItem: $0) } ?? -1
         switch event.keyCode {
         case 125, 126: // Down, Up: focus only, leaving selection in the model.
@@ -1133,7 +1174,7 @@ final class SidebarOutlineView: NSOutlineView {
 
     override func accessibilityRows() -> [any NSAccessibilityRow]? {
         (0..<numberOfRows).compactMap { row -> NSTableRowView? in
-            guard itemID(of: item(atRow: row)) != nil || item(atRow: row) is NewTabItem else { return nil }
+            guard itemID(of: item(atRow: row)) != nil || item(atRow: row) is NewTabItem || item(atRow: row) is LiveFolderMoreItem else { return nil }
             return rowView(atRow: row, makeIfNecessary: true)
         }
     }

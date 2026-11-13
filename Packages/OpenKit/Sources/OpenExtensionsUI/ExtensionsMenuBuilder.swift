@@ -58,7 +58,9 @@ public struct ExtensionsMenuEntry: Codable, Equatable, Sendable {
         return menu
     }
     public static func relabel(_ title: String) -> String {
-        if ["Remove from Chrome", "Remove from Chrome…", "Remove from Chromium", "Remove from Chromium…"].contains(title) { return "Remove from Open…" }
+        // Engine #532 brands this upstream label as Open. Keep the ellipsis:
+        // selecting the item still opens our removal confirmation sheet.
+        if ["Remove from Chrome", "Remove from Chrome…", "Remove from Chromium", "Remove from Chromium…", "Remove from Open"].contains(title) { return "Remove from Open…" }
         if title == "Pin to Toolbar" { return "Pin" }
         if title == "Unpin from Toolbar" { return "Unpin" }
         return title.replacingOccurrences(of: "Chromium", with: "Open").replacingOccurrences(of: "Chrome", with: "Open")

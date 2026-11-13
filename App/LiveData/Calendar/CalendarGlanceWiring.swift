@@ -18,7 +18,12 @@ extension AppDelegate {
         case .granted, .restricted: return access
         }
       },
-      join: { [weak factory] link in factory?.openMeetingLink(link, from: "card") })
+      join: { [weak factory] link in factory?.openMeetingLink(link, from: "card") },
+      refresh: { [weak self] in
+        guard let self else { return }
+        self.calendar.source.refresh()
+        self.liveCalendar.refetch()
+      })
   }
 }
 

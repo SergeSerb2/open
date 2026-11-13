@@ -12,6 +12,9 @@ final class FixtureCalendarSource: CalendarSource {
   var answer: CalendarAccess
   private(set) var requests = 0
   private(set) var queries = 0
+  private(set) var refreshes = 0
+  /// E2E: each events query waits this long, so the card's Refresh spinner can be observed.
+  var delay: TimeInterval = 0
 
   init(events: [CalendarEvent], access: CalendarAccess, answer: CalendarAccess) {
     self.events = events; self.state = access; self.answer = answer
@@ -28,8 +31,11 @@ final class FixtureCalendarSource: CalendarSource {
     return state
   }
 
+  func refresh() { refreshes += 1 }
+
   func events(from start: Date, to end: Date) async -> [CalendarEvent] {
     queries += 1
+    if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
     guard state == .granted else { return [] }
     return events.filter { $0.end > start && $0.start < end }.sorted { $0.start < $1.start }
   }
@@ -61,6 +67,7 @@ extension AutomationController {
       }
       let fixture = FixtureCalendarSource(events: events, access: try access("access", .granted), answer: try access("answer", .granted))
       fixture.clockOffset = 60 * ((a["clock"] as? Double) ?? 0)
+      fixture.delay = min(5, max(0, (a["delayMs"] as? Double ?? 0) / 1000))
       service.replaceSource(fixture)
       app.liveCalendar.tileAppeared()  // starts only with access and a calendar Favorite
       return try await calendarState(service)
@@ -99,7 +106,7 @@ extension AutomationController {
     var out: [String: Any] = ["access": service.source.access.rawValue, "generation": service.generation,
       "meetRouteAnnounced": MeetRoute.announcedForAutomation, "meetRouteDone": UserDefaults.standard.bool(forKey: MeetRoute.doneKey)]
     if let fixture = service.source as? FixtureCalendarSource {
-      out["source"] = "fixture"; out["requests"] = fixture.requests; out["queries"] = fixture.queries
+      out["source"] = "fixture"; out["requests"] = fixture.requests; out["queries"] = fixture.queries; out["refreshes"] = fixture.refreshes
     } else {
       out["source"] = "eventkit"
     }

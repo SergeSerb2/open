@@ -33,6 +33,15 @@ struct LaunchOptions {
   /// suites written before the empty-state card (A3) keep their sidebar geometry. The product shows it.
   var hideFavoritesEmptyState = false
   var reduceMotion = false
+  /// Real onboarding and Welcome views share the same per-process motion mode.
+  /// Automation can cover both modes without changing the machine's settings.
+  var resolvedReduceMotion: Bool {
+    #if OPEN_AUTOMATION
+    if reduceMotion { return true }
+    if ProcessInfo.processInfo.environment["OPEN_E2E_REDUCE_MOTION"] == "0" { return false }
+    #endif
+    return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+  }
   var measureIntroFrames = false
   var replayOnboarding = false
   private(set) var replayRefused = false

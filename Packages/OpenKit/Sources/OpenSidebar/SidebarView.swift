@@ -704,6 +704,21 @@ extension SidebarView {
         return button.accessibilityPerformPress()
     }
 
+    /// The actual Show More row, for socket read-back and pressing its product action.
+    public func liveFolderMoreFrame(folderID: ItemID, reveal: Bool = false) -> CGRect? {
+        guard let page = pager.currentPage, let item = page.liveFolderMoreItem(folderID: folderID) else { return nil }
+        if reveal { page.outline.scrollRowToVisible(page.outline.row(forItem: item)); layoutSubtreeIfNeeded() }
+        return convert(page.outline.rect(ofRow: page.outline.row(forItem: item)), from: page.outline)
+    }
+    @discardableResult
+    public func pressLiveFolderMore(folderID: ItemID) -> Bool {
+        guard let page = pager.currentPage, let item = page.liveFolderMoreItem(folderID: folderID) else { return false }
+        let row = page.outline.row(forItem: item)
+        page.outline.scrollRowToVisible(row)
+        guard let view = page.outline.rowView(atRow: row, makeIfNecessary: true) as? SidebarRowView else { return false }
+        return view.accessibilityPerformPress()
+    }
+
     public func unreadDotFrame(nodeID: ItemID) -> CGRect? {
         guard let cell = cell(nodeID: nodeID), let dot = cell.layer?.sublayers?.first(where: { $0.name == "sidebar-unread-dot" }), dot.opacity > 0 else { return nil }
         return convert(dot.frame, from: cell)
