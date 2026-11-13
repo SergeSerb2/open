@@ -292,9 +292,18 @@ class Session:
             return False
         if w['number'] in self.drag_rail_ids:
             return True
+        b = w['bounds']
+        for (ox, oy, ow, oh), oedge in self.drag_geometry.get('others', []):
+            # LEAD 13:15 cross-window drag: the same rail shapes on the destination window, any time during the drag.
+            if (w['layer'] == 0 and abs(b['Height'] - oh) <= 2 and abs(b['Y'] - oy) <= 2 and b['Width'] <= 80
+                    and (b['X'] - 2 <= ox <= b['X'] + b['Width'] + 2 or b['X'] - 2 <= oedge <= b['X'] + b['Width'] + 2)):
+                self.drag_rail_ids.add(w['number'])
+                self.drag_windows.add((b['X'], b['Y'], b['Width'], b['Height']))
+                self.log('drag-rail-accepted', window=w, rule='LEAD 13:15', kind='destination rail')
+                return True
         if self.drag_first_move_at is None or time.monotonic() - self.drag_first_move_at > 1:
             return False
-        b = w['bounds']; wx, wy, ww, wh = self.drag_geometry['window']; edge = self.drag_geometry['sidebar_edge']
+        wx, wy, ww, wh = self.drag_geometry['window']; edge = self.drag_geometry['sidebar_edge']
         screen = self.initial['screens'][0]['frame']
         rail = (w['layer'] == 0 and abs(b['Height'] - wh) <= 2 and abs(b['Y'] - wy) <= 2 and b['Width'] <= 80
                 and (b['X'] - 2 <= wx <= b['X'] + b['Width'] + 2 or b['X'] - 2 <= edge <= b['X'] + b['Width'] + 2))
@@ -580,13 +589,13 @@ class Session:
             # The visible outline starts at the window's left edge; keep sidebar items inside it.
             outlines = [o['frame'] for o in walk(tree) if o.get('id') == 'sidebarAllTabList' and o.get('frame')]
             if outlines and wins:
-                left = min(w[0] for w in wins)
-                vis = min(outlines, key=lambda f: abs(f[0] - left))
+                # One visible outline per window: the one that starts at that window's left edge.
+                vis_all = [min(outlines, key=lambda f, x=w[0]: abs(f[0] - x)) for w in wins]
                 def in_sidebar(n):
                     if not ('/AXOutline' in n.get('anc', '') or n.get('id') == 'sidebarAllTabList' or n.get('id') == 'sidebarSpaceName'):
                         return True
                     cx = n['frame'][0] + n['frame'][2] / 2
-                    return vis[0] - 2 <= cx <= vis[0] + vis[2] + 2
+                    return any(v[0] - 2 <= cx <= v[0] + v[2] + 2 for v in vis_all)
                 nodes = [n for n in nodes if in_sidebar(n)]
         if 'index' in predicate:
             index = int(predicate['index'])
@@ -1482,6 +1491,7 @@ class Session:
             if len(main) != 1 or not outline:
                 raise UnavailableAX('AX target: drag needs one main window and a sidebar outline')
             # Neighbouring Spaces' outlines are present too; the visible one starts at the window's left edge.
+            all_outlines = list(outline)
             outline = [min(outline, key=lambda f: abs(f[0] - main[0][0]))]
             edge = outline[0][0] + outline[0][2] - 1
             self.drag_geometry = {'window': main[0], 'sidebar_edge': edge}
@@ -1494,6 +1504,18 @@ class Session:
                 # Sidebar width drag: start on the divider, end inside the window; no tab drop.
                 if abs(sx - edge) > 6 or not (main[0][0] + 40 <= ex <= main[0][0] + main[0][2] - 200):
                     raise Stopped('divider drag must start on the sidebar edge and stay inside the window')
+            elif step.get('kind') == 'cross_window':
+                # LEAD 13:15 item 1(a): drop into the tab list of another owned Arc window, >= 20 pt from its edges.
+                if 'LEAD 13:15 readback: session 11' not in self.rulings:
+                    raise Stopped('cross-window drag needs the LEAD 13:15 ruling')
+                mx, my, mw, mh = main[0]
+                lists = [f for f in all_outlines if f[2] > 0 and f[0] >= 0 and abs(f[0] - mx) > 2
+                         and any(a - 2 <= f[0] < a + c and b - 2 <= f[1] < b + d for a, b, c, d in frames)]
+                hit = [f for f in lists if f[0] + 20 <= ex <= f[0] + f[2] - 20 and f[1] <= ey < f[1] + f[3]]
+                if len(hit) != 1 or (mx <= ex < mx + mw and my <= ey < my + mh):
+                    raise Stopped('cross-window drop must be inside another window\'s tab list, 20 pt from its edges, not under the source window')
+                dest = min(frames, key=lambda f: abs(f[0] - hit[0][0]))
+                self.drag_geometry['others'] = [(dest, hit[0][0] + hit[0][2] - 1)]
             # LEAD 13:00: drop inside the same sidebar, >= 20 pt from both rails.
             elif not (main[0][0] + 40 <= ex <= edge - 20):
                 raise Stopped('drop point is within 20 pt of a drop-target rail or outside the sidebar')
