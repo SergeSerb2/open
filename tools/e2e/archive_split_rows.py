@@ -5,6 +5,7 @@ Uses only the real App socket and isolated synthetic loopback pages.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -55,6 +56,7 @@ def run(output, frames=False):
                   and all(r['kind'] == 'tab' and r['space'] == space['id'] and r['profile'] == space['profile']
                           and r['originalLocation'] == 'split:'+split['id'] for r in archive_rows()), rows=archive_rows())
             check('archived_panes_leave_sidebar', not any(t['id'] in {first, second} for t in app.call('tabs')))
+            check('empty_space_preview_context', not app.call('tabs'))
             state(action='open', section='archive'); check('two_library_rows', wait(lambda: bool(row(first) and row(second))))
             before_records = archive_rows(); before_tabs = {t['id'] for t in app.call('tabs')}
             for width in [1280, 900]:
@@ -85,6 +87,18 @@ def run(output, frames=False):
             check('return_preview_open', open_preview(first)); key('return')
             check('return_does_not_restore_behind_peek', state()['open'] and archive_rows() == before_records)
             app.call('peek-close')
+            # All-Profiles Archive must use the record owner's engine Profile,
+            # even when opened from a different empty Space.
+            state(action='close')
+            other_space = app.call('space-create', title='Preview owner', profile='Preview Profile')
+            app.call('space', space=other_space); state(action='open', section='archive')
+            check('other_profile_archive_visible', wait(lambda: bool(row(first))))
+            check('other_profile_peek', open_preview(first))
+            peek = app.call('peek-state')['stack'][-1]
+            check('peek_uses_archive_owner_profile', peek['profile'] == space['profile'] and peek['librarySpace'] == other_space)
+            check('other_profile_escape', dismiss('escape') and state()['open'])
+            state(action='close'); app.call('space', space=space['id']); state(action='open', section='archive')
+            check('original_space_rows_retained', wait(lambda: bool(row(first) and row(second))))
             if frames:
                 app.call('window-frame', frame=[0, 40, 1280, 800], unconstrained=True)
                 for appearance in ['light', 'dark']:
@@ -95,7 +109,10 @@ def run(output, frames=False):
             # Actual native button hit targets use the row's visible control geometry.
             pointer('hover', row(first)['frame'], 80)
             trash = next(b for b in row(first)['buttons'] if b['title'] == 'Delete')
-            pointer('click', trash['frame']); app.call('alert', window='library', button='Cancel')
+            pointer('click', trash['frame'])
+            if os.environ.get('OPEN_ARCHIVE_FORCE_ALERT_FAILURE') == '1':
+                check('forced_alert_cleanup_probe', False)
+            app.call('alert', window='library', button='Cancel')
             check('trash_cancel_keeps_both', archive_rows() == before_records)
             pointer('hover', row(first)['frame'], 80)
             trash = next(b for b in row(first)['buttons'] if b['title'] == 'Delete')
