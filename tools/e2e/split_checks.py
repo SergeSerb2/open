@@ -172,6 +172,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for appearance in ('light','dark'):
             app.call('appearance',name=appearance)
             path = Path(h.ROOT) / '.re/s9-split' / ('split-custom-' + appearance + '.png')
+            path.parent.mkdir(parents=True, exist_ok=True)
             app.call('snapshot',path=str(path))
             captures.append(str(path))
         app.call('appearance',name='system')
