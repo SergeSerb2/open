@@ -187,8 +187,10 @@ def compare_live(path, state, scale, private, env, negative_path=None):
 ARC_LIGHT = [('body left third', (40, 150), (237, 211, 138), 3), ('body right third', (200, 150), (246, 248, 234), 3),
              ('tile', (14, 26), (250, 250, 250), 3), ('footer chip', (30, -18), (225, 200, 131), 3),
              ('footer hairline', (120, -53), (213, 190, 125), None)]
-# Key #BD9C26 renders Arc's golden sidebar #B9A35F through Open's theme math.
-GOLD = {'mathVersion': 1, 'keyColor': {'red': 0xBD / 255, 'green': 0x9C / 255, 'blue': 0x26 / 255, 'alpha': 1}, 'colorCount': 1,
+# Arc 14c's visible golden sidebar is #B9A35F. This synthetic key recreates that
+# backdrop with #344's light-theme law. The old fitted #BD9C26 key predates that
+# law and now draws a brighter sidebar; it was never a captured Arc editor key.
+GOLD = {'mathVersion': 1, 'keyColor': {'red': 0x9F / 255, 'green': 0x7C / 255, 'blue': 0x12 / 255, 'alpha': 1}, 'colorCount': 1,
         'wheel': 'analogous', 'appearance': 'automatic', 'noiseFactor': 0, 'texture': 'grain', 'intensityFactor': .8}
 
 
@@ -238,6 +240,12 @@ def light_and_ghost(app, origin, private, env, record):
     # The same state without the panel: the S11_light negative and the S14 "shapes are visible" proof.
     _, _, neg = env['read_image'](snap('S11-light-closed.png'), srgb=True)
     closed_px = neg
+    # Verify the captured scene's input too, so a later theme-law change cannot
+    # silently compare a different backdrop with the same material targets.
+    backdrop = list(neg(4 * scale, 150 * scale))[:3]
+    backdrop_delta = delta(backdrop, [185, 163, 95])
+    record('S11_light_backdrop', backdrop_delta <= 1, rgb=backdrop, arc=[185, 163, 95],
+           deltaE00=round(backdrop_delta, 2), limit=1, point=[4, 150])
     negative = [delta(list(neg((bx + x) * scale, (by + at(y)) * scale)), list(t)) for _, (x, y), t, limit in ARC_LIGHT if limit]
     negative_rejected = any(d > 3 for d in negative)
     record('S11_light', all(p['ok'] for p in probes) and negative_rejected, probes=probes, negativeDeltaE00=negative,
