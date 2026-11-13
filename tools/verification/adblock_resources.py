@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise real openkit generation publication, migration and rejection paths."""
 import hashlib
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 import json
 import os
 from pathlib import Path
@@ -10,6 +10,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'e2e'))  # loopback_http; appended, so the stdlib wins
+from loopback_http import LoopbackHTTPServer
 
 
 def verify(cli, root):
@@ -39,7 +41,7 @@ def verify(cli, root):
         def log_message(self, *args):
             pass
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LoopbackHTTPServer(Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

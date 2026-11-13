@@ -1,9 +1,13 @@
 """Small loopback-only synthetic site for native browser capture blocks."""
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 import html
 import threading
 import time
 from urllib.parse import urlsplit
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parents[1] / 'e2e'))  # loopback_http; appended, so the stdlib wins
+from loopback_http import LoopbackHTTPServer
 
 
 class SyntheticSite:
@@ -101,7 +105,7 @@ class SyntheticSite:
 
         try:
             for number in (port, other_port):
-                server = ThreadingHTTPServer(('127.0.0.1', number), Handler)
+                server = LoopbackHTTPServer(Handler, number)
                 server.daemon_threads = True
                 self.servers.append(server)
                 threading.Thread(target=server.serve_forever, daemon=True).start()
