@@ -9,6 +9,8 @@ final class ResultsView: NSView {
     private(set) var rows: [CommandBarRow] = []
     private(set) var selectedIndex: Int?
     private var rowViews: [ResultRowView] = []
+    private(set) var layoutRowsCount = 0
+    private(set) var rowUpdateCount = 0
     private let selectionLayer = CALayer()
     private(set) var scrollOffset: CGFloat = 0
     var extensionIcon: (@MainActor (String) -> NSImage?)? {
@@ -83,6 +85,11 @@ final class ResultsView: NSView {
 
     /// Replaces the rows. Views whose row did not change are not redrawn.
     func setRows(_ newRows: [CommandBarRow], selected: Int?) {
+        let nextSelected = selected.flatMap { newRows.indices.contains($0) ? $0 : nil }
+        // Async providers can finish with exactly the local rows already on
+        // screen. Consume the snapshot without repeating row/layout work.
+        guard newRows != rows || nextSelected != selectedIndex else { return }
+        rowUpdateCount += 1
         rows = newRows
         while rowViews.count < rows.count {
             let v = ResultRowView(frame: .zero)
@@ -103,7 +110,7 @@ final class ResultsView: NSView {
                 v.isHidden = true
             }
         }
-        selectedIndex = selected.flatMap { rows.indices.contains($0) ? $0 : nil }
+        selectedIndex = nextSelected
         scrollOffset = min(scrollOffset, maxScroll)
         layoutRows()
         announceSelection()
@@ -116,7 +123,11 @@ final class ResultsView: NSView {
         announceSelection()
     }
 
-    func resetScroll() { scrollOffset = 0 }
+    func resetScroll() {
+        guard scrollOffset != 0 else { return }
+        scrollOffset = 0
+        layoutRows()
+    }
 
     /// Keeps row `i` inside the visible window (keyboard navigation).
     func scrollToVisible(_ i: Int) {
@@ -135,6 +146,7 @@ final class ResultsView: NSView {
     }
 
     private func layoutRows() {
+        layoutRowsCount += 1
         let l = layoutSpec
         let w = bounds.width - 2 * l.listPaddingX
         let visible = CGRect(x: 0, y: 0, width: bounds.width, height: visibleHeight).insetBy(dx: 0, dy: -1)
