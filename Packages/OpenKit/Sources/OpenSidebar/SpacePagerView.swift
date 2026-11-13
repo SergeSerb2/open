@@ -76,7 +76,7 @@ final class SpacePagerView: NSView {
             let shownIndex = shownSpaceID.flatMap { id in spaces.firstIndex { $0.id == id } } ?? focusedIndex
             offset = CGFloat(creationPage == nil ? shownIndex : spaces.count) * bounds.width
         }
-        placeStrip(commitOffset: swipe == nil)
+        placeStrip(commitOffset: swipe == nil && !animating)
     }
 
     private func layoutPages() {
@@ -94,8 +94,8 @@ final class SpacePagerView: NSView {
 
     private func placeStrip(commitOffset: Bool = true) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        // Commit the native origin once at a switch/drop, so AppKit hit testing
-        // follows the focused page. Interactive events move only the layer.
+        // Commit the native origin once at rest, so AppKit hit testing follows
+        // the focused page. Interactive events and springs move only the layer.
         let frame = CGRect(x: commitOffset ? -offset : strip.frame.minX, y: 0, width: max(CGFloat(spaces.count + (creationPage == nil ? 0 : 1)), 1) * bounds.width, height: bounds.height)
         if strip.frame != frame { strip.frame = frame }
         strip.layer?.setValue(-offset - frame.minX, forKeyPath: "transform.translation.x")
@@ -130,9 +130,11 @@ final class SpacePagerView: NSView {
         shownSpaceID = focused.id
         let presentationX = presentationOffset
         offset = CGFloat(target) * w
-        placeStrip()
+        let animate = animated && context.animatesChanges && previous != nil
+            && animatesSidebarChanges && !Motion.reducesMotion
+        placeStrip(commitOffset: !animate)
         let style = context.style(for: focused)
-        guard animated, context.animatesChanges, previous != nil, animatesSidebarChanges, !Motion.reducesMotion else {
+        guard animate else {
             slideGeneration += 1
             strip.layer?.removeAnimation(forKey: "slide")
             lastSlideAnimation = nil
@@ -156,11 +158,11 @@ final class SpacePagerView: NSView {
         let generation = slideGeneration
         let spring = token.animation(keyPath: "transform.translation.x")
         spring.fromValue = x - strip.frame.minX
-        spring.toValue = 0
+        spring.toValue = -offset - strip.frame.minX
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
             guard let self, self.slideGeneration == generation else { return }
-            self.animating = false; self.finishSlide()
+            self.animating = false; self.placeStrip(); self.finishSlide()
         } }
         let request = requestedAt ?? CACurrentMediaTime()
         spring.beginTime = strip.layer?.convertTime(CACurrentMediaTime(), from: nil) ?? CACurrentMediaTime()
@@ -267,8 +269,9 @@ final class SpacePagerView: NSView {
             shownSpaceID = context.focusedSpace?.id
             let from = -offset
             offset = CGFloat(landed) * w
-            placeStrip()
-            if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwipeSnap) }
+            let animate = animatesSidebarChanges && !Motion.reducesMotion
+            placeStrip(commitOffset: !animate)
+            if animate { slide(from: from, spring: Motion.spaceSwipeSnap) }
             else { lastSlideAnimation = nil; animating = false; finishSlide() }
             return true
         default:
