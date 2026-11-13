@@ -130,6 +130,32 @@ Reading: no Credential Management account chooser, no auto sign-in first-run pro
 - `ArcWebLoginDialog`: `isProxyLogin`, `isURLPotentiallyTrustworthy`, `authority`, `accept:with:`, `cancel`, `close` (`objc-methods`).
 - Selectors `webContents:showWebLoginDialog:`, `webContentsDidCloseWebLoginDialog:`, `webContents:didAutoFillWebLoginDialog:` (`selectors`). The fill arrives as an `ArcLoginCredentials` (url, username, password).
 
+Capture update, 2026-11-13 (C13-AUTH, Arc 1.172.2): the Basic-auth sheet is
+413 × 257 pt and centered over the whole browser window. It shows “Sign in to
+127.0.0.1”, “Your connection to this site is private.”, Username and Password
+labels/placeholders, and Cancel / Sign in. The server's realm is absent.
+Username starts focused. The password field conceals typed text; Return from
+that field submits. Evidence: `.re/capture/s13/m1/arc/v2/002-auth-cancel-light/`
+and `002-auth-cancel-dark/`, `auth-{light,dark}-dialog.{png,ax.json}`.
+
+Sheet-relative AX text bounds in points (the field bounds describe the editable
+text, not its surrounding background): title (19,19,375,23), body
+(19,60,229.5,18), Username label (19,103,67,18), Username field
+(99,103,288,18), Password label (19,158,67,18), Password field
+(99,158,288,18), Cancel text (241,213,63,18), Sign in text
+(324,213,63,18). The same light AX frame above supplies these measurements.
+
+Cancel renders the fixture's 401 response in the same tab. Wrong credentials
+produce another sheet with empty fields, Username focused, and no added error
+text. Accepted credentials load the fixture's 200 page and offer the existing
+save-password sheet (“Save password for 127.0.0.1?” / “That way, it’ll be
+auto-filled next time”; Never on this site / No / Save). Evidence:
+`.re/capture/s13/m1/arc/v3/004-auth-complete-no-save/`, the wrong-password,
+success and `auth-after-no` PNG/AX pairs and request status receipts. This
+follow-up exits 0 and quits normally after No. No password was saved, so this
+capture does not prove saved-password refill; the fill API evidence above
+remains separate.
+
 ## PW-12. Default prefs on this Mac
 
 Read-only key check of `~/Library/Application Support/Arc/User Data/Default/Preferences` (key names and presence only; no values printed):

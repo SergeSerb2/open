@@ -15,6 +15,7 @@ final class HTTPAuthPresenter {
   private let text: (any HTTPAuthRequest) -> HTTPAuthSheetText
   private var activeEntry: Entry?
   private(set) var active: HTTPAuthSheet?
+  private var dim: NSPanel?
   var onPresent: ((HTTPAuthSheet) -> Void)?
   var queuedCount: Int { pending.count }
   private var closing = false
@@ -28,7 +29,8 @@ final class HTTPAuthPresenter {
        text: @escaping (any HTTPAuthRequest) -> HTTPAuthSheetText) {
     self.window = window; self.isFocused = isFocused; self.text = text
     for name in [NSWindow.didEndSheetNotification, NSWindow.didBecomeKeyNotification,
-                 NSWindow.didDeminiaturizeNotification] {
+                 NSWindow.didDeminiaturizeNotification, NSWindow.didMoveNotification,
+                 NSWindow.didResizeNotification] {
       observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
         MainActor.assumeIsolated { self?.schedule() }
       })
@@ -81,6 +83,7 @@ final class HTTPAuthPresenter {
 
   func cancelAll() {
     closing = true
+    removeDim()
     let removed = pending; pending.removeAll()
     for entry in removed {
       DispatchQueue.main.async { if !entry.request.isAnswered { entry.request.cancel() } }
@@ -120,9 +123,11 @@ final class HTTPAuthPresenter {
         if let parent = sheet.sheetParent { parent.endSheet(sheet) }
         sheet.orderOut(nil)
       }
+      removeDim()
       if preserve { pending.insert(entry, at: 0) }
       else if !entry.request.isAnswered { entry.request.cancel() }
     }
+    positionSheet()
     guard !closing, active == nil, let window, window.isVisible,
           !window.isMiniaturized, window.attachedSheet == nil else { return }
     pending.removeAll { $0.request.isAnswered }
@@ -130,6 +135,7 @@ final class HTTPAuthPresenter {
     let entry = pending.remove(at: index)
     let sheet = HTTPAuthSheet(request: entry.request, text: text(entry.request))
     activeEntry = entry; active = sheet
+    showDim(in: window)
     sheet.onFinished = { [weak self, weak sheet] in
       guard let self, self.active === sheet else { return }
       self.activeInvalid = true; self.schedule()
@@ -138,9 +144,42 @@ final class HTTPAuthPresenter {
       guard let self, self.active === sheet else { return }
       self.activeInvalid = true; self.schedule()
     }
+    positionSheet()
     sheet.makeFirstResponder(sheet.initialFirstResponder)
     sheet.announce()
     onPresent?(sheet)
+  }
+
+  private func positionSheet() {
+    guard let window, let sheet = active else { return }
+    // C13-AUTH centers over the entire window, including its sidebar.
+    sheet.setFrameOrigin(NSPoint(x: window.frame.midX - sheet.frame.width / 2,
+      y: window.frame.midY - sheet.frame.height / 2))
+    dim?.setFrame(window.frame, display: true)
+  }
+
+  private func showDim(in window: NSWindow) {
+    let panel = NSPanel(contentRect: window.frame, styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered, defer: false)
+    panel.isReleasedWhenClosed = false; panel.isOpaque = false; panel.hasShadow = false
+    panel.ignoresMouseEvents = true; panel.hidesOnDeactivate = false
+    // Recreated veil from C13-AUTH's paired dialog/cancel frames: a white
+    // page becomes sRGB 204 in light appearance and about 114 in dark.
+    panel.backgroundColor = NSColor(name: nil) { appearance in
+      let value: CGFloat = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? 20 / 255 : 170 / 255
+      return NSColor(srgbRed: value, green: value, blue: value, alpha: 0.6)
+    }
+    panel.identifier = .init("http-auth-dim"); panel.setAccessibilityElement(false)
+    window.addChildWindow(panel, ordered: .above)
+    panel.orderFront(nil)
+    dim = panel
+  }
+
+  private func removeDim() {
+    guard let panel = dim else { return }
+    dim = nil
+    panel.parent?.removeChildWindow(panel)
+    panel.orderOut(nil); panel.close()
   }
 
   isolated deinit {
@@ -151,6 +190,7 @@ final class HTTPAuthPresenter {
     if let sheet = active {
       sheet.sheetParent?.endSheet(sheet); sheet.orderOut(nil)
     }
+    removeDim()
   }
 }
 #endif
