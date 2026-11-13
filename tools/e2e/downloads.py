@@ -317,18 +317,24 @@ def checks(factory, results, tmp, config, harness):
         space = next(v['id'] for v in app.call('spaces') if v['focused'])
         original = app.call('theme-get', space=space)['style']
         key = start('/slow?name=theme-mark.txt')
+        capture_root = Path(os.environ.get('OPEN_DOWNLOADS_CAPTURE_DIR', str(root)))
+        capture_root.mkdir(parents=True, exist_ok=True)
         def ink(label):
             wait(lambda: item(key).get('received', 0) > 0)
-            path = root / ('mark-theme-' + label + '.png')
+            path = capture_root / ('mark-theme-' + label + '.png')
             app.call('snapshot', path=str(path))
             w, h, bpp, pixels = png_pixels(str(path))
             scale = w / app.call('window-state')['frame'][2]
             x, y, width, height = state()['badge']['markFrame']
+            # AppKit's content coordinates start at the bottom; PNG rows start at the top.
+            # Sample only the 20 pt ring's outer annulus, not the sidebar or arrow.
+            cx, cy = (x+width/2)*scale, h-(y+height/2)*scale
             colors = [tuple(pixels[py][px*bpp:px*bpp+3])
-                      for py in range(max(0, int(y*scale)), min(h, int((y+height)*scale)))
-                      for px in range(max(0, int(x*scale)), min(w, int((x+width)*scale)))]
-            # Exclude the red sidebar background; retain only the high-chroma ring/arrow ink.
-            saturated = [c for c in colors if max(c)-min(c) > 120]
+                      for py in range(max(0, int(cy-10*scale)), min(h, int(cy+10*scale)))
+                      for px in range(max(0, int(cx-10*scale)), min(w, int(cx+10*scale)))
+                      if (8*scale)**2 <= (px+.5-cx)**2+(py+.5-cy)**2 <= (10*scale)**2]
+            # The measured themes' sidebar backgrounds stay below this chroma; ring ink exceeds it.
+            saturated = [c for c in colors if max(c)-min(c) > 150]
             return Counter(saturated).most_common(1)[0][0] if saturated else (0, 0, 0)
         try:
             app.call('theme-set', space=space, style=None)
