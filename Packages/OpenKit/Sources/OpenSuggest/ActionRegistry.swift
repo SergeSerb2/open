@@ -153,7 +153,7 @@ struct ActionMatcher: Sendable {
     struct Entry: Sendable {
         let action: BrowserAction
         /// Title first, then aliases; folded, each with match factor 1.
-        let phrases: [([UInt8], Double)]
+        let phrases: [[UInt8]]
         /// Initials of each phrase with 2+ words.
         let initials: [[UInt8]]
     }
@@ -167,13 +167,13 @@ struct ActionMatcher: Sendable {
     static func entry(for action: BrowserAction) -> Entry {
         let phrases = ([action.title] + action.aliases).map { TextMatching.fold($0) }
         let initials = phrases.map(TextMatching.initials(of:)).filter { $0.count >= 2 }
-        return Entry(action: action, phrases: phrases.map { ($0, 1.0) }, initials: initials)
+        return Entry(action: action, phrases: phrases, initials: initials)
     }
 
     /// Quality over the title and aliases; queries shorter than 2 bytes never match.
     static func quality(_ query: FoldedQuery, _ entry: Entry, minimumBytes: Int = 2) -> Double {
         guard query.bytes.count >= minimumBytes else { return 0 }
-        var best = TextMatching.rowQuality(query, fields: entry.phrases)
+        var best = TextMatching.rowQuality(query, titles: entry.phrases)
         if best < MatchQuality.initials, !query.bytes.contains(32), entry.initials.contains(query.bytes) {
             best = MatchQuality.initials
         }
