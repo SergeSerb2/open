@@ -94,6 +94,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         app.eval(a, "window.__splitResize=[];addEventListener('resize',()=>__splitResize.push([innerWidth,innerHeight]));true")
         key('='); s = settled(2)
         add_resizes = app.eval(a, 'window.__splitResize')
+        row('pane_layer_redraw_prepared_once', all(p['layerRedrawPolicy'] == 3 for p in s['panes']), panes=s['panes'])
         row('add_resizes_web_once', len(add_resizes) <= 1, sizes=add_resizes)
         b = next(p['id'] for p in s['panes'] if p['id'] != a)
         row('C1_shortcut', s['orientation'] == 'horizontal' and s['focused'] == b and len(app.call('tabs')) == 2 and app.page(a)['identifier'] == original_page, state=s)
