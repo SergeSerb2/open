@@ -126,6 +126,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var cardGeneration = 0
     private var sidebarPanelTarget: CGRect?
     private var sidebarPanelRootSize: CGSize?
+    private let sidebarPanelClip = CALayer()
+    private let sidebarPanelShadow = SidebarPanelShadowView()
     private var trafficLightObservers: [NSObjectProtocol] = []
     private var placingTrafficLights = false
     /// Arc's window buttons at rest (docs/design.md §2.2): the system buttons fade out and
@@ -360,7 +362,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.addSubview(background)
         emptyPanelHost.wantsLayer = true; emptyPanelHost.layer?.addSublayer(emptyPanel)
         root.addSubview(emptyPanelHost)
-        root.addSubview(container); root.addSubview(cardShadow); root.addSubview(sidebar); root.addSubview(resizeHandle)
+        root.addSubview(sidebarPanelShadow); root.addSubview(container); root.addSubview(cardShadow); root.addSubview(sidebar); root.addSubview(resizeHandle)
         WindowSpeedTrace.mark("windowViewsAttached")
         cardShadow.isHidden = true
         resizeHandle.onBegin = { [weak self] in self?.beginSidebarResize() }
@@ -579,7 +581,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if animate { sidebarMotionRequestedAt = nil }
         // Presentation reads are needed only to start/reverse a visible animation,
         // never while building the first window or following a plain width/resize tick.
-        let oldPanel = animate ? (container.layer?.presentation()?.frame ?? container.frame) : container.frame
+        var oldPanel = animate ? (container.layer?.presentation()?.frame ?? container.frame) : container.frame
+        if animate, container.layer?.mask === sidebarPanelClip {
+            oldPanel.size = sidebarPanelClip.presentation()?.bounds.size ?? sidebarPanelClip.bounds.size
+        }
         let modelOffset = sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0
         let oldOffset = animate ? (sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? modelOffset) : modelOffset
         if cardState != .off {
@@ -594,14 +599,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // no row layout or model width write runs on the animation's display ticks.
             let sidebarFrame = CGRect(x: 0, y: 0, width: width, height: size.height)
             let targetOffset: CGFloat = hidden ? -width : 0
-            let geometryChanged = (!animate && !continuingPanelMotion && container.frame != panelFrame) || sidebar.frame != sidebarFrame
-            if geometryChanged { sidebarGeometryChanges += 1 }
+            // A shrinking clip still needs the old, wider backing until it has
+            // finished. Growing can prepare the wider viewport once at entry.
+            let defersViewport = animate && panelFrame.width < container.frame.width
+            let geometryChanged = (!continuingPanelMotion && container.frame != panelFrame) || sidebar.frame != sidebarFrame
+            if geometryChanged && (!defersViewport || sidebar.frame != sidebarFrame) { sidebarGeometryChanges += 1 }
             let targetChanged = (sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0) != targetOffset
             if case .floatingCard = sidebar.presentation { sidebar.presentation = .anchored }
             CATransaction.begin(); CATransaction.setDisableActions(true)
             if animate {
                 sidebarPanelTarget = panelFrame
                 sidebarPanelRootSize = size
+                // One native viewport resize: at entry when growing, at rest
+                // when shrinking. The clip never exposes missing backing pixels.
+                if !defersViewport && container.frame != panelFrame { container.frame = panelFrame }
+                if emptyPanel.frame != panelFrame { emptyPanel.frame = panelFrame }
+                container.layoutSubtreeIfNeeded()
             } else if !continuingPanelMotion {
                 finishSidebarPanelLayout(at: panelFrame)
                 if container.frame != panelFrame { container.frame = panelFrame }
@@ -615,7 +628,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 sidebarAnimationGeneration += 1
                 let generation = sidebarAnimationGeneration
                 anchoredSliding = animate
-                container.setSidebarSliding(animate)
+                container.setSidebarSliding(false)
                 sidebarAnimations = [:]
                 sidebar.isHidden = animate ? false : hidden
                 positionTrafficLights()
@@ -642,33 +655,49 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     layer.removeAnimation(forKey: "sidebarToggle")
                     layer.setValue(targetOffset, forKeyPath: "transform.translation.x")
                     if animate {
-                        let spring = Motion.sidebarToggle.animation(keyPath: "transform.translation.x")
+                        let spring = Motion.sidebarAnimation(keyPath: "transform.translation.x", showing: !hidden)
                         spring.fromValue = oldOffset; spring.toValue = targetOffset
                         addMotion(spring, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
                         if index == 0 { sidebarAnimations["sidebar"] = layer.animation(forKey: "sidebarToggle") }
                     }
                 }
-                for (name, layer) in [("panel", container.layer), ("emptyPanel", Optional(emptyPanel))] {
-                    layer?.removeAnimation(forKey: "sidebarToggle")
-                    if animate, let layer {
-                        // Move the current backing image. The live page keeps its
-                        // viewport until completion, then lays out once at rest.
-                        func transform(for rect: CGRect) -> CATransform3D {
-                            let position = CGPoint(x: rect.minX + rect.width * layer.anchorPoint.x,
-                                y: rect.minY + rect.height * layer.anchorPoint.y)
-                            return CATransform3DMakeAffineTransform(CGAffineTransform(
-                                a: rect.width / max(layer.bounds.width, 1), b: 0,
-                                c: 0, d: rect.height / max(layer.bounds.height, 1),
-                                tx: position.x - layer.position.x, ty: position.y - layer.position.y))
-                        }
-                        let from = transform(for: oldPanel), target = transform(for: panelFrame)
-                        layer.transform = target
-                        let spring = Motion.sidebarToggle.animation(keyPath: "transform")
-                        spring.fromValue = NSValue(caTransform3D: from)
-                        spring.toValue = NSValue(caTransform3D: target)
-                        addMotion(spring, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
-                        sidebarAnimations[name] = layer.animation(forKey: "sidebarToggle")
+                if animate, let layer = container.layer {
+                    let fromTranslation = oldPanel.minX - container.frame.minX
+                    let targetTranslation = panelFrame.minX - container.frame.minX
+                    layer.removeAnimation(forKey: "sidebarToggle")
+                    layer.setValue(targetTranslation, forKeyPath: "transform.translation.x")
+                    sidebarPanelClip.anchorPoint = .zero
+                    sidebarPanelClip.position = .zero
+                    sidebarPanelClip.bounds = CGRect(origin: .zero, size: panelFrame.size)
+                    sidebarPanelClip.backgroundColor = NSColor.black.cgColor
+                    sidebarPanelClip.cornerRadius = PanelMetrics.cornerRadius
+                    sidebarPanelClip.cornerCurve = .continuous
+                    layer.mask = sidebarPanelClip
+                    let move = Motion.sidebarAnimation(keyPath: "transform.translation.x", showing: !hidden)
+                    move.fromValue = fromTranslation; move.toValue = targetTranslation
+                    addMotion(move, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
+                    sidebarAnimations["panel"] = layer.animation(forKey: "sidebarToggle")
+                    let clip = Motion.sidebarAnimation(keyPath: "bounds.size", showing: !hidden)
+                    clip.fromValue = NSValue(size: oldPanel.size); clip.toValue = NSValue(size: panelFrame.size)
+                    addMotion(clip, to: sidebarPanelClip, key: "sidebarToggle", requestedAt: requestedAt)
+                    sidebarPanelShadow.prepare(frame: panelFrame)
+                    sidebarPanelShadow.isHidden = container.isHidden
+                    for (shadowLayer, key, from, to) in sidebarPanelShadow.motion(from: oldPanel.size, translation: oldPanel.minX - panelFrame.minX) {
+                        let spring = Motion.sidebarToggle.animation(keyPath: key)
+                        spring.fromValue = from; spring.toValue = to
+                        addMotion(spring, to: shadowLayer, key: "sidebarToggle", requestedAt: requestedAt)
                     }
+                    // An empty panel has no live text or web surface to stretch.
+                    emptyPanel.removeAnimation(forKey: "sidebarToggle")
+                    let emptyGroup = CAAnimationGroup()
+                    let emptyMove = Motion.sidebarAnimation(keyPath: "position", showing: !hidden)
+                    emptyMove.fromValue = NSValue(point: CGPoint(x: oldPanel.midX, y: oldPanel.midY))
+                    emptyMove.toValue = NSValue(point: emptyPanel.position)
+                    let emptySize = Motion.sidebarAnimation(keyPath: "bounds.size", showing: !hidden)
+                    emptySize.fromValue = NSValue(size: oldPanel.size); emptySize.toValue = NSValue(size: panelFrame.size)
+                    emptyGroup.animations = [emptyMove, emptySize]
+                    emptyGroup.duration = max(emptyMove.duration, emptySize.duration)
+                    addMotion(emptyGroup, to: emptyPanel, key: "sidebarToggle", requestedAt: requestedAt)
                 }
                 CATransaction.commit()
             } else if !anchoredSliding { sidebar.isHidden = hidden }
@@ -689,22 +718,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         captureStorage?.layout()
         onLayout?()
     }
-    /// Commit the viewport once, after the render-server spring (or an interruption).
+    /// Retire the temporary render-server clip; the native endpoint is already laid out.
     private func finishSidebarPanelLayout(at finalFrame: CGRect? = nil) {
         guard let pending = sidebarPanelTarget else { return }
         let target = finalFrame ?? pending
         sidebarPanelTarget = nil; sidebarPanelRootSize = nil
         CATransaction.begin(); CATransaction.setDisableActions(true)
         container.layer?.removeAnimation(forKey: "sidebarToggle")
+        sidebarPanelClip.removeAnimation(forKey: "sidebarToggle")
+        container.layer?.mask = nil
+        sidebarPanelShadow.isHidden = true
         emptyPanel.removeAnimation(forKey: "sidebarToggle")
         container.layer?.transform = CATransform3DIdentity
         emptyPanel.transform = CATransform3DIdentity
-        if container.frame != target {
-            container.frame = target
-            if finalFrame == nil { sidebarGeometryChanges += 1 }
-        }
+        if container.frame != target { container.frame = target; sidebarGeometryChanges += 1 }
         if emptyPanel.frame != target { emptyPanel.frame = target }
-        container.layoutSubtreeIfNeeded()
         CATransaction.commit()
     }
     /// Delayed idle work attaches only the hidden shell; it never moves the page.
@@ -1790,5 +1818,46 @@ extension BrowserWindowController {
               let options = pendingSpaceCreationOptions else { return }
         pendingSpaceCreationOptions = nil
         _ = beginSpaceCreation(options: options)
+    }
+}
+
+/// A prepared shadow outside the animated panel clip. Only its layer paths move.
+@MainActor
+private final class SidebarPanelShadowView: NSView {
+    private let shadowLayer = CALayer()
+    private let outside = CAShapeLayer()
+    override init(frame: NSRect) {
+        super.init(frame: frame); wantsLayer = true; isHidden = true
+        shadowLayer.shadowColor = NSColor.black.cgColor
+        shadowLayer.shadowOpacity = PanelMetrics.shadowOpacity
+        shadowLayer.shadowRadius = PanelMetrics.shadowRadius
+        shadowLayer.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
+        outside.fillRule = .evenOdd; shadowLayer.mask = outside
+        layer?.addSublayer(shadowLayer)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    func prepare(frame: CGRect) {
+        self.frame = frame
+        shadowLayer.frame = bounds; outside.frame = bounds
+        shadowLayer.shadowPath = shape(bounds.size)
+        outside.path = exterior(bounds.size)
+        layer?.setValue(0, forKeyPath: "transform.translation.x")
+        isHidden = false
+    }
+    func motion(from size: CGSize, translation: CGFloat) -> [(CALayer, String, Any, Any)] {
+        guard let layer else { return [] }
+        return [(layer, "transform.translation.x", translation, CGFloat(0)),
+                (shadowLayer, "shadowPath", shape(size), shape(bounds.size)),
+                (outside, "path", exterior(size), exterior(bounds.size))]
+    }
+    private func shape(_ size: CGSize) -> CGPath {
+        CGPath(roundedRect: CGRect(origin: .zero, size: size), cornerWidth: PanelMetrics.cornerRadius,
+               cornerHeight: PanelMetrics.cornerRadius, transform: nil)
+    }
+    private func exterior(_ size: CGSize) -> CGPath {
+        let path = CGMutablePath()
+        path.addRect(CGRect(origin: .zero, size: size).insetBy(dx: -24, dy: -24))
+        path.addPath(shape(size)); return path
     }
 }
