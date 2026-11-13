@@ -11658,13 +11658,15 @@ def space_manager_checks(results, tmp, config, style):
         app.call('library-open')
         # Delete/undo the Space through its real manager controls, preserving
         # both the Space and its archived tab's original identity.
-        app.call('space-manager-menu', space=s2, item='Delete')
+        # PR #482 (81ec4180) uses the shared native Space menu in Library.
+        delete_menu = app.call('space-manager-menu', space=s2, item='?')
+        app.call('space-manager-menu', space=s2, item='Delete Space')
         # A1: the Manager's Delete confirms first, with a sheet on the Library window.
         manager_alert = app.call('alert', window='library')
         app.call('alert', window='library', button='Delete')
-        require('manager_delete_space', s2 not in order(app) and 'Delete' in manager_alert['buttons']
+        require('manager_delete_space', s2 not in order(app) and 'Delete Space' in delete_menu and 'Delete' in manager_alert['buttons']
                 and any(t.endswith(' Space?') and t.startswith('Delete your ') for t in manager_alert['texts']),
-                order=order(app), alert=manager_alert)
+                order=order(app), alert=manager_alert, menu=delete_menu)
         library_key(app, 'z', ['cmd'])
         require('manager_delete_space_undo_ids', order(app) == reordered and app.tab(tab)['id'] == tab, order=order(app), tab=tab)
         # App-only appearance changes; always restore the original App override.
@@ -11678,8 +11680,9 @@ def space_manager_checks(results, tmp, config, style):
             original_appearance = ('dark' if 'Dark' in appearance_before else 'light' if 'Aqua' in appearance_before else 'system')
             app.call('appearance', name=original_appearance)
         require('manager_app_appearance_restored', app.call('space-manager-lifecycle')['appAppearance'] == appearance_before, state=app.call('space-manager-lifecycle'))
-        # One presenter follows B, then A, then B after A closes. The Space
-        # edit precedes each lifetime mutation, with no intervening undoable edit.
+        # PR #350 gives each browser its own Library session. Read A's hidden
+        # cache passively while B is front, then prove each session keeps its
+        # owner and scroll position. Edits still precede lifetime changes.
         order_before_window = order(app)
         app.call('space-manager-drag', space=s1, to=0)
         undo_before_window = state(app)['modelUndoCount']
@@ -11692,9 +11695,10 @@ def space_manager_checks(results, tmp, config, style):
         app.call('window-focus', id=second, activate=True)
         app.call('window-focus', id=original_window, activate=True)
         app.call('window-focus', id=second, activate=True)
-        hidden_after = app.call('space-manager-lifecycle')
+        hidden_after = app.call('space-manager-lifecycle', id=original_window)
         require('hidden_manager_focus_does_not_rebind', hidden_after['identity'] == hidden_before['identity']
-                and hidden_after['contextWindow'] == hidden_before['contextWindow'] and hidden_after['builtColumns'] == hidden_before['builtColumns'],
+                and hidden_after['contextWindow'] == hidden_before['contextWindow'] and hidden_after['builtColumns'] == hidden_before['builtColumns']
+                and app.call('window-state')['id'] == second,
                 before=hidden_before, after=hidden_after)
         app.call('library-open'); second_manager = manager_ready(app)
         library_key(app, 'z', ['cmd'])
@@ -11709,12 +11713,21 @@ def space_manager_checks(results, tmp, config, style):
         scrolled = app.call('space-manager-scroll', x=32)
         app.call('window-focus', id=original_window, activate=True)
         app.call('library-open'); first_manager = manager_ready(app)
-        require('manager_rebind_second_and_first', second_manager['contextWindow'] == second and first_manager['contextWindow'] == original_window
-                and second_manager['identity'] != first_manager['identity'] and second_manager['window'] == first_manager['window'],
+        require('manager_sessions_follow_own_windows', second_manager['contextWindow'] == second and first_manager['contextWindow'] == original_window
+                and second_manager['identity'] != first_manager['identity'] and second_manager['window'] != first_manager['window']
+                and first_manager['identity'] == hidden_before['identity'],
                 first=first_manager, second=second_manager)
-        copied_origin = app.call('space-manager-lifecycle')['origin']
-        require('visible_manager_rebind_keeps_horizontal_origin', scrolled['origin'][0] > 0
-                and abs(copied_origin[0] - scrolled['origin'][0]) < 0.5, before=scrolled['origin'], after=copied_origin)
+        first_origin = app.call('space-manager-lifecycle')['origin']
+        app.call('window-focus', id=second, activate=True)
+        app.call('library-open'); second_again = manager_ready(app)
+        second_origin = app.call('space-manager-lifecycle')['origin']
+        require('manager_sessions_keep_independent_horizontal_origins', scrolled['origin'][0] > 0
+                and abs(first_origin[0] - hidden_before['origin'][0]) < 0.5
+                and abs(second_origin[0] - scrolled['origin'][0]) < 0.5
+                and second_again['identity'] == second_manager['identity'],
+                before=scrolled['origin'], first=first_origin, second=second_origin)
+        app.call('window-focus', id=original_window, activate=True)
+        app.call('library-open'); manager_ready(app)
         app.call('space-manager-scroll', x=0)
         order_before_close = order(app)
         app.call('space-manager-drag', space=s1, to=0)
@@ -11722,8 +11735,8 @@ def space_manager_checks(results, tmp, config, style):
         app.call('window-focus', id=original_window, activate=True)
         app.call('window-close')
         app.call('library-open'); surviving = manager_ready(app)
-        require('closed_presenter_rebinds_live_window', surviving['contextWindow'] == second and surviving['contextValid']
-                and len(app.call('shell-windows')) == 1, state=surviving)
+        require('closed_session_preserves_live_window', surviving['contextWindow'] == second and surviving['contextValid']
+                and surviving['identity'] == second_manager['identity'] and len(app.call('shell-windows')) == 1, state=surviving)
         library_key(app, 'z', ['cmd'])
         with open(app.call('save')) as stream: after_close = json.load(stream)
         require('library_undo_after_window_close', order(app) == order_before_close
@@ -11779,7 +11792,7 @@ def space_manager_checks(results, tmp, config, style):
         source_ids = snapshot_ids(export_source['pinned'] + export_source['today'])
         export_title = next(sp['title'] for sp in app.call('spaces') if sp['id'] == s1) or 'Space'
         export_dest = next(sp for sp in app.call('spaces') if sp['id'] == s3)
-        app.call('space-manager-menu', space=s1, item='Turn into Folder/' + (export_dest['title'] or 'Space'))
+        app.call('space-manager-menu', space=s1, item='Export “' + export_title + '” into Folder/' + (export_dest['title'] or 'Space'))
         exported = wait_until(lambda: s1 not in order(app), timeout=5)
         with open(app.call('save')) as stream: exported_snapshot = json.load(stream)
         dest_pinned = next(sp for sp in exported_snapshot['spaces'] if sp['id'] == s3)['pinned']
@@ -11793,23 +11806,29 @@ def space_manager_checks(results, tmp, config, style):
         app.call('library-close')
         app.call('window-focus', id=second, activate=True); app.call('window-close')
         require('no_browser_window', app.call('shell-windows') == [])
-        no_browser = app.call('library-open')
-        no_browser = manager_ready(app)
-        require('no_browser_reuses_retained_model_window', no_browser and no_browser['contextValid'] and no_browser['sameModel']
-                and no_browser['contextWindow'] == second and app.call('shell-windows') == [], state=state(app))
-        app.call('pasteboard-write', text='no-browser-sentinel')
+        # PR #350 hosts Library in a browser. With no browser, the command
+        # creates a live owner; it must keep the shared model and original IDs.
+        app.call('library-open'); no_browser = manager_ready(app)
+        created_windows = app.call('shell-windows')
+        created_owner = created_windows[0]['id'] if len(created_windows) == 1 else ''
+        require('library_without_browser_creates_live_owner', no_browser and no_browser['contextValid'] and no_browser['sameModel']
+                and created_owner and created_owner != second and no_browser['contextWindow'] == created_owner,
+                state=state(app), windows=created_windows)
+        app.call('pasteboard-write', text='new-owner-sentinel')
         app.call('space-manager-menu', space=s2, node=pin, item='Copy Link')
         copied_without_browser = app.call('pasteboard')
         with open(app.call('save')) as stream: retained_snapshot = json.load(stream)
         retained_space = next(s for s in retained_snapshot['spaces'] if s['id'] == s2)
-        require('no_browser_copy_link_retains_model_ids', app.call('shell-windows') == []
-                and len(retained_snapshot['windows']) == 1 and retained_snapshot['windows'][0]['id'] == second
+        require('library_new_owner_copy_link_retains_model_ids', len(app.call('shell-windows')) == 1
+                and len(retained_snapshot['windows']) == 1 and retained_snapshot['windows'][0]['id'] == created_owner
                 and any(n.get('tab', {}).get('_0', {}).get('id') == pin for n in retained_space['pinned'])
                 and copied_without_browser == pin_url_before_close,
                 snapshot=retained_snapshot, pasteboard=copied_without_browser)
+        app.call('library-close'); app.call('window-focus', id=created_owner, activate=True); app.call('window-close')
         app.call('window-reopen'); app.call('library-open'); recovered = manager_ready(app)
         require('last_window_reopen_recovers', len(app.call('shell-windows')) == 1 and recovered['contextWindow'] == app.call('shell-windows')[0]['id']
                 and recovered['contextValid'], state=recovered)
+        second = recovered['contextWindow']
         # Native nil-target undo stays menu-owned. Other context keys exercise
         # the same OEApplication path and leave no panels or command bar open.
         # A selected Today tab makes accidental browser Cmd+W observable as an archive.

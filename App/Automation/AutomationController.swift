@@ -788,7 +788,7 @@
         if let sheet = target?.attachedSheet { dialogs.append(sheet.windowNumber); target?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
         app.settingsPresenter.closeLibrary()
         return ["closed": app.settingsPresenter.libraryWindow == nil, "dialogs": dialogs] as [String: Any]
-      case "space-manager-lifecycle": return spaceManagerLifecycle()
+      case "space-manager-lifecycle": return try spaceManagerLifecycle(a)
       case "space-manager-row-controls": return try spaceManagerRowControls(a)
       case "space-manager-scroll":
         let (manager, _) = try realSpaceManager()
@@ -2909,14 +2909,19 @@
       return true
     }
     /// Passive cache read: do not layout/build the hidden manager while checking focus work.
-    private func spaceManagerLifecycle() -> [String: Any] {
+    private func spaceManagerLifecycle(_ args: [String: Any]) throws -> [String: Any] {
       let adapter = app.settingsPresenter
-      let manager = adapter.library?.spaceManagerView as? SpaceManagerView
-      let target = adapter.libraryWindow
+      let session: AppLibrarySession?
+      if let id = args["id"] as? String {
+        guard let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown browser window") }
+        session = adapter.librarySessions[controller.windowID]
+      } else { session = adapter.activeLibrarySession }
+      let manager = session?.model.spaceManagerView as? SpaceManagerView
+      let target = session?.controller?.isLibraryOpen == true ? session?.controller?.window : nil
       var sectionRows: [[String: Any]] = []
       // PR #350 replaced the table rail with native tiles. Use the same real
       // controls as Library automation; the harness still clicks via sendEvent.
-      if let panel = adapter.activeLibrarySession?.panel, let target {
+      if let panel = session?.panel, let target {
         for tile in panel.automationRailState {
           guard let section = tile["id"] as? String, let frame = tile["frame"] as? [CGFloat], frame.count == 4 else { continue }
           let point = panel.convert(CGPoint(x: frame[0] + frame[2] / 2, y: frame[1] + frame[3] / 2), to: nil)
@@ -2928,7 +2933,7 @@
         "origin": [manager?.scrollView.contentView.bounds.origin.x ?? 0, manager?.scrollView.contentView.bounds.origin.y ?? 0],
         "systemAppearance": manager.map { String(describing: $0.context.systemAppearance) } ?? "",
         "appAppearance": NSApp.appearance?.name.rawValue ?? "", "visible": target?.isVisible == true,
-        "key": target?.isKeyWindow == true, "section": adapter.library?.section.rawValue ?? "",
+        "key": target?.isKeyWindow == true, "section": session?.model.section.rawValue ?? "",
         "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows] as [String: Any]
     }
     /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
