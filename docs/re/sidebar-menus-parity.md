@@ -37,7 +37,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | Media | not captured (Media stayed at its first-use card) | Open · Copy · Show in Finder · Save As… · — · Delete (captures); Open · Copy · Show in Finder · — · Hide from Library (folder files) | C3 item 12 |
 | Easels (S4) | card menu: a single "Delete" | a single "Delete" | none |
 | Spaces (session 8 item 13, `v13/34-item-13`) | card header right-click and footer "…": the sidebar Space menu without "Manage Spaces…" and its separator; a tab row keeps the row menu | the same (`SidebarMenus.space(_:inLibrary:)`) | none |
-| Boosts | not captured | Edit Boost · Turn On/Off · — · Delete | C3 item 14 |
+| Boosts (session 8 item 14, `v13/33-boost-menu-delete`) | the card has no right-click menu; a click opens the editor, whose title menu is Rename this Boost… · Shuffle · Reset all Edits · Delete this Boost · — · All Boosts… | no right-click menu; the More button keeps Edit Boost · Turn On/Off · — · Delete; the editor title menu adds Open's "— · Apply to ▸" (its only route to the scope menu) | the card shows the name over the host in Arc; Open shows the host over the name (not changed here) |
 | History | not a Library category in Arc; ⌘Y opens the browser's own History page (S1L) | Open has a History section | Open addition; its menus are Open's own (no Arc parity target) |
 
 ## 3. Build order (one PR per section, branch prefix `design/d2c-`)

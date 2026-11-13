@@ -26,6 +26,9 @@ struct LibraryRowItem {
     var activate: () -> Void
     var actions: [LibraryRowAction] = []
     var hoverActions: [LibraryRowAction] = []
+    /// False: a right-click opens no menu (Arc's Downloads rows); the More button still opens it.
+    var contextMenu = true
+    var moreTooltip = "More"
 }
 
 /// Native, reusable rows. The model owns snapshots and mutations; this view
@@ -89,7 +92,14 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.onScroll = { [weak self] in self?.overscanGeneration += 1 }
         table.onPrefetch = { [weak self] range,direction,stride in self?.prefetchRows(range,direction:direction,stride:stride) }
         table.menuAtRow = { [weak self] row in
-            guard let self else { return nil }; let menu = self.menu(at:row); self.activeMenu = menu; return menu
+            guard let self else { return nil }
+            // Arc: a right click on a row without a menu (Downloads, Archived Tabs, Boosts) opens nothing; it
+            // only selects the row (capture C3 s8 items 9 and 11). The … button still opens the menu.
+            if self.item(at:row)?.contextMenu == false {
+                if row >= 0 { self.table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+                return nil
+            }
+            let menu = self.menu(at:row); self.activeMenu = menu; return menu
         }
         table.setAccessibilityLabel("Library items")
         scroll.documentView = table; addSubview(scroll)
@@ -350,6 +360,13 @@ final class LibraryListView: NSView, NSMenuDelegate {
         }
         return menu
     }
+    /// What a right click on the row would show (nil: no menu), and the selection after it.
+    func rightClickMenu(id: String) -> (menu: NSMenu?, selected: Bool)? {
+        guard let row = entryIndex(id) else { return nil }
+        let menu = table.menuAtRow?(row)
+        if menu != nil { activeMenu = nil }
+        return (menu, table.selectedRow == row)
+    }
     func showMenu(id:String,escapeOnOpen:Bool = false) -> Bool {
         guard let row = entryIndex(id), let menu = menu(at:row), let cell = table.view(atColumn:0,row:row,makeIfNecessary:true) else { return false }
         activeMenu = menu
@@ -400,7 +417,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
             guard let item = item(at: row) else { return nil }
             let frame = root.convert(table.rect(ofRow: row),from: table)
             return ["id":item.id,"frame":[frame.minX,frame.minY,frame.width,frame.height],"title":item.title,"subtitle":item.subtitle,
-              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),"toolTip":item.toolTip ?? ""]
+              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),"contextMenu":item.contextMenu,"toolTip":item.toolTip ?? "",
+              "buttonToolTips":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonToolTips ?? []]
         }
     }
 }
@@ -428,6 +446,8 @@ private final class LibraryItemView: NSView {
     private let plate = CALayer(), ring = CAShapeLayer(), progressLayer = CAShapeLayer(), arrow = CAShapeLayer()
     override var wantsUpdateLayer: Bool { true }
     private var buttons: [LibraryControl] = []
+    /// Tooltips of the drawn row buttons (automation evidence).
+    var buttonToolTips: [String] { buttons.filter { !$0.isHidden }.compactMap(\.toolTip) }
     private var foreground = NSColor.labelColor, overlay = NSColor.labelColor
     private var tracking: NSTrackingArea?
     private var gallery = false
@@ -460,7 +480,7 @@ private final class LibraryItemView: NSView {
             }) }
         }
         var actions = item.hoverActions
-        if !item.actions.isEmpty { actions.append(.init(title:"More",glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
+        if !item.actions.isEmpty { actions.append(.init(title:item.moreTooltip,glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
         // The table's reuse identifier stays "row". Item identity belongs to AX,
         // not the viewport reuse pool.
         setAccessibilityIdentifier(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")

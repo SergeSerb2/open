@@ -84,7 +84,9 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
               let id = info["command"] else { return true }
         let key = enabledKeys[ObjectIdentifier(menuItem).debugDescription] ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
         let state = dispatcher?.menuState(for: id)
-        if let title = state?.title ?? dispatcher?.menuTitle(for: id), menuItem.title != title { menuItem.title = title }
+        // A state title applies while its state lasts; a registry item then returns to its built title.
+        let built = menuItem.identifier?.rawValue == id ? MenuBuilder.builtTitle(for: id) : nil
+        if let title = state?.title ?? dispatcher?.menuTitle(for: id) ?? built, menuItem.title != title { menuItem.title = title }
         if let checked = state?.isChecked {
             let mark: NSControl.StateValue = checked ? .on : .off
             if menuItem.state != mark { menuItem.state = mark }
@@ -149,7 +151,7 @@ public enum MenuBuilder {
         }
         let shortcuts = overrides.effectiveShortcuts(for: command)
         let item = NSMenuItem(
-            title: overrideTitle ?? command.title,
+            title: overrideTitle ?? arcMenuTitles[commandID] ?? command.title,
             action: #selector(MenuCommandTarget.openCommandAction(_:)),
             keyEquivalent: shortcuts.first?.keyEquivalent ?? ""
         )
@@ -161,13 +163,43 @@ public enum MenuBuilder {
         var info: [String: String] = ["command": commandID]
         if let payload { info["payload"] = payload }
         item.representedObject = info
-        if commandID == "open-extensions-picker" {
+        if hiddenInMenu.contains(commandID) {
             item.isHidden = true
             item.allowsKeyEquivalentWhenHidden = true
         }
         item.identifier = NSUserInterfaceItemIdentifier(commandID)
         return item
     }
+
+    /// Arc 1.172.2's menu-bar titles where they differ from the command's own title (which the
+    /// command bar and Settings keep). Evidence: Arc's runtime menu bar in the capture AX trees
+    /// (docs/re/menus-and-hotkeys.md, "Arc 1.172.2 runtime menu bar").
+    static func builtTitle(for id: String) -> String? { arcMenuTitles[id] ?? CommandRegistry.byID[id]?.title }
+
+    static let arcMenuTitles: [String: String] = [
+        "hide-others": "Hide Other Windows",
+        "save-page-as": "Save Page As", "print": "Print",
+        "find-and-replace": "Find and Replace",
+        "collapse-pinned-section": "Collapse Pinned Tabs", "cast": "Cast",
+        "clear-unpinned-tabs": "Clear Today",
+        "view-archive": "View Archive…",
+        "minimize-window": "Minimize Window",
+        "view-library": "Open Library…", "view-downloads": "View Downloads…",
+        "view-media": "View Media…", "view-boosts": "View Boosts…", "view-easels-notes": "View Easels & Notes…",
+        "help-center": "Visit Help Center", "export-notes": "Export Notes",
+    ]
+
+    /// Items Arc 1.172.2 keeps in its menu bar but never shows (absent from every runtime AX
+    /// capture): hidden here too; their shortcuts still work (`allowsKeyEquivalentWhenHidden`).
+    static let hiddenInMenu: Set<String> = [
+        "open-extensions-picker",
+        "new-boost", "edit-boost", "new-legacy-boost", "boost-gallery",
+        "reveal-current-tab", "expand-pinned-section", "exit-modal",
+        "duplicate-tab", "rename-tab", "reset-tab", "cycle-tab-forward", "cycle-tab-backward",
+        "tab-switcher-forward", "tab-switcher-backward", "expand-all-folders", "collapse-all-folders",
+        "peek-email", "join-meeting", "open-in-current-space",
+        "release-notes",
+    ]
 
     /// Alternate key carriers for a command: hidden items that hold the extra
     /// key equivalents (arc stores them as duplicate menu items). The router
@@ -206,9 +238,12 @@ public enum MenuBuilder {
 
     private static func buildOpenMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "Open")
-        add(menu, ["about-open", "set-default-browser"], target: target, overrides: overrides)
+        // Arc 1.172.2 order (runtime AX). Share, Privacy Policy and Sign Out are out of scope.
+        add(menu, ["about-open"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["settings", "check-for-updates", "import-from-browser"], target: target, overrides: overrides)
+        add(menu, ["settings", "set-default-browser"], target: target, overrides: overrides)
+        menu.addItem(.separator())
+        add(menu, ["import-from-browser", "check-for-updates"], target: target, overrides: overrides)
         menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenuItem("Services", services))
@@ -222,17 +257,18 @@ public enum MenuBuilder {
 
     private static func buildFileMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "File")
-        add(menu, ["new-tab", "open-command-bar", "new-window", "new-incognito-window", "new-little-open-window", "blank-window"], target: target, overrides: overrides)
+        // Arc 1.172.2 order (runtime AX). Its Boost items exist but are never shown (hidden carriers).
+        add(menu, ["new-tab", "new-window", "blank-window", "new-incognito-window", "new-little-open-window", "restore-last-closed-tab"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        // GUESS — capture pending: Arc 1.172 removed these items, so their position is not captured.
-        add(menu, ["new-note", "new-note-in-split"], target: target, overrides: overrides)
-        add(menu, ["new-easel"], target: target, overrides: overrides)
+        add(menu, ["open-command-bar"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["archive-tab", "close-window", "restore-last-closed-tab"], target: target, overrides: overrides)
+        // GUESS: Arc 1.172 hides its Note items, so their place (beside New Easel) is not captured.
+        add(menu, ["new-profile", "new-note", "new-note-in-split", "new-easel"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["print", "save-page-as", "share-page", "capture-page", "capture-full-page", "capture-portrait"], target: target, overrides: overrides)
+        add(menu, ["close-window", "archive-tab"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["new-profile", "new-boost", "edit-boost", "new-legacy-boost", "boost-gallery"], target: target, overrides: overrides)
+        add(menu, ["share-page", "capture-page", "capture-full-page", "capture-portrait", "save-page-as", "print"], target: target, overrides: overrides)
+        add(menu, ["new-boost", "edit-boost", "new-legacy-boost", "boost-gallery"], target: target, overrides: overrides)
         return menu
     }
 
@@ -240,13 +276,11 @@ public enum MenuBuilder {
         let menu = NSMenu(title: "Edit")
         add(menu, ["undo", "redo"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["cut", "copy", "paste", "paste-and-match-style", "delete", "select-all"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-        add(menu, ["copy-url", "copy-url-markdown", "copy-url-quote"], target: target, overrides: overrides)
+        add(menu, ["cut", "copy", "copy-url", "copy-url-markdown", "copy-url-quote", "paste", "paste-and-match-style", "delete", "select-all"], target: target, overrides: overrides)
         menu.addItem(.separator())
 
         let find = NSMenu(title: "Find")
-        add(find, ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"], target: target, overrides: overrides)
+        add(find, ["find", "find-and-replace", "find-next", "find-previous", "use-selection-to-find", "jump-to-selection"], target: target, overrides: overrides)
         menu.addItem(submenuItem("Find", find))
 
         let spelling = NSMenu(title: "Spelling and Grammar")
@@ -277,36 +311,39 @@ public enum MenuBuilder {
     }
 
     private static func buildViewMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
+        // Arc 1.172.2 order (runtime AX). Reveal Current Tab, Expand Pinned Section and Exit are hidden carriers.
         let menu = NSMenu(title: "View")
-        add(menu, ["toggle-sidebar", "toggle-toolbar", "toggle-full-screen"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-        add(menu, ["reload", "force-reload", "stop-loading", "clear-cache-and-refresh", "clear-cookies-and-refresh"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-        add(menu, ["zoom-in", "zoom-out", "zoom-actual-size"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-        add(menu, ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-        add(menu, ["reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "cast", "exit-modal"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-
         let appearance = NSMenu(title: "Appearance")
-        let header = NSMenuItem(title: "Websites will use:", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: "Websites, Easels, and Notes will use:", action: nil, keyEquivalent: "")
         header.isEnabled = false
         appearance.addItem(header)
         add(appearance, ["appearance-automatic", "appearance-light", "appearance-dark"], target: target, overrides: overrides)
         menu.addItem(submenuItem("Appearance", appearance))
-
+        menu.addItem(.separator())
+        add(menu, ["toggle-sidebar", "toggle-toolbar", "collapse-pinned-section", "expand-pinned-section", "reveal-current-tab", "exit-modal"], target: target, overrides: overrides)
+        menu.addItem(.separator())
+        add(menu, ["stop-loading", "reload", "force-reload", "clear-cookies-and-refresh", "clear-cache-and-refresh"], target: target, overrides: overrides)
+        menu.addItem(.separator())
+        add(menu, ["add-split-view", "close-split-pane", "separate-from-split-view", "expand-current-split"], target: target, overrides: overrides)
+        menu.addItem(.separator())
+        add(menu, ["zoom-actual-size", "zoom-in", "zoom-out"], target: target, overrides: overrides)
+        menu.addItem(.separator())
+        add(menu, ["cast"], target: target, overrides: overrides)
+        menu.addItem(.separator())
         let developer = NSMenu(title: "Developer")
-        add(developer, ["developer-tools", "javascript-console", "view-source", "inspect-elements", "network-inspector", "toggle-developer-mode", "allow-js-apple-events"], target: target, overrides: overrides)
+        add(developer, ["view-source", "developer-tools", "inspect-elements", "javascript-console", "network-inspector", "allow-js-apple-events", "toggle-developer-mode"], target: target, overrides: overrides)
         menu.addItem(submenuItem("Developer", developer))
+        menu.addItem(.separator())
+        add(menu, ["toggle-full-screen"], target: target, overrides: overrides)
         return menu
     }
 
     private static func buildSpacesMenu(target: MenuCommandTarget, spaces: [SpaceMenuEntry], overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "Spaces")
-        add(menu, ["next-space", "previous-space"], target: target, overrides: overrides)
+        // Arc 1.172.2 order (runtime AX): Manage Spaces… closes the menu, after the Space list.
+        add(menu, ["new-space", "edit-theme", "rename-space", "change-profile"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["new-space", "manage-spaces", "rename-space", "edit-theme", "change-profile"], target: target, overrides: overrides)
+        add(menu, ["next-space", "previous-space"], target: target, overrides: overrides)
         if !spaces.isEmpty {
             menu.addItem(.separator())
             for (index, space) in spaces.enumerated() {
@@ -323,6 +360,8 @@ public enum MenuBuilder {
                 menu.addItem(dynamic)
             }
         }
+        menu.addItem(.separator())
+        add(menu, ["manage-spaces"], target: target, overrides: overrides)
         return menu
     }
 
@@ -331,16 +370,16 @@ public enum MenuBuilder {
         // new-tab lives in File; Tabs shows the same command (Arc lists it in both).
         menu.addItem(item("new-tab", target: target, overrides: overrides))
         carriers("new-tab", target: target, overrides: overrides, into: menu)
+        // Arc 1.172.2 order (runtime AX); the other Tabs items are hidden carriers (`hiddenInMenu`),
+        // and so is the ⌘1…⌘9 tab list (Arc's shows only as empty "Item n" rows in a hidden group).
+        add(menu, ["pin-unpin-tab", "new-folder"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["pin-unpin-tab", "duplicate-tab", "rename-tab", "reveal-tab-in-sidebar", "reset-tab", "reset-all-tabs-in-space"], target: target, overrides: overrides)
+        add(menu, ["next-tab", "previous-tab", "reveal-tab-in-sidebar"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-        add(menu, ["new-folder", "expand-all-folders", "collapse-all-folders", "clear-unpinned-tabs"], target: target, overrides: overrides)
-        menu.addItem(.separator())
-        add(menu, ["peek-email", "join-meeting", "open-in-current-space"], target: target, overrides: overrides)
+        add(menu, ["clear-unpinned-tabs", "reset-all-tabs-in-space"], target: target, overrides: overrides)
+        add(menu, ["duplicate-tab", "rename-tab", "reset-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward",
+                   "expand-all-folders", "collapse-all-folders", "peek-email", "join-meeting", "open-in-current-space"], target: target, overrides: overrides)
         if !tabs.isEmpty {
-            menu.addItem(.separator())
             for (index, tab) in tabs.enumerated() {
                 let number = index + 1
                 let dynamic = NSMenuItem(
@@ -353,6 +392,8 @@ public enum MenuBuilder {
                 dynamic.keyEquivalentModifierMask = [.command]
                 dynamic.representedObject = ["command": "go-to-tab-\(min(number, 9))", "payload": tab.id]
                 dynamic.identifier = NSUserInterfaceItemIdentifier("dynamic-tab-\(tab.id)")
+                dynamic.isHidden = true
+                dynamic.allowsKeyEquivalentWhenHidden = true
                 menu.addItem(dynamic)
             }
         }
@@ -369,15 +410,17 @@ public enum MenuBuilder {
 
     private static func buildExtensionsMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "Extensions")
-        add(menu, ["open-extensions-picker", "manage-extensions", "add-extension"], target: target, overrides: overrides)
+        add(menu, ["open-extensions-picker", "add-extension", "manage-extensions"], target: target, overrides: overrides)
         return menu
     }
 
     private static func buildWindowMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "Window")
-        add(menu, ["minimize-window", "zoom-window"], target: target, overrides: overrides)
+        // Arc 1.172.2 order (runtime AX). macOS adds its own items (Fill, Center, Move & Resize…).
+        // Arc 1.172.2 says "View Easels…"; Open keeps Notes, so EZ's #504 title with the 1.172 ellipsis.
+        add(menu, ["stay-on-top", "minimize-window", "zoom-window"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["view-downloads", "view-library", "view-media", "view-boosts"], target: target, overrides: overrides)
+        add(menu, ["view-library", "view-downloads", "view-easels-notes", "view-media", "view-boosts"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["bring-all-to-front"], target: target, overrides: overrides)
         NSApp?.windowsMenu = menu
@@ -386,11 +429,13 @@ public enum MenuBuilder {
 
     private static func buildHelpMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "Help")
-        add(menu, ["help-center", "getting-started", "keyboard-shortcuts-edu", "release-notes", "contact-team"], target: target, overrides: overrides)
+        // Arc 1.172.2 order (runtime AX). Release Notes is a hidden item there; Restore Data is not built.
+        add(menu, ["getting-started", "keyboard-shortcuts-edu", "contact-team", "help-center", "release-notes", "export-notes"], target: target, overrides: overrides)
         menu.addItem(.separator())
-        add(menu, ["export-notes"], target: target, overrides: overrides)
         let troubleshooting = NSMenu(title: "Troubleshooting")
-        add(troubleshooting, ["task-manager", "record-trace", "cancel-trace", "copy-open-info", "reveal-open-data"], target: target, overrides: overrides)
+        add(troubleshooting, ["record-trace", "cancel-trace", "task-manager"], target: target, overrides: overrides)
+        troubleshooting.addItem(.separator())
+        add(troubleshooting, ["reveal-open-data", "copy-open-info"], target: target, overrides: overrides)
         menu.addItem(submenuItem("Troubleshooting", troubleshooting))
         NSApp?.helpMenu = menu
         return menu
@@ -450,6 +495,7 @@ public enum SystemCommandActions {
         "hide-others": "hideOtherApplications:", "show-all": "unhideAllApplications:",
         "close-window": "performClose:", "minimize-window": "performMiniaturize:",
         "zoom-window": "performZoom:", "bring-all-to-front": "arrangeInFront:",
+        "stay-on-top": "toggleStayOnTop:",
         "toggle-full-screen": "toggleFullScreen:",
         "cut": "cut:", "copy": "copy:", "paste": "paste:",
         "paste-and-match-style": "pasteAsPlainText:", "delete": "delete:",

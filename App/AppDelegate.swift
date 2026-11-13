@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var directories: ProfileDirectories!
   /// Easel documents (`<data root>/Easels`); made on the first Easel open, never at launch.
   private var easelStore: EaselStore?
+  var hasEaselStore: Bool { easelStore != nil }
+  /// Command bar search over every Easel (made on the first command bar open).
+  private(set) lazy var easelSearch = EaselSearch(app: self)
   var easels: EaselStore {
     if let easelStore { return easelStore }
     let store = EaselStore(root: directories.root); easelStore = store; return store
@@ -1133,6 +1136,8 @@ extension AppDelegate: CommandDispatcher {
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
+    // Arc 1.172.2 (capture, C-questions "_NS:451"): "View Library" with no browser window, else "Open Library…".
+    if id == "view-library", frontStandardWindowController == nil { return CommandMenuState(title: "View Library") }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
@@ -1160,7 +1165,7 @@ extension AppDelegate: CommandDispatcher {
     // New Note with no browser window key (a Little Open window, Settings, no key window):
     // the Note goes to the front browser window (NoteTab.create).
     if ["new-note", "new-note-in-split"].contains(id) { return frontStandardWindowController != nil }
-    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
+    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-easels-notes", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
     guard allowsFirstRunCommand(id) else { return }
@@ -1209,6 +1214,7 @@ extension AppDelegate: CommandDispatcher {
     // Arc's View Media runs viewScreenshotsAndCaptures: (docs/re/menus-and-hotkeys.md): the Library's
     // Media grid (Captures + Screenshots), not playback.
     case "view-media": settingsPresenter.showLibrary(section: .media)
+    case "view-easels-notes": settingsPresenter.showLibraryEasels()
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history":
       settingsPresenter.showLibrary(section: .history)

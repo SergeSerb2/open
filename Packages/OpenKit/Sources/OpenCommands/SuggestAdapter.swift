@@ -114,7 +114,7 @@ public extension CommandRegistry {
         "show-substitutions", "smart-copy-paste", "smart-quotes", "smart-dashes", "smart-links", "text-replacement", "data-detectors",
         "make-upper-case", "make-lower-case", "capitalize", "start-speaking", "stop-speaking",
         "font-bold", "font-italic", "font-underline", "show-fonts",
-        "exit-modal", "cast", "minimize-window", "zoom-window", "bring-all-to-front",
+        "exit-modal", "cast", "stay-on-top", "minimize-window", "zoom-window", "bring-all-to-front",
         "view-media", "record-trace", "cancel-trace", "copy-open-info", "reveal-open-data",
         "network-inspector", "allow-js-apple-events", "toggle-developer-mode",
         "tab-switcher-forward", "tab-switcher-backward", "cycle-tab-forward", "cycle-tab-backward",

@@ -31,6 +31,8 @@ final class ProfileTeardown {
   private var owners: [WeakOwner] = []
   private struct WeakOwner { weak var owner: (any ProfileDataOwner)? }
   init(app: AppDelegate) { self.app = app }
+  /// The step a running wipe is in (verification: a delete that never finishes names the step it waits in).
+  private(set) var stage = ""
 
   /// The single registration point for per-Profile App stores (weakly held).
   func register(_ owner: any ProfileDataOwner) {
@@ -38,7 +40,10 @@ final class ProfileTeardown {
     owners.append(WeakOwner(owner: owner))
   }
   private func retireOwners(profileID: ProfileID, directory: String) async {
-    for entry in owners { await entry.owner?.retireProfile(profileID, directory: directory) }
+    for entry in owners {
+      stage = "retireOwners:" + (entry.owner.map { String(describing: type(of: $0)) } ?? "nil")
+      await entry.owner?.retireProfile(profileID, directory: directory)
+    }
     owners.removeAll { $0.owner == nil }
   }
 
@@ -60,6 +65,7 @@ final class ProfileTeardown {
       context !== OEEngine.shared.defaultContext else {
       throw Self.failure("The Profile context is unavailable for deletion.")
     }
+    stage = "deleteContext"
     try await OEEngine.shared.deleteContext(context)
     unloaded.insert(profileID)
   }
@@ -67,9 +73,12 @@ final class ProfileTeardown {
   func wipe(profileID: ProfileID, directory: String) async throws {
     // Journal before teardown so any engine or filesystem failure remains
     // recoverable. Errors preserve all folders until a later safe launch.
+    stage = "enqueue"
     try Self.enqueue(directory, directories: app.directories)
     // Registered App stores stop and drop dirty state before any folder goes.
+    stage = "retireOwners"
     await retireOwners(profileID: profileID, directory: directory)
+    stage = "flushHistory"
     await app.stores.flushHistory()
     app.archiveSink.flushAll()
     // An unopened Profile may still have native data/attributes from a prior
@@ -83,10 +92,13 @@ final class ProfileTeardown {
       }
       loaded[profileID] = directory
     }
+    stage = "unload"
     try await unload(profileID: profileID)
+    stage = "removeFolders"
     try Self.removeIfPresent(app.directories.profileDirectory(dataDirectoryName: directory))
     try Self.wipeEngine(directory, directories: app.directories)
     try Self.dequeue(directory, directories: app.directories)
+    stage = "done"
   }
 
   private static func pendingURL(_ directories: ProfileDirectories) -> URL {
