@@ -21,7 +21,8 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 BIN = ROOT / 'Packages/OpenKit/.build/release'
 HELPERS = ROOT / '.re/e2e-tools'
-DOMAIN = 'io.github.sergeserb2.open'
+# The App's preferences live in the harness's private per-run domain (tools/e2e/prefs_domain.py): budget rows
+# never read or write the real `io.github.sergeserb2.open` domain (LEAD 10:45, 12:18).
 LIMIT = 16 * 1024 * 1024  # Bounded real-harness output; no page bodies in receipts.
 GROUPS = ('launch', 'first-run', 'idle-animated', 'idle-static', 'sitecontrol', 'sidebar',
           'commandbar', 'tab-switch', 'sidebar-bench', 'sidebar-selection',
@@ -156,6 +157,7 @@ def worker(group, app, output, data_root):
     receipt = dict(group=group, load_start=list(os.getloadavg()), cleanup=False, data_root=str(data_root))
     harness = None
     saved = {}
+    DOMAIN = None
     try:
         if group in APP:
             # Keep diagnostic injection and negative controls out of the
@@ -168,12 +170,14 @@ def worker(group, app, output, data_root):
             # Import before resetting defaults so every reset has a restore path.
             sys.path.insert(0, str(ROOT / 'tools/e2e'))
             harness = load_module('budgets_engine_e2e', ROOT / 'tools/e2e/engine_e2e.py')
+            DOMAIN = harness.prefs_domain.domain()
+            receipt['preferences_domain'] = DOMAIN
             exported = subprocess.run(['defaults', 'export', DOMAIN, '-'], capture_output=True, timeout=10)
             if len(exported.stdout) > LIMIT:
-                raise RuntimeError('shared defaults export exceeds 16 MiB')
+                raise RuntimeError('private defaults export exceeds 16 MiB')
             persistent = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
             if exported.returncode and b'does not exist' not in exported.stdout + exported.stderr:
-                raise RuntimeError('could not snapshot shared defaults')
+                raise RuntimeError('could not snapshot private defaults')
             saved = {key: persistent.get(key) for key in KEYS}
             for key in KEYS:
                 subprocess.run(['defaults', 'delete', DOMAIN, key], capture_output=True, timeout=10)
@@ -225,7 +229,7 @@ def worker(group, app, output, data_root):
                      plistlib.dumps(restored[key], fmt=plistlib.FMT_BINARY) == plistlib.dumps(value, fmt=plistlib.FMT_BINARY))
                     for key, value in saved.items())
                 if not receipt['defaults_restored']:
-                    raise RuntimeError('shared defaults did not restore with original values/types')
+                    raise RuntimeError('private defaults did not restore with original values/types')
                 receipt['app_cleanup'] = [a.quit_report for a in harness._OWNED_APPS]
                 if any('reply' not in a.quit_report for a in harness._OWNED_APPS):
                     receipt['stop_onscreen'] = True

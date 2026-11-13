@@ -620,3 +620,15 @@ No work on these until the lead schedules them (`docs/re/sidebar-menus-parity.md
 - Split row: "Rename…", "Change Icon…" and "Reset Name and Icon" from Arc's code (MH). The split-row menu was not captured in 1.172.2 (C3 item 5).
 - Library › Media: "Open Source URL" and "Copy Source URL". Open's capture index stores only the source host, so it needs the full source URL first. The Media menu order and separators stay marked GUESS (session 8 item 12 was skipped).
 - Pinned tab row: "Customize Page…" is Open's own item and not in Arc's menu (S3D). Keep it or move it; this needs a decision.
+
+## Easels: not capturable without an Arc account (LEAD 15:25 ruling)
+Arc makes no Easel without an Arc account, and captures use no account or sign-in, so these Arc behaviours
+cannot be observed. Open keeps its current behaviour and builds no guessed surface (PB2-questions "EZ GAPS"):
+- G3: Export All Easels progress sheet ("Saving your Easels", "%d of %d") and result sheet. Open shows a toast.
+- G4: object-menu rows known only as string comments (Easel title, "Set as Easel thumbnail", "Edit Alt Text",
+  copy a Capture's URL). Open has the captured rows only.
+- G5: the third palette, `theme`, in Color Palette ▸. Open offers Vibrant and Chill.
+- G7: the zoom maximum and canvas panning. Open stops at 400 % (GUESS) and scrolls vertically.
+- G8: the image tool's open panel and the size a picture lands at. Open places pictures ≤ 400 pt wide (GUESS).
+- The live web card dialog's closing shortcut and button titles (C3-EZ-1). Open uses its own last sentence and buttons.
+

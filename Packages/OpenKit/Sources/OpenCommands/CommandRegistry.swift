@@ -312,6 +312,8 @@ public enum CommandRegistry {
                           defaultShortcuts: [.cmdShift("l")], aliases: ["Library"]),
         CommandDefinition(id: "view-media", title: "View Media", menuPath: ["Window"]),
         CommandDefinition(id: "view-boosts", title: "View Boosts", menuPath: ["Window"]),
+        // Arc 1.172.2 Window menu (runtime AX, `didClickStayOnTopWithMenuItem:`): keeps this window above others.
+        CommandDefinition(id: "stay-on-top", title: "Stay On Top", menuPath: ["Window"], aliases: ["Float Window", "Always on Top"]),
         // Arc: Window ▸ View Easels & Notes, `viewEaselsAndNotes:` (docs/re/menus-and-hotkeys.md); opens
         // the Library at its Easels page, which lists Easels and Notes.
         CommandDefinition(id: "view-easels-notes", title: "View Easels & Notes", menuPath: ["Window"], aliases: ["Easels", "Notes"]),

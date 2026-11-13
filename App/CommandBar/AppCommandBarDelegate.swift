@@ -2,6 +2,7 @@ import AppKit
 import OpenCommandBar
 import OpenFeatures
 import OpenDesign
+import OpenEasel
 import OpenModel
 import OpenSuggest
 import OpenEngine
@@ -15,6 +16,8 @@ final class StoredCommandBarFavicons: CommandBarFaviconSource {
   let cache: StoredFaviconCache
   init(cache: StoredFaviconCache) { self.cache = cache }
   func favicon(for pageURL: URL, loaded: @escaping @MainActor (URL) -> Void) -> NSImage? {
+    // Easel rows (sidebar tabs and Library-only Easels) use the Easel glyph, as the sidebar does.
+    if EaselTab.matches(pageURL) { return EaselIcon.image }
     var image: NSImage?
     withObservationTracking { image = cache.image(for: pageURL) } onChange: {
       Task { @MainActor in loaded(pageURL) }
@@ -96,6 +99,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       if welcomeIcons == nil { welcomeIcons = WelcomeCommandBarIcons() }
       bar.favicons = welcomeIcons
     } else { bar.favicons = factory.isIncognito ? nil : storedIcons }
+    if !factory.isIncognito { factory.app.easelSearch.refresh() }
     // The Space accent; Light/Dark follows the window (the bar reads its own effective appearance).
     let style = factory.focusedSpace.map { windowController.context.style(for: $0) }
     bar.theme = CommandBarTheme(style: style, isDark: ContentAppearance(bar.view.effectiveAppearance) == .dark)
@@ -207,7 +211,7 @@ final class AppCommandBarSession: CommandBarDelegate {
         return [f.minX, h - f.maxY, f.width, f.height] }(),
       "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
-      "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title,
+      "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",
         "extension": $0.extensionID ?? "", "content": $0.extensionContent ?? "", "keycaps": $0.shortcutKeys] }] as [String: Any]
