@@ -111,6 +111,8 @@ def run(factory, results, wait):
                 and state['browsers'][target]['tabs'] == [page['id']]
                 and evaluate('media.currentTime') >= media_before
                 and state['synchronousCallbacks'] == 0, preserved=before == after, identity=page,
+                before=before, after=after, moved=moved['moved'], originalIdentity=identity,
+                synchronousCallbacks=state['synchronousCallbacks'],
                 sourceTabs=state['browsers'][source]['tabs'], targetTabs=state['browsers'][target]['tabs'])
 
         for name, source, target, index in [('context', 'a', 'c', 0), ('owner', 'b', 'a', 0),
