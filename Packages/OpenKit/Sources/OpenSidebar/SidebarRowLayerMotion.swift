@@ -1,0 +1,110 @@
+import AppKit
+import OpenDesign
+
+/// Native list edits settle once. Only the already laid-out row layers move.
+/// The bookkeeping and optional departing-row bitmap happen at edit boundaries,
+/// never on a display timer. At most 256 visible rows and 8 MiB of bitmaps survive.
+@MainActor
+final class SidebarRowLayerMotion {
+    private struct Previous { let origin: CGPoint; let view: NSTableRowView }
+    private var previous: [ObjectIdentifier: Previous] = [:]
+    private var depth = 0
+    private var enabled = false
+    private var duration: CFTimeInterval = Motion.rowStructure
+    private var timing = Motion.easeInOut
+    private var departing: [CALayer] = []
+    private var bitmapPixels = 0
+    private var generation = 0
+
+    func begin(_ outline: NSOutlineView, animated: Bool, duration: CFTimeInterval, timing: CAMediaTimingFunction) {
+        depth += 1
+        guard depth == 1 else { return }
+        enabled = animated && !Motion.reducesMotion
+        self.duration = duration; self.timing = timing
+        generation += 1
+        departing.forEach { $0.removeFromSuperlayer() }; departing.removeAll(); bitmapPixels = 0
+        previous.removeAll(keepingCapacity: true)
+        if enabled {
+            outline.enumerateAvailableRowViews { view, row in
+                guard self.previous.count < 256, let item = outline.item(atRow: row) as AnyObject? else { return }
+                var point = view.convert(.zero, to: outline)
+                point.y += view.layer?.presentation()?.transform.m42 ?? 0
+                self.previous[ObjectIdentifier(item)] = Previous(origin: point, view: view)
+            }
+        }
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
+        NSAnimationContext.current.allowsImplicitAnimation = false
+    }
+
+    func captureDeparture(_ item: AnyObject, in outline: NSOutlineView) {
+        guard enabled, let old = previous[ObjectIdentifier(item)], !departing.contains(where: { $0.name == String(describing: ObjectIdentifier(item)) }) else { return }
+        let view = old.view, scale = view.window?.backingScaleFactor ?? 1
+        let width = ceil(view.bounds.width * scale), height = ceil(view.bounds.height * scale)
+        // One allocation is <= 8 MiB; the whole transition has the same ceiling.
+        guard width > 0, height > 0, width <= 2048, height <= 1024,
+              bitmapPixels + Int(width * height) <= 2_097_152,
+              let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        guard let image = bitmap.cgImage else { return }
+        bitmapPixels += Int(width * height)
+        let copy = CALayer(); copy.contents = image; copy.contentsScale = scale
+        copy.name = String(describing: ObjectIdentifier(item))
+        copy.frame = CGRect(origin: old.origin, size: view.bounds.size)
+        departing.append(copy)
+    }
+
+    func captureDescendants(of item: Any, in outline: NSOutlineView) {
+        guard enabled else { return }
+        let row = outline.row(forItem: item)
+        guard row >= 0 else { return }
+        let level = outline.level(forRow: row)
+        var next = row + 1
+        while next < outline.numberOfRows, outline.level(forRow: next) > level {
+            if let child = outline.item(atRow: next) as AnyObject? { captureDeparture(child, in: outline) }
+            next += 1
+        }
+    }
+
+    func end(_ outline: NSOutlineView) {
+        guard depth > 0 else { return }
+        depth -= 1; guard depth == 0 else { return }
+        NSAnimationContext.endGrouping()
+        guard enabled else { previous.removeAll(); return }
+        outline.layoutSubtreeIfNeeded()
+        let token = generation
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.generation == token else { return }
+                self.departing.forEach { $0.removeFromSuperlayer() }; self.departing.removeAll()
+            }
+        }
+        outline.enumerateAvailableRowViews { view, row in
+            guard let item = outline.item(atRow: row) as AnyObject?, let layer = view.layer else { return }
+            let old = self.previous[ObjectIdentifier(item)]
+            let delta = old.map { $0.origin.y - view.convert(.zero, to: outline).y } ?? -min(16, view.bounds.height)
+            layer.removeAnimation(forKey: "row.structure.position")
+            layer.removeAnimation(forKey: "row.structure.opacity")
+            layer.transform = CATransform3DIdentity; layer.opacity = 1
+            if abs(delta) > 0.01 {
+                let move = CABasicAnimation(keyPath: "transform.translation.y")
+                move.fromValue = delta; move.toValue = 0; move.duration = self.duration; move.timingFunction = self.timing
+                layer.add(move, forKey: "row.structure.position")
+            }
+            if old == nil {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = 0; fade.toValue = 1; fade.duration = self.duration; fade.timingFunction = self.timing
+                layer.add(fade, forKey: "row.structure.opacity")
+            }
+        }
+        for layer in departing {
+            outline.layer?.addSublayer(layer)
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 1; fade.toValue = 0; fade.duration = duration; fade.timingFunction = timing
+            layer.opacity = 0; layer.add(fade, forKey: "row.structure.opacity")
+        }
+        CATransaction.commit()
+        previous.removeAll(keepingCapacity: true)
+    }
+}

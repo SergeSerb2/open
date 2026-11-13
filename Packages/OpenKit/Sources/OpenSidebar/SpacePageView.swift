@@ -48,6 +48,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var draggingIDs: Set<ItemID> = []
     private var applyingBulk = false
     private var syncingExpansion = false
+    private let rowMotion = SidebarRowLayerMotion()
     private var hoveredItem: AnyObject? { didSet { if hoveredItem !== oldValue { updateRowStates(animated: true) } } }
     private var tracking: NSTrackingArea?
 
@@ -265,6 +266,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
         }
         guard root || !folders.isEmpty else { return }
+        rowMotion.begin(outline, animated: animatesChanges, duration: Motion.rowStructure, timing: Motion.easeInOut)
+        defer { rowMotion.end(outline) }
         applyingBulk = true
         outline.beginUpdates()
         let parents: [Displayed] = folders.map { .folder($0) } + (root ? [.root] : [])
@@ -333,6 +336,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         var src = srcList
         src.remove(at: fromIndex)
         guard src.map(ObjectIdentifier.init) == target(for: from).map(ObjectIdentifier.init) else { return false }
+        rowMotion.begin(outline, animated: animatesChanges, duration: Motion.rowStructure, timing: Motion.easeInOut)
+        defer { rowMotion.end(outline) }
         setList(src, for: from)
         setList(dstNew, for: to)
         outline.beginUpdates()
@@ -415,6 +420,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         let steps = ListDiff.steps(old: list(for: d).map(ObjectIdentifier.init), new: new.map(ObjectIdentifier.init))
         guard !steps.isEmpty else { return }
         let animate = animated ?? animatesChanges
+        rowMotion.begin(outline, animated: animate, duration: Motion.rowStructure, timing: Motion.easeInOut)
+        defer { rowMotion.end(outline) }
         let parent = parentItem(d)
         if syncingExpansion, case .folder = d {
             // A folder transition only inserts or removes a subset, preserving
@@ -424,15 +431,18 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             let kept = Set(newIDs), prior = Set(oldIDs)
             if oldIDs.filter({ kept.contains($0) }) == newIDs {
                 let indexes = IndexSet(oldIDs.indices.filter { !kept.contains(oldIDs[$0]) })
-                for i in indexes { if let folder = old[i] as? Folder { dropCache(folder) } }
+                for i in indexes {
+                    rowMotion.captureDeparture(old[i], in: outline)
+                    if let folder = old[i] as? Folder { rowMotion.captureDescendants(of: folder, in: outline); dropCache(folder) }
+                }
                 setList(new, for: d)
-                outline.removeItems(at: indexes, inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
+                outline.removeItems(at: indexes, inParent: parent, withAnimation: [])
                 return
             }
             if newIDs.filter({ prior.contains($0) }) == oldIDs {
                 let indexes = IndexSet(newIDs.indices.filter { !prior.contains(newIDs[$0]) })
                 setList(new, for: d)
-                outline.insertItems(at: indexes, inParent: parent, withAnimation: animate ? [.effectFade, .slideDown] : [])
+                outline.insertItems(at: indexes, inParent: parent, withAnimation: [])
                 return
             }
         }
@@ -440,13 +450,16 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         for step in steps {
             switch step {
             case .remove(let i):
+                let departing = list(for: d)[i]
+                rowMotion.captureDeparture(departing, in: outline)
+                rowMotion.captureDescendants(of: departing, in: outline)
                 var removed: AnyObject?
                 mutate(d) { removed = $0.remove(at: i) }
                 if let f = removed as? Folder { dropCache(f) }
-                outline.removeItems(at: IndexSet(integer: i), inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
+                outline.removeItems(at: IndexSet(integer: i), inParent: parent, withAnimation: [])
             case .insert(let j):
                 mutate(d) { $0.insert(new[j], at: j) }
-                outline.insertItems(at: IndexSet(integer: j), inParent: parent, withAnimation: animate ? [.effectFade, .slideDown] : [])
+                outline.insertItems(at: IndexSet(integer: j), inParent: parent, withAnimation: [])
             case .move(let k, let j):
                 mutate(d) { let item = $0.remove(at: k); $0.insert(item, at: j) }
                 outline.moveItem(at: k, inParent: parent, to: j, inParent: parent)
@@ -488,6 +501,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func syncExpansion(animated: Bool, initial: Bool = false, changedFolder: ItemID? = nil) {
         guard !syncingExpansion else { return }
         syncingExpansion = true
+        let expanding = changedFolder.flatMap { context.model.node(id: $0)?.folder }?.isExpanded ?? true
+        rowMotion.begin(outline, animated: animated && !initial,
+                        duration: expanding ? Motion.folderExpand : Motion.folderCollapse,
+                        timing: expanding ? Motion.folderExpandTiming : Motion.folderCollapseTiming)
+        defer { rowMotion.end(outline) }
         let measuring = SidebarDiagnostics.measuresFolderTransitions
         let started = measuring ? CACurrentMediaTime() : 0
         let cpuStarted = measuring ? clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) : 0
@@ -538,10 +556,10 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                     let transition = old != state
                     let duration = transition ? (expanding ? Motion.folderExpand : Motion.folderCollapse) : Motion.rowStructure
                     NSAnimationContext.runAnimationGroup { group in
-                        group.duration = animate ? duration : 0
+                        group.duration = 0
                         group.timingFunction = transition ? (expanding ? Motion.folderExpandTiming : Motion.folderCollapseTiming) : nil
                         if transition {
-                            SidebarDiagnostics.folderTransitionDuration = group.duration
+                            SidebarDiagnostics.folderTransitionDuration = animate ? duration : 0
                             SidebarDiagnostics.folderTransitionExpanding = expanding
                         }
                         outline.beginUpdates()
@@ -554,9 +572,10 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                             apply(target: target, in: .folder(folder), animated: animate)
                         }
                         if state != .collapsed, !native {
-                            if animate { outline.animator().expandItem(folder) } else { outline.expandItem(folder) }
+                            outline.expandItem(folder)
                         } else if state == .collapsed, native {
-                            if animate { outline.animator().collapseItem(folder) } else { outline.collapseItem(folder) }
+                            rowMotion.captureDescendants(of: folder, in: outline)
+                            outline.collapseItem(folder)
                         }
                         outline.endUpdates()
                     }
