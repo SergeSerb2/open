@@ -361,6 +361,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     controller.onMenuState = { [weak self] in self?.pageMenuState(for: $0) }  // checkmarks, Cast hidden, Developer Mode title (page-platform §7.1)
     // Developer Mode sites show their full URL in the URL field (§4.10.3).
+    controller.context.canCustomizePage = { [weak self] in self?.canCustomizePage($0) == true }
     controller.context.developerModeHosts = DeveloperMode.hosts
     developerPanel.attach(controller.container)
     developerModeObserver = NotificationCenter.default.addObserver(forName: DeveloperMode.didChange, object: nil, queue: .main) { [weak self] _ in
@@ -835,7 +836,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     switch intent {
     case .customizePage(let id):
-      guard !isIncognito, app.stores.boosts.canEdit(tabID: id) else { return false }
+      guard canCustomizePage(id) else { return false }
       app.stores.boosts.editCurrent(tabID: id); return true
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
@@ -1605,6 +1606,11 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     return controller?.handleKeyDown(event, unconsumed: true) == true
   }
 
+  private func canCustomizePage(_ id: ItemID) -> Bool {
+    !isIncognito && model.tab(id: id)?.live.hasLoadedInThisLaunch == true
+      && app.stores.boosts.canEdit(tabID: id)
+  }
+
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
     if pendingLittleOpenExtensionTabs[webContent.identifier] === webContent {
       routeLittleOpenExtensionTab(webContent, url: webContent.url)
@@ -1612,7 +1618,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     }
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
-    if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status) }
+    if let id = tabID(for: webContent) {
+      model.tab(id: id)?.live.hasLoadedInThisLaunch = true
+      LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status)
+    }
     record("load", webContent, ["status": status, "url": webContent.url?.absoluteString ?? ""])
   }
 

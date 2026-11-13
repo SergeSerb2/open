@@ -218,6 +218,7 @@ struct SidebarMenus {
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
             rename,
             mute(tab),
+        ] + customizeItems(tab) + [
             .separator(),
             splitItem(tab),
             item("Duplicate", .duplicate(nodeID: tab.id)),
@@ -252,6 +253,12 @@ struct SidebarMenus {
         item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id))
     }
 
+    /// Capture session 12's loaded-page matrix; the App also enforces Profile and URL eligibility.
+    private func customizeItems(_ tab: Tab) -> [NSMenuItem] {
+        guard !context.isIncognito, context.canCustomizePage?(tab.id) == true else { return [] }
+        return [item("Customize Page…", .customizePage(tabID: tab.id))]
+    }
+
     /// "Edit Pinned Page ▸" (pinned tabs and favourites, F0116, S3D).
     private func editPinnedPage(_ tab: Tab) -> NSMenuItem {
         let edit = NSMenuItem(title: "Edit Pinned Page", action: nil, keyEquivalent: "")
@@ -270,8 +277,8 @@ struct SidebarMenus {
     }
 
     /// The shared pinned / favourite list up to the last separator (S3D: the favourite menu is
-    /// the pinned menu with "Remove Favorite" last). Arc has no "Customize Page…" here; Boosts
-    /// open from Site Controls (C-report-s3 Part G).
+    /// the pinned menu with "Remove Favorite" last). C12-D2-3 adds Customize Page… after
+    /// Mute only for pages loaded in this launch, immediately before Edit Pinned Page.
     private func pinnedItems(_ tab: Tab) -> [NSMenuItem] {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         return [
@@ -281,6 +288,7 @@ struct SidebarMenus {
             item("Change Icon…", .changeIcon(nodeID: tab.id)),
             rename,
             mute(tab),
+        ] + customizeItems(tab) + [
             editPinnedPage(tab),
             .separator(),
             splitItem(tab),

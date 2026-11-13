@@ -930,6 +930,71 @@ def context_menu_checks(factory, results, tmp, h):
                     h._try(lambda t=tab_id: app.call('close', tab=t))
                 h._try(focus)
         run('cm_selection_menu_order', selection_menu_order)
+        # C12-D2-3: real row menus, process restore and the existing native Boost editor.
+        def customize_page_matrix():
+            nonlocal app
+            made = []
+            rows, menus = {}, {}
+            label = 'Customize Page…'
+            def listed(identifier):
+                return app.call('sidebar-menu-items', node=identifier)
+            def present(identifier):
+                state = listed(identifier)
+                return label in state['items'] and label not in state['disabled']
+            def loaded(identifier):
+                app.call('select', tab=identifier)
+                app.call('wait', tab=identifier)
+                return wait(lambda: present(identifier), timeout=5) is True
+            def remember(name, identifier):
+                menus[name] = listed(identifier)
+                return label in menus[name]['items'] and label not in menus[name]['disabled']
+            def relaunch_on(other):
+                nonlocal app
+                app.call('select', tab=other); app.call('wait', tab=other)
+                app.call('save'); app.quit()
+                app = factory(urls=())
+            try:
+                owned_space = app.call('space-create', title='Customize matrix', profile='Default')
+                app.call('space', space=owned_space)
+                a = app.call('open', url=origin + '/target.html?customize=a', background=False)['id']; made.append(a)
+                rows['today_loaded'] = loaded(a) and remember('today', a)
+                if not rows['today_loaded']:
+                    return {'ok': False, 'rows': rows, 'menus': menus}
+                b_url = origin.replace('127.0.0.1', 'localhost') + '/target.html?customize=b'
+                b = app.call('open', url=b_url, background=False)['id']; made.append(b)
+                app.call('wait', tab=b)
+                rows['today_unselected'] = remember('today_unselected', a)
+                app.call('select', tab=a); app.call('command', id='reload'); app.call('wait', tab=a)
+                rows['today_reloaded'] = remember('today_reloaded', a)
+                app.call('pin', tab=a)
+                rows['pinned_loaded'] = remember('pinned_loaded', a)
+                relaunch_on(b)
+                rows['pinned_restored_absent'] = label not in listed(a)['items']
+                rows['pinned_first_load'] = loaded(a)
+                app.call('command', id='reload'); app.call('wait', tab=a); app.call('select', tab=b)
+                rows['pinned_reload_unselected'] = remember('pinned_unselected', a)
+                app.call('favorite', tab=a)
+                relaunch_on(b)
+                before = listed(a)
+                rows['favorite_restored_absent'] = label not in before['items'] and 'Edit Pinned Page ▸' in before['items']
+                rows['favorite_first_load'] = loaded(a)
+                app.call('select', tab=b); app.call('wait', tab=b)
+                rows['favorite_unselected'] = remember('favorite_unselected', a)
+                order = menus['favorite_unselected']['items']
+                rows['favorite_placement'] = label in order and order[order.index(label) + 1] == 'Edit Pinned Page ▸'
+                app.call('sidebar-menu', node=a, item=label)
+                editor = wait(lambda: (lambda x: x if x.get('open') else None)(app.call('boost-editor')), timeout=5) or {}
+                rows['editor_targets_a'] = editor.get('tab') == a and editor.get('boost', {}).get('siteMatch', {}).get('domain') == '127.0.0.1'
+                after_escape = app.call('boost-editor', action='key', key='escape')
+                rows['escape_keeps_editor'] = after_escape.get('open') is True and after_escape.get('tab') == a
+                return {'ok': all(rows.values()), 'rows': rows, 'menus': menus, 'editor': editor, 'afterEscape': after_escape}
+            finally:
+                if not app.closed:
+                    h._try(lambda: app.call('boost-editor', action='close'))
+                    for identifier in made:
+                        h._try(lambda t=identifier: app.call('close', tab=t))
+        run('cm_customize_page_matrix', customize_page_matrix)
+
         if only_case and not ran_cases:
             raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:

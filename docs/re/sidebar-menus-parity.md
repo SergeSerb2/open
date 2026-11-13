@@ -16,8 +16,8 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 
 | Surface | Arc (order) | Open (main 243b511a) | Gap |
 |---|---|---|---|
-| Today tab row (S3D, S8 items 1, 3) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · — · Open in Split View · Duplicate · Move to ▸ · — · Archive Tab · Archive Tabs Below (⌥ Archive Other Tabs, Archive Tabs Above). Selected tab: Copy Link shows ⌘⇧C and "Add Split View" replaces "Open in Split View". Mute is disabled on a silent tab; "Unmute" on a muted one | the same | none. S8 saw "Customize Page…" after Mute in one run only (condition not established); Open does not show it |
-| Pinned tab row (S3D, S8 item 1) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ · — · Remove Pin | the same | none (the "Customize Page…" note above applies) |
+| Today tab row (S3D, S8 items 1, 3) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · — · Open in Split View · Duplicate · Move to ▸ · — · Archive Tab · Archive Tabs Below (⌥ Archive Other Tabs, Archive Tabs Above). Selected tab: Copy Link shows ⌘⇧C and "Add Split View" replaces "Open in Split View". Mute is disabled on a silent tab; "Unmute" on a muted one | the same | C12-D2-3: Customize Page… appears after Mute for pages loaded in this launch; restored pages omit it before their first load. The App routes it to the existing Boost editor |
+| Pinned tab row (S3D, S8 item 1) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ · — · Remove Pin | the same | C12-D2-3: the loaded-page rule above applies; Customize Page… sits immediately before Edit Pinned Page |
 | Favourite tile (S3D, S8 item 1) | the pinned menu, last item "Remove Favorite" | the same; before it, Open's Live Calendar items and Top App switches (Show Meeting Link ▸, Meeting Reminder ▸, Show Unread Badge, Show Time to Next Meeting) for matching tiles | the place of the Live Calendar and Top App items is a GUESS (capture pending, F2 item 7) |
 | Share ▸ (S8 item 1) | the Mac's share services (AirDrop · Mail · Messages · Notes · …), each with its icon; the same list in tab rows and the URL field | the same (`ShareServices`; Reading List left out) | none |
 | Move to ▸ (S8 item 2) | one row per Space in dock order, current Space checked · — · New Space… | the same | Spaces of other Profiles: not established |
@@ -81,3 +81,5 @@ this change does not alter transfer retries or persistence. The failed-row menu 
 C12-PB1-3 report separately records that this failed row was absent after relaunch, including an exact-name search
 showing "No results found" (`.re/capture/s12/m1/arc/v11/36-failure-relaunch/failed-after-relaunch.{png,ax.json}`).
 The PB1 lane tracks that relaunch behavior; this change covers the subtitle.
+
+C12-D2-3 evidence: capture report session 12, `v19/111-d2-customize-pinned/`, `v20/112-d2-customize-relaunch/`, `v25/116-d2-favorite-matrix/`, and `v26/117-d2-customize-invoke/`. The bounded matrix is a visible behavior rule, not a claim about Arc internals. Escape leaves the editor open. Open uses runtime-only load state and the existing non-private HTTP(S) Boost eligibility guard.
