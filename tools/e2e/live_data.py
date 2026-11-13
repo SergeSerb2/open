@@ -440,7 +440,9 @@ def run(factory, results, tmp, harness):
         survived = app.call('glance-state', wait=False).get('shown') is True
         if not survived:
             hover(linear)
-            app.call('glance-state')
+            # Under load the card can show after the hover's 800 ms read (one suite error on a
+            # loaded rented Mac: "glance-open: no Recents card"). Wait for it before opening a row.
+            wait_until(lambda: app.call('glance-state').get('shown') is True, timeout=3, step=.05)
         results['live_recents_card_after_snapshot'] = {'ok': True, 'info': 'card survived the window snapshot: %s' % survived}
         opened = app.call('glance-open', row=0)
         first_state = app.call('peek-state')
