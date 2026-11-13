@@ -34,6 +34,13 @@ public final class PeekOverlayView: NSView {
     public var onSplit: (() -> Void)?
     public var scrimColor = NSColor.black.withAlphaComponent(0.55) { didSet { backdrop.layer?.backgroundColor = scrimColor.cgColor } }
     public var controlsFill = NSColor.black { didSet { buttons.forEach { ($0 as? ActionButton)?.circleFill = controlsFill } } }
+    /// Event-driven counters: no display-link or per-frame observation on the shipping path.
+    public private(set) var layoutCount = 0
+    public private(set) var hostFrameChangeCount = 0
+    public internal(set) var motionKind = ""
+    public internal(set) var motionDuration: CFTimeInterval = 0
+    public internal(set) var motionStartedAt: CFTimeInterval = 0
+    private weak var hostedView: NSView?
     public init() {
         super.init(frame: .zero); wantsLayer = true; backdrop.layer?.backgroundColor = scrimColor.cgColor
         backdrop.onDismiss = { [weak self] in self?.onDismiss?() }
@@ -55,9 +62,11 @@ public final class PeekOverlayView: NSView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override func layout() {
-        super.layout(); let width = round(baseWidth * PeekMetrics.widthFraction)
-        panel.frame = CGRect(x: contentRect.minX + (baseWidth - width) / 2, y: contentRect.minY + PeekMetrics.verticalInset,
-                             width: width, height: max(0, contentRect.height - 2 * PeekMetrics.verticalInset))
+        super.layout(); layoutCount += 1
+        let width = round(baseWidth * PeekMetrics.widthFraction)
+        let frame = CGRect(x: contentRect.minX + (baseWidth - width) / 2, y: contentRect.minY + PeekMetrics.verticalInset,
+                           width: width, height: max(0, contentRect.height - 2 * PeekMetrics.verticalInset))
+        if panel.frame != frame { panel.frame = frame }
         layoutPanel()
         for (i, b) in buttons.enumerated() {
             b.frame = CGRect(x: panel.frame.maxX + PeekMetrics.buttonGap, y: panel.frame.maxY - PeekMetrics.buttonTop - CGFloat(i) * PeekMetrics.buttonPitch - PeekMetrics.buttonDiameter,
@@ -65,11 +74,14 @@ public final class PeekOverlayView: NSView {
         }
     }
     func layoutPanel() {
-        pageClip.frame = panel.bounds
-        pageClip.subviews.forEach { $0.frame = pageClip.bounds }
+        if pageClip.frame != panel.bounds { pageClip.frame = panel.bounds }
+        for view in pageClip.subviews where view.frame != pageClip.bounds {
+            if view === hostedView { hostFrameChangeCount += 1 }
+            view.frame = pageClip.bounds
+        }
         panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
     }
-    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() }; swipeIndicator = nil; sadTabView = nil }
+    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() }; hostedView = nil; swipeIndicator = nil; sadTabView = nil }
     func showHost(_ host: any WebContentHost, close: @escaping () -> Void) {
         let wasSad = sadTabView != nil
         let hadPageFocus = (window?.firstResponder as? NSView).map { $0 === pageClip || $0.isDescendant(of: pageClip) } ?? false
@@ -86,10 +98,12 @@ public final class PeekOverlayView: NSView {
         }
         if host.view.superview !== pageClip {
             clearHost()
+            hostedView = host.view
             pageClip.addSubview(host.view)
+            host.view.autoresizingMask = [.width, .height]
         }
         host.view.isHidden = false
-        host.view.frame = pageClip.bounds; host.view.autoresizingMask = [.width, .height]
+        if host.view.frame != pageClip.bounds { hostFrameChangeCount += 1; host.view.frame = pageClip.bounds }
         host.view.alphaValue = host.isLoading ? 0 : 1
         if hadPageFocus && wasSad { host.focus() }
     }
@@ -104,10 +118,5 @@ public final class PeekOverlayView: NSView {
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         return hit === self ? nil : hit
-    }
-    /// Sets the overlay and its backdrop together; inside an animation group both animate.
-    func setOpacity(_ value: CGFloat, animated: Bool) {
-        if animated { animator().alphaValue = value; backdrop.animator().alphaValue = value }
-        else { alphaValue = value; backdrop.alphaValue = value }
     }
 }

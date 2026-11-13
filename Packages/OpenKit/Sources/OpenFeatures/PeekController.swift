@@ -98,7 +98,8 @@ public final class PeekController {
     private func open(url: URL, sourceTabID: ItemID, librarySpaceID: SpaceID?, profileID: ProfileID?) {
         guard let space = splitController.space else { return }
         let profile = profileID ?? space.profileID
-        dismissGeneration += 1; isDismissing = false; overlay.setOpacity(1, animated: false)
+        dismissGeneration += 1; isDismissing = false
+        expandingGeneration += 1; isExpanding = false
         if stack.count >= 5 { stack.last?.host?.load(url); return }
         let hostID = ItemID()
         guard let host = factory.makeHost(tabID: hostID, profileID: profile, url: nil) else { return }
@@ -117,8 +118,7 @@ public final class PeekController {
             guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return }
             self.onPageChange?()
             if !loading {
-                if self.duration(0.12) == 0 { host.view.alphaValue = 1 }
-                else { NSAnimationContext.runAnimationGroup { c in c.duration = self.duration(0.12); host.view.animator().alphaValue = 1 } }
+                self.overlay.revealHost(host.view, duration: self.duration(0.12))
             }
         }
         host.onLiveStateChange = { [weak self, weak host] state in
@@ -134,17 +134,10 @@ public final class PeekController {
             return true
         }
         host.load(url); refresh(); host.focus(); installKeys()
-        if duration(Motion.peekOpen) > 0 {
-            overlay.setOpacity(0, animated: false)
-            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                let animation = CABasicAnimation(keyPath: "transform.scale"); animation.fromValue = 0.98; animation.toValue = 1
-                animation.duration = Motion.peekOpen; animation.timingFunction = Motion.easeOut; overlay.panel.layer?.add(animation, forKey: "peekOpen")
-            }
-            NSAnimationContext.runAnimationGroup { c in c.duration = duration(Motion.peekOpen); overlay.setOpacity(1, animated: true) }
-        }
+        overlay.animatePresentation(true, duration: duration(Motion.peekOpen))
         onChange?()
     }
-    private func duration(_ value: Double) -> Double { overlay.window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? value : 0 }
+    private func duration(_ value: Double) -> Double { overlay.window?.isVisible == true && !Motion.reducesMotion ? value : 0 }
     private func installKeys() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -190,24 +183,21 @@ public final class PeekController {
     }
     public func escape() {
         if onPageEscape?() == true { return }
-        if isExpanding { expandingGeneration += 1; isExpanding = false; overlay.panel.layer?.removeAllAnimations(); overlay.buttons.forEach { $0.alphaValue = 1 }; overlay.needsLayout = true; refresh() }
+        if isExpanding {
+            expandingGeneration += 1; isExpanding = false
+            overlay.cancelExpansion(duration: duration(Motion.peekOpen)); refresh()
+        }
         else { dismissTop() }
     }
     public func dismissTop() {
         guard !isExpanding, !isDismissing, let item = stack.last else { return }
         let interval = duration(Motion.peekDismiss)
-        if interval == 0 { finishDismiss(); return }
+        if interval == 0 { finishDismiss(); overlay.resetMotion(); return }
         isDismissing = true; dismissGeneration += 1; let generation = dismissGeneration, id = item.id
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 1; scale.toValue = 0.98
-            scale.duration = interval; overlay.panel.layer?.add(scale, forKey: "peekDismiss")
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = interval; overlay.setOpacity(0, animated: true)
-        } completionHandler: { [weak self] in MainActor.assumeIsolated {
+        overlay.animatePresentation(false, duration: interval) { [weak self] in
             guard let self, self.dismissGeneration == generation, self.stack.last?.id == id else { return }
-            self.isDismissing = false; self.finishDismiss(); self.overlay.setOpacity(1, animated: false)
-        } }
+            self.isDismissing = false; self.finishDismiss(); self.overlay.resetMotion()
+        }
     }
     private func finishDismiss() {
         guard let item = stack.popLast() else { return }
@@ -236,25 +226,17 @@ public final class PeekController {
     public func dismissAll() {
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
         undoTask?.cancel(); undoItem = nil; undoToast?.dismiss(); undoToast = nil
-        for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; overlay.clearHost(); removeKeys(); onChange?()
+        for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; overlay.resetMotion(); overlay.clearHost(); removeKeys(); onChange?()
     }
     private func removeKeys() { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil }
     public func expandTop() { expandTop(into: splitController.space?.id) }
     public func expandTop(into target: SpaceID?) {
-        guard !isExpanding, let item = stack.last, let target, model.space(id: target) != nil else { return }
+        guard !isExpanding, !isDismissing, let item = stack.last, let target, model.space(id: target) != nil else { return }
         expandingGeneration += 1; let generation = expandingGeneration; isExpanding = true
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration(Motion.peekExpand); context.timingFunction = Motion.easeInOut
-            overlay.buttons.forEach { $0.animator().alphaValue = 0 }
-            overlay.panel.animator().frame = overlay.contentRect
-        } completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, self.expandingGeneration == generation else { return }
-                if let top = self.stack.last { self.promote(top, into: target, split: false) }
-            }
+        overlay.animateExpansion(to: overlay.contentRect, duration: duration(Motion.peekExpand)) { [weak self] in
+            guard let self, self.expandingGeneration == generation, self.stack.last?.id == item.id else { return }
+            self.promote(item, into: target, split: false)
         }
-        // Offscreen harnesses have no animation clock; finish the same handoff synchronously.
-        if duration(Motion.peekExpand) == 0 && isExpanding { expandingGeneration += 1; promote(item, into: target, split: false) }
     }
     @discardableResult public func openInSplitTop() -> Bool {
         guard let item = stack.last, let space = splitController.space, !isExpanding else { return false }
@@ -293,7 +275,7 @@ public final class PeekController {
             else { splitController.container.adopt(host, for:tab.id) }
         }
         splitController.refresh(); splitController.container.focus(tabID: tab.id)
-        overlay.buttons.forEach { $0.alphaValue = 1 }; refresh(); if stack.isEmpty { removeKeys() }; onChange?(); return true
+        overlay.resetMotion(); refresh(); if stack.isEmpty { removeKeys() }; onChange?(); return true
     }
     public func linkMenu(url: URL, source: ItemID) -> NSMenu {
         let menu = NSMenu(); menu.autoenablesItems = false

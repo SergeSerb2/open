@@ -17,6 +17,28 @@ extension AutomationController {
     let factory = try window
     guard let controller = factory.controller else { throw Failure(message: "no browser window") }
     switch cmd {
+    case "peek-motion":
+      guard controller.hasPeekController else { return ["shown": false] }
+      let peek = controller.peekController, overlay = peek.overlay
+      func rect(_ rect: CGRect) -> [Double] { [rect.minX, rect.minY, rect.width, rect.height] }
+      func motion(_ layer: CALayer?) -> [String: Any] {
+        guard let layer else { return [:] }
+        let displayed = layer.presentation() ?? layer
+        return ["frame": rect(layer.frame), "presentation": rect(displayed.frame),
+          "opacity": displayed.opacity, "scale": [displayed.transform.m11, displayed.transform.m22],
+          "animations": (layer.animationKeys() ?? []).map { key in
+            let animation = layer.animation(forKey: key)
+            let paths = (animation as? CAAnimationGroup)?.animations?.compactMap { ($0 as? CAPropertyAnimation)?.keyPath }
+              ?? (animation as? CAPropertyAnimation).map { [$0.keyPath ?? ""] } ?? []
+            return ["key": key, "duration": animation?.duration ?? 0, "paths": paths] as [String: Any]
+          }]
+      }
+      return ["shown": peek.isShown, "expanding": peek.isExpanding, "kind": overlay.motionKind,
+        "duration": overlay.motionDuration, "startedAt": overlay.motionStartedAt,
+        "layouts": overlay.layoutCount, "hostFrameChanges": overlay.hostFrameChangeCount,
+        "panelFrame": rect(overlay.panel.frame), "clipFrame": rect(overlay.pageClip.frame),
+        "hostFrame": peek.stack.last?.host.map { rect($0.view.frame) } ?? [],
+        "panel": motion(overlay.panel.layer), "overlay": motion(overlay.layer), "backdrop": motion(overlay.backdrop.layer)] as [String: Any]
     case "peek-ui":
       controller.contentView.layoutSubtreeIfNeeded()
       let visible = app.media.visibility.sleepVisibility().visibleTabIDs(in: app.model).map(\.description).sorted()

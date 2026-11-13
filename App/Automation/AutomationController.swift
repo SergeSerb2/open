@@ -939,7 +939,7 @@
       case "boost-editor", "boosts", "boost-library":
         return try await runBoostCommand(cmd, a)
       case "boost-gallery-ui": return try await boostGalleryUI(a)
-      case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
+      case "peek-ui", "peek-motion", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
       case "theme-data-state":
         // The theme variables the App sets for a tab (setting on), or none.
