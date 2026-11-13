@@ -376,9 +376,6 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       if controller.context.downloadBadge != next { controller.context.downloadBadge = next }
     }
   }
-  func acknowledgeLibrary() {
-    completionFiles = []; badgeExpiry?.cancel(); badgeExpiry = nil; updateBadges()
-  }
   private func scheduleBadgeExpiry() {
     badgeExpiry?.cancel(); badgeExpiry = nil
     guard let oldest=completionFiles.last else { return }
@@ -556,7 +553,8 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     return store
   }
   private func persist(_ item: DownloadItemSnapshot, profile: Profile) {
-    guard let state = DownloadHistoryRecord.State(rawValue: item.state.rawValue), let source = item.sourceURL,
+    // C12-PB1-3: failed transfers remain visible only for this app session.
+    guard item.state != .failed, let state = DownloadHistoryRecord.State(rawValue: item.state.rawValue), let source = item.sourceURL,
       let endedAt = item.endedAt, !removedHistory.contains(item.id), entries[item.id]?.hidden != true,
       !inFlightHistoryClears.values.contains(where: { $0.contains(item) }),
       let store = historyStore(for: profile.id) else { return }
@@ -593,7 +591,8 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
             // ranges make the final read safe even if its revision is stale.
             if revision != historyRevisions[profile.id, default: 0], retries < 2 { retries += 1; continue }
             for record in records {
-              guard !removedHistory.contains(record.id), entries[record.id] == nil, history[record.id] == nil,
+              // Also omit failed rows saved by earlier Open versions.
+              guard record.state != .failed, !removedHistory.contains(record.id), entries[record.id] == nil, history[record.id] == nil,
                 !clearedHistoryDuringLoad.contains(where: { $0.contains(profileID: record.profileID, startedAt: record.startedAt) }) else { continue }
               var item = DownloadItemSnapshot(id: record.id, fileName: record.fileName, sourceHost: record.sourceHost,
                 receivedBytes: record.receivedBytes, totalBytes: record.totalBytes,
