@@ -648,8 +648,16 @@ func runCommandsDemo(args: [String]) async throws {
           "folder icon uses the same typed command")
     undo.undo(); check(movingFolder.iconOverride == nil && movingFolder.customIcon == "folder.fill", "folder icon undo restores both fields")
     undo.redo()
+    // #549 made split icons editable. Exercise the command, then leave this seed uncustomized.
+    let splitIconDepth = undoDepth()
+    check(model.setNodeIcon(id: refusalSplit.id, icon: .named("planet"))
+          && refusalSplit.iconOverride == .named("planet") && undoDepth() == splitIconDepth + 1,
+          "split icon adds one undo step")
+    undo.undo(); check(refusalSplit.iconOverride == nil, "split icon undo restores the pane favicons")
+    undo.redo(); check(refusalSplit.iconOverride == .named("planet"), "split icon redo restores the override")
+    undo.undo()
     let refusalsDepth = undoDepth()
-    check(!model.setNodeIcon(id: movingTab.id, icon: .emoji("🧭")) && !model.setNodeIcon(id: refusalSplit.id, icon: .named("planet"))
+    check(!model.setNodeIcon(id: movingTab.id, icon: .emoji("🧭")) && !model.setNodeIcon(id: refusalSplit.id, icon: nil)
           && !model.setNodeIcon(id: ItemID(), icon: nil) && undoDepth() == refusalsDepth, "same, split and missing node icon commands register no undo")
     let originalIcon = space.icon
     model.setSpaceIcon(id: sid, icon: .emoji("🎨"))
