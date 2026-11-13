@@ -85,6 +85,10 @@ final class ResultsView: NSView {
 
     /// Replaces the rows. Views whose row did not change are not redrawn.
     func setRows(_ newRows: [CommandBarRow], selected: Int?) {
+        let nextSelected = selected.flatMap { newRows.indices.contains($0) ? $0 : nil }
+        // Async providers can finish with exactly the local rows already on
+        // screen. Consume the snapshot without repeating row/layout work.
+        guard newRows != rows || nextSelected != selectedIndex else { return }
         rowUpdateCount += 1
         rows = newRows
         while rowViews.count < rows.count {
@@ -106,7 +110,7 @@ final class ResultsView: NSView {
                 v.isHidden = true
             }
         }
-        selectedIndex = selected.flatMap { rows.indices.contains($0) ? $0 : nil }
+        selectedIndex = nextSelected
         scrollOffset = min(scrollOffset, maxScroll)
         layoutRows()
         announceSelection()
@@ -119,7 +123,11 @@ final class ResultsView: NSView {
         announceSelection()
     }
 
-    func resetScroll() { scrollOffset = 0 }
+    func resetScroll() {
+        guard scrollOffset != 0 else { return }
+        scrollOffset = 0
+        layoutRows()
+    }
 
     /// Keeps row `i` inside the visible window (keyboard navigation).
     func scrollToVisible(_ i: Int) {
