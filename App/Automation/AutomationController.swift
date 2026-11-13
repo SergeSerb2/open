@@ -1853,7 +1853,8 @@
       }
       let pageColor = w.hosts.values.first { $0.content === c }?.pageBackgroundColor
       return [
-        "identifier": c.identifier, "kind": kind, "live": c.isLive, "ephemeral": c.context.isEphemeral, "url": c.url?.absoluteString ?? "",
+        "identifier": c.identifier, "nativeViewIdentity": String(describing: ObjectIdentifier(c.view)),
+        "kind": kind, "live": c.isLive, "ephemeral": c.context.isEphemeral, "url": c.url?.absoluteString ?? "",
         "title": c.title, "loading": c.isLoading, "style": c.runtimeStyle == .chrome ? "chrome" : "alloy",
         "audible": c.isAudible, "muted": c.isMuted, "crash": c.crashState.rawValue, "fullscreen": c.isFullscreen,
         "favicon": c.favicon != nil, "context": c.context.identifier, "canGoBack": c.canGoBack,

@@ -1,77 +1,71 @@
-# Cross-window page preservation — parked for 1.1
+# Cross-window page preservation
 
-Status: deferred by the lead's 22:00 ruling on 2026-11-12. This branch
-contains an investigation only. No engine API, shell transfer implementation,
-or new e2e row has been added. There is no active request for E3.
+The lead reopened this parked 1.1 investigation in the 2026-11-13 night lane.
+The shell implementation is in `ns/nt-live-tab-transfer`. Engine adoption and
+real-App acceptance are pending; this document does not claim either is done.
+If the engine is not adopted by 04:00 Vancouver, the URL reload fallback stays
+and the no-reload feature returns to 1.1.
 
-Branch: `ns/nt-live-tab-transfer`, based on main `6328035d`.
+## Engine boundary
 
-## Current behavior
+The original reload paths created a fresh tab and closed the source host
+(`App/BlankWindow.swift` on main `6328035d`). Moving only its NSView was unsafe:
+`OEBrowser.insert` refused content owned by another hidden browser, while source
+browser close still owned the actual hosted tab. Evidence: the original
+`Engine/OpenEngine/src/OEBrowser.mm` insert/remove/sync/close paths and
+`OEWebContent.mm` hosted creation path at that revision.
 
-Blank Window drag works in both directions. The destination gets a new model
-tab and loads its URL. The original host closes. Moving a Blank Window tab to
-a Space takes the same approach. Page state therefore does not survive.
-
-Evidence: `App/BlankWindow.swift:150–154`, `:165–170`, and `:178–182` on the
-base commit. These paths create a model tab, then close the source host through
-`releaseTabToAnotherWindow`.
-
-## Why a shell-only view move is insufficient
-
-`EngineWebContentHost.view` exposes `OEWebContent.view`.
-`WebContentContainer.takeHost(for:)` can remove a cached host without closing
-it. Its `adopt(_:for:)` method binds the host to container callbacks. The
-factory's `adoptHost(_:as:)` currently accepts only its own hosts. A future
-transfer must update factory ownership, model membership, tab and Space IDs,
-and window-specific presenters and callbacks.
-
-The engine also owns the actual hosted tab:
-
-- `Engine/OpenEngine/src/OEBrowser.mm:379–386` refuses insertion when the
-  content's actual host browser is another window's browser.
-- `removeWebContent` at lines 404–415 removes strip bookkeeping but keeps the
-  actual host owner. `oe_syncTabStrip` at lines 546–576 only orders and
-  activates pages owned by that browser.
-- `Engine/OpenEngine/src/OEWebContent.mm:581–600` creates the hosted tab in
-  its original hidden browser strip and sets its host owner.
-- `OEBrowser.close` at lines 469–499 closes its underlying strip. Reparenting
-  only the NSView could leave the page subject to source-window teardown.
-
-## Proposed OpenEngine API for 1.1
-
-The destination `OEBrowser` needs a main-actor operation:
+E3 owns the engine implementation. The requested public OpenEngine operation is:
 
 ```objc
+#define OE_HAS_WEB_CONTENT_TRANSFER 1
 - (BOOL)transferWebContent:(OEWebContent*)webContent
               fromBrowser:(OEBrowser*)source
                   atIndex:(NSUInteger)index
     NS_SWIFT_NAME(transfer(_:from:at:));
 ```
 
-The operation must move the existing hosted Chrome tab between open browsers
-of the same `OEBrowserContext`. It must keep the page, native view, engine and
-chrome.tabs IDs, JavaScript document, form values, history, scroll, and media
-state. It must update actual engine ownership and both strip memberships.
-Pending strip changes must be flushed before transfer. Existing APIs can then
-apply destination pinning and selection, and the shell can reparent the view.
+It synchronously moves the existing hosted tab between open browsers of the
+same context. It preserves the document, native view, content/chrome.tabs IDs,
+history, scroll, typed text and media state. Index is inclusive 0...count.
+Wrong owners, contexts, indices, closing objects and unsupported content refuse
+without mutation. Empty destination and last-tab source are supported. No
+synchronous lifecycle delegate callback may interrupt the shell transaction.
+The caller retains both browsers and content throughout the call. Source close
+after success must not close the moved tab. E3's public header documents these
+rules; the Swift shell never imports or calls CEF.
 
-An empty destination and a source losing its last tab must work. Closing the
-source afterwards must not close or mark the moved page as closing. Failure
-must leave both sides intact and return `false`; a reload is not a successful
-transfer. Reject wrong ownership, mismatched contexts, closing objects, and
-unsupported content. Lifecycle callbacks must not interrupt the shell's
-ownership transaction synchronously. The public header must state that rule.
+## Shell handoff
 
-## Remaining work
+`BrowserModel.transferTab` transfers the same Tab object and ID between the two
+models without Archive or Undo entries. It stages both graphs, calls the
+synchronous external-ownership operation, and rolls back without tree events
+on refusal. Both graphs and host owners are final before tree observers run.
 
-E3 would implement the engine operation under a future 1.1 assignment. NT
-would then transfer shell host ownership for Blank Window drags and the
-same-Profile Move to Space route. Cross-Profile moves need separate handling.
-The Swift shell must continue to use only OpenEngine APIs.
+`EngineWebContentHostFactory.transferLiveTab` calls only OpenEngine. After YES
+it removes the cached host from the old container without closing it, retires
+old window-specific prompts/find/translation bindings, changes factory ownership,
+renews the host generation and binds the existing view in the destination
+container. Source-window teardown then cannot reach that host. Both drag and
+the same-Profile Move to Space route use this path. Other profiles, unsupported
+hosts and older engines keep the existing URL reload behavior.
 
-Add a real-App socket row that types text into a synthetic loopback form,
-records a document nonce and content identifier, and drags normal → Blank
-Window → normal. Assert that the text and both identities survive each move.
-Cover closing an emptied source window and a refused transfer where practical.
-Prove the new row fails on the original app, then run the build and touched
-suites. None of that implementation or verification has run on this branch.
+`tools/build.sh` sets `OPEN_ENGINE_WEB_CONTENT_TRANSFER` only when the public
+API marker exists, the actual copied distribution exposes the needed hosting
+capability, and its framework hash matches the recorded distribution. Merely
+editing a repository header cannot enable the Swift call with an older engine.
+
+## Verification contract
+
+The real-App `blank-window` suite types synthetic text into a loopback page,
+records its document nonce, scroll, back-history capability, model ID, engine
+and chrome.tabs IDs and native view identity, then drags normal → Blank Window
+→ normal. It checks all identities/state after both moves and after the emptied
+Blank Window closes. The Move to Space menu gets the same state check.
+
+The test uses native rail windows and the existing socket drag transport, not
+the system mouse or keyboard. `OPEN_REQUIRE_LIVE_TAB_TRANSFER=1` runs these
+assertions against the older reload path for negative proof. Without a capable
+engine, the feature rows report DEFERRED explicitly; the existing Blank Window
+suite still exercises URL moves, Archive behavior and relaunch restoration.
+Only capable-engine PASS receipts qualify the no-reload feature as ready.

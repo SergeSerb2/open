@@ -202,4 +202,94 @@ def run(factory, results, tmp, h):
         app.call('defaults', key='open.advanced.restoreWindowsOnLaunch', value=None)
     finally:
         app.quit()
+    try:
+        live_transfer_checks(factory, results, h, origin)
+    finally:
         server.shutdown()
+        server.server_close()
+
+
+def live_transfer_checks(factory, results, h, origin):
+    """Typed document, engine/native identities, and last-source close via real rails."""
+    app = factory(urls=(origin + '/transfer-control',), fresh=True)
+    def row(name, ok, **evidence):
+        results[name] = dict(ok=bool(ok), **evidence)
+        print('blank-window %-34s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
+    def key(name, *mods): return app.call('key', key=name, modifiers=list(mods), route='app')
+    def front(window): app.call('window-focus', id=window, activate=True)
+    def page(tab): return app.call('tab-state', tab=tab).get('page', {})
+    def document(tab):
+        return app.call('eval', tab=tab, js='({text:document.querySelector("#transfer-text")?.value||"", nonce:window.__transferNonce||"", scroll:scrollY})')
+    def drop(tab, target, top):
+        app.call('sidebar-drag', op='begin', nodes=[tab])
+        try:
+            return app.call('sidebar-drag', op='rail', window=target, rail=0, node=tab, top=top, perform=True)['accepted']
+        finally:
+            app.call('sidebar-drag', op='end')
+    def open_blank():
+        key('n', 'control', 'command')
+        opened = h.wait_until(lambda: (lambda s: s if s['isBlankWindow'] else None)(app.call('blank-window')), timeout=8)
+        if not opened: raise AssertionError('live transfer Blank Window did not open')
+        key('escape')
+        placeholder = h.new_tab(app, origin + '/transfer-placeholder')
+        return opened['window'], placeholder, app.call('sidebar-row', node=placeholder)['point'][1]
+    try:
+        supported = app.call('blank-window').get('liveTabTransferSupported', False)
+        if not supported and os.environ.get('OPEN_REQUIRE_LIVE_TAB_TRANSFER') != '1':
+            results['live_transfer_engine_capability'] = dict(status='DEFERRED', reason='Adopted engine lacks live tab transfer; URL reload fallback remains enabled.')
+            return
+        main = app.call('window-state')['id']
+        control = app.call('tabs')[0]['id']; app.call('wait', tab=control)
+        app.call('window-frame', frame=[100, 220, 900, 480])
+        tab = h.new_tab(app, origin + '/transfer-before')
+        app.call('navigate', tab=tab, url=origin + '/transfer-form'); app.call('wait', tab=tab)
+        app.call('focus', tab=tab)
+        app.call('eval', tab=tab, js='document.body.innerHTML="<input id=transfer-text><div style=height:3000px>Transfer fixture</div>"; window.__transferNonce=crypto.randomUUID(); document.querySelector("input").focus()')
+        app.call('type', tab=tab, text='Typed before moving this page')
+        app.call('eval', tab=tab, js='scrollTo(0,380)')
+        initial = document(tab); original = page(tab)
+        row('live_transfer_typed_fixture', initial['text'] == 'Typed before moving this page' and initial['nonce'] and initial['scroll'] == 380,
+            document=initial, page=original)
+        main_top = app.call('sidebar-row', node=control)['point'][1]
+        blank, placeholder, blank_top = open_blank()
+        front(main); accepted = drop(tab, blank, blank_top)
+        front(blank)
+        incoming = h.wait_until(lambda: next((t['id'] for t in app.call('tabs') if t['url'] == origin + '/transfer-form'), None), timeout=5)
+        if not incoming: raise AssertionError('live transfer did not reach Blank Window')
+        app.call('wait', tab=incoming)
+        moved, moved_page = document(incoming), page(incoming)
+        identity = lambda p: [p.get(k) for k in ('identifier', 'chromeTabId', 'nativeViewIdentity')]
+        row('live_transfer_normal_to_blank_keeps_document', accepted and incoming == tab and moved == initial
+            and identity(moved_page) == identity(original) and moved_page['browser'] != original['browser']
+            and original['canGoBack'] and moved_page['canGoBack'],
+            before=initial, after=moved, originalPage=original, movedPage=moved_page)
+        # Leave only the moved tab. Moving it back must close its old Blank
+        # Window without closing the transferred engine page or native view.
+        app.call('close', tab=placeholder)
+        accepted_back = drop(incoming, main, main_top)
+        front(main)
+        returned = h.wait_until(lambda: next((t['id'] for t in app.call('tabs') if t['url'] == origin + '/transfer-form'), None), timeout=5)
+        if not returned: raise AssertionError('live transfer did not return to normal window')
+        app.call('wait', tab=returned)
+        closed = h.wait_until(lambda: all(w['id'] != blank for w in app.call('shell-windows')), timeout=8)
+        after, after_page = document(returned), page(returned)
+        row('live_transfer_blank_to_normal_survives_source_close', accepted_back and closed and returned == tab
+            and after == initial and identity(after_page) == identity(original) and after_page['browser'] == original['browser']
+            and after_page['canGoBack'],
+            before=initial, after=after, originalPage=original, returnedPage=after_page, windows=app.call('shell-windows'))
+        # The Move to menu must use the same ownership handoff as drag.
+        blank, placeholder, blank_top = open_blank()
+        front(main); drop(returned, blank, blank_top); front(blank)
+        incoming = next(t['id'] for t in app.call('tabs') if t['url'] == origin + '/transfer-form')
+        app.call('close', tab=placeholder)
+        target = app.call('spaces')[0]['title'] or 'Space 1'
+        app.call('sidebar-menu', node=incoming, items=['Move to', target])
+        closed = h.wait_until(lambda: all(w['id'] != blank for w in app.call('shell-windows')), timeout=8)
+        front(main)
+        returned = next(t['id'] for t in app.call('tabs') if t['url'] == origin + '/transfer-form')
+        app.call('select', tab=returned)
+        after, after_page = document(returned), page(returned)
+        row('live_transfer_move_to_space_keeps_document', closed and returned == tab and after == initial
+            and identity(after_page) == identity(original), before=initial, after=after, returnedPage=after_page)
+    finally:
+        app.quit()
