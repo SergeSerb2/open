@@ -507,7 +507,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func syncPeekSidebar() {
         if peekStorage?.isShown == true { siteControl?.dismiss(reason: .sourceUnavailable, animated: false) }
         var badges: [ItemID: SidebarPeekBadge] = [:]
-        for item in peekStorage?.stack ?? [] { badges[item.sourceTabID] = SidebarPeekBadge(url: item.host?.currentURL ?? item.url, faviconPNG: item.faviconPNG) }
+        for item in peekStorage?.stack ?? [] where item.librarySpaceID == nil { badges[item.sourceTabID] = SidebarPeekBadge(url: item.host?.currentURL ?? item.url, faviconPNG: item.faviconPNG) }
         if context.peekBadges != badges { context.peekBadges = badges }
         let shown: SidebarShownPeek?
         if let peek = peekStorage, peek.isShown, let item = peek.stack.last {

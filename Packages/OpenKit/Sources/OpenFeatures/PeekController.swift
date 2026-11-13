@@ -281,7 +281,12 @@ public final class PeekController {
         }
         stack.removeLast(); item.host?.view.removeFromSuperview()
         // Bind before show, so showing a new tab cannot create and load a replacement host.
-        if let host = item.host { splitController.container.adopt(host, for: tab.id) }
+        if let host = item.host {
+            // All-Profiles Archive can preview a different Profile. Promotion
+            // must create a destination host rather than adopt that context.
+            if item.librarySpaceID != nil, model.space(id:target)?.profileID != item.profileID { host.close() }
+            else { splitController.container.adopt(host, for:tab.id) }
+        }
         splitController.refresh(); splitController.container.focus(tabID: tab.id)
         overlay.buttons.forEach { $0.alphaValue = 1 }; refresh(); if stack.isEmpty { removeKeys() }; onChange?(); return true
     }
