@@ -4521,7 +4521,9 @@ def peek_checks(factory, results, tmp):
         results["peek_png"] = {"ok": True, "file": shot(app, "peek-window.png")}
         motion_before = app.call('peek-motion')
         app.call("peek-expand")
-        expansion = app.call('peek-motion')
+        # Capturing the loaded viewport happens before CA motion starts.
+        expansion = wait_until(lambda: (lambda s: s if s.get('kind') == 'expand'
+            and s.get('snapshot') else None)(app.call('peek-motion')), timeout=5, step=.005) or app.call('peek-motion')
         sampled = [expansion]
         while app.call('peek-state').get('expanding') and len(sampled) < 12:
             sampled.append(app.call('peek-motion'))
@@ -4535,6 +4537,8 @@ def peek_checks(factory, results, tmp):
                     and s['layouts'] == motion_before['layouts']
                     and s['hostFrameChanges'] == motion_before['hostFrameChanges'] for s in active),
             'before': motion_before, 'samples': sampled}
+        results['peek_expand_freezes_live_compositor'] = {'ok': bool(active)
+            and all(s.get('snapshot') and s.get('hostHidden') for s in active), 'samples': sampled}
         wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
         promoted = next(t["id"] for t in app.call("tabs") if t["selected"])
         counts = app.call("host-counts")

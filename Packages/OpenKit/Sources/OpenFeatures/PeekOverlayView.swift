@@ -44,6 +44,7 @@ public final class PeekOverlayView: NSView {
     var motionSnapshotLayer: CALayer?
     var motionHostWasHidden = false
     var motionRevealPending = false
+    public var hasMotionSnapshot: Bool { motionSnapshotLayer != nil }
     private weak var hostedView: NSView?
     public init() {
         super.init(frame: .zero); wantsLayer = true; backdrop.layer?.backgroundColor = scrimColor.cgColor

@@ -47,6 +47,8 @@ extension AutomationController {
           }]
       }
       return ["shown": peek.isShown, "expanding": peek.isExpanding, "kind": overlay.motionKind,
+        "snapshot": overlay.hasMotionSnapshot,
+        "hostHidden": peek.stack.last?.host?.view.isHiddenOrHasHiddenAncestor ?? true,
         "duration": overlay.motionDuration, "startedAt": overlay.motionStartedAt,
         "layouts": overlay.layoutCount, "hostFrameChanges": overlay.hostFrameChangeCount,
         "panelFrame": rect(overlay.panel.frame), "clipFrame": rect(overlay.pageClip.frame),
