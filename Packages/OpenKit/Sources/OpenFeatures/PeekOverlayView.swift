@@ -40,6 +40,10 @@ public final class PeekOverlayView: NSView {
     public internal(set) var motionKind = ""
     public internal(set) var motionDuration: CFTimeInterval = 0
     public internal(set) var motionStartedAt: CFTimeInterval = 0
+    weak var motionHostView: NSView?
+    var motionSnapshotLayer: CALayer?
+    var motionHostWasHidden = false
+    var motionRevealPending = false
     private weak var hostedView: NSView?
     public init() {
         super.init(frame: .zero); wantsLayer = true; backdrop.layer?.backgroundColor = scrimColor.cgColor
@@ -86,7 +90,7 @@ public final class PeekOverlayView: NSView {
             panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
         }
     }
-    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() }; hostedView = nil; swipeIndicator = nil; sadTabView = nil }
+    func clearHost() { endHostSnapshot(reveal: false); pageClip.subviews.forEach { $0.removeFromSuperview() }; hostedView = nil; swipeIndicator = nil; sadTabView = nil }
     func showHost(_ host: any WebContentHost, close: @escaping () -> Void) {
         PeekMotionTrace.watch(host.view)
         let wasSad = sadTabView != nil
@@ -108,9 +112,9 @@ public final class PeekOverlayView: NSView {
             pageClip.addSubview(host.view)
             host.view.autoresizingMask = [.width, .height]
         }
-        host.view.isHidden = false
+        host.view.isHidden = isHostFrozen(host.view)
         if host.view.frame != pageClip.bounds { PeekMotionTrace.mark("host.setFrame", value: pageClip.bounds.width); hostFrameChangeCount += 1; host.view.frame = pageClip.bounds }
-        host.view.alphaValue = host.isLoading ? 0 : 1
+        if !isHostFrozen(host.view) { host.view.alphaValue = host.isLoading ? 0 : 1 }
         if hadPageFocus && wasSad { host.focus() }
     }
     public func showHistorySwipe(_ event: SwipeIndicatorView.Event) {

@@ -62,6 +62,8 @@ public final class PeekController {
     public private(set) var isExpanding = false
     @ObservationIgnored private var isDismissing = false
     @ObservationIgnored private var dismissGeneration = 0
+    @ObservationIgnored private var motionGeneration = 0
+    @ObservationIgnored private var snapshotTask: Task<Void, Never>?
     public var onChange: (() -> Void)?
     /// The window's toasts: "Peek closed" with Undo (M4).
     @ObservationIgnored public weak var toasts: ToastCenter?
@@ -79,7 +81,7 @@ public final class PeekController {
         overlay.isHidden = true; overlay.onDismiss = { [weak self] in self?.dismissTop() }
         overlay.onExpand = { [weak self] in self?.expandTop() }; overlay.onSplit = { [weak self] in self?.openInSplitTop() }
     }
-    isolated deinit { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; undoTask?.cancel(); for item in stack { item.host?.close() } }
+    isolated deinit { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; undoTask?.cancel(); snapshotTask?.cancel(); for item in stack { item.host?.close() } }
     public func intercept(tabID: ItemID, url: URL, flags: NSEvent.ModifierFlags) -> Bool {
         guard let tab = model.tab(id: tabID) else { return true }
         let favorite: Bool = if case .favorites? = model.parent(of: tabID) { true } else { false }
@@ -99,6 +101,8 @@ public final class PeekController {
         PeekMotionTrace.mark("request.open")
         guard let space = splitController.space else { return }
         let profile = profileID ?? space.profileID
+        motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
+        overlay.endHostSnapshot()
         dismissGeneration += 1; isDismissing = false
         expandingGeneration += 1; isExpanding = false
         if stack.count >= 5 { overlay.resetMotion(); stack.last?.host?.load(url); return }
@@ -136,7 +140,13 @@ public final class PeekController {
             return true
         }
         host.load(url); refresh(); host.focus(); installKeys()
-        overlay.animatePresentation(true, duration: duration(Motion.peekOpen))
+        let interval = duration(Motion.peekOpen), generation = motionGeneration
+        if interval > 0 { overlay.freezeHost(host.view, image: nil) }
+        overlay.animatePresentation(true, duration: interval) { [weak self, weak host] in
+            guard let self, let host, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
+            self.overlay.endHostSnapshot()
+            host.focus()
+        }
         PeekMotionTrace.region("open.onChange") { onChange?() }
     }
     private func duration(_ value: Double) -> Double { overlay.window?.isVisible == true && !Motion.reducesMotion ? value : 0 }
@@ -167,7 +177,8 @@ public final class PeekController {
         // Factories create transient pages hidden. Only the shown top page is
         // visible; a refresh must not hide/show a page that stays on screen.
         for candidate in stack {
-            let hidden = !sourceIsVisible || candidate.id != item.id || candidate.host?.liveState.isCrashed == true
+            let frozen = candidate.host.map { overlay.isHostFrozen($0.view) } ?? false
+            let hidden = !sourceIsVisible || candidate.id != item.id || candidate.host?.liveState.isCrashed == true || frozen
             if candidate.host?.view.isHidden != hidden { candidate.host?.view.isHidden = hidden }
         }
         guard sourceIsVisible else { overlay.isHidden = true; return }
@@ -188,6 +199,7 @@ public final class PeekController {
     public func escape() {
         if onPageEscape?() == true { return }
         if isExpanding {
+            motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
             expandingGeneration += 1; isExpanding = false
             overlay.cancelExpansion(duration: duration(Motion.peekOpen)); refresh()
         }
@@ -199,9 +211,25 @@ public final class PeekController {
         let interval = duration(Motion.peekDismiss)
         if interval == 0 { finishDismiss(); overlay.resetMotion(); return }
         isDismissing = true; dismissGeneration += 1; let generation = dismissGeneration, id = item.id
-        overlay.animatePresentation(false, duration: interval) { [weak self] in
+        prepareMotionSnapshot(for: item) { [weak self] in
             guard let self, self.dismissGeneration == generation, self.stack.last?.id == id else { return }
-            self.isDismissing = false; self.finishDismiss(); self.overlay.resetMotion()
+            self.overlay.animatePresentation(false, duration: interval) { [weak self] in
+                guard let self, self.dismissGeneration == generation, self.stack.last?.id == id else { return }
+                self.isDismissing = false; self.finishDismiss(); self.overlay.resetMotion()
+            }
+        }
+    }
+    private func prepareMotionSnapshot(for item: PeekItem, action: @escaping @MainActor () -> Void) {
+        motionGeneration += 1; let generation = motionGeneration
+        snapshotTask?.cancel(); snapshotTask = nil
+        guard let host = item.host, !overlay.isHostFrozen(host.view) else { action(); return }
+        snapshotTask = Task { @MainActor [weak self, weak host] in
+            guard let host else { return }
+            let image = await PeekHostSnapshot.capture(host)
+            guard !Task.isCancelled, let self, self.motionGeneration == generation, self.stack.last?.id == item.id else { return }
+            self.snapshotTask = nil
+            if let image { self.overlay.freezeHost(host.view, image: image) }
+            action()
         }
     }
     private func finishDismiss() {
@@ -229,6 +257,7 @@ public final class PeekController {
         dismissAll()
     }
     public func dismissAll() {
+        motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
         undoTask?.cancel(); undoItem = nil; undoToast?.dismiss(); undoToast = nil
         for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; overlay.resetMotion(); overlay.clearHost(); removeKeys(); onChange?()
@@ -239,9 +268,14 @@ public final class PeekController {
         PeekMotionTrace.mark("request.expand")
         guard !isExpanding, !isDismissing, let item = stack.last, let target, model.space(id: target) != nil else { return }
         expandingGeneration += 1; let generation = expandingGeneration; isExpanding = true
-        overlay.animateExpansion(to: overlay.contentRect, duration: duration(Motion.peekExpand)) { [weak self] in
+        let interval = duration(Motion.peekExpand)
+        if interval == 0 { promote(item, into: target, split: false); return }
+        prepareMotionSnapshot(for: item) { [weak self] in
             guard let self, self.expandingGeneration == generation, self.stack.last?.id == item.id else { return }
-            self.promote(item, into: target, split: false)
+            self.overlay.animateExpansion(to: self.overlay.contentRect, duration: interval) { [weak self] in
+                guard let self, self.expandingGeneration == generation, self.stack.last?.id == item.id else { return }
+                self.promote(item, into: target, split: false)
+            }
         }
     }
     @discardableResult public func openInSplitTop() -> Bool {

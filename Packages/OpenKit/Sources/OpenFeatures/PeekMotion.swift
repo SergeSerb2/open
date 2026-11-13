@@ -52,7 +52,11 @@ extension PeekOverlayView {
         guard duration > 0, let panelLayer = panel.layer else { resetMotion(); return }
         let current = panelLayer.presentation() ?? panelLayer
         let transform = current.transform, position = current.position
-        beginMotion("cancel-expand", duration: duration, completion: nil)
+        let snapshot = motionSnapshotLayer
+        beginMotion("cancel-expand", duration: duration) { [weak self] in
+            guard let self, self.motionSnapshotLayer === snapshot else { return }
+            self.endHostSnapshot()
+        }
         geometry(panelLayer, from: transform, position: position, to: CATransform3DIdentity, targetPosition: panelLayer.position,
                  duration: duration, holdsEnd: false, timing: Motion.easeOut)
         for button in buttons {
@@ -62,6 +66,7 @@ extension PeekOverlayView {
     }
 
     func resetMotion() {
+        endHostSnapshot()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for layer in [layer, backdrop.layer] + buttons.map(\.layer) {
             layer?.removeAnimation(forKey: "peekVisibility"); layer?.opacity = 1
@@ -72,6 +77,11 @@ extension PeekOverlayView {
     }
 
     func revealHost(_ view: NSView, duration: CFTimeInterval) {
+        if isHostFrozen(view) {
+            motionRevealPending = true
+            PeekMotionTrace.mark("host.reveal.deferred")
+            return
+        }
         PeekMotionTrace.mark("host.reveal", value: duration)
         let opacity = view.layer.map { ($0.presentation() ?? $0).opacity } ?? Float(view.alphaValue)
         CATransaction.begin(); CATransaction.setDisableActions(true)
