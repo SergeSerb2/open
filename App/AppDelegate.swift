@@ -139,6 +139,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var hotkeyAttempts = 0
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
+  private var cloneCleanupScheduled = false
+  #if OPEN_AUTOMATION
+  var cloneCleanupCounts: [String: NSNumber]?
+  #endif
   var littleOpenCoordinator: LittleOpenCoordinator!
   var pendingLittleOpenBlankStamps: [TimeInterval?] = []
   var littleOpenProfileAlert: NSAlert?
@@ -866,6 +870,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if !isFirstRun || firstRunSaved { completeLinkRestoration() }
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
+    // Empty Spaces, Welcome, and onboarding have a native first frame but no
+    // web paint callback. Leave that frame two seconds before background I/O.
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(2))
+      guard let self, !self.shutdownPrepared, !self.terminationRequested,
+            OEEngine.shared.allWebContents.isEmpty,
+            NSApp.windows.contains(where: { $0.isVisible }) else { return }
+      self.scheduleCloneCleanupAfterPaint()
+    }
     #if OPEN_AUTOMATION
     if !isFirstRun { startAutomationIfNeeded() }
     #endif
@@ -1023,6 +1036,7 @@ extension AppDelegate: CommandDispatcher {
               !self.terminationRequested, !Task.isCancelled else { return }
         let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
         if painted == true {
+          self.scheduleCloneCleanupAfterPaint()
           // Each service body gets its own main run-loop turn, so input is
           // handled between them and no turn carries several bodies.
           if !self.commandServicesPrepared {
@@ -1053,6 +1067,7 @@ extension AppDelegate: CommandDispatcher {
       }
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
+      self.scheduleCloneCleanupAfterPaint()
       self.startupRegion("fallback.sleep") { self.tabSleep.start() }
       guard await self.nextStartupTurn() else { return }
       self.startupRegion("fallback.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
@@ -1060,6 +1075,19 @@ extension AppDelegate: CommandDispatcher {
       self.startupRegion("fallback.icon") { self.applicationIcon.restoreAfterContent() }
       guard await self.nextStartupTurn() else { return }
       self.startupRegion("fallback.updater") { self.prepareUpdaterAfterPaint() }
+    }
+  }
+  private func scheduleCloneCleanupAfterPaint() {
+    guard !cloneCleanupScheduled, engineReady, !shutdownPrepared, !terminationRequested else { return }
+    cloneCleanupScheduled = true
+    #if OPEN_AUTOMATION
+    LaunchTiming.shared.mark("cloneCleanupScheduled")
+    #endif
+    OEEngine.shared.pruneUnusedCodeSignClones { [weak self] counts in
+      #if OPEN_AUTOMATION
+      self?.cloneCleanupCounts = counts
+      LaunchTiming.shared.mark("cloneCleanupFinished")
+      #endif
     }
   }
   /// Ends this run-loop turn (a 1 ms timer wake, not a queue hop that can run
