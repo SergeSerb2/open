@@ -12,7 +12,8 @@ import OpenDesign
 /// Developer Mode's Extensions Menu uses the same card (`Layout.extensions`, C-report-s10 PB3-a2), measured on
 /// `v10/d1-devbar-hover-menus/m-ext.png` (2x, light): card 250 × 96 pt plus the arrow, arrow tip under the button's
 /// center 10.5 pt below its bottom edge, two 40 pt rows with no gap and 8 pt padding, titles 19 pt from the card's
-/// left, no icons and no shortcuts; same card #FDFDFF and hovered row #D3D4FD.
+/// left, no icons and no shortcuts. C3 session 11 confirms the "+" popover colours in light and dark; the App
+/// supplies `PlusPopoverColors` for that card, with a 10 pt row highlight radius.
 @MainActor
 public final class ToolbarMorePopover: NSView {
     /// Row icons, drawn here to Arc's shapes (measured on the capture, 2 pt strokes): `sidebar` is a 20 × 15 pt

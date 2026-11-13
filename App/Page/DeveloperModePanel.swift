@@ -49,7 +49,8 @@ final class DeveloperModePanel {
   }
 
   /// The Extensions Menu card (C-report-s10 PB3-a2, `m-ext.png`): "Add Extension…" and "Manage Extensions…" in the
-  /// More options card style (`ToolbarMorePopover.Layout.extensions`). A second press on the button closes it.
+  /// More options card layout (`ToolbarMorePopover.Layout.extensions`) with the "+" popover colours (C3 session 11).
+  /// A second press on the button closes it.
   private(set) weak var extensionsCard: ToolbarMorePopover?
   func toggleExtensionsCard(anchor: NSView) {
     if let open = extensionsCard { open.dismiss(); return }
