@@ -91,7 +91,7 @@ def run(factory, results, wait):
         results[name] = dict(ok=bool(ok), **receipt)
 
     try:
-        app = factory(fresh=True, urls=('about:blank',), extra_args=['--style=chrome'])
+        app = factory(fresh=True, urls=('about:blank',), extra_args=['--style=chrome', '--engine-api-auth'])
         call('start')
         call('add', page='p', browser='a', url=base + '/form')
         assert loaded('p'), 'live fixture did not load'
@@ -210,7 +210,7 @@ def run(factory, results, wait):
         call('cleanup'); app.quit(); app = None
 
         app = factory(fresh=True, urls=('about:blank',), extra_args=[
-            '--style=chrome', '--proxy-server=http://127.0.0.1:%d' % port,
+            '--style=chrome', '--engine-api-auth', '--proxy-server=http://127.0.0.1:%d' % port,
             '--proxy-bypass-list=<-loopback>'])
         call('start')
         call('add', page='proxy', browser='a', url='http://open-auth-fixture.test/page')

@@ -42,7 +42,7 @@
   if ((self = [super init])) {
     _originURL = [origin copy];
     _host = [host copy]; _port = port;
-    _realm = [realm copy]; _scheme = [scheme copy]; _proxy = proxy;
+    _realm = [realm copy]; _scheme = [scheme copy]; _proxyAuthentication = proxy;
     _callback = callback;
   }
   return self;

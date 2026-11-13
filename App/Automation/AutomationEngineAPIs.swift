@@ -77,7 +77,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
     }, "requests": requests.keys.sorted().map { id -> [String: Any] in
       let r = requests[id]!
       let pending: Bool = r.isPending
-      let proxy: Bool = r.isProxy
+      let proxy: Bool = r.isProxyAuthentication
       return ["id": id, "pending": pending, "origin": r.originURL?.absoluteString ?? "",
         "realm": r.realm, "scheme": r.scheme, "proxy": proxy,
         "host": r.host, "port": r.port] as [String: Any]

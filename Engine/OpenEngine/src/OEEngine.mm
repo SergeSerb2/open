@@ -55,6 +55,7 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
   c.additionalSwitches = _additionalSwitches;
   c.logFile = _logFile;
   c.verboseLogging = _verboseLogging;
+  c.handlesHTTPAuthentication = _handlesHTTPAuthentication;
   c.keychainServiceName = _keychainServiceName;
   c.keychainAccountName = _keychainAccountName;
   c.useMockKeychain = _useMockKeychain;
@@ -479,6 +480,9 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
       NSBundle.mainBundle.bundleIdentifier.UTF8String ?: "io.github.sergeserb2.open";
 
   NSArray<NSString*>* switches = _configuration.additionalSwitches;
+  if (_configuration.handlesHTTPAuthentication) {
+    switches = [switches arrayByAddingObject:@"--disable-chrome-login-prompt"];
+  }
   if (_configuration.useMockKeychain &&
       ![switches containsObject:@"--use-mock-keychain"]) {
     switches = [switches arrayByAddingObject:@"--use-mock-keychain"];

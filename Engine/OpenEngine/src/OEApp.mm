@@ -160,10 +160,6 @@ class OEApp : public CefApp,
     // official CDN build. Remove once dev.args.gn sets
     // disable_fieldtrial_testing_config=true.
     command_line->AppendSwitch("disable-field-trial-config");
-    // Route 401/407 challenges through CefRequestHandler, including Chrome
-    // style hosted tabs. The shell owns authentication UI; never show Chrome's
-    // login dialog when the shell cancels or has no handler.
-    command_line->AppendSwitch("disable-chrome-login-prompt");
     for (const std::string& s : switches_) {
       std::string sw = s.rfind("--", 0) == 0 ? s.substr(2) : s;
       size_t eq = sw.find('=');

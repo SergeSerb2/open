@@ -32,14 +32,21 @@ the normal API.
 
 ## HTTP and proxy authentication
 
-The engine uses CEF's `disable-chrome-login-prompt` switch to select
+Set `OEEngineConfiguration.handlesHTTPAuthentication` before starting the
+engine to opt in. Its default is false, so an engine adoption alone does not
+replace the existing Chromium authentication path. The guarded shell adapter
+enables it with `OPEN_HTTP_AUTH_ENGINE`; the real-App API fixture enables it
+with its automation-only `--engine-api-auth` argument.
+
+When enabled, the engine uses CEF's `disable-chrome-login-prompt` switch to select
 `net_service::LoginDelegate` for Chrome style content, including hosted tabs.
 `OEClient::GetAuthCredentials` receives the network callback on CEF's IO thread
 and dispatches it to main before reading any page or delegate state.
 
 `webContent(_:handleAuthenticationRequest:)` receives an
 `OEAuthenticationRequest` with the requesting URL, challenger host/port, realm,
-scheme and proxy flag. Retain it while presenting the shell sheet, and call
+scheme and `isProxyAuthentication` flag. The longer name avoids NSObject's
+unrelated `isProxy()` method. Retain it while presenting the shell sheet, and call
 `continue(username:password:)` or `cancel()`. Answers are one-shot. Unanswered
 deallocation, a missing handler or a false return cancels. Chromium's login
 dialog does not appear. The engine does not log credentials.
