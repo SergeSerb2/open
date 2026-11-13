@@ -435,8 +435,13 @@ extension LibraryPanelView {
             let scheme = (row.url.scheme ?? "") + "://"
             var item = LibraryRowItem(id:id.description,title:title,subtitle:url.hasPrefix(scheme) && scheme != "://" ? String(url.dropFirst(scheme.count)) : url,kind:"archive",day:"",
                 image:symbol(row.kind == .folder ? "folder" : "globe"),loadImage:row.kind == .folder ? nil : { [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.kind == .folder ? nil : row.url,activate:restore,
-                // Session 11 C-D2-2: no hover glyphs. Keep keyboard/VoiceOver actions.
-                actions:[.init(title:"Delete",run:remove),.init(title:"Restore",run:restore)],showsMoreButton:false)
+                    actions:[.init(title:"Delete",run:remove),.init(title:"Restore",run:restore)],showsMoreButton:false)
+            if row.kind == .tab {
+                // S12 C12-D2-4: ordinary single-tab rows, including split panes.
+                item.activate = { [weak self] in self?.viewModel.previewArchived(id:id) }
+                item.keyboardActivate = restore
+                item.hoverActions = [.init(title:"Delete",glyph:.trash,run:remove),.init(title:"Restore",glyph:.undo,run:restore)]
+            }
             item.toolTip = title
             // Arc: a right click on an Archived Tabs row opens no menu (capture C3 s8 item 11).
             item.contextMenu = false

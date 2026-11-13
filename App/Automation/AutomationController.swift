@@ -960,7 +960,9 @@
         guard let controller = w.controller, controller.hasPeekController else { return ["shown": false, "stack": []] as [String: Any] }
         let peek = controller.peekController
         return ["shown": peek.isShown, "expanding": peek.isExpanding, "stack": peek.stack.map { item in
-          ["source": item.sourceTabID.description, "originalHostTab": item.hostTabID.description,
+          ["source": item.sourceTabID.description, "url": item.url.absoluteString,
+           "profile": item.profileID.description, "librarySpace": item.librarySpaceID?.description ?? "",
+           "originalHostTab": item.hostTabID.description,
            "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0,
            "style": (item.host as? EngineWebContentHost).map { $0.content.runtimeStyle == .chrome ? "chrome" : "alloy" } ?? ""] as [String: Any]
         }] as [String: Any]
