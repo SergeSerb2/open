@@ -27,6 +27,7 @@ final class BottomBarView: NSView {
         self.menus = menus
         super.init(frame: .zero)
         wantsLayer = true
+        clipsToBounds = false; layer?.masksToBounds = false
         strip.wantsLayer = true
         addSubview(strip)
         let style: @MainActor () -> SpaceThemeStyle = { [unowned context] in

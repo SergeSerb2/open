@@ -39,6 +39,7 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate, NSDraggingSour
 
     init() {
         super.init(glyph: .library)
+        clipsToBounds = false; layer?.masksToBounds = false
         for shape in [track, ring] {
             shape.fillColor = nil; shape.lineWidth = 2; shape.opacity = 0
             layer?.addSublayer(shape)

@@ -286,6 +286,7 @@ def checks(factory, results, tmp, config, harness):
             dismiss_library()
 
     def captured_mark_flow():
+        library(); dismiss_library()
         for appearance in ('light', 'dark'):
             app.call('appearance', name=appearance)
             key = start('/finish?name=mark-' + appearance + '.txt')
@@ -1013,7 +1014,7 @@ def checks(factory, results, tmp, config, harness):
             if retry_result is not None:
                 check('history_retry', **retry_result)
                 if not retry_result['ok']:
-                    raise RuntimeError('historical Retry did not complete a new transfer')
+                    raise RuntimeError('live failed-row Retry did not complete a new transfer')
     finally:
         if not app.closed:
             E._try(lambda: app.call('profiles-shell', action='cancel'))
