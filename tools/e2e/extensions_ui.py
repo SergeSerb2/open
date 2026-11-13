@@ -533,7 +533,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         bar = app.call("ext-ui-menu", kind="bar")
         names = [a["name"] for a in sorted(actions(), key=lambda a: (not a["pinned"], a["pinnedIndex"] if a["pinned"] else a["name"]))]
         shown_names = [x["title"] for x in bar if not x["separator"]]
-        results["X16_menu_bar"] = {"ok": shown_names == names + ["Manage Extensions…", "Add Extension…"], "titles": shown_names}
+        # #506 (34a51432, source 5b6a0c3f) adopted the captured menu-bar order.
+        results["X16_menu_bar"] = {"ok": shown_names == names + ["Add Extension…", "Manage Extensions…"], "titles": shown_names}
         app.call("ext-ui-menu", kind="bar", select=action(probe)["name"])
         from_menu = wait_until(lambda: app.call("ext-popup-state").get("visible"), timeout=10)
         results["X16_menu_run"] = {"ok": bool(from_menu), "state":app.call("ext-popup-state")}
