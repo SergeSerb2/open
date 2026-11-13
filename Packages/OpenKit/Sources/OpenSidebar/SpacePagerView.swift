@@ -166,7 +166,14 @@ final class SpacePagerView: NSView {
         let motionLayer = strip.layer
         let spring = token.animation(keyPath: "transform.translation.x")
         spring.fromValue = x
-        spring.toValue = -offset
+        // The finite spring still has a subpixel remainder at settlingDuration.
+        // Normalize its travel so its last presentation matches the model when
+        // Core Animation removes it. Keep the response, damping and lifetime.
+        let progress = Motion.springProgress(token, at: spring.duration)
+        spring.toValue = progress.isFinite && abs(progress) > 0.001
+            ? x + (-offset - x) / CGFloat(progress) : -offset
+        let hz = Float(window?.screen?.maximumFramesPerSecond ?? 60)
+        spring.preferredFrameRateRange = CAFrameRateRange(minimum: hz, maximum: hz, preferred: hz)
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
             guard let self, self.slideGeneration == generation else { return }
