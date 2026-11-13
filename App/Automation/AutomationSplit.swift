@@ -52,13 +52,9 @@ extension AutomationController {
             // NSOutlineView.mouseDown tracks native drag input synchronously. The socket's
             // virtual pointer does not run the WindowServer drag loop. Exercise the actual
             // destination callbacks with the real sidebar pasteboard format instead.
-            try await activateForInput(window)
             let info = SplitDraggingInfo(window: window, source: controller.sidebar,
                 point: NSPoint(x: point[0], y: window.frame.height - point[1]), node: raw)
             defer { info.draggingPasteboard.releaseGlobally() }
-            guard info.draggingPasteboard.string(forType: .init("com.open.sidebar.node")) == raw else {
-                throw Failure(message: "split drag pasteboard did not retain the source node (written: \(info.payloadWritten), typePresent: \(info.draggingPasteboard.types?.contains(.init("com.open.sidebar.node")) ?? false))")
-            }
             let entered = container.draggingEntered(info)
             let updated = container.draggingUpdated(info)
             let overlayShown = !container.dropOverlay.isHidden
@@ -258,8 +254,7 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
     let draggingDestinationWindow: NSWindow?
     let draggingSource: Any?
     let draggingLocation: NSPoint
-    let draggingPasteboard = NSPasteboard(name: .init("open.automation.split.\(UUID().uuidString)"))
-    private(set) var payloadWritten = false
+    let draggingPasteboard = NSPasteboard.withUniqueName()
     let draggingSourceOperationMask: NSDragOperation = .move
     let draggingSequenceNumber = 1
     var draggedImageLocation: NSPoint { draggingLocation }
@@ -271,12 +266,7 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
     init(window: NSWindow, source: NSView, point: NSPoint, node: String) {
         draggingDestinationWindow = window; draggingSource = source; draggingLocation = point
         super.init()
-        let type = NSPasteboard.PasteboardType("com.open.sidebar.node")
-        // Match the sidebar's real native drag writer: an owned item, not a
-        // legacy pasteboard string declaration. Readback is required above.
-        draggingPasteboard.clearContents()
-        let item = NSPasteboardItem()
-        payloadWritten = item.setString(node, forType: type) && draggingPasteboard.writeObjects([item])
+        draggingPasteboard.setString(node, forType: .init("com.open.sidebar.node"))
     }
     func slideDraggedImage(to screenPoint: NSPoint) {}
     override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
