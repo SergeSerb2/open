@@ -641,6 +641,7 @@
         default: throw Failure(message: "invalid drop parent")
         }
         return controller.context.performNodeDrop(ids: ids, to: destination, index: index)
+      case "sidebar-drag": return try sidebarDrag(a)
       case "sidebar-clear-state":
         let controller = try sidebarController(a)
         controller.contentView.layoutSubtreeIfNeeded()
@@ -2175,7 +2176,7 @@
       switch name { case "cmd": return "command"; case "opt", "alt": return "option"; case "ctrl": return "control"; default: return name }
     }
 
-    private func sidebarController(_ args: [String: Any]) throws -> BrowserWindowController {
+    func sidebarController(_ args: [String: Any]) throws -> BrowserWindowController {
       if let raw = args["window"] {
         guard let id = raw as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown browser window") }
         return controller

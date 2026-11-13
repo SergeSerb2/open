@@ -11,6 +11,7 @@ import QuartzCore
 import OpenCommands
 import OpenSettings
 import OpenLibrary
+import OpenSidebar
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -58,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// The engine layout step's outcome (and the data root lock).
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
+  var sidebarDropRails: [SidebarDropRails] = []
   private(set) var windowControllers: [BrowserWindowController] = []
   let incognitoSessions = IncognitoSessions()
   // CEF pumps AppKit without a normal per-event undo group boundary. The
@@ -538,6 +540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         guard let self, let factory else { return false }
         return self.dropTabs(ids, fromAnotherWindowInto: factory, parent: parent, index: index, perform: perform)
       }
+      controller.context.tabDragChanged = { [weak self] ids in self?.sidebarDragChanged(ids) }
       controller.context.storedFavicons = stores.sidebarFavicons
       // Favorites empty-state card (A3): on in the product; a launch option turns it off for older suites.
       controller.context.showsFavoritesEmptyState = !options.hideFavoritesEmptyState
@@ -687,6 +690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    sidebarDragChanged(nil)
     libraryFirstSidebarDraws.removeValue(forKey:id)
     settingsPresenter.libraryWindowClosed(id)
     guard let factory = hostFactories[id] else { return }

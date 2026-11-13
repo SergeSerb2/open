@@ -1,12 +1,13 @@
 import AppKit
 import OpenModel
+import OpenSidebar
 
 /// File ▸ Blank Window (⌃⌘N) as its own window kind (capture C10, Arc 1.172.2; C-report-s6.md):
 /// - the same size as the source window, offset +29 / +29 pt;
 /// - the sidebar header "This Window" over this window's tabs only (newest first), with no
 ///   Favorites, no pinned section and no Space dots; the bottom bar keeps Library and "+";
 /// - default theme colours, the command bar open, the window title "Space 1" until a page shows;
-/// - ⌘W on the last tab closes the window with no prompt; it is not restored at relaunch;
+/// - ⌘W on the last tab closes the window with no prompt; a closed window is not restored;
 /// - ⇧⌘T reopens a closed tab in this window, and does not bring a closed Blank Window back.
 ///
 /// Open builds it as a window with its own in-memory model: one untitled Space on a stand-in
@@ -34,6 +35,18 @@ struct SavedBlankWindow: Codable {
 }
 
 extension AppDelegate {
+  /// No windows, observers or timers are allocated for rails until a sidebar drag starts.
+  func sidebarDragChanged(_ ids: [ItemID]?) {
+    sidebarDropRails.forEach { $0.close() }; sidebarDropRails.removeAll()
+    guard let ids, !ids.isEmpty, ids.count <= 500 else { return }
+    for controller in windowControllers {
+      guard controller.window?.isVisible == true, controller.window?.isMiniaturized == false,
+        !controller.context.isIncognito, let space = controller.context.focusedSpace,
+        controller.context.acceptsNodeDrop(ids: ids, to: .spaceToday(space.id), index: 0) else { continue }
+      sidebarDropRails.append(SidebarDropRails(sidebar: controller.sidebar))
+    }
+  }
+
   var blankWindowsFile: URL { snapshotStore.fileURL.deletingLastPathComponent().appendingPathComponent("blank-windows.json") }
 
   /// Taken when quit starts, before any window closes.
@@ -59,7 +72,8 @@ extension AppDelegate {
   /// At launch, after the snapshot's windows: once, then the file is gone.
   func restoreBlankWindows() {
     let file = blankWindowsFile
-    guard let data = try? Data(contentsOf: file), data.count <= 4 << 20 else { return }
+    guard let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4 << 20,
+      let data = try? Data(contentsOf: file), data.count <= 4 << 20 else { return }
     try? FileManager.default.removeItem(at: file)
     guard UserDefaults.standard.object(forKey: "open.advanced.restoreWindowsOnLaunch") as? Bool != false,
       let saved = try? JSONDecoder().decode([SavedBlankWindow].self, from: data) else { return }
@@ -87,7 +101,7 @@ extension AppDelegate {
     if let width = sourceFactory?.windowState.sidebarWidth { state.sidebarWidth = width }
     let memory = BrowserModel(profiles: [profile], spaces: [space], windows: [state])
     let undo = UndoManager(); undo.groupsByEvent = false; memory.undoManager = undo
-    // GUESS: a tab closed here goes to the Profile's Archive like any Today tab.
+    // Capture s11 1(b): a closed tab goes to the Profile's Archive; the last closes the window.
     memory.archiveSink = archiveSink
     if let saved {
       // Oldest first, so each new tab lands on top and the list keeps its saved order.
@@ -117,9 +131,11 @@ extension AppDelegate {
   /// selected in the destination.
   func dropTabs(_ ids: [ItemID], fromAnotherWindowInto factory: EngineWebContentHostFactory,
                 parent: NodeParent, index: Int, perform: Bool) -> Bool {
+    guard index >= 0, !ids.isEmpty, ids.count <= 500 else { return false }
     switch parent {
-    case .spaceToday, .folder: break
-    case .spacePinned: guard !factory.isBlankWindow else { return false }
+    case .spaceToday(let id): guard factory.model.space(id: id) != nil else { return false }
+    case .folder(let id): guard factory.model.node(id: id)?.folder != nil else { return false }
+    case .spacePinned(let id): guard !factory.isBlankWindow, factory.model.space(id: id) != nil else { return false }
     case .favorites, .splitPane: return false
     }
     guard let space = factory.focusedSpace, Set(ids).count == ids.count,
@@ -171,6 +187,46 @@ extension EngineWebContentHostFactory {
 
 #if OPEN_AUTOMATION
 extension AutomationController {
+  /// Only drag transport is supplied by the socket. Real rail windows and the live outline's
+  /// destination callbacks do all validation, insertion feedback, tab transfer and cleanup.
+  func sidebarDrag(_ args: [String: Any]) throws -> [String: Any] {
+    let controller = try sidebarController(args)
+    switch args["op"] as? String ?? "state" {
+    case "begin":
+      guard let raw = args["nodes"] as? [String], !raw.isEmpty, raw.count <= 500 else { throw Failure(message: "invalid drag nodes") }
+      let ids = try raw.map { value -> ItemID in
+        guard let uuid = UUID(uuidString: value), controller.context.model.tab(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "unknown drag tab") }
+        return ItemID(rawValue: uuid)
+      }
+      controller.context.tabDragChanged?(ids)
+    case "end": app.sidebarDragChanged(nil)
+    case "rail":
+      let rails = app.sidebarDropRails.flatMap(\.windows).filter { $0.parent === controller.window }
+      let index = args["rail"] as? Int ?? 0
+      guard rails.indices.contains(index), let view = rails[index].contentView,
+        let node = args["node"] as? String, UUID(uuidString: node) != nil,
+        let top = args["top"] as? Double, top.isFinite else { throw Failure(message: "invalid rail drop") }
+      let info = SplitDraggingInfo(window: rails[index], source: controller.sidebar,
+        point: CGPoint(x: rails[index].frame.width / 2, y: rails[index].frame.height - top), node: node)
+      defer { info.draggingPasteboard.releaseGlobally() }
+      let entered = view.draggingEntered(info)
+      let updated = view.draggingUpdated(info)
+      let indicator = controller.sidebar.dropIndicatorFrame
+      let accepted = args["perform"] as? Bool == true && view.prepareForDragOperation(info) && view.performDragOperation(info)
+      if args["perform"] as? Bool == true { view.concludeDragOperation(info) }
+      return ["entered": entered.rawValue, "updated": updated.rawValue, "accepted": accepted,
+        "indicator": indicator.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? [],
+        "path": "real rail windows, pasteboard and outline destination callbacks; no WindowServer drag loop"]
+    case "state": break
+    default: throw Failure(message: "unknown sidebar drag operation")
+    }
+    return ["rails": app.sidebarDropRails.flatMap(\.windows).map { rail in
+      ["parent": app.windowControllers.first(where: { $0.window === rail.parent })?.windowID.description ?? "",
+       "visible": rail.isVisible, "opaque": rail.isOpaque,
+       "frame": [rail.frame.minX, rail.frame.minY, rail.frame.width, rail.frame.height]] as [String: Any]
+    }]
+  }
+
   /// The front window's Blank Window facts (capture C10 rows).
   func blankWindowState() throws -> [String: Any] {
     let factory = try window

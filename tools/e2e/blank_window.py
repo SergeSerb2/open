@@ -30,6 +30,7 @@ def run(factory, results, tmp, h):
         app.call('window-frame', frame=[100, 220, 900, 480])
         main = blank()
         main_window = main['window']
+        main_drop_top = app.call('sidebar-row', node=main_tab)['point'][1]
         main_tabs = [t['id'] for t in app.call('tabs')]
         main_space = next(s['id'] for s in app.call('spaces') if s['focused'])
 
@@ -79,13 +80,36 @@ def run(factory, results, tmp, h):
         # C-report-s11 1(a): a tab drags from the Blank Window into the normal window's sidebar and back.
         five = h.new_tab(app, origin + '/five')
         bspace = blank()['space']
-        out = app.call('sidebar-drop', window=main_window, nodes=[five], parent=dict(kind='today', id=main_space), index=0)
+        blank_drop_top = app.call('sidebar-row', node=first)['point'][1]
+        rails = app.call('sidebar-drag', op='begin', nodes=[five])['rails']
+        target_rails = [r for r in rails if r['parent'] == main_window]
+        hover = app.call('sidebar-drag', op='rail', window=main_window, rail=0, node=five, top=main_drop_top)
+        row('destination_rails_and_blue_line', len(target_rails) == 2
+            and sorted(r['frame'][2] for r in target_rails) == [30, 80]
+            and all(r['visible'] and not r['opaque'] for r in target_rails)
+            and hover['entered'] and hover['updated'] and len(hover['indicator']) == 4,
+            rails=target_rails, hover=hover)
+        # Cancel leaves the tab in its original window and removes all rail windows and feedback.
+        ended = app.call('sidebar-drag', op='end')
+        row('cancel_drag_cleans_rails', ended['rails'] == [] and any('/five' in t['url'] for t in blank()['tabs']), ended=ended)
+        app.call('sidebar-drag', op='begin', nodes=[five])
+        try:
+            out = app.call('sidebar-drag', op='rail', window=main_window, rail=0, node=five, top=main_drop_top, perform=True)['accepted']
+        finally:
+            app.call('sidebar-drag', op='end')
         left = h.wait_until(lambda: all('/five' not in t['url'] for t in blank()['tabs']) or None, timeout=5, step=.1)
         in_main = '/five' in snapshot_text()
         row('drag_blank_to_normal_window', out is True and bool(left) and in_main and blank()['isBlankWindow'], dropped=out, inMain=in_main)
         app.call('window-focus', id=main_window, activate=True)
         moved_five = h.wait_until(lambda: [t['id'] for t in app.call('tabs') if '/five' in t['url']] or None, timeout=5, step=.1) or []
-        back = app.call('sidebar-drop', window=b['window'], nodes=moved_five[:1], parent=dict(kind='today', id=bspace), index=0) if moved_five else False
+        back = False
+        if moved_five:
+            app.call('sidebar-drag', op='begin', nodes=moved_five[:1])
+            try:
+                incoming = app.call('sidebar-drag', op='rail', window=b['window'], rail=1, node=moved_five[0], top=blank_drop_top, perform=True)
+                back = incoming['accepted'] and len(incoming['indicator']) == 4
+            finally:
+                app.call('sidebar-drag', op='end')
         app.call('window-focus', id=b['window'], activate=True)
         returned = h.wait_until(lambda: any('/five' in t['url'] for t in blank()['tabs']) or None, timeout=5, step=.1)
         row('drag_normal_window_to_blank', back is True and bool(returned) and '/five' not in snapshot_text(),
@@ -104,6 +128,10 @@ def run(factory, results, tmp, h):
 
         frames = os.path.join(h.ROOT, '.re', 'nt-frames'); os.makedirs(frames, exist_ok=True)
         app.call('snapshot', path=os.path.join(frames, 'blank-window.png'))
+        for appearance in ['light', 'dark']:
+            app.call('appearance', name=appearance)
+            app.call('snapshot', path=os.path.join(frames, 'blank-window-' + appearance + '.png'))
+        app.call('appearance', name='system')
 
         # ⇧⌘T (capture C10 addition): a tab closed here reopens in this window.
         third = h.new_tab(app, origin + '/three')

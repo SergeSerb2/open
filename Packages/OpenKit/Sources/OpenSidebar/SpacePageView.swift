@@ -27,6 +27,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     let header: SpaceHeaderView
     let scroll = PageScrollView()
     let outline = SidebarOutlineView()
+    let dropIndicator = SidebarDropIndicator()
     let spacer = SpacerItem(), divider = DividerItem(), newTab = NewTabItem()
     var menus: SidebarMenus
 
@@ -103,7 +104,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.registerForDraggedTypes([.sidebarNode, .URL, .fileURL])
         outline.setDraggingSourceOperationMask(.move, forLocal: true)
         outline.setDraggingSourceOperationMask(.copy, forLocal: false)
-        outline.draggingDestinationFeedbackStyle = .gap
+        outline.draggingDestinationFeedbackStyle = .none
+        dropIndicator.isHidden = true
+        outline.addSubview(dropIndicator)
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = false
@@ -863,12 +866,15 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         context.suppressPreviews(.drag, true)
         TooltipController.shared.cancel(for: nil)
         draggingIDs = Set(draggedItems.compactMap { itemID(of: $0) })
+        context.tabDragChanged?(Array(draggingIDs))
         updateRowStates(animated: false)
     }
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         draggingIDs = []
+        context.tabDragChanged?(nil)
+        clearDropIndicator()
         context.suppressPreviews(.drag, false)
         context.haptics.endDrag()
         outline.dragWasStarted = false
@@ -889,11 +895,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
             return (.folder(f.id), childIndex, nil)
         case nil:
-            let pinnedCount = space.isPinnedCollapsed ? 0 : space.pinned.count
+            let pinnedCount = context.hidesSpaceChrome || space.isPinnedCollapsed ? 0 : space.pinned.count
             let pinnedEnd = 1 + pinnedCount
-            let newTabIndex = pinnedEnd + (space.today.isEmpty ? 0 : 1)
+            let newTabIndex = pinnedEnd + (context.hidesSpaceChrome || space.today.isEmpty ? 0 : 1)
             let todayStart = newTabIndex + (context.manager?.libraryLayout == true ? 0 : 1)
-            if childIndex <= pinnedEnd { return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil) }
+            if !context.hidesSpaceChrome, childIndex <= pinnedEnd { return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil) }
             if childIndex <= todayStart { return (.spaceToday(space.id), 0, childIndex == todayStart ? nil : (nil, todayStart)) }
             return (.spaceToday(space.id), childIndex - todayStart, nil)
         case let t as AnyObject where t is Tab || t is Split:
@@ -909,20 +915,42 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     private func outlineView(_ outlineView: NSOutlineView, parentOf item: AnyObject) -> Any? { outlineView.parent(forItem: item) }
 
+    func clearDropIndicator() { dropIndicator.isHidden = true }
+    private func showDropIndicator(item: Any?, index: Int) {
+        let count = children(of: item).count
+        let row: Int
+        if index < count { row = outline.row(forItem: children(of: item)[max(0, index)]) }
+        else if count > 0 { row = outline.row(forItem: children(of: item)[count - 1]) + 1 }
+        else { row = 0 }
+        let y = row < outline.numberOfRows ? outline.rect(ofRow: max(0, row)).minY
+            : (outline.numberOfRows > 0 ? outline.rect(ofRow: outline.numberOfRows - 1).maxY : 0)
+        dropIndicator.frame = CGRect(x: 8, y: y - 4, width: max(0, outline.bounds.width - 16), height: 8)
+        dropIndicator.isHidden = false
+        outline.addSubview(dropIndicator, positioned: .above, relativeTo: nil)
+        dropIndicator.needsDisplay = true
+    }
+
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
         context.suppressPreviews(.drag, true)
-        guard let dest = dropDestination(item: item, childIndex: index) else { return [] }
+        guard let dest = dropDestination(item: item, childIndex: index) else { clearDropIndicator(); return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
             let allowed = context.acceptsNodeDrop(ids: ids, to: dest.parent, index: dest.index)
-            if allowed { context.haptics.insertionChanged(parent: dest.parent, index: dest.index) }
+            if allowed {
+                context.haptics.insertionChanged(parent: dest.parent, index: dest.index)
+                let target = dest.retarget ?? (item, index)
+                showDropIndicator(item: target.0, index: target.1)
+            } else { clearDropIndicator() }
             return allowed ? .move : []
         }
-        return SidebarPasteboard.urls(from: info.draggingPasteboard).isEmpty ? [] : .copy
+        guard !SidebarPasteboard.urls(from: info.draggingPasteboard).isEmpty else { clearDropIndicator(); return [] }
+        let target = dest.retarget ?? (item, index)
+        showDropIndicator(item: target.0, index: target.1)
+        return .copy
     }
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
-        defer { context.suppressPreviews(.drag, false) }
+        defer { context.suppressPreviews(.drag, false); clearDropIndicator() }
         guard let dest = dropDestination(item: item, childIndex: index) else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
             let accepted = context.performNodeDrop(ids: ids, to: dest.parent, index: dest.index)
@@ -1008,11 +1036,13 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     override func draggingEnded(_ sender: any NSDraggingInfo) {
+        page?.clearDropIndicator()
         page?.context.suppressPreviews(.drag, false)
         super.draggingEnded(sender)
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        page?.clearDropIndicator()
         page?.context.haptics.endDrag()
         page?.context.suppressPreviews(.drag, false)
         super.draggingExited(sender)

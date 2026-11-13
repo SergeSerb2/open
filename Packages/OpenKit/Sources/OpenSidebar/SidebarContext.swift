@@ -27,6 +27,8 @@ public final class SidebarContext {
     /// normal window, capture C-report-s11 1(a)). `perform: false` only asks whether the drop is
     /// accepted; `true` moves them in at `parent` / `index`.
     @ObservationIgnored public var foreignNodeDrop: (@MainActor (_ ids: [ItemID], _ parent: NodeParent, _ index: Int, _ perform: Bool) -> Bool)?
+    /// Native tab-drag lifetime. The App opens destination rails only during a drag.
+    @ObservationIgnored public var tabDragChanged: (@MainActor (_ ids: [ItemID]?) -> Void)?
     /// Incognito and Blank Windows show no Favorites, pinned section, Space dots or Space header controls.
     public var hidesSpaceChrome: Bool { isIncognito || isWindowOnly }
     public var extensionsUI: ExtensionsUIContext?
