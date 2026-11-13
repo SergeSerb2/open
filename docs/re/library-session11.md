@@ -3,7 +3,11 @@
 Evidence: Arc 1.172.2, C3 capture session 11, C-D2-1 and C-D2-2.
 The capture menu is visible in
 `.re/capture/s11/m1/arc/v16/d3-media-menus/m1-card-right-w-101791.png`.
-Archive hover observations are in the same session's `v14/d2` capture sequence.
+Media before a folder grant is visible in
+`.re/capture/s11/m1/arc/v15/d1-media-capture/d1-media.png`.
+Archive hover observations are in
+`.re/capture/s11/m1/arc/v14/d2-archive-hover/d2-row0-left-window-101722.png`,
+`d2-row1-right-window-101722.png` and `d2-selected-right.png` in the same folder.
 These observations replace the earlier menu-order guess for saved captures.
 Folder-file menus remain outside this finding: C3 could not capture them without
 a folder grant.
