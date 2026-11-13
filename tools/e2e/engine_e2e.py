@@ -4532,6 +4532,7 @@ def peek_checks(factory, results, tmp):
             and set(geometry[0]['paths']) == {'position', 'transform'}
             and all(s['panelFrame'] == motion_before['panelFrame'] and s['clipFrame'] == motion_before['clipFrame']
                     and s['hostFrame'] == motion_before['hostFrame']
+                    and s['layouts'] == motion_before['layouts']
                     and s['hostFrameChanges'] == motion_before['hostFrameChanges'] for s in active),
             'before': motion_before, 'samples': sampled}
         wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
