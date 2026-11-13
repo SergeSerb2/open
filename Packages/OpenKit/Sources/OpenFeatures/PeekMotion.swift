@@ -15,7 +15,8 @@ extension PeekOverlayView {
         let transform = interrupted || !shown ? (panelLayer.presentation() ?? panelLayer).transform : CATransform3DMakeScale(0.98, 0.98, 1)
         let position = (panelLayer.presentation() ?? panelLayer).position
         let target = shown ? Float(1) : 0
-        let targetTransform = shown ? CATransform3DIdentity : CATransform3DMakeScale(0.98, 0.98, 1)
+        // Keep the existing fade-only exit until C14-4 measures its geometry.
+        let targetTransform = CATransform3DIdentity
         beginMotion(shown ? "open" : "close", duration: duration, completion: completion)
         fade(layer, from: opacity, to: target, duration: duration)
         if let backdropLayer = backdrop.layer {
