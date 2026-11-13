@@ -148,6 +148,21 @@ final class HTTPAuthPresenter {
     sheet.makeFirstResponder(sheet.initialFirstResponder)
     sheet.announce()
     onPresent?(sheet)
+    fillSavedCredential(for: entry.request, sheet: sheet)
+  }
+
+  private func fillSavedCredential(for request: any HTTPAuthRequest, sheet: HTTPAuthSheet) {
+    guard let source = request as? any HTTPAuthPasswordManagerRequest,
+          let protectionSpace = HTTPAuthProtectionSpace(request) else { return }
+    source.fetchSavedCredential { [weak self, weak request, weak sheet] credential in
+      guard let self, let request, let sheet, let credential,
+            self.active === sheet, self.activeEntry?.request === request,
+            !self.closing, !self.activeInvalid, !request.isAnswered,
+            credential.protectionSpace == protectionSpace,
+            HTTPAuthProtectionSpace(request) == protectionSpace else { return }
+      // HTTPAuthSheet also refuses a late result after the user starts typing.
+      sheet.autofill(username: credential.username, password: credential.password)
+    }
   }
 
   private func positionSheet() {

@@ -195,7 +195,7 @@ final class HTTPAuthSheet: NSPanel, NSTextFieldDelegate {
       && passwordField.stringValue.utf8.count <= Self.maximumCredentialBytes
   }
 
-  /// Reserved for a future engine password-manager hook. User typing wins.
+  /// Receives a matching engine password-store result. User typing wins.
   func autofill(username: String, password: String) {
     guard !userEdited, request?.isAnswered == false,
           username.utf8.count <= Self.maximumCredentialBytes,

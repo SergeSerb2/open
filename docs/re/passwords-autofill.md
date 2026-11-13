@@ -156,6 +156,27 @@ follow-up exits 0 and quits normally after No. No password was saved, so this
 capture does not prove saved-password refill; the fill API evidence above
 remains separate.
 
+Open implementation status (2026-11-13): the captured save offer is required;
+there is no capture-based exception to omit it. `OPEN_HTTP_AUTH` guards the
+sheet and the shell's credential-result handoff. That handoff checks transport,
+host, effective port, realm, authentication scheme, and proxy flag, and ignores
+late results after typing, answer, withdrawal, or sheet replacement.
+`OPEN_HTTP_AUTH_ENGINE` additionally guards the request/answer/cancel adapter.
+Normal-tab delegates forward to the same factory as standalone pages.
+
+Password-manager integration is **not complete**: E3's declared
+`OEAuthenticationRequest` API has no saved-credential lookup or successful-auth
+callback, and its CEF LoginDelegate path bypasses Chromium's password-manager
+integration. `OEAutofill.h` and `cef_open_autofill.h` expose credential counts
+and imports, but no credential lookup or update; import preserves existing
+entries. An engine-owned implementation must supply the guarded
+`HTTPAuthPasswordManagerRequest` handoff and issue the existing `OESavePrompt`
+only after confirmed acceptance. Its existing save/update presenter and answer
+path can then be reused. The shell must not infer acceptance from a later page
+load, use import as update, or create another credential store. These are Open
+implementation requirements, not captured Arc internals. Default builds keep
+both flags off; no auth runtime or saved-refill acceptance is claimed.
+
 ## PW-12. Default prefs on this Mac
 
 Read-only key check of `~/Library/Application Support/Arc/User Data/Default/Preferences` (key names and presence only; no values printed):

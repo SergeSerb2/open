@@ -12,6 +12,19 @@ extension OEAuthenticationRequest: HTTPAuthRequest {
   }
 }
 
+// Normal tabs use EngineWebContentHost as their delegate. Standalone pages
+// can use the factory directly; both must reach the same per-window presenter.
+extension EngineWebContentHost {
+  func webContent(_ page: OEWebContent, handleAuthenticationRequest request: OEAuthenticationRequest) -> Bool {
+    guard !closed, let owner else { return false }
+    return owner.webContent(page, handleAuthenticationRequest: request)
+  }
+
+  func webContent(_ page: OEWebContent, didCancelAuthenticationRequest request: OEAuthenticationRequest) {
+    owner?.webContent(page, didCancelAuthenticationRequest: request)
+  }
+}
+
 extension EngineWebContentHostFactory {
   func webContent(_ page: OEWebContent, handleAuthenticationRequest request: OEAuthenticationRequest) -> Bool {
     guard !isClosing, let window, request.isPending else { return false }
