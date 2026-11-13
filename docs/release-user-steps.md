@@ -119,6 +119,9 @@ launch path that the budget assumes, and the ad-hoc cost is a development-only
 effect. If they still scan, the change-time writer inside a full Open run must
 be found and removed before launch work can meet the budget.
 
+Result (H15, 2026-11-12): launch 2 may scan once (about 180 ms) and launch 3 must not. Run 1 of each install or update hard-links the executable into Chromium's code-sign clone (`~/Library/Application Support/Open/CodeSignClones/`, engine patch 0106), which advances its change time once.
+Later runs reuse that clone and do not scan. This is accepted for 1.0 (lead, 2026-11-12 20:15). A scan on launch 3 or later is a regression.
+
 ## U-4: Sparkle signing key and backup
 
 This unlocks signed updates. Losing this key prevents installed copies from

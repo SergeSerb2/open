@@ -9624,7 +9624,7 @@ def commandbar_checks(factory, results, tmp, config):
         results['edit_pinned_url'] = {'ok': bool(editing) and editing['mode'] == 'editCurrentURL' and editing['text'] == origin + '/pinned'
             and editing['range'] == [0, len(origin + '/pinned')] and bool(changed) and bool(moved) and not state().get('pinnedEdit'),
             'editing': {k: (editing or {}).get(k) for k in ('mode', 'text', 'range', 'pinnedEdit')}, 'pinnedURL': (changed or {}).get('pinnedURL')}
-        commandbar_pb1_checks(app, results, bar, press, type_query, state)
+        commandbar_pb1_checks(app, results, bar, press, type_query, state, origin)
         time.sleep(.25)
         app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
         app.call('settings-toggle', name='external'); app.call('save'); app.quit()
@@ -9643,7 +9643,7 @@ def commandbar_checks(factory, results, tmp, config):
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
-def commandbar_pb1_checks(app, results, bar, press, type_query, state):
+def commandbar_pb1_checks(app, results, bar, press, type_query, state, origin):
     """PB1 command-bar rows: the privacy footer link, Arc's new-document actions, Undo <name>."""
     def top_rows(): return [(r.get('action'), r.get('title')) for r in state().get('rows', [])]
     tab = app.call('tabs')[0]['id']
@@ -9669,6 +9669,30 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
         and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
         'rows': rows[:4], 'tab': doc}
+    # Multi-word queries (capture PB1-h, C-report-s6 §6): query words must start adjacent title words, in
+    # order. "new g" finds New Google Doc, "new d" does not (it skips "Google"), nor does "doc new".
+    # Host/URL words keep the old rules: "shell alpha" finds "Shell C /alpha/beta-words" ("alpha" is in
+    # the URL); "c shell" (title words out of order, neither in the URL) finds no row for that page.
+    def action_ids(query):
+        press('escape'); bar('t', 'window'); found = type_query(query) or state()
+        return [r.get('action') for r in found.get('rows', [])]
+    order = {q: action_ids(q) for q in ('new g', 'new d', 'doc new', 'google d')}
+    gdoc = 'new-document-google-doc'
+    results['commandbar_words_adjacent_in_order'] = {'ok': gdoc in order['new g'] and gdoc not in order['new d']
+        and gdoc not in order['doc new'], 'actions': order}
+    press('escape')
+    words_url = origin + '/alpha/beta-words'
+    words_tab = new_tab(app, words_url)
+    wait_until(lambda: app.eval(words_tab, 'document.title') == 'Shell C /alpha/beta-words', timeout=5, step=.1)
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    def page_rows(query):
+        press('escape'); bar('t', 'window'); found = type_query(query) or state()
+        return [(r.get('kind'), r.get('title')) for r in found.get('rows', []) if r.get('tab') == words_tab or (r.get('url') or '') == words_url]
+    url_word, out_of_order = page_rows('shell alpha'), page_rows('c shell')
+    results['commandbar_words_url_rule'] = {'ok': bool(url_word) and not out_of_order, 'shell alpha': url_word, 'c shell': out_of_order}
+    press('escape')
+    app.call('select', tab=words_tab); app.call('menu-perform', id='archive-tab')
+    app.call('select', tab=tab); app.call('focus', tab=tab)
     # Top Domains (capture PB1-i): "netfl" completes the field inline to netflix.com and lists "Netflix" first.
     app.call('select', tab=tab); app.call('focus', tab=tab)
     bar('t', 'window'); app.call('key', text='netfl')
