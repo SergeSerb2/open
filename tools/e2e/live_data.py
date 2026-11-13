@@ -466,6 +466,10 @@ def run(factory, results, tmp, harness):
 
         app.call('defaults', key=key, value=False)
         off = hover(linear)
+        # The page card shows after the hover delay; under load it can land after the 800 ms read
+        # (one FAIL on a loaded rented Mac). Wait for the shown card; a glance card still fails.
+        if off['kind'] == 'none':
+            off = wait_until(lambda: (lambda st: st if st['kind'] != 'none' else None)(app.call('preview-state')), timeout=3, step=.05) or off
         results['live_recents_switch_off_gives_page_card'] = {'ok': off['kind'] == 'page' and app.call('glance-state').get('shown') is False, 'hover': off}
         app.call('defaults', key='open.general.previewsPages', value=False)
         none = hover(linear)
