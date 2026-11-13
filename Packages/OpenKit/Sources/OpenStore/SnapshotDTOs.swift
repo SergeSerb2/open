@@ -128,6 +128,8 @@ public struct TabDTO: Codable, Sendable {
     public var isUnread: Bool
     /// Live Folder row's pull request URL (LF L2); absent for normal tabs.
     public var liveItemURL: String? = nil
+    /// Live Folder row's pull request facts (C-LF-1); absent for normal tabs and older snapshots.
+    public var liveItem: LiveItemInfo? = nil
 }
 
 public struct FolderDTO: Codable, Sendable {
@@ -397,7 +399,7 @@ public enum SnapshotMapper {
         TabDTO(id: t.id.rawValue.uuidString, url: t.url.absoluteString, title: t.title, customTitle: t.customTitle,
                pinnedURL: t.pinnedURL?.absoluteString, customIcon: t.customIcon, iconOverride: iconDTO(t.iconOverride),
                createdAt: t.createdAt.timeIntervalSince1970, lastActiveAt: t.lastActiveAt.timeIntervalSince1970,
-               isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread, liveItemURL: t.liveItemURL?.absoluteString)
+               isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread, liveItemURL: t.liveItemURL?.absoluteString, liveItem: t.liveItem)
     }
 
     static func tab(from dto: TabDTO) -> Tab {
@@ -406,6 +408,7 @@ public enum SnapshotMapper {
             createdAt: Date(timeIntervalSince1970: dto.createdAt), lastActiveAt: Date(timeIntervalSince1970: dto.lastActiveAt),
             isMuted: dto.isMuted, openerID: dto.openerID.map { ItemID(uuidString: $0) }, isUnread: dto.isUnread)
         tab.liveItemURL = dto.liveItemURL.flatMap(URL.init(string:))
+        tab.liveItem = tab.liveItemURL == nil ? nil : dto.liveItem
         return tab
     }
 

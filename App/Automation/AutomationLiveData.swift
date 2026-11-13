@@ -28,6 +28,7 @@ extension AutomationController {
       case .recents(let site)?: return ["kind": "recents", "site": site.rawValue]
       case .calendar(let provider)?: return ["kind": "calendar", "provider": provider.rawValue]
       case .gmail(let account)?: return ["kind": "gmail", "account": account]
+      case .pullRequest?: return ["kind": "pullRequest"]
       case nil: return ["kind": "none"]
       }
     case "history-record":
@@ -75,7 +76,10 @@ extension AutomationController {
       let rows: [[String: Any]] = folder.children.compactMap { node in
         guard case .tab(let tab) = node else { return nil }
         return ["id": tab.id.description, "url": tab.url.absoluteString, "title": tab.title, "live": tab.liveItemURL?.absoluteString ?? "",
-                "unread": tab.isUnread]
+                "unread": tab.isUnread, "status": tab.liveItem?.status.rawValue ?? "", "number": tab.liveItem?.number ?? 0,
+                "repository": tab.liveItem?.repository ?? "", "author": tab.liveItem?.author ?? "",
+                "awaitingMyReview": tab.liveItem?.awaitingMyReview ?? false,
+                "glyph": app.frontWindowController?.sidebar.drawnFaviconSource(tabID: tab.id) ?? ""]
       }
       let index = space.pinned.firstIndex { $0.id == folder.id } ?? -1
       let intro = app.frontWindowController?.liveFolderIntro.map { v -> [String: Any] in
@@ -93,6 +97,12 @@ extension AutomationController {
     case "glance-state":
       let controller = try glanceController(a)
       guard case .glance(let id)? = controller.hoverPreview.request?.kind else { return ["shown": false] }
+      if let pr = controller.hoverPreview.card?.content as? LiveItemPreviewView {
+        let card = controller.hoverPreview.card.map { $0.convert($0.bounds, to: nil) } ?? .zero
+        return ["shown": true, "kind": "pullRequest", "tab": pr.tab.id.description, "title": pr.tab.displayTitle,
+          "status": pr.info.status.rawValue, "subtitle": pr.subtitle, "reviewLine": pr.reviewLine ?? NSNull(),
+          "card": [card.minX, card.minY, card.width, card.height]] as [String: Any]
+      }
       if let calendar = controller.hoverPreview.card?.content as? CalendarPreviewView {
         return try await calendarGlanceState(calendar, controller: controller, tab: id, wait: a["wait"] as? Bool != false)
       }

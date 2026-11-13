@@ -685,7 +685,7 @@ public final class BrowserModel {
                 pinnedURL: tab.pinnedURL, customIcon: tab.customIcon, iconOverride: tab.iconOverride,
                 createdAt: tab.createdAt, lastActiveAt: activity, isMuted: tab.isMuted,
                 openerID: tab.openerID, isUnread: tab.isUnread)
-            if case .folder(let id) = parent, index[id]?.folder?.live != nil { copy.liveItemURL = tab.liveItemURL }
+            if case .folder(let id) = parent, index[id]?.folder?.live != nil { copy.liveItemURL = tab.liveItemURL; copy.liveItem = tab.liveItem }
             return copy
         }
         func duplicate(_ id: ItemID, into parent: NodeParent) -> Bool {
@@ -1811,7 +1811,7 @@ public final class BrowserModel {
     /// Only rows with `liveItemURL` are removed or retitled. Returns the IDs of added rows.
     @discardableResult
     public func applyLiveRows(folderID: ItemID, add: [(url: URL, title: String)], remove: [ItemID], retitle: [ItemID: String],
-                              unread: Bool) -> [ItemID] {
+                              unread: Bool, info: [URL: LiveItemInfo] = [:]) -> [ItemID] {
         guard let folder = index[folderID]?.folder, folder.live != nil else { return [] }
         for id in remove where tab(id: id)?.liveItemURL != nil && parentByID[id] == .folder(folderID) { _ = detach(id) }
         for (id, title) in retitle { if let tab = tab(id: id), tab.liveItemURL != nil, tab.customTitle == nil { tab.title = title } }
@@ -1820,6 +1820,12 @@ public final class BrowserModel {
             let tab = Tab(url: item.url, title: item.title, pinnedURL: item.url, isUnread: unread)
             tab.liveItemURL = item.url
             if attach(.tab(tab), to: .folder(folderID), at: 0) != nil { added.append(tab.id) }
+        }
+        // Each row's PR facts follow the fetch (glyph and hover card, C-LF-1).
+        if !info.isEmpty {
+            for case .tab(let tab) in folder.children {
+                if let url = tab.liveItemURL, let fresh = info[url], tab.liveItem != fresh { tab.liveItem = fresh }
+            }
         }
         // A new unread PR peeks out of a collapsed folder (live-data §2.2, W2).
         if unread, let first = added.first, !folder.isExpanded { folder.applyExpansion(.peeked(first)) }

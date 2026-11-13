@@ -21,6 +21,14 @@ public struct PRSnapshot: Codable, Hashable, Sendable {
     }
 }
 
+extension PRSnapshot {
+    /// The row's stored facts (C-LF-1). "Awaiting my review" = found by the review-requested search.
+    public var liveItemInfo: LiveItemInfo {
+        LiveItemInfo(status: LiveItemInfo.Status(rawValue: status.rawValue) ?? .open, number: number, repository: repository,
+                     author: author, awaitingMyReview: kinds.contains(.reviewRequested))
+    }
+}
+
 /// GitHub searches, one per kind (live-data §2.4, query fragments are facts from Arc's strings).
 public enum GitHubQuery {
     /// Most rows a Live Folder keeps (memory and row budget: F2-report §6, ≤ 200 per Profile).

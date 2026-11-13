@@ -154,7 +154,8 @@ final class LiveFolderService {
       // New rows after the first fill show the unread dot (Arc `showNewItemsAsUnread`).
       let unread = live.lastFetch?.outcome == .success
       app.model.applyLiveRows(folderID: folderID, add: diff.add.map { ($0.url, $0.title) }, remove: diff.remove,
-                              retitle: diff.retitle, unread: unread)
+                              retitle: diff.retitle, unread: unread,
+                              info: Dictionary(fresh.map { ($0.url, $0.liveItemInfo) }, uniquingKeysWith: { first, _ in first }))
     }
     current.live?.lastFetch = .init(date: Date(), outcome: outcome)
     app.scheduleSave()

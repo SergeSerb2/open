@@ -105,6 +105,40 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is True, 'menu': menu, 'state': state}
         results['live_folder_fetch_pages_closed'] = {'ok': state.get('fetchPagesCreated') == state.get('fetchPagesClosed') and state.get('fetchPagesCreated', 0) >= 4,
             'state': {k: state.get(k) for k in ('fetchPagesCreated', 'fetchPagesClosed')}}
+        # C-LF-1 (Open's design, live-data §8): each row stores its PR facts and draws Open's PR-state
+        # glyph instead of the favicon; hovering a row shows the PR card (no fetch).
+        def by_number(st): return {r['number']: r for r in st.get('rows', [])}
+        glyphs = wait_until(lambda: (lambda st: st if {r['number']: r['glyph'] for r in st.get('rows', [])}
+            == {12: 'pullRequest.open', 7: 'pullRequest.draft', 15: 'pullRequest.open'} else None)(app.call('live-folder-state')), timeout=5, step=.1)
+        facts = by_number(glyphs or app.call('live-folder-state'))
+        plain = [t for t in app.call('tabs') if not any(t['id'] == r['id'] for r in facts.values())]
+        results['live_folder_row_glyphs'] = {'ok': bool(glyphs)
+            and (facts[12]['status'], facts[12]['repository'], facts[12]['author'], facts[12]['awaitingMyReview']) == ('open', 'acme/app', 'octo', True)
+            and (facts[7]['status'], facts[7]['repository'], facts[7]['awaitingMyReview']) == ('draft', 'acme/web', False)
+            and (facts[15]['status'], facts[15]['awaitingMyReview']) == ('open', True)
+            and bool(plain) and not any(t.get('rowFaviconSource', '').startswith('pullRequest') for t in plain),
+            'rows': facts, 'negative': {t['id']: t.get('rowFaviconSource') for t in plain}}
+        def pr_card(row):
+            app.call('hover', leave=True, ms=300)
+            app.call('hover', node=row['id'], ms=800)
+            return wait_until(lambda: (lambda g: g if g.get('kind') == 'pullRequest' and g.get('tab') == row['id'] else None)(app.call('glance-state')), timeout=3, step=.05) or app.call('glance-state')
+        review_card = pr_card(facts[15])
+        if os.environ.get('OPEN_LIVE_DATA_FRAMES') and review_card.get('kind') == 'pullRequest':
+            for name in ('light', 'dark'):
+                app.call('appearance', name=name); time.sleep(.6)
+                review_card = pr_card(facts[15])
+                app.call('snapshot', window=app.call('window-state').get('number'),
+                         path=os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-folder-pr-card-%s.png' % name))
+            app.call('appearance', name='system')
+            review_card = pr_card(facts[15])
+        draft_card = pr_card(facts[7])
+        app.call('hover', leave=True, ms=300)
+        results['live_folder_pr_card'] = {'ok': review_card.get('title') == 'Add Live Folders' and review_card.get('subtitle') == '#15 · acme/app'
+            and review_card.get('reviewLine') == 'octo needs your review' and review_card.get('status') == 'open'
+            and review_card.get('card', [0, 0, 0])[2] == 240
+            and draft_card.get('title') == 'Draft: new header' and draft_card.get('subtitle') == '#7 · acme/web'
+            and draft_card.get('reviewLine') is None and draft_card.get('status') == 'draft',
+            'review': review_card, 'draft': draft_card, 'negative': 'no review line on a PR that does not await my review'}
         # A PR ends, a new one comes: refetch removes and adds, new rows are unread.
         gh['prs']['created'] = [('acme/app', 12, 'Fix sidebar drag (v2)', 'open')]
         gh['prs']['review'] = [('acme/app', 21, 'New review request', 'open')]
@@ -172,10 +206,15 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         gh['signed_in'] = True
         # The folder's settings and rows survive a relaunch (snapshot DTO fields).
         before = {(r['url'], r['live']) for r in state.get('rows', [])}
+        facts_before = {r['url']: (r['status'], r['number'], r['repository'], r['awaitingMyReview']) for r in state.get('rows', [])}
         app.quit()
         app = holder['app'] = factory(urls=(), fresh=False)
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
         again = app.call('live-folder-state')
+        # C-LF-1: the PR facts are stored with the row, so the glyph is right before any refresh.
+        facts_again = {r['url']: (r['status'], r['number'], r['repository'], r['awaitingMyReview']) for r in again.get('rows', [])}
+        results['live_folder_pr_facts_survive_relaunch'] = {'ok': bool(facts_before) and all(f[0] for f in facts_before.values())
+            and facts_again == facts_before, 'before': facts_before, 'after': facts_again}
         results['live_folder_survives_relaunch'] = {'ok': again.get('exists') and again.get('outcome') == 'signedOut'
             and {(r['url'], r['live']) for r in again.get('rows', [])} == before
             and bool(wait_until(lambda: app.call('live-folder-refresh').get('outcome') == 'success', timeout=15, step=.5)),
