@@ -80,8 +80,15 @@ public final class FavoritesEmptyStateView: NSView {
     /// Light content: the title ink × 3.35 per sRGB channel (fits `#202BFF` from `#090D4E` and
     /// `#B60021` from `#360009`); dark content: the title ink itself (measured `#EDEEFF`).
     private var discColor: NSColor {
-        guard !isDark, let c = titleInk.usingColorSpace(.sRGB) else { return titleInk }
+        isDark ? titleInk : Self.accentColor(titleInk: titleInk)
+    }
+    /// Shared bright Space accent: the light title role, amplified as measured in PB5-c.
+    static func accentColor(titleInk: NSColor) -> NSColor {
+        guard let c = titleInk.usingColorSpace(.sRGB) else { return titleInk }
         return NSColor(srgbRed: min(1, c.redComponent * 3.35), green: min(1, c.greenComponent * 3.35), blue: min(1, c.blueComponent * 3.35), alpha: 1)
+    }
+    static func cardFillColor(_ appearance: ContentAppearance) -> NSColor {
+        appearance == .dark ? NSColor.black.withAlphaComponent(0.12) : NSColor.white.withAlphaComponent(0.14)
     }
     /// The card's resolved colours as sRGB hex with alpha (checks read them; the drawing uses the same values).
     public var resolvedColors: [String: String] {
@@ -92,7 +99,7 @@ public final class FavoritesEmptyStateView: NSView {
         return ["title": hex(titleColor), "body": hex(bodyColor), "disc": hex(discColor), "outline": hex(outlineColor), "fill": hex(fillColor),
                 "dismissPlate": hex(dismissButton.plate), "content": isDark ? "dark" : "light"]
     }
-    private var fillColor: NSColor { isDark ? NSColor.black.withAlphaComponent(0.12) : NSColor.white.withAlphaComponent(0.14) }
+    private var fillColor: NSColor { Self.cardFillColor(content) }
     private var outlineColor: NSColor {
         if isDropTarget { return NSColor.white.withAlphaComponent(isDark ? 0.35 : 0.55) }
         return isDark ? NSColor.white.withAlphaComponent(0.28) : discColor.withAlphaComponent(0.30)

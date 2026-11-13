@@ -153,7 +153,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func showLibrary(section: LibrarySection? = nil, boostsPresentation: BoostsPresentation? = nil, boostsProfileID: ProfileID? = nil) {
     guard let controller = app.frontStandardWindowController ?? app.makeWindow(), let window = controller.window else { return }
     librarySessions = librarySessions.filter { $0.value.controller != nil }
-    app.downloadsCenter.refreshFiles(); app.downloadsCenter.acknowledgeLibrary()
+    app.downloadsCenter.refreshFiles()
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
     let session = makeLibrarySession(controller)

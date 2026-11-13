@@ -665,7 +665,7 @@ extension LibraryPanelView {
 
 /// Arc's download file-kind word (string keys "Sidebar download cell file type copy for a PDF / an image / a disk image /
 /// a movie file / audio files / zip archives / generic archives"; titles from the code's small-string immediates:
-/// PDF, Image, Disk Image, Movie, Audio, Zip Archive, Archive). Nil: no kind word (the caller uses the extension).
+/// PDF, Image, Disk Image, Movie, Audio, Zip Archive, Archive). Nil: no kind word.
 nonisolated func downloadKind(_ fileName: String) -> String? {
     let ext = URL(fileURLWithPath: fileName).pathExtension
     guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return nil }
@@ -682,7 +682,13 @@ nonisolated func downloadKind(_ fileName: String) -> String? {
 nonisolated private func downloadSubtitle(_ item:DownloadItemSnapshot) -> String {
     switch item.state {
     // Arc's subtitle is the file-kind word ("PDF", "Archive"), else "Download" (capture session 8 item 9).
-    case .completed: return item.fileExists == true ? (downloadKind(item.fileName) ?? "Download") : "File moved or deleted."
+    case .completed:
+        guard item.fileExists == true else { return "File moved or deleted." }
+        // C12-PB1-2: these filename probes all show Download. In particular,
+        // DOCX may conform to ZIP on the host; that must not change its subtitle.
+        let ext = URL(fileURLWithPath: item.fileName).pathExtension.lowercased()
+        if ["docx", "csv", "json", "txt", ""].contains(ext) { return "Download" }
+        return downloadKind(item.fileName) ?? "Download"
     // Arc 1.172.2, C12-PB1-3: truncated transfer at 30, 60 and 90 seconds.
     case .failed: return "Failed to Download"
     case .cancelled: return "Cancelled"
