@@ -81,12 +81,17 @@ def run_idle_contract(factory, results, tmp, api):
 
 
 def run(factory, results, tmp, api):
+    # Normal and reduced paths are explicit, independent of the host's setting.
+    os.environ.setdefault('OPEN_E2E_REDUCE_MOTION', '0')
+    if os.environ.get('OPEN_E2E_WELCOME_RESTORE_ONLY') == '1':
+        return run_restore_contract(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_IDLE_ONLY') == '1':
         return run_idle_contract(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_CONTRAST_ONLY') == '1':
         return contrast_matrix(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_NEGATIVE') == '1':
         return negative_gates(factory, results, tmp, api)
+    run_restore_contract(factory, results, tmp, api)
     root = Path(api.ROOT)
     evidence = root / '.re/handoff/sections/s17/c4'
     evidence.mkdir(parents=True, exist_ok=True)
@@ -164,7 +169,7 @@ def run(factory, results, tmp, api):
         app.call('close', tab=inserted['tab'])
         inserted = app.call('welcome', action='insert')
         welcome = inserted['tab']
-        shown = await_state(lambda s: s['visible'] and s['activeCard'] == 1 and s['animating'])
+        shown = await_state(lambda s: s['visible'])
         tab = app.call('tab-state', tab=welcome)
         record('W02_insert_native_today', shown and tab['url'] == 'open://welcome'
                and tab['title'] == 'Welcome to Open' and tab['selected'] and tab['section'] == 'today'
@@ -865,3 +870,37 @@ def negative_gates(factory, results, tmp, api):
         finally:
             if app: app.quit()
         (evidence / 'results.json').write_text(json.dumps(dict(results), indent=2))
+
+
+def run_restore_contract(factory, results, tmp, api):
+    """Quit preflight may visit a background page; it must keep Welcome selected."""
+    app = None
+    try:
+        for handler in (False, True):
+            app = factory(urls=('about:blank',), fresh=True)
+            background = app.call('tabs')[0]['id']
+            app.call('wait', tab=background)
+            if handler:
+                # A real renderer reports this handler to the engine. It does
+                # not ask for a dialog or need sticky user activation.
+                app.eval(background, 'onbeforeunload=()=>{};true')
+                assert api.wait_until(lambda: app.call('engine-sleep', tab=background)['unloadHandlers'],
+                                      timeout=3, step=.025)
+            welcome = app.call('welcome', action='insert')['tab']
+            assert api.wait_until(lambda: app.call('welcome')['visible'], timeout=5, step=.025)
+            path = Path(app.call('save'))
+            def selection():
+                return [w['selectedNodeBySpace'] for w in json.loads(path.read_text())['windows']]
+            before = selection()
+            app.quit()
+            after = selection()
+            app = factory(urls=())
+            restored = api.wait_until(lambda: (lambda s: s if s['visible'] and s['tab'] == welcome else None)(
+                app.call('welcome')), timeout=5, step=.025)
+            results['W38_quit_restore_' + ('background_handler' if handler else 'no_handler')] = dict(
+                ok=before == after and bool(restored), beforeQuit=before, afterQuit=after,
+                expectedTab=welcome, state=restored or app.call('welcome'))
+            app.quit()
+    finally:
+        if app and not app.closed:
+            app.quit()

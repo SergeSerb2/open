@@ -40,7 +40,12 @@ def run(factory, results, tmp, h):
     def screen(name): until(lambda: state()['screen']==name); return state()
     def launch(directory=source, fresh=True, flags=(), **env):
         nonlocal app, last_intro
-        if app and not app.closed: app.quit()
+        if app and not app.closed:
+            # Clear the live defaults cache before quit can flush it again.
+            # Deleting only through `defaults` after quit can leave the next
+            # fresh case with the previous run's completion flag.
+            if fresh: h._restore_defaults(app, {keys[0]: None, keys[1]: None})
+            app.quit()
         if fresh: h._restore_defaults(None, {keys[0]: None, keys[1]: None})
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(directory), '--intro-sound=off', *flags], extra_env=env)
         # Answer the native quit confirmation on this suite's unsaved close path.
@@ -205,6 +210,10 @@ def run(factory, results, tmp, h):
         app.call('key', key='t', modifiers=['command']); app.call('key', key='escape')
         # A new ordinary tab hides Welcome and must cancel its pending work.
         app.call('open', url='about:blank')
+        background = next(t['id'] for t in app.call('tabs') if t.get('selected'))
+        app.call('wait', tab=background)
+        app.eval(background, 'onbeforeunload=()=>{};true')
+        until(lambda: app.call('engine-sleep', tab=background)['unloadHandlers'])
         hidden = app.call('welcome')
         gate('welcome_hidden_stops', lambda s: not s.get('visible') and s.get('animationCount')==0
             and not any(x['animating'] for x in s.get('hosts',[])), hidden, active)
