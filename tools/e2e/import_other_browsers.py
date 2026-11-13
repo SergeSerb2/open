@@ -232,6 +232,23 @@ def run(factory, results, tmp, h):
         refused=refused[:60], labels=labels, safariFolders=(roots_before, roots_after), failures=report.get('settingsFailures'),
         outcome={k: outcome.get(k) for k in ('Bookmarks', 'History', 'Passwords', 'Password duplicates')}, logins=logins() - before_logins)
 
+    # A fresh Safari profile has no Bookmarks.plist: Bookmarks shows "Not found", is unticked and disabled, and the
+    # Report has no "could not be imported" line (hand check, IMF 20:15). The file returns for later rows.
+    aside = files/'Bookmarks.plist.aside'
+    shutil.move(str(safari_dir/'Bookmarks.plist'), aside)
+    try:
+        open_sources(); call('settings-source', id='safari')
+        chosen = settle()
+        label = chosen.get('settingsBrowserLabels', {}).get('Bookmarks')
+        report = finish_import()
+    finally:
+        shutil.move(str(aside), safari_dir/'Bookmarks.plist')
+    row('safari_not_found_unticked', label == 'Not found' and chosen.get('settingsPlan', {}).get('bookmarks') is False
+        and 'Bookmarks' in chosen.get('settingsNotFound', []) and chosen.get('settingsPlan', {}).get('history') is True
+        and report.get('settingsError') == '' and 'Bookmarks' not in report.get('settingsFailures', {}),
+        label=label, plan=chosen.get('settingsPlan'), notFound=chosen.get('settingsNotFound'),
+        error=report.get('settingsError'), failures=report.get('settingsFailures'))
+
     # I-5 data sources in IMC's onboarding (first run, no Arc data): Safari without Full Disk Access is not
     # offered; a running Firefox stops the import; Favorites come from Firefox frecency + visit counts.
     app.quit()

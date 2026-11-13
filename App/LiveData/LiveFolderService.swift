@@ -15,7 +15,14 @@ final class LiveFolderService {
   private unowned let app: AppDelegate
   /// github.com, or a fixture origin set by automation. Static so the per-navigation check in
   /// `EngineWebContentHost` never creates the service.
-  static var origin = GitHubQuery.defaultOrigin
+  static var origin: URL = {
+    #if OPEN_AUTOMATION
+    // A restored Live Folder can refresh before the socket accepts commands. Keep
+    // that first real fetch on the same synthetic origin as the rest of the suite.
+    if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_GITHUB_ORIGIN"], let url = URL(string: raw) { return url }
+    #endif
+    return GitHubQuery.defaultOrigin
+  }()
   var origin: URL { get { Self.origin } set { Self.origin = newValue } }
   /// Last origin URL per tab, to see "compare page → new PR page" (PR created).
   private var lastOriginURL: [ItemID: URL] = [:]
@@ -111,9 +118,10 @@ final class LiveFolderService {
     return origin.appendingPathComponent(parts[0...3].joined(separator: "/"))
   }
 
-  /// Folder header action: sign in when signed out, otherwise the pulls page.
+  /// Folder header/menu action: sign in, the last banner's SSO URL, or the pulls page.
   func stateURL(folderID: ItemID) -> URL? {
-    guard let live = app.model.node(id: folderID)?.folder?.live, live.stateMessage != nil else { return nil }
+    guard let folder = app.model.node(id: folderID)?.folder, let live = folder.live, live.stateMessage != nil else { return nil }
+    if live.lastFetch?.outcome == .needsSSO, let url = folder.liveSSOURL { return url }
     return live.lastFetch?.outcome == .signedOut ? origin.appendingPathComponent("login") : origin.appendingPathComponent("pulls")
   }
 
@@ -131,6 +139,7 @@ final class LiveFolderService {
     lastRefresh[folderID] = Date(); refreshCount += 1
     var lists: [[PRSnapshot]] = []
     var outcome = LiveFolderConfig.Outcome.success
+    var ssoURL: URL?
     search: for kind in LiveFolderConfig.Kind.allCases where config.kinds.contains(kind) {
       do {
         let value = try await app.liveFetch.fetch(profileID: space.profileID,
@@ -139,7 +148,9 @@ final class LiveFolderService {
         switch state {
         case .ok: lists.append(items)
         case .signedOut: outcome = .signedOut; break search
-        case .needsSSO: outcome = .needsSSO; lists.append(items)
+        case .needsSSO:
+          outcome = .needsSSO; lists.append(items)
+          ssoURL = ssoURL ?? GitHubQuery.ssoURL(from: value, origin: origin)
         case .unexpected: outcome = .failed; break search
         }
       } catch {
@@ -154,8 +165,10 @@ final class LiveFolderService {
       // New rows after the first fill show the unread dot (Arc `showNewItemsAsUnread`).
       let unread = live.lastFetch?.outcome == .success
       app.model.applyLiveRows(folderID: folderID, add: diff.add.map { ($0.url, $0.title) }, remove: diff.remove,
-                              retitle: diff.retitle, unread: unread)
+                              retitle: diff.retitle, unread: unread,
+                              info: Dictionary(fresh.map { ($0.url, $0.liveItemInfo) }, uniquingKeysWith: { first, _ in first }))
     }
+    current.liveSSOURL = outcome == .needsSSO ? ssoURL : nil
     current.live?.lastFetch = .init(date: Date(), outcome: outcome)
     app.scheduleSave()
     return outcome

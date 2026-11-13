@@ -41,9 +41,10 @@ def png_pixels(path):
 
 def github_fixture():
     """A loopback stand-in for github.com/pulls (synthetic rows only). `state` drives it:
-    {'signed_in': bool, 'prs': {kind_marker: [(owner/repo, number, title, status)]}}."""
+    {'signed_in': bool, 'prs': {kind_marker: [(owner/repo, number, title, status)]},
+     'sso': None (no banner) or a list of hrefs in its banner}."""
     import http.server, threading, html, urllib.parse
-    state = {'signed_in': True, 'prs': {}, 'requests': []}
+    state = {'signed_in': True, 'prs': {}, 'requests': [], 'sso': None, 'fetch_gate': None}
     markers = {'author:@me': 'created', 'review-requested:@me': 'review', 'review:approved': 'approved', 'review:changes_requested': 'changes'}
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -55,6 +56,8 @@ def github_fixture():
             if parsed.path == '/login':
                 body = '<!doctype html><title>Sign in</title><form action="/session" method="post"><input name="login"></form>'
             elif parsed.path == '/pulls':
+                gate = state['fetch_gate']
+                if gate is not None: gate.wait(timeout=10)
                 query = urllib.parse.parse_qs(parsed.query).get('q', [''])[0]
                 kind = next((v for k, v in markers.items() if k in query), '')
                 rows = state['prs'].get(kind, [])
@@ -62,6 +65,9 @@ def github_fixture():
                                 '<relative-time datetime="2026-11-1%dT10:00:00Z"></relative-time></li>' % (st, repo, n, html.escape(t), n % 10)
                                 for repo, n, t, st in rows)
                 body = '<!doctype html><title>Pull requests</title><ul>%s</ul>%s' % (items, '' if rows else '<div class="blankslate">No results</div>')
+                if state['sso'] is not None:
+                    body += '<div data-testid="global-sso-banner">%s</div>' % ''.join(
+                        '<a href="%s">Authorize organization</a>' % html.escape(href, quote=True) for href in state['sso'])
             else:
                 body = '<!doctype html><title>Fixture</title>'
             data = body.encode()
@@ -105,6 +111,40 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is True, 'menu': menu, 'state': state}
         results['live_folder_fetch_pages_closed'] = {'ok': state.get('fetchPagesCreated') == state.get('fetchPagesClosed') and state.get('fetchPagesCreated', 0) >= 4,
             'state': {k: state.get(k) for k in ('fetchPagesCreated', 'fetchPagesClosed')}}
+        # C-LF-1 (Open's design, live-data §8): each row stores its PR facts and draws Open's PR-state
+        # glyph instead of the favicon; hovering a row shows the PR card (no fetch).
+        def by_number(st): return {r['number']: r for r in st.get('rows', [])}
+        glyphs = wait_until(lambda: (lambda st: st if {r['number']: r['glyph'] for r in st.get('rows', [])}
+            == {12: 'pullRequest.open', 7: 'pullRequest.draft', 15: 'pullRequest.open'} else None)(app.call('live-folder-state')), timeout=5, step=.1)
+        facts = by_number(glyphs or app.call('live-folder-state'))
+        plain = [t for t in app.call('tabs') if not any(t['id'] == r['id'] for r in facts.values())]
+        results['live_folder_row_glyphs'] = {'ok': bool(glyphs)
+            and (facts[12]['status'], facts[12]['repository'], facts[12]['author'], facts[12]['awaitingMyReview']) == ('open', 'acme/app', 'octo', True)
+            and (facts[7]['status'], facts[7]['repository'], facts[7]['awaitingMyReview']) == ('draft', 'acme/web', False)
+            and (facts[15]['status'], facts[15]['awaitingMyReview']) == ('open', True)
+            and bool(plain) and not any(t.get('rowFaviconSource', '').startswith('pullRequest') for t in plain),
+            'rows': facts, 'negative': {t['id']: t.get('rowFaviconSource') for t in plain}}
+        def pr_card(row):
+            app.call('hover', leave=True, ms=300)
+            app.call('hover', node=row['id'], ms=800)
+            return wait_until(lambda: (lambda g: g if g.get('kind') == 'pullRequest' and g.get('tab') == row['id'] else None)(app.call('glance-state')), timeout=3, step=.05) or app.call('glance-state')
+        review_card = pr_card(facts[15])
+        if os.environ.get('OPEN_LIVE_DATA_FRAMES') and review_card.get('kind') == 'pullRequest':
+            for name in ('light', 'dark'):
+                app.call('appearance', name=name); time.sleep(.6)
+                review_card = pr_card(facts[15])
+                app.call('snapshot', window=app.call('window-state').get('number'),
+                         path=os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-folder-pr-card-%s.png' % name))
+            app.call('appearance', name='system')
+            review_card = pr_card(facts[15])
+        draft_card = pr_card(facts[7])
+        app.call('hover', leave=True, ms=300)
+        results['live_folder_pr_card'] = {'ok': review_card.get('title') == 'Add Live Folders' and review_card.get('subtitle') == '#15 · acme/app'
+            and review_card.get('reviewLine') == 'octo needs your review' and review_card.get('status') == 'open'
+            and review_card.get('card', [0, 0, 0])[2] == 240
+            and draft_card.get('title') == 'Draft: new header' and draft_card.get('subtitle') == '#7 · acme/web'
+            and draft_card.get('reviewLine') is None and draft_card.get('status') == 'draft',
+            'review': review_card, 'draft': draft_card, 'negative': 'no review line on a PR that does not await my review'}
         # A PR ends, a new one comes: refetch removes and adds, new rows are unread.
         gh['prs']['created'] = [('acme/app', 12, 'Fix sidebar drag (v2)', 'open')]
         gh['prs']['review'] = [('acme/app', 21, 'New review request', 'open')]
@@ -172,10 +212,15 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         gh['signed_in'] = True
         # The folder's settings and rows survive a relaunch (snapshot DTO fields).
         before = {(r['url'], r['live']) for r in state.get('rows', [])}
+        facts_before = {r['url']: (r['status'], r['number'], r['repository'], r['awaitingMyReview']) for r in state.get('rows', [])}
         app.quit()
-        app = holder['app'] = factory(urls=(), fresh=False)
+        app = holder['app'] = factory(urls=(), fresh=False, extra_env={'OPEN_AUTOMATION_GITHUB_ORIGIN': 'http://github.localhost:%d' % port})
         app.call('live-folder-origin', url='http://github.localhost:%d' % port)
         again = app.call('live-folder-state')
+        # C-LF-1: the PR facts are stored with the row, so the glyph is right before any refresh.
+        facts_again = {r['url']: (r['status'], r['number'], r['repository'], r['awaitingMyReview']) for r in again.get('rows', [])}
+        results['live_folder_pr_facts_survive_relaunch'] = {'ok': bool(facts_before) and all(f[0] for f in facts_before.values())
+            and facts_again == facts_before, 'before': facts_before, 'after': facts_again}
         results['live_folder_survives_relaunch'] = {'ok': again.get('exists') and again.get('outcome') == 'signedOut'
             and {(r['url'], r['live']) for r in again.get('rows', [])} == before
             and bool(wait_until(lambda: app.call('live-folder-refresh').get('outcome') == 'success', timeout=15, step=.5)),
@@ -221,6 +266,117 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and set(alert.get('buttons', [])) >= {'Delete Folder', 'Cancel'} and gone.get('exists') is False
             and app.call('live-folder-state').get('exists') is False
             and app.call('defaults', key='open.liveFolders.githubAutoCreate') is False, 'alert': alert}
+        # C-LF-2: Open's design is ten PR rows, then the actual sidebar Show More control.
+        gh['prs'] = {'created': [('acme/app', n, 'Pull request %d' % n, 'open') for n in range(100, 113)]}
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        long_folder = app.call('live-folder-state', wait=True)
+        def exposed(st): return [r['id'] for r in st.get('rows', []) if r.get('exposed')]
+        limited = wait_until(lambda: (lambda s: s if len(exposed(s)) == 10 and s.get('showMore') else None)(app.call('live-folder-state')), timeout=3, step=.05) or long_folder
+        results['live_folder_show_more_limit'] = {'ok': len(limited.get('rows', [])) == 13 and len(exposed(limited)) == 10
+            and (limited.get('showMore') or {}).get('title') == 'Show More', 'state': limited}
+        if os.environ.get('OPEN_LIVE_DATA_FRAMES'):
+            for name in ('light', 'dark'):
+                app.call('appearance', name=name)
+                app.call('live-folder-state', revealMore=True); time.sleep(.3)
+                app.call('snapshot', window=app.call('window-state').get('number'),
+                         path=os.path.join(os.environ['OPEN_LIVE_DATA_FRAMES'], 'live-folder-show-more-%s.png' % name))
+            app.call('appearance', name='system')
+        fetches = limited.get('fetchPagesCreated')
+        pressed = app.call('live-folder-show-more')
+        revealed = wait_until(lambda: (lambda s: s if len(exposed(s)) == 13 and s.get('showMore') is None else None)(app.call('live-folder-state')), timeout=3, step=.05) or app.call('live-folder-state')
+        results['live_folder_show_more_reveals_without_fetch'] = {'ok': pressed.get('pressed') is True and len(exposed(revealed)) == 13
+            and revealed.get('showMore') is None and revealed.get('fetchPagesCreated') == fetches, 'pressed': pressed, 'state': revealed}
+        app.call('folder-toggle', folder=long_folder['id'])
+        app.call('folder-toggle', folder=long_folder['id'])
+        reset = wait_until(lambda: (lambda s: s if len(exposed(s)) == 10 and s.get('showMore') else None)(app.call('live-folder-state')), timeout=3, step=.05) or app.call('live-folder-state')
+        results['live_folder_show_more_resets_on_collapse'] = {'ok': len(exposed(reset)) == 10 and bool(reset.get('showMore')), 'state': reset}
+        gh['prs']['created'] = gh['prs']['created'][:10]
+        app.call('live-folder-refresh')
+        boundary = app.call('live-folder-state')
+        gh['prs']['created'] = []
+        app.call('live-folder-refresh')
+        empty = app.call('live-folder-state')
+        results['live_folder_show_more_boundary_and_empty'] = {'ok': len(exposed(boundary)) == 10 and boundary.get('showMore') is None
+            and empty.get('rows') == [] and empty.get('showMore') is None and app.call('live-folder-show-more').get('pressed') is False,
+            'boundary': boundary, 'empty': empty}
+        # C-LF-3: fetch the real banner, build the real menu, and deliver its NSMenu action.
+        # The checked state reports the fetch. Pressing it must not toggle a preference.
+        folder = long_folder['id']
+        origin = 'http://github.localhost:%d' % port
+        def sso_menu(): return app.call('sidebar-menu-state', node=folder, items=['Single Sign-On', 'Required'])
+        def press_sso():
+            try:
+                app.call('sidebar-menu', node=folder, items=['Single Sign-On', 'Required'])
+                return True
+            except Exception:
+                return False
+        gh['sso'] = ['/orgs/acme/sso/?return_to=private#ignored']
+        sso_refresh = app.call('live-folder-refresh')
+        sso_state, checked = app.call('live-folder-state'), sso_menu()
+        owner = next(s for s in app.call('spaces') if s['focused'])
+        prefs = {k: app.call('defaults', key=k) for k in ('open.liveFolders.githubAutoCreate', 'open.liveFolders.introSeen')}
+        tabs_before = {t['id'] for t in app.call('tabs')}
+        pressed = press_sso()
+        opened = wait_until(lambda: [t for t in app.call('tabs') if t['id'] not in tabs_before], timeout=3, step=.05) or []
+        results['live_folder_sso_menu_opens_org'] = {'ok': sso_refresh.get('outcome') == 'needsSSO'
+            and sso_state.get('ssoURL') == origin + '/orgs/acme/sso' and checked.get('checked') and checked.get('enabled') and pressed
+            and len(opened) == 1 and opened[0]['url'] == origin + '/orgs/acme/sso'
+            and opened[0]['space'] == owner['id'] and opened[0]['profile'] == owner['profile']
+            and sso_menu().get('checked') and prefs == {k: app.call('defaults', key=k) for k in prefs},
+            'state': sso_state, 'menu': checked, 'opened': opened}
+        for t in opened: app.call('close', tab=t['id'])
+        # Boundary inputs travel through page extraction and the native service, not a parser helper.
+        base_link = origin + '/orgs/a/sso?x='
+        cases = [
+            ('slug_39', ['/orgs/' + 'a' * 39 + '/sso'], origin + '/orgs/' + 'a' * 39 + '/sso'),
+            ('slug_40', ['/orgs/' + 'a' * 40 + '/sso'], None),
+            ('url_2048', [base_link + 'a' * (2048 - len(base_link))], origin + '/orgs/a/sso'),
+            ('url_2049', [base_link + 'a' * (2049 - len(base_link))], None),
+            ('link_20', ['/settings'] * 19 + ['/orgs/twenty/sso'], origin + '/orgs/twenty/sso'),
+            ('link_21', ['/settings'] * 20 + ['/orgs/twentyone/sso'], None),
+            ('cross_origin', ['https://example.invalid/orgs/acme/sso'], None),
+            ('credentials', [origin.replace('://', '://user:pass@') + '/orgs/acme/sso'], None),
+            ('bad_slug', ['/orgs/-bad/sso'], None),
+            ('wrong_path', ['/orgs/acme/settings'], None),
+            ('missing_link', [], None),
+        ]
+        boundaries = []
+        for name, links, expected in cases:
+            gh['sso'] = links
+            fetched = app.call('live-folder-refresh')
+            st, mi = app.call('live-folder-state'), sso_menu()
+            tab_ids = {t['id'] for t in app.call('tabs')}
+            refused = not press_sso() if expected is None else True
+            boundaries.append({'case': name, 'ok': fetched.get('outcome') == 'needsSSO' and st.get('ssoURL') == expected
+                and mi.get('checked') is True and mi.get('enabled') == (expected is not None)
+                and refused and tab_ids == {t['id'] for t in app.call('tabs')}, 'menu': mi, 'ssoURL': st.get('ssoURL')})
+        results['live_folder_sso_url_boundaries'] = {'ok': all(c['ok'] for c in boundaries), 'cases': boundaries}
+        gh['sso'] = ['/orgs/acme/sso']
+        app.call('live-folder-refresh')
+        # The saved last-fetch state can say SSO, but a URL is never restored from disk.
+        app.quit()
+        import threading
+        gate = gh['fetch_gate'] = threading.Event()
+        try:
+            app = holder['app'] = factory(urls=(), fresh=False, extra_env={'OPEN_AUTOMATION_GITHUB_ORIGIN': origin})
+            app.call('live-folder-origin', url=origin)
+            # Hold any automatic fetch at the fixture while inspecting the restored model.
+            restored, restored_menu = app.call('live-folder-state'), sso_menu()
+        finally:
+            gh['fetch_gate'] = None
+            gate.set()
+        results['live_folder_sso_link_is_transient'] = {'ok': restored.get('outcome') == 'needsSSO'
+            and restored.get('ssoURL') is None and restored_menu.get('checked') and not restored_menu.get('enabled'),
+            'state': restored, 'menu': restored_menu}
+        gh['sso'] = None
+        # A refresh may already be running after activation. Wait for its 20 s native
+        # deadline, then a completed fixture refresh; a busy reply is not a result.
+        cleared = wait_until(lambda: (lambda r: r if r.get('outcome') == 'success' else None)(app.call('live-folder-refresh')),
+                             timeout=30, step=.1) or {}
+        clean, clean_menu = app.call('live-folder-state'), sso_menu()
+        results['live_folder_sso_clears_after_success'] = {'ok': cleared.get('outcome') == 'success' and clean.get('ssoURL') is None
+            and not clean_menu.get('checked') and not clean_menu.get('enabled') and not press_sso(), 'state': clean, 'menu': clean_menu}
+        app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:
         try:
