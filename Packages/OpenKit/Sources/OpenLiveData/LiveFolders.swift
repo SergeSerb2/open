@@ -60,7 +60,13 @@ public enum GitHubQuery {
       const path = location.pathname;
       if (path.startsWith('/login') || path.startsWith('/session') || document.querySelector('form[action="/session"]'))
         return {state: 'signedOut', items: []};
-      if (document.querySelector("[data-testid='global-sso-banner']")) return {state: 'needsSSO', items: []};
+      const banner = document.querySelector("[data-testid='global-sso-banner']");
+      if (banner) {
+        const link = Array.from(banner.querySelectorAll('a[href]')).slice(0, 20).map(a => {
+          try { return new URL(a.getAttribute('href'), location.href); } catch { return null; }
+        }).find(u => u && u.origin === location.origin && /^\/orgs\/[^/]+\/sso\/?$/.test(u.pathname));
+        return {state: 'needsSSO', items: [], ssoURL: link?.href || null};
+      }
       const seen = new Set(), items = [];
       for (const link of document.querySelectorAll('a[href*="/pull/"]')) {
         const href = new URL(link.getAttribute('href'), location.href);
@@ -84,6 +90,23 @@ public enum GitHubQuery {
     """#
 
     public enum PageState: String, Sendable { case ok, signedOut, needsSSO, unexpected }
+
+    /// The organization's SSO action, from the last banner only (C-LF-3). A page cannot
+    /// turn the menu into an arbitrary link: require this origin and a bounded GitHub org
+    /// slug, and build the canonical path ourselves. Query/fragment data is not retained.
+    public static func ssoURL(from value: Any, origin: URL = defaultOrigin) -> URL? {
+        guard let object = value as? [String: Any], object["state"] as? String == PageState.needsSSO.rawValue,
+              let raw = object["ssoURL"] as? String, raw.utf8.count <= 2048, let url = URL(string: raw),
+              url.scheme == origin.scheme, url.host?.lowercased() == origin.host?.lowercased(),
+              url.port == origin.port, url.user == nil, url.password == nil else { return nil }
+        let parts = url.path.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 4 || (parts.count == 5 && parts[4].isEmpty), parts[0].isEmpty,
+              parts[1] == "orgs", parts[3] == "sso" else { return nil }
+        let slug = parts[2], bytes = slug.utf8
+        guard (1...39).contains(bytes.count), bytes.first != 45, bytes.last != 45,
+              bytes.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 }) else { return nil }
+        return origin.appendingPathComponent("orgs").appendingPathComponent(String(slug)).appendingPathComponent("sso")
+    }
 
     /// Decodes the script's value. Unknown or malformed rows are dropped, never guessed.
     public static func decode(_ value: Any, kind: LiveFolderConfig.Kind) -> (PageState, [PRSnapshot]) {

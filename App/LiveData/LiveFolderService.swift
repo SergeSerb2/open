@@ -113,7 +113,8 @@ final class LiveFolderService {
 
   /// Folder header action: sign in when signed out, otherwise the pulls page.
   func stateURL(folderID: ItemID) -> URL? {
-    guard let live = app.model.node(id: folderID)?.folder?.live, live.stateMessage != nil else { return nil }
+    guard let folder = app.model.node(id: folderID)?.folder, let live = folder.live, live.stateMessage != nil else { return nil }
+    if live.lastFetch?.outcome == .needsSSO, let url = folder.liveSSOURL { return url }
     return live.lastFetch?.outcome == .signedOut ? origin.appendingPathComponent("login") : origin.appendingPathComponent("pulls")
   }
 
@@ -131,6 +132,7 @@ final class LiveFolderService {
     lastRefresh[folderID] = Date(); refreshCount += 1
     var lists: [[PRSnapshot]] = []
     var outcome = LiveFolderConfig.Outcome.success
+    var ssoURL: URL?
     search: for kind in LiveFolderConfig.Kind.allCases where config.kinds.contains(kind) {
       do {
         let value = try await app.liveFetch.fetch(profileID: space.profileID,
@@ -139,7 +141,9 @@ final class LiveFolderService {
         switch state {
         case .ok: lists.append(items)
         case .signedOut: outcome = .signedOut; break search
-        case .needsSSO: outcome = .needsSSO; lists.append(items)
+        case .needsSSO:
+          outcome = .needsSSO; lists.append(items)
+          ssoURL = ssoURL ?? GitHubQuery.ssoURL(from: value, origin: origin)
         case .unexpected: outcome = .failed; break search
         }
       } catch {
@@ -157,6 +161,7 @@ final class LiveFolderService {
                               retitle: diff.retitle, unread: unread,
                               info: Dictionary(fresh.map { ($0.url, $0.liveItemInfo) }, uniquingKeysWith: { first, _ in first }))
     }
+    current.liveSSOURL = outcome == .needsSSO ? ssoURL : nil
     current.live?.lastFetch = .init(date: Date(), outcome: outcome)
     app.scheduleSave()
     return outcome
