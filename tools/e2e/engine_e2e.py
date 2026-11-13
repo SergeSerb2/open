@@ -11423,6 +11423,7 @@ def _safe_alert(app):
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
+    geometry_only = os.environ.get('OPEN_SPACE_MANAGER_GEOMETRY_ONLY') == '1'
     token = '%d-%s' % (os.getpid(), os.urandom(4).hex())
     suite_config = 'SpaceManager-' + token
     bundle_dir = os.path.join(ROOT, 'build', suite_config)
@@ -11479,7 +11480,7 @@ def space_manager_checks(results, tmp, config, style):
         info['CFBundleIdentifier'] = bundle_id
         with open(info_path, 'wb') as stream: plistlib.dump(info, stream)
         subprocess.run(['codesign', '--force', '--sign', '-', bundle], check=True, capture_output=True)
-        if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY') != 'keyboard' and os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') != '1':
+        if not geometry_only and os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY') != 'keyboard' and os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') != '1':
             os.makedirs(os.path.join(root, 'State'), exist_ok=True)
             with open(os.path.join(root, 'State', 'captures.json'), 'w') as stream: stream.write('{deliberately corrupt capture index')
         app = launch((fixture('Manager One'),))
@@ -11487,13 +11488,14 @@ def space_manager_checks(results, tmp, config, style):
         if os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') == '1':
             sidebar_intents_menu_checks(app, results, require, tmp)
             return
-        library_capture_checks(app, require, root, evidence)
+        if not geometry_only: library_capture_checks(app, require, root, evidence)
         if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY'): return
         s1 = order(app)[0]
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
-        sidebar_a1_checks(app, results, require, evidence)
-        sidebar_a2_checks(app, results, require, evidence, tmp)
+        if not geometry_only:
+            sidebar_a1_checks(app, results, require, evidence)
+            sidebar_a2_checks(app, results, require, evidence, tmp)
         app.call('space', space=s1)
         original = [s1, s2, s3]
         # The rest capture shows the loaded page title, not a title still in flight.
@@ -11532,6 +11534,9 @@ def space_manager_checks(results, tmp, config, style):
                 reference='PR #350 (ec9b4055), approved D1 Library cards; viewport-relative height')
         if os.environ.get('OPEN_SPACE_MANAGER_EARLY_FAILURE') == '1':
             raise AssertionError('deliberate early failure with Library open')
+        if geometry_only:
+            results['geometry_only_scope'] = {'status': 'INFO', 'reason': 'OPEN_SPACE_MANAGER_GEOMETRY_ONLY=1; real Library composition and E5 geometry only'}
+            return
         library = ready['window']
         app.call('library-close')
         command = app.call('library-open', entry='command')
