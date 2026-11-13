@@ -472,7 +472,6 @@ def checks(factory, results, tmp, config, harness):
             return records
         disk = stored_rows()
         required = set(before_first) | {other}
-        check('history_failed_absent_store', failed not in {r['id'] for r in disk})
         check('history_terminal_store', required <= {r['id'] for r in disk}
               and all(r['endedAt'] >= r['startedAt'] and r['sourceURL'] and r['profileID'] for r in disk), rows=disk)
         check('history_private_absent_store', not any('private-history' in json.dumps(v) or 'history=private' in json.dumps(v) for v in disk))
@@ -506,6 +505,7 @@ def checks(factory, results, tmp, config, harness):
         restart(required)
         restored = {v['id']: v for v in state()['items']}
         check('history_failed_absent_relaunch', failed not in restored and not any(v['state'] == 'failed' for v in restored.values()), items=list(restored.values()))
+        check('history_failed_absent_store', failed not in {r['id'] for r in disk})
         check('history_relaunch_two_profiles', required <= set(restored)
               and len(restored) == len(state()['items']) and all(restored[k]['historical'] for k in required)
               and all(restored[k]['state'] == before_first[k]['state'] for k in before_first)
