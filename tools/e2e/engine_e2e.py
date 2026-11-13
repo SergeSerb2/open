@@ -13871,8 +13871,11 @@ def main():
             space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
-            space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
-            folder_peek_checks(factory, results[opts.only], tmp)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
+                sys.modules[__name__], factory, results[opts.only], tmp)
+            if os.environ.get('OPEN_MIXED_DELETE_ONLY') != '1':
+                space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
+                folder_peek_checks(factory, results[opts.only], tmp)
         elif opts.only == "find":
             results["find"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/find_checks.py"))["run"](sys.modules[__name__], factory, results["find"], tmp)
