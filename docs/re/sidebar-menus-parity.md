@@ -20,7 +20,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | Pinned tab row (S3D, S8 item 1) | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ · — · Remove Pin | the same | C12-D2-3: the loaded-page rule above applies; Customize Page… sits immediately before Edit Pinned Page |
 | Favourite tile (S3D, S8 item 1) | the pinned menu, last item "Remove Favorite" | the same; before it, Open's Live Calendar items and Top App switches (Show Meeting Link ▸, Meeting Reminder ▸, Show Unread Badge, Show Time to Next Meeting) for matching tiles | the place of the Live Calendar and Top App items is a GUESS (capture pending, F2 item 7) |
 | Share ▸ (S8 item 1) | the Mac's share services (AirDrop · Mail · Messages · Notes · …), each with its icon; the same list in tab rows and the URL field | the same (`ShareServices`; Reading List left out) | none |
-| Move to ▸ (S8 item 2) | one row per Space in dock order, current Space checked · — · New Space… | the same | Spaces of other Profiles: not established |
+| Move to ▸ (S8 item 2; S13 C13-D2-5) | every Space in dock order, including other Profiles; current Space checked and enabled; every destination enabled · — · New Space… (enabled) | the same | cross-Profile transfer results were not captured; existing move behavior is retained |
 | Folder row (S3D, S8 item 4) | Share Folder… · — · New Nested Folder… · Turn "‹name›" into Space · Copy All Links · Copy All Links as Markdown · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Delete; an empty folder has no Copy items | the same | none |
 | Live Folder row (code, live-data §2.2) | not captured | header · Repositories · Single Sign-On ▸ · Refresh · — · Copy All Links · — · Delete Live Folder | order is a GUESS (F2 item 3) |
 | Space menu: title, empty area, Clear row, Space dot, title "…" button (S3D, S8 item 8) | Change Space Icon… · Rename Space… · Edit Theme Color… · Set Profile ▸ · — · New Folder · Live Folders ▸ · — · Share Space… · Export "‹name›" into Folder ▸ · — · Manage Spaces… · — · Delete Space | the same (Share Space… disabled: no account) | none |
@@ -46,6 +46,15 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | History | not a Library category in Arc; ⌘Y opens the browser's own History page (S1L) | Open has a History section | Open addition; its menus are Open's own (no Arc parity target) |
 
 ## 3. Status
+
+Session 13 C13-D2-5 verifies Today, pinned, folder and split row submenus in Profile A, plus a
+reciprocal Today row in Profile B. Spaces A1/A2 belong to A and B1 belongs to B; all appear in dock
+order without Profile headers or separators between Profiles. Evidence:
+`.re/capture/s13/m1/arc/v7/113-cross-profile-menus/cross-{today,pin,folder,split,b1}-submenu.{png,ax.json}`
+and `matrix-{a1,b1}-verified.{png,ax.json}`; A2's assignment is read back in
+`v6/118-a-main-picker/a2-profile-verified.{png,ax.json}`. No destination was selected. The real-App
+`cm_cross_profile_move_menu` check covers the matrix; it does not claim transfer parity or
+multi-selection submenu behavior, which were not captured.
 
 The build order of the first inventory is done: sidebar row menus, URL field, "+" popover, then the Library sections
 (one PR each). Open items: the two C3 captures above (C-D2-1 Media menus, C-D2-2 Archive hover glyphs), the deferred
