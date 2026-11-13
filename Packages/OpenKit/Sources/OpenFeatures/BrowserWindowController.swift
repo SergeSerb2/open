@@ -677,6 +677,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     clip.fromValue = NSValue(size: oldPanel.size); clip.toValue = NSValue(size: panelFrame.size)
                     addMotion(clip, to: sidebarPanelClip, key: "sidebarToggle", requestedAt: requestedAt)
                     sidebarPanelShadow.prepare(frame: panelFrame)
+                    sidebarPanelShadow.isHidden = container.isHidden
                     for (shadowLayer, key, from, to) in sidebarPanelShadow.motion(from: oldPanel.size, translation: translation) {
                         let spring = Motion.sidebarToggle.animation(keyPath: key)
                         spring.fromValue = from; spring.toValue = to
@@ -684,10 +685,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     }
                     // An empty panel has no live text or web surface to stretch.
                     emptyPanel.removeAnimation(forKey: "sidebarToggle")
-                    let moveEmpty = Motion.sidebarToggle.animation(keyPath: "position")
-                    moveEmpty.fromValue = NSValue(point: CGPoint(x: oldPanel.midX, y: oldPanel.midY))
-                    moveEmpty.toValue = NSValue(point: emptyPanel.position)
-                    addMotion(moveEmpty, to: emptyPanel, key: "sidebarToggle", requestedAt: requestedAt)
+                    let emptyGroup = CAAnimationGroup()
+                    let emptyMove = Motion.sidebarToggle.animation(keyPath: "position")
+                    emptyMove.fromValue = NSValue(point: CGPoint(x: oldPanel.midX, y: oldPanel.midY))
+                    emptyMove.toValue = NSValue(point: emptyPanel.position)
+                    let emptySize = Motion.sidebarToggle.animation(keyPath: "bounds.size")
+                    emptySize.fromValue = NSValue(size: oldPanel.size); emptySize.toValue = NSValue(size: panelFrame.size)
+                    emptyGroup.animations = [emptyMove, emptySize]
+                    emptyGroup.duration = max(emptyMove.duration, emptySize.duration)
+                    addMotion(emptyGroup, to: emptyPanel, key: "sidebarToggle", requestedAt: requestedAt)
                 }
                 CATransaction.commit()
             } else if !anchoredSliding { sidebar.isHidden = hidden }
@@ -1805,23 +1811,23 @@ extension BrowserWindowController {
 /// A prepared shadow outside the animated panel clip. Only its layer paths move.
 @MainActor
 private final class SidebarPanelShadowView: NSView {
-    private let shadow = CALayer()
+    private let shadowLayer = CALayer()
     private let outside = CAShapeLayer()
     override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true; isHidden = true
-        shadow.shadowColor = NSColor.black.cgColor
-        shadow.shadowOpacity = PanelMetrics.shadowOpacity
-        shadow.shadowRadius = PanelMetrics.shadowRadius
-        shadow.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
-        outside.fillRule = .evenOdd; shadow.mask = outside
-        layer?.addSublayer(shadow)
+        shadowLayer.shadowColor = NSColor.black.cgColor
+        shadowLayer.shadowOpacity = PanelMetrics.shadowOpacity
+        shadowLayer.shadowRadius = PanelMetrics.shadowRadius
+        shadowLayer.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
+        outside.fillRule = .evenOdd; shadowLayer.mask = outside
+        layer?.addSublayer(shadowLayer)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     func prepare(frame: CGRect) {
         self.frame = frame
-        shadow.frame = bounds; outside.frame = bounds
-        shadow.shadowPath = shape(bounds.size)
+        shadowLayer.frame = bounds; outside.frame = bounds
+        shadowLayer.shadowPath = shape(bounds.size)
         outside.path = exterior(bounds.size)
         layer?.setValue(0, forKeyPath: "transform.translation.x")
         isHidden = false
@@ -1829,7 +1835,7 @@ private final class SidebarPanelShadowView: NSView {
     func motion(from size: CGSize, translation: CGFloat) -> [(CALayer, String, Any, Any)] {
         guard let layer else { return [] }
         return [(layer, "transform.translation.x", translation, CGFloat(0)),
-                (shadow, "shadowPath", shape(size), shape(bounds.size)),
+                (shadowLayer, "shadowPath", shape(size), shape(bounds.size)),
                 (outside, "path", exterior(size), exterior(bounds.size))]
     }
     private func shape(_ size: CGSize) -> CGPath {
