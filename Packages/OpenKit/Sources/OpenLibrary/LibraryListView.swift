@@ -24,6 +24,8 @@ struct LibraryRowItem {
     var progress: Double? = nil
     var dragURL: URL? = nil
     var activate: () -> Void
+    /// A separate Return action when pointer activation previews rather than restores.
+    var keyboardActivate: (() -> Void)? = nil
     var actions: [LibraryRowAction] = []
     var hoverActions: [LibraryRowAction] = []
     /// False: a right-click opens no menu (Arc's Downloads rows); the More button still opens it.
@@ -350,7 +352,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
     }
     var selectedItem: LibraryRowItem? { item(at: table.selectedRow) }
     func entryIndex(_ id: String) -> Int? { entries.indices.first { row in if case .item(let index) = entries[row] { return sources[index].id == id }; return false } }
-    func activateSelected() { selectedItem?.activate() }
+    func activateSelected() { guard let item = selectedItem else { return }; (item.keyboardActivate ?? item.activate)() }
     func deleteSelected() { guard let selectedItem else { return }; (selectedItem.hoverActions+selectedItem.actions).first(where: { ["Delete","Move to Trash","Hide from Open"].contains($0.title) && $0.enabled })?.run() }
     func focus() {
         window?.makeFirstResponder(table)
@@ -423,7 +425,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
             let frame = root.convert(table.rect(ofRow: row),from: table)
             return ["id":item.id,"frame":[frame.minX,frame.minY,frame.width,frame.height],"title":item.title,"subtitle":item.subtitle,
               "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),"contextMenu":item.contextMenu,"toolTip":item.toolTip ?? "",
-              "buttonToolTips":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonToolTips ?? []]
+              "buttonToolTips":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonToolTips ?? [],
+              "buttons":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonState(in:root) ?? []]
         }
     }
 }
@@ -551,6 +554,12 @@ private final class LibraryItemView: NSView {
             }
         } else {
             for (index,button) in buttons.enumerated() { button.frame = CGRect(x:bounds.width-10-CGFloat(buttons.count-index)*34,y:top+2,width:30,height:30) }
+        }
+    }
+    func buttonState(in root: NSView) -> [[String:Any]] {
+        buttons.filter { !$0.isHidden }.map { button in
+            let frame = root.convert(button.bounds,from:button)
+            return ["title":button.toolTip ?? "","frame":[frame.minX,frame.minY,frame.width,frame.height]]
         }
     }
     private func setIcon(_ image:NSImage?) {

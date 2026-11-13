@@ -40,6 +40,9 @@ public final class PeekController {
         public var url: URL
         public let sourceTabID: ItemID
         public let hostTabID: ItemID
+        /// Library previews belong to the current Space, without requiring a live source tab.
+        public let librarySpaceID: SpaceID?
+        public let profileID: ProfileID
         public var host: (any WebContentHost)?
         /// The Peek page's favicon, for the source row's badge.
         public var faviconPNG: Data?
@@ -53,7 +56,7 @@ public final class PeekController {
     @ObservationIgnored private let factory: any WebContentHostFactory
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var keyMonitor: Any?
-    @ObservationIgnored private var undoItem: (URL, ItemID, Date)?
+    @ObservationIgnored private var undoItem: (url: URL, source: ItemID, librarySpace: SpaceID?, profile: ProfileID, expiry: Date)?
     @ObservationIgnored private var undoTask: Task<Void, Never>?
     @ObservationIgnored private var expandingGeneration = 0
     public private(set) var isExpanding = false
@@ -69,7 +72,7 @@ public final class PeekController {
     public var onPageChange: (() -> Void)?
     /// App-owned page overlays can consume Esc before the Peek itself closes.
     public var onPageEscape: (() -> Bool)?
-    public var peekBadgeTabIDs: Set<ItemID> { Set(stack.map(\.sourceTabID)) }
+    public var peekBadgeTabIDs: Set<ItemID> { Set(stack.filter { $0.librarySpaceID == nil }.map(\.sourceTabID)) }
     public init(model: BrowserModel, splitController: SplitViewController, factory: any WebContentHostFactory, defaults: UserDefaults) {
         self.model = model; self.splitController = splitController; self.factory = factory; self.defaults = defaults
         defaults.register(defaults: ["open.links.openPeekOtherSites": true, "open.links.openPeekShiftClick": true])
@@ -86,12 +89,20 @@ public final class PeekController {
         return true
     }
     public func open(url: URL, sourceTabID: ItemID) {
+        open(url:url,sourceTabID:sourceTabID,librarySpaceID:nil,profileID:nil)
+    }
+    public func openLibraryPreview(url: URL, profileID: ProfileID) {
         guard let space = splitController.space else { return }
+        open(url:url,sourceTabID:splitController.focusedTab?.id ?? ItemID(),librarySpaceID:space.id,profileID:profileID)
+    }
+    private func open(url: URL, sourceTabID: ItemID, librarySpaceID: SpaceID?, profileID: ProfileID?) {
+        guard let space = splitController.space else { return }
+        let profile = profileID ?? space.profileID
         dismissGeneration += 1; isDismissing = false; overlay.setOpacity(1, animated: false)
         if stack.count >= 5 { stack.last?.host?.load(url); return }
         let hostID = ItemID()
-        guard let host = factory.makeHost(tabID: hostID, profileID: space.profileID, url: nil) else { return }
-        let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, host: host)
+        guard let host = factory.makeHost(tabID: hostID, profileID: profile, url: nil) else { return }
+        let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, librarySpaceID: librarySpaceID, profileID: profile, host: host)
         stack.append(item)
         let itemID = item.id
         host.onURLChange = { [weak self, weak host] value in
@@ -117,8 +128,8 @@ public final class PeekController {
         host.shouldNavigate = { [weak self, weak host] target, flags in
             guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return false }
             if FeatureSite.shouldPeek(source: host.currentURL, target: target, pinned: true, flags: flags, defaults: self.defaults) && self.stack.count < 5 {
-                guard let source = self.stack.last?.sourceTabID else { return false }
-                self.open(url: target, sourceTabID: source); return false
+                guard let source = self.stack.last else { return false }
+                self.open(url:target,sourceTabID:source.sourceTabID,librarySpaceID:source.librarySpaceID,profileID:source.librarySpaceID == nil ? nil : source.profileID); return false
             }
             return true
         }
@@ -151,7 +162,9 @@ public final class PeekController {
     public func refresh() {
         guard let item = stack.last else { overlay.isHidden = true; overlay.clearHost(); return }
         let sourceIsVisible: Bool
-        if case .favorites(let profileID)? = model.parent(of: item.sourceTabID) {
+        if let space = item.librarySpaceID {
+            sourceIsVisible = splitController.space?.id == space
+        } else if case .favorites(let profileID)? = model.parent(of: item.sourceTabID) {
             sourceIsVisible = splitController.space?.profileID == profileID
         } else { sourceIsVisible = splitController.selected?.id == sourceNodeID(of: item) }
         // Factories create transient pages hidden. Only the shown top page is
@@ -198,7 +211,7 @@ public final class PeekController {
     }
     private func finishDismiss() {
         guard let item = stack.popLast() else { return }
-        item.host?.close(); undoItem = (item.url, item.sourceTabID, Date().addingTimeInterval(Self.undoWindow))
+        item.host?.close(); undoItem = (item.url, item.sourceTabID, item.librarySpaceID, item.profileID, Date().addingTimeInterval(Self.undoWindow))
         undoToast?.dismiss()
         undoToast = toasts?.show(.undo("Peek closed", lifetime: Self.undoWindow)) { [weak self] _ in self?.undoDismiss() }
         undoTask?.cancel(); undoTask = Task { [weak self] in
@@ -211,9 +224,14 @@ public final class PeekController {
     }
     public func undoDismiss() {
         // Live while its toast shows (a hovered toast outlasts the 5 s window), else for 5 s.
-        guard let item = undoItem, item.2 > Date() || undoToast?.isVisible == true else { return }; undoItem = nil; undoTask?.cancel()
+        guard let item = undoItem, item.expiry > Date() || undoToast?.isVisible == true else { return }; undoItem = nil; undoTask?.cancel()
         undoToast?.dismiss(); undoToast = nil
-        open(url: item.0, sourceTabID: item.1)
+        open(url:item.url,sourceTabID:item.source,librarySpaceID:item.librarySpace,profileID:item.librarySpace == nil ? nil : item.profile)
+    }
+    /// Closing Library also expires Undo for its last dismissed preview.
+    public func closeLibraryPreviews() {
+        guard stack.contains(where: { $0.librarySpaceID != nil }) || undoItem?.librarySpace != nil else { return }
+        dismissAll()
     }
     public func dismissAll() {
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
@@ -268,7 +286,12 @@ public final class PeekController {
         }
         stack.removeLast(); item.host?.view.removeFromSuperview()
         // Bind before show, so showing a new tab cannot create and load a replacement host.
-        if let host = item.host { splitController.container.adopt(host, for: tab.id) }
+        if let host = item.host {
+            // All-Profiles Archive can preview a different Profile. Promotion
+            // must create a destination host rather than adopt that context.
+            if item.librarySpaceID != nil, model.space(id:target)?.profileID != item.profileID { host.close() }
+            else { splitController.container.adopt(host, for:tab.id) }
+        }
         splitController.refresh(); splitController.container.focus(tabID: tab.id)
         overlay.buttons.forEach { $0.alphaValue = 1 }; refresh(); if stack.isEmpty { removeKeys() }; onChange?(); return true
     }

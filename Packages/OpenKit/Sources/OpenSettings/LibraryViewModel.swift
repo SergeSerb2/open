@@ -198,6 +198,13 @@ import OpenStore
     private struct ArchivedTitle: Decodable { let customTitle: String? }
     public func archivedDisplayTitle(_ row: ArchivedTabRecord) -> String { archivedDisplayTitles[row.id] ?? row.title }
 
+    /// Preview keeps both the archived record and the sidebar unchanged.
+    public func previewArchived(id: ItemID) {
+        guard let row = archiveRows.first(where: { $0.id == id && $0.kind == .tab }),
+              let profile = archiveOwners[id] ?? row.profileID else { return }
+        actions.previewArchived(url: row.url, profileID: profile)
+    }
+
     public func restore(id: ItemID, to spaceID: SpaceID? = nil) async {
         guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
         guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return }
