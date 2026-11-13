@@ -87,6 +87,9 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         // The App lists sessions itself, with stable ids and MRU ordering.
         window.isExcludedFromWindowsMenu = true
         window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+        // The root paints the normal fill. An opaque WindowServer background
+        // would remain as a white rectangle while the native frame fades out.
+        window.isOpaque = false; window.backgroundColor = .clear
         window.isMovableByWindowBackground = true; window.animationBehavior = .none
         super.init(window: window)
         window.onDownloadsKey = { [weak self] in self?.onDownloadsKey?($0) ?? false }
