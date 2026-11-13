@@ -105,7 +105,7 @@ public final class PeekController {
         overlay.endHostSnapshot()
         dismissGeneration += 1; isDismissing = false
         expandingGeneration += 1; isExpanding = false
-        if stack.count >= 5 { overlay.resetMotion(); stack.last?.host?.load(url); return }
+        if stack.count >= 5 { overlay.resetMotion(); stack.last?.host?.load(url); refresh(); return }
         let hostID = ItemID()
         guard let host = factory.makeHost(tabID: hostID, profileID: profile, url: nil) else { overlay.resetMotion(); return }
         let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, librarySpaceID: librarySpaceID, profileID: profile, host: host)
@@ -139,13 +139,20 @@ public final class PeekController {
             }
             return true
         }
-        host.load(url); refresh(); host.focus(); installKeys()
         let interval = duration(Motion.peekOpen), generation = motionGeneration
-        if interval > 0 { overlay.freezeHost(host.view, image: nil) }
+        if interval > 0 {
+            // A new engine page is created when its view first enters a
+            // window. Keep that startup and navigation out of the motion.
+            overlay.clearHost()
+            overlay.layoutSubtreeIfNeeded()
+            overlay.freezeHost(host.view, image: nil)
+        }
+        host.load(url); refresh(); host.focus(); installKeys()
         let focusAfterFreeze = overlay.window?.firstResponder
         overlay.animatePresentation(true, duration: interval) { [weak self, weak host] in
             guard let self, let host, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
             self.overlay.endHostSnapshot()
+            self.refresh()
             if self.isShown, self.overlay.window?.isKeyWindow == true,
                self.overlay.window?.firstResponder === focusAfterFreeze { host.focus() }
         }

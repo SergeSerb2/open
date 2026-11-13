@@ -94,6 +94,15 @@ public final class PeekOverlayView: NSView {
     func clearHost() { endHostSnapshot(reveal: false); pageClip.subviews.forEach { $0.removeFromSuperview() }; hostedView = nil; swipeIndicator = nil; sadTabView = nil }
     func showHost(_ host: any WebContentHost, close: @escaping () -> Void) {
         PeekMotionTrace.watch(host.view)
+        if isHostFrozen(host.view), host.view.superview !== pageClip {
+            // Opening uses the engine's initial plate. Attaching now would
+            // create Chromium and make its first commits during the motion.
+            if host.view.frame != pageClip.bounds {
+                PeekMotionTrace.mark("host.setFrame", value: pageClip.bounds.width)
+                hostFrameChangeCount += 1; host.view.frame = pageClip.bounds
+            }
+            return
+        }
         let wasSad = sadTabView != nil
         let hadPageFocus = (window?.firstResponder as? NSView).map { $0 === pageClip || $0.isDescendant(of: pageClip) } ?? false
         if host.liveState.isCrashed {
