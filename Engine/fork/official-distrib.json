@@ -1,5 +1,5 @@
 {
- "status": "1.0.1 code-sign clone lease inode guard; qualified candidate",
+ "status": "adopted 1.0.1 code-sign clone lease inode guard",
  "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
  "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
  "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",

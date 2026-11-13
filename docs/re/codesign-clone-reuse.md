@@ -1457,3 +1457,9 @@ Receipts are in `engine-items/.re/e3-clone-lease-101/`: `runtime.tar.gz`,
 `runtime-summary.json`, `{old,candidate}/result.json`, `pause-lease.c`,
 `lease-runtime.py`, `window-status.json` and the build/restore logs. These
 records prove lease safety and runtime behavior; they make no timing claim.
+
+At 08:40, the guarded overlay, official distribution and matching Release
+framework/sample outputs were adopted in one normal heavy-slot transaction.
+`adoption.json` records atomic directory exchanges and retained 267 rollback
+directories; `adopt-status.json` records 8 PASS, 0 FAIL, 0 WARN. The distribution
+pointer still names the official path. No M1 distribution or DMG was changed.
