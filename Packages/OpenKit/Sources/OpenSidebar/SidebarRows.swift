@@ -211,7 +211,7 @@ final class SidebarRowView: NSTableRowView {
         switch representedItem {
         case let tab as Tab: tab.displayTitle
         case let folder as Folder: folder.title
-        case let split as Split: "Split View: " + split.panes.map(\.displayTitle).joined(separator: ", ")
+        case let split as Split: "Split View: " + (split.isCustomized ? split.displayTitle : split.panes.map(\.displayTitle).joined(separator: ", "))
         case is NewTabItem: "New Tab"
         case is LiveFolderMoreItem: "Show More"
         default: nil
@@ -356,10 +356,11 @@ class SidebarCellView: NSView {
 
     /// Inline title editor (double-click or "Rename…").
     private var editor: NSTextField?
-    func beginEditing(text: String, frame: NSRect, font: NSFont, commit: @escaping @MainActor (String) -> Void) {
+    func beginEditing(text: String, frame: NSRect, font: NSFont, placeholder: String? = nil, commit: @escaping @MainActor (String) -> Void) {
         page?.context.suppressPreviews(.rename, true)
         let field = RenameField(frame: frame)
         field.stringValue = text
+        field.placeholderString = placeholder
         field.font = font
         field.isBordered = false
         field.drawsBackground = false
@@ -371,6 +372,7 @@ class SidebarCellView: NSView {
             self?.editor = nil
             self?.page?.context.suppressPreviews(.rename, false)
             self?.subviews.forEach { if $0 is TextLabel { $0.isHidden = false } }
+            self?.needsLayout = true
             if let value { commit(value) }
         }
         subviews.forEach { if $0 is TextLabel { $0.isHidden = true } }
@@ -1007,10 +1009,19 @@ final class SplitCellView: SidebarCellView {
     private var titles: [TextLabel] = []
     private var dividers: [CALayer] = []
     private var cells: [CALayer] = []
+    let customIcon = SplitIconView()
+    private let customTitle = TextLabel()
 
     required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
+        customTitle.font = Typography.tabTitle.font
+        customTitle.baseline = SpaceListMetrics.titleBaselineOffset
+        customTitle.inset = SpaceListMetrics.textInset
+        customTitle.trailingInset = SpaceListMetrics.textTrailingInset
+        customTitle.text = { [weak self] in self?.split?.displayTitle ?? "" }
+        customTitle.color = { [weak self] in self?.titleColor() ?? .labelColor }
+        addSubview(customIcon); addSubview(customTitle)
     }
 
     override var wantsUpdateLayer: Bool { true }
@@ -1042,6 +1053,21 @@ final class SplitCellView: SidebarCellView {
 
     var visibleCellFrames: [CGRect] { cells.filter { !$0.isHidden }.map(\.frame) }
     var dividersVisible: Bool { dividers.contains { !$0.isHidden } }
+    var presentation: [String:Any] {
+        ["titles":customTitle.isHidden ? titles.filter { !$0.isHidden }.map { $0.text() } : [customTitle.text()],
+         "customIconVisible":!customIcon.isHidden,"paneFaviconsVisible":favicons.filter { !$0.isHidden }.count,
+         "iconSource":customIcon.isHidden ? "panes" : split?.iconOverride == nil ? "count" : "custom"]
+    }
+
+    func beginRename() {
+        guard let split else { return }
+        let id = split.id, m = SpaceListMetrics.self
+        beginEditing(text: split.displayTitle,
+                     frame: CGRect(x:m.titleX + indent,y:10,width:max(0,bounds.width - m.titleX - indent - m.titleTrailingInset),height:20),
+                     font: Typography.tabTitle.font, placeholder:"Title") { [weak self] value in
+            self?.context?.send(.rename(nodeID:id,title:value))
+        }
+    }
 
     private func applyColors() {
         let appearance = contentAppearance
@@ -1055,9 +1081,14 @@ final class SplitCellView: SidebarCellView {
         super.layout()
         guard let split else { return }
         let panes = tracked({ split.panes }) { [weak self] in self?.needsLayout = true }
+        let customized = tracked({ split.isCustomized }) { [weak self] in self?.needsLayout = true }
         if panes.map(\.id) != paneIDs { paneIDs = panes.map(\.id); rebuild(panes) }
         guard !favicons.isEmpty else { return }
         let m = SpaceListMetrics.self
+        customIcon.split = split
+        customIcon.isHidden = !customized; customTitle.isHidden = !customized
+        customIcon.frame = CGRect(x:m.faviconX + indent,y:m.faviconY,width:m.faviconSize,height:m.faviconSize)
+        customTitle.frame = CGRect(x:m.titleX + indent,y:0,width:max(0,bounds.width - m.titleX - indent - m.titleTrailingInset),height:m.rowHeight)
         let n = CGFloat(favicons.count)
         // Cell pitch = cell width + gap: (W − 16 − indent − 4) / n.
         let pitch = (bounds.width - 2 * m.rowFillInsetX - indent - m.splitCellGap) / n
@@ -1066,18 +1097,42 @@ final class SplitCellView: SidebarCellView {
         let selected = rowView?.isCurrent ?? false
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for i in favicons.indices {
+            favicons[i].isHidden = customized; titles[i].isHidden = customized
             let x = x0 + CGFloat(i) * pitch
             favicons[i].frame = CGRect(x: x, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
             titles[i].frame = CGRect(x: x + 28, y: 0, width: max(0, pitch - 40), height: m.rowHeight)
             let left = (cellX0 + CGFloat(i) * pitch).rounded(), right = (cellX0 + CGFloat(i) * pitch + pitch - m.splitCellGap).rounded()
             cells[i].frame = CGRect(x: left, y: m.splitCellTop, width: right - left, height: m.splitCellHeight)
-            cells[i].isHidden = !selected
+            cells[i].isHidden = !selected || customized
             if i > 0 {
                 dividers[i - 1].frame = CGRect(x: x - 10, y: 12, width: m.splitDividerWidth, height: 17)
-                dividers[i - 1].isHidden = selected
+                dividers[i - 1].isHidden = selected || customized
             }
         }
         CATransaction.commit()
+    }
+}
+
+/// A customized split uses its selected icon, or a pane-count badge for a name-only change (C12-D2-2).
+@MainActor
+final class SplitIconView: NSView {
+    weak var split: Split? { didSet { if split !== oldValue { needsDisplay = true } } }
+    override init(frame:NSRect) {
+        super.init(frame:frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+    @available(*,unavailable) required init?(coder:NSCoder) { fatalError() }
+    override var isFlipped:Bool { true }
+    override func hitTest(_ point:NSPoint)->NSView? { nil }
+    override func draw(_ dirtyRect:NSRect) {
+        guard let split else { return }
+        let (icon,count) = tracked({ (split.iconOverride,split.panes.count) }) { [weak self] in self?.needsDisplay = true }
+        let ink = bounds.insetBy(dx:3,dy:3)
+        if let icon { NodeIconRenderer.draw(icon,in:ink,tint:SidebarRole.secondaryText.nsColor); return }
+        NSColor.white.withAlphaComponent(0.35).setFill()
+        NSBezierPath(roundedRect:ink,xRadius:4,yRadius:4).fill()
+        let text = NSAttributedString(string:String(count),attributes:[.font:NSFont.systemFont(ofSize:11,weight:.bold),.foregroundColor:Core.brandBlue.nsColor])
+        let size = text.size()
+        text.draw(at:CGPoint(x:bounds.midX - size.width/2,y:bounds.midY - size.height/2))
     }
 }
 

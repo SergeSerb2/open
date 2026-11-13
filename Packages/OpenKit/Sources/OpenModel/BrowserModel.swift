@@ -734,7 +734,7 @@ public final class BrowserModel {
                         for tab in panes { add(.tab(tab), to: parent); counts.tabs += 1 }
                     } else if panes.count >= 2 {
                         let focused = panes.contains { $0.id == split.focusedPaneID } ? split.focusedPaneID : panes.first?.id
-                        add(.split(Split(id: split.id, orientation: split.orientation, fractions: panes.count == split.panes.count ? split.fractions : [], panes: panes, focusedPaneID: focused)), to: parent)
+                        add(.split(Split(id: split.id, orientation: split.orientation, fractions: panes.count == split.panes.count ? split.fractions : [], panes: panes, focusedPaneID: focused, customTitle: split.customTitle, iconOverride: split.iconOverride)), to: parent)
                         counts.tabs += panes.count
                     } else if let tab = panes.first { add(.tab(tab), to: parent); counts.tabs += 1 }
                 }
@@ -891,7 +891,7 @@ public final class BrowserModel {
             case .split(let split):
                 let panes = split.panes.map(copyTab)
                 let focused = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
-                return .split(Split(orientation: split.orientation, fractions: split.fractions, panes: panes, focusedPaneID: focused))
+                return .split(Split(orientation: split.orientation, fractions: split.fractions, panes: panes, focusedPaneID: focused, customTitle: split.customTitle, iconOverride: split.iconOverride))
             }
         }
         let copied = copyNode(source)
@@ -1189,6 +1189,8 @@ public final class BrowserModel {
         var fractions: [Double]
         var panes: [ArchivedTabPayload]
         var focusedPaneID: String?
+        var customTitle: String?
+        var iconOverride: SpaceIcon?
     }
 
     private func decodedFolder(_ record: ArchivedTabRecord) -> (Folder, String?)? {
@@ -1237,7 +1239,8 @@ public final class BrowserModel {
                     ? shares.map { $0 / sum } : Array(repeating: 1 / Double(panes.count), count: panes.count)
                 let focused = payload.focusedPaneID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) }
                 return .split(Split(id: id, orientation: payload.orientation, fractions: fractions, panes: panes,
-                                    focusedPaneID: panes.first { $0.id == focused }?.id ?? panes.first?.id))
+                                    focusedPaneID: panes.first { $0.id == focused }?.id ?? panes.first?.id,
+                                    customTitle: payload.customTitle, iconOverride: payload.iconOverride))
             }
         }
         guard let result = folder(payload) else { return nil }
@@ -1608,7 +1611,7 @@ public final class BrowserModel {
         case .split(let split):
             let panes = split.panes.map(copyTab)
             let focus = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
-            return .split(Split(orientation: split.orientation, fractions: split.fractions, panes: panes, focusedPaneID: focus))
+            return .split(Split(orientation: split.orientation, fractions: split.fractions, panes: panes, focusedPaneID: focus, customTitle: split.customTitle, iconOverride: split.iconOverride))
         }
     }
 
@@ -1863,6 +1866,12 @@ public final class BrowserModel {
             guard title != (old ?? tab.title), new != old else { return }
             tab.customTitle = new
             registerChange(undo: { tab.customTitle = old }, redo: { tab.customTitle = new })
+        } else if let split = index[id]?.split {
+            guard title.utf8.count <= 16_384 else { return }
+            let old = split.customTitle, new = title.isEmpty ? nil : title
+            guard old != new, title != split.displayTitle else { return }
+            split.customTitle = new
+            registerChange(undo: { split.customTitle = old }, redo: { split.customTitle = new })
         } else if let folder = index[id]?.folder {
             let old = folder.title
             guard title != old else { return }
@@ -2219,7 +2228,23 @@ public final class BrowserModel {
             folder.iconOverride = icon; folder.customIcon = nil
             registerChange(undo: { folder.iconOverride = old; folder.customIcon = legacy },
                            redo: { folder.iconOverride = icon; folder.customIcon = nil })
+        } else if let split = index[id]?.split {
+            guard split.iconOverride != icon else { return false }
+            let old = split.iconOverride
+            split.iconOverride = icon
+            registerChange(undo: { split.iconOverride = old }, redo: { split.iconOverride = icon })
         } else { return false }
+        return true
+    }
+
+    /// Session 12 C12-D2-2: reset both values in one undo step, leaving the panes untouched.
+    @discardableResult
+    public func resetSplitCustomization(id: ItemID) -> Bool {
+        guard let split = index[id]?.split, split.isCustomized else { return false }
+        let title = split.customTitle, icon = split.iconOverride
+        split.customTitle = nil; split.iconOverride = nil
+        registerChange(undo: { split.customTitle = title; split.iconOverride = icon },
+                       redo: { split.customTitle = nil; split.iconOverride = nil })
         return true
     }
 

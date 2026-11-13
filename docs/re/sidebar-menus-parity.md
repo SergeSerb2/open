@@ -81,3 +81,19 @@ this change does not alter transfer retries or persistence. The failed-row menu 
 C12-PB1-3 report separately records that this failed row was absent after relaunch, including an exact-name search
 showing "No results found" (`.re/capture/s12/m1/arc/v11/36-failure-relaunch/failed-after-relaunch.{png,ax.json}`).
 The PB1 lane tracks that relaunch behavior; this change covers the subtitle.
+
+### Split name and icon (session 12, C12-D2-2)
+
+Rename opens the native inline Title field with the initial text `2 Tabs` selected.
+A custom name replaces the pane titles; Escape leaves the saved name unchanged.
+A name-only row uses a pane-count badge. An icon-only row uses that icon and the
+count title `2 Tabs`. The shared emoji picker supplies the icon. Both values survive
+relaunch. `Reset Name and Icon` appears immediately before `Change Icon…` only
+while either value is customized; it restores the individual titles and favicons.
+
+Evidence: `.re/capture/s12/m1/arc/v18/101-d2-rename-reset/split-{rename-editor,renamed,rename-cancel,reset}.png`
+and `split-rename-focus.focused.json`; icon-only presentation is
+`v20/103-d2-icon-both/icon-only-picked.png`; light/dark custom states are
+`v21/105-d2-both-focused/custom-split-{light,dark}.png`; persistence and final Reset
+are `v21/104-d2-persist-reset/split-{custom-relaunch,final-reset}.png`.
+These are local reference facts; no reference assets are shipped.

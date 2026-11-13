@@ -800,6 +800,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard row >= 0, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return }
         (cell as? TabCellView)?.beginRename()
         (cell as? FolderCellView)?.beginRename()
+        (cell as? SplitCellView)?.beginRename()
     }
 
     func menu(at point: NSPoint) -> NSMenu {
