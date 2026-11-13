@@ -9356,6 +9356,7 @@ def commandbar_checks(factory, results, tmp, config):
         correct = wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /edited', step=.1)
         results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
         commandbar_footer_checks(app, results, tmp, bar, press, new['id'])
+        commandbar_results_work_checks(app, results, bar, press, new['id'])
         app.call('focus', tab=new['id'])
         app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
         app.call('pasteboard-write', text='COPY NOT RUN')
@@ -9809,6 +9810,37 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state, origin):
     # Archive registers no undo name in Open's model, so the row reads plain "Undo"; named steps read "Undo <name>".
     results['commandbar_undo_by_name'] = {'ok': len(undo_rows) == 1 and (undo_rows[0]['title'] == 'Undo' or undo_rows[0]['title'].startswith('Undo '))
         and bool(restored), 'row': undo_rows[0] if undo_rows else None, 'tabs': len(app.call('tabs')), 'expected': count}
+
+
+
+def commandbar_results_work_checks(app, results, bar, press, tab):
+    """Real local+history snapshots: unchanged rows do no second layout pass."""
+    state = lambda: app.call('commandbar-state')
+    app.call('suggest-remote', enabled=False)
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    app.eval(tab, 'window.commandBarResizeCount=0; window.addEventListener("resize",()=>window.commandBarResizeCount++);1')
+    try:
+        for reduced in (False, True):
+            app.call('window-motion', reduced=reduced)
+            bar('t')
+            opened = wait_until(lambda: (lambda s: s if s.get('final') else None)(state()), timeout=5, step=.02)
+            app.call('key', text='zzqv993')
+            typed = wait_until(lambda: (lambda s: s if s.get('text') == 'zzqv993' and s.get('final') else None)(state()), timeout=5, step=.02)
+            results['commandbar_duplicate_snapshot_work_' + str(reduced).lower()] = {
+                'ok': bool(typed) and typed['snapshotSequence'] >= 1
+                    and typed['rowUpdates'] - opened['rowUpdates'] == 1
+                    and typed['animationKeys'] == [] and typed['panelOpacity'] == 1
+                    and len(typed['rows']) == 1 and typed['rows'][0]['title'] == 'zzqv993',
+                'before': {k: opened[k] for k in ('rowUpdates', 'resultsLayouts', 'panelLayouts')},
+                'after': {k: typed[k] for k in ('rowUpdates', 'resultsLayouts', 'panelLayouts', 'snapshotSequence', 'animationKeys')} if typed else None}
+            press('escape')
+            closed = state()
+            results['commandbar_no_page_resize_' + str(reduced).lower()] = {
+                'ok': closed['hidden'] and not closed['presented'] and closed['animationKeys'] == []
+                    and app.eval(tab, 'window.commandBarResizeCount') == 0}
+    finally:
+        press('escape')
+        app.call('window-motion', reduced=False)
 
 
 def commandbar_footer_checks(app, results, tmp, bar, press, tab):
