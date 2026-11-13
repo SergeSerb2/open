@@ -209,6 +209,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       "panelOpacity": bar.view.debugPanelPresentationOpacity, "allAnimationKeys": bar.view.debugAllAnimationKeys,
       "panelFrame": { let f = bar.view.convert(bar.view.panelFrame, to: nil); let h = factory.window?.contentView?.bounds.height ?? 0
         return [f.minX, h - f.maxY, f.width, f.height] }(),
+      "panelLayouts": bar.view.debugPanelLayoutCount, "rowDraws": bar.view.debugRowDrawCount,
+      "resultsLayouts": bar.view.debugResultsLayoutCount, "rowUpdates": bar.view.debugRowUpdateCount, "snapshotSequence": bar.appliedSequence,
       "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
