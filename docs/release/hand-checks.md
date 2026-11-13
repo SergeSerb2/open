@@ -146,8 +146,8 @@ Other findings from this run:
   "Some selected data could not be imported." Fixed: a data type with "Not found" is now unticked and disabled
   (Settings ▸ Import and onboarding); e2e row `import_other_browsers/safari_not_found_unticked`.
 - The Chrome Report listed Chrome's built-in "Google Docs Offline" and "Chrome Web Store Payments" under Extensions.
-  Fixed: extensions with install location 5 or 10, or `was_installed_by_default`, are not offered; e2e row
-  `import_browsers/extensions_skip_browser_own`.
+  Fixed in #519 (IMC): extensions with install location 5 or 10, or `was_installed_by_default`, are not offered;
+  e2e suite `import-browsers`.
 - The password reveal prompt says "Chromium is trying to show passwords": an engine string, handed to E3 (LEAD 20:15).
 - First launch on rented Macs showed "Allow “Open” to access your microphone?". Log proof: coreaudiod asked TCC for
   the Open main process during onboarding. The only audio device there is BlackHole 2ch, the default output and

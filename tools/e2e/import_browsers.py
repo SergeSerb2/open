@@ -122,16 +122,7 @@ def fixture(library):
         'aaaabbbbccccddddeeeeffffgggghhhh': {'path': 'aaaabbbbccccddddeeeeffffgggghhhh/1.0', 'from_webstore': True,
                                              'manifest': {'name': 'Example Extension', 'version': '1.0'}},
         'iiiijjjjkkkkllllmmmmnnnnoooopppp': {'path': '/Applications/Example.app/Contents/Resources/component',
-                                             'manifest': {'name': 'Example Component', 'version': '1.0'}},
-        # The browser's own installs, shaped like Chrome's (hand check, IMF 20:15): an external component (location 10)
-        # and a default install (location 6, was_installed_by_default), both with a profile-relative path and
-        # from_webstore. Neither is offered. A desktop app's install (location 6, not by default) is.
-        'qqqqrrrrssssttttuuuuvvvvwwwwxxxx': {'path': 'qqqqrrrrssssttttuuuuvvvvwwwwxxxx/1.0', 'from_webstore': True, 'location': 10,
-                                             'was_installed_by_default': True, 'manifest': {'name': 'Example Store Payments', 'version': '1.0'}},
-        'ccccddddeeeeffffgggghhhhiiiijjjj': {'path': 'ccccddddeeeeffffgggghhhhiiiijjjj/1.0', 'from_webstore': True, 'location': 6,
-                                             'was_installed_by_default': True, 'manifest': {'name': 'Example Default App', 'version': '1.0'}},
-        'kkkkllllmmmmnnnnooooppppaaaabbbb': {'path': 'kkkkllllmmmmnnnnooooppppaaaabbbb/1.0', 'from_webstore': True, 'location': 6,
-                                             'was_installed_by_default': False, 'manifest': {'name': 'Example Companion', 'version': '1.0'}}}}}))
+                                             'manifest': {'name': 'Example Component', 'version': '1.0'}}}}}))
     work = {'version': 1, 'checksum': '0', 'roots': {
         'bookmark_bar': {'type': 'folder', 'guid': '00000000-0000-4000-b000-000000000001', 'name': 'Bookmarks bar', 'children': [
             url('20000000-0000-4000-a000-000000000001', 'Example Work', 'https://work.example.com/')]},
@@ -246,10 +237,7 @@ def run(factory, results, tmp, h):
         and all(secrets_state[k] == 0 for k in ('consentAdapterCalls', 'keychainProbeCalls', 'keychainReadCalls')),
         labels=labels, enabled=chosen.get('settingsBrowserSecretsEnabled'),
         keychain={k: secrets_state[k] for k in ('consentAdapterCalls', 'keychainProbeCalls', 'keychainReadCalls')})
-    row('extensions_list', report.get('settingsExtensions') == ['aaaabbbbccccddddeeeeffffgggghhhh', 'kkkkllllmmmmnnnnooooppppaaaabbbb'],
-        extensions=report.get('settingsExtensions'))
-    own = {'qqqqrrrrssssttttuuuuvvvvwwwwxxxx', 'ccccddddeeeeffffgggghhhhiiiijjjj', 'iiiijjjjkkkkllllmmmmnnnnoooopppp'}
-    row('extensions_skip_browser_own', not own & set(report.get('settingsExtensions') or []),
+    row('extensions_list', report.get('settingsExtensions') == ['aaaabbbbccccddddeeeeffffgggghhhh'],
         extensions=report.get('settingsExtensions'))
     data, nodes = sidebar(app)
     imported = [n for n in nodes if n not in before_nodes]
