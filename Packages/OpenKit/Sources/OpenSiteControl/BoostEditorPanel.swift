@@ -151,7 +151,8 @@ public final class BoostEditorController: NSObject {
             if editing { panel.makeFirstResponder(view);return true }
             if view.advanced { view.closeAdvanced();return true }
             if view.isCodeMode { setCodeMode(false);return true }
-            close(animated: true);return true
+            // C12-D2-3: Escape leaves the main My Boost editor open; Done closes it.
+            return true
         }
         if view.isCodeMode,event.modifierFlags.contains(.command),event.charactersIgnoringModifiers?.lowercased() == "r" { session.refreshToRun();return true }
         if view.isCodeMode,event.modifierFlags.contains(.command),let key = event.charactersIgnoringModifiers,["1","2"].contains(key) { view.codeView?.select(key == "1" ? .css : .js);return true }

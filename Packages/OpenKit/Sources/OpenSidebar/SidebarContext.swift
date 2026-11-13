@@ -127,6 +127,9 @@ public final class SidebarContext {
     /// Shared folder rendering resolves this before Folder.customIcon.
     public var folderIconOverrideProvider: (@MainActor (Folder) -> String?)?
 
+    /// The App combines current-launch load state with the existing Boost editor guards.
+    @ObservationIgnored public var canCustomizePage: (@MainActor (ItemID) -> Bool)?
+
     public var storedFavicons: StoredFaviconCache?
 
     /// Recents hover card data (live-data §3.4): history rows of a Profile whose URLs contain one
