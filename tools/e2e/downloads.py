@@ -297,7 +297,7 @@ def checks(factory, results, tmp, config, harness):
             app.call('snapshot', path=str(capture_root / ('mark-running-' + appearance + '.png')))
             badge = state()['badge']
             box = badge.get('markFrame', badge['frame'])
-            app.call('mouse', action='click', queued=True, window=app.call('library-state')['window'], x=box[0]+box[2]/2, y=box[1]+box[3]/2)
+            app.call('mouse', action='click', queued=True, window=app.call('library-state')['window'], x=box[0]+box[2]/2, y=box[1]+8)
             opened = wait(lambda: app.call('library-state').get('open') and app.call('library-state').get('section') == 'downloads')
             check('captured_mark_click_' + appearance, opened and app.call('library-state')['windowID'] == app.call('shell-windows')[0]['id'])
             dismiss_library()
