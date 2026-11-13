@@ -1,6 +1,7 @@
 import AppKit
 import OpenEngine
 import OpenFeatures
+import OpenDesign
 import OpenModel
 import OpenSidebar
 
@@ -58,6 +59,10 @@ final class DeveloperModePanel {
       .init(title: "Manage Extensions…") { [weak controller] in controller?.performCommand("manage-extensions") },
     ], layout: .extensions)
     card.dark = anchor.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    // The "+" popover's style (C3 session 11), from the bar's Space style and the window's appearance.
+    if let bar = anchor.superview as? DeveloperContentPanelView {
+      card.colors = PlusPopoverColors(style: bar.tooltipStyle, system: card.dark ? .dark : .light)
+    }
     card.swallowsClick = { [weak anchor] location in
       guard let anchor else { return false }
       return anchor.bounds.contains(anchor.convert(location, from: nil))
