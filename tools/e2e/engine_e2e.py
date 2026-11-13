@@ -4502,6 +4502,9 @@ def themed_card_checks(factory, results, private):
 def peek_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
+        # Cover normal motion even when the rental has system Reduce Motion on.
+        # The separate reduced path below uses the same process-only override.
+        app.call("window-motion", reduced=False)
         source = new_tab(app, fixture("Peek source"))
         app.call("pin", tab=source)
         baseline = app.call("host-counts")
