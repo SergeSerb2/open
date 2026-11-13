@@ -284,7 +284,10 @@ public final class ToastCenter {
 
     private func relayout() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        for entry in entries { entry.view.frame = ToastMetrics.frame(size: entry.view.frame.size, in: overlay.bounds) }
+        for entry in entries {
+            let frame = ToastMetrics.frame(size: entry.view.frame.size, in: overlay.bounds)
+            if entry.view.frame != frame { entry.view.frame = frame }
+        }
         CATransaction.commit()
     }
 
@@ -298,6 +301,15 @@ public final class ToastCenter {
 
     private func animateIn(_ view: ToastView) {
         guard animates(), let layer = view.layer else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        layer.rasterizationScale = view.window?.backingScaleFactor ?? 1
+        layer.shouldRasterize = true
+        CATransaction.setCompletionBlock { [weak layer] in
+            MainActor.assumeIsolated {
+                if layer?.animation(forKey: "toastOut.opacity") == nil { layer?.shouldRasterize = false }
+            }
+        }
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1; fade.duration = Motion.toastFadeIn
         fade.timingFunction = CAMediaTimingFunction(name: .linear)
@@ -315,6 +327,9 @@ public final class ToastCenter {
         guard let layer = view.layer else { return }
         // Start from what is on screen (an exit during the appear spring does not snap).
         let presentation = layer.presentation()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        layer.removeAnimation(forKey: "toastIn.opacity")
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = presentation?.opacity ?? layer.opacity; fade.toValue = 0
         fade.duration = Motion.toastOut; fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
