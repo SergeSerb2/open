@@ -19,6 +19,7 @@ final class SpacePagerView: NSView {
     private var offset: CGFloat = 0
     private var shownSpaceID: SpaceID?
     private var animating = false
+    private var slideGeneration = 0
     private(set) var lastSlideAnimation: CAAnimation?
     private var swipe: SwipeState?
     private var loop: ObservationLoop?
@@ -75,21 +76,29 @@ final class SpacePagerView: NSView {
             let shownIndex = shownSpaceID.flatMap { id in spaces.firstIndex { $0.id == id } } ?? focusedIndex
             offset = CGFloat(creationPage == nil ? shownIndex : spaces.count) * bounds.width
         }
-        placeStrip()
+        placeStrip(commitOffset: swipe == nil)
     }
 
     private func layoutPages() {
         let w = bounds.width, h = bounds.height
-        creationPage?.frame = CGRect(x: CGFloat(spaces.count) * w, y: 0, width: w, height: h)
+        let creationFrame = CGRect(x: CGFloat(spaces.count) * w, y: 0, width: w, height: h)
+        if creationPage?.frame != creationFrame { creationPage?.frame = creationFrame }
         // Drop pages of deleted Spaces.
         let live = Set(spaces.map(\.id))
         for (id, p) in pages where !live.contains(id) { p.removeFromSuperview(); pages[id] = nil }
-        for (i, s) in spaces.enumerated() { pages[s.id]?.frame = CGRect(x: CGFloat(i) * w, y: 0, width: w, height: h) }
+        for (i, s) in spaces.enumerated() {
+            let frame = CGRect(x: CGFloat(i) * w, y: 0, width: w, height: h)
+            if pages[s.id]?.frame != frame { pages[s.id]?.frame = frame }
+        }
     }
 
-    private func placeStrip() {
+    private func placeStrip(commitOffset: Bool = true) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        strip.frame = CGRect(x: -offset, y: 0, width: max(CGFloat(spaces.count + (creationPage == nil ? 0 : 1)), 1) * bounds.width, height: bounds.height)
+        // Commit the native origin once at a switch/drop, so AppKit hit testing
+        // follows the focused page. Interactive events move only the layer.
+        let frame = CGRect(x: commitOffset ? -offset : strip.frame.minX, y: 0, width: max(CGFloat(spaces.count + (creationPage == nil ? 0 : 1)), 1) * bounds.width, height: bounds.height)
+        if strip.frame != frame { strip.frame = frame }
+        strip.layer?.setValue(-offset - frame.minX, forKeyPath: "transform.translation.x")
         CATransaction.commit()
     }
 
@@ -104,6 +113,8 @@ final class SpacePagerView: NSView {
             // Space order can change while focus stays on the same Space.
             // Keep the cached page objects and re-offset the strip immediately.
             layoutPages()
+            if animating, offset == CGFloat(focusedIndex) * bounds.width { return }
+            slideGeneration += 1
             strip.layer?.removeAnimation(forKey: "slide")
             animating = false
             offset = CGFloat(focusedIndex) * bounds.width
@@ -117,7 +128,7 @@ final class SpacePagerView: NSView {
         for i in min(from, target)...max(from, target) { page(for: spaces[i]).isHidden = false }
         layoutPages()
         shownSpaceID = focused.id
-        let presentationX = strip.layer?.presentation()?.position.x ?? strip.frame.minX
+        let presentationX = presentationOffset
         offset = CGFloat(target) * w
         placeStrip()
         let style = context.style(for: focused)
@@ -133,13 +144,23 @@ final class SpacePagerView: NSView {
         themeBackground?.crossfade(to: style, animated: true)
     }
 
+    private var presentationOffset: CGFloat {
+        strip.frame.minX + (strip.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
+            ?? strip.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0)
+    }
+
     private func slide(from x: CGFloat, spring token: SpringToken, requestedAt: CFTimeInterval? = nil) {
         animating = true
-        let spring = token.animation(keyPath: "position.x")
-        spring.fromValue = x
-        spring.toValue = -offset
+        slideGeneration += 1
+        let generation = slideGeneration
+        let spring = token.animation(keyPath: "transform.translation.x")
+        spring.fromValue = x - strip.frame.minX
+        spring.toValue = 0
         CATransaction.begin()
-        CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated { self?.animating = false; self?.finishSlide() } }
+        CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
+            guard let self, self.slideGeneration == generation else { return }
+            self.animating = false; self.finishSlide()
+        } }
         let request = requestedAt ?? CACurrentMediaTime()
         spring.beginTime = strip.layer?.convertTime(CACurrentMediaTime(), from: nil) ?? CACurrentMediaTime()
         spring.setValue(strip.layer?.convertTime(request, from: nil) ?? request, forKey: "openRequestedAt")
@@ -157,14 +178,14 @@ final class SpacePagerView: NSView {
     func beginCreation(page: NSView) {
         guard creationPage == nil else { return }
         swipe = nil; creationPage = page; strip.addSubview(page)
-        let from = strip.layer?.presentation()?.position.x ?? strip.frame.minX
+        let from = presentationOffset
         layoutPages(); offset = CGFloat(spaces.count) * bounds.width; placeStrip()
         if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwitch) }
         else { animating = false; finishSlide() }
     }
 
     func endCreation() {
-        let from = strip.layer?.presentation()?.position.x ?? strip.frame.minX
+        let from = presentationOffset
         creationPage?.removeFromSuperview(); creationPage = nil
         strip.layer?.removeAnimation(forKey: "slide"); animating = false
         shownSpaceID = nil
@@ -185,10 +206,12 @@ final class SpacePagerView: NSView {
         case .began:
             guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return false }
             context.suppressPreviews(.swipe, true)
+            let start = -presentationOffset
+            slideGeneration += 1
             strip.layer?.removeAnimation(forKey: "slide")
             animating = false
             let base = focusedIndex
-            swipe = SwipeState(baseIndex: base, startOffset: -(strip.layer?.presentation()?.position.x ?? -offset))
+            swipe = SwipeState(baseIndex: base, startOffset: start)
             offset = swipe!.startOffset
             for p in pages.values { p.isHidden = false }
             for i in max(0, base - 1)...min(spaces.count - 1, base + 1) { _ = page(for: spaces[i]) }
@@ -208,7 +231,7 @@ final class SpacePagerView: NSView {
             let direction = offset > base ? 1 : -1
             if past, !s.pastThreshold, spaces.indices.contains(s.baseIndex + direction) { context.haptics.perform(.levelChange) }
             s.pastThreshold = past
-            placeStrip()
+            if !Motion.reducesMotion { placeStrip(commitOffset: false) }
             let dir = offset >= base ? 1 : -1
             let n = s.baseIndex + dir
             if spaces.indices.contains(n) {
@@ -231,7 +254,7 @@ final class SpacePagerView: NSView {
             // The delegate changes focus synchronously; snap to whatever is focused now.
             if target != s.baseIndex { context.send(.switchSpace(spaces[target].id)) }
             let landed = focusedIndex
-            themeBackground?.endTransition(commit: landed != s.baseIndex && landed == s.neighbor)
+            themeBackground?.endTransition(commit: landed != s.baseIndex && landed == s.neighbor, duration: Motion.reducesMotion ? 0 : Motion.themeCrossfade)
             if landed != s.baseIndex && landed != s.neighbor, let f = context.focusedSpace {
                 themeBackground?.crossfade(to: context.style(for: f), animated: true)
             }
@@ -239,7 +262,8 @@ final class SpacePagerView: NSView {
             let from = -offset
             offset = CGFloat(landed) * w
             placeStrip()
-            slide(from: from, spring: Motion.spaceSwipeSnap)
+            if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwipeSnap) }
+            else { lastSlideAnimation = nil; animating = false; finishSlide() }
             return true
         default:
             return swipe != nil
