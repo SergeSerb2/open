@@ -89,6 +89,9 @@ public protocol WebContent: AnyObject {
     var onOpenWorldMessage: ((String, String, String) -> Void)? { get set }
     /// PNG of the visible page.
     func snapshotPNG() async throws -> Data
+    /// A visible-viewport capture for a transition, without emulating another
+    /// viewport or asking the renderer to capture beyond its current view.
+    func motionSnapshotPNG() async throws -> Data
     /// PNG of the whole page at device scale, at most `maxDevicePixels` tall (page-platform
     /// EP-8; `OEWebContent.captureFullPage`). `truncated` says the page was cut at the cap.
     func fullPagePNG(maxDevicePixels: Int) async throws -> FullPagePNG
@@ -103,6 +106,7 @@ public enum ScriptWorld: Sendable, Hashable { case page, open }
 public enum ScriptWorldError: Error { case unsupported }
 
 extension WebContent {
+    public func motionSnapshotPNG() async throws -> Data { try await snapshotPNG() }
     /// Alternate backends must opt in to Open's isolated world.
     public func evaluateJavaScript(_ script: String, in world: ScriptWorld) async throws -> Any {
         guard world == .page else { throw ScriptWorldError.unsupported }

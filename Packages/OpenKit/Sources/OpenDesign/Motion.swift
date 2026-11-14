@@ -62,6 +62,19 @@ public enum Motion {
     public static let tooltipFade: CFTimeInterval = 0.12
     /// Sidebar hide and show (Cmd+S) slide.
     public static let sidebarToggle = SpringToken(response: 0.10, dampingFraction: 0.95)
+    /// C14-2 show: equivalent image fit, not Arc's internal native animation.
+    /// Two marker fits agree within 0.48 pt; evidence: docs/re/sidebar-motion.md.
+    public static let sidebarShowDuration: CFTimeInterval = 0.075834
+    public static var sidebarShowTiming: CAMediaTimingFunction {
+        CAMediaTimingFunction(controlPoints: 0.01055, 0.50742, 0.55930, 0.98516)
+    }
+    public static func sidebarAnimation(keyPath: String, showing: Bool) -> CABasicAnimation {
+        guard showing else { return sidebarToggle.animation(keyPath: keyPath) }
+        let animation = CABasicAnimation(keyPath: keyPath)
+        animation.duration = sidebarShowDuration
+        animation.timingFunction = sidebarShowTiming
+        return animation
+    }
     /// Capture session 2, V 26.63 s; app-shell §3.3: 2.9 pt overshoot on 223 pt travel.
     public static let revealCardIn = SpringToken(response: 0.164, dampingFraction: 0.81)
     public static let revealCardOut: CFTimeInterval = 0.105
