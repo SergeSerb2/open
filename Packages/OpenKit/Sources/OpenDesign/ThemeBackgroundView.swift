@@ -75,6 +75,9 @@ public final class ThemeBackgroundView: NSView {
     public var isWindowBackdropActive: Bool { drawsWindowBackdrop && windowBlur?.state == .active }
     private let themeSurface = ThemeSurfaceView()
     private var windowBlur: NSVisualEffectView?
+    private var windowWash: NSView?
+    private struct WashKey: Equatable { var gray: Double; var opacity: Float }
+    private var appliedWash: WashKey?
 
     private var current = ThemeLayer(style: .defaultTheme(system: .light))
     /// Holds the theme layers. Its opacity is `1 − w` over the page blur, else 1.
@@ -139,11 +142,20 @@ public final class ThemeBackgroundView: NSView {
             blur.isEmphasized = false
             addSubview(blur, positioned: .below, relativeTo: themeSurface)
             windowBlur = blur
+            let wash = NSView(frame: bounds)
+            wash.wantsLayer = true
+            wash.layerContentsRedrawPolicy = .never
+            addSubview(wash, positioned: .above, relativeTo: blur)
+            windowWash = wash
         }
         if let blur = windowBlur, blur.isHidden == enabled { blur.isHidden = !enabled }
+        if let wash = windowWash, wash.isHidden == enabled { wash.isHidden = !enabled }
         guard enabled, let blur = windowBlur else { return }
-        let dark = style.backdropScheme == .dark
-        let material: NSVisualEffectView.Material = dark ? .underWindowBackground : .sidebar
+        // The imported JSON is unchanged when macOS appearance changes (C14-T).
+        // Its stored translucency selects the material; window appearance selects
+        // the wash. Editor themes carry their explicit window scheme themselves.
+        let dark = style.usesLegacyIntensity ? ContentAppearance(effectiveAppearance) == .dark : style.windowColorScheme == .dark
+        let material: NSVisualEffectView.Material = style.translucency == .dark ? .dark : .light
         let appearance: NSAppearance.Name = dark ? .darkAqua : .aqua
         let state: NSVisualEffectView.State = isWindowActive ? .active : .inactive
         // Reapplying an appearance can invalidate AppKit's material subtree.
@@ -151,6 +163,28 @@ public final class ThemeBackgroundView: NSView {
         if blur.material != material { blur.material = material }
         if blur.appearance?.name != appearance { blur.appearance = NSAppearance(named: appearance) }
         if blur.state != state { blur.state = state }
+        let isDefault: Bool
+        if case .corners = style.fill { isDefault = true } else { isDefault = false }
+        // Real-window C14-T output fit, with the existing theme coverage retained.
+        // This constant wash leaves the system material to perform the blur and
+        // saturation. Inactive windows cover it completely, as Arc's clear patches
+        // are invariant across all three wallpapers. See window-translucency.md.
+        let fit: (opacity: Float, gray: Double, inactiveGray: Double)
+        switch (isDefault, dark) {
+        case (false, false): fit = (0.4764, 1, 1)
+        case (false, true): fit = (0.1701, 0, 0.8292)
+        case (true, false): fit = (0.2319, 0.2641, 0.8366)
+        case (true, true): fit = (0.1729, 0, 0.1023)
+        }
+        let key = WashKey(gray: isWindowActive ? fit.gray : fit.inactiveGray, opacity: isWindowActive ? fit.opacity : 1)
+        if appliedWash != key {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            windowWash?.layer?.backgroundColor = NSColor(srgbRed: key.gray, green: key.gray, blue: key.gray, alpha: 1).cgColor
+            windowWash?.layer?.opacity = key.opacity
+            CATransaction.commit()
+            appliedWash = key
+        }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -167,6 +201,11 @@ public final class ThemeBackgroundView: NSView {
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         refresh()
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if usesWindowBackdrop { rebuildFields() }
     }
 
     public override func viewWillStartLiveResize() {
@@ -189,6 +228,7 @@ public final class ThemeBackgroundView: NSView {
         CATransaction.setDisableActions(true)
         if themeSurface.frame != bounds { themeSurface.frame = bounds }
         if let blur = windowBlur, blur.frame != bounds { blur.frame = bounds }
+        if let wash = windowWash, wash.frame != bounds { wash.frame = bounds }
         themeHost.frame = themeSurface.bounds
         pageBlur?.frame = bounds
         for layer in [current, incoming].compactMap({ $0 }) {

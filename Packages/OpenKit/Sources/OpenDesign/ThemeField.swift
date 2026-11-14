@@ -282,12 +282,20 @@ public enum ThemeField {
     }
 
     /// Theme tint over the system's behind-window material. The fitted opacity
-    /// is retained; only the constant neutral underlay is removed. Static
+    /// is retained; the constant underlay is removed. The default dark field
+    /// also has a small live tint correction from C14-T. Static
     /// previews continue to use `makeImage` or `composition`.
     public static func makeWindowTint(style: SpaceThemeStyle, windowSize: CGSize) -> CGImage? {
         // Fixed 64×64 RGBA float field: largest allocation is 65,536 bytes.
         let n = 64
         let e = Evaluator(style: style, windowSize: windowSize, isActive: true)
+        let correction: (Double, Double, Double)
+        if case .corners = style.fill, style.translucency == .dark {
+            // Default corners store final fitted pixels, rather than a raw fill.
+            // Native-material fit across the three C14-T wallpapers, not an
+            // adjustment to the stored theme or to static preview pixels.
+            correction = (-0.12938, -0.12318, -0.12659)
+        } else { correction = (0, 0, 0) }
         let displaySpace: Bool
         if case .blended = style.fill { displaySpace = !e.legacy && !e.mixesInSRGB }
         else { displaySpace = false }
@@ -310,8 +318,9 @@ public enum ThemeField {
                 // Unmix in the field's encoded space. Extended float channels
                 // retain colors outside sRGB until the window's ColorSync pass.
                 let gray = e.underlay * (1 - a)
-                pixels[i] = Float(r - gray); pixels[i + 1] = Float(g - gray)
-                pixels[i + 2] = Float(b - gray); pixels[i + 3] = Float(a)
+                pixels[i] = Float(r - gray + correction.0 * a)
+                pixels[i + 1] = Float(g - gray + correction.1 * a)
+                pixels[i + 2] = Float(b - gray + correction.2 * a); pixels[i + 3] = Float(a)
             }
         }
         let data = pixels.withUnsafeBytes { Data($0) }

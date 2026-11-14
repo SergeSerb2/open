@@ -36,8 +36,29 @@ A model with one wallpaper gain and a constant RGB tint in linear sRGB is reject
 
 ## Open implementation and validation status
 
-Real browser windows use a native `NSVisualEffectView` with `.behindWindow` blending below the theme field. The theme retains its fitted coverage. The provisional materials are `.sidebar` with Aqua for a light backdrop and `.underWindowBackground` with Dark Aqua for a dark backdrop. Existing window activation events select the material state. Non-vibrant themes remain opaque. The window server performs the blur; no periodic sampling or new display loop is used.
+Real browser windows use a native `NSVisualEffectView` with `.behindWindow` blending below the theme field. The theme retains its fitted coverage. The selected materials are `.light` and `.dark`, chosen by the stored translucency style. Window appearance selects Aqua or Dark Aqua and a constant neutral wash under the retained theme tint. These legacy native materials are intentional: the semantic sidebar material suppresses too much wallpaper contrast and remains wallpaper-dependent while inactive. Existing window activation events select the material state. A solid inactive underlay makes the inactive result independent of wallpaper. All wash setters are guarded and run only on state changes. Non-vibrant themes remain opaque. The window server performs the blur; no periodic sampling or new display loop is used.
 
-The Custom-Light real-window comparison is pending. Material selection and the broader C14-T fit are provisional until that comparison passes ΔE00 ≤ 2 for the qualified sidebar and frame regions. System material selection is not a claim about Arc's internal blur radius.
+The first Custom-Light real-window comparison completed all six states on the M1 with the exact imported theme, matched big-window geometry, original ICC, and independently verified wallpaper restoration. Its provisional `.sidebar`/Aqua material does **not** pass ΔE00 ≤ 2. The worst clear-region difference is 3.47. The light-wallpaper cases pass; the dark and colorful active cases miss, as do some inactive regions. The inactive output also varies with wallpaper, unlike Arc.
+
+| Wallpaper | Active worst region ΔE00 | Inactive worst region ΔE00 |
+|---|---|---|
+| Dark | 3.47 | 2.46 |
+| Light | 1.19 | 1.38 |
+| Colorful | 2.36 | 2.05 |
+
+At the colorful 128-point pattern, the provisional Open output/input amplitude is about 0.063 versus Arc 0.117. This identifies an output mismatch; it does not separate blur from tint. Private evidence: D2 `.re/d2-translucency/custom-light/{capture-v2/result,comparison-v2/comparison.json}` and shared `D2-frames/translucency-custom-light/first-comparison/`. All six source-pixel side-by-side sidebar crops are retained. Material choices are being compared in a private diagnostic app; those controls are outside the PR and are not shipping or CPU evidence. System material selection is not a claim about Arc's internal blur radius.
 
 Paired M1 Release idle CPU samples before and after the prepared implementation are 0.1477% / 0.1375% for an empty window and 0.2129% / 0.2955% for ten verified loaded static tabs. Each is one 60-second process CPU sample after a 90-second settle and two load1 readings ≤ 3.5, ten seconds apart. These samples pass the 0.5% budget; they do not establish a causal speed change. The field rebuild counter remains unchanged and no display update is pending at rest. An informational inventory of other system CPU was not retained. Evidence: private `.re/d2-translucency/{cpu-readout.md,cpu-qualification.json,receipts/m1-idle-v3.tar}` in the D2 worktree, with the empty-window samples in v1/v2 receipts.
+
+The corrected private Custom-Light probe uses `.light`/Aqua and a 0.4764 white wash below the unchanged 0.64 theme tint. All six states pass all three qualified regions, worst ΔE00 0.71. The colorful 128-point amplitude is Open 0.03628 versus Arc 0.03618. This is a rendered output fit, not an independent internal radius or saturation estimate. Each of the six capture states has unforced cleanup, unchanged preferences, and fresh-process exact wallpaper restoration. Evidence: private `wash-probe-v1/custom-light-fit/comparison/comparison.json` and shared `D2-frames/translucency-custom-light/neutral-wash-fit/`.
+
+The source now carries that fit and the remaining themes' predicted fits. The latter use unclipped native-material reference captures, because the first Default-Light probe clips bright channels and cannot identify its tint from those pixels. The Default-Dark live tint has a small RGB correction; stored themes and static images retain their earlier values. **Exact shipping-source matrix acceptance remains pending.**
+
+| Theme / appearance | Active wash opacity | Active wash gray | Inactive opaque gray |
+|---|---|---|---|
+| Custom / Light | 0.4764 | 1 | 1 |
+| Custom / Dark | 0.1701 | 0 | 0.8292 |
+| Default / Light | 0.2319 | 0.2641 | 0.8366 |
+| Default / Dark | 0.1729 | 0 | 0.1023 |
+
+Private wash probe receipt `receipts/wash-probe-v1.tar` retains all 36 states, including rejected material choices. These diagnostic controls are not in the shipping source.
