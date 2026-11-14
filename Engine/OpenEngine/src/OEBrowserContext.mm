@@ -177,8 +177,15 @@ class OERequestContextHandler : public CefRequestContextHandler {
 class DeleteCookiesCallback : public CefDeleteCookiesCallback {
  public:
   explicit DeleteCookiesCallback(void (^done)(void)) : done_([done copy]) {}
+  ~DeleteCookiesCallback() override {
+    // Released unrun (the cookie store went away): still answer once.
+    if (void (^done)(void) = done_) {
+      dispatch_async(dispatch_get_main_queue(), done);
+    }
+  }
   void OnComplete(int num_deleted) override {
     void (^done)(void) = done_;
+    done_ = nil;
     dispatch_async(dispatch_get_main_queue(), ^{
       if (done) {
         done();

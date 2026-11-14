@@ -78,16 +78,22 @@ typedef void (^OEFrameCompletion)(NSData* _Nullable);
   if (!_frameCompletions) {
     _frameCompletions = [NSMutableArray array];
   }
-  [_frameCompletions addObject:done];
+  // Answers exactly once, also when this object is deallocated before the
+  // deadline (its pending completions are dropped unrun then).
+  __block BOOL settled = NO;
+  OEFrameCompletion once = ^(NSData* png) {
+    if (settled) return;
+    settled = YES;
+    done(png);
+  };
+  [_frameCompletions addObject:once];
   _window->ExecuteAction("captureFrame", nullptr);
   __weak OEPictureInPicture* weakSelf = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC),
                  dispatch_get_main_queue(), ^{
                    OEPictureInPicture* pip = weakSelf;
-                   if (pip && [pip->_frameCompletions containsObject:done]) {
-                     [pip->_frameCompletions removeObject:done];
-                     done(nil);
-                   }
+                   if (pip) [pip->_frameCompletions removeObject:once];
+                   once(nil);
                  });
 }
 
