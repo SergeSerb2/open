@@ -953,19 +953,21 @@ public final class BrowserModel {
     /// back and drops the archive rows.
     public func closeTab(id: ItemID) {
         guard let parent = parentByID[id] else { return }
-        // A Live Folder row the user deletes stays hidden on later refreshes (live-data §2.7,
-        // Arc `liveFolderChildItemManuallyDeleted`).
-        if case .folder(let folderID) = parent, let folder = index[folderID]?.folder, folder.live != nil,
-           let url = tab(id: id)?.liveItemURL {
-            folder.live?.hiddenItems.insert(url.absoluteString)
-        }
         if case .splitPane(let splitID) = parent {
             guard let revert = closePane(id, of: splitID) else { return }
             registerUndo(revert, reapply: { $0.closePane(id, of: splitID) ?? Self.noRevert })
             return
         }
-        guard let revert = closeNode(id) else { return }
-        registerUndo(revert, reapply: { $0.closeNode(id) ?? Self.noRevert })
+        // A Live Folder row the user deletes stays hidden on later refreshes (live-data §2.7,
+        // Arc `liveFolderChildItemManuallyDeleted`). Undo un-hides it, or the next refresh
+        // would remove the restored row again.
+        let live = noteLiveRowLeaving(id)
+        guard let revert = closeNode(id) else { live?(); return }
+        registerUndo(Self.restoringLive(revert, [live]), reapply: { model in
+            let live = model.noteLiveRowLeaving(id)
+            guard let revert = model.closeNode(id) else { live?(); return Self.noRevert }
+            return Self.restoringLive(revert, [live])
+        })
     }
 
     private func closeNode(_ id: ItemID) -> Revert? {
@@ -1336,9 +1338,14 @@ public final class BrowserModel {
     /// Returns false, with no change and no event, when the move breaks a placement rule.
     @discardableResult
     public func moveNode(id: ItemID, to destination: NodeParent, at position: Int?) -> Bool {
-        noteLiveRowLeaving(id, to: destination)
-        guard let revert = move(id, to: destination, at: position) else { return false }
-        registerUndo(revert, reapply: { $0.move(id, to: destination, at: position) ?? Self.noRevert })
+        // A refused move must not hide the row; Undo puts the row back as a live row.
+        let live = noteLiveRowLeaving(id, to: destination)
+        guard let revert = move(id, to: destination, at: position) else { live?(); return false }
+        registerUndo(Self.restoringLive(revert, [live]), reapply: { model in
+            let live = model.noteLiveRowLeaving(id, to: destination)
+            guard let revert = model.move(id, to: destination, at: position) else { live?(); return Self.noRevert }
+            return Self.restoringLive(revert, [live])
+        })
         return true
     }
 
@@ -1503,9 +1510,14 @@ public final class BrowserModel {
 
     @discardableResult
     public func archiveNodes(ids: [ItemID], archiveFolderTabs: Bool = false) -> Int {
-        for id in ids { noteLiveRowLeaving(id) }
+        let live = ids.map { noteLiveRowLeaving($0) }
         let result = archiveMany(ids, archiveFolderTabs: archiveFolderTabs)
-        if let revert = result.revert { registerUndo(revert, reapply: { $0.archiveMany(ids, archiveFolderTabs: archiveFolderTabs).revert ?? Self.noRevert }) }
+        guard let revert = result.revert else { live.forEach { $0?() }; return result.count }
+        registerUndo(Self.restoringLive(revert, live), reapply: { model in
+            let live = ids.map { model.noteLiveRowLeaving($0) }
+            guard let revert = model.archiveMany(ids, archiveFolderTabs: archiveFolderTabs).revert else { live.forEach { $0?() }; return Self.noRevert }
+            return Self.restoringLive(revert, live)
+        })
         return result.count
     }
 
@@ -1820,11 +1832,32 @@ public final class BrowserModel {
 
     /// A fetched row leaves its Live Folder by the user's action (archive, Remove Pin, drag out):
     /// remember it as hidden so later refreshes do not bring it back, and make it a normal tab.
-    func noteLiveRowLeaving(_ id: ItemID, to destination: NodeParent? = nil) {
+    /// Returns the closure that undoes the note (un-hides the row and makes it live again), or nil
+    /// when `id` is not a fetched row leaving its Live Folder.
+    func noteLiveRowLeaving(_ id: ItemID, to destination: NodeParent? = nil) -> LiveRowRestore? {
         guard let tab = tab(id: id), let url = tab.liveItemURL, case .folder(let folderID)? = parentByID[id],
-              destination != .folder(folderID), let folder = index[folderID]?.folder, folder.live != nil else { return }
-        folder.live?.hiddenItems.insert(url.absoluteString)
-        if destination != nil { tab.liveItemURL = nil }
+              destination != .folder(folderID), let folder = index[folderID]?.folder, folder.live != nil else { return nil }
+        let key = url.absoluteString
+        let hid = folder.live?.hiddenItems.insert(key).inserted == true
+        let cleared = destination != nil
+        if cleared { tab.liveItemURL = nil }
+        return {
+            if hid { folder.live?.hiddenItems.remove(key) }
+            if cleared, tab.liveItemURL == nil { tab.liveItemURL = url }
+        }
+    }
+
+    typealias LiveRowRestore = @MainActor () -> Void
+
+    /// Runs `restores` after `revert` puts the nodes back.
+    private static func restoringLive(_ revert: @escaping Revert, _ restores: [LiveRowRestore?]) -> Revert {
+        let restores = restores.compactMap { $0 }
+        guard !restores.isEmpty else { return revert }
+        return { model in
+            guard revert(model) else { return false }
+            restores.forEach { $0() }
+            return true
+        }
     }
 
     /// Every Live Folder in the model (any Space).
