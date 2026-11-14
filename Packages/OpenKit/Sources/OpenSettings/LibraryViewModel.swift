@@ -161,14 +161,25 @@ import OpenStore
     }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() }; if section == .downloads { await downloads.refreshDownloads() } }
     private var archiveQuery = ""
+    private var archiveLoadedIdentity = ""
     public func reloadArchive(text:String? = nil) async {
         generation = UUID(); let request = generation
         archiveQuery = text ?? query
+        // A reload of the same list (a delete, a restore, a newly archived tab) loads as many rows
+        // as were shown, so the Library does not jump back to its first page.
+        let identity = "\(archiveQuery)|\(archiveSpaceFilter?.description ?? "")|\(archiveReasonFilter?.rawValue ?? "")|\(archiveOriginFilter.rawValue)"
+        let depth = identity == archiveLoadedIdentity ? archiveRows.count : 0
         var total = 0
         for store in archives.values { total += await store.count() }
         guard !Task.isCancelled,request == generation else { return }
         archiveTotalCount = total; cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archivedDisplayTitles = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false
+        archiveLoadedIdentity = identity
         await loadNextArchivePage()
+        while archiveRows.count < depth, archiveHasMore, request == generation, !Task.isCancelled {
+            let loaded = archiveRows.count
+            await loadNextArchivePage()
+            if archiveRows.count == loaded { break }
+        }
     }
     public func loadNextArchivePage() async {
         guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation, load = UUID();activeArchiveLoad=load
@@ -314,10 +325,14 @@ import OpenStore
         return filtered.sorted { a, b in if captureSort == "Name" { return a.fileName.localizedStandardCompare(b.fileName) == .orderedAscending }; return captureSort == "Oldest" ? a.createdAt < b.createdAt : a.createdAt > b.createdAt }
     }
     public func captureURL(_ item: CaptureItemSnapshot) -> URL? {
-        if !usesLegacySpaceManager { return captureLocations[item.id] }
+        if !usesLegacySpaceManager, let url = captureLocations[item.id] { return url }
+        // A capture saved after the last Media refresh (the capture writer reloads the index while
+        // the Library is open or prebuilt) is not in the off-main location map yet: check it here.
         guard FileCapturesProvider.safeName(item.fileName) else { return nil }
         let url = captures.directory.appendingPathComponent(item.fileName)
-        guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == false else { return nil }; return url
+        guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == false else { return nil }
+        if !usesLegacySpaceManager { captureLocations[item.id] = url }
+        return url
     }
     public func captureBytes(_ item: CaptureItemSnapshot) -> Int64 { guard let url = captureURL(item) else { return 0 }; return Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
     public func loadThumbnail(_ item: CaptureItemSnapshot) async {
@@ -339,22 +354,26 @@ import OpenStore
         historyLoadRevision += 1; historyLoading = false; historyHasMore = true
         historyQuery = text ?? query
         let identity = historyProfileID.description+"|"+historyQuery
+        // A reload of the same list (a new visit, a delete) keeps the pages already shown, so the
+        // Library does not jump back to its first page. `recent` returns at most 1,000 rows.
+        let depth = identity == historyLoadedIdentity ? historyRows.count : 0
         if identity != historyLoadedIdentity { historyRows = [] }
         historyLoadedIdentity = identity
-        await loadNextHistoryPage(reset:true)
+        await loadNextHistoryPage(reset:true, depth:depth)
     }
     private var historyQuery = ""
-    public func loadNextHistoryPage(reset:Bool = false) async {
+    public func loadNextHistoryPage(reset:Bool = false, depth:Int = 0) async {
         guard historyHasMore, !historyLoading else { return }
         historyLoading = true
         let revision = historyLoadRevision, profile = historyProfileID, text = historyQuery, offset = reset ? 0 : historyRows.count
+        let limit = reset ? min(1_000, max(100, (depth+99)/100*100)) : 100
         defer { if revision == historyLoadRevision { historyLoading = false } }
         let rows: [HistoryMatch]
-        if text.isEmpty { rows = await histories[profile]?.recent(limit:100,offset:offset) ?? [] }
-        else { rows = Array((await histories[profile]?.search(text,limit:offset+100) ?? []).dropFirst(offset)) }
+        if text.isEmpty { rows = await histories[profile]?.recent(limit:limit,offset:offset) ?? [] }
+        else { rows = Array((await histories[profile]?.search(text,limit:offset+limit) ?? []).dropFirst(offset)) }
         guard revision == historyLoadRevision, profile == historyProfileID, text == historyQuery, !Task.isCancelled else { return }
         if reset { historyRows = rows } else { historyRows += rows }
-        historyHasMore = rows.count == 100
+        historyHasMore = rows.count == limit
         if historyFaviconImages.count > 512 { historyFavicons = [:]; historyFaviconImages = [:] }
     }
 }

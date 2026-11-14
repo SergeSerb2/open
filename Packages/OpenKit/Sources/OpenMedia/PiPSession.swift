@@ -30,7 +30,8 @@ import OpenModel
         guard activeSource?.tabID != tabID else { return nil }
         let minimizedID: ItemID?
         if case .minimized(let id) = state { minimizedID = id } else { minimizedID = nil }
-        let replaced = (activeSource?.tabID ?? minimizedID).map { Effect(tabID: $0, reason: .replaced, pause: false) }
+        // A minimized PiP of the same tab reopening is not a replacement: closing it would end the new PiP.
+        let replaced = (activeSource?.tabID ?? minimizedID).flatMap { $0 == tabID ? nil : Effect(tabID: $0, reason: .replaced, pause: false) }
         state = .requesting(tabID: tabID, automatic: automatic)
         return replaced
     }

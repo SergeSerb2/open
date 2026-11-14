@@ -147,7 +147,6 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         addSubview(boostDisabledText); addSubview(boostTurnOn)
         easelsCard.isHidden = true; easelsCard.onExport = { [weak self] in self?.exportAllEasels() }; addSubview(easelsCard)
         statusLabel.font = .systemFont(ofSize:12); addSubview(statusLabel)
-        listView.onEnd = { [weak self] in self?.loadNextPage() }
         for button in [boostList,boostGallery,boostsProfile] {
             button.isChip = true; button.baseAlpha = 0.045; button.labelSize = 12
             button.layer?.cornerRadius = 9; addSubview(button)

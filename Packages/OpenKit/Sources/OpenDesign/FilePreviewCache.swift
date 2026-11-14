@@ -11,6 +11,10 @@ public final class FilePreviewCache {
     private let images = NSCache<NSString, NSImage>()
     private var checked: [String:Double] = [:]
     private var pending: [String:[@MainActor () -> Void]] = [:]
+    /// Requests that arrived while all 16 slots were busy. A row configured then keeps its
+    /// callback here instead of losing it (it would show the placeholder until reconfigured).
+    private var waiting: [String:(url:URL,callbacks:[@MainActor () -> Void])] = [:]
+    private var waitingOrder: [String] = []
     private let placeholder = NSImage(systemSymbolName:"doc",accessibilityDescription:nil) ?? NSImage()
     private init() { images.countLimit = 128; images.totalCostLimit = 16*1024*1024 }
     public func warmPlaceholder() {
@@ -24,8 +28,17 @@ public final class FilePreviewCache {
             return cached ?? placeholder
         }
         if cached != nil, ProcessInfo.processInfo.systemUptime-(checked[key] ?? 0)<2 { return cached! }
-        guard pending.count < 16 else { return cached ?? placeholder }
-        pending[key] = [onReady]
+        guard pending.count < 16 else {
+            if waiting[key] == nil { waiting[key] = (url,[]); waitingOrder.append(key) }
+            if waiting[key]!.callbacks.count < 32 { waiting[key]!.callbacks.append(onReady) }
+            if waitingOrder.count > 256 { waiting[waitingOrder.removeFirst()] = nil }
+            return cached ?? placeholder
+        }
+        start(key:key,url:url,callbacks:[onReady])
+        return cached ?? placeholder
+    }
+    private func start(key:String,url:URL,callbacks:[@MainActor () -> Void]) {
+        pending[key] = callbacks
         Task { [weak self] in
             let preview = await Task.detached(priority:.utility) { () -> CGImage? in
                 let values = try? url.resourceValues(forKeys:[.contentTypeKey,.fileSizeKey])
@@ -47,7 +60,16 @@ public final class FilePreviewCache {
             let callbacks = self.pending.removeValue(forKey:key) ?? []
             for callback in callbacks { callback() }
             if self.checked.count>512 { self.checked = [:] }
+            self.startWaiting()
         }
-        return cached ?? placeholder
+    }
+    /// Newest first: the rows the user scrolled to last are the ones on screen.
+    private func startWaiting() {
+        while pending.count < 16, let key = waitingOrder.popLast() {
+            guard let entry = waiting.removeValue(forKey:key) else { continue }
+            if pending[key] != nil { pending[key]! += entry.callbacks.prefix(max(0,32-pending[key]!.count)); continue }
+            if images.object(forKey:key as NSString) != nil, ProcessInfo.processInfo.systemUptime-(checked[key] ?? 0)<2 { entry.callbacks.forEach { $0() }; continue }
+            start(key:key,url:entry.url,callbacks:entry.callbacks)
+        }
     }
 }

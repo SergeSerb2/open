@@ -73,7 +73,7 @@ public enum ArcNotes {
                 guard let property = property as? [String: Any] else { continue }
                 let rich = property["richText"] as? [String: Any] ?? property
                 guard let range = range(rich["range"]), range.location >= 0, range.length >= 0,
-                    range.location + range.length <= length, let format = format(rich["value"]) else { continue }
+                    range.length <= length - range.location, let format = format(rich["value"]) else { continue }
                 var f = format; f.location = offset + range.location; f.length = range.length
                 if ["h1", "h2", "h3", "bulletList", "numberedList"].contains(f.type) {
                     let paragraph = (text as NSString).paragraphRange(for: NSRange(location: f.location, length: f.length))
