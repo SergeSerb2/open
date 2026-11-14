@@ -78,7 +78,8 @@ final class DeepLinkRouter {
 
   /// A 1-based index (the Ctrl+1…9 order) or a Space title (case-insensitive).
   private func focusSpace(_ argument: String) -> String {
-    guard let factory = frontFactory() else { return "no-window" }
+    // The main model's Spaces live in its windows only (not Incognito or a Blank Window).
+    guard let factory = app.frontMainModelWindowController.flatMap({ app.hostFactories[$0.windowID] }) else { return "no-window" }
     let spaces = app.model.spaces
     let space: Space?
     if let index = Int(argument) { space = (1...max(1, spaces.count)).contains(index) && !spaces.isEmpty ? spaces[index - 1] : nil }

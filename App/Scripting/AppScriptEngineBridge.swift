@@ -36,7 +36,7 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
     }
     let history = await app.tabSleep.store?.sleepHistory(tabID: tabID)
     guard app.engineReady, !app.shutdownPrepared, app.model?.tab(id: tabID) === tab,
-          let factory = app.frontStandardWindowController.flatMap({ app.hostFactories[$0.windowID] }) else { return nil }
+          let factory = app.frontMainModelWindowController.flatMap({ app.hostFactories[$0.windowID] }) else { return nil }
     let restore = history.flatMap { OENavigationHistory(container: $0.container) }
     let page = factory.ensureContent(for: tab, history: restore)
     // Restored background pages have no renderer until a navigation starts. Reload
