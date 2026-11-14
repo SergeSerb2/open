@@ -22,7 +22,10 @@ public final class SplitDividerView: NSView {
         guard isEnabled else { return }
         resize(delta: orientation == .horizontal ? event.locationInWindow.x - start.x : start.y - event.locationInWindow.y)
     }
-    public override func mouseUp(with event: NSEvent) { if isEnabled && !current.isEmpty { onCommit?(current) }; initial = []; current = [] }
+    /// A press without a drag leaves the frames as they were. Committing them would store fractions
+    /// rebuilt from integer-rounded frames, which differ slightly from the saved ones and register
+    /// an undo step that changes nothing visible.
+    public override func mouseUp(with event: NSEvent) { if isEnabled && !current.isEmpty && current != initial { onCommit?(current) }; initial = []; current = [] }
     /// The same live resize path used by mouse events; harness supplies the delta directly.
     public func drag(by delta: CGFloat, commit: Bool = true) {
         initial = onBegin?() ?? []; current = initial; resize(delta: delta)
