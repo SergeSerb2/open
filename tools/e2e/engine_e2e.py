@@ -8438,6 +8438,7 @@ def littleopen_checks(factory, results, tmp):
                inputLimit={'acceptedBytes': 8192, 'refusedBytes': 8193, 'refused': refused_limit})
         app.call('open', url=origin + '/main-browser-control')
         main_key = app.call('native-focus-state')['keyWindow']
+        creation_before_handoff = state()['littleOpenBrowserCreations']
         motion = app.call('window-motion')
         try:
             app.call('window-motion', reduced=False)
@@ -8449,6 +8450,13 @@ def littleopen_checks(factory, results, tmp):
                    before=main_key, opened=handoff['opened']['keyWindow'],
                    afterKey=handoff['after']['keyWindow'], afterMain=handoff['after']['mainWindow'],
                    route='atomic real close before the exit animation completion')
+            retired = wait_until(lambda: not any(w['number'] == handoff['opened']['keyWindow']
+                                and w['visible'] for w in app.call('windows')), timeout=4)
+            record('littleopen_normal_close_cancels_creation', retired
+                   and state()['littleOpenBrowserCreations'] == creation_before_handoff,
+                   retired=bool(retired), before=creation_before_handoff,
+                   after=state()['littleOpenBrowserCreations'],
+                   route='normal-motion close before browser creation, through native retirement')
         finally:
             app.call('window-motion', reduced=motion['reduced'])
         base = state()

@@ -401,6 +401,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         CATransaction.commit()
     }
     func prepareToClose() {
+        container.host(for: session.tab.id)?.prepareToClose()
         onCloseDownloads?(); onCloseDownloads = nil; onDownloadsKey = nil
         // Tear down this controller's appearance observation once during close preparation.
         systemAppearanceObservation = nil

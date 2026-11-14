@@ -20,6 +20,7 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
   private var frameSubmittedAt: CFTimeInterval = 0
   private var pendingURL: URL?
   private var closed = false
+  private var closing = false
   #if OPEN_AUTOMATION
   static var beforeNextCreationForAutomation: ((LittleOpenWebContent) -> Bool)?
   private(set) static var browserCreationCountForAutomation = 0
@@ -83,7 +84,7 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
   /// refresh boundary as the App's first-window observer. Creation then runs
   /// on the next main run-loop turn, without a timer or a fixed delay.
   func windowOrderedFront() {
-    guard !closed, host == nil, !creationScheduled,
+    guard !closed, !closing, host == nil, !creationScheduled,
       let window = surfaceWindow, window.isVisible, let view = window.contentView else { return }
     creationScheduled = true
     window.displayIfNeeded()
@@ -93,14 +94,14 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     firstFrameLink?.add(to: .main, forMode: .common)
   }
   @objc private func firstFrameCommitted(_ link: CADisplayLink) {
-    guard !closed, link.timestamp >= frameSubmittedAt else { return }
+    guard !closed, !closing, link.timestamp >= frameSubmittedAt else { return }
     firstFrameLink?.invalidate(); firstFrameLink = nil
     firstFrameRead = ["browserID": browser.map { $0.identifier } as Any? ?? NSNull(),
       "content": host?.content.identifier ?? 0, "visible": surfaceWindow?.isVisible ?? false,
       "uptime": ProcessInfo.processInfo.systemUptime]
     RunLoop.main.perform(inModes: [.default, .eventTracking, .modalPanel]) { [weak self] in
       MainActor.assumeIsolated {
-        guard let self, !self.closed else { return }
+        guard let self, !self.closed, !self.closing else { return }
         #if OPEN_AUTOMATION
         let before = self.beforeCreationForAutomation; self.beforeCreationForAutomation = nil
         if before?(self) == true { return }
@@ -110,7 +111,7 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     }
   }
   private func createBrowser() {
-    guard !closed, host == nil, let context = factory.context(for: profileID) else { return }
+    guard !closed, !closing, host == nil, let context = factory.context(for: profileID) else { return }
     browserCreationStartedAt = ProcessInfo.processInfo.systemUptime
     // Same P1 path as the main window: context, Browser, Chrome host, strip insertion.
     let browser = OEBrowser(context: context)
@@ -125,7 +126,7 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
       pendingURL = initialURL
       browser.close(); self.browser = nil; factory.standaloneBrowser = nil; return
     }
-    guard !closed else { host.close(); browser.close(); return }
+    guard !closed, !closing else { host.close(); browser.close(); return }
     self.host = host
     host.onURLChange = onURLChange; host.onTitleChange = onTitleChange
     host.onLoadingChange = onLoadingChange; host.onFaviconChange = onFaviconChange
@@ -176,6 +177,12 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
   func goBack() { host?.goBack() }
   func goForward() { host?.goForward() }
   func focus() { host?.focus() }
+  func prepareToClose() {
+    closing = true
+    creationScheduled = false
+    firstFrameLink?.invalidate(); firstFrameLink = nil
+    pendingURL = nil
+  }
   func close() {
     guard !closed else { return }; closed = true
     creationScheduled = false
