@@ -199,9 +199,11 @@ void SetPreference(OEBrowserContext* context, const char* name, BOOL enabled) {
   if (context.ephemeral || !AutofillAvailable()) return;
   std::string key(name);
   [context oe_whenReady:^{
-    if (!AutofillAvailable()) return;
+    // oe_whenReady also runs this when the context closed (and then
+    // oe_requestContext is null), not only when it became ready.
+    if (!AutofillAvailable() || !context.oe_isReady) return;
     auto request = context.oe_requestContext;
-    if (!request->CanSetPreference(key)) return;
+    if (!request || !request->CanSetPreference(key)) return;
     auto value = CefValue::Create(); value->SetBool(enabled);
     CefString error;
     request->SetPreference(key, value, error);
