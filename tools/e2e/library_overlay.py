@@ -215,9 +215,9 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
                       and 0 < timing['start'] - closed['motion']['closeRequestedAt'] <= .050,
                       motion=closed['motion'])
                 if close_mode == 'retained-live':
-                    frames = closed['motion']['presentedFrames']
-                    check('close_waits_for_real_present', bool(frames) and all(f['presented'] for f in frames)
-                          and 0 < closed['motion']['framePresentedAt'] <= timing['start'], frames=frames)
+                    presented_frames = closed['motion']['presentedFrames']
+                    check('close_waits_for_real_present', bool(presented_frames) and all(f['presented'] for f in presented_frames)
+                          and 0 < closed['motion']['framePresentedAt'] <= timing['start'], frames=presented_frames)
                 properties = next(a['properties'] for a in closed['motion']['page']['animations'] if a['key'] == 'libraryFrame')
                 check('live_close_is_translation_only', properties == ['transform.translation.x', 'transform.translation.y'],
                       properties=properties)
