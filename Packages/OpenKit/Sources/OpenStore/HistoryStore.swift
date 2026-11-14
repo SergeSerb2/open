@@ -16,6 +16,8 @@ public actor HistoryStore {
     var db: SQLiteDB?
     public let fileURL: URL
     private var observers: [UUID: AsyncStream<Void>.Continuation] = [:]
+    /// Set by `close()`: the store never opens (or recreates) its file again.
+    private var closed = false
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
@@ -33,8 +35,17 @@ public actor HistoryStore {
     private func removeObserver(_ id: UUID) { observers[id] = nil }
     func didChange() { for observer in observers.values { observer.yield(()) } }
 
+    /// Closes the database for good (its Profile was deleted). Later calls
+    /// read nothing and write nothing, and never recreate the file.
+    public func close() {
+        closed = true
+        db = nil
+        for observer in observers.values { observer.finish() }
+        observers.removeAll()
+    }
+
     public func open() {
-        guard db == nil else { return }
+        guard db == nil, !closed else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         db = try? SQLiteDB(path: fileURL.path)
         db?.exec("""

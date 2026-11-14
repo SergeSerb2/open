@@ -99,11 +99,31 @@ final class DeepLinkRouter {
     guard restartRequested else { return }
     let arguments = ProcessInfo.processInfo.arguments
     guard let executable = arguments.first else { return }
-    let options = arguments.dropFirst().filter { $0.hasPrefix("-") }
+    let options = Self.relaunchOptions(Array(arguments.dropFirst()))
     let waiter = Process()
     waiter.executableURL = URL(fileURLWithPath: "/bin/sh")
     waiter.arguments = ["-c", "while /bin/kill -0 \"$0\" 2>/dev/null; do /bin/sleep 0.1; done; exec \"$@\"",
       String(ProcessInfo.processInfo.processIdentifier), executable] + options
     do { try waiter.run() } catch { AppDelegate.commandLog("Restart could not start the relauncher.") }
+  }
+
+  /// Options without the launch URLs. A single-dash user-defaults option
+  /// (`-NSFoo YES`, as Xcode passes them) keeps its separate value; `--key=value`
+  /// switches stand alone. The old process serial number (`-psn_…`) is dropped.
+  static func relaunchOptions(_ arguments: [String]) -> [String] {
+    var options: [String] = []
+    var index = 0
+    while index < arguments.count {
+      let argument = arguments[index]
+      index += 1
+      guard argument.hasPrefix("-"), !argument.hasPrefix("-psn_") else { continue }
+      options.append(argument)
+      if !argument.hasPrefix("--"), argument.count > 1, !argument.contains("="),
+        index < arguments.count, !arguments[index].hasPrefix("-"),
+        URL(string: arguments[index])?.scheme == nil {  // a launch URL is not a value
+        options.append(arguments[index]); index += 1
+      }
+    }
+    return options
   }
 }
