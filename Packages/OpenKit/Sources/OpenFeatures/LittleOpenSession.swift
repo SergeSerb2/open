@@ -80,6 +80,7 @@ private final class LittleHostAdapter: WebContentHost {
         if let rich = base as? any WebContentHost { rich.focus() }
         else { view.window?.makeFirstResponder(view) }
     }
+    func prepareToClose() { (base as? any WebContentHost)?.prepareToClose() }
     func close() {
         base.onURLChange = nil; base.onTitleChange = nil
         (base as? any WebContentHost)?.close()
