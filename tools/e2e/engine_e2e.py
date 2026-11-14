@@ -4527,7 +4527,9 @@ def peek_checks(factory, results, tmp):
             and preparation.get('kind') == 'open' and preparation.get('duration') == .1
             and preparation.get('snapshot') and not preparation.get('snapshotPixels')
             and preparation.get('hostHidden') and not preparation.get('hostAttached')
-            and bool(preparation['panel']['animations']), 'motion': preparation}
+            and bool(preparation['panel']['animations'])
+            and all(a['requestedHz'] == preparation['displayHz']
+                    for a in preparation['panel']['animations'] + preparation['overlay']['animations']), 'motion': preparation}
         opening_samples = [preparation]
         for _ in range(8):
             motion = app.call('peek-motion')

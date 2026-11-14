@@ -94,6 +94,7 @@ extension PeekOverlayView {
         hold.fromValue = snapshot.opacity; hold.toValue = snapshot.opacity
         hold.duration = 1 / Double(max(1, window?.screen?.maximumFramesPerSecond ?? 60))
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { ready() } }
+        requestDisplayRate(hold)
         snapshot.add(hold, forKey: "peekSnapshotReady")
         PeekMotionTrace.region("snapshot.readyCommit") { CATransaction.commit() }
     }
@@ -159,6 +160,7 @@ extension PeekOverlayView {
             }
         } }
         snapshot.opacity = hasImage ? 1 : 0
+        requestDisplayRate(fade)
         snapshot.add(fade, forKey: "peekContentReveal")
         PeekMotionTrace.mark("opening.contentFade", value: duration)
         PeekMotionTrace.region("opening.fadeCommit") { CATransaction.commit() }
