@@ -38,8 +38,13 @@ extension ArcImporter {
     private static func urls(in value: Any, limit: Int, depth: Int = 0) -> [URL] {
         guard depth <= 4 else { return [] }
         if let text = value as? String {
-            guard text.count <= 2_048, let url = URL(string: text), url.scheme == "https" || url.scheme == "http" else { return [] }
-            return [url]
+            // Scheme and host are case-insensitive (RFC 3986 §3.1, §3.2.2). Normalize them, because
+            // hidden items match fetched rows by exact `absoluteString`.
+            guard text.count <= 2_048, var components = URLComponents(string: text), let scheme = components.scheme?.lowercased(),
+                  scheme == "https" || scheme == "http" else { return [] }
+            components.scheme = scheme
+            components.percentEncodedHost = components.percentEncodedHost?.lowercased()
+            return components.url.map { [$0] } ?? []
         }
         var out: [URL] = []
         let children: [Any] = (value as? [Any]).map { Array($0.prefix(limit)) } ?? (value as? [String: Any]).map { Array($0.values) } ?? []

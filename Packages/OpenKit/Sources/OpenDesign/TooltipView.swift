@@ -98,6 +98,8 @@ public final class TooltipController {
     private var pending: DispatchWorkItem?
     private weak var owner: NSView?
     private var scheduledTooltip: Tooltip?
+    /// Bumped by every show, so a fade-out that finishes after a newer show leaves that tooltip up.
+    private var presentation = 0
     public private(set) var scheduleCount = 0
     public private(set) var showCount = 0
     public var visibleOrPendingTooltip: Tooltip? { scheduledTooltip }
@@ -128,15 +130,22 @@ public final class TooltipController {
         owner = nil
         scheduledTooltip = nil
         guard let panel else { return }
+        let fading = presentation
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Motion.tooltipFade
             panel.animator().alphaValue = 0
-        }, completionHandler: { MainActor.assumeIsolated { panel.orderOut(nil) } })
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard self?.presentation == fading else { return }
+                panel.orderOut(nil)
+            }
+        })
     }
 
     private func show(_ tooltip: Tooltip, for view: NSView, at point: NSPoint?) {
         guard let window = view.window else { return }
         showCount += 1
+        presentation += 1
         let content = TooltipView(tooltip: tooltip)
         let size = content.fittingSize
         let margin = TooltipMetrics.shadowMargin
