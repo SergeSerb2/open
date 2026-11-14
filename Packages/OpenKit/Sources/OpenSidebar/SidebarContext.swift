@@ -222,6 +222,10 @@ public final class SidebarContext {
         }
     }
 
+    isolated deinit {
+        if let favoriteSettingsObserver { NotificationCenter.default.removeObserver(favoriteSettingsObserver) }
+    }
+
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }
 
     /// Arc hides the Space header when the browser has a single Space with no name, unless the user chose
