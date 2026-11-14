@@ -4502,10 +4502,30 @@ def themed_card_checks(factory, results, private):
 def peek_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
+        # Cover normal motion even when the rental has system Reduce Motion on.
+        # The separate reduced path below uses the same process-only override.
+        app.call("window-motion", reduced=False)
         source = new_tab(app, fixture("Peek source"))
         app.call("pin", tab=source)
         baseline = app.call("host-counts")
         app.call("peek-open", tab=source, url=fixture("Peek page"))
+        preparation = app.call('peek-motion')
+        results['peek_open_preparation_retains_source'] = {'ok': preparation.get('preparingOpening')
+            and preparation['overlay']['opacity'] == 0 and preparation['backdrop']['opacity'] == 0,
+            'motion': preparation}
+        wait_until(lambda: app.call('peek-motion').get('kind') == 'open', timeout=5, step=.005)
+        opening_samples = []
+        for _ in range(8):
+            motion = app.call('peek-motion')
+            if not motion.get('overlay', {}).get('animations'):
+                break
+            opening_samples.append(motion)
+            time.sleep(.01)
+        results['peek_open_animates_ready_page_snapshot'] = {'ok': bool(opening_samples)
+            and all(s.get('snapshot') and s.get('snapshotPixels') and s.get('hostHidden') and s.get('hostAttached')
+                    and s['panel'].get('rasterized')
+                    and s['panel'].get('rasterScale') == s.get('backingScale') for s in opening_samples),
+            'samples': opening_samples}
         app.call("wait")
         state = app.call("peek-state")
         content = state["stack"][-1]["content"]
@@ -4516,9 +4536,39 @@ def peek_checks(factory, results, tmp):
             and strip[0]["active"] == source and strip[0]["activeIsMember"], "strip": strip}
         before = app.call("host-counts")
         results["peek_png"] = {"ok": True, "file": shot(app, "peek-window.png")}
+        motion_before = app.call('peek-motion')
         app.call("peek-expand")
+        # Capturing the loaded viewport happens before CA motion starts.
+        expansion = wait_until(lambda: (lambda s: s if s.get('kind') == 'expand'
+            and s.get('snapshot') else None)(app.call('peek-motion')), timeout=5, step=.005) or app.call('peek-motion')
+        sampled = [expansion]
+        while app.call('peek-state').get('expanding') and len(sampled) < 12:
+            sampled.append(app.call('peek-motion'))
+            time.sleep(.01)
+        active = [s for s in sampled if s.get('expanding')]
+        geometry = [a for a in expansion.get('panel', {}).get('animations', []) if a['key'] == 'peekGeometry']
+        results['peek_expand_keeps_live_viewport_fixed'] = {'ok': bool(active) and bool(geometry)
+            and set(geometry[0]['paths']) == {'position', 'bounds', 'shadowPath'}
+            and all(s['panelFrame'] == motion_before['panelFrame'] and s['clipFrame'] == motion_before['clipFrame']
+                    and s['hostFrame'] == active[0]['hostFrame']
+                    and s['layouts'] == active[0]['layouts']
+                    and s['hostFrameChanges'] == active[0]['hostFrameChanges'] for s in active)
+            and active[0]['hostFrameChanges'] == motion_before['hostFrameChanges'] + 1,
+            'before': motion_before, 'samples': sampled}
+        results['peek_expand_freezes_live_compositor'] = {'ok': bool(active)
+            and all(s.get('snapshot') and s.get('hostHidden') and s.get('expandedImage')
+                    and s.get('expandedImageScale') == s.get('backingScale')
+                    and s['expandedImageFrame'][2:] == s['hostFrame'][2:]
+                    and s['expandedImagePixels'] == [v * s['backingScale'] for v in s['hostFrame'][2:]]
+                    and s['panel']['scale'] == [1, 1] for s in active), 'samples': sampled}
         wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
         promoted = next(t["id"] for t in app.call("tabs") if t["selected"])
+        cleared = wait_until(lambda: (lambda s: s if not s.get('promotionHandoff')
+            and app.call('peek-ui')['dimHidden'] else None)(app.call('peek-motion')), timeout=5, step=.02)
+        results['peek_promotion_clears_cover'] = {'ok': bool(cleared)
+            and cleared['overlayHidden'] and cleared['backdropHidden']
+            and not app.call('peek-state')['stack'] and check_page(app, promoted, 'Peek page'),
+            'motion': cleared or app.call('peek-motion'), 'ui': app.call('peek-ui')}
         counts = app.call("host-counts")
         strip = app.call("tab-strip")
         if app.page(source)["style"] == "chrome":
@@ -4565,6 +4615,59 @@ def peek_checks(factory, results, tmp):
         # Review #153: the pointer over "Peek closed" pauses it past the 5 s undo window; its Undo
         # still brings the Peek back.
         app.call("peek-close")
+        # Reverse an expansion through the real Escape route. The page stays
+        # alive and keeps its viewport; a later completed expansion still works.
+        app.call('peek-open', tab=source, url=fixture('Peek reversal'))
+        time.sleep(.25)
+        reverse_before = app.call('peek-motion')
+        app.call('peek-expand')
+        wait_until(lambda: app.call('peek-motion').get('kind') == 'expand', timeout=5, step=.005)
+        press = app.call('key', key='escape')
+        reverse = app.call('peek-motion')
+        time.sleep(.3)
+        settled = app.call('peek-motion')
+        results['peek_expand_escape_reverses_without_resize'] = {'ok': reverse.get('kind') == 'cancel-expand'
+            and settled['shown'] and not settled['expanding']
+            and settled['panelFrame'] == reverse_before['panelFrame']
+            and settled['hostFrame'] == reverse_before['hostFrame']
+            and settled['hostFrameChanges'] <= reverse_before['hostFrameChanges'] + 2
+            and settled['panel']['scale'] == [1, 1], 'before': reverse_before, 'reverse': reverse, 'settled': settled}
+        app.call('peek-close')
+        # Close twice while expansion owns a completion: it must not promote a
+        # page after close. This exercises the actual controller lifetime path.
+        app.call('peek-open', tab=source, url=fixture('Peek interrupted'))
+        time.sleep(.25)
+        tabs_before = len(app.call('tabs'))
+        app.call('peek-expand')
+        app.call('peek-close'); app.call('peek-close')
+        time.sleep(.3)
+        results['peek_close_during_expand_cancels_promotion'] = {'ok': not app.call('peek-state')['stack']
+            and len(app.call('tabs')) == tabs_before}
+        # At the nesting cap, opening reuses the top page. It must also cancel
+        # a close already in flight, rather than leave that page transparent.
+        for i in range(5):
+            app.call('peek-open', tab=source, url=fixture('Peek cap ' + str(i)))
+        time.sleep(.25)
+        app.call('key', key='escape')
+        app.call('peek-open', tab=source, url=fixture('Peek cap reopened'))
+        time.sleep(.25)
+        capped = app.call('peek-motion')
+        results['peek_capped_reopen_cancels_close'] = {'ok': len(app.call('peek-state')['stack']) == 5
+            and capped['shown'] and capped['overlay']['opacity'] == 1
+            and capped['panel']['scale'] == [1, 1], 'settled': capped}
+        app.call('peek-close')
+        # The process-local Reduce Motion switch reaches this same public UI.
+        app.call('window-motion', reduced=True)
+        try:
+            app.call('peek-open', tab=source, url=fixture('Peek reduced'))
+            reduced = app.call('peek-motion')
+            app.call('key', key='escape')
+            results['peek_reduce_motion_has_no_geometry_animation'] = {'ok': reduced['shown']
+                and not reduced['panel']['animations'] and not reduced['overlay']['animations']
+                and not reduced['panel'].get('rasterized')
+                and not app.call('peek-state')['stack'], 'open': reduced}
+        finally:
+            app.call('window-motion', reduced=False)
         wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
         app.call("peek-open", tab=source, url=fixture("Peek page"))
         wait_until(lambda: app.call("peek-state")["shown"], timeout=5, step=0.05)
