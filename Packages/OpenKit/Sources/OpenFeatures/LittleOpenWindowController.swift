@@ -380,6 +380,16 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         window?.ignoresMouseEvents = true
         let start = layer.presentation()?.opacity ?? layer.opacity
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        // Restore the next window's key/main appearance with the first fade
+        // transaction. Waiting for orderOut leaves a second visible change
+        // after the Little window is transparent. Do not change window order.
+        if let window, window.isKeyWindow,
+           let next = NSApp.orderedWindows.first(where: {
+               $0 !== window && $0.isVisible && !$0.isMiniaturized && !$0.ignoresMouseEvents && $0.isOnActiveSpace
+                   && $0.canBecomeKey && $0.canBecomeMain
+           }) {
+            (next.attachedSheet ?? next).makeKey(); next.makeMain()
+        }
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
         layer.removeAnimation(forKey: "littleOpen.opacity")
         view.alphaValue = 0

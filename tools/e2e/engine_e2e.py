@@ -8437,6 +8437,20 @@ def littleopen_checks(factory, results, tmp):
                creationBaseline=creation_baseline,
                inputLimit={'acceptedBytes': 8192, 'refusedBytes': 8193, 'refused': refused_limit})
         app.call('open', url=origin + '/main-browser-control')
+        main_key = app.call('native-focus-state')['keyWindow']
+        motion = app.call('window-motion')
+        try:
+            app.call('window-motion', reduced=False)
+            handoff = app.call('little-open-action', action='blank', then='close')
+            record('littleopen_close_focus_handoff', main_key != 0
+                   and handoff['opened']['keyWindow'] != main_key
+                   and handoff['after']['keyWindow'] == main_key
+                   and handoff['after']['mainWindow'] == main_key,
+                   before=main_key, opened=handoff['opened']['keyWindow'],
+                   afterKey=handoff['after']['keyWindow'], afterMain=handoff['after']['mainWindow'],
+                   route='atomic real close before the exit animation completion')
+        finally:
+            app.call('window-motion', reduced=motion['reduced'])
         base = state()
         menu('new-little-open-window')
         bar = sessions()[0]
