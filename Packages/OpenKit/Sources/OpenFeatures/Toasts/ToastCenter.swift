@@ -303,13 +303,8 @@ public final class ToastCenter {
         guard animates(), let layer = view.layer else { return }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
-        layer.rasterizationScale = view.window?.backingScaleFactor ?? 1
-        layer.shouldRasterize = true
-        CATransaction.setCompletionBlock { [weak layer] in
-            MainActor.assumeIsolated {
-                if layer?.animation(forKey: "toastOut.opacity") == nil { layer?.shouldRasterize = false }
-            }
-        }
+        // The fill and text already have backing textures. Animate those
+        // directly instead of creating another offscreen cache for each toast.
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1; fade.duration = Motion.toastFadeIn
         fade.timingFunction = CAMediaTimingFunction(name: .linear)
