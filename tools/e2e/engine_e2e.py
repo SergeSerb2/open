@@ -4524,8 +4524,7 @@ def peek_checks(factory, results, tmp):
             time.sleep(.005)
         results['peek_open_moves_plate_with_fixed_hidden_viewport'] = {'ok': bool(opening_samples)
             and all(s.get('snapshot') and s.get('hostHidden') and not s.get('hostAttached')
-                    and s['panel'].get('rasterized')
-                    and s['panel'].get('rasterScale') == s.get('backingScale')
+                    and not s['panel'].get('rasterized')
                     and s['hostFrame'] == preparation['hostFrame']
                     and s['hostFrameChanges'] == preparation['hostFrameChanges'] for s in opening_samples),
             'samples': opening_samples}

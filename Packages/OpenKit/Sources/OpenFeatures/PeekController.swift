@@ -66,6 +66,7 @@ public final class PeekController {
     @ObservationIgnored private var snapshotTask: Task<Void, Never>?
     public private(set) var isPromotionHandoff = false
     public private(set) var isPreparingOpening = false
+    @ObservationIgnored private var openingLoadStarted = false
     @ObservationIgnored private weak var openingFocus: NSResponder?
     public var onChange: (() -> Void)?
     /// The window's toasts: "Peek closed" with Undo (M4).
@@ -108,7 +109,7 @@ public final class PeekController {
             ?? splitController.container.host(for: sourceTabID)?.pageBackgroundColor
             ?? overlay.style.miniPlayerFill(overlay.style.resolvedAppearance(system: .light)).nsColor
         motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
-        isPreparingOpening = false
+        isPreparingOpening = false; openingLoadStarted = false
         isPromotionHandoff = false; overlay.clearExpansionCard(); overlay.restoreExpansionViewport()
         overlay.endHostSnapshot()
         dismissGeneration += 1; isDismissing = false
@@ -130,10 +131,15 @@ public final class PeekController {
         host.onLoadingChange = { [weak self, weak host] loading in
             guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return }
             PeekMotionTrace.mark("host.loading", value: loading ? 1 : 0)
+            if loading { self.openingLoadStarted = true }
             PeekMotionTrace.region("host.onPageChange") { self.onPageChange?() }
             if !loading {
                 if self.isPreparingOpening { return }
-                if self.overlay.openingHandoff { self.finishOpeningHandoff(itemID: itemID, host: host) }
+                if self.overlay.openingHandoff {
+                    // Chromium emits its initial false state before starting
+                    // the pending navigation. That is not ready page content.
+                    if self.openingLoadStarted { self.finishOpeningHandoff(itemID: itemID, host: host) }
+                }
                 else { self.overlay.revealHost(host.view, duration: self.duration(0.12)) }
             }
         }
@@ -169,7 +175,6 @@ public final class PeekController {
                 // Chromium creation and commits cannot compete with its frames.
                 self.overlay.attachOpeningHost(host.view)
                 self.refresh()
-                if !host.isLoading { self.finishOpeningHandoff(itemID: itemID, host: host) }
             }
             if self.isShown, self.overlay.window?.isKeyWindow == true,
                self.overlay.window?.firstResponder === self.openingFocus { host.focus() }

@@ -59,7 +59,9 @@ extension PeekOverlayView {
         // The captured page, rounded clip, and fixed shadow are static while
         // only this ancestor's transform/position/opacity change. Cache that
         // subtree at this window's real scale until motion finishes.
-        if hide, let panelLayer = panel.layer {
+        // A solid opening plate needs no offscreen raster texture. Loaded
+        // viewport images still cache their masked subtree while moving.
+        if hide, image != nil, let panelLayer = panel.layer {
             panelLayer.rasterizationScale = window?.backingScaleFactor ?? 1
             panelLayer.shouldRasterize = true
         }
