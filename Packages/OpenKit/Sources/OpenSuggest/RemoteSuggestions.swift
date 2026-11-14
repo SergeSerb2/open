@@ -90,7 +90,7 @@ final class RemoteSuggestCache: Sendable {
 
 /// 4. Search engine suggestions. Debounced, cancelled by the next keystroke, 300 ms timeout.
 ///
-/// Privacy: nothing is sent when remote suggestions are off, in search-tabs mode, for URL-like
+/// Privacy: nothing is sent when remote suggestions are off, in the Tabs or Actions scope, for URL-like
 /// input (the typed URL never leaves the machine), for calculator input, for text over 200
 /// characters, or in a Site Search scope that is not a search engine.
 public struct RemoteSuggestionsProvider: SuggestProvider {
@@ -115,7 +115,8 @@ public struct RemoteSuggestionsProvider: SuggestProvider {
 
     /// The engine to ask, or nil when this input must not go to the network.
     func engine(for input: SuggestInput) -> SearchEngine? {
-        guard input.context.allowsRemoteSuggestions, input.context.mode != .searchTabs,
+        // The Tabs and Actions scopes list only tabs or actions (commandbar-completion §4.3.3).
+        guard input.context.allowsRemoteSuggestions, !input.context.mode.isScoped,
               case .text(let text) = input.typed, text.count <= 200,
               Calculator.evaluate(text) == nil else { return nil }
         let engine: SearchEngine
