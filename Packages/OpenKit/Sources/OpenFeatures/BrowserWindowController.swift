@@ -855,9 +855,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // controls; their next show places them at the new native endpoint.
             if !dimmedLights.isHidden { dimmedLights.isHidden = true }
         }
+        let outgoing = (anchoredSliding && context.window?.sidebarMode == .hidden) || cardState == .hiding
+        let nativeHidden = hidden || (outgoing && appliedTrafficLightDim == true)
         for kind in Self.trafficLightKinds {
             guard let button = window.standardWindowButton(kind) else { continue }
-            if button.isHidden != hidden { button.isHidden = hidden }
+            // AppKit draws a group background even when its buttons have the
+            // nearly transparent resting alpha. Retire those unused buttons
+            // at outgoing motion's entry, while our circles keep sliding.
+            if button.isHidden != nativeHidden { button.isHidden = nativeHidden }
             if isLibraryOpen { button.layer?.removeAnimation(forKey: "sidebarToggle"); button.layer?.setValue(0, forKeyPath: "transform.translation.x") }
         }
         if isLibraryOpen { dimmedLights.motionLayer.removeAnimation(forKey: "sidebarToggle"); dimmedLights.motionLayer.setValue(0, forKeyPath: "transform.translation.x") }
@@ -911,7 +916,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         dimmedLights.groupRect = group.offsetBy(dx: -frame.minX, dy: -frame.minY)
         dimmedLights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
         dimmedLights.showsRing = window.isKeyWindow
-        let hidden = buttons[0].isHidden
+        let hidden = trafficLightsHidden
         // Hiding clears the hover state and showing reads it from the pointer (the view).
         if dimmedLights.isHidden != hidden { dimmedLights.isHidden = hidden }
         applyTrafficLightDim(animated: false)
