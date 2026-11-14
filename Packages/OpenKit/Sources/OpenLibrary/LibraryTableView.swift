@@ -142,7 +142,8 @@ final class LibraryTableView: NSView, NSDraggingSource {
         let range = rows(in:viewport.insetBy(dx:0,dy:-viewport.height))
         overscanViewport = viewport
         for row in range.location..<(range.location+range.length) {
-            guard !Task.isCancelled,isCurrent() else { return }
+            // setRows can run during the awaits below (a gallery switch does not cancel this pass).
+            guard !Task.isCancelled,isCurrent(),rows.indices.contains(row) else { return }
             let descriptor = rows[row]
             // Visible rows already belong to the normal display path. Only
             // prepare missing overscan cells here, away from the layer tree.
