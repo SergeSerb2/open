@@ -451,6 +451,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         root.addSubview(toastOverlay)
         root.onLayout = { [weak self] in self?.layoutContent() }
+        container.onSpaceSelectionApplied = { [weak self] in self?.layoutContent() }
         root.onDragBackground = { [weak self] event in self?.window?.performDrag(with: event) }
         treeObserver = model.addObserver { [weak self] _ in self?.scheduleRefresh() }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -489,6 +490,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Sidebar's pager owns theme transitions. Never reset its cross-fade here.
         if spaceCreationController == nil, background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion && !context.isLiveThemePreview(space.id)) }
         container.style = context.style(for: space)
+        container.spaceOrder = model.spaces.map(\.id)
         container.showsToolbar = context.window?.showsToolbar == true
         let style = context.style(for: space)
         peekStorage?.overlay.style = style

@@ -3,13 +3,13 @@ import OpenDesign
 import OpenModel
 
 /// The retained pixels for a Space change. The caller supplies an outgoing
-/// viewport capture before changing native selection. Native selection changes
+/// viewport capture, or keeps the unchanged live source beneath the plate.
+/// Native selection changes
 /// once, after the incoming plate covers that viewport. Only a matching engine
 /// presentation receipt may retire the plate. Animation completion is not that
 /// receipt.
 ///
-/// This primitive is not connected to selection until OpenEngine implements
-/// the presentation boundary described in docs/re/space-motion.md.
+/// WebContentContainer owns selection and the per-view presentation requests.
 @MainActor
 final class SpacePageSnapshotTransition: NSView {
     struct SnapshotKey: Hashable {
@@ -19,6 +19,7 @@ final class SpacePageSnapshotTransition: NSView {
         /// Host/document generations, not URLs or titles. Navigation, host
         /// replacement and selection changes must invalidate the old key.
         let revisions: [UInt64]
+        let layout: [Double]
         let width: Int
         let height: Int
         let scale: Double
@@ -87,24 +88,49 @@ final class SpacePageSnapshotTransition: NSView {
         lru.removeAll { $0 == key }
     }
 
-    private static func cost(_ image: CGImage) -> Int? {
+    static func cost(_ image: CGImage) -> Int? {
         guard image.width > 0, image.height > 0, image.width <= 8192, image.height <= 8192,
               image.width <= 16 * 1024 * 1024 / image.height,
               image.bytesPerRow > 0, image.bytesPerRow <= byteLimit / image.height else { return nil }
         return image.bytesPerRow * image.height
     }
 
-    /// Must be called with the exact current viewport image, including any
-    /// interrupted presentation. A plain cached source is not sufficient on
-    /// reversal. Return false without changing native selection on failure.
+    /// Capture only the retained plates at an input/resize boundary. Transparent
+    /// regions keep showing the unchanged native source below. This also folds
+    /// an interrupted slide into one bounded image, without growing layer trees.
+    func capturePresentation(size: CGSize, scale: CGFloat) -> CGImage? {
+        guard phase != .idle, let layer, !bounds.isEmpty,
+              let context = Self.context(size: size, scale: scale) else { return nil }
+        context.scaleBy(x: size.width / bounds.width, y: size.height / bounds.height)
+        (layer.presentation() ?? layer).render(in: context)
+        return context.makeImage()
+    }
+
+    static func context(size: CGSize, scale: CGFloat) -> CGContext? {
+        guard size.width.isFinite, size.height.isFinite, scale.isFinite,
+              size.width > 0, size.height > 0, (1...4).contains(scale),
+              size.width * scale <= 8192, size.height * scale <= 8192 else { return nil }
+        let width = Int(ceil(size.width * scale)), height = Int(ceil(size.height * scale))
+        guard width <= 16 * 1024 * 1024 / height,
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: width * 4, space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.scaleBy(x: scale, y: scale)
+        return context
+    }
+
+    /// A plain cached source is not sufficient on reversal. The owner passes
+    /// capturePresentation() then, and leaves the native source unchanged until
+    /// onCovered. Nil is valid for the first slide over that unchanged source.
     @discardableResult
-    func begin(outgoing image: CGImage, destination key: SnapshotKey,
+    func begin(outgoing image: CGImage?, destination key: SnapshotKey,
                theme: SpaceThemeStyle, themeFrame: CGRect, direction: CGFloat,
                animated: Bool, token: SpringToken = Motion.spaceSwitch,
                onCovered: @escaping (Receipt) -> Void) -> Bool {
-        guard !bounds.isEmpty, Self.cost(image) != nil, direction.isFinite,
+        guard !bounds.isEmpty, image == nil || Self.cost(image!) != nil, direction.isFinite,
               key.scale.isFinite, (1...4).contains(key.scale),
-              image.width == key.width, image.height == key.height,
+              image == nil || (image!.width == key.width && image!.height == key.height),
               key.width == Int(ceil(bounds.width * key.scale)),
               key.height == Int(ceil(bounds.height * key.scale)),
               themeFrame.width.isFinite, themeFrame.height.isFinite,
@@ -198,5 +224,6 @@ final class SpacePageSnapshotTransition: NSView {
         outgoing = nil; incoming = nil; covered = nil; lastAnimation = nil
         phase = .idle
         CATransaction.commit()
+        removeFromSuperview()
     }
 }

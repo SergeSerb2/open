@@ -47,8 +47,9 @@ Private native evidence from `NT-frames/animation-space-finite-35/` shows white
 between 13.77 and 38.77 ms in key-next, with page pixels returning at 47.11 ms.
 The same issue on main is retained as a finding. It is not waived for #575.
 
-`SpacePageSnapshotTransition` is a compiled **preparation primitive**, not a
-connected or accepted fix. It provides bounded memory-only images, a stationary
+`SpacePageSnapshotTransition` is now connected through
+`SpaceContentTransitionController` to Space selection. The live handoff is not
+accepted until the engine presentation adapter lands. It provides bounded memory-only images, a stationary
 outgoing plate, an incoming snapshot/theme plate, a render-server spring and
 Reduce Motion, plus separate motion-complete and engine-presented receipts.
 A failed or stale presentation cannot retire the cover. Snapshot keys include
@@ -56,11 +57,13 @@ Space, profile, pane selection, host/document revisions, viewport and scale.
 The cache is bounded to eight entries and 64 MiB; each image is limited to
 8192 per dimension, 16M pixels and 64 MiB decoded. Two active plates can retain
 at most two additional images (128 MiB). It performs no per-frame capture,
-layout, text work, timer driving or native view resize. The caller must capture
-an interrupted presentation before replacing it; a source cache entry alone
-would jump on reversal. It must invalidate keys on navigation, host close,
-profile teardown and geometry changes. None of these integration duties is
-claimed complete by the primitive.
+layout, text work, timer driving or native view resize. The controller folds an interrupted presentation into a bounded transparent
+image above the unchanged native source. It invalidates cache keys on
+navigation, host close, profile teardown and geometry changes. Viewport
+capture combines native chrome with bounded engine page images; PNG decode
+runs on a worker. Only one source capture can be in flight per window.
+The source remains attached during motion; native selection changes once
+after the incoming plate covers it. Missing captures refuse cache insertion.
 
 The required shared engine contract is:
 
@@ -81,14 +84,19 @@ The required shared engine contract is:
 5. Deliver once on the main actor without retaining a closed page. The shell
    validates its own selection generation before retiring a retained image.
 
-The intended owner leaves outgoing content unchanged during preparation and
-motion. Once the incoming plate fully covers it, the owner applies native
+The controller leaves outgoing content unchanged during preparation and
+motion. Once the incoming plate fully covers it, it applies native
 selection/layout once behind the plate and requests presentation. Only a
 matching successful callback removes the plate. With no destination snapshot,
 the incoming plate contains the destination Space field. Empty Spaces complete
 against their explicitly rendered themed surface, rather than a nonexistent
-engine frame. Click/key/swipe, reversal, resize, close, cold-cache and renderer
-failure flows require real-App proof after integration. M1 pacing and strips
+engine frame. The small `WebContentFramePresentation` protocol accepts a per-view device-pixel
+viewport and request UUID; cancellation returns no success. Its receipt echoes
+the UUID and viewport. The shell also validates host identity, document revision,
+selection and request generations. The default host provider is nil until E3
+implements the App adapter, so the snapshot/theme stays on top without a timer.
+Click/key/swipe, reversal, resize, close, cold-cache and renderer failure flows
+require real-App proof; successful live reveal waits for SEAM READY. M1 pacing and strips
 must then be rerun unchanged. No result from the earlier sidebar-only candidate
 qualifies this new handoff.
 
@@ -103,4 +111,4 @@ API binding those to the requested view/presentation is not implemented. A saved
 surface is acceptable for Space switching when those identities match; D3
 new-width resize has its separate stronger requirement.
 Its existing A/B engine pair remains pinned. Chromium ownership stays with E3;
-#575 remains draft pending the engine contract, integration and runtime proof.
+#575 remains draft pending the engine adapter and runtime proof.
