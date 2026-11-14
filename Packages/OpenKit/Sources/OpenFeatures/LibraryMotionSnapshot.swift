@@ -11,7 +11,7 @@ struct LibraryMotionSnapshot {
     let image: CGImage
     let backingScale: CGFloat
 
-    func install() -> NSView? {
+    func install(background: CGColor) -> NSView? {
         guard let parent = source.superview, source.frame == frame,
               source.window?.backingScaleFactor == backingScale else { return nil }
         let view = LibraryMotionSnapshotView(frame: frame)
@@ -19,6 +19,7 @@ struct LibraryMotionSnapshot {
         // otherwise redraw its empty NSView over the supplied image contents.
         let texture = CALayer()
         texture.contents = image
+        texture.backgroundColor = background
         texture.contentsGravity = .resize
         texture.contentsScale = backingScale
         texture.needsDisplayOnBoundsChange = false

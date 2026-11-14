@@ -42,6 +42,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var libraryClosePreparation: Task<Void, Never>?
     private var libraryClosePreparationGeneration = 0
     private var libraryCloseCommitPending = false
+    private var libraryClosePresentation: LibraryClosePresentation?
+    public private(set) var libraryCloseMode = "idle"
+    public private(set) var libraryClosePhase = "idle"
+    public private(set) var libraryCloseRequestedAt: CFTimeInterval = 0
+    public private(set) var libraryFramePresentedAt: CFTimeInterval = 0
+    public private(set) var libraryCloseDeadlineMissed = false
+    public private(set) var libraryPresentedFrames: [[String: Any]] = []
+    private var libraryUsesLiveTransform = false
     private var librarySnapshotViews: [NSView] = []
     private var libraryHiddenLiveViews: [NSView] = []
     public var libraryMotionSnapshotCount: Int { librarySnapshotViews.count }
@@ -544,6 +552,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         background.prepareForSnapshot()
     }
     public func layoutContent(animated: Bool = false) {
+        if let presentation = libraryClosePresentation, !presentation.isCurrent { cancelLibraryPageMotion() }
         let region = WindowSpeedTrace.begin("browser.layoutContent")
         defer { region?() }
         defer { updateThemeEditorAnchor() }
@@ -578,7 +587,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         let size = root.bounds.size, hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
         let width = context.sidebarWidth
-        let panelFrame = isPageFullscreen ? root.bounds : PanelMetrics.frame(windowSize: size, sidebarWidth: width, sidebarHidden: hidden)
+        let panelFrame = pageFrameOutsideLibrary()
         if background.frame != root.bounds { background.frame = root.bounds }
         if let hint = hintToast {
             let w = hint.frame.width
@@ -725,8 +734,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func dismissLibraryPanel(animated: Bool = true) {
         guard isLibraryOpen else { return }
+        libraryCloseRequestedAt = CACurrentMediaTime()
+        libraryFramePresentedAt = 0; libraryCloseDeadlineMissed = false; libraryPresentedFrames = []
         if animated, !Motion.reducesMotion, window?.isVisible == true {
             guard libraryClosePreparation == nil else { return }
+            if beginLiveLibraryClose() { return }
+            libraryCloseMode = "snapshot-fallback"; libraryClosePhase = "capturing"
             libraryClosePreparationGeneration += 1
             let generation = libraryClosePreparationGeneration
             libraryClosePreparation = Task { @MainActor [weak self] in
@@ -742,7 +755,117 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return
         }
         cancelLibraryClosePreparation()
+        libraryCloseMode = "immediate"; libraryClosePhase = "settled"
         finishDismissingLibrary(animated: animated, snapshots: [])
+    }
+    private func pageFrameOutsideLibrary() -> CGRect {
+        let hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
+        return isPageFullscreen ? root.bounds : PanelMetrics.frame(windowSize: root.bounds.size,
+            sidebarWidth: context.sidebarWidth, sidebarHidden: hidden)
+    }
+    /// The optional engine capability is armed before any live viewport changes.
+    /// Older engines retain the separate snapshot fallback below.
+    private func beginLiveLibraryClose() -> Bool {
+        let target = pageFrameOutsideLibrary()
+        guard let targets = container.libraryResizeTargets(for: target.size) else { return false }
+        let source = container.layer?.presentation()?.frame ?? container.frame
+        let pageGeneration = libraryPageMotionGeneration + 1
+        let request = LibraryClosePresentation(generation: pageGeneration,
+            requestedAt: libraryCloseRequestedAt, targets: targets)
+        guard request.arm() else { return false }
+        libraryMotionGeneration += 1
+        let generation = libraryMotionGeneration
+        prepareLibraryPageMotion(from: source, animated: true)
+        libraryClosePresentation = request
+        libraryCloseMode = targets.isEmpty ? "empty-live" : "retained-live"
+        libraryClosePhase = "awaiting-present"
+        libraryCloseCommitPending = true
+        libraryMotionStartedAt = 0; libraryMotionEndsAt = 0
+        request.onReady = { [weak self, weak request] in
+            guard let self, let request, self.libraryClosePresentation === request,
+                  self.libraryMotionGeneration == generation,
+                  self.libraryPageMotionGeneration == pageGeneration, !self.isLibraryOpen else { return }
+            self.libraryPresentedFrames = request.evidence
+            self.libraryFramePresentedAt = request.presentedAt
+            self.libraryCloseDeadlineMissed = request.timedOut || CACurrentMediaTime() > request.requestedAt + 0.050
+            self.libraryCloseCommitPending = false
+            self.libraryClosePresentation = nil
+            request.cancel()
+            if self.libraryCloseDeadlineMissed {
+                // A late frame ends the stationary hold, not a late slide.
+                // This is an explicit deadline failure, never a readiness substitute.
+                self.libraryClosePhase = "presented-after-deadline"
+                self.cancelLibraryPageMotion()
+                self.fadeLibraryClosePanel(animated: false, generation: generation)
+            } else {
+                self.animateLiveLibraryClose(source: source, target: target, generation: generation,
+                                             pageGeneration: pageGeneration)
+            }
+        }
+        request.onDeadline = { [weak self, weak request] in
+            guard let self, let request, self.libraryClosePresentation === request else { return }
+            self.libraryCloseDeadlineMissed = true
+            self.libraryClosePhase = "holding-after-deadline"
+            self.libraryPresentedFrames = request.evidence
+        }
+        request.onInvalidated = { [weak self] in self?.cancelLibraryPageMotion(); self?.layoutContent() }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        isLibraryOpen = false
+        layoutContent() // Records the final target without changing the old viewport.
+        libraryPageMotion = nil
+        libraryUsesLiveTransform = true
+        // No PNG readback, hidden view, engine sleep or snapshot in the moving tree.
+        container.layer?.backgroundColor = libraryThemeFill()
+        emptyPanel.isHidden = targets.isEmpty
+        layoutPageFrame(target)
+        container.needsLayout = true; container.layoutSubtreeIfNeeded()
+        for layer in [container.layer, Optional(emptyPanel)].compactMap({ $0 }) {
+            layer.removeAnimation(forKey: "libraryFrame")
+            layer.transform = CATransform3DMakeTranslation(source.minX - target.minX, source.minY - target.minY, 0)
+        }
+        libraryPageMotion = (source, target)
+        libraryLayoutCommittedAt = CACurrentMediaTime()
+        CATransaction.commit()
+        request.widthCommitted()
+        return true
+    }
+    private func animateLiveLibraryClose(source: CGRect, target: CGRect, generation: Int, pageGeneration: Int) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        libraryClosePhase = "sliding-live"
+        libraryMotionOpening = false
+        libraryMotionStartedAt = CACurrentMediaTime()
+        libraryMotionEndsAt = libraryMotionStartedAt + 0.20
+        CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
+            guard let self, self.libraryPageMotionGeneration == pageGeneration else { return }
+            self.libraryPageMotion = nil; self.libraryClosePhase = "settled"
+            // Model transform is already identity. Only retire the animation;
+            // no contents, viewport, visibility or layer ownership changes here.
+            self.container.layer?.removeAnimation(forKey: "libraryFrame")
+            self.emptyPanel.removeAnimation(forKey: "libraryFrame")
+            self.libraryUsesLiveTransform = false
+        } }
+        for layer in [container.layer, Optional(emptyPanel)].compactMap({ $0 }) {
+            layer.allowsGroupOpacity = false; layer.needsDisplayOnBoundsChange = false
+            layer.transform = CATransform3DIdentity
+            let x = CABasicAnimation(keyPath: "transform.translation.x")
+            x.fromValue = source.minX - target.minX; x.toValue = 0
+            let y = CABasicAnimation(keyPath: "transform.translation.y")
+            y.fromValue = source.minY - target.minY; y.toValue = 0
+            let group = CAAnimationGroup(); group.animations = [x, y]; group.duration = 0.20
+            group.beginTime = layer.convertTime(libraryMotionStartedAt, from: nil)
+            group.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
+            group.fillMode = .both; group.isRemovedOnCompletion = false
+            layer.add(group, forKey: "libraryFrame")
+        }
+        if !sidebar.isHidden { fadeLibrary(sidebar, from: 0, to: 1, duration: 0.20, beginAt: libraryMotionStartedAt) }
+        fadeLibraryClosePanel(animated: true, generation: generation)
+        CATransaction.commit()
+    }
+    private func libraryThemeFill() -> CGColor {
+        let field = ThemeField.Evaluator(style: container.style, windowSize: root.bounds.size,
+                                        isActive: context.isWindowActive)
+        let (r, g, b) = field.color(u: 0.75, v: 0.5)
+        return NSColor(srgbRed: CGFloat(r), green: CGFloat(g), blue: CGFloat(b), alpha: 1).cgColor
     }
     private func finishDismissingLibrary(animated: Bool, snapshots: [LibraryMotionSnapshot]) {
         guard isLibraryOpen else { return }
@@ -754,8 +877,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // before submitting the moving frames in a separate transaction.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        librarySnapshotViews = snapshots.compactMap { $0.install() }
-        libraryHiddenLiveViews = snapshots.map(\.source)
+        container.layer?.backgroundColor = libraryThemeFill()
+        emptyPanel.isHidden = snapshots.isEmpty
+        libraryClosePhase = "snapshot-preparing"
+        let fill = libraryThemeFill()
+        let installed = snapshots.compactMap { snapshot -> (NSView, NSView)? in
+            snapshot.install(background: fill).map { ($0, snapshot.source) }
+        }
+        librarySnapshotViews = installed.map { $0.0 }
+        // A refused image installation must never hide an uncovered live page.
+        libraryHiddenLiveViews = installed.map { $0.1 }
         container.setLibraryMotionHidesContent(!libraryHiddenLiveViews.isEmpty)
         isLibraryOpen = false
         layoutContent()
@@ -803,7 +934,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if libraryCloseCommitPending { CATransaction.flush() }
     }
     private func animateLibraryClose(animated: Bool, generation: Int) {
+        libraryClosePhase = animated ? "sliding-snapshot" : "settled"
         animateLibrary(opening: false, duration: 0.20, animated: animated)
+        fadeLibraryClosePanel(animated: animated, generation: generation)
+    }
+    private func fadeLibraryClosePanel(animated: Bool, generation: Int) {
         guard let panel = libraryPanel else { return }
         if animated, window?.isVisible == true {
             let duration = Motion.reducesMotion ? 0.10 : 0.20
@@ -838,6 +973,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// the end; closing reflows once at the start, behind fixed-size page pixels.
     private func prepareLibraryPageMotion(from source: CGRect, animated: Bool) {
         cancelLibraryClosePreparation()
+        resetLibraryLiveTransform()
+        emptyPanel.isHidden = false
+        container.layer?.backgroundColor = nil
         libraryCloseCommitPending = false
         container.layer?.removeAnimation(forKey: "libraryPreparation")
         emptyPanel.removeAnimation(forKey: "libraryPreparation")
@@ -851,6 +989,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     private func cancelLibraryPageMotion() {
         cancelLibraryClosePreparation()
+        resetLibraryLiveTransform()
         libraryCloseCommitPending = false
         removeLibrarySnapshots()
         libraryPageMotionGeneration += 1
@@ -863,6 +1002,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func cancelLibraryClosePreparation() {
         libraryClosePreparationGeneration += 1
         libraryClosePreparation?.cancel(); libraryClosePreparation = nil
+        if let presentation = libraryClosePresentation {
+            libraryClosePhase = "cancelled"
+            presentation.cancel(); libraryClosePresentation = nil
+        }
+    }
+    private func resetLibraryLiveTransform() {
+        guard libraryUsesLiveTransform else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        container.layer?.transform = CATransform3DIdentity
+        emptyPanel.transform = CATransform3DIdentity
+        CATransaction.commit()
+        libraryUsesLiveTransform = false
     }
     private func removeLibrarySnapshots() {
         container.setLibraryMotionHidesContent(false)
@@ -903,6 +1054,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     self.container.needsLayout = true
                     self.container.layoutSubtreeIfNeeded()
                     self.libraryLayoutCommittedAt = CACurrentMediaTime()
+                } else {
+                    self.libraryClosePhase = "settled"
                 }
                 self.removeLibrarySnapshots()
                 self.container.layer?.removeAnimation(forKey: "libraryFrame")

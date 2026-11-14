@@ -171,6 +171,11 @@ extension AutomationController {
       "snapshotCount":controller.libraryMotionSnapshotCount,
       "snapshotLiveViewsHidden":controller.libraryMotionLiveViewsHidden,
       "snapshotStatus":controller.container.librarySnapshotStatus,
+      "closeMode":controller.libraryCloseMode,"closePhase":controller.libraryClosePhase,
+      "closeRequestedAt":controller.libraryCloseRequestedAt,
+      "framePresentedAt":controller.libraryFramePresentedAt,
+      "closeDeadlineMissed":controller.libraryCloseDeadlineMissed,
+      "presentedFrames":controller.libraryPresentedFrames,
       "preparingClose":controller.isPreparingLibraryClose,
       "timing":["start":controller.libraryMotionStartedAt,"end":controller.libraryMotionEndsAt,
         "layoutCommit":controller.libraryLayoutCommittedAt,"opening":controller.libraryMotionOpening] as [String:Any]] as [String:Any]

@@ -207,10 +207,28 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             check('close_commits_width_before_motion', closed['motion']['page']['frame'] == closed_frame
                   and not timing['opening'] and 0 < timing['layoutCommit'] <= timing['start'],
                   before=open_frame, during=closed['motion']['page']['frame'], timing=timing)
-            check('close_uses_page_snapshot', closed['motion']['snapshotCount'] > 0, motion=closed['motion'])
-            check('close_hides_live_views', closed['motion']['snapshotLiveViewsHidden'], motion=closed['motion'])
-            check('close_separates_preparation_commit', timing['start'] - timing['layoutCommit'] >= 1/240,
-                  timing=timing)
+            close_mode = closed['motion']['closeMode']
+            if close_mode in ['retained-live', 'empty-live']:
+                check('close_moves_full_width_live_host', closed['motion']['snapshotCount'] == 0
+                      and not closed['motion']['snapshotLiveViewsHidden'], motion=closed['motion'])
+                check('close_starts_within_deadline', not closed['motion']['closeDeadlineMissed']
+                      and 0 < timing['start'] - closed['motion']['closeRequestedAt'] <= .050,
+                      motion=closed['motion'])
+                if close_mode == 'retained-live':
+                    frames = closed['motion']['presentedFrames']
+                    check('close_waits_for_real_present', bool(frames) and all(f['presented'] for f in frames)
+                          and 0 < closed['motion']['framePresentedAt'] <= timing['start'], frames=frames)
+                properties = next(a['properties'] for a in closed['motion']['page']['animations'] if a['key'] == 'libraryFrame')
+                check('live_close_is_translation_only', properties == ['transform.translation.x', 'transform.translation.y'],
+                      properties=properties)
+            else:
+                check('close_retains_snapshot_fallback', close_mode == 'snapshot-fallback', motion=closed['motion'])
+                check('close_uses_page_snapshot', closed['motion']['snapshotCount'] > 0, motion=closed['motion'])
+                check('close_hides_live_views', closed['motion']['snapshotLiveViewsHidden'], motion=closed['motion'])
+                check('fallback_does_not_claim_presentation', closed['motion']['framePresentedAt'] == 0
+                      and not closed['motion']['presentedFrames'], motion=closed['motion'])
+                check('close_separates_preparation_commit', timing['start'] - timing['layoutCommit'] >= 1/240,
+                      timing=timing)
             second = state()['motion']
             check('close_keeps_final_viewport_fixed', second['page']['frame'] == closed['motion']['page']['frame'], motion=second)
             time.sleep(.25)
