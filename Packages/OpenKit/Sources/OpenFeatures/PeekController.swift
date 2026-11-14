@@ -376,18 +376,34 @@ public final class PeekController {
             else { splitController.container.adopt(host, for:tab.id) }
         }
         splitController.refresh(); splitController.container.focus(tabID: tab.id)
-        if isPromotionHandoff, let host = item.host {
-            finishPromotionHandoff(host, tabID: tab.id)
-        } else { overlay.resetMotion(); refresh() }
+        if isPromotionHandoff, let host = splitController.container.host(for: tab.id) {
+            // Alloy Peek pages can be replaced by a Chrome destination. The
+            // old host closes during adopt; only the destination can finish
+            // this handoff. Its normal container callbacks remain untouched.
+            finishPromotionHandoff(host, tabID: tab.id, generation: motionGeneration, waitsForLoad: host !== item.host)
+        } else { isPromotionHandoff = false; overlay.resetMotion(); refresh() }
         if stack.isEmpty { removeKeys() }; onChange?(); return true
     }
-    private func finishPromotionHandoff(_ host: any WebContentHost, tabID: ItemID) {
-        let generation = motionGeneration
+    private func finishPromotionHandoff(_ host: any WebContentHost, tabID: ItemID, generation: Int, waitsForLoad: Bool) {
+        guard motionGeneration == generation, isPromotionHandoff,
+              splitController.container.host(for: tabID) === host, let tab = model.tab(id: tabID) else { return }
+        let ready = withObservationTracking {
+            !tab.live.isLoading && (!waitsForLoad || tab.live.hasLoadedInThisLaunch || tab.live.isCrashed)
+        } onChange: { [weak self] in
+            // Observation fires before the property write. Resume on the next
+            // turn, once the load state and the destination pixels can settle.
+            Task { @MainActor [weak self] in
+                guard let self, let host = self.splitController.container.host(for: tabID) else { return }
+                self.finishPromotionHandoff(host, tabID: tabID, generation: generation, waitsForLoad: waitsForLoad)
+            }
+        }
+        guard ready, snapshotTask == nil else { return }
+        PeekMotionTrace.mark("promotion.destinationReady")
         snapshotTask = Task { @MainActor [weak self, weak host] in
             guard let host else { return }
             let image = await PeekHostSnapshot.capture(host)
             guard !Task.isCancelled, let self, self.motionGeneration == generation,
-                  self.isPromotionHandoff, self.model.tab(id: tabID) != nil,
+                  self.isPromotionHandoff, self.splitController.container.host(for: tabID) === host,
                   let card = self.overlay.expansionCard else { return }
             self.snapshotTask = nil
             if let image { self.overlay.expansionImage?.contents = image }

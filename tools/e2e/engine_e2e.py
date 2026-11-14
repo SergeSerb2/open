@@ -4558,6 +4558,12 @@ def peek_checks(factory, results, tmp):
                     and s['panel']['scale'] == [1, 1] for s in active), 'samples': sampled}
         wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
         promoted = next(t["id"] for t in app.call("tabs") if t["selected"])
+        cleared = wait_until(lambda: (lambda s: s if not s.get('promotionHandoff')
+            and app.call('peek-ui')['dimHidden'] else None)(app.call('peek-motion')), timeout=5, step=.02)
+        results['peek_promotion_clears_cover'] = {'ok': bool(cleared)
+            and cleared['overlayHidden'] and cleared['backdropHidden']
+            and not app.call('peek-state')['stack'] and check_page(app, promoted, 'Peek page'),
+            'motion': cleared or app.call('peek-motion'), 'ui': app.call('peek-ui')}
         counts = app.call("host-counts")
         strip = app.call("tab-strip")
         if app.page(source)["style"] == "chrome":

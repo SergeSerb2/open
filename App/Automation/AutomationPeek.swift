@@ -48,6 +48,7 @@ extension AutomationController {
           }]
       }
       return ["shown": peek.isShown, "expanding": peek.isExpanding, "kind": overlay.motionKind,
+        "overlayHidden": overlay.isHidden, "backdropHidden": overlay.backdrop.isHidden,
         "snapshot": overlay.hasMotionSnapshot,
         "openingHandoff": overlay.isOpeningHandoff, "promotionHandoff": peek.isPromotionHandoff,
         "expandedImage": overlay.hasExpansionImage,
