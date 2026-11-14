@@ -275,8 +275,16 @@ public final class ThemeBackgroundView: NSView {
     public func beginTransition(to style: SpaceThemeStyle) {
         if let incoming, incoming.theme == style { return }
         incoming?.removeFromSuperlayer()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        current.removeAnimation(forKey: "opacity")
+        current.opacity = 1
+        CATransaction.commit()
         let l = ThemeLayer(style: style)
         l.opacity = 0
+        // Two translucent source-over layers would increase tint coverage in
+        // the middle of the fade. Add complementary premultiplied fields instead.
+        if drawsWindowBackdrop { l.compositingFilter = "plusL" }
         themeHost.addSublayer(l)
         incoming = l
         refresh()
@@ -288,6 +296,7 @@ public final class ThemeBackgroundView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         incoming.opacity = Float(min(max(progress, 0), 1))
+        if incoming.compositingFilter != nil { current.opacity = 1 - incoming.opacity }
         CATransaction.commit()
     }
 
@@ -295,6 +304,7 @@ public final class ThemeBackgroundView: NSView {
     public func endTransition(commit: Bool, duration: CFTimeInterval = Motion.themeCrossfade) {
         guard let incoming else { return }
         if commit { finish(to: incoming, duration: duration) } else {
+            if incoming.compositingFilter != nil { animateOpacity(current, to: 1, duration: duration) {} }
             animateOpacity(incoming, to: 0, duration: duration) { [weak self] in
                 incoming.removeFromSuperlayer()
                 if self?.incoming === incoming { self?.incoming = nil; self?.refresh() }
@@ -309,6 +319,11 @@ public final class ThemeBackgroundView: NSView {
         if animated, let incoming, incoming.theme == style, incoming.animation(forKey: "opacity") != nil { return }
         if !animated {
             incoming?.removeFromSuperlayer(); incoming = nil
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            current.removeAnimation(forKey: "opacity")
+            current.opacity = 1
+            CATransaction.commit()
             current.theme = style
             refresh()
             return
@@ -318,9 +333,11 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func finish(to layer: ThemeLayer, duration: CFTimeInterval) {
+        if layer.compositingFilter != nil { animateOpacity(current, to: 0, duration: duration) {} }
         animateOpacity(layer, to: 1, duration: duration) { [weak self] in
             guard let self, self.incoming === layer else { return }
             self.current.removeFromSuperlayer()
+            layer.compositingFilter = nil
             self.current = layer
             self.incoming = nil
             self.refresh()

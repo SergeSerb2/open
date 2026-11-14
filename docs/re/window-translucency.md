@@ -52,7 +52,7 @@ Paired M1 Release idle CPU samples before and after the prepared implementation 
 
 The corrected private Custom-Light probe uses `.light`/Aqua and a 0.4764 white wash below the unchanged 0.64 theme tint. All six states pass all three qualified regions, worst ΔE00 0.71. The colorful 128-point amplitude is Open 0.03628 versus Arc 0.03618. This is a rendered output fit, not an independent internal radius or saturation estimate. Each of the six capture states has unforced cleanup, unchanged preferences, and fresh-process exact wallpaper restoration. Evidence: private `wash-probe-v1/custom-light-fit/comparison/comparison.json` and shared `D2-frames/translucency-custom-light/neutral-wash-fit/`.
 
-The source now carries that fit and the remaining themes' predicted fits. The latter use unclipped native-material reference captures, because the first Default-Light probe clips bright channels and cannot identify its tint from those pixels. The Default-Dark live tint has a small RGB correction; stored themes and static images retain their earlier values. **Exact shipping-source matrix acceptance remains pending.**
+The source now carries that fit and the remaining themes' predicted fits. The latter use unclipped native-material reference captures, because the first Default-Light probe clips bright channels and cannot identify its tint from those pixels. The Default-Dark live tint has a small RGB correction; stored themes and static images retain their earlier values. **Exact product-source matrix acceptance passes all 24 states at functional head `74dae543`.**
 
 | Theme / appearance | Active wash opacity | Active wash gray | Inactive opaque gray |
 |---|---|---|---|
@@ -62,3 +62,20 @@ The source now carries that fit and the remaining themes' predicted fits. The la
 | Default / Dark | 0.1729 | 0 | 0.1023 |
 
 Private wash probe receipt `receipts/wash-probe-v1.tar` retains all 36 states, including rejected material choices. These diagnostic controls are not in the shipping source.
+
+## Exact product-app comparison
+
+The clean product Release build (with the automation socket, without diagnostic controls) passes all 24 C14-T states on the M1. All 72 qualified clear-region median differences are below ΔE00 2, and the worst sampled pixel 95th percentile is 1.783. The limit remains 2. The table reports the worst region across all six states and the colorful active 128-point pattern amplitude norm.
+
+| Theme / appearance | Worst median ΔE00 | Worst sampled p95 | Open pattern amplitude | Arc pattern amplitude |
+|---|---|---|---|---|
+| Custom / Light | 0.7055 | 1.3899 | 0.036277 | 0.036179 |
+| Custom / Dark | 0.3609 | 1.0712 | 0.048163 | 0.049298 |
+| Default / Light | 0.6503 | 1.5017 | 0.065720 | 0.064646 |
+| Default / Dark | 0.9355 | 1.7829 | 0.005852 | 0.005855 |
+
+Evidence: D2 `receipts/fitted-matrix-v1.tar`, `fitted-matrix-v1/qualification.json`, each group's `comparison/comparison.json`, and private shared `D2-frames/translucency-final-74dae543/`. The identity pins clean functional source `74dae5432b5e2882600a621b3e0bab808ddf75bd`, executable and engine hashes, and the four product-source hashes. All four groups pass unforced cleanup, unchanged real preferences, and independent fresh-process exact wallpaper URL/options restoration. The unchanged `space-legacy` checker passes on the exact recognized M1 display key with all three reference PNGs byte-identical. Rental display-key failure remains retained and was not converted into a reference update. Product lifecycle checks pass 13/13 on the rental Mac, including window activation, actual editor/model changes, resize, sidebar toggles, stable field counters, refusal, and opaque Incognito.
+
+The translucent Space-switch fade uses complementary layer weights with additive premultiplied composition. Ordinary source-over would increase tint coverage halfway through a fade. A real two-Space observation with equal fields and motion explicitly enabled exposed that increase: clear sidebar RGB was (213,148,115) at rest and (212,144,110) in the middle. The corrected observation gives (213,148,116) in the middle and the original value at both endpoints, within one encoded channel unit. The socket receipt records Reduce Motion false and the scheduled Space animation. This checks Open’s tint coverage; it is not Arc motion acceptance. Private receipts: `transition-motion-on.tar` (before) and `transition-fix.tar` (after). The corrected flow quits without force and leaves no owned windows or processes.
+
+Final fitted-material idle CPU is not yet qualified. Both first final-head attempts failed the unchanged OS sampler before a usable counter window. Raw failures and unforced cleanup are retained in `receipts/idle-final-invalid.tar`. A short diagnostic can read the counters immediately after launch; a settled diagnostic rerun is pending. Earlier prepared-head CPU values above remain historical and must not be used as final fitted-head acceptance.
