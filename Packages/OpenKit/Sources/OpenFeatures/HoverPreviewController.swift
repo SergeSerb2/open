@@ -27,6 +27,7 @@ public final class HoverPreviewController {
     public private(set) var makeHostCount = 0
     public private(set) var reusedCachedHost = false
     public private(set) var shows = 0
+    private var retiringCard: PreviewCardView?
 
     init(root: NSView, container: WebContentContainer, factory: any WebContentHostFactory, context: SidebarContext,
          select: @escaping @MainActor (ItemID) -> Void) {
@@ -49,7 +50,22 @@ public final class HoverPreviewController {
         if let layer = card?.layer, !swapping, !Motion.reducesMotion, root.window?.isVisible == true || SidebarDiagnostics.forceAnimations {
             let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
             fade.duration = Motion.previewIn; fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            // Folder contents are static during the fade. Composite one bitmap
+            // rather than the text, icons, clip and shadow on every frame.
+            if case .folder = next.kind {
+                layer.rasterizationScale = root.window?.backingScaleFactor ?? 1
+                layer.shouldRasterize = true
+            }
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            CATransaction.setCompletionBlock { [weak card] in
+                MainActor.assumeIsolated {
+                    if card?.layer?.animation(forKey: "previewOut") == nil {
+                        card?.layer?.shouldRasterize = false
+                    }
+                }
+            }
             layer.add(fade, forKey: "previewIn")
+            CATransaction.commit()
         }
     }
 
@@ -182,21 +198,31 @@ public final class HoverPreviewController {
     /// Removes the card. A page host returns to the container's hidden cache (LRU and sleep).
     public func hide(animated: Bool) {
         context.hoverPreviews.setPreviewFrameInWindow(nil)
+        retiringCard?.removeFromSuperview(); retiringCard = nil
         guard let card else { request = nil; return }
         let page = host, id = hostTabID
         self.card = nil; host = nil; hostTabID = nil; request = nil
+        card.isDismissing = true; card.onClick = nil; card.onPointer = nil
         if let page, let id {
             page.view.removeFromSuperview()
             container.adopt(page, for: id)
         }
         let animates = animated && !Motion.reducesMotion && (root.window?.isVisible == true || SidebarDiagnostics.forceAnimations)
         guard animates, let layer = card.layer else { card.removeFromSuperview(); return }
-        layer.opacity = 0
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
+        let start = layer.presentation()?.opacity ?? layer.opacity
+        retiringCard = card
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock { [weak self, weak card] in
+            MainActor.assumeIsolated {
+                card?.removeFromSuperview()
+                if self?.retiringCard === card { self?.retiringCard = nil }
+            }
+        }
+        layer.removeAnimation(forKey: "previewIn"); layer.opacity = 0
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = start; fade.toValue = 0
         fade.duration = Motion.previewOut
         layer.add(fade, forKey: "previewOut")
-        let work = DispatchWorkItem { [weak card] in MainActor.assumeIsolated { card?.removeFromSuperview() } }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.previewOut, execute: work)
+        CATransaction.commit()
     }
 }
 
@@ -207,6 +233,7 @@ public final class PreviewCardView: NSView {
     public let content: NSView
     private let clip = NSView()
     private let catcher: ClickCatcher?
+    fileprivate var isDismissing = false
     var onClick: (@MainActor () -> Void)?
     var onPointer: (@MainActor (Bool) -> Void)?
     private var tracking: NSTrackingArea?
@@ -231,7 +258,9 @@ public final class PreviewCardView: NSView {
     public override var isFlipped: Bool { true }
     public override func layout() {
         super.layout()
-        clip.frame = bounds; content.frame = clip.bounds; catcher?.frame = clip.bounds
+        if clip.frame != bounds { clip.frame = bounds }
+        if content.frame != clip.bounds { content.frame = clip.bounds }
+        if catcher?.frame != clip.bounds { catcher?.frame = clip.bounds }
         layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: HoverPreviewMetrics.radius, cornerHeight: HoverPreviewMetrics.radius, transform: nil)
     }
     public override func updateTrackingAreas() {
@@ -240,6 +269,7 @@ public final class PreviewCardView: NSView {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
     }
+    public override func hitTest(_ point: NSPoint) -> NSView? { isDismissing ? nil : super.hitTest(point) }
     public override func mouseEntered(with event: NSEvent) { onPointer?(true) }
     public override func mouseExited(with event: NSEvent) { onPointer?(false) }
     /// Sends the click to the card (checks and automation use the real event path).

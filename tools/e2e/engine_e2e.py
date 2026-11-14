@@ -13603,6 +13603,8 @@ def main():
     ap.add_argument('--window-launch-continuation', help='LEAD 07:10: add one pair to the original five-pair M1 receipt')
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
+    ap.add_argument("--sidebar-folder-only", action="store_true",
+                    help="sidebar-completion: run mixed-folder deletion and folder-peek flows, without the Library/Space Manager flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
     ap.add_argument('--passwords-probe-dialog-free', action='store_true', help='observe safe Step 0 rows; report card, WebAuthn and HTTP Basic as BLOCKED')
     ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
@@ -14054,7 +14056,8 @@ def main():
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
                 sys.modules[__name__], factory, results[opts.only], tmp)
             if os.environ.get('OPEN_MIXED_DELETE_ONLY') != '1':
-                space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
+                if not opts.sidebar_folder_only:
+                    space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
                 folder_peek_checks(factory, results[opts.only], tmp)
         elif opts.only == "find":
             results["find"] = CheckedResults(tracker)

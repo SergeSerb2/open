@@ -284,7 +284,10 @@ public final class ToastCenter {
 
     private func relayout() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        for entry in entries { entry.view.frame = ToastMetrics.frame(size: entry.view.frame.size, in: overlay.bounds) }
+        for entry in entries {
+            let frame = ToastMetrics.frame(size: entry.view.frame.size, in: overlay.bounds)
+            if entry.view.frame != frame { entry.view.frame = frame }
+        }
         CATransaction.commit()
     }
 
@@ -298,15 +301,21 @@ public final class ToastCenter {
 
     private func animateIn(_ view: ToastView) {
         guard animates(), let layer = view.layer else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        // The fill and text already have backing textures. Animate those
+        // directly instead of creating another offscreen cache for each toast.
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1; fade.duration = Motion.toastFadeIn
         fade.timingFunction = CAMediaTimingFunction(name: .linear)
+        preferDisplayRefresh(fade, for: view)
         layer.add(fade, forKey: "toastIn.opacity")
         lastAnimations = ["in.opacity": fade]
         guard !reducesMotion() else { return }
         let grow = Motion.toastIn.animation(keyPath: "transform")
         grow.fromValue = NSValue(caTransform3D: Self.topCenterScale(Motion.toastInScale, size: view.bounds.size))
         grow.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        preferDisplayRefresh(grow, for: view)
         layer.add(grow, forKey: "toastIn.transform")
         lastAnimations["in.transform"] = grow
     }
@@ -315,10 +324,14 @@ public final class ToastCenter {
         guard let layer = view.layer else { return }
         // Start from what is on screen (an exit during the appear spring does not snap).
         let presentation = layer.presentation()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        layer.removeAnimation(forKey: "toastIn.opacity")
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = presentation?.opacity ?? layer.opacity; fade.toValue = 0
         fade.duration = Motion.toastOut; fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
         layer.opacity = 0
+        preferDisplayRefresh(fade, for: view)
         layer.add(fade, forKey: "toastOut.opacity")
         lastAnimations["out.opacity"] = fade
         guard !reducesMotion() else { return }
@@ -328,8 +341,18 @@ public final class ToastCenter {
         shrink.duration = Motion.toastOut; shrink.timingFunction = CAMediaTimingFunction(name: .easeIn)
         layer.removeAnimation(forKey: "toastIn.transform")
         layer.transform = end
+        preferDisplayRefresh(shrink, for: view)
         layer.add(shrink, forKey: "toastOut.transform")
         lastAnimations["out.transform"] = shrink
+    }
+
+    /// Ask the render server to use this window's display cadence only while
+    /// the toast moves. No display link or main-thread frame callback is needed.
+    private func preferDisplayRefresh(_ animation: CAAnimation, for view: NSView) {
+        guard let screen = view.window?.screen else { return }
+        let rate = Float(screen.maximumFramesPerSecond)
+        guard rate > 0 else { return }
+        animation.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
     }
 
     private func announce(_ content: ToastContent) {
