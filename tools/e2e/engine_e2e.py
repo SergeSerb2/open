@@ -4526,6 +4526,7 @@ def peek_checks(factory, results, tmp):
         results['peek_open_starts_card_without_waiting_for_page'] = {'ok': preparation.get('preparingOpening')
             and preparation.get('kind') == 'open' and preparation.get('duration') == .1
             and preparation.get('snapshot') and not preparation.get('snapshotPixels')
+            and preparation.get('clipMasksToBounds') is False
             and preparation.get('hostHidden') and not preparation.get('hostAttached')
             and bool(preparation['panel']['animations'])
             and all(a['requestedHz'] == preparation['displayHz']
@@ -4539,6 +4540,7 @@ def peek_checks(factory, results, tmp):
             time.sleep(.005)
         results['peek_open_moves_plate_with_fixed_hidden_viewport'] = {'ok': bool(opening_samples)
             and all(s.get('snapshot') and s.get('hostHidden') and not s.get('hostAttached')
+                    and s.get('clipMasksToBounds') is False
                     and not s['panel'].get('rasterized')
                     and s['hostFrame'] == preparation['hostFrame']
                     and s['hostFrameChanges'] == preparation['hostFrameChanges'] for s in opening_samples),
@@ -4548,7 +4550,8 @@ def peek_checks(factory, results, tmp):
         settled_open = wait_until(lambda: (lambda s: s if not s.get('preparingOpening')
             and not s.get('openingHandoff') else None)(app.call('peek-motion')), timeout=5, step=.01)
         results['peek_ready_content_fades_then_retires_cover'] = {'ok': bool(fading) and fading.get('snapshotPixels')
-            and fading.get('hostHidden') and bool(settled_open) and not settled_open.get('snapshot')
+            and fading.get('hostHidden') and fading.get('clipMasksToBounds') is True
+            and bool(settled_open) and settled_open.get('clipMasksToBounds') is True and not settled_open.get('snapshot')
             and not settled_open.get('hostHidden'), 'fade': fading, 'settled': settled_open}
         app.call("wait")
         state = app.call("peek-state")

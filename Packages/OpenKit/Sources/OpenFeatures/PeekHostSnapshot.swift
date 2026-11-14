@@ -36,6 +36,10 @@ extension PeekOverlayView {
         pageClip.layer?.backgroundColor = color.cgColor
         freezeHost(view, image: nil)
         motionSnapshotLayer?.backgroundColor = color.cgColor
+        // Only rounded solid backgrounds move here. Their own corner radii
+        // draw the outline without clipping a child subtree offscreen.
+        motionSnapshotLayer?.cornerRadius = pageClip.layer?.cornerRadius ?? 0
+        pageClip.layer?.masksToBounds = false
         PeekMotionTrace.mark("opening.plateReady")
     }
 
@@ -104,6 +108,7 @@ extension PeekOverlayView {
         PeekMotionTrace.mark("opening.attachCovered")
         CATransaction.begin(); CATransaction.setDisableActions(true)
         openingHandoff = true; motionHostFrozen = false; motionHostWasHidden = false
+        pageClip.layer?.masksToBounds = true
         panel.layer?.shouldRasterize = false
         hostedView = view
         if view.superview !== pageClip { pageClip.addSubview(view) }
@@ -167,6 +172,7 @@ extension PeekOverlayView {
     }
 
     func endHostSnapshot(reveal: Bool = true) {
+        pageClip.layer?.masksToBounds = true
         guard let snapshot = motionSnapshotLayer else { return }
         PeekMotionTrace.mark("snapshot.thaw")
         CATransaction.begin(); CATransaction.setDisableActions(true)
