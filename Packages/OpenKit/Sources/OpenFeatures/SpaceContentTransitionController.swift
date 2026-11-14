@@ -41,7 +41,8 @@ final class SpaceContentTransitionController {
         let needsCover = source != nil && (source?.space != selection.space || plate.phase != .idle)
         guard needsCover, container.window?.isVisible == true,
               let parent = container.superview, !container.bounds.isEmpty else {
-            cancel(clearCache: source?.profile != selection.profile)
+            cancel(clearCache: source?.profile != selection.profile,
+                   preservingCapture: plate.phase == .idle && source?.profile == selection.profile)
             requestedSelection = selection; nativeSelection = selection; nativeStyle = container.style
             container.applySpaceSelection(selection, animateSlots: source?.space == selection.space, notify: false)
             return
@@ -166,8 +167,11 @@ final class SpaceContentTransitionController {
             plate.presented(receipt); container.finishEmptySpaceSelection(); return
         }
         let token = frameGeneration
-        let hosts = selection.tabs.compactMap { container.host(for: $0) }.filter { !$0.view.isHiddenOrHasHiddenAncestor }
-        guard hosts.count == selection.tabs.count else { presentationUnavailable = true; return }
+        let visibleTabs: [ItemID]
+        if let maximized = container.maximizedTabID, selection.tabs.contains(maximized) { visibleTabs = [maximized] }
+        else { visibleTabs = selection.tabs }
+        let hosts = visibleTabs.compactMap { container.host(for: $0) }.filter { !$0.view.isHiddenOrHasHiddenAncestor }
+        guard hosts.count == visibleTabs.count else { presentationUnavailable = true; return }
         // Loading may finish before pixels are presented, so this is only a
         // prerequisite. Its callback re-arms the actual presentation request.
         guard hosts.allSatisfy({ !$0.isLoading }) else { return }
@@ -192,8 +196,11 @@ final class SpaceContentTransitionController {
         }
     }
 
-    func cancel(clearCache: Bool = false) {
-        generation &+= 1; cancelRequests(); snapshotTask?.cancel()
+    func cancel(clearCache: Bool = false, preservingCapture: Bool = false) {
+        generation &+= 1; cancelRequests()
+        // Ordinary same-profile refreshes can run while an outgoing capture is
+        // still settling. Its immutable key/revision validates it on completion.
+        if !preservingCapture { snapshotTask?.cancel() }
         applyingCoveredSelection = nil; receipt = nil; requestedSelection = nil
         plate.cancel(); if clearCache { plate.invalidateAll() }
     }
