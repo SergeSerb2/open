@@ -20,7 +20,7 @@ final class ExtensionShortcutTable {
       for key in command.defaultShortcuts + overrides.effectiveShortcuts(for: command) where reserved[key] == nil { reserved[key] = command.id }
     }
     entries = []; conflicts = []; lookup = [:]
-    let names = Dictionary(uniqueKeysWithValues: manager.installedExtensions.map { ($0.identifier, $0.name) })
+    let names = Dictionary(manager.installedExtensions.map { ($0.identifier, $0.name) }, uniquingKeysWith: { first, _ in first })
     for command in manager.commands.prefix(1024) {
       guard let key = Self.shortcut(command.keyEquivalent, flags: command.modifierFlags) else { continue }
       let conflict = reserved[key]

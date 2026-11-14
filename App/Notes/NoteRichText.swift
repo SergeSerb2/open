@@ -150,7 +150,8 @@ enum NoteRichText {
     let result = NSMutableAttributedString(string: text)
     let length = result.length
     for format in formats {
-      guard format.location >= 0, format.length >= 0, format.location + format.length <= length else { continue }
+      // No `location + length`: a damaged file's huge values would overflow and trap.
+      guard format.location >= 0, format.length >= 0, format.location <= length, format.length <= length - format.location else { continue }
       let range = NSRange(location: format.location, length: format.length)
       if let key = inlineKeys.first(where: { $0.1 == format.type })?.0 {
         result.addAttribute(key, value: true, range: range)

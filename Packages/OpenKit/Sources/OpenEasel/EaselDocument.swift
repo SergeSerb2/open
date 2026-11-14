@@ -36,6 +36,7 @@ public struct EaselDocument: Codable, Equatable, Sendable {
     public static let maxPoints = 20_000
     public static let maxTitleLength = 1_000
     public static let maxURLLength = 8_192
+    public static let maxZIndex = 1 << 52
     /// Image file names are `<64 hex>.<png|jpg|gif|webp|heic|tiff>`: no paths, no traversal.
     public static func isImageFileName(_ name: String) -> Bool {
         let parts = name.split(separator: ".")
@@ -48,7 +49,9 @@ public struct EaselDocument: Codable, Equatable, Sendable {
         for o in objects {
             guard o.frame.minX.isFinite, o.frame.minY.isFinite, o.frame.width.isFinite, o.frame.height.isFinite,
                   abs(o.frame.minX) < 1e6, abs(o.frame.minY) < 1e7, o.frame.width >= 0, o.frame.height >= 0,
-                  o.frame.width < 1e6, o.frame.height < 1e7 else { return false }
+                  o.frame.width < 1e6, o.frame.height < 1e7,
+                  // New objects take maxZ + 1 (Bring to Front adds more): a huge z would overflow and trap.
+                  o.zIndex > -Self.maxZIndex, o.zIndex < Self.maxZIndex else { return false }
             switch o.content {
             case .text(let t): if t.string.utf16.count > maxTextLength { return false }
             case .shape(_, _, let arrow, let points):
