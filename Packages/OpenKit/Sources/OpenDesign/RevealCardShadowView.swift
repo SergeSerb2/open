@@ -41,7 +41,8 @@ public final class RevealCardShadowView: NSView {
         let shape = CGPath(roundedRect: bounds, cornerWidth: r, cornerHeight: r, transform: nil)
         shadowLayer.shadowPath = shape
         let outside = CGMutablePath()
-        outside.addRect(bounds.insetBy(dx: -24, dy: -24))
+        let outset = WindowMetrics.revealCardShadowOutset
+        outside.addRect(bounds.insetBy(dx: -outset, dy: -outset))
         outside.addPath(shape)
         shadowMask.frame = bounds
         shadowMask.path = outside

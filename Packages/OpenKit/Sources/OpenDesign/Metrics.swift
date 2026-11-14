@@ -321,6 +321,8 @@ public enum WindowMetrics {
     /// none at 8.5. A Gaussian edge with σ ≈ 4 and peak 0.17 fits.
     public static let revealCardShadowOpacity: Float = 0.17
     public static let revealCardShadowRadius: CGFloat = 4
+    /// Bounds of the prepared shadow mask, including its transparent tail.
+    public static let revealCardShadowOutset: CGFloat = 24
 
     /// Card frame for a window of `size` and sidebar width `width`.
     public static func revealCardFrame(windowSize size: CGSize, sidebarWidth width: CGFloat) -> CGRect {

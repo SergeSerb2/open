@@ -991,7 +991,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func setRevealCard(_ shown: Bool) {
         let size = root.bounds.size
         let card = WindowMetrics.revealCardFrame(windowSize: size, sidebarWidth: context.sidebarWidth)
-        let away = -(card.maxX - PanelMetrics.inset)
+        // Move the whole card and its shadow past the window edge. Leaving the
+        // panel inset visible makes the later native hide pop those pixels away.
+        let away = -(card.maxX + WindowMetrics.revealCardShadowOutset)
         let animate = window?.isVisible == true && !Motion.reducesMotion
         let from = cardState == .off ? away : currentCardOffset()
         cardGeneration += 1
@@ -1011,9 +1013,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             sidebar.cardFieldFrame = CGRect(x: -card.minX, y: -card.minY, width: size.width, height: size.height)
             sidebar.prepareFloatingCard(size: card.size)
             sidebar.presentation = .floatingCard
-            sidebar.frame = card
+            if sidebar.frame != card { sidebar.frame = card }
             sidebar.alphaValue = 1
-            cardShadow.frame = card
+            if cardShadow.frame != card { cardShadow.frame = card }
             sidebar.layoutSubtreeIfNeeded()
             cardShadow.layoutSubtreeIfNeeded()
             sidebar.isHidden = false
@@ -1042,14 +1044,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     private func currentCardOffset() -> CGFloat {
-        sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0
+        sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
+            ?? sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0
     }
 
     private func slideCard(from: CGFloat, to: CGFloat, generation: Int, completion: (@MainActor () -> Void)?) {
         let layers = [sidebar.layer, cardShadow.layer].compactMap { $0 }
         let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.motionLayer].compactMap { $0 }
         cardAnimations = [:]
-        CATransaction.begin()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         CATransaction.setCompletionBlock {
             MainActor.assumeIsolated { [weak self] in
                 guard let self, self.cardGeneration == generation else { return }
@@ -1058,6 +1061,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         for layer in layers + buttons {
             layer.removeAnimation(forKey: "reveal")
+            layer.setValue(to, forKeyPath: "transform.translation.x")
             guard from != to else { continue }
             let slide: CABasicAnimation
             if to == 0 { slide = Motion.revealCardIn.animation(keyPath: "transform.translation.x") }
@@ -1068,7 +1072,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             slide.fromValue = from
             slide.toValue = to
             slide.fillMode = .both
-            slide.isRemovedOnCompletion = to == 0
+            slide.isRemovedOnCompletion = true
             addMotion(slide, to: layer, key: "reveal")
             if layer === sidebar.layer { cardAnimations["card"] = layer.animation(forKey: "reveal") }
             if layer === cardShadow.layer { cardAnimations["shadow"] = layer.animation(forKey: "reveal") }
@@ -1078,14 +1082,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func finishCardHide(_ generation: Int) {
         guard generation == cardGeneration, cardState == .hiding else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         cardState = .off
         sidebar.isHidden = true
         cardShadow.isHidden = true
         for layer in [sidebar.layer, cardShadow.layer, dimmedLights.motionLayer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
             layer.removeAnimation(forKey: "reveal")
         }
-        sidebar.presentation = .anchored
-        layoutContent()
+        // Keep the offscreen model transforms until the next show or anchored
+        // layout. Resetting them before AppKit commits button visibility briefly
+        // draws the three dimmed circles over the page at the hide endpoint.
+        positionTrafficLights()
+        CATransaction.commit()
+        // Keep the hidden card's prepared geometry. Re-anchoring every dismissal
+        // lays out all sidebar rows twice per reveal, although the page never moves.
+        // An actual anchored layout restores the sidebar's presentation once.
     }
 
     /// Drops the card at once, without the slide (the sidebar becomes anchored, the window closes).
