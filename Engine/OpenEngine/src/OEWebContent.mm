@@ -280,11 +280,11 @@ class OESelectionCallback : public CefSelectionCallback {
 #pragma mark - Frame presentation
 
 @interface OEWebContentPresentedFrame ()
-- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+- (instancetype)initWithRequestID:(NSUUID*)requestID size:(NSSize)size
                        scale:(double)scale time:(NSTimeInterval)time;
 @end
 @implementation OEWebContentPresentedFrame
-- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+- (instancetype)initWithRequestID:(NSUUID*)requestID size:(NSSize)size
                        scale:(double)scale time:(NSTimeInterval)time {
   if ((self = [super init])) {
     _requestID = [requestID copy];
@@ -297,7 +297,7 @@ class OESelectionCallback : public CefSelectionCallback {
 @end
 
 @interface OEWebContentFrameRequest ()
-- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+- (instancetype)initWithRequestID:(NSUUID*)requestID size:(NSSize)size
                        scale:(double)scale cancel:(void (^)(void))cancel
                   completion:(void (^)(OEWebContentPresentedFrame*))completion;
 - (void)oe_presentedAt:(NSTimeInterval)time;
@@ -312,7 +312,7 @@ class OESelectionCallback : public CefSelectionCallback {
   void (^_cancelAction)(void);
   void (^_completion)(OEWebContentPresentedFrame*);
 }
-- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+- (instancetype)initWithRequestID:(NSUUID*)requestID size:(NSSize)size
                        scale:(double)scale cancel:(void (^)(void))cancel
                   completion:(void (^)(OEWebContentPresentedFrame*))completion {
   if ((self = [super init])) {
@@ -350,7 +350,7 @@ class OESelectionCallback : public CefSelectionCallback {
   _cancelAction = nil;
   if (done) {
     OEWebContentPresentedFrame* receipt = _cancelled || time <= 0 ? nil :
-        [[OEWebContentPresentedFrame alloc] oe_initWithID:_requestID
+        [[OEWebContentPresentedFrame alloc] initWithRequestID:_requestID
             size:_size scale:_scale time:time];
     done(receipt);
   }
@@ -971,7 +971,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   const int64_t identifier = nextID.fetch_add(1);
   __weak OEWebContent* weakSelf = self;
   OEWebContentFrameRequest* request = [[OEWebContentFrameRequest alloc]
-      oe_initWithID:requestID size:pixelSize scale:backingScale cancel:^{
+      initWithRequestID:requestID size:pixelSize scale:backingScale cancel:^{
         OEWebContent* content = weakSelf;
         if (content && content->_browser)
           CefCancelOpenFramePresentation(content->_browser, identifier);
