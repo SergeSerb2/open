@@ -89,9 +89,19 @@ class OECompletionCallback : public CefCompletionCallback {
 class PdfCallback : public CefPdfPrintCallback {
  public:
   explicit PdfCallback(void (^done)(BOOL)) : done_([done copy]) {}
+  ~PdfCallback() override {
+    // Released unrun (the page closed mid-print): still answer once.
+    if (void (^done)(BOOL) = done_) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(NO);
+      });
+    }
+  }
   void OnPdfPrintFinished(const CefString& path, bool ok) override {
-    if (done_) {
-      done_(ok);
+    void (^done)(BOOL) = done_;
+    done_ = nil;
+    if (done) {
+      done(ok);
     }
   }
 
@@ -778,6 +788,12 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   [_openWorldCallbacks removeAllObjects];
   for (OEOpenWorldCompletion done in pending) {
     done(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorWebContentClosed userInfo:nil]);
+  }
+  if (_chromeHost) {
+    // A Views-window Chrome page whose browser closed on its own
+    // (window.close()): its frameless window would otherwise stay up, empty,
+    // because a later -close finds no host left to close.
+    OEChromeHostClose(_chromeHost);
   }
   _chromeHost = nullptr;
   _adoptedBrowserView = nullptr;
@@ -1897,7 +1913,7 @@ static double OEPNGPixelWidth(NSData* png) {
 }
 
 - (void)printToPDFAtURL:(NSURL*)fileURL completion:(void (^)(BOOL))completion {
-  if (!_browser) {
+  if (!_browser || !fileURL.isFileURL || !fileURL.path.length) {
     if (completion) completion(NO);
     return;
   }
