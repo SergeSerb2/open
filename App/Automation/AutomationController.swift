@@ -1427,6 +1427,7 @@
         let travel = controller.context.sidebarWidth + WindowMetrics.revealCardInset - PanelMetrics.inset
         return ["reduced": Motion.reducesMotion,
           "tokens": ["sidebarToggle": token(Motion.sidebarToggle), "revealCardIn": token(Motion.revealCardIn),
+            "sidebarShowDuration": Motion.sidebarShowDuration,
             "revealCardOut": Motion.revealCardOut, "spaceSwitch": token(Motion.spaceSwitch)] as [String: Any],
           "cardCurve": [0.112, 0.140, 0.210].map { ["time": $0, "pastRest": (Motion.springProgress(Motion.revealCardIn, at: $0) - 1) * travel] },
           "toggleRemainderAt130ms": (1 - Motion.springProgress(Motion.sidebarToggle, at: 0.130)) * (WindowMetrics.defaultSidebarWidth - PanelMetrics.inset),

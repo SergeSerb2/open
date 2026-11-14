@@ -4116,10 +4116,12 @@ def window_chrome_followup_checks(factory, results, tmp):
             "high": high["sidebarLiveWidth"], "low": low["sidebarLiveWidth"], "model": edge["sidebarWidth"]}
         gone = pointer("drag", 81)
         hide_motion = app.call("window-motion")
+        gone = sidebar_hidden(app) or gone
         results["width_hide_while_pressed"] = {"ok": gone["sidebarResizeActive"] and gone["sidebarMode"] == "hidden"
             and gone["panel"][0] == 10 and gone["sidebarWidth"] == 364
             and spring(hide_motion["sidebar"].get("sidebar", {}), .1, .95), "state": gone}
         back = pointer("drag", 82)
+        back = sidebar_anchored(app) or back
         results["width_show_before_release"] = {"ok": back["sidebarResizeActive"] and back["sidebarMode"] == "anchored"
             and back["sidebarLiveWidth"] == 164 and back["panel"][0] == 164 and back["sidebarWidth"] == 364}
         visible = pointer("up", 82)
@@ -4140,6 +4142,7 @@ def window_chrome_followup_checks(factory, results, tmp):
             "width": hidden["sidebarWidth"], "gestures": hidden["sidebarGestureHides"] - before["sidebarGestureHides"]}
         shown = key(); show_motion = app.call("window-motion")
         settled()
+        shown = state()
         results["width_cmd_s_restores_start"] = {"ok": shown["sidebarMode"] == "anchored" and shown["sidebarWidth"] == 364 and shown["panel"][0] == 364}
         drag(364, 228)
         key(); settled(); key(); settled(); show_png = snap("cmd-s-restored")
@@ -4171,11 +4174,21 @@ def window_chrome_followup_checks(factory, results, tmp):
         key(); toggle_hide = app.call("window-motion")
         settled(); key(); toggle_show = app.call("window-motion")
         motions = [hide_motion, show_motion, toggle_hide, toggle_show]
-        results["motion_sidebar_toggle"] = {"ok": all(spring(m["sidebar"].get("sidebar", {}), .1, .95, "transform.translation.x")
-            and all(spring(a, .1, .95, relative_to_group=True) for a in m["sidebar"].get("panel", {}).get("children", []))
-            and len(m["sidebar"].get("panel", {}).get("children", [])) == 2
+        def toggle_motion(m, showing):
+            values = [m["sidebar"].get(name, {}) for name in ["sidebar", "panel"]]
+            if not showing:
+                return all(spring(v, .1, .95, "transform.translation.x") for v in values)
+            controls = [[0, 0], [.01055, .50742], [.55930, .98516], [1, 1]]
+            return m["tokens"].get("sidebarShowDuration") == .075834 and all(
+                v.get("type") == "CABasicAnimation" and v.get("keyPath") == "transform.translation.x"
+                and abs(v.get("duration", 0) - .075834) < 1e-6
+                and len(v.get("timing", [])) == 4 and all(
+                    abs(actual - expected) < 1e-5 for point, reference in zip(v["timing"], controls)
+                    for actual, expected in zip(point, reference)) for v in values)
+        results["motion_sidebar_toggle"] = {"ok": all(toggle_motion(m, showing)
             and 0<=m["sidebar"].get("panel",{}).get("scheduledDelay",-1)<=1/60
-            and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95} for m in motions),
+            and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95}
+            for m, showing in zip(motions, [False, True, False, True])),
             "scheduled": [m["sidebar"] for m in motions]}
         settled()
         app.call("window-motion", sidebarDelay=.29)
