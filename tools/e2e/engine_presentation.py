@@ -93,11 +93,18 @@ def run(factory, results, wait, output, read_image):
             target = dict(viewport, pixelSize=[round(910 * viewport['scale']),
                                                round(600 * viewport['scale'])])
             identifier, reply = request(target, retain=True, resizeTo=[910, 600])
+            # Observe beyond the normal surface deadline while no renderer
+            # can produce the requested frame. This delay cannot complete a
+            # request; only the engine's successful presentation receipt can.
+            pending_observation_started = time.monotonic()
+            time.sleep(.25)
             pending_name, pending_image = capture('pending-retained-resize')
+            pending_observation_seconds = time.monotonic() - pending_observation_started
             pending_rows = call()['frameReceipts']
             premature = any(r['requestID'] == identifier for r in pending_rows)
             call('presentation-cancel', requestID=identifier)
             cancelled = receipt(identifier)
+            time.sleep(.1)
             cancelled_name, cancelled_image = capture('cancelled-retained-resize')
             # Re-arm at the already applied size. It still needs a genuine
             # presentation after this request; cancellation must keep pixels.
@@ -138,6 +145,7 @@ def run(factory, results, wait, output, read_image):
             receipt=actual, cancelledReceipt=cancelled, noPrematureReceipt=not premature,
             unchangedPixelsOnCancel=kept_on_cancel,
             unchangedCommonPixels=retained, goldWidths=widths,
+            pendingObservationSeconds=pending_observation_seconds,
             pausedOwnedRenderers=len(stopped),
             captures=[before_name, pending_name, cancelled_name, final_name])
         assert results['retained_pixels_until_matching_presentation']['ok']
