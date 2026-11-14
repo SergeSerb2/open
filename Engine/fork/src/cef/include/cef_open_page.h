@@ -43,6 +43,9 @@
 #define CEF_INCLUDE_CEF_OPEN_PAGE_H_
 #pragma once
 
+// Embedders may still build against an earlier recorded distribution.
+#define CEF_OPEN_HAS_FRAME_PRESENTATION 1
+
 #include "include/cef_api_hash.h"
 #include "include/cef_base.h"
 #include "include/cef_browser.h"

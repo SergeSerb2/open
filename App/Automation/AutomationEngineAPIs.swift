@@ -70,6 +70,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
     ["pages": pages.mapValues { page in
       ["id": page.identifier, "tabID": page.chromeTabIdentifier,
        "live": page.isLive, "loading": page.isLoading,
+       "framePresentation": page.supportsFramePresentation,
        "url": page.url?.absoluteString ?? "",
        "pinned": page.browser?.isPinned(page) ?? false,
        "view": String(describing: ObjectIdentifier(page.view)),

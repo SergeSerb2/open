@@ -57,7 +57,8 @@ def run(factory, results, wait, output, read_image):
         call('add', page='p', browser='a',
              url='http://127.0.0.1:%d/static' % server.server_address[1])
         assert wait(lambda: (lambda p: p['live'] and not p['loading'])(call()['pages']['p']), timeout=20)
-        row('presentation_capability', 'frameReceipts' in call())
+        row('presentation_capability', 'frameReceipts' in call()
+            and call()['pages']['p'].get('framePresentation', False))
         assert results['presentation_capability']['ok'], 'App has no presentation request capability'
         viewport = call('presentation-viewport', page='p')
         identifier, reply = request(viewport)

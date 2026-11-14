@@ -357,6 +357,7 @@ class OESelectionCallback : public CefSelectionCallback {
 }
 @end
 
+#if defined(CEF_OPEN_HAS_FRAME_PRESENTATION)
 class OEFramePresentationCallback : public CefOpenFramePresentationCallback {
  public:
   explicit OEFramePresentationCallback(OEWebContentFrameRequest* request)
@@ -371,6 +372,7 @@ class OEFramePresentationCallback : public CefOpenFramePresentationCallback {
   OEWebContentFrameRequest* __weak request_;
   IMPLEMENT_REFCOUNTING(OEFramePresentationCallback);
 };
+#endif
 
 #pragma mark - OEWebContent
 
@@ -938,10 +940,21 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   _frameRequest = nil;
 }
 
+- (BOOL)supportsFramePresentation {
+#if defined(CEF_OPEN_HAS_FRAME_PRESENTATION)
+  return YES;
+#else
+  return NO;
+#endif
+}
+
 - (nullable OEWebContentFrameRequest*)requestFramePresentationForPixelSize:(NSSize)pixelSize
     backingScale:(double)backingScale requestID:(NSUUID*)requestID
     retainingSurfaceForResize:(BOOL)retainingSurfaceForResize
     completion:(void (^)(OEWebContentPresentedFrame* _Nullable))completion {
+#if !defined(CEF_OPEN_HAS_FRAME_PRESENTATION)
+  return nil;
+#else
   [self oe_cancelFramePresentation];
   if (!_browser || _closeRequested || !_view.window ||
       _view.isHiddenOrHasHiddenAncestor || !completion || !requestID ||
@@ -978,6 +991,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     // Request was accepted by OE; deliver its deferred nil completion once.
   }
   return request;
+#endif
 }
 
 // Hosted tabs (P1) and Alloy pages restored with no_renderer start hidden.

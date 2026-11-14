@@ -268,6 +268,9 @@ typedef NS_ENUM(NSInteger, OEDevToolsPanel) {
 /// timers and painting.
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEWebContent : NSObject
+/// Whether the linked distribution exposes genuine presentation requests.
+/// Older recorded distributions keep this NO and return nil for requests.
+@property(nonatomic, readonly) BOOL supportsFramePresentation;
 /// Arms a genuine renderer-frame presentation for the attached current page.
 /// pixelSize is an integral device-pixel viewport. The call does not resize.
 /// Arm before the shell's one geometry write when retainingSurfaceForResize
