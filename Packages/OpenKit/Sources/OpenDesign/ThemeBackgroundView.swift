@@ -155,7 +155,10 @@ public final class ThemeBackgroundView: NSView {
         // Its stored translucency selects the material; window appearance selects
         // the wash. Editor themes carry their explicit window scheme themselves.
         let dark = style.usesLegacyIntensity ? ContentAppearance(effectiveAppearance) == .dark : style.windowColorScheme == .dark
-        let material: NSVisualEffectView.Material = style.translucency == .dark ? .dark : .light
+        // Raw values 1/2 are the legacy light/dark materials measured in C14-T.
+        // Their named cases emit SDK deprecation warnings; the semantic materials
+        // have a different measured wallpaper response and inactive behavior.
+        let material = NSVisualEffectView.Material(rawValue: style.translucency == .dark ? 2 : 1)!
         let appearance: NSAppearance.Name = dark ? .darkAqua : .aqua
         let state: NSVisualEffectView.State = isWindowActive ? .active : .inactive
         // Reapplying an appearance can invalidate AppKit's material subtree.
