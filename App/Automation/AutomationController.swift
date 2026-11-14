@@ -180,6 +180,9 @@
           let cmd = request["cmd"] as? String
         else { throw Failure(message: "expected {\"cmd\": …}") }
         id = request["id"] ?? NSNull()
+        let traceName = String(cmd.prefix(48))
+        PeekMotionTrace.mark("socket.begin." + traceName)
+        defer { PeekMotionTrace.mark("socket.end." + traceName) }
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
@@ -939,7 +942,7 @@
       case "boost-editor", "boosts", "boost-library":
         return try await runBoostCommand(cmd, a)
       case "boost-gallery-ui": return try await boostGalleryUI(a)
-      case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
+      case "peek-ui", "peek-motion", "peek-motion-trace", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
       case "theme-data-state":
         // The theme variables the App sets for a tab (setting on), or none.
@@ -1424,6 +1427,7 @@
         let travel = controller.context.sidebarWidth + WindowMetrics.revealCardInset - PanelMetrics.inset
         return ["reduced": Motion.reducesMotion,
           "tokens": ["sidebarToggle": token(Motion.sidebarToggle), "revealCardIn": token(Motion.revealCardIn),
+            "sidebarShowDuration": Motion.sidebarShowDuration,
             "revealCardOut": Motion.revealCardOut, "spaceSwitch": token(Motion.spaceSwitch)] as [String: Any],
           "cardCurve": [0.112, 0.140, 0.210].map { ["time": $0, "pastRest": (Motion.springProgress(Motion.revealCardIn, at: $0) - 1) * travel] },
           "toggleRemainderAt130ms": (1 - Motion.springProgress(Motion.sidebarToggle, at: 0.130)) * (WindowMetrics.defaultSidebarWidth - PanelMetrics.inset),
