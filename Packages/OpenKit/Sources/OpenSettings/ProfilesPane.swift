@@ -159,7 +159,7 @@ import OpenDesign
     }
     public func engineIssue(name: String, keyword: String, template: String) -> String? {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !keyword.isEmpty, !keyword.contains(where: \.isWhitespace), template.contains("%s"),
-              let url = URL(string: template.replacingOccurrences(of: "%s", with: "example")), ["http", "https"].contains(url.scheme), url.host() != nil else {
+              let url = URL(string: template.replacingOccurrences(of: "%s", with: "example")), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host() != nil else {
             return "Enter a name, a keyword without spaces, and a search URL containing %s."
         }
         return nil

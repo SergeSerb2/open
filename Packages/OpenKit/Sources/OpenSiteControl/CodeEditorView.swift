@@ -130,13 +130,23 @@ public enum BoostCodeLanguage: String, Sendable { case css, js }
         replaceLines { text in
             let trailing = text.hasSuffix("\n"),body = trailing ? String(text.dropLast()) : text
             let lines = body.components(separatedBy: "\n"),js = language == .js
-            let uncomment = lines.allSatisfy { let s = $0.trimmingCharacters(in: .whitespaces);return js ? s.hasPrefix("//") : s.hasPrefix("/*") && s.hasSuffix("*/") }
-            return lines.map { line in
-                let indent = String(line.prefix { $0 == " " || $0 == "\t" }),content = String(line.dropFirst(indent.count))
+            // Blank lines neither decide nor receive the toggle; a CRLF line keeps its "\r" outside the comment.
+            func split(_ line: String) -> (String,String) { line.hasSuffix("\r") ? (String(line.dropLast()),"\r") : (line,"") }
+            func blank(_ line: String) -> Bool { split(line).0.allSatisfy { $0 == " " || $0 == "\t" } }
+            let uncomment = lines.contains { !blank($0) } && lines.allSatisfy { line in
+                let s = split(line).0.trimmingCharacters(in: .whitespaces)
+                return s.isEmpty || (js ? s.hasPrefix("//") : s.hasPrefix("/*") && s.hasSuffix("*/"))
+            }
+            return lines.map { whole in
+                if blank(whole) { return whole }
+                let (line,cr) = split(whole)
+                let indent = String(line.prefix { $0 == " " || $0 == "\t" }),tail = String(line.dropFirst(indent.count))
+                // CSS needs "*/" last; trailing blanks would make uncomment cut the wrong two characters.
+                let content = js ? tail : tail.replacingOccurrences(of: #"[ \t]+$"#,with: "",options: .regularExpression)
                 if uncomment {
-                    var result = String(content.dropFirst(2));if !js { result = String(result.dropLast(2));if result.hasSuffix(" ") { result.removeLast() } };if result.hasPrefix(" ") { result.removeFirst() };return indent+result
+                    var result = String(content.dropFirst(2));if !js { result = String(result.dropLast(2));if result.hasSuffix(" ") { result.removeLast() } };if result.hasPrefix(" ") { result.removeFirst() };return indent+result+cr
                 }
-                return indent+(js ? "// "+content : "/* "+content+" */")
+                return indent+(js ? "// "+content : "/* "+content+" */")+cr
             }.joined(separator: "\n")+(trailing ? "\n" : "")
         }
     }
@@ -215,11 +225,18 @@ public enum BoostCodeLanguage: String, Sendable { case css, js }
         let glyphs = layout.glyphRange(forBoundingRect: visible,in: container)
         let chars = layout.characterRange(forGlyphRange: glyphs,actualGlyphRange: nil)
         var index = source.lineRange(for: NSRange(location: min(chars.location,source.length),length: 0)).location
-        var number = source.substring(to: index).reduce(1) { $1 == "\n" ? $0+1 : $0 }
+        // Count lines the way lineRange(for:) splits them: "\r\n" is one Character
+        // (never == "\n"), and lone "\r" and U+2028 also end a line.
+        var number = source.substring(to: index).reduce(1) { ["\n","\r","\r\n","\u{85}","\u{2028}","\u{2029}"].contains($1) ? $0+1 : $0 }
+        var end = 0,contentsEnd = 0
+        if source.length>0 { source.getLineStart(nil,end: &end,contentsEnd: &contentsEnd,for: NSRange(location: source.length-1,length: 0)) }
+        let endsWithBreak = source.length == 0 || contentsEnd<end
         repeat {
             let lineRect: CGRect
             if index<source.length { lineRect = layout.lineFragmentRect(forGlyphAt: layout.glyphIndexForCharacter(at: index),effectiveRange: nil) }
-            else { lineRect = layout.extraLineFragmentRect }
+            else if endsWithBreak { lineRect = layout.extraLineFragmentRect }
+            // No empty last line after unterminated text: its zero rect would draw over line 1.
+            else { break }
             let point = convert(CGPoint(x: 0,y: lineRect.minY+editor.textContainerInset.height),from: editor)
             let text = String(number) as NSString,attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: BoostEditorMetrics.gutterFont,weight: .regular),.foregroundColor: BoostEditorColors.codeGutter.nsColor]
             text.draw(at: CGPoint(x: ruleThickness-text.size(withAttributes: attrs).width-BoostEditorMetrics.codeInset.width,y: point.y),withAttributes: attrs)
