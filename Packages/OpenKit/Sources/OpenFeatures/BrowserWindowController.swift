@@ -962,7 +962,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         librarySnapshotViews = installed.map { $0.0 }
         // A refused image installation must never hide an uncovered live page.
         libraryHiddenLiveViews = installed.map { $0.1 }
-        container.setLibraryMotionHidesContent(!libraryHiddenLiveViews.isEmpty)
+        container.setLibraryMotionHiddenViews(libraryHiddenLiveViews)
         isLibraryOpen = false
         layoutContent()
         if let motion = libraryPageMotion, let target = motion.target {
@@ -1091,7 +1091,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         libraryUsesLiveTransform = false
     }
     private func removeLibrarySnapshots() {
-        container.setLibraryMotionHidesContent(false)
+        container.setLibraryMotionHiddenViews([])
         libraryHiddenLiveViews.forEach { $0.isHidden = false }
         libraryHiddenLiveViews.removeAll()
         librarySnapshotViews.forEach { $0.removeFromSuperview() }

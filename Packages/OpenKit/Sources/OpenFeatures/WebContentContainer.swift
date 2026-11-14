@@ -156,10 +156,11 @@ public final class PaneSlotView: NSView {
 public final class WebContentContainer: NSView {
     var librarySnapshotReadInFlight = false
     public internal(set) var librarySnapshotStatus = "idle"
-    private var libraryMotionHidesContent = false
-    public func setLibraryMotionHidesContent(_ hidden: Bool) {
-        libraryMotionHidesContent = hidden
+    private var libraryMotionHiddenViews: Set<ObjectIdentifier> = []
+    func setLibraryMotionHiddenViews(_ views: [NSView]) {
+        libraryMotionHiddenViews = Set(views.map(ObjectIdentifier.init))
         for slot in slots {
+            let hidden = slot.contentHostView.map { libraryMotionHiddenViews.contains(ObjectIdentifier($0)) } ?? false
             slot.libraryMotionHidesContent = hidden
             slot.contentHostView?.isHidden = hidden
             // The closing snapshot already contains the pane's rounded edge.
@@ -370,7 +371,8 @@ public final class WebContentContainer: NSView {
     private func updateSlots() {
         for slot in slots {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
-            slot.libraryMotionHidesContent = libraryMotionHidesContent
+            slot.libraryMotionHidesContent = cache[id].map { libraryMotionHiddenViews.contains(ObjectIdentifier($0.view)) } ?? false
+            slot.clip.layer?.masksToBounds = !slot.libraryMotionHidesContent
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
