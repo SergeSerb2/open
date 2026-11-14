@@ -7,20 +7,12 @@ import OpenDesign
 struct SpacePageSnapshotInput {
     struct Page { let host: any WebContentHost; let frame: CGRect }
     let context: CGContext
-    let base: CGImage?
     let pages: [Page]
-    let bounds: CGRect
-    let style: SpaceThemeStyle
-    let active: Bool
 
     func capture() async -> CGImage? {
         guard pages.count <= 4 else { return nil }
-        // Opaque theme underlay; a remote-surface capture failure refuses the
-        // cache entry instead of caching an AppKit white/transparent hole.
-        if let theme = ThemeField.makeImage(style: style, windowSize: bounds.size, isActive: active) {
-            context.draw(theme, in: bounds)
-        }
-        if let base { context.draw(base, in: bounds) }
+        // The caller has drawn the opaque theme and native chrome once. A
+        // failed remote-surface capture refuses this entry; no hole is cached.
         for page in pages {
             guard !Task.isCancelled, !page.host.isLoading,
                   let content = (page.host as? any WebContentProviding)?.webContent,

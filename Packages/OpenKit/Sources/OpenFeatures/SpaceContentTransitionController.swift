@@ -31,6 +31,9 @@ final class SpaceContentTransitionController {
     private var applying = false
     private var applyingCoveredSelection: (() -> Void)?
     private var lastViewport: WebContentFrameViewport?
+    private var lastPresentationViewports: [ItemID: WebContentFrameViewport] = [:]
+
+    var keepsEmptySourceVisible: Bool { nativeSelection?.tabs.isEmpty == true && plate.phase != .idle }
 
     init(container: WebContentContainer) { self.container = container }
     isolated deinit { snapshotTask?.cancel(); for request in requests.values { request.cancel() } }
@@ -60,6 +63,9 @@ final class SpaceContentTransitionController {
         // Share the web panel's ancestor. Sidebar/Cmd+S layer motion therefore
         // moves the cover too, without a per-frame sibling-frame update.
         container.addSubview(plate, positioned: .above, relativeTo: nil)
+        // An empty Space keeps its native chrome below this transparent source
+        // while the incoming plate enters. Hidden ancestors would cull it.
+        container.isHidden = false
         let style = container.style
         let key = container.spaceSnapshotKey(selection)
         let visualSource = previousRequest ?? source
@@ -92,7 +98,10 @@ final class SpaceContentTransitionController {
             // Keep the old native source/cover and allow the same request to
             // retry when geometry becomes representable. Never expose a hole.
             applyingCoveredSelection = nil; requestedSelection = nil
-            if plate.phase == .idle { plate.removeFromSuperview() }
+            if plate.phase == .idle {
+                plate.removeFromSuperview()
+                if source?.tabs.isEmpty == true { container.isHidden = true }
+            }
         }
         lastViewport = viewport
     }
@@ -120,7 +129,11 @@ final class SpaceContentTransitionController {
     func layout() {
         guard plate.phase != .idle, let parent = container.superview else { return }
         let frame = container.bounds
-        guard frame != plate.frame || lastViewport != viewport else { return }
+        guard frame != plate.frame || lastViewport != viewport else {
+            if !applying, plate.phase == .awaitingPresentation, let selection = nativeSelection,
+               presentationViewports(selection) != lastPresentationViewports { awaitPresentation() }
+            return
+        }
         if frame.size == plate.frame.size, lastViewport == viewport {
             CATransaction.begin(); CATransaction.setDisableActions(true); plate.frame = frame; CATransaction.commit()
             return
@@ -154,7 +167,19 @@ final class SpaceContentTransitionController {
         frameGeneration &+= 1
         // Cancel may run completion synchronously. Invalidate before calling it.
         let old = Array(requests.values); requests.removeAll(); waiting.removeAll()
+        lastPresentationViewports.removeAll()
         for request in old { request.cancel() }
+    }
+
+    private func visibleTabs(_ selection: SpaceContentSelection) -> [ItemID] {
+        if let maximized = container.maximizedTabID, selection.tabs.contains(maximized) { return [maximized] }
+        return selection.tabs
+    }
+
+    private func presentationViewports(_ selection: SpaceContentSelection) -> [ItemID: WebContentFrameViewport] {
+        Dictionary(uniqueKeysWithValues: visibleTabs(selection).compactMap { id in
+            container.host(for: id).map { (id, container.spaceHostViewport($0)) }
+        })
     }
 
     private func awaitPresentation() {
@@ -167,10 +192,9 @@ final class SpaceContentTransitionController {
             plate.presented(receipt); container.finishEmptySpaceSelection(); return
         }
         let token = frameGeneration
-        let visibleTabs: [ItemID]
-        if let maximized = container.maximizedTabID, selection.tabs.contains(maximized) { visibleTabs = [maximized] }
-        else { visibleTabs = selection.tabs }
+        let visibleTabs = visibleTabs(selection)
         let hosts = visibleTabs.compactMap { container.host(for: $0) }.filter { !$0.view.isHiddenOrHasHiddenAncestor }
+        lastPresentationViewports = presentationViewports(selection)
         guard hosts.count == visibleTabs.count else { presentationUnavailable = true; return }
         // Loading may finish before pixels are presented, so this is only a
         // prerequisite. Its callback re-arms the actual presentation request.
@@ -182,6 +206,7 @@ final class SpaceContentTransitionController {
             let request = presenter.firstFramePresented(at: viewport, requestID: id) { [weak self, weak host] frame in
                 guard let self, let host, self.frameGeneration == token,
                       self.nativeSelection == selection, self.container.host(for: host.tabID) === host,
+                      !host.view.isHiddenOrHasHiddenAncestor,
                       self.container.spaceHostRevision(host.tabID) == revision,
                       self.container.spaceHostViewport(host) == viewport else { return }
                 self.requests[id] = nil

@@ -172,6 +172,7 @@ public final class WebContentContainer: NSView {
         if let spaceMotionStorage { return spaceMotionStorage }
         let motion = SpaceContentTransitionController(container: self); spaceMotionStorage = motion; return motion
     }
+    public var spacePageRetainsEmptySurface: Bool { spaceMotionStorage?.keepsEmptySourceVisible == true }
     public var spacePageMotionPhase: String { spaceMotionStorage?.plate.phase.rawValue ?? "idle" }
     public var spacePageUsesSnapshot: Bool { spaceMotionStorage?.plate.destinationUsesSnapshot ?? false }
     public var spacePageSnapshotBytes: Int { spaceMotionStorage?.plate.cachedBytes ?? 0 }
@@ -406,8 +407,7 @@ public final class WebContentContainer: NSView {
                   let view = slot.contentHostView else { return nil }
             return .init(host: host, frame: view.convert(view.bounds, to: self))
         }
-        return SpacePageSnapshotInput(context: context, base: context.makeImage(), pages: pages,
-            bounds: bounds, style: style, active: window?.isKeyWindow == true)
+        return SpacePageSnapshotInput(context: context, pages: pages)
     }
     /// Install the normal callbacks before a new preview starts loading, or renew
     /// them after takeHost invalidated a cached host's generation.

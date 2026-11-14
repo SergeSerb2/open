@@ -552,7 +552,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if container.frame != panel { container.frame = panel }
             emptyPanel.frame = panel
             emptyPanelHost.frame = root.bounds
-            emptyPanelHost.isHidden = !container.isHidden
+            emptyPanelHost.isHidden = !container.isHidden && !container.spacePageRetainsEmptySurface
             sidebar.isHidden = CACurrentMediaTime() >= librarySidebarFadeUntil
             cardShadow.isHidden = true
             resizeHandle.isHidden = true
@@ -577,7 +577,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             hint.setFrameOrigin(CGPoint(x: size.width - HintToastMetrics.trailingInset - w, y: HintToastMetrics.topInset))
         }
         if emptyPanelHost.frame != root.bounds { emptyPanelHost.frame = root.bounds }
-        emptyPanelHost.isHidden = !container.isHidden
+        emptyPanelHost.isHidden = !container.isHidden && !container.spacePageRetainsEmptySurface
         let animate = animated && window?.isVisible == true && !Motion.reducesMotion
         let continuingPanelMotion = anchoredSliding && !animated && !Motion.reducesMotion
             && sidebarPanelTarget == panelFrame && sidebarPanelRootSize == size
