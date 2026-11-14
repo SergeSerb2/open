@@ -345,7 +345,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       }
     }
     applyLaunchWindowPreference(to: model)
-    let repaired = repairMissingProfiles(in: model)
+    // Repeated IDs in the snapshot were repaired while loading: save the repaired copy.
+    let repaired = repairMissingProfiles(in: model) || !model.loadRepairs.isEmpty
     if model.windows.isEmpty, let space = model.spaces.first {
       let state = BrowserWindowState(focusedSpaceID: space.id)
       model.windows.append(state)

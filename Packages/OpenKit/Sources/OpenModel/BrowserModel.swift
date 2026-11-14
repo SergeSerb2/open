@@ -144,6 +144,8 @@ public enum ProfileDeleteBlock: Sendable, Equatable {
 public final class BrowserModel {
     public var profiles: [Profile]
     public var spaces: [Space]
+    /// What loading repaired in the snapshot (repeated IDs). Non-empty: the App saves at once.
+    @ObservationIgnored public var loadRepairs: [String] = []
     public var windows: [BrowserWindowState] { didSet { commitMutation() } }
     public var routingRules: [RoutingRule]
     public var defaultDestination: DefaultDestination
@@ -266,8 +268,9 @@ public final class BrowserModel {
     public func rebuildIndex() {
         treeRevision &+= 1
         index.removeAll(); parentByID.removeAll()
-        spaceByIDCache = Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0) })
-        profileByIDCache = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
+        // Never trap on a repeated ID (a damaged snapshot or import): the first one wins.
+        spaceByIDCache = Dictionary(spaces.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        profileByIDCache = Dictionary(profiles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for profile in profiles {
             for tab in profile.favorites { register(.tab(tab), under: .favorites(profile.id)) }
         }

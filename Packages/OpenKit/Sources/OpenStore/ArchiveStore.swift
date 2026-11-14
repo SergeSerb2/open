@@ -50,12 +50,28 @@ public final class ArchiveStore: ArchiveSink {
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
+    /// Runs `body` with synchronous=FULL, then restores the connection's previous mode, so only
+    /// the archive commit itself (and its schema setup) pays for the full sync.
+    nonisolated private func withFullSync<T>(_ db: SQLiteDB, _ body: () throws -> T) throws -> T {
+        guard let read = db.prepare("PRAGMA synchronous") else { throw archiveFailure() }
+        let previous = sqlite3_step(read) == SQLITE_ROW ? db.columnInt(read, 0) : 1
+        sqlite3_finalize(read)
+        guard db.exec("PRAGMA synchronous=FULL") else { throw archiveFailure() }
+        defer { db.exec("PRAGMA synchronous=\(previous)") }
+        return try body()
+    }
+
     nonisolated private func openOnQueue() throws {
         guard !retired else { throw archiveFailure() }
         guard db == nil else { return }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let opened = try SQLiteDB(path: fileURL.path)
-        guard opened.exec("PRAGMA synchronous=FULL"), opened.exec("BEGIN IMMEDIATE") else { throw archiveFailure() }
+        try withFullSync(opened) { try migrateOnQueue(opened) }
+        db = opened
+    }
+
+    nonisolated private func migrateOnQueue(_ opened: SQLiteDB) throws {
+        guard opened.exec("BEGIN IMMEDIATE") else { throw archiveFailure() }
         var committed = false
         defer { if !committed { opened.exec("ROLLBACK") } }
         guard opened.exec("""
@@ -81,7 +97,6 @@ public final class ArchiveStore: ArchiveSink {
         }
         guard opened.exec("COMMIT") else { throw archiveFailure() }
         committed = true
-        db = opened
     }
 
     /// Snapshots the tabs on the main actor. JSON encoding and one SQLite transaction run on the queue.
@@ -256,9 +271,13 @@ public final class ArchiveStore: ArchiveSink {
 
     nonisolated private func insertOnQueue(_ rows: [ArchiveRow]) throws {
         guard let db else { throw archiveFailure() }
+        try withFullSync(db) { try insertOnQueue(rows, db: db) }
+    }
+
+    nonisolated private func insertOnQueue(_ rows: [ArchiveRow], db: SQLiteDB) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard db.exec("PRAGMA synchronous=FULL"), db.exec("BEGIN IMMEDIATE") else { throw archiveFailure() }
+        guard db.exec("BEGIN IMMEDIATE") else { throw archiveFailure() }
         var committed = false
         defer { if !committed { db.exec("ROLLBACK") } }
         guard let stmt = db.prepare("INSERT OR REPLACE INTO archived_tabs(id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind) VALUES(?,?,?,?,?,?,?,?,?,?)") else { throw archiveFailure() }
@@ -318,7 +337,7 @@ public final class ArchiveStore: ArchiveSink {
                      reason: ArchiveReason? = nil, origin: String = "all") async -> [ArchivedTabRecord] {
         let authority = "substr(url,instr(url,'://')+3)"
         let host = "substr(\(authority),1,instr(\(authority)||'/','/')-1)"
-        var filter = "(title LIKE ? OR \(host) LIKE ?)"
+        var filter = "(title LIKE ? ESCAPE '\\' OR \(host) LIKE ? ESCAPE '\\')"
         if let spaceID { filter += " AND space_id='\(spaceID.description)'" }
         if let reason { filter += " AND reason='\(reason.rawValue)'" }
         if origin == "littleOpen" { filter += " AND lower(original_location) LIKE 'little%'" }
@@ -326,9 +345,19 @@ public final class ArchiveStore: ArchiveSink {
         let sql = "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind FROM archived_tabs WHERE \(filter) ORDER BY archived_at DESC,id LIMIT ? OFFSET \(max(0, offset))"
         return await withCheckedContinuation { continuation in
             queue.async { [weak self] in
-                continuation.resume(returning: self?.queryOnQueue(sql: sql, limit: max(1, min(100, limit)), likeText: "%\(query)%", exactID: nil) ?? [])
+                continuation.resume(returning: self?.queryOnQueue(sql: sql, limit: max(1, min(100, limit)), likeText: Self.likePattern(query), exactID: nil) ?? [])
             }
         }
+    }
+
+    /// A substring LIKE pattern: `%`, `_` and `\` in the user's text match themselves.
+    nonisolated static func likePattern(_ text: String) -> String {
+        var escaped = ""
+        for character in text {
+            if character == "%" || character == "_" || character == "\\" { escaped.append("\\") }
+            escaped.append(character)
+        }
+        return "%" + escaped + "%"
     }
 
     public func delete(id: ItemID) async throws { try await delete(ids: [id]) }
@@ -376,11 +405,11 @@ public final class ArchiveStore: ArchiveSink {
     }
 
     public func search(_ text: String, limit: Int = 100) async -> [ArchivedTabRecord] {
-        let like = "%\(text)%"
+        let like = Self.likePattern(text)
         return await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: []); return }
-                let rows = self.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind FROM archived_tabs WHERE title LIKE ? OR url LIKE ? ORDER BY archived_at DESC LIMIT ?", limit: limit, likeText: like, exactID: nil)
+                let rows = self.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind FROM archived_tabs WHERE title LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\' ORDER BY archived_at DESC LIMIT ?", limit: limit, likeText: like, exactID: nil)
                 continuation.resume(returning: rows)
             }
         }
