@@ -47,7 +47,9 @@ extension Motion {
     /// Provisional guesses: docs/re/interaction-states.md §19 has no timing capture.
     public static let splitExpand: CFTimeInterval = 0.22
     public static let splitRemove: CFTimeInterval = 0.14
-    public static let peekOpen: CFTimeInterval = 0.18
+    // Lead's open-latency target: final card by click +133ms, including
+    // dispatch and the first display refresh (2026-11-13).
+    public static let peekOpen: CFTimeInterval = 0.10
     public static let peekDismiss: CFTimeInterval = 0.14
     public static let peekExpand: CFTimeInterval = 0.22
 }

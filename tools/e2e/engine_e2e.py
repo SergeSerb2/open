@@ -4523,22 +4523,36 @@ def peek_checks(factory, results, tmp):
         baseline = app.call("host-counts")
         app.call("peek-open", tab=source, url=fixture("Peek page"))
         preparation = app.call('peek-motion')
-        results['peek_open_preparation_retains_source'] = {'ok': preparation.get('preparingOpening')
-            and preparation['overlay']['opacity'] == 0 and preparation['backdrop']['opacity'] == 0,
-            'motion': preparation}
-        wait_until(lambda: app.call('peek-motion').get('kind') == 'open', timeout=5, step=.005)
-        opening_samples = []
+        results['peek_open_starts_card_without_waiting_for_page'] = {'ok': preparation.get('preparingOpening')
+            and preparation.get('kind') == 'open' and preparation.get('duration') == .1
+            and preparation.get('snapshot') and not preparation.get('snapshotPixels')
+            and preparation.get('clipMasksToBounds') is False
+            and preparation.get('hostHidden') and not preparation.get('hostAttached')
+            and bool(preparation['panel']['animations'])
+            and all(a['requestedHz'] == preparation['displayHz']
+                    for a in preparation['panel']['animations'] + preparation['overlay']['animations']), 'motion': preparation}
+        opening_samples = [preparation]
         for _ in range(8):
             motion = app.call('peek-motion')
-            if not motion.get('overlay', {}).get('animations'):
+            if not motion.get('preparingOpening'):
                 break
             opening_samples.append(motion)
-            time.sleep(.01)
-        results['peek_open_animates_ready_page_snapshot'] = {'ok': bool(opening_samples)
-            and all(s.get('snapshot') and s.get('snapshotPixels') and s.get('hostHidden') and s.get('hostAttached')
-                    and s['panel'].get('rasterized')
-                    and s['panel'].get('rasterScale') == s.get('backingScale') for s in opening_samples),
+            time.sleep(.005)
+        results['peek_open_moves_plate_with_fixed_hidden_viewport'] = {'ok': bool(opening_samples)
+            and all(s.get('snapshot') and s.get('hostHidden') and not s.get('hostAttached')
+                    and s.get('clipMasksToBounds') is False
+                    and not s['panel'].get('rasterized')
+                    and s['hostFrame'] == preparation['hostFrame']
+                    and s['hostFrameChanges'] == preparation['hostFrameChanges'] for s in opening_samples),
             'samples': opening_samples}
+        fading = wait_until(lambda: (lambda s: s if s.get('contentFading') else None)(app.call('peek-motion')),
+                            timeout=5, step=.005)
+        settled_open = wait_until(lambda: (lambda s: s if not s.get('preparingOpening')
+            and not s.get('openingHandoff') else None)(app.call('peek-motion')), timeout=5, step=.01)
+        results['peek_ready_content_fades_then_retires_cover'] = {'ok': bool(fading) and fading.get('snapshotPixels')
+            and fading.get('hostHidden') and fading.get('clipMasksToBounds') is True
+            and bool(settled_open) and settled_open.get('clipMasksToBounds') is True and not settled_open.get('snapshot')
+            and not settled_open.get('hostHidden'), 'fade': fading, 'settled': settled_open}
         app.call("wait")
         state = app.call("peek-state")
         content = state["stack"][-1]["content"]
