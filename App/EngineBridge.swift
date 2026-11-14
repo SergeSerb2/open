@@ -12,6 +12,15 @@ extension OEWebContent: @retroactive WebContent {
     try await evaluateJavaScript(script, inWorld: world == .open ? .open : .page)
   }
   public func snapshotPNG() async throws -> Data { try await takeSnapshot() }
+  public func motionSnapshotPNG() async throws -> Data {
+    let result = try await sendDevToolsMethod("Page.captureScreenshot", parameters: [
+      "format": "png", "fromSurface": true, "captureBeyondViewport": false, "optimizeForSpeed": true,
+    ])
+    guard let encoded = result["data"] as? String, encoded.utf8.count <= 90 * 1024 * 1024,
+      let data = Data(base64Encoded: encoded), data.count <= 64 * 1024 * 1024
+    else { throw CocoaError(.fileReadCorruptFile) }
+    return data
+  }
   /// EP-8 (page-platform §6): OpenEngine's tiled DevTools capture.
   public func fullPagePNG(maxDevicePixels: Int) async throws -> FullPagePNG {
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<FullPagePNG, any Error>) in
