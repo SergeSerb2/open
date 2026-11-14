@@ -1,10 +1,12 @@
 import AppKit
 import OpenModel
+import OpenWeb
 import OpenDesign
 import OpenExtensionsUI
 
 @MainActor
 public final class PaneSlotView: NSView {
+    var libraryMotionHidesContent = false
     var fullBleed = false {
         didSet { if fullBleed != oldValue { clip.layer?.cornerRadius = fullBleed ? 0 : PanelMetrics.cornerRadius; layer?.shadowOpacity = fullBleed ? 0 : PanelMetrics.shadowOpacity } }
     }
@@ -25,6 +27,8 @@ public final class PaneSlotView: NSView {
     var isFocused = false
     init(tabID: ItemID) {
         self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
+        layer?.allowsGroupOpacity = false; clip.layer?.allowsGroupOpacity = false
+        layer?.needsDisplayOnBoundsChange = false; clip.layer?.needsDisplayOnBoundsChange = false
         layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = PanelMetrics.shadowOpacity
         layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
         clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.cornerCurve = .continuous; clip.layer?.masksToBounds = true; addSubview(clip)
@@ -84,7 +88,7 @@ public final class PaneSlotView: NSView {
             sadTabView?.removeFromSuperview(); sadTabView = nil
             if contentHostView !== host.view { contentHostView?.removeFromSuperview(); lastHostWindowRect = nil }
             placeholderView?.removeFromSuperview(); placeholderView = nil
-            contentHostView = host.view; host.view.isHidden = false
+            contentHostView = host.view; host.view.isHidden = libraryMotionHidesContent
             if host.view.superview !== clip { clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome) }
             if hadPageFocus && wasSad { host.focus() }
         } else {
@@ -112,6 +116,10 @@ public final class PaneSlotView: NSView {
         indicator.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
         indicator.update(event)
     }
+    func libraryViewportSize(for size: CGSize) -> CGSize {
+        let bar = developerPanel != nil ? DeveloperPanelMetrics.height : paneChrome == nil ? 0 : SplitMetrics.barHeight
+        return CGSize(width: size.width, height: max(0, size.height - bar))
+    }
     /// Updates slot geometry without forcing layout in the embedded web subtree.
     fileprivate func layoutContents() {
         if clip.frame != bounds { clip.frame = bounds }
@@ -119,7 +127,7 @@ public final class PaneSlotView: NSView {
         let chromeFrame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
         if paneChrome?.frame != chromeFrame { paneChrome?.frame = chromeFrame }
         if developerPanel?.frame != chromeFrame { developerPanel?.frame = chromeFrame }
-        let page = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
+        let page = CGRect(origin: .zero, size: libraryViewportSize(for: bounds.size))
         // Frame setters enter OpenEngine's geometry bridge even for equal values.
         // A cached slot can move while the page's local frame stays equal: keep
         // that window-coordinate change so Chrome's child window still follows.
@@ -146,6 +154,20 @@ public final class PaneSlotView: NSView {
 
 @MainActor
 public final class WebContentContainer: NSView {
+    var librarySnapshotReadInFlight = false
+    public internal(set) var librarySnapshotStatus = "idle"
+    private var libraryMotionHiddenViews: Set<ObjectIdentifier> = []
+    func setLibraryMotionHiddenViews(_ views: [NSView]) {
+        libraryMotionHiddenViews = Set(views.map(ObjectIdentifier.init))
+        for slot in slots {
+            let hidden = slot.contentHostView.map { libraryMotionHiddenViews.contains(ObjectIdentifier($0)) } ?? false
+            slot.libraryMotionHidesContent = hidden
+            slot.contentHostView?.isHidden = hidden
+            // The closing snapshot already contains the pane's rounded edge.
+            // Keep the ordinary live clip for opening and restore it on cancel.
+            slot.clip.layer?.masksToBounds = !hidden
+        }
+    }
     public static let maxCachedHiddenHosts = 8
     public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
     public var extensionsUI: ExtensionsUIContext? { didSet { for slot in slots { slot.paneChrome?.extensionsUI = extensionsUI } } }
@@ -349,6 +371,8 @@ public final class WebContentContainer: NSView {
     private func updateSlots() {
         for slot in slots {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
+            slot.libraryMotionHidesContent = cache[id].map { libraryMotionHiddenViews.contains(ObjectIdentifier($0.view)) } ?? false
+            slot.clip.layer?.masksToBounds = !slot.libraryMotionHidesContent
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
@@ -386,6 +410,33 @@ public final class WebContentContainer: NSView {
         slots.removeAll(); ids.removeAll(); focused = nil
         for divider in dividers { divider.removeFromSuperview() }; dividers.removeAll()
         trimCache()
+    }
+    /// Use the same split geometry as layoutPanes, without moving any live view.
+    /// Each engine arms retention before that view receives its sole new width.
+    func libraryResizeTargets(for size: CGSize) -> [LibraryClosePresentation.Target]? {
+        let content = CGRect(origin: bounds.origin, size: size)
+        let frames = SplitLayout.frames(content: content, orientation: orientation,
+            fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
+        var targets: [LibraryClosePresentation.Target] = []
+        for (slot, frame) in zip(slots, frames) where !slot.isHidden {
+            guard let view = slot.contentHostView else { continue }
+            guard let host = host(for: slot.tabID),
+                  let source = (host as? WebContentProviding)?.webContent as? any WebContentRetainedSurfaceResizing,
+                  let scale = view.window?.backingScaleFactor else { return nil }
+            let bounds = maximizedTabID == slot.tabID ? content : frame
+            let size = slot.libraryViewportSize(for: bounds.size)
+            guard size.width > 0, size.height > 0, size.width.isFinite, size.height.isFinite,
+                  scale > 0, scale.isFinite else { return nil }
+            let url = host.currentURL
+            targets.append(.init(source: source, view: view, size: size, scale: scale,
+                isCurrent: { [weak self, weak slot, weak host, weak view] in
+                    guard let self, let slot, let host, let view else { return false }
+                    return self.host(for: slot.tabID) === host && slot.contentHostView === view
+                        && slot.superview === self && !slot.isHidden && host.currentURL == url
+                        && view.window?.backingScaleFactor == scale
+                }))
+        }
+        return targets
     }
     public func host(for tabID: ItemID) -> (any WebContentHost)? { cache[tabID] }
     public func takeHost(for id: ItemID) -> (any WebContentHost)? {
@@ -485,7 +536,11 @@ public final class WebContentContainer: NSView {
         } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
         layoutDividers()
     }
-    public override func layout() { super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false) }
+    public override func layout() {
+        let region = WindowSpeedTrace.begin("webContainer.layout")
+        defer { region?() }
+        super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false)
+    }
     private func layoutDividers() {
         while dividers.count > max(0, slots.count - 1) { dividers.removeLast().removeFromSuperview() }
         while dividers.count < max(0, slots.count - 1) {
