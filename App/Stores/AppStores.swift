@@ -79,6 +79,10 @@ final class AppStores: ProfileDataOwner {
 
   func retireProfile(_ profileID: ProfileID, directory: String) async {
     await adBlockStorage?.retireProfile(profileID)
+    // Host recorders and the Library may still hold this store: close it so a
+    // late visit cannot reopen (or recreate) the deleted Profile's database.
+    if let store = histories.removeValue(forKey: profileID) { await store.close() }
+    if currentProfile == profileID { currentSuggest?.cancel(); currentSuggest = nil; currentProfile = nil }
   }
 
   func history(for profileID: ProfileID?) -> HistoryStore? {

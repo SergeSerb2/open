@@ -1346,8 +1346,9 @@ extension EngineWebContentHostFactory {
   func cycleTab(by delta: Int) {
     let ids = orderedTabs.map(\.id)
     guard !ids.isEmpty else { return }
-    let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? -delta
-    select(nodeID: ids[(current + delta + ids.count) % ids.count])
+    // No selection: Next goes to the first tab, Previous to the last.
+    let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? (delta >= 0 ? -1 : 0)
+    select(nodeID: ids[((current + delta) % ids.count + ids.count) % ids.count])
   }
 
   func showTabSwitcher(by delta: Int) {

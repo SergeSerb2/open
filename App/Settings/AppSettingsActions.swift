@@ -46,7 +46,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     settingsStorage = vm
     return vm
   }
-  func modelWasInstalled() { settingsStorage = nil }
+  /// A replaced model (first-run import) needs a fresh view model AND a fresh
+  /// presenter: the presenter keeps the view model it was created with.
+  func modelWasInstalled() {
+    settingsStorage = nil
+    guard let old = presenterStorage else { return }
+    presenterStorage = nil
+    let wasVisible = old.window?.isVisible == true
+    old.window?.delegate = nil
+    old.window?.close()
+    if wasVisible { settingsPresenter.show() }
+  }
   func refreshPreferencesIfLoaded() { settingsStorage?.preferenceRevision &+= 1 }
   // Registry callbacks never instantiate Settings or open another Profile.
   func refreshAdBlockWarning() { settingsStorage?.adBlock?.refreshOtherBlocker() }
@@ -74,7 +84,13 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     guard openingSettings || app.adBlockEngineAdapter.isSupported else { return }
     if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
   }
-  @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
+  @ObservationIgnored private var presenterStorage: SettingsPresenter?
+  var settingsPresenter: SettingsPresenter {
+    if let presenterStorage { return presenterStorage }
+    let presenter = SettingsPresenter(viewModel: settings)
+    presenterStorage = presenter
+    return presenter
+  }
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root, loadImmediately: false)
   /// Library folder sources (PB1). Nothing reads the folders before "Choose Folders…".
   @ObservationIgnored lazy var mediaFolders: LibraryMediaFoldersProvider = {

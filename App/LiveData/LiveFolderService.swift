@@ -77,6 +77,10 @@ final class LiveFolderService {
   func addressChanged(tabID: ItemID, url: URL, space: Space?) {
     let previous = lastOriginURL[tabID]
     lastOriginURL[tabID] = url
+    // Closed tabs never report again: drop their entries once the map grows.
+    if lastOriginURL.count > 64, let model = app.model {
+      lastOriginURL = lastOriginURL.filter { model.tab(id: $0.key) != nil || $0.key == tabID }
+    }
     // Sign-in and sign-out on GitHub refetch the Space's Live Folder (live-data §2.4 item 4, Arc
     // refetch reasons `githubUserSignedIn` / `githubUserSignedOut`): leaving a sign-in page for
     // another GitHub page means signed in; reaching the sign-out page means signed out.
@@ -125,8 +129,17 @@ final class LiveFolderService {
     return live.lastFetch?.outcome == .signedOut ? origin.appendingPathComponent("login") : origin.appendingPathComponent("pulls")
   }
 
+  /// The Space that holds the folder, also when it was dragged into another folder or Today.
   private func space(of folderID: ItemID) -> Space? {
-    app.model.spaces.first { $0.pinned.contains { $0.id == folderID } }
+    var id = folderID
+    for _ in 0..<64 {
+      switch app.model.parent(of: id) {
+      case .spacePinned(let spaceID)?, .spaceToday(let spaceID)?: return app.model.space(id: spaceID)
+      case .folder(let parentID)?: id = parentID
+      default: return nil
+      }
+    }
+    return nil
   }
 
   /// One refresh. `manual` (create, menu Refresh) skips the 10 s throttle.
