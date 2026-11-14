@@ -51,6 +51,7 @@ public final class PeekOverlayView: NSView {
     var expansionViewport: CGRect?
     var expansionOriginalViewport: CGRect?
     public var hasMotionSnapshot: Bool { motionSnapshotLayer != nil }
+    public var isOpeningContentFading: Bool { motionSnapshotLayer?.animation(forKey: "peekContentReveal") != nil }
     public var hasSnapshotPixels: Bool { motionSnapshotLayer?.contents != nil }
     public var motionPanelLayer: CALayer? { expansionCard ?? panel.layer }
     public var expandedImageFrame: CGRect? { expansionImage?.frame }
@@ -109,11 +110,9 @@ public final class PeekOverlayView: NSView {
     func clearHost() { endHostSnapshot(reveal: false); pageClip.subviews.forEach { $0.removeFromSuperview() }; hostedView = nil; swipeIndicator = nil; sadTabView = nil }
     func showHost(_ host: any WebContentHost, close: @escaping () -> Void) {
         PeekMotionTrace.watch(host.view)
-        // The empty/loading host is transparent. Keep its actual initial plate
-        // underneath it rather than exposing the mask's black backing.
-        if let color = host.view.layer?.backgroundColor { pageClip.layer?.backgroundColor = color }
+        if !hasMotionSnapshot, let color = host.pageBackgroundColor { pageClip.layer?.backgroundColor = color.cgColor }
         if isHostFrozen(host.view), host.view.superview !== pageClip {
-            // Opening uses the engine's initial plate. Attaching now would
+            // Opening uses the source page color. Attaching now would
             // create Chromium and make its first commits during the motion.
             if host.view.frame != pageClip.bounds {
                 PeekMotionTrace.mark("host.setFrame", value: pageClip.bounds.width)

@@ -51,7 +51,7 @@ extension AutomationController {
         "overlayHidden": overlay.isHidden, "backdropHidden": overlay.backdrop.isHidden,
         "snapshot": overlay.hasMotionSnapshot,
         "snapshotPixels": overlay.hasSnapshotPixels, "preparingOpening": peek.isPreparingOpening,
-        "openingHandoff": overlay.isOpeningHandoff, "promotionHandoff": peek.isPromotionHandoff,
+        "openingHandoff": overlay.isOpeningHandoff, "contentFading": overlay.isOpeningContentFading, "promotionHandoff": peek.isPromotionHandoff,
         "expandedImage": overlay.hasExpansionImage,
         "expandedImageFrame": overlay.expandedImageFrame.map(rect) ?? [],
         "expandedImageScale": overlay.expandedImageScale ?? 0,
