@@ -403,7 +403,7 @@ class OEApp : public CefApp,
 CefRefPtr<CefApp> OECreateApp(NSArray<NSString*>* extraSwitches) {
   std::vector<std::string> switches;
   for (NSString* s in extraSwitches) {
-    switches.push_back(s.UTF8String);
+    if (const char* utf8 = s.UTF8String) switches.push_back(utf8);
   }
   return new OEApp(std::move(switches));
 }

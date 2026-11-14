@@ -320,6 +320,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if incognitoTitle != nil { window.contentAppearanceOverride = NSAppearance(named: .darkAqua) }
         WindowSpeedTrace.mark("nativeWindowCreated")
         window.isReleasedWhenClosed = false; window.isRestorable = false
+        window.isOpaque = false; window.backgroundColor = .clear
+        background.usesWindowBackdrop = true
         window.title = incognitoTitle == nil ? "Open" : "Incognito";
         window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.tabbingMode = .disallowed; window.isMovableByWindowBackground = false
