@@ -1,8 +1,10 @@
 # Space motion endpoint
 
-The Space strip uses live backing layers and native pages inside the viewport.
-The current shipping selection path has no page bitmap or presentation fence. Native geometry changes
-only when the viewport changes; the scheduled slide uses a layer translation.
+The Space strip uses live backing layers with native pages inside the viewport.
+The Space content path now slides a retained viewport image or opaque Space
+field above the unchanged outgoing page. Native selection and final layout
+change once, after that incoming plate covers the viewport. The live reveal
+still requires the engine presentation adapter described below.
 
 The M1 measurement on a4a53e77 records a critical spring with response 0.20 s,
 duration and settlingDuration 0.30 s, and travel 228 pt. Its physical response at
@@ -95,10 +97,26 @@ viewport and request UUID; cancellation returns no success. Its receipt echoes
 the UUID and viewport. The shell also validates host identity, document revision,
 selection and request generations. The default host provider is nil until E3
 implements the App adapter, so the snapshot/theme stays on top without a timer.
-Click/key/swipe, reversal, resize, close, cold-cache and renderer failure flows
-require real-App proof; successful live reveal waits for SEAM READY. M1 pacing and strips
-must then be rerun unchanged. No result from the earlier sidebar-only candidate
-qualifies this new handoff.
+The first real-App rental flow at `cff14a2f` passed cached click/key/swipe,
+no timer reveal, reversal, resize, Cmd+S, Reduce Motion, empty-Space and document
+retention rows (14 passed, one close assertion failed). Cleanup found zero
+windows before quit and no remaining owned processes. The failed assertion
+expected all AppKit window objects to disappear, including hidden objects; the
+follow-up checks shell removal and zero visible native windows separately. The
+original failed receipt remains unchanged. In the 1880 by 1296 pixel page ROI,
+key-return, swipe-return and reversed retained images each match the original
+source exactly (mean and maximum channel difference zero). These are composed
+App snapshots of synthetic fixtures, not physical presentation or pacing proof.
+Private evidence: `NT-frames/animation-space-protocol-55/first-rental/`.
+
+Later source review keeps empty-Space chrome below the incoming slide, preserves
+an in-flight source capture across ordinary same-profile refreshes and re-arms
+receipts when a visible pane's viewport changes. Maximized splits wait only for
+the visible pane. A source capture now draws the native base once, without a
+second full-size base image or repeated theme drawing. The updated rental flow
+is pending. Renderer-loss kill probes remain M1-only under the existing rule.
+Successful live reveal waits for SEAM READY. M1 pacing and strips must then be
+rerun unchanged; the earlier sidebar-only candidate does not qualify this path.
 
 E3 confirmed on 2026-11-13 at 18:39 that no implementation/head is available.
 Its read-only source audit at 18:48 identifies
