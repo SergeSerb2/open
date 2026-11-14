@@ -2323,7 +2323,7 @@
           for child in layer.sublayers ?? [] { inspect(child) }
         }
         for _ in 0..<8 {
-          var positions: [String: Double] = [:]
+          var positions: [String: Double] = [:], modelPositions: [String: Double] = [:]
           for index in 0..<outline.numberOfRows {
             guard let item = outline.item(atRow: index), let view = outline.rowView(atRow: index, makeIfNecessary: false) else { continue }
             let id: String
@@ -2331,9 +2331,10 @@
             else if let folder = item as? Folder { id = folder.id.description }
             else { continue }
             positions[id] = Double(view.layer?.presentation()?.frame.minY ?? view.frame.minY)
+            modelPositions[id] = Double(view.frame.minY)
             if samples.isEmpty, let layer = view.layer { inspect(layer) }
           }
-          samples.append(["time": CACurrentMediaTime() - started, "rows": positions])
+          samples.append(["time": CACurrentMediaTime() - started, "rows": positions, "modelRows": modelPositions])
           try await Task.sleep(for: .milliseconds(45))
         }
         result["motion"] = ["appliedDuration": SidebarDiagnostics.folderTransitionDuration,

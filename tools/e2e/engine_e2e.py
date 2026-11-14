@@ -10433,7 +10433,7 @@ def folder_peek_checks(factory, results, tmp):
             raise AssertionError(name)
     def motion_result(name, response, duration, curve):
         motion = response.get("motion", {})
-        native = any(animation.get("path") == "position" and abs(animation.get("duration", 0) - duration) < .001
+        native = any(animation.get("path") == "transform.translation.y" and abs(animation.get("duration", 0) - duration) < .001
                      and len(animation.get("curve", [])) == 8
                      and all(abs(a-b) < .001 for a,b in zip(animation["curve"][2:6], curve))
                      for animation in motion.get("animations", []))
@@ -10441,7 +10441,10 @@ def folder_peek_checks(factory, results, tmp):
         common = set.intersection(*(set(sample["rows"]) for sample in samples)) if samples else set()
         trajectories = [[sample["rows"][row] for sample in samples] for row in common]
         moving = any(max(values)-min(values) > 1 and abs(values[-1]-values[-2]) < .1 for values in trajectories)
-        require(name, abs(motion.get("appliedDuration", 0)-duration) < .001 and native and moving, motion=motion)
+        # Real row frames settle once; only presentation geometry may move.
+        model_stable = bool(samples) and all(sample.get("modelRows") is not None for sample in samples)
+        model_stable = model_stable and all(max(sample["modelRows"][row] for sample in samples) - min(sample["modelRows"][row] for sample in samples) < .1 for row in common)
+        require(name, abs(motion.get("appliedDuration", 0)-duration) < .001 and native and moving and model_stable, motion=motion)
     def state(folder):
         value = app.call("tabs", sidebar=True)
         row = next((f for f in value["folders"] if f["id"] == folder), {})
@@ -13603,6 +13606,8 @@ def main():
     ap.add_argument('--window-launch-continuation', help='LEAD 07:10: add one pair to the original five-pair M1 receipt')
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
+    ap.add_argument("--sidebar-folder-only", action="store_true",
+                    help="sidebar-completion: run mixed-folder deletion and folder-peek flows, without the Library/Space Manager flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
     ap.add_argument('--passwords-probe-dialog-free', action='store_true', help='observe safe Step 0 rows; report card, WebAuthn and HTTP Basic as BLOCKED')
     ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
@@ -14054,7 +14059,8 @@ def main():
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
                 sys.modules[__name__], factory, results[opts.only], tmp)
             if os.environ.get('OPEN_MIXED_DELETE_ONLY') != '1':
-                space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
+                if not opts.sidebar_folder_only:
+                    space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
                 folder_peek_checks(factory, results[opts.only], tmp)
         elif opts.only == "find":
             results["find"] = CheckedResults(tracker)
