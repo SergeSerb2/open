@@ -124,6 +124,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private enum CardState { case off, shown, hiding }
     private var cardState = CardState.off
     private var cardGeneration = 0
+    private var sidebarPanelTarget: CGRect?
+    private var sidebarPanelRootSize: CGSize?
+    private let sidebarPanelClip = CALayer()
+    private let sidebarPanelShadow = SidebarPanelShadowView()
     private var trafficLightObservers: [NSObjectProtocol] = []
     private var placingTrafficLights = false
     /// Arc's window buttons at rest (docs/design.md §2.2): the system buttons fade out and
@@ -358,7 +362,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.addSubview(background)
         emptyPanelHost.wantsLayer = true; emptyPanelHost.layer?.addSublayer(emptyPanel)
         root.addSubview(emptyPanelHost)
-        root.addSubview(container); root.addSubview(cardShadow); root.addSubview(sidebar); root.addSubview(resizeHandle)
+        root.addSubview(sidebarPanelShadow); root.addSubview(container); root.addSubview(cardShadow); root.addSubview(sidebar); root.addSubview(resizeHandle)
         WindowSpeedTrace.mark("windowViewsAttached")
         cardShadow.isHidden = true
         resizeHandle.onBegin = { [weak self] in self?.beginSidebarResize() }
@@ -538,6 +542,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // engine does not reflow into a tiny 46-point viewport.
             let pageWidth = libraryUsesWideLayout ? size.width - 427 : size.width - edge - 10
             let panel = CGRect(x: edge, y: 10, width: max(46, pageWidth), height: max(0, size.height - 20))
+            finishSidebarPanelLayout(at: panel)
             let libraryFrame = CGRect(x: 0, y: 0, width: edge, height: size.height)
             if libraryPanel.frame != libraryFrame { libraryPanel.frame = libraryFrame; libraryPanel.needsLayout = true }
             if container.frame != panel { container.frame = panel }
@@ -570,11 +575,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if emptyPanelHost.frame != root.bounds { emptyPanelHost.frame = root.bounds }
         emptyPanelHost.isHidden = !container.isHidden
         let animate = animated && window?.isVisible == true && !Motion.reducesMotion
+        let continuingPanelMotion = anchoredSliding && !animated && !Motion.reducesMotion
+            && sidebarPanelTarget == panelFrame && sidebarPanelRootSize == size
         let requestedAt = sidebarMotionRequestedAt ?? CACurrentMediaTime()
         if animate { sidebarMotionRequestedAt = nil }
         // Presentation reads are needed only to start/reverse a visible animation,
         // never while building the first window or following a plain width/resize tick.
-        let oldPanel = animate ? (container.layer?.presentation()?.frame ?? container.frame) : container.frame
+        var oldPanel = animate ? (container.layer?.presentation()?.frame ?? container.frame) : container.frame
+        if animate, container.layer?.mask === sidebarPanelClip {
+            oldPanel.size = sidebarPanelClip.presentation()?.bounds.size ?? sidebarPanelClip.bounds.size
+        }
         let modelOffset = sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0
         let oldOffset = animate ? (sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? modelOffset) : modelOffset
         if cardState != .off {
@@ -589,13 +599,27 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // no row layout or model width write runs on the animation's display ticks.
             let sidebarFrame = CGRect(x: 0, y: 0, width: width, height: size.height)
             let targetOffset: CGFloat = hidden ? -width : 0
-            let geometryChanged = container.frame != panelFrame || sidebar.frame != sidebarFrame
-            if geometryChanged { sidebarGeometryChanges += 1 }
+            // A shrinking clip still needs the old, wider backing until it has
+            // finished. Growing can prepare the wider viewport once at entry.
+            let defersViewport = animate && panelFrame.width < container.frame.width
+            let geometryChanged = (!continuingPanelMotion && container.frame != panelFrame) || sidebar.frame != sidebarFrame
+            if geometryChanged && (!defersViewport || sidebar.frame != sidebarFrame) { sidebarGeometryChanges += 1 }
             let targetChanged = (sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0) != targetOffset
             if case .floatingCard = sidebar.presentation { sidebar.presentation = .anchored }
             CATransaction.begin(); CATransaction.setDisableActions(true)
-            if container.frame != panelFrame { container.frame = panelFrame }
-            if emptyPanel.frame != panelFrame { emptyPanel.frame = panelFrame }
+            if animate {
+                sidebarPanelTarget = panelFrame
+                sidebarPanelRootSize = size
+                // One native viewport resize: at entry when growing, at rest
+                // when shrinking. The clip never exposes missing backing pixels.
+                if !defersViewport && container.frame != panelFrame { container.frame = panelFrame }
+                if emptyPanel.frame != panelFrame { emptyPanel.frame = panelFrame }
+                container.layoutSubtreeIfNeeded()
+            } else if !continuingPanelMotion {
+                finishSidebarPanelLayout(at: panelFrame)
+                if container.frame != panelFrame { container.frame = panelFrame }
+                if emptyPanel.frame != panelFrame { emptyPanel.frame = panelFrame }
+            }
             if sidebar.frame != sidebarFrame { sidebar.frame = sidebarFrame }
             sidebar.alphaValue = 1
             sidebar.layer?.setValue(targetOffset, forKeyPath: "transform.translation.x")
@@ -604,14 +628,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 sidebarAnimationGeneration += 1
                 let generation = sidebarAnimationGeneration
                 anchoredSliding = animate
-                container.setSidebarSliding(animate)
+                container.setSidebarSliding(false)
                 sidebarAnimations = [:]
                 sidebar.isHidden = animate ? false : hidden
-                positionTrafficLights()
+                positionTrafficLights(placeMoving: true)
                 CATransaction.begin(); CATransaction.setDisableActions(true)
                 CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
                     guard let self, self.sidebarAnimationGeneration == generation else { return }
                     self.anchoredSliding = false
+                    self.finishSidebarPanelLayout()
                     self.container.setSidebarSliding(false)
                     if self.cardState == .off {
                         self.sidebar.isHidden = hidden
@@ -624,31 +649,55 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                         self.positionTrafficLights()
                     }
                 } }
-                let layers = [sidebar.layer, dimmedLights.layer].compactMap { $0 }
+                let layers = [sidebar.layer, dimmedLights.motionLayer].compactMap { $0 }
                     + Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer }
                 for (index, layer) in layers.enumerated() {
                     layer.removeAnimation(forKey: "sidebarToggle")
                     layer.setValue(targetOffset, forKeyPath: "transform.translation.x")
                     if animate {
-                        let spring = Motion.sidebarToggle.animation(keyPath: "transform.translation.x")
+                        let spring = Motion.sidebarAnimation(keyPath: "transform.translation.x", showing: !hidden)
                         spring.fromValue = oldOffset; spring.toValue = targetOffset
                         addMotion(spring, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
                         if index == 0 { sidebarAnimations["sidebar"] = layer.animation(forKey: "sidebarToggle") }
                     }
                 }
-                for (name, layer) in [("panel", container.layer), ("emptyPanel", Optional(emptyPanel))] {
-                    layer?.removeAnimation(forKey: "sidebarToggle")
-                    if animate, let layer {
-                        let group = CAAnimationGroup()
-                        let fromPosition = CGPoint(x: oldPanel.minX + oldPanel.width * layer.anchorPoint.x,
-                            y: oldPanel.minY + oldPanel.height * layer.anchorPoint.y)
-                        group.animations = [
-                            frameSpring("position", from: NSValue(point: fromPosition), to: NSValue(point: layer.position)),
-                            frameSpring("bounds.size", from: NSValue(size: oldPanel.size), to: NSValue(size: panelFrame.size))]
-                        group.duration = group.animations!.map(\.duration).max() ?? 0
-                        addMotion(group, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
-                        sidebarAnimations[name] = layer.animation(forKey: "sidebarToggle")
+                if animate, let layer = container.layer {
+                    let fromTranslation = oldPanel.minX - container.frame.minX
+                    let targetTranslation = panelFrame.minX - container.frame.minX
+                    layer.removeAnimation(forKey: "sidebarToggle")
+                    layer.setValue(targetTranslation, forKeyPath: "transform.translation.x")
+                    sidebarPanelClip.anchorPoint = .zero
+                    sidebarPanelClip.position = .zero
+                    sidebarPanelClip.bounds = CGRect(origin: .zero, size: panelFrame.size)
+                    sidebarPanelClip.backgroundColor = NSColor.black.cgColor
+                    sidebarPanelClip.cornerRadius = PanelMetrics.cornerRadius
+                    sidebarPanelClip.cornerCurve = .continuous
+                    layer.mask = sidebarPanelClip
+                    let move = Motion.sidebarAnimation(keyPath: "transform.translation.x", showing: !hidden)
+                    move.fromValue = fromTranslation; move.toValue = targetTranslation
+                    addMotion(move, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
+                    sidebarAnimations["panel"] = layer.animation(forKey: "sidebarToggle")
+                    let clip = Motion.sidebarAnimation(keyPath: "bounds.size", showing: !hidden)
+                    clip.fromValue = NSValue(size: oldPanel.size); clip.toValue = NSValue(size: panelFrame.size)
+                    addMotion(clip, to: sidebarPanelClip, key: "sidebarToggle", requestedAt: requestedAt)
+                    sidebarPanelShadow.prepare(frame: panelFrame)
+                    sidebarPanelShadow.isHidden = container.isHidden
+                    for (shadowLayer, key, from, to) in sidebarPanelShadow.motion(from: oldPanel.size, translation: oldPanel.minX - panelFrame.minX) {
+                        let spring = Motion.sidebarAnimation(keyPath: key, showing: !hidden)
+                        spring.fromValue = from; spring.toValue = to
+                        addMotion(spring, to: shadowLayer, key: "sidebarToggle", requestedAt: requestedAt)
                     }
+                    // An empty panel has no live text or web surface to stretch.
+                    emptyPanel.removeAnimation(forKey: "sidebarToggle")
+                    let emptyGroup = CAAnimationGroup()
+                    let emptyMove = Motion.sidebarAnimation(keyPath: "position", showing: !hidden)
+                    emptyMove.fromValue = NSValue(point: CGPoint(x: oldPanel.midX, y: oldPanel.midY))
+                    emptyMove.toValue = NSValue(point: emptyPanel.position)
+                    let emptySize = Motion.sidebarAnimation(keyPath: "bounds.size", showing: !hidden)
+                    emptySize.fromValue = NSValue(size: oldPanel.size); emptySize.toValue = NSValue(size: panelFrame.size)
+                    emptyGroup.animations = [emptyMove, emptySize]
+                    emptyGroup.duration = max(emptyMove.duration, emptySize.duration)
+                    addMotion(emptyGroup, to: emptyPanel, key: "sidebarToggle", requestedAt: requestedAt)
                 }
                 CATransaction.commit()
             } else if !anchoredSliding { sidebar.isHidden = hidden }
@@ -668,6 +717,23 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         hoverPreview.layout()
         captureStorage?.layout()
         onLayout?()
+    }
+    /// Retire the temporary render-server clip; the native endpoint is already laid out.
+    private func finishSidebarPanelLayout(at finalFrame: CGRect? = nil) {
+        guard let pending = sidebarPanelTarget else { return }
+        let target = finalFrame ?? pending
+        sidebarPanelTarget = nil; sidebarPanelRootSize = nil
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        container.layer?.removeAnimation(forKey: "sidebarToggle")
+        sidebarPanelClip.removeAnimation(forKey: "sidebarToggle")
+        container.layer?.mask = nil
+        sidebarPanelShadow.isHidden = true
+        emptyPanel.removeAnimation(forKey: "sidebarToggle")
+        container.layer?.transform = CATransform3DIdentity
+        emptyPanel.transform = CATransform3DIdentity
+        if container.frame != target { container.frame = target; sidebarGeometryChanges += 1 }
+        if emptyPanel.frame != target { emptyPanel.frame = target }
+        CATransaction.commit()
     }
     /// Delayed idle work attaches only the hidden shell; it never moves the page.
     public var onLibraryIdleRefresh: (() -> Void)?
@@ -752,12 +818,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         if !opening, animated, !sidebar.isHidden { fadeLibrary(sidebar, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : duration) }
     }
-    private func frameSpring(_ key: String, from: NSValue, to: NSValue) -> CASpringAnimation {
-        let spring = Motion.sidebarToggle.animation(keyPath: key)
-        spring.fromValue = from; spring.toValue = to
-        return spring
-    }
     private func addMotion(_ animation: CAAnimation, to layer: CALayer, key: String, requestedAt: CFTimeInterval? = nil) {
+        // Ask ProMotion to keep the active display's cadence during this finite
+        // layer animation. The render server still owns every display tick.
+        let hz = Float(window?.screen?.maximumFramesPerSecond ?? 60)
+        animation.preferredFrameRateRange = CAFrameRateRange(minimum: hz, maximum: hz, preferred: hz)
         let request = requestedAt ?? CACurrentMediaTime()
         animation.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil)
             + (key == "sidebarToggle" ? Motion.sidebarDelayOverride ?? 0 : 0)
@@ -776,21 +841,40 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// back when one is moved. So the buttons are placed after AppKit's layout pass and before
     /// the window draws (`BrowserWindow.onLayoutPass`), where AppKit leaves them be; frame
     /// observers place a moved button at once as well.
-    private func positionTrafficLights() {
-        guard let window, !window.styleMask.contains(.fullScreen) else { return }
-        observeTrafficLights(window)
-        let hidden = !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
-        for kind in Self.trafficLightKinds {
-            guard let button = window.standardWindowButton(kind) else { continue }
-            if button.isHidden != hidden { button.isHidden = hidden }
-            if isLibraryOpen { button.layer?.removeAnimation(forKey: "sidebarToggle"); button.layer?.setValue(0, forKeyPath: "transform.translation.x") }
-        }
-        if isLibraryOpen { dimmedLights.layer?.removeAnimation(forKey: "sidebarToggle"); dimmedLights.layer?.setValue(0, forKeyPath: "transform.translation.x") }
-        placeTrafficLights()
+    private var trafficLightsHidden: Bool {
+        !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
     }
 
-    private func placeTrafficLights() {
-        guard !placingTrafficLights, let window, !window.styleMask.contains(.fullScreen) else { return }
+    private func positionTrafficLights(placeMoving: Bool = false) {
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        observeTrafficLights(window)
+        let hidden = trafficLightsHidden
+        if hidden {
+            // A native frame write can replace an NSView's backing-layer
+            // transform. Retire visibility before AppKit lays out the hidden
+            // controls; their next show places them at the new native endpoint.
+            if !dimmedLights.isHidden { dimmedLights.isHidden = true }
+        }
+        let outgoing = (anchoredSliding && context.window?.sidebarMode == .hidden) || cardState == .hiding
+        let nativeHidden = hidden || (outgoing && appliedTrafficLightDim == true)
+        for kind in Self.trafficLightKinds {
+            guard let button = window.standardWindowButton(kind) else { continue }
+            // AppKit draws a group background even when its buttons have the
+            // nearly transparent resting alpha. Retire those unused buttons
+            // at outgoing motion's entry, while our circles keep sliding.
+            if button.isHidden != nativeHidden { button.isHidden = nativeHidden }
+            if isLibraryOpen { button.layer?.removeAnimation(forKey: "sidebarToggle"); button.layer?.setValue(0, forKeyPath: "transform.translation.x") }
+        }
+        if isLibraryOpen { dimmedLights.motionLayer.removeAnimation(forKey: "sidebarToggle"); dimmedLights.motionLayer.setValue(0, forKeyPath: "transform.translation.x") }
+        if !hidden { placeTrafficLights(whileMoving: placeMoving) }
+    }
+
+    private func placeTrafficLights(whileMoving: Bool = false) {
+        guard !placingTrafficLights, !trafficLightsHidden, let window, !window.styleMask.contains(.fullScreen) else { return }
+        // AppKit can lay out its title bar after the explicit animations were
+        // installed. Keep its NSView frame synchronization from replacing their
+        // model transforms. The start of a new motion places controls once.
+        guard whileMoving || (!anchoredSliding && sidebar.layer?.animation(forKey: "reveal") == nil) else { return }
         placingTrafficLights = true
         defer { placingTrafficLights = false }
         let inset = cardState == .off ? 0 : WindowMetrics.revealCardInset
@@ -832,7 +916,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         dimmedLights.groupRect = group.offsetBy(dx: -frame.minX, dy: -frame.minY)
         dimmedLights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
         dimmedLights.showsRing = window.isKeyWindow
-        let hidden = buttons[0].isHidden
+        let hidden = trafficLightsHidden
         // Hiding clears the hover state and showing reads it from the pointer (the view).
         if dimmedLights.isHidden != hidden { dimmedLights.isHidden = hidden }
         applyTrafficLightDim(animated: false)
@@ -852,7 +936,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let buttonAlpha: CGFloat = dim ? Self.restButtonAlpha : 1, circlesAlpha: CGFloat = dim ? 1 : 0
         let changed = appliedTrafficLightDim != dim
         appliedTrafficLightDim = dim
-        if animated && changed && window.isVisible && !Motion.reducesMotion {
+        if animated && changed && window.isVisible && !dimmedLights.isHiddenOrHasHiddenAncestor && !Motion.reducesMotion {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Motion.hoverFade
                 for button in buttons { button.animator().alphaValue = buttonAlpha }
@@ -913,8 +997,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         cardGeneration += 1
         let generation = cardGeneration
         if shown {
+            finishSidebarPanelLayout()
+            container.setSidebarSliding(false)
             // Clear anchored-hide transforms before the same layers become a card.
-            for layer in [sidebar.layer, dimmedLights.layer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
+            for layer in [sidebar.layer, dimmedLights.motionLayer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
                 layer.removeAnimation(forKey: "sidebarToggle")
                 CATransaction.begin(); CATransaction.setDisableActions(true)
                 layer.setValue(0, forKeyPath: "transform.translation.x"); CATransaction.commit()
@@ -932,7 +1018,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             cardShadow.layoutSubtreeIfNeeded()
             sidebar.isHidden = false
             cardShadow.isHidden = false
-            positionTrafficLights()
+            positionTrafficLights(placeMoving: true)
             slideCard(from: animate ? from : 0, to: 0, generation: generation, completion: nil)
             if samplesCardMotion {
                 cardSampleTask?.cancel(); cardMotionSamples = []
@@ -961,7 +1047,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func slideCard(from: CGFloat, to: CGFloat, generation: Int, completion: (@MainActor () -> Void)?) {
         let layers = [sidebar.layer, cardShadow.layer].compactMap { $0 }
-        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.layer].compactMap { $0 }
+        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.motionLayer].compactMap { $0 }
         cardAnimations = [:]
         CATransaction.begin()
         CATransaction.setCompletionBlock {
@@ -995,7 +1081,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         cardState = .off
         sidebar.isHidden = true
         cardShadow.isHidden = true
-        for layer in [sidebar.layer, cardShadow.layer, dimmedLights.layer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
+        for layer in [sidebar.layer, cardShadow.layer, dimmedLights.motionLayer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
             layer.removeAnimation(forKey: "reveal")
         }
         sidebar.presentation = .anchored
@@ -1746,5 +1832,46 @@ extension BrowserWindowController {
               let options = pendingSpaceCreationOptions else { return }
         pendingSpaceCreationOptions = nil
         _ = beginSpaceCreation(options: options)
+    }
+}
+
+/// A prepared shadow outside the animated panel clip. Only its layer paths move.
+@MainActor
+private final class SidebarPanelShadowView: NSView {
+    private let shadowLayer = CALayer()
+    private let outside = CAShapeLayer()
+    override init(frame: NSRect) {
+        super.init(frame: frame); wantsLayer = true; isHidden = true
+        shadowLayer.shadowColor = NSColor.black.cgColor
+        shadowLayer.shadowOpacity = PanelMetrics.shadowOpacity
+        shadowLayer.shadowRadius = PanelMetrics.shadowRadius
+        shadowLayer.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
+        outside.fillRule = .evenOdd; shadowLayer.mask = outside
+        layer?.addSublayer(shadowLayer)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    func prepare(frame: CGRect) {
+        self.frame = frame
+        shadowLayer.frame = bounds; outside.frame = bounds
+        shadowLayer.shadowPath = shape(bounds.size)
+        outside.path = exterior(bounds.size)
+        layer?.setValue(0, forKeyPath: "transform.translation.x")
+        isHidden = false
+    }
+    func motion(from size: CGSize, translation: CGFloat) -> [(CALayer, String, Any, Any)] {
+        guard let layer else { return [] }
+        return [(layer, "transform.translation.x", translation, CGFloat(0)),
+                (shadowLayer, "shadowPath", shape(size), shape(bounds.size)),
+                (outside, "path", exterior(size), exterior(bounds.size))]
+    }
+    private func shape(_ size: CGSize) -> CGPath {
+        CGPath(roundedRect: CGRect(origin: .zero, size: size), cornerWidth: PanelMetrics.cornerRadius,
+               cornerHeight: PanelMetrics.cornerRadius, transform: nil)
+    }
+    private func exterior(_ size: CGSize) -> CGPath {
+        let path = CGMutablePath()
+        path.addRect(CGRect(origin: .zero, size: size).insetBy(dx: -24, dy: -24))
+        path.addPath(shape(size)); return path
     }
 }
