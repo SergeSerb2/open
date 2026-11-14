@@ -304,8 +304,9 @@ public final class ThemeBackgroundView: NSView {
     public func endTransition(commit: Bool, duration: CFTimeInterval = Motion.themeCrossfade) {
         guard let incoming else { return }
         if commit { finish(to: incoming, duration: duration) } else {
-            if incoming.compositingFilter != nil { animateOpacity(current, to: 1, duration: duration) {} }
-            animateOpacity(incoming, to: 0, duration: duration) { [weak self] in
+            let start = incoming.presentation()?.opacity ?? incoming.opacity
+            if incoming.compositingFilter != nil { animateOpacity(current, from: 1 - start, to: 1, duration: duration) {} }
+            animateOpacity(incoming, from: start, to: 0, duration: duration) { [weak self] in
                 incoming.removeFromSuperlayer()
                 if self?.incoming === incoming { self?.incoming = nil; self?.refresh() }
             }
@@ -333,8 +334,11 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func finish(to layer: ThemeLayer, duration: CFTimeInterval) {
-        if layer.compositingFilter != nil { animateOpacity(current, to: 0, duration: duration) {} }
-        animateOpacity(layer, to: 1, duration: duration) { [weak self] in
+        let start = layer.presentation()?.opacity ?? layer.opacity
+        // A removed animation's presentation value can survive until the next
+        // frame. Derive both starts from the incoming layer so they still sum to 1.
+        if layer.compositingFilter != nil { animateOpacity(current, from: 1 - start, to: 0, duration: duration) {} }
+        animateOpacity(layer, from: start, to: 1, duration: duration) { [weak self] in
             guard let self, self.incoming === layer else { return }
             self.current.removeFromSuperlayer()
             layer.compositingFilter = nil
@@ -344,13 +348,13 @@ public final class ThemeBackgroundView: NSView {
         }
     }
 
-    private func animateOpacity(_ layer: CALayer, to value: Float, duration: CFTimeInterval, completion: @escaping @MainActor () -> Void) {
+    private func animateOpacity(_ layer: CALayer, from start: Float, to value: Float, duration: CFTimeInterval, completion: @escaping @MainActor () -> Void) {
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
         CATransaction.setAnimationTimingFunction(Motion.themeCrossfadeTiming)
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
         let a = CABasicAnimation(keyPath: "opacity")
-        a.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        a.fromValue = start
         a.toValue = value
         layer.opacity = value
         layer.add(a, forKey: "opacity")
