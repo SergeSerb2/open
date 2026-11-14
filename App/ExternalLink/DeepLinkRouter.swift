@@ -16,6 +16,7 @@ final class DeepLinkRouter {
   private(set) var handledCount = 0
   /// Set by the restart route; the relauncher starts only when the quit is committed.
   private(set) var restartRequested = false
+  private var restartStarting = false
 
   init(app: AppDelegate) { self.app = app }
 
@@ -50,7 +51,12 @@ final class DeepLinkRouter {
     case "quit":
       result = "quit"; DispatchQueue.main.async { NSApp.terminate(nil) }
     case "restart":
-      result = "restart"; restartRequested = true; DispatchQueue.main.async { NSApp.terminate(nil) }
+      result = "restart"
+      DispatchQueue.main.async { [weak self] in
+        // The flag marks this quit attempt only (`beginQuitAttempt`), so a restart whose quit
+        // is cancelled (an alert's Cancel, a page's "Stay") does not relaunch a later quit.
+        self?.restartStarting = true; NSApp.terminate(nil); self?.restartStarting = false
+      }
     case "welcome":
       if let factory = frontFactory() { factory.openBasics(nil); result = "welcome" } else { result = "no-window" }
     case "space":
@@ -81,6 +87,10 @@ final class DeepLinkRouter {
     factory.focus(space: space)
     return "space"
   }
+
+  /// A fresh quit attempt starts: it restarts only if the restart route started it.
+  /// Retries of the same attempt (history flush, sleep capture, page replies) keep the flag.
+  func beginQuitAttempt() { restartRequested = restartStarting }
 
   /// Called once the quit is committed. Starts the same executable with the same
   /// options after this process exits (launch URLs are not repeated).

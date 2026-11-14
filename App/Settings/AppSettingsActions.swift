@@ -519,7 +519,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       app.openProfilePage(url,profileID:profileID); return
     }
     guard
-      let controller = app.frontStandardWindowController ?? app.makeWindow(focusedSpaceID: space.id),
+      // A window of the main model: a Blank Window front window does not hold this Space.
+      let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: space.id),
       let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
     if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
