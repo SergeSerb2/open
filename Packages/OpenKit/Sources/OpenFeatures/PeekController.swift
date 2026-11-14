@@ -188,9 +188,14 @@ public final class PeekController {
             let image = await PeekHostSnapshot.capture(host)
             guard !Task.isCancelled, let self, self.motionGeneration == generation,
                   self.stack.last?.id == itemID, self.overlay.openingHandoff else { return }
-            self.snapshotTask = nil
-            guard !host.isLoading else { return }
-            self.overlay.finishOpeningHandoff(image: image, duration: self.duration(0.08)) { [weak self] in self?.refresh() }
+            guard !host.isLoading else { self.snapshotTask = nil; return }
+            // Keep this task as the handoff owner through the fade and live
+            // swap, so repeated not-loading callbacks cannot start a second
+            // reveal after CA has removed the completed animation.
+            self.overlay.finishOpeningHandoff(image: image, duration: self.duration(0.08)) { [weak self] in
+                guard let self, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
+                self.snapshotTask = nil; self.refresh()
+            }
         }
     }
     private func duration(_ value: Double) -> Double { overlay.window?.isVisible == true && !Motion.reducesMotion ? value : 0 }
