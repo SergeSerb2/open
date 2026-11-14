@@ -168,7 +168,10 @@ final class PageQuitCoordinator {
     // Preserve its browser-owned history first, without stopping tab sleep
     // (the user may still cancel this quit).
     Task { @MainActor [weak self, weak owner, weak page] in
-      guard let self, let owner, let page else { return }
+      guard let self else { return }
+      // A page or window closed meanwhile has nothing left to ask; keep the preflight
+      // moving, or `running` stays set and every later quit attempt is refused.
+      guard let owner, let page else { self.next(); return }
       if let id = owner.tabID(for: page), let envelope = self.app.tabSleep.adapter?.captureHistory(tabID: id) {
         try? await self.app.tabSleep.store?.save(tabID: id, envelope: envelope)
       }
