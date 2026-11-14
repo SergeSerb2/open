@@ -524,6 +524,9 @@ final class EaselColorPopover: NSView {
 @MainActor
 final class EaselTitleField: NSTextField, NSTextFieldDelegate {
     var onCommit: ((String) -> Void)?
+    /// The first edit of the title: an open text box must close first, or its commit would
+    /// restore the document from before the box and drop the new title.
+    var onBeginEditing: (() -> Void)?
     /// GUESS 26 pt bold — the 2× capture's glyph run measures ≈ 140 pt wide for
     /// "Untitled Easel"; capture of the font pending.
     static let font = NSFont.systemFont(ofSize: 26, weight: .bold)
@@ -547,6 +550,7 @@ final class EaselTitleField: NSTextField, NSTextFieldDelegate {
     }
     override var placeholderString: String? { get { EaselDocument.untitled } set {} }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
+    func controlTextDidBeginEditing(_ obj: Notification) { onBeginEditing?() }
     func controlTextDidEndEditing(_ obj: Notification) { onCommit?(stringValue) }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         if selector == #selector(NSResponder.insertNewline(_:)) || selector == #selector(NSResponder.cancelOperation(_:)) {

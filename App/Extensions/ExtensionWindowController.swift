@@ -41,13 +41,16 @@ final class ExtensionWindowController: NSWindowController, NSWindowDelegate, OEW
     content.close(); browser.close()
     Self.windows.removeValue(forKey: browser.identifier)
   }
-  func webContentDidRequestClose(_ webContent: OEWebContent) { close() }
+  /// Chromium is still inside its delegate callback here: close the page on the next turn,
+  /// as the browser window's close path does (`webContentDidRequestClose` in the factory).
+  private func closeAfterCallback() { DispatchQueue.main.async { [weak self] in self?.close() } }
+  func webContentDidRequestClose(_ webContent: OEWebContent) { closeAfterCallback() }
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
     window?.title = webContent.title ?? ""
   }
   func webContent(_ webContent: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     if event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
-       event.charactersIgnoringModifiers?.lowercased() == "w" { close(); return true }
+       event.charactersIgnoringModifiers?.lowercased() == "w" { closeAfterCallback(); return true }
     return false
   }
   static func closeAll() { for controller in Array(windows.values) { controller.close() } }
