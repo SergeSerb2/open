@@ -38,7 +38,6 @@ extension PeekOverlayView {
         motionSnapshotLayer?.backgroundColor = color.cgColor
         // Only rounded solid backgrounds move here. Their own corner radii
         // draw the outline without clipping a child subtree offscreen.
-        motionSnapshotLayer?.cornerRadius = pageClip.layer?.cornerRadius ?? 0
         pageClip.layer?.masksToBounds = false
         PeekMotionTrace.mark("opening.plateReady")
     }
@@ -57,6 +56,7 @@ extension PeekOverlayView {
         snapshot.contents = image
         snapshot.contentsScale = window?.backingScaleFactor ?? 1
         snapshot.contentsGravity = .resize
+        if image == nil { snapshot.cornerRadius = parent.cornerRadius }
         // A known page color also covers transparent snapshot pixels.
         snapshot.backgroundColor = parent.backgroundColor
         parent.addSublayer(snapshot)
