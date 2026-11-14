@@ -51,6 +51,7 @@ public final class PeekOverlayView: NSView {
     var expansionViewport: CGRect?
     var expansionOriginalViewport: CGRect?
     public var hasMotionSnapshot: Bool { motionSnapshotLayer != nil }
+    public var hasSnapshotPixels: Bool { motionSnapshotLayer?.contents != nil }
     public var motionPanelLayer: CALayer? { expansionCard ?? panel.layer }
     public var expandedImageFrame: CGRect? { expansionImage?.frame }
     public var expandedImageScale: CGFloat? { expansionImage?.contentsScale }

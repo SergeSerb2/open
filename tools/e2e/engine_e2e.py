@@ -4509,6 +4509,11 @@ def peek_checks(factory, results, tmp):
         app.call("pin", tab=source)
         baseline = app.call("host-counts")
         app.call("peek-open", tab=source, url=fixture("Peek page"))
+        preparation = app.call('peek-motion')
+        results['peek_open_preparation_retains_source'] = {'ok': preparation.get('preparingOpening')
+            and preparation['overlay']['opacity'] == 0 and preparation['backdrop']['opacity'] == 0,
+            'motion': preparation}
+        wait_until(lambda: app.call('peek-motion').get('kind') == 'open', timeout=5, step=.005)
         opening_samples = []
         for _ in range(8):
             motion = app.call('peek-motion')
@@ -4516,8 +4521,8 @@ def peek_checks(factory, results, tmp):
                 break
             opening_samples.append(motion)
             time.sleep(.01)
-        results['peek_open_defers_engine_until_motion_ends'] = {'ok': bool(opening_samples)
-            and all(s.get('snapshot') and s.get('hostHidden') and not s.get('hostAttached')
+        results['peek_open_animates_ready_page_snapshot'] = {'ok': bool(opening_samples)
+            and all(s.get('snapshot') and s.get('snapshotPixels') and s.get('hostHidden') and s.get('hostAttached')
                     and s['panel'].get('rasterized')
                     and s['panel'].get('rasterScale') == s.get('backingScale') for s in opening_samples),
             'samples': opening_samples}

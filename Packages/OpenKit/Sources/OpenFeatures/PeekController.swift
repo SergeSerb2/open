@@ -65,6 +65,9 @@ public final class PeekController {
     @ObservationIgnored private var motionGeneration = 0
     @ObservationIgnored private var snapshotTask: Task<Void, Never>?
     public private(set) var isPromotionHandoff = false
+    public private(set) var isPreparingOpening = false
+    @ObservationIgnored private var openingInterval = 0.0
+    @ObservationIgnored private weak var openingFocus: NSResponder?
     public var onChange: (() -> Void)?
     /// The window's toasts: "Peek closed" with Undo (M4).
     @ObservationIgnored public weak var toasts: ToastCenter?
@@ -103,6 +106,7 @@ public final class PeekController {
         guard let space = splitController.space else { return }
         let profile = profileID ?? space.profileID
         motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
+        isPreparingOpening = false
         isPromotionHandoff = false; overlay.clearExpansionCard(); overlay.restoreExpansionViewport()
         overlay.endHostSnapshot()
         dismissGeneration += 1; isDismissing = false
@@ -126,7 +130,8 @@ public final class PeekController {
             PeekMotionTrace.mark("host.loading", value: loading ? 1 : 0)
             PeekMotionTrace.region("host.onPageChange") { self.onPageChange?() }
             if !loading {
-                if self.overlay.openingHandoff { self.finishOpeningHandoff(itemID: itemID, host: host) }
+                if self.isPreparingOpening { self.prepareOpeningImage(itemID: itemID, host: host) }
+                else if self.overlay.openingHandoff { self.finishOpeningHandoff(itemID: itemID, host: host) }
                 else { self.overlay.revealHost(host.view, duration: self.duration(0.12)) }
             }
         }
@@ -142,24 +147,47 @@ public final class PeekController {
             }
             return true
         }
-        let interval = duration(Motion.peekOpen), generation = motionGeneration
+        let interval = duration(Motion.peekOpen)
         if interval > 0 {
-            // A new engine page is created when its view first enters a
-            // window. Keep that startup and navigation out of the motion.
-            overlay.clearHost()
-            overlay.layoutSubtreeIfNeeded()
-            overlay.freezeHost(host.view, image: nil)
+            // Keep the source visible while the new page loads and its image
+            // is prepared. No empty plate is allowed to replace that content.
+            isPreparingOpening = true; openingInterval = interval
+            overlay.beginOpeningPreparation()
         }
         host.load(url); refresh(); host.focus(); installKeys()
-        let focusAfterFreeze = overlay.window?.firstResponder
-        overlay.animatePresentation(true, duration: interval) { [weak self, weak host] in
-            guard let self, let host, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
-            self.overlay.attachOpeningHost(host.view)
-            self.refresh()
-            if self.isShown, self.overlay.window?.isKeyWindow == true,
-               self.overlay.window?.firstResponder === focusAfterFreeze { host.focus() }
-        }
+        openingFocus = overlay.window?.firstResponder
+        if interval == 0 { overlay.animatePresentation(true, duration: 0) }
         PeekMotionTrace.region("open.onChange") { onChange?() }
+    }
+    private func prepareOpeningImage(itemID: UUID, host: any WebContentHost) {
+        guard snapshotTask == nil else { return }
+        let generation = motionGeneration, interval = openingInterval
+        snapshotTask = Task { @MainActor [weak self, weak host] in
+            guard let host else { return }
+            let image = await PeekHostSnapshot.capture(host)
+            guard !Task.isCancelled, let self, self.motionGeneration == generation,
+                  self.stack.last?.id == itemID, self.isPreparingOpening else { return }
+            self.snapshotTask = nil
+            guard !host.isLoading else { return }
+            guard let image else {
+                // A refused/failed snapshot reveals the ready live page at
+                // once, rather than animating an empty or live compositor.
+                self.isPreparingOpening = false; self.overlay.resetMotion(); self.refresh(); return
+            }
+            self.overlay.stageHostSnapshot(host.view, image: image) { [weak self, weak host] in
+                guard let self, let host, self.motionGeneration == generation,
+                      self.stack.last?.id == itemID, self.isPreparingOpening else { return }
+                self.isPreparingOpening = false
+                self.overlay.animatePresentation(true, duration: interval) { [weak self, weak host] in
+                    guard let self, let host, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
+                    self.overlay.attachOpeningHost(host.view)
+                    if !host.isLoading { self.overlay.finishOpeningHandoff(image: nil) { [weak self] in self?.refresh() } }
+                    self.refresh()
+                    if self.isShown, self.overlay.window?.isKeyWindow == true,
+                       self.overlay.window?.firstResponder === self.openingFocus { host.focus() }
+                }
+            }
+        }
     }
     private func finishOpeningHandoff(itemID: UUID, host: any WebContentHost) {
         guard snapshotTask == nil else { return }
@@ -240,6 +268,10 @@ public final class PeekController {
     public func dismissTop() {
         PeekMotionTrace.mark("request.close")
         guard !isExpanding, !isDismissing, let item = stack.last else { return }
+        if isPreparingOpening {
+            motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil; isPreparingOpening = false
+            finishDismiss(); overlay.resetMotion(); return
+        }
         let interval = duration(Motion.peekDismiss)
         if interval == 0 { finishDismiss(); overlay.resetMotion(); return }
         isDismissing = true; dismissGeneration += 1; let generation = dismissGeneration, id = item.id
@@ -294,6 +326,7 @@ public final class PeekController {
     }
     public func dismissAll() {
         motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
+        isPreparingOpening = false
         isPromotionHandoff = false
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
         undoTask?.cancel(); undoItem = nil; undoToast?.dismiss(); undoToast = nil

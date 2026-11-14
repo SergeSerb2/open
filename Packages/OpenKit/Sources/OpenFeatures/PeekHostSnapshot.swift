@@ -30,6 +30,16 @@ enum PeekHostSnapshot {
 extension PeekOverlayView {
     func isHostFrozen(_ view: NSView) -> Bool { motionHostView === view && motionHostFrozen }
 
+    func beginOpeningPreparation() {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        motionKind = "prepare-open"; motionDuration = 0
+        layer?.removeAnimation(forKey: "peekVisibility"); backdrop.layer?.removeAnimation(forKey: "peekVisibility")
+        panel.layer?.removeAnimation(forKey: "peekGeometry")
+        layer?.opacity = 0; backdrop.layer?.opacity = 0
+        PeekMotionTrace.mark("opening.prepareSourceVisible")
+        CATransaction.commit()
+    }
+
     /// Opening freezes the initial, empty page plate. A loaded page uses the
     /// engine's viewport image for close/expand. Both keep the live view hidden
     /// for the entire motion, including late load/reveal callbacks.
