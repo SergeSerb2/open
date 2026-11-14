@@ -48,6 +48,31 @@ public enum ExpectedMenu {
         "Services", "Websites, Easels, and Notes will use:",
     ]
 
+    /// The table copies Arc's menu glyphs ("Cmd++", "Cmd+:"); Open names the base key with Shift
+    /// ("Cmd+Shift+=", `KeyboardShortcut.normalized`). This maps a table display to Open's form.
+    public static func baseKeyDisplay(_ display: String) -> String {
+        let key: String, names: [Substring]
+        if display.hasSuffix("++") {
+            key = "+"; names = display.dropLast(2).split(separator: "+")
+        } else {
+            let parts = display.split(separator: "+", omittingEmptySubsequences: false)
+            guard let last = parts.last, !last.isEmpty else { return display }
+            key = String(last); names = parts.dropLast()
+        }
+        guard let base = KeyboardShortcut.shiftedBaseKeys[key] else { return display }
+        var modifiers: ShortcutModifiers = [.shift]
+        for name in names {
+            switch name {
+            case "Cmd": modifiers.insert(.command)
+            case "Ctrl": modifiers.insert(.control)
+            case "Opt": modifiers.insert(.option)
+            case "Shift": break
+            default: return display
+            }
+        }
+        return KeyboardShortcut(key: base, modifiers: modifiers).display
+    }
+
     public static func isAllowedExtra(path: String, title: String) -> Bool {
         if allowedExtraTitles.contains(title) { return true }
         if path == "Spaces", title.hasPrefix("") { return false }
@@ -116,10 +141,11 @@ public enum MenuComparator {
                 if item.inScope { missing.append(item) } else { allowedMissing.append(item) }
                 continue
             }
-            if item.inScope, !item.shortcut.isEmpty, builtShortcut != item.shortcut {
+            let expectedShortcut = ExpectedMenu.baseKeyDisplay(item.shortcut)
+            if item.inScope, !item.shortcut.isEmpty, builtShortcut != expectedShortcut {
                 // A command with alternates shows its first key; accept any default.
                 if let command = CommandRegistry.active.first(where: { $0.title == item.title }),
-                   command.defaultShortcuts.map(\.display).contains(item.shortcut) {
+                   command.defaultShortcuts.map(\.display).contains(expectedShortcut) {
                     continue
                 }
                 different.append((item, builtShortcut))

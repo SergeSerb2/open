@@ -154,17 +154,38 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17, "1": 18, "2": 19,
         "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25, "7": 26, "-": 27, "8": 28,
         "0": 29, "]": 30, "o": 31, "u": 32, "[": 33, "i": 34, "p": 35, "l": 37, "j": 38,
-        "k": 40, "n": 45, "m": 46, ",": 43, ".": 47, "/": 44, "return": 36, "tab": 48,
+        "k": 40, "n": 45, "m": 46, ",": 43, ".": 47, "/": 44, ";": 41, "'": 39, "\\": 42, "`": 50, "return": 36, "tab": 48,
         "space": 49, "delete": 51, "escape": 53, "left": 123, "right": 124, "down": 125, "up": 126,
         "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97, "f7": 98, "f8": 100,
         "f9": 101, "f10": 109, "f11": 103, "f12": 111,
     ]
 
-    /// Builds a shortcut from an NSEvent, for routing. Returns nil for bare modifier presses.
+    /// Shifted glyphs of the US layout and their base keys. One convention everywhere: a shortcut
+    /// names the base key and carries Shift in `modifiers` (Cmd+Shift+2, not Cmd+"@"), as macOS
+    /// menus display it ("⇧⌘2"). Used for events whose layout lookup fails and for stored data.
+    public static let shiftedBaseKeys: [String: String] = [
+        "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+        "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/", "~": "`",
+    ]
+
+    /// The base-key form: a shifted glyph with Shift becomes its base key ("@" + Shift → "2" + Shift).
+    public var normalized: KeyboardShortcut {
+        guard modifiers.contains(.shift), let base = Self.shiftedBaseKeys[key] else { return self }
+        return KeyboardShortcut(key: base, modifiers: modifiers)
+    }
+
+    /// Builds a shortcut from an NSEvent, for routing and recording. Returns nil for bare modifier presses.
     public static func from(event: NSEvent) -> KeyboardShortcut? {
         guard event.type == .keyDown else { return nil }
         let mods = ShortcutModifiers.from(eventFlags: event.modifierFlags)
-        let raw = event.charactersIgnoringModifiers ?? ""
+        var raw = event.charactersIgnoringModifiers ?? ""
+        // AppKit keeps Shift in charactersIgnoringModifiers (Shift+2 gives "@"). Ask the keyboard
+        // layout for the unshifted key so the shortcut names the base key, with Shift in `mods`.
+        // Letters keep their Command-layout character and only fold case below.
+        if mods.contains(.shift), !raw.contains(where: \.isLetter), let base = event.characters(byApplyingModifiers: []), base.count == 1,
+           !base.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) {
+            raw = base
+        }
         var key = raw
         switch event.keyCode {
         case 49: key = "space"
@@ -194,7 +215,7 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         }
         // Shift+letter: keep the base letter; shift lives in modifiers.
         if key.count == 1 { key = key.lowercased() }
-        return KeyboardShortcut(key: key, modifiers: mods)
+        return KeyboardShortcut(key: key, modifiers: mods).normalized
     }
 
     // Codable through key + modifier names so override files stay readable.
@@ -204,6 +225,8 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         key = try container.decode(String.self, forKey: .key)
         let names = try container.decodeIfPresent([String].self, forKey: .modifiers) ?? []
         modifiers = ShortcutModifiers.fromNames(names)
+        // Recordings saved before the base-key convention hold the shifted glyph ("@" + Shift).
+        key = normalized.key
     }
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)

@@ -176,7 +176,7 @@ public enum CommandRegistry {
         CommandDefinition(id: "stop-loading", title: "Stop Loading", menuPath: ["View"],
                           defaultShortcuts: [.cmd(".")], enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "zoom-in", title: "Zoom In", menuPath: ["View"],
-                          defaultShortcuts: [.cmd("+"), .cmd("=")], isCustomizable: true, enabledKey: EnabledKey.currentTab),
+                          defaultShortcuts: [.cmdShift("="), .cmd("=")], isCustomizable: true, enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "zoom-out", title: "Zoom Out", menuPath: ["View"],
                           defaultShortcuts: [.cmd("-"), .cmdShift("-")], enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "zoom-actual-size", title: "Zoom to Actual Size", menuPath: ["View"],
@@ -367,7 +367,7 @@ public enum CommandRegistry {
 
     static let textMenu: [CommandDefinition] = [
         CommandDefinition(id: "show-spelling", title: "Show Spelling and Grammar", menuPath: ["Edit", "Spelling and Grammar"],
-                          defaultShortcuts: [.cmd(":")], scope: .webContent),
+                          defaultShortcuts: [.cmdShift(";")], scope: .webContent),
         CommandDefinition(id: "check-spelling", title: "Check Document Now", menuPath: ["Edit", "Spelling and Grammar"],
                           defaultShortcuts: [.cmd(";")], scope: .webContent),
         CommandDefinition(id: "check-spelling-while-typing", title: "Check Spelling While Typing", menuPath: ["Edit", "Spelling and Grammar"], scope: .webContent),
@@ -440,9 +440,9 @@ public enum CommandRegistry {
                           defaultShortcuts: [.ctrlShift(String(number))], enabledKey: EnabledKey.currentTabInSplit)
     } + [
         CommandDefinition(id: "next-split-pane", title: "Next Split Pane",
-                          defaultShortcuts: [.ctrlShift("}")], enabledKey: EnabledKey.currentTabInSplit),
+                          defaultShortcuts: [.ctrlShift("]")], enabledKey: EnabledKey.currentTabInSplit),
         CommandDefinition(id: "previous-split-pane", title: "Previous Split Pane",
-                          defaultShortcuts: [.ctrlShift("{")], enabledKey: EnabledKey.currentTabInSplit),
+                          defaultShortcuts: [.ctrlShift("[")], enabledKey: EnabledKey.currentTabInSplit),
     ]
 
     // MARK: - Reserved out-of-scope commands (keys stay taken; no menu item)

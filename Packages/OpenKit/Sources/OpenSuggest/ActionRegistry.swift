@@ -94,7 +94,7 @@ public struct ActionRegistry: Sendable {
         BrowserAction(id: "force-reload", title: "Force Refresh the Page", aliases: ["Force Reload", "Force Refresh"], shortcut: "⇧⌘R", symbol: "arrow.clockwise.circle", requirement: .currentTab),
         BrowserAction(id: "clear-cache-and-refresh", title: "Clear Cache and Refresh", aliases: ["Clear Cache"], symbol: "trash", requirement: .currentTab),
         BrowserAction(id: "clear-cookies-and-refresh", title: "Clear Cookies and Refresh", aliases: ["Clear Cookies"], symbol: "trash.circle", requirement: .currentTab),
-        BrowserAction(id: "zoom-in", title: "Zoom In", shortcut: "⌘+", symbol: "plus.magnifyingglass", requirement: .currentTab),
+        BrowserAction(id: "zoom-in", title: "Zoom In", shortcut: "⇧⌘=", symbol: "plus.magnifyingglass", requirement: .currentTab),
         BrowserAction(id: "zoom-out", title: "Zoom Out", shortcut: "⌘-", symbol: "minus.magnifyingglass", requirement: .currentTab),
         BrowserAction(id: "zoom-actual-size", title: "Zoom to Actual Size", aliases: ["Reset Zoom"], shortcut: "⌘0", symbol: "1.magnifyingglass", requirement: .currentTab),
         BrowserAction(id: "find", title: "Find", aliases: ["Find on Page", "Search Page"], shortcut: "⌘F", symbol: "magnifyingglass", requirement: .currentTab),
