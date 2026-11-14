@@ -664,6 +664,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let native = host as? NoteContentHost {
       return native.owner === self && native.tabID == tabID && !native.closed
     }
+    // An Easel host coming back from a hover preview or the hidden cache keeps its canvas
+    // (undo history, live cards); refusing it would close and rebuild the Easel.
+    if let native = host as? EaselContentHost {
+      return native.owner === self && native.tabID == tabID && !native.closed
+    }
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
           profile(for: tabID)?.id == host.profileID else { return false }
     // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch

@@ -50,7 +50,8 @@ final class NotificationClickRouter {
   /// The most recently active tab with the origin, in a window that shows its profile's Spaces.
   private static func fallbackTab(app: AppDelegate, context: OEBrowserContext, origin: URL) -> (EngineWebContentHostFactory, Tab)? {
     var best: (EngineWebContentHostFactory, Tab)?
-    for factory in app.hostFactories.values {
+    // Only windows of the main model hold its Spaces (a Blank Window has a model of its own).
+    for factory in app.hostFactories.values where factory.model === app.model {
       guard let profile = factory.profile(for: context) else { continue }
       for space in app.model.spaces where space.profileID == profile.id {
         for tab in factory.flattened(space.pinned) + factory.flattened(space.today) where sameOrigin(tab.url, origin) {
