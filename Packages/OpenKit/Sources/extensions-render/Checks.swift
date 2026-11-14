@@ -258,18 +258,18 @@ import OpenExtensionsUI
             && menu.items[8].isSeparatorItem && menu.items.suffix(2).map(\.title) == ["Manage Extensions…", "Add Extension…"]
             && menu.items.prefix(8).allSatisfy { $0.image?.size == CGSize(width: 16, height: 16) }
             && emptyMenu.items.count == 2 && !emptyMenu.items.contains(where: \.isSeparatorItem), "pinned first, names, disabled, 16pt icons, separator, empty menu")
-        let labels = ["Remove from Chromium", "Remove from Chrome…", "Remove from Chromium…", "Pin to Toolbar", "Unpin from Toolbar", "Manage Chrome", "Chromium Settings"]
-        let expected = ["Remove from Open…", "Remove from Open…", "Remove from Open…", "Pin", "Unpin", "Manage Open", "Open Settings"]
+        let labels = ["Remove from Chromium", "Remove from Chrome…", "Remove from Chromium…", "Pin to Toolbar", "Unpin from Toolbar", "Chrome Tools", "Chromium Settings Sync"]
+        let expected = ["Remove from Open…", "Remove from Open…", "Remove from Open…", "Pin", "Unpin", "Chrome Tools", "Chromium Settings Sync"]
         let source = SyntheticMenu([.init(command: 10, title: "Chrome Tools", submenu: [.init(command: 11, title: "Pin to Toolbar", isChecked: true)]), .init(isSeparator: true), .init(command: 12, title: "Remove from Chromium")])
         var native: NSMenu? = ExtensionsMenuBuilder.contextMenu(source)
-        let preserved = native?.items[0].submenu?.items[0].state == .on && native?.items[1].isSeparatorItem == true
+        let preserved = native?.items[0].title == "Chrome Tools" && native?.items[0].submenu?.items[0].title == "Pin" && native?.items[0].submenu?.items[0].state == .on && native?.items[1].isSeparatorItem == true
         native?.performActionForItem(at: 2); native?.delegate?.menuDidClose?(native!); native?.delegate?.menuDidClose?(native!)
         RunLoop.main.run(until: Date().addingTimeInterval(0.01)); native = nil
         let cancelled = SyntheticMenu([.init(command: 1, title: "Options")]); var cancelMenu: NSMenu? = ExtensionsMenuBuilder.contextMenu(cancelled)
         cancelMenu?.delegate?.menuDidClose?(cancelMenu!); cancelMenu?.delegate?.menuDidClose?(cancelMenu!)
         RunLoop.main.run(until: Date().addingTimeInterval(0.01)); cancelMenu = nil
         check("menu.relabel", labels.map(ExtensionsMenuBuilder.relabel) == expected && preserved && source.selections == [12] && source.cancels == 0 && cancelled.cancels == 1,
-              "Chrome + Chromium relabel; separator/submenu/check preserved; select once, cancel once")
+              "Chrome + Chromium built-in relabel, extension names kept; separator/submenu/check preserved; select once, cancel once")
         let body = ExtensionsSectionBody(frame: CGRect(x: 0, y: 0, width: 260, height: 200)); body.pickerMode = true
         _ = body.setActions(Synthetic.actions(5))
         let pickerWindow = ExtensionsRenderer.host(body, scale: 2); defer { pickerWindow.contentView = nil; pickerWindow.close() }
