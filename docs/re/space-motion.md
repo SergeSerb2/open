@@ -113,9 +113,28 @@ Later source review keeps empty-Space chrome below the incoming slide, preserves
 an in-flight source capture across ordinary same-profile refreshes and re-arms
 receipts when a visible pane's viewport changes. Maximized splits wait only for
 the visible pane. A source capture now draws the native base once, without a
-second full-size base image or repeated theme drawing. The updated rental flow
-is pending. Renderer-loss kill probes remain M1-only under the existing rule.
-Successful live reveal waits for SEAM READY. M1 pacing and strips must then be
+second full-size base image or repeated theme drawing. On functional head
+`46b19b45`, the updated rental flow passes all 18 rows, including empty-to-page
+entry and close during motion. Close removes the shell window and leaves zero
+visible native windows; hidden AppKit objects are not treated as open windows.
+Cleanup is normal, with no owned processes and unchanged real preferences.
+Cached key-return, swipe-return and reversed-cover page ROIs again match the
+source exactly (mean/max channel difference 0/0). The endpoint contact contains
+composed rental stills, not a timed strip or physical-presentation receipt.
+Its empty-to-page image uses a cached destination, not the theme fallback.
+
+Rental pacing collected zero trials. The first attempt failed with
+`Frame helper timeout waiting for ready`; its helper stderr is empty. The
+rental display was 2560 by 1600, 2x, 60 Hz, and preflight load1 was 2.038086 /
+1.797852. One bounded GUI-session retry failed before App/capture launch:
+`Could not switch to audit session 0x186a2: 1: Operation not permitted`.
+No further rental capture retry was started. System guards were clear; normal
+App cleanup and a final path-scoped process/holder audit found no owned work
+remaining. Private raw receipts are in
+`NT-frames/animation-space-protocol-55/latest-rental/`.
+
+Renderer-loss kill probes remain M1-only under the existing rule. Successful
+live reveal waits for SEAM READY. M1 pacing and native strips must then be
 rerun unchanged; the earlier sidebar-only candidate does not qualify this path.
 
 E3 confirmed on 2026-11-13 at 18:39 that no implementation/head is available.
@@ -128,5 +147,7 @@ and LocalSurfaceId (`render_widget_host_view_mac.mm:1221-1226`), but a shell
 API binding those to the requested view/presentation is not implemented. A saved
 surface is acceptable for Space switching when those identities match; D3
 new-width resize has its separate stronger requirement.
-Its existing A/B engine pair remains pinned. Chromium ownership stays with E3;
-#575 remains draft pending the engine adapter and runtime proof.
+E3 reported at 19:34 that its A/B run is done and the seam is active in a
+separate worktree, but no callback or SEAM READY head is available. Chromium
+ownership stays with E3; #575 remains draft pending the engine adapter and
+runtime proof.
