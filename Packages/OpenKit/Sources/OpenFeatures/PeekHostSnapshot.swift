@@ -130,9 +130,22 @@ extension PeekOverlayView {
             motionHostView?.isHidden = true; motionHostFrozen = true
             snapshot.contents = image
         }
+        snapshot.opacity = image == nil ? snapshot.opacity : 0
+        PeekMotionTrace.region("opening.imageCommit") { CATransaction.commit() }
+        // Keep engine visibility and image preparation out of the animation
+        // transaction. The source color stays opaque for this commit fence.
+        afterSnapshotCommit(snapshot) { [weak self] in
+            guard let self, self.openingHandoff, self.motionSnapshotLayer === snapshot else { return }
+            self.fadeOpeningImage(snapshot, hasImage: image != nil, duration: duration, ready: ready)
+        }
+    }
+
+    private func fadeOpeningImage(_ snapshot: CALayer, hasImage: Bool, duration: CFTimeInterval,
+                                  ready: @escaping @MainActor () -> Void) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = image == nil ? snapshot.opacity : 0
-        fade.toValue = image == nil ? 0 : 1
+        fade.fromValue = hasImage ? 0 : snapshot.opacity
+        fade.toValue = hasImage ? 1 : 0
         fade.duration = duration
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { [weak self] in
             guard let self, self.openingHandoff, self.motionSnapshotLayer === snapshot else { return }
@@ -145,10 +158,10 @@ extension PeekOverlayView {
                 self.endHostSnapshot(); ready()
             }
         } }
-        snapshot.opacity = image == nil ? 0 : 1
+        snapshot.opacity = hasImage ? 1 : 0
         snapshot.add(fade, forKey: "peekContentReveal")
         PeekMotionTrace.mark("opening.contentFade", value: duration)
-        CATransaction.commit()
+        PeekMotionTrace.region("opening.fadeCommit") { CATransaction.commit() }
     }
 
     func endHostSnapshot(reveal: Bool = true) {
