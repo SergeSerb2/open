@@ -127,10 +127,12 @@ final class SpacePageSnapshotTransition: NSView {
     func begin(outgoing image: CGImage?, destination key: SnapshotKey,
                theme: SpaceThemeStyle, themeFrame: CGRect, direction: CGFloat,
                animated: Bool, token: SpringToken = Motion.spaceSwitch,
+               incomingOverride: CGImage? = nil,
                onCovered: @escaping (Receipt) -> Void) -> Bool {
-        guard !bounds.isEmpty, image == nil || Self.cost(image!) != nil, direction.isFinite,
+        guard !bounds.isEmpty, image.map({ Self.cost($0) != nil }) ?? true, direction.isFinite,
               key.scale.isFinite, (1...4).contains(key.scale),
-              image == nil || (image!.width == key.width && image!.height == key.height),
+              image.map({ $0.width == key.width && $0.height == key.height }) ?? true,
+              incomingOverride.map({ Self.cost($0) != nil && $0.width == key.width && $0.height == key.height }) ?? true,
               key.width == Int(ceil(bounds.width * key.scale)),
               key.height == Int(ceil(bounds.height * key.scale)),
               themeFrame.width.isFinite, themeFrame.height.isFinite,
@@ -146,9 +148,9 @@ final class SpacePageSnapshotTransition: NSView {
         source.contentsGravity = .resize; source.contentsScale = key.scale
         let target = CALayer(); target.frame = bounds; target.masksToBounds = true
         target.contentsScale = source.contentsScale
-        if let cached = cache[key] {
+        if let cached = incomingOverride ?? cache[key] {
             destinationUsesSnapshot = true; target.contents = cached; target.contentsGravity = .resize
-            lru.removeAll { $0 == key }; lru.append(key)
+            if cache[key] != nil { lru.removeAll { $0 == key }; lru.append(key) }
         } else {
             destinationUsesSnapshot = false
             // An opaque, canonical Space field. The field stays in window

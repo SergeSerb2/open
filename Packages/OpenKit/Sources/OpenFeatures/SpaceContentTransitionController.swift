@@ -49,19 +49,23 @@ final class SpaceContentTransitionController {
 
         generation &+= 1; let token = generation
         cancelRequests()
+        let previousRequest = requestedSelection
         requestedSelection = selection
         if source?.profile != selection.profile { plate.invalidateAll() }
         let scale = container.window?.backingScaleFactor ?? 1
         let previousCover = plate.capturePresentation(size: container.bounds.size, scale: scale)
         if plate.phase != .idle, previousCover == nil { return }
-        plate.frame = parent.convert(container.bounds, from: container)
-        parent.addSubview(plate, positioned: .above, relativeTo: container)
+        plate.frame = container.bounds
+        // Share the web panel's ancestor. Sidebar/Cmd+S layer motion therefore
+        // moves the cover too, without a per-frame sibling-frame update.
+        container.addSubview(plate, positioned: .above, relativeTo: nil)
         let style = container.style
         let key = container.spaceSnapshotKey(selection)
-        let oldIndex = source.flatMap { container.spaceOrder.firstIndex(of: $0.space) } ?? 0
+        let visualSource = previousRequest ?? source
+        let oldIndex = visualSource.flatMap { container.spaceOrder.firstIndex(of: $0.space) } ?? 0
         let newIndex = container.spaceOrder.firstIndex(of: selection.space) ?? oldIndex
         let direction: CGFloat = newIndex == oldIndex ? 0 : newIndex < oldIndex ? -1 : 1
-        let themeFrame = parent.bounds.offsetBy(dx: -plate.frame.minX, dy: -plate.frame.minY)
+        let themeFrame = container.convert(parent.bounds, from: parent)
         // Source remains attached and visible throughout the slide. Capture it
         // once for a later return, without waiting to begin the layer motion.
         if let source, source.space != selection.space { captureSource(source) }
@@ -114,7 +118,7 @@ final class SpaceContentTransitionController {
     /// plates once, then request the final native viewport behind them.
     func layout() {
         guard plate.phase != .idle, let parent = container.superview else { return }
-        let frame = parent.convert(container.bounds, from: container)
+        let frame = container.bounds
         guard frame != plate.frame || lastViewport != viewport else { return }
         if frame.size == plate.frame.size, lastViewport == viewport {
             CATransaction.begin(); CATransaction.setDisableActions(true); plate.frame = frame; CATransaction.commit()
@@ -127,8 +131,8 @@ final class SpaceContentTransitionController {
         CATransaction.begin(); CATransaction.setDisableActions(true); plate.frame = frame; CATransaction.commit()
         let token = generation
         _ = plate.begin(outgoing: image, destination: container.spaceSnapshotKey(selection),
-            theme: container.style, themeFrame: parent.bounds.offsetBy(dx: -frame.minX, dy: -frame.minY),
-            direction: 0, animated: false) { [weak self] receipt in
+            theme: container.style, themeFrame: container.convert(parent.bounds, from: parent),
+            direction: 0, animated: false, incomingOverride: image) { [weak self] receipt in
                 guard let self, self.generation == token else { return }
                 self.receipt = receipt
                 if let apply = self.applyingCoveredSelection {
@@ -159,7 +163,7 @@ final class SpaceContentTransitionController {
         if selection.tabs.isEmpty {
             // The explicit native empty-Space surface is ready. No live engine
             // view is exposed and no engine receipt is fabricated for it.
-            plate.presented(receipt); return
+            plate.presented(receipt); container.finishEmptySpaceSelection(); return
         }
         let token = frameGeneration
         let hosts = selection.tabs.compactMap { container.host(for: $0) }.filter { !$0.view.isHiddenOrHasHiddenAncestor }

@@ -273,10 +273,12 @@ public final class WebContentContainer: NSView {
                 fractions: selection.fractions, spaceID: selection.space, profileID: selection.profile,
                 animateSlots: animateSlots)
         } else {
-            clearNativeSelection(); currentSpace = selection.space; currentProfile = selection.profile; isHidden = true
+            clearNativeSelection(); currentSpace = selection.space; currentProfile = selection.profile
+            isHidden = spaceMotionStorage?.plate.phase == .idle
         }
         if notify { onSpaceSelectionApplied?() }
     }
+    func finishEmptySpaceSelection() { isHidden = true; onSpaceSelectionApplied?() }
     private func showNative(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID, animateSlots: Bool) {
         // Selection may come from keyboard cycling, automation, or model observers.
         // Return the preview before changing slots or refreshing any selected host.
@@ -388,16 +390,23 @@ public final class WebContentContainer: NSView {
         // Native chrome/placeholder pixels are captured once. The engine's
         // remote surfaces are filled from viewport captures below, not from
         // AppKit cacheDisplay, which can leave holes for those surfaces.
-        let base: CGImage?
-        if let rep = bitmapImageRepForCachingDisplay(in: bounds) {
-            cacheDisplay(in: bounds, to: rep); base = rep.cgImage
-        } else { base = nil }
+        // Capture slots, not their container: the retained plate is a sibling
+        // of these slots and must never contaminate a Space's cached page.
+        if let theme = ThemeField.makeImage(style: style, windowSize: bounds.size, isActive: window?.isKeyWindow == true) {
+            context.draw(theme, in: bounds)
+        }
+        for view in slots.filter({ !$0.isHidden }).map({ $0 as NSView }) + dividers.filter({ !$0.isHidden }) {
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            guard let image = rep.cgImage else { return nil }
+            context.draw(image, in: view.convert(view.bounds, to: self))
+        }
         let pages = slots.filter { !$0.isHidden }.compactMap { slot -> SpacePageSnapshotInput.Page? in
             guard let host = cache[slot.tabID], host is any WebContentProviding,
                   let view = slot.contentHostView else { return nil }
             return .init(host: host, frame: view.convert(view.bounds, to: self))
         }
-        return SpacePageSnapshotInput(context: context, base: base, pages: pages,
+        return SpacePageSnapshotInput(context: context, base: context.makeImage(), pages: pages,
             bounds: bounds, style: style, active: window?.isKeyWindow == true)
     }
     /// Install the normal callbacks before a new preview starts loading, or renew
