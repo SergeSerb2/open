@@ -47,9 +47,13 @@ public protocol WebContentHost: AnyObject {
     var onPageBackgroundChange: ((NSColor?) -> Void)? { get set }
     var liveState: WebContentLiveState { get }
     var onLiveStateChange: ((WebContentLiveState) -> Void)? { get set }
+    /// Nil on engines without the per-view presentation seam. Snapshot covers
+    /// remain in place; capture/load/animation completion cannot replace it.
+    var framePresentation: (any WebContentFramePresentation)? { get }
 }
 
 public extension WebContentHost {
+    var framePresentation: (any WebContentFramePresentation)? { nil }
     var liveState: WebContentLiveState { WebContentLiveState(isLoading: isLoading, canGoBack: canGoBack, canGoForward: canGoForward) }
 }
 

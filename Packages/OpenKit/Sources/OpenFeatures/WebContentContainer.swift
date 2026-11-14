@@ -2,6 +2,7 @@ import AppKit
 import OpenModel
 import OpenDesign
 import OpenExtensionsUI
+import ImageIO
 
 @MainActor
 public final class PaneSlotView: NSView {
@@ -160,6 +161,24 @@ public final class WebContentContainer: NSView {
     let factory: any WebContentHostFactory
     public var tabProvider: ((ItemID) -> Tab?) = { _ in nil }
     public var style = SpaceThemeStyle.defaultTheme(system: .dark)
+    public var spaceOrder: [SpaceID] = []
+    /// A deferred native selection needs one ordinary window layout after it
+    /// attaches behind the retained plate (especially the empty-Space surface).
+    public var onSpaceSelectionApplied: (() -> Void)?
+    private var spaceMotionStorage: SpaceContentTransitionController?
+    private var motionRevisions: [ItemID: UInt64] = [:]
+    private var nextMotionRevision: UInt64 = 0
+    private var spaceMotion: SpaceContentTransitionController {
+        if let spaceMotionStorage { return spaceMotionStorage }
+        let motion = SpaceContentTransitionController(container: self); spaceMotionStorage = motion; return motion
+    }
+    public var spacePageRetainsEmptySurface: Bool { spaceMotionStorage?.keepsEmptySourceVisible == true }
+    public var spacePageMotionPhase: String { spaceMotionStorage?.plate.phase.rawValue ?? "idle" }
+    public var spacePageUsesSnapshot: Bool { spaceMotionStorage?.plate.destinationUsesSnapshot ?? false }
+    public var spacePageSnapshotBytes: Int { spaceMotionStorage?.plate.cachedBytes ?? 0 }
+    public var spacePageCaptureCount: Int { spaceMotionStorage?.captureCount ?? 0 }
+    public var spacePagePresentationUnavailable: Bool { spaceMotionStorage?.presentationUnavailable ?? false }
+    public var spacePageAnimation: CAAnimation? { spaceMotionStorage?.plate.lastAnimation }
     public private(set) var slots: [PaneSlotView] = []
     // Reuse the chrome with its cached host. Rebuilding fourteen AppKit buttons
     // on every single→split switch exceeded the live-tab budget (s9 sample).
@@ -237,13 +256,35 @@ public final class WebContentContainer: NSView {
         }
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { if let monitor { NSEvent.removeMonitor(monitor) }; for host in Array(cache.values) + Array(previewHosts.values) { host.close() } }
+    isolated deinit { spaceMotionStorage?.cancel(clearCache: true); if let monitor { NSEvent.removeMonitor(monitor) }; for host in Array(cache.values) + Array(previewHosts.values) { host.close() } }
     public func show(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID) {
         guard (1...4).contains(tabIDs.count), Set(tabIDs).count == tabIDs.count, tabIDs.contains(focusedTabID) else { return }
+        if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
+        spaceMotion.select(SpaceContentSelection(tabs: tabIDs, focused: focusedTabID, orientation: orientation,
+            fractions: fractions, space: spaceID, profile: profileID))
+    }
+    public func showEmptySpace(spaceID: SpaceID, profileID: ProfileID) {
+        spaceMotion.select(SpaceContentSelection(tabs: [], focused: nil, orientation: .horizontal,
+            fractions: [], space: spaceID, profile: profileID))
+    }
+    func applySpaceSelection(_ selection: SpaceContentSelection, animateSlots: Bool, notify: Bool = true) {
+        if let focused = selection.focused {
+            isHidden = false
+            showNative(tabIDs: selection.tabs, focusedTabID: focused, orientation: selection.orientation,
+                fractions: selection.fractions, spaceID: selection.space, profileID: selection.profile,
+                animateSlots: animateSlots)
+        } else {
+            clearNativeSelection(); currentSpace = selection.space; currentProfile = selection.profile
+            isHidden = spaceMotionStorage?.plate.phase == .idle
+        }
+        if notify { onSpaceSelectionApplied?() }
+    }
+    func finishEmptySpaceSelection() { isHidden = true; onSpaceSelectionApplied?() }
+    private func showNative(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID, animateSlots: Bool) {
         // Selection may come from keyboard cycling, automation, or model observers.
         // Return the preview before changing slots or refreshing any selected host.
         if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
-        if let currentProfile, currentProfile != profileID { closeAll() }
+        if let currentProfile, currentProfile != profileID { closeAll(preservingSpaceMotion: true) }
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
         let old = ids, previousFocus = focused
         for id in old where !tabIDs.contains(id) { cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
@@ -261,7 +302,12 @@ public final class WebContentContainer: NSView {
         ids = tabIDs; focused = focusedTabID; self.orientation = orientation
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
         hiddenLRU.removeAll { tabIDs.contains($0) }
-        ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: old != ids)
+        if spaceMotionStorage?.plate.phase == .awaitingPresentation {
+            for id in tabIDs { ensureHost(id) }
+        } else { ensureHost(focusedTabID) }
+        updateSlots(); trimCache(); layoutPanes(animated: animateSlots && old != ids)
+        // Apply the final viewport now. No layout work is driven by the slide.
+        for slot in slots { slot.layoutContents() }
         if previousFocus != focusedTabID { focusContent(focusedTabID) }
         let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
         if !pending.isEmpty {
@@ -283,9 +329,11 @@ public final class WebContentContainer: NSView {
     }
     private func bind(_ host: any WebContentHost, as id: ItemID) {
         nextGeneration += 1; let generation = nextGeneration
+        advanceMotionRevision(id)
         cache[id] = host; generations[id] = generation; tabProvider(id)?.live.hasWebContent = true
         host.onURLChange = { [weak self, weak host] url in
             guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
+            self.advanceMotionRevision(id)
             // No engine-to-model bridge exists before the App target; property writes are the bridge.
             self.tabProvider(id)?.url = url; self.onTabURLChanged?(id, url); self.metadataChanged(id)
         }
@@ -295,6 +343,8 @@ public final class WebContentContainer: NSView {
         }
         host.onLoadingChange = { [weak self, weak host] loading in
             guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
+            if loading { self.advanceMotionRevision(id) }
+            else { self.spaceMotionStorage?.invalidate(tab: id) }
             self.tabProvider(id)?.live.isLoading = loading; self.metadataChanged(id)
         }
         host.onFaviconChange = { [weak self, weak host] data in
@@ -316,6 +366,49 @@ public final class WebContentContainer: NSView {
         applyLiveState(host.liveState, for: id)
     }
     private func registeredHost(for id: ItemID) -> (any WebContentHost)? { cache[id] ?? previewHosts[id] }
+    private func advanceMotionRevision(_ id: ItemID) {
+        nextMotionRevision &+= 1; motionRevisions[id] = nextMotionRevision
+        spaceMotionStorage?.invalidate(tab: id)
+    }
+    func spaceHostRevision(_ id: ItemID) -> UInt64 { motionRevisions[id] ?? 0 }
+    func spaceHostViewport(_ host: any WebContentHost) -> WebContentFrameViewport {
+        let scale = host.view.window?.backingScaleFactor ?? window?.backingScaleFactor ?? 1
+        return WebContentFrameViewport(width: Int(ceil(host.view.bounds.width * scale)),
+            height: Int(ceil(host.view.bounds.height * scale)), scale: scale)
+    }
+    func spaceSnapshotKey(_ selection: SpaceContentSelection) -> SpacePageSnapshotTransition.SnapshotKey {
+        let scale = window?.backingScaleFactor ?? 1
+        return .init(space: selection.space, profile: selection.profile, tabs: selection.tabs,
+            revisions: selection.tabs.map { motionRevisions[$0] ?? 0 },
+            layout: [selection.orientation == .horizontal ? 0 : 1, showsToolbar ? 1 : 0,
+                     Double(selection.tabs.firstIndex { $0 == maximizedTabID } ?? -1)] + selection.fractions,
+            width: Int(ceil(bounds.width * scale)), height: Int(ceil(bounds.height * scale)), scale: scale)
+    }
+    func spaceSnapshotInput(style: SpaceThemeStyle) -> SpacePageSnapshotInput? {
+        let scale = window?.backingScaleFactor ?? 1
+        guard let context = SpacePageSnapshotTransition.context(size: bounds.size, scale: scale),
+              !isHiddenOrHasHiddenAncestor else { return nil }
+        // Native chrome/placeholder pixels are captured once. The engine's
+        // remote surfaces are filled from viewport captures below, not from
+        // AppKit cacheDisplay, which can leave holes for those surfaces.
+        // Capture slots, not their container: the retained plate is a sibling
+        // of these slots and must never contaminate a Space's cached page.
+        if let theme = ThemeField.makeImage(style: style, windowSize: bounds.size, isActive: window?.isKeyWindow == true) {
+            context.draw(theme, in: bounds)
+        }
+        for view in slots.filter({ !$0.isHidden }).map({ $0 as NSView }) + dividers.filter({ !$0.isHidden }) {
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            guard let image = rep.cgImage else { return nil }
+            context.draw(image, in: view.convert(view.bounds, to: self))
+        }
+        let pages = slots.filter { !$0.isHidden }.compactMap { slot -> SpacePageSnapshotInput.Page? in
+            guard let host = cache[slot.tabID], host is any WebContentProviding,
+                  let view = slot.contentHostView else { return nil }
+            return .init(host: host, frame: view.convert(view.bounds, to: self))
+        }
+        return SpacePageSnapshotInput(context: context, pages: pages)
+    }
     /// Install the normal callbacks before a new preview starts loading, or renew
     /// them after takeHost invalidated a cached host's generation.
     public func connectPreviewHost(_ host: any WebContentHost, for id: ItemID) {
@@ -373,6 +466,10 @@ public final class WebContentContainer: NSView {
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }
     public func clearSelection() {
+        spaceMotionStorage?.reset()
+        clearNativeSelection(); currentSpace = nil
+    }
+    private func clearNativeSelection() {
         onReturnPreviewHost?()
         showGeneration += 1
         for id in ids {
@@ -389,6 +486,7 @@ public final class WebContentContainer: NSView {
     }
     public func host(for tabID: ItemID) -> (any WebContentHost)? { cache[tabID] }
     public func takeHost(for id: ItemID) -> (any WebContentHost)? {
+        spaceMotionStorage?.invalidate(tab: id); motionRevisions[id] = nil
         generations[id] = nil; parkedSlots[id] = nil; hiddenLRU.removeAll { $0 == id }; return cache.removeValue(forKey: id)
     }
     public func adopt(_ host: any WebContentHost, for id: ItemID) {
@@ -406,6 +504,7 @@ public final class WebContentContainer: NSView {
         parkedSlots[id] = nil
         generations[id] = nil
         let host = cache.removeValue(forKey: id) ?? previewHosts.removeValue(forKey: id)
+        motionRevisions[id] = nil; spaceMotionStorage?.invalidate(tab: id)
         hiddenLRU.removeAll { $0 == id }
         host?.close()
         if host != nil {
@@ -424,6 +523,10 @@ public final class WebContentContainer: NSView {
         if includingFavicon { live.faviconPNG = nil }
     }
     public func closeAll() {
+        closeAll(preservingSpaceMotion: false)
+    }
+    private func closeAll(preservingSpaceMotion: Bool) {
+        if !preservingSpaceMotion { spaceMotionStorage?.reset() }
         if !previewHosts.isEmpty { onReturnPreviewHost?() }
         for id in Set(cache.keys).union(previewHosts.keys) { closeHost(for: id) }
         parkedSlots.removeAll()
@@ -485,7 +588,7 @@ public final class WebContentContainer: NSView {
         } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
         layoutDividers()
     }
-    public override func layout() { super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false) }
+    public override func layout() { super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false); spaceMotionStorage?.layout() }
     private func layoutDividers() {
         while dividers.count > max(0, slots.count - 1) { dividers.removeLast().removeFromSuperview() }
         while dividers.count < max(0, slots.count - 1) {

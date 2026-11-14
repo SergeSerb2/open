@@ -1436,6 +1436,12 @@
           "card": controller.cardAnimations.mapValues(describeAnimation),
           "cardSamples": controller.cardMotionSamples.map { ["time": $0.time, "offset": $0.offset] },
           "space": controller.sidebar.spaceSlideAnimation.map(describeAnimation) ?? [:],
+          "spacePage": ["phase": controller.container.spacePageMotionPhase,
+            "cachedDestination": controller.container.spacePageUsesSnapshot,
+            "cacheBytes": controller.container.spacePageSnapshotBytes,
+            "captures": controller.container.spacePageCaptureCount,
+            "presentationUnavailable": controller.container.spacePagePresentationUnavailable,
+            "animation": controller.container.spacePageAnimation.map(describeAnimation) ?? [:]] as [String: Any],
           "active": ["sidebar": controller.sidebar.layer?.animationKeys() ?? [],
             "panel": controller.container.layer?.animationKeys() ?? []]] as [String: Any]
       case "window-state":

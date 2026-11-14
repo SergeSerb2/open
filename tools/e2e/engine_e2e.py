@@ -4236,7 +4236,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         key(); settled()
         app.call("space-create", title="Motion Space")
         switched = wait_until(lambda: app.call("window-motion")["space"], timeout=3, step=.01) or {}
-        results["motion_space_switch"] = {"ok": spring(switched, .2, 1, "position.x"), "scheduled": switched}
+        results["motion_space_switch"] = {"ok": spring(switched, .2, 1, "transform.translation.x"), "scheduled": switched}
         # Reduce Motion uses the same real input and frame paths, with no animated slide/fade.
         app.call("window-motion", reduced=True)
         key(); reduced_hide = app.call("window-motion")
@@ -5024,7 +5024,7 @@ def sidebar_checks(factory, results, tmp):
         travel = abs(switched.get("to", 0) - switched.get("from", 0))
         results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
             and after_click["selected"] == e and after_click["shownPages"] == [e]
-            and scheduled_spring(switched, .20, 1, "position.x") and remainder <= .5 and travel > .5,
+            and scheduled_spring(switched, .20, 1, "transform.translation.x") and remainder <= .5 and travel > .5,
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
             "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
