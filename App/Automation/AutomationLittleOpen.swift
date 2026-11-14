@@ -77,7 +77,9 @@ extension AutomationController {
     let count = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "open_idle_count").map {
       unsafeBitCast($0, to: (@convention(c) (Int32) -> UInt64).self)
     }
-    return ["sessions": sessions, "hotkeyRegistered": app.hotkeyService?.isRegistered ?? false,
+    return ["sessions": sessions, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
+      "mainWindow": NSApp.mainWindow?.windowNumber ?? 0,
+      "hotkeyRegistered": app.hotkeyService?.isRegistered ?? false,
       "expiry": archiveState(), "mainWindows": app.windowControllers.count,
       "browserCount": OEEngine.shared.browsers.count,
       "littleOpenBrowserCreations": LittleOpenWebContent.browserCreationCountForAutomation,

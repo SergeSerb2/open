@@ -58,6 +58,9 @@ public enum Motion {
     public static let folderCollapse: CFTimeInterval = 0.25
     public static var folderExpandTiming: CAMediaTimingFunction { easeOut }
     public static var folderCollapseTiming: CAMediaTimingFunction { CAMediaTimingFunction(name: .default) }
+    /// Provisional Little Open window fades, using the existing 0.12 s panel
+    /// fade duration until capture C14-7 supplies its measured timing.
+    public static let littleOpenFade: CFTimeInterval = 0.12
     /// Tooltip fade in and out.
     public static let tooltipFade: CFTimeInterval = 0.12
     /// Sidebar hide and show (Cmd+S) slide.
