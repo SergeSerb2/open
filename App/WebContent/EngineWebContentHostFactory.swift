@@ -87,7 +87,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let profile = focusedProfile else { return nil }
     return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)
   }
-  var contentContainer: NSView { controller!.container }
+  /// Nil for a Little Open factory (no browser window controller).
+  var contentContainer: NSView? { controller?.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
   var welcomeHosts: [ItemID: WelcomeContentHost] = [:]
   /// Native Note pages (`open://note/<uuid>`), one per shown Note tab.
@@ -743,7 +744,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let host = makeHost(tabID: tab.id, profileID: profileID, url: history == nil ? nil : tab.url, history: history)
       as? EngineWebContentHost else { return nil }
     controller?.container.adopt(host, for: tab.id)
-    if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
+    if host.view.superview == nil, let contentContainer { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     if history == nil { host.load(tab.url) }
     return host.content
   }
@@ -754,7 +755,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     tab.live.sleepPhase = .live
     guard let host = makeHost(tabID: tab.id, profileID: profile.id, url: nil) as? EngineWebContentHost else { return nil }
     controller?.container.adopt(host, for: tab.id)
-    if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
+    if host.view.superview == nil, let contentContainer { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     if let url { host.load(url) }; mirror.sync(); return host.content
   }
   private func dropContent(id: ItemID, content: OEWebContent) { controller?.container.closeHost(for: id); hosts[id]?.close() }
@@ -1063,6 +1064,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     easelHosts.removeAll()
     controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
+    // Block observers stay in NotificationCenter until removed, one pair per closed window.
+    for observer in [developerModeObserver, swipeActivationObserver].compactMap({ $0 }) { NotificationCenter.default.removeObserver(observer) }
+    developerModeObserver = nil; swipeActivationObserver = nil
     savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
@@ -1302,12 +1306,22 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func restoreLastClosedTab(_ sender: Any?) {
+    // Incognito windows have no Archive (the menu item is disabled there); never pull a
+    // regular Profile's closed tab into a private window through the key path.
+    guard !isIncognito, !isClosing else { return }
     let store = app.archiveSink.store(for: focusedProfile?.id)
     Task { @MainActor in
-      guard let recent = await store.recent(limit: 1).first,
-        let record = await store.restore(id: recent.id)
-      else { return }
+      // Read the row without deleting it: if the window closes or Open quits during the
+      // await, the closed tab must stay in the Archive. The model's restore discards the
+      // row only once the tab is placed.
+      guard let record = await store.recent(limit: 1).first else { return }
       guard !self.isClosing, !self.app.terminationRequested else { return }
+      // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
+      // blank tab and drop its children.
+      if record.kind == .folder {
+        if let folder = self.model.restoreArchivedFolder(record) { self.controller?.sidebar.reveal(nodeID: folder.id) }
+        return
+      }
       let tab = self.model.restoreArchivedTab(record)
       self.select(nodeID: tab.id)
     }
@@ -1346,7 +1360,8 @@ extension EngineWebContentHostFactory {
   func cycleTab(by delta: Int) {
     let ids = orderedTabs.map(\.id)
     guard !ids.isEmpty else { return }
-    let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? -delta
+    // With no selection, Next starts at the first tab and Previous at the last one.
+    let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? (delta > 0 ? -1 : 0)
     select(nodeID: ids[(current + delta + ids.count) % ids.count])
   }
 
@@ -1920,7 +1935,7 @@ extension EngineWebContentHostFactory {
     tab.live.sleepPhase = .live
     content.isMuted = tab.isMuted
     controller?.container.adopt(host, for: tab.id)
-    if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
+    if host.view.superview == nil, let contentContainer { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     mirror.sync()
     app.tabSleep.contentCreated(tabID: tab.id, host: host)
   }
