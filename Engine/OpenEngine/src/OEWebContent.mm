@@ -4,6 +4,8 @@
 #import <ImageIO/ImageIO.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 
 #include "include/cef_open_browser_info.h"
 #include "include/cef_parser.h"
@@ -155,6 +157,7 @@ static NSView* OEParkingView() {
 - (void)oe_viewWillMoveToWindow:(nullable NSWindow*)window;
 - (void)oe_viewDidMoveToWindow;
 - (void)oe_viewGeometryChanged;
+- (void)oe_cancelFramePresentation;
 - (void)oe_showPageIfVisible;
 @end
 
@@ -176,6 +179,12 @@ static NSView* OEParkingView() {
   [super viewWillMoveToWindow:newWindow];
 }
 
+- (void)viewWillMoveToSuperview:(NSView*)newSuperview {
+  if (newSuperview != self.superview)
+    [_content oe_cancelFramePresentation];
+  [super viewWillMoveToSuperview:newSuperview];
+}
+
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
   [_content oe_viewDidMoveToWindow];
@@ -188,6 +197,11 @@ static NSView* OEParkingView() {
 
 - (void)setFrameOrigin:(NSPoint)newOrigin {
   [super setFrameOrigin:newOrigin];
+  [_content oe_viewGeometryChanged];
+}
+
+- (void)viewDidChangeBackingProperties {
+  [super viewDidChangeBackingProperties];
   [_content oe_viewGeometryChanged];
 }
 
@@ -263,6 +277,101 @@ class OESelectionCallback : public CefSelectionCallback {
   IMPLEMENT_REFCOUNTING(OESelectionCallback);
 };
 
+#pragma mark - Frame presentation
+
+@interface OEWebContentPresentedFrame ()
+- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+                       scale:(double)scale time:(NSTimeInterval)time;
+@end
+@implementation OEWebContentPresentedFrame
+- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+                       scale:(double)scale time:(NSTimeInterval)time {
+  if ((self = [super init])) {
+    _requestID = [requestID copy];
+    _pixelSize = size;
+    _backingScale = scale;
+    _presentedAt = time;
+  }
+  return self;
+}
+@end
+
+@interface OEWebContentFrameRequest ()
+- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+                       scale:(double)scale cancel:(void (^)(void))cancel
+                  completion:(void (^)(OEWebContentPresentedFrame*))completion;
+- (void)oe_presentedAt:(NSTimeInterval)time;
+- (void)oe_deliverPresentedAt:(NSTimeInterval)time;
+@end
+@implementation OEWebContentFrameRequest {
+  NSUUID* _requestID;
+  NSSize _size;
+  double _scale;
+  BOOL _cancelled;
+  BOOL _deliveryScheduled;
+  void (^_cancelAction)(void);
+  void (^_completion)(OEWebContentPresentedFrame*);
+}
+- (instancetype)oe_initWithID:(NSUUID*)requestID size:(NSSize)size
+                       scale:(double)scale cancel:(void (^)(void))cancel
+                  completion:(void (^)(OEWebContentPresentedFrame*))completion {
+  if ((self = [super init])) {
+    _requestID = [requestID copy]; _size = size; _scale = scale;
+    _cancelAction = [cancel copy]; _completion = [completion copy];
+  }
+  return self;
+}
+- (void)cancel {
+  if (!_completion)
+    return;
+  _cancelled = YES;
+  void (^action)(void) = _cancelAction;
+  _cancelAction = nil;
+  if (action) action();
+  [self oe_presentedAt:0];
+}
+- (void)oe_presentedAt:(NSTimeInterval)time {
+  if (!_completion)
+    return;
+  if (time <= 0) _cancelled = YES;
+  if (_deliveryScheduled)
+    return;
+  _deliveryScheduled = YES;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self oe_deliverPresentedAt:time];
+  });
+}
+- (void)oe_deliverPresentedAt:(NSTimeInterval)time {
+  // CEF invokes its callback from a deferred UI task after validating the
+  // document, attachment and geometry. Deliver in that task, without another
+  // gap in which those identities could change.
+  void (^done)(OEWebContentPresentedFrame*) = _completion;
+  _completion = nil;
+  _cancelAction = nil;
+  if (done) {
+    OEWebContentPresentedFrame* receipt = _cancelled || time <= 0 ? nil :
+        [[OEWebContentPresentedFrame alloc] oe_initWithID:_requestID
+            size:_size scale:_scale time:time];
+    done(receipt);
+  }
+}
+@end
+
+class OEFramePresentationCallback : public CefOpenFramePresentationCallback {
+ public:
+  explicit OEFramePresentationCallback(OEWebContentFrameRequest* request)
+      : request_(request) {}
+  ~OEFramePresentationCallback() override { [request_ oe_presentedAt:0]; }
+  void OnFramePresented(int64_t request_id, double presented_at) override {
+    OEWebContentFrameRequest* request = request_;
+    request_ = nil;
+    [request oe_deliverPresentedAt:presented_at];
+  }
+ private:
+  OEWebContentFrameRequest* __weak request_;
+  IMPLEMENT_REFCOUNTING(OEFramePresentationCallback);
+};
+
 #pragma mark - OEWebContent
 
 typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable);
@@ -302,6 +411,10 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   NSString* _lastFindString;
   BOOL _autoResize;
   // Page API (cef_open_page.h): selection flag and swipe options.
+  OEWebContentFrameRequest* _frameRequest;
+  NSSize _frameRequestPixelSize;
+  double _frameRequestScale;
+  BOOL _frameRequestGeometryMatched;
   BOOL _hasSelection;
   BOOL _historySwipeEnabled;
   BOOL _drawsEngineHistorySwipeOverlay;
@@ -371,6 +484,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 }
 
 - (void)dealloc {
+  [_frameRequest cancel];
   _client->Detach();
   if (_browser) {
     _client->SetClosing();
@@ -805,6 +919,65 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 - (void)oe_viewGeometryChanged {
   [self oe_layoutBrowserView];
   [self oe_syncChromeWindow];
+  if (_frameRequest) {
+    const double scale = _view.window.backingScaleFactor;
+    const NSSize pixels = NSMakeSize(std::round(_view.bounds.size.width * scale),
+                                    std::round(_view.bounds.size.height * scale));
+    if (!_view.window || _view.isHiddenOrHasHiddenAncestor ||
+        std::abs(scale - _frameRequestScale) > .00001 ||
+        (_frameRequestGeometryMatched && !NSEqualSizes(pixels, _frameRequestPixelSize))) {
+      [self oe_cancelFramePresentation];
+    } else if (NSEqualSizes(pixels, _frameRequestPixelSize)) {
+      _frameRequestGeometryMatched = YES;
+    }
+  }
+}
+
+- (void)oe_cancelFramePresentation {
+  [_frameRequest cancel];
+  _frameRequest = nil;
+}
+
+- (nullable OEWebContentFrameRequest*)requestFramePresentationForPixelSize:(NSSize)pixelSize
+    backingScale:(double)backingScale requestID:(NSUUID*)requestID
+    retainingSurfaceForResize:(BOOL)retainingSurfaceForResize
+    completion:(void (^)(OEWebContentPresentedFrame* _Nullable))completion {
+  [self oe_cancelFramePresentation];
+  if (!_browser || _closeRequested || !_view.window ||
+      _view.isHiddenOrHasHiddenAncestor || !completion || !requestID ||
+      !std::isfinite(pixelSize.width) || !std::isfinite(pixelSize.height) ||
+      pixelSize.width <= 0 || pixelSize.height <= 0 ||
+      pixelSize.width > 32768 || pixelSize.height > 32768 ||
+      std::round(pixelSize.width) != pixelSize.width ||
+      std::round(pixelSize.height) != pixelSize.height ||
+      !std::isfinite(backingScale) || backingScale <= 0 || backingScale > 16 ||
+      std::abs(_view.window.backingScaleFactor - backingScale) > .00001) {
+    return nil;
+  }
+  static std::atomic<int64_t> nextID{1};
+  const int64_t identifier = nextID.fetch_add(1);
+  __weak OEWebContent* weakSelf = self;
+  OEWebContentFrameRequest* request = [[OEWebContentFrameRequest alloc]
+      oe_initWithID:requestID size:pixelSize scale:backingScale cancel:^{
+        OEWebContent* content = weakSelf;
+        if (content && content->_browser)
+          CefCancelOpenFramePresentation(content->_browser, identifier);
+      } completion:completion];
+  _frameRequest = request;
+  _frameRequestPixelSize = pixelSize;
+  _frameRequestScale = backingScale;
+  _frameRequestGeometryMatched =
+      std::round(_view.bounds.size.width * backingScale) == pixelSize.width &&
+      std::round(_view.bounds.size.height * backingScale) == pixelSize.height;
+  if (!CefRequestOpenFramePresentation(_browser, identifier,
+      static_cast<int>(pixelSize.width), static_cast<int>(pixelSize.height),
+      backingScale, retainingSurfaceForResize,
+      new OEFramePresentationCallback(request))) {
+    [request cancel];
+    _frameRequest = nil;
+    // Request was accepted by OE; deliver its deferred nil completion once.
+  }
+  return request;
 }
 
 // Hosted tabs (P1) and Alloy pages restored with no_renderer start hidden.
@@ -833,6 +1006,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 }
 
 - (void)oe_viewWillMoveToWindow:(NSWindow*)newWindow {
+  [self oe_cancelFramePresentation];
   NSNotificationCenter* nc = NSNotificationCenter.defaultCenter;
   if (_observedWindow) {
     [nc removeObserver:self name:nil object:_observedWindow];
@@ -1955,6 +2129,7 @@ static double OEPNGPixelWidth(NSData* png) {
 }
 
 - (void)close {
+  [self oe_cancelFramePresentation];
   // An action popup: the engine owns its page (CloseBrowser does nothing for
   // it), so close it as the popup.
   OEBrowser* owner = _oe_popupOwner;

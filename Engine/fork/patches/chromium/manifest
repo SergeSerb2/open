@@ -85,3 +85,6 @@ paths: components/web_cache/browser/web_cache_manager.cc components/web_cache/br
 
 # 0509-open-macos-product-strings.patch
 paths: chrome/app/chromium_strings.grd chrome/app/password_manager_ui_strings.grdp chrome/app/settings_chromium_strings.grdp components/autofill_payments_strings.grdp components/autofill_strings.grdp components/components_chromium_strings.grd components/management_strings.grdp components/new_or_sad_tab_strings.grdp components/page_info_strings.grdp components/password_manager_strings.grdp components/privacy_sandbox_strings.grd components/reset_password_strings.grdp components/search_engine_choice_strings.grdp components/security_interstitials_strings.grdp components/ssl_errors_strings.grdp extensions/strings/extensions_chromium_strings.grdp
+
+# 0510-open-frame-presentation.patch
+paths: third_party/blink/public/mojom/widget/platform_widget.mojom third_party/blink/renderer/platform/widget/widget_base.h third_party/blink/renderer/platform/widget/widget_base.cc content/browser/renderer_host/render_widget_host_impl.h content/browser/renderer_host/render_widget_host_impl.cc content/browser/renderer_host/render_widget_host_view_mac.h content/browser/renderer_host/render_widget_host_view_mac.mm content/browser/renderer_host/browser_compositor_view_mac.h content/browser/renderer_host/browser_compositor_view_mac.mm

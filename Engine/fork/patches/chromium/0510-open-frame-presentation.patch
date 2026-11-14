@@ -1,0 +1,280 @@
+diff --git a/third_party/blink/public/mojom/widget/platform_widget.mojom b/third_party/blink/public/mojom/widget/platform_widget.mojom
+index 6c682e0ec983b0b5a733d3f9b5661a25858f8007..bd3efa7753c6b49c67f6f378ab498b1379e3155a 100644
+--- a/third_party/blink/public/mojom/widget/platform_widget.mojom
++++ b/third_party/blink/public/mojom/widget/platform_widget.mojom
+@@ -103,6 +103,16 @@
+   // surface etc.).
+   ForceRedraw() => ();
+ 
++  // Open: request a successful presentation of this widget at the exact
++  // device-pixel viewport and scale. A null timestamp means cancellation.
++  // The request can precede the one resize; matching visual properties arm
++  // the next renderer commit. Supersession, hide or another surface cancels.
++  RequestOpenFramePresentation(uint64 request_id,
++                               gfx.mojom.Size viewport_pixels,
++                               float scale) =>
++      (mojo_base.mojom.TimeTicks presented_at);
++  CancelOpenFramePresentation(uint64 request_id);
++
+   // Update the visual properties of the widget.
+   UpdateVisualProperties(VisualProperties visual_properties);
+ 
+diff --git a/third_party/blink/renderer/platform/widget/widget_base.h b/third_party/blink/renderer/platform/widget/widget_base.h
+index a26fb60d607ca059f968a26065dc2fda1d59d5d3..f91253d5ecb16e9c37c532890c8a2465bf1ab726 100644
+--- a/third_party/blink/renderer/platform/widget/widget_base.h
++++ b/third_party/blink/renderer/platform/widget/widget_base.h
+@@ -162,6 +162,10 @@
+ 
+   // mojom::blink::Widget overrides:
+   void ForceRedraw(mojom::blink::Widget::ForceRedrawCallback callback) override;
++  void RequestOpenFramePresentation(
++      uint64_t request_id, const gfx::Size& viewport_pixels, float scale,
++      RequestOpenFramePresentationCallback callback) override;
++  void CancelOpenFramePresentation(uint64_t request_id) override;
+   void UpdateVisualProperties(
+       const VisualProperties& visual_properties) override;
+   void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
+@@ -645,6 +649,19 @@
+   bool waiting_for_first_begin_frame_ = false;
+   bool is_using_early_frame_sink_ = false;
+ 
++  // Open's one-shot successful renderer-frame receipt. Kept separate from
++  // Chromium's tab-switch metrics so neither consumer cancels the other.
++  void MaybeArmOpenFramePresentation();
++  void DidPresentOpenFrame(uint64_t epoch,
++                           const viz::FrameTimingDetails& details);
++  uint64_t open_frame_request_id_ = 0;
++  uint64_t open_frame_epoch_ = 0;
++  gfx::Size open_frame_viewport_pixels_;
++  float open_frame_scale_ = 0;
++  viz::LocalSurfaceId open_frame_surface_;
++  bool open_frame_armed_ = false;
++  RequestOpenFramePresentationCallback open_frame_callback_;
++
+   base::WeakPtrFactory<WidgetBase> weak_ptr_factory_{this};
+ };
+ 
+diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
+index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..09b94ae4e0d958bcd06bef85ac4dce92f071b2c1 100644
+--- a/third_party/blink/renderer/platform/widget/widget_base.cc
++++ b/third_party/blink/renderer/platform/widget/widget_base.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/platform/widget/widget_base.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ 
+ #include "base/check.h"
+ #include "base/command_line.h"
+@@ -420,6 +421,70 @@
+   return widget_scheduler_.get();
+ }
+ 
++void WidgetBase::RequestOpenFramePresentation(
++    uint64_t request_id, const gfx::Size& viewport_pixels, float scale,
++    RequestOpenFramePresentationCallback callback) {
++  CancelOpenFramePresentation(open_frame_request_id_);
++  if (is_hidden_ || viewport_pixels.IsEmpty() || !std::isfinite(scale) ||
++      scale <= 0 || !request_id) {
++    std::move(callback).Run(base::TimeTicks());
++    return;
++  }
++  open_frame_request_id_ = request_id;
++  ++open_frame_epoch_;
++  open_frame_viewport_pixels_ = viewport_pixels;
++  open_frame_scale_ = scale;
++  open_frame_callback_ = std::move(callback);
++  MaybeArmOpenFramePresentation();
++}
++
++void WidgetBase::CancelOpenFramePresentation(uint64_t request_id) {
++  if (request_id != open_frame_request_id_ || !open_frame_callback_)
++    return;
++  ++open_frame_epoch_;
++  open_frame_armed_ = false;
++  auto callback = std::move(open_frame_callback_);
++  std::move(callback).Run(base::TimeTicks());
++}
++
++void WidgetBase::MaybeArmOpenFramePresentation() {
++  if (!open_frame_callback_)
++    return;
++  const bool matches =
++      CompositorViewportRect().size() == open_frame_viewport_pixels_ &&
++      LayerTreeHost()->device_scale_factor() == open_frame_scale_;
++  if (open_frame_armed_) {
++    if (!matches || open_frame_surface_ != local_surface_id_from_parent_)
++      CancelOpenFramePresentation(open_frame_request_id_);
++    return;
++  }
++  if (!matches || !local_surface_id_from_parent_.is_valid())
++    return;  // Armed before resize: wait for its actual visual properties.
++  open_frame_surface_ = local_surface_id_from_parent_;
++  open_frame_armed_ = true;
++  LayerTreeHost()->RequestSuccessfulPresentationTimeForNextFrame(
++      base::BindOnce(&WidgetBase::DidPresentOpenFrame,
++                     weak_ptr_factory_.GetWeakPtr(), open_frame_epoch_));
++  // Static pages also need a qualifying frame. This does not treat a
++  // redraw ACK or commit/activation as presentation.
++  LayerTreeHost()->SetNeedsCommitWithForcedRedraw();
++}
++
++void WidgetBase::DidPresentOpenFrame(
++    uint64_t epoch, const viz::FrameTimingDetails& details) {
++  if (epoch != open_frame_epoch_ || !open_frame_callback_)
++    return;
++  if (is_hidden_ || !open_frame_armed_ ||
++      open_frame_surface_ != local_surface_id_from_parent_ ||
++      CompositorViewportRect().size() != open_frame_viewport_pixels_ ||
++      LayerTreeHost()->device_scale_factor() != open_frame_scale_) {
++    CancelOpenFramePresentation(open_frame_request_id_);
++    return;
++  }
++  open_frame_armed_ = false;
++  std::move(open_frame_callback_).Run(details.presentation_feedback.timestamp);
++}
++
+ void WidgetBase::ForceRedraw(
+     mojom::blink::Widget::ForceRedrawCallback callback) {
+   TRACE_EVENT0("renderer", "WidgetBase::ForceRedraw");
+@@ -1583,6 +1648,8 @@
+   // The status has changed.  Tell the RenderThread about it and ensure
+   // throttled acks are released in case frame production ceases.
+   is_hidden_ = hidden;
++  if (hidden)
++    CancelOpenFramePresentation(open_frame_request_id_);
+ 
+   if (widget_scheduler_)
+     widget_scheduler_->SetHidden(hidden);
+@@ -1928,7 +1995,10 @@
+     }
+   }
+ 
++  auto open_weak_this = weak_ptr_factory_.GetWeakPtr();
+   client_->DidUpdateSurfaceAndScreen(previous_original_screen_infos);
++  if (open_weak_this)
++    MaybeArmOpenFramePresentation();
+ }
+ 
+ void WidgetBase::UpdateScreenInfo(
+diff --git a/content/browser/renderer_host/render_widget_host_impl.h b/content/browser/renderer_host/render_widget_host_impl.h
+index 59284de7962dd48f9b4cc3a1bd22a0e421d13514..43a6b75b5c328bf7063db02f51d8afff6fbebaab 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.h
++++ b/content/browser/renderer_host/render_widget_host_impl.h
+@@ -526,6 +526,12 @@
+   void RequestSuccessfulPresentationTimeForNextFrame(
+       blink::RecordContentToVisibleTimeRequest visible_time_request);
+   void CancelSuccessfulPresentationTimeRequest();
++
++  // Open: actual successful renderer presentation, separate from tab metrics.
++  void RequestOpenFramePresentation(
++      uint64_t request_id, const gfx::Size& viewport_pixels, float scale,
++      base::OnceCallback<void(base::TimeTicks)> callback);
++  void CancelOpenFramePresentation(uint64_t request_id);
+ 
+ #if BUILDFLAG(IS_ANDROID)
+   // Set the importance of widget. The importance is passed onto
+diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
+index 7b8fe5cdf47f47923a9223bc41f77bf4cc06cbcb..af84aff5dd45d6107aac71371f85c402a8454d8b 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.cc
++++ b/content/browser/renderer_host/render_widget_host_impl.cc
+@@ -1057,6 +1057,22 @@
+       std::move(visible_time_request));
+ }
+ 
++void RenderWidgetHostImpl::RequestOpenFramePresentation(
++    uint64_t request_id, const gfx::Size& viewport_pixels, float scale,
++    base::OnceCallback<void(base::TimeTicks)> callback) {
++  if (is_hidden_ || waiting_for_init_ || !blink_widget_.is_bound()) {
++    std::move(callback).Run(base::TimeTicks());
++    return;
++  }
++  blink_widget_->RequestOpenFramePresentation(
++      request_id, viewport_pixels, scale, std::move(callback));
++}
++
++void RenderWidgetHostImpl::CancelOpenFramePresentation(uint64_t request_id) {
++  if (blink_widget_.is_bound())
++    blink_widget_->CancelOpenFramePresentation(request_id);
++}
++
+ void RenderWidgetHostImpl::CancelSuccessfulPresentationTimeRequest() {
+   CHECK(!is_hidden_);
+   if (waiting_for_init_) {
+diff --git a/content/browser/renderer_host/render_widget_host_view_mac.h b/content/browser/renderer_host/render_widget_host_view_mac.h
+index 2126c6c61ed8acce6614967052f6acfc306784ee..a9133d4530874494b9ba110e91b3a984600119c8 100644
+--- a/content/browser/renderer_host/render_widget_host_view_mac.h
++++ b/content/browser/renderer_host/render_widget_host_view_mac.h
+@@ -130,6 +130,8 @@
+ 
+   // RenderWidgetHostViewBase implementation.
+   ui::Compositor* GetCompositor() override;
++  // Changes only future resize deadlines; cancellation never clears pixels.
++  void SetOpenRetainSurfaceForResize(bool retain);
+   void InitAsChild(gfx::NativeView parent_view) override;
+   void SetSize(const gfx::Size& size) override;
+   void SetBounds(const gfx::Rect& rect) override;
+diff --git a/content/browser/renderer_host/render_widget_host_view_mac.mm b/content/browser/renderer_host/render_widget_host_view_mac.mm
+index f99512647a6dbced1120427adc6e181e73e27b00..c4b56377785d8c999186edd1fcf325f09b13a865 100644
+--- a/content/browser/renderer_host/render_widget_host_view_mac.mm
++++ b/content/browser/renderer_host/render_widget_host_view_mac.mm
+@@ -475,6 +475,11 @@
+   CHECK_EQ(widget_type_, WidgetType::kFrame, base::NotFatalUntil::M152);
+ }
+ 
++void RenderWidgetHostViewMac::SetOpenRetainSurfaceForResize(bool retain) {
++  if (browser_compositor_)
++    browser_compositor_->SetOpenRetainSurfaceForResize(retain);
++}
++
+ ui::Compositor* RenderWidgetHostViewMac::GetCompositor() {
+   return browser_compositor_ ? browser_compositor_->GetCompositor() : nullptr;
+ }
+diff --git a/content/browser/renderer_host/browser_compositor_view_mac.h b/content/browser/renderer_host/browser_compositor_view_mac.h
+index 625bfb2402ef3cd98219915504c9ee29a195cfe4..882d2711df1b2cdb2c531521b25a43e1f885f021 100644
+--- a/content/browser/renderer_host/browser_compositor_view_mac.h
++++ b/content/browser/renderer_host/browser_compositor_view_mac.h
+@@ -79,6 +79,9 @@
+   // NSView. This will allocate a new SurfaceId, so should only be called
+   // when necessary.
+   void UpdateSurfaceFromNSView(const gfx::Size& new_size_dip);
++  void SetOpenRetainSurfaceForResize(bool retain) {
++    open_retain_surface_for_resize_ = retain;
++  }
+ 
+   // Update the renderer's SurfaceId to reflect |new_size_in_pixels| in
+   // anticipation of the NSView resizing during auto-resize.
+@@ -202,6 +205,7 @@
+   float dfh_device_scale_factor_ = 1.f;
+ 
+   bool is_first_navigation_ = true;
++  bool open_retain_surface_for_resize_ = false;
+ 
+   base::WeakPtrFactory<BrowserCompositorMac> weak_factory_;
+ };
+diff --git a/content/browser/renderer_host/browser_compositor_view_mac.mm b/content/browser/renderer_host/browser_compositor_view_mac.mm
+index 4ab8a9cf166665a3dee3069e237d36788c15447a..647e2f83ac88bd855b9cf311464df12dee1d8a46 100644
+--- a/content/browser/renderer_host/browser_compositor_view_mac.mm
++++ b/content/browser/renderer_host/browser_compositor_view_mac.mm
+@@ -135,7 +135,9 @@
+     dfh_local_surface_id_allocator_.GenerateId();
+     delegated_frame_host_->EmbedSurface(
+         dfh_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
+-        dfh_size_dip_, cc::DeadlinePolicy::UseSpecifiedDeadline(0u));
++        dfh_size_dip_, open_retain_surface_for_resize_
++                           ? cc::DeadlinePolicy::UseInfiniteDeadline()
++                           : cc::DeadlinePolicy::UseSpecifiedDeadline(0u));
+   }
+ 
+   if (recyclable_compositor_) {
+@@ -170,7 +172,9 @@
+     }
+     delegated_frame_host_->EmbedSurface(
+         dfh_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
+-        dfh_size_dip_, cc::DeadlinePolicy::UseDefaultDeadline());
++        dfh_size_dip_, open_retain_surface_for_resize_
++                           ? cc::DeadlinePolicy::UseInfiniteDeadline()
++                           : cc::DeadlinePolicy::UseDefaultDeadline());
+   }
+   client_->OnBrowserCompositorSurfaceIdChanged();
+ }

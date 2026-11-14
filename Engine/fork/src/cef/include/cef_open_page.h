@@ -89,6 +89,50 @@ class CefOpenPageHandler : public virtual CefBaseRefCounted {
 };
 
 ///
+/// Result of one Open frame-presentation request. Browser-process UI thread.
+/// A zero |presented_at| means cancellation. Otherwise it is the successful
+/// renderer-frame presentation time in host monotonic seconds. Commit,
+/// activation, load, capture and failed presentation never produce success.
+///
+/*--cef(source=client,added=experimental)--*/
+class CefOpenFramePresentationCallback : public virtual CefBaseRefCounted {
+ public:
+  ///
+  /// Completes |request_id| once. Zero |presented_at| means cancellation.
+  ///
+  /*--cef()--*/
+  virtual void OnFramePresented(int64_t request_id, double presented_at) = 0;
+};
+
+///
+/// Arms one frame-presentation request for the current primary document and
+/// attached native view. |pixel_width|, |pixel_height| and |scale| identify the
+/// desired renderer viewport. May precede one native resize; this call does
+/// not resize the view. A static page is asked to redraw. When |retain_surface|
+/// is true, resize waits for the new surface without clearing current pixels.
+/// A newer request, navigation, hide, renderer loss or page destruction cancels
+/// the request. The embedder must cancel before detaching/reparenting the view.
+/// Cancellation never clears the displayed surface. |request_id| must be a
+/// positive unique identifier for this browser's request. Returns false for
+/// invalid/unavailable pages, without invoking |callback|; otherwise invokes
+/// it once. UI thread. The callback is deferred and may close the page.
+///
+/*--cef(added=experimental)--*/
+bool CefRequestOpenFramePresentation(
+    CefRefPtr<CefBrowser> browser, int64_t request_id,
+    int pixel_width, int pixel_height, double scale, bool retain_surface,
+    CefRefPtr<CefOpenFramePresentationCallback> callback);
+
+///
+/// Cancels the matching request, if pending. Idempotent; a stale identifier
+/// never cancels a newer request. Does not clear or invalidate any surface.
+/// Browser-process UI thread.
+///
+/*--cef(added=experimental)--*/
+void CefCancelOpenFramePresentation(CefRefPtr<CefBrowser> browser,
+                                     int64_t request_id);
+
+///
 /// Sets (or, with an empty |handler|, removes) the page handler of |browser|.
 /// Returns false for a browser without a page. Must be called on the browser
 /// process UI thread.
