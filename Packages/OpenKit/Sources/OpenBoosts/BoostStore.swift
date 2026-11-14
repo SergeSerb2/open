@@ -167,6 +167,8 @@ public final class BoostStore: @unchecked Sendable {
             if let dto { write(dto) }
         }
     }
+    /// A mutation's debounced write has not run yet (quit must call saveNow).
+    public var hasPendingSave: Bool { lock.withLock { !retired && pendingWork != nil } }
     /// Drains in-flight writes. An asyncAfter debounce that has not fired is not flushed.
     /// Call saveNow on quit. Must be called off the private store queue.
     public func flush() { queue.sync {} }

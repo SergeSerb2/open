@@ -16,6 +16,7 @@ public actor HistoryStore {
     var db: SQLiteDB?
     public let fileURL: URL
     private var observers: [UUID: AsyncStream<Void>.Continuation] = [:]
+    private var closed = false
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
@@ -33,8 +34,15 @@ public actor HistoryStore {
     private func removeObserver(_ id: UUID) { observers[id] = nil }
     func didChange() { for observer in observers.values { observer.yield(()) } }
 
+    /// Closes the connection for good (Profile deletion). Later calls find no
+    /// database and never recreate the file in a folder that is being removed.
+    public func close() {
+        closed = true
+        db = nil
+    }
+
     public func open() {
-        guard db == nil else { return }
+        guard db == nil, !closed else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         db = try? SQLiteDB(path: fileURL.path)
         db?.exec("""

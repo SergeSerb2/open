@@ -1304,12 +1304,17 @@ extension EngineWebContentHostFactory {
   @objc func restoreLastClosedTab(_ sender: Any?) {
     let store = app.archiveSink.store(for: focusedProfile?.id)
     Task { @MainActor in
-      guard let recent = await store.recent(limit: 1).first,
-        let record = await store.restore(id: recent.id)
-      else { return }
-      guard !self.isClosing, !self.app.terminationRequested else { return }
+      // Read without removing: the model discards the Archive row only once the
+      // item is back in the sidebar, so a window that closed meanwhile loses nothing.
+      guard let record = await store.recent(limit: 1).first,
+        !self.isClosing, !self.app.terminationRequested else { return }
+      if record.kind == .folder {
+        self.model.restoreArchivedFolder(record)
+        return
+      }
+      if self.model.tab(id: record.id) != nil { store.discardArchived(ids: [record.id]) }
       let tab = self.model.restoreArchivedTab(record)
-      self.select(nodeID: tab.id)
+      if self.model.parentByID[tab.id] != nil { self.select(nodeID: tab.id) }
     }
   }
 

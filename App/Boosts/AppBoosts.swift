@@ -237,9 +237,16 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
   }
   func saveNow() {
     // Merely displaying a page must not create an empty Boosts file on quit.
-    for id in Array(profiles.keys) where !isRetired(id) && profiles[id]?.needsSave == true {
+    // A store mutation whose caller did not refresh still has its debounced write pending.
+    for id in Array(profiles.keys) where !isRetired(id)
+      && (profiles[id]?.needsSave == true || profiles[id]?.store.hasPendingSave == true) {
       profiles[id]?.store.saveNow(); profiles[id]?.needsSave = false
     }
   }
-  func stop() { existingEditorHost?.stopPicker(); adapter.stop(); saveNow() }
+  func stop() {
+    // An open editor's CSS/JS draft is still on its debounce timer: write it into the store
+    // before the final save, or quit loses the last edits.
+    for factory in app.hostFactories.values { factory.controller?.boostEditor?.session?.flushCode() }
+    existingEditorHost?.stopPicker(); adapter.stop(); saveNow()
+  }
 }

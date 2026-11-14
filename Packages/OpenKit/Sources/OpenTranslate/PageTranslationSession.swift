@@ -192,6 +192,9 @@ public final class PageTranslationSession {
 
     private func runLoop(_ offer: Offer, token: Int, userAction: Bool, announced: Bool) {
         loop = Task { [weak self] in
+            // Every exit (the runtime ended, a failure, a newer generation) ends this loop; only
+            // the current generation's loop clears the handle, so `isLoopRunning` reads false.
+            defer { if let self, self.generation == token { self.loop = nil } }
             var announced = announced
             while let self, !Task.isCancelled, self.generation == token, !self.closed, let page = self.page {
                 let raw: Any

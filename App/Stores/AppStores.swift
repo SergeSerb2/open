@@ -79,6 +79,10 @@ final class AppStores: ProfileDataOwner {
 
   func retireProfile(_ profileID: ProfileID, directory: String) async {
     await adBlockStorage?.retireProfile(profileID)
+    // Close the history database before its folder is removed. Queued visits
+    // for this Profile then find no database instead of reopening the file.
+    if let store = histories.removeValue(forKey: profileID) { await store.close() }
+    app.archiveSink.retire(directoryName: directory)
   }
 
   func history(for profileID: ProfileID?) -> HistoryStore? {

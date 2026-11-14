@@ -35,6 +35,8 @@ public final class ProfileArchiveSink: ArchiveSink {
         try store(for: entries.first?.profileID).archiveForProfileDeletion(entries, directoryName: directoryName)
         try directories.retireDirectoryName(directoryName)
     }
+    /// Profile deletion: close that folder's archive before the folder is removed.
+    public func retire(directoryName: String) { stores.removeValue(forKey: directoryName)?.retire() }
     public func discardArchived(ids: [ItemID]) { for store in stores.values { store.discardArchived(ids: ids) } }
     public func flushAll() { for store in stores.values { store.flushQueue() } }
 }

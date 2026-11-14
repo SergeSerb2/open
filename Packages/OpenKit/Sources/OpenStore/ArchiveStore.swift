@@ -46,10 +46,12 @@ public final class ArchiveStore: ArchiveSink {
     public let fileURL: URL
     private let queue = DispatchQueue(label: "open.archive", qos: .utility)
     @ObservationIgnored nonisolated(unsafe) private var db: SQLiteDB?
+    @ObservationIgnored nonisolated(unsafe) private var retired = false
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
     nonisolated private func openOnQueue() throws {
+        guard !retired else { throw archiveFailure() }
         guard db == nil else { return }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let opened = try SQLiteDB(path: fileURL.path)
@@ -149,6 +151,12 @@ public final class ArchiveStore: ArchiveSink {
             sqlite3_finalize(stmt)
             db.exec("COMMIT")
         }
+    }
+
+    /// Profile deletion: finish queued writes, close the database and never
+    /// reopen it, so its folder can be removed without a file coming back.
+    public func retire() {
+        queue.sync { retired = true; db = nil }
     }
 
     /// Test/CLI helper: wait until queued writes finish.
