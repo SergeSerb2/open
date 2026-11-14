@@ -88,12 +88,6 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func goBack() { if !closed { content.goBack() } }
   func goForward() { if !closed { content.goForward() } }
   func focus() { if !closed { content.focusPage(); owner?.savePromptFocusChanged() } }
-  func setPageCoveredBySnapshot(_ covered: Bool) {
-    guard !closed else { return }
-    // The explicit WasHidden path also covers Chrome's child-window host.
-    // Releasing a snapshot must not wake a page parked or hidden elsewhere.
-    content.setPageHidden(covered || view.window == nil || view.isHiddenOrHasHiddenAncestor)
-  }
   func rebind(tabID: ItemID, spaceID: SpaceID?) {
     if tabID != self.tabID { owner?.app.stores.boosts.existingEditorHost?.exitZap(tabID: self.tabID) }
     generation += 1; self.tabID = tabID; self.spaceID = spaceID
