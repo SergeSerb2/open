@@ -142,7 +142,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     let started = ProcessInfo.processInfo.systemUptime
     #endif
     attachBrowserStores(openingSettings: true)
-    settings.appearanceWindowID = app.frontStandardWindowController?.windowID
+    settings.appearanceWindowID = app.frontMainModelWindowController?.windowID
     settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild()
     #if OPEN_AUTOMATION
     lastSettingsShowMs = (ProcessInfo.processInfo.systemUptime-started)*1000
@@ -228,7 +228,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func makeSpaceManagerView() -> NSView? {
     // Closing the last browser retains its model window for normal reopen.
     // Prefer a live browser, then that existing state; never create a window here.
-    let id = app.frontStandardWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
+    let id = app.frontMainModelWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
     guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
     if let spaceManager, spaceManager.context.windowID == id { spaceManager.prepareForPresentation(); return spaceManager }
     let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
