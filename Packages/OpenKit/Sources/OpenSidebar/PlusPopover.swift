@@ -132,6 +132,11 @@ final class PlusPopover {
     private var monitor: Any?
     var onVisibilityChange: ((Bool) -> Void)?
     var isShown: Bool { panel != nil }
+    /// A window that closes while the popover shows must not leave its event monitor installed.
+    isolated deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let panel { panel.parent?.removeChildWindow(panel); panel.orderOut(nil) }
+    }
 
     /// Shows the popover with its arrow at `button`'s top centre.
     func show(menu: NSMenu, colors: PlusPopoverColors, from button: NSView, sidebar: NSView) {
