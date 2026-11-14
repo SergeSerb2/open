@@ -69,9 +69,11 @@ The required shared engine contract is:
 2. Success identifies this WebContents, document/renderer generation,
    view-attachment generation, viewport in device pixels and scale. It must
    follow a successful compositor presentation for that target, newer than the
-   request. A pre-attachment or previous-viewport presentation is stale.
-3. A successful new frame may be requested for an otherwise static page. Load,
-   DOM rAF, capture completion, render-view readiness, a display tick and
+   attachment/request. A pre-attachment or previous-viewport presentation is stale.
+3. A retained/saved surface may qualify if it matches the current document,
+   attached view, viewport and scale and is successfully presented after the
+   request. Space switching does not require new renderer pixels in that case.
+   Load, DOM rAF, capture completion, render-view readiness, a display tick and
    animation completion are not presentation receipts.
 4. Close, navigation replacement, renderer loss, hide, detach and superseding
    requests cancel the request. Cancellation/error cannot report success or
@@ -91,5 +93,14 @@ must then be rerun unchanged. No result from the earlier sidebar-only candidate
 qualifies this new handoff.
 
 E3 confirmed on 2026-11-13 at 18:39 that no implementation/head is available.
+Its read-only source audit at 18:48 identifies
+`ui::Compositor::RequestSuccessfulPresentationTimeForNextFrame`
+(`ui/compositor/compositor.h:363-384`), used for tab-show in
+`delegated_frame_host.cc:120-134`. The Mac tab-show path permits a saved frame
+(`render_widget_host_view_mac.mm:563-615`). Surface metadata exposes size, scale
+and LocalSurfaceId (`render_widget_host_view_mac.mm:1221-1226`), but a shell
+API binding those to the requested view/presentation is not implemented. A saved
+surface is acceptable for Space switching when those identities match; D3
+new-width resize has its separate stronger requirement.
 Its existing A/B engine pair remains pinned. Chromium ownership stays with E3;
 #575 remains draft pending the engine contract, integration and runtime proof.
