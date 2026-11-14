@@ -31,6 +31,8 @@ extension AutomationController {
                 "sidebarCurrent": split.split.map { controller.sidebar.isCurrentRow(nodeID: $0.id) } ?? false,
                 "panes": container.slots.map { slot -> [String: Any] in
                     ["id": slot.tabID.description, "frame": frame(slot), "hidden": slot.isHidden,
+                     "layerRedrawPolicy": slot.layerContentsRedrawPolicy.rawValue,
+                     "layerAnimations": slot.layer?.animationKeys() ?? [],
                      "ring": !slot.focusRing.isHidden, "bar": slot.paneChrome != nil,
                      "host": container.host(for: slot.tabID) != nil]
                 }, "dividers": (0..<max(0, container.slots.count - 1)).compactMap { container.divider(at: $0).map(frame) }] as [String: Any]

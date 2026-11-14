@@ -25,6 +25,11 @@ public final class PaneSlotView: NSView {
     var isFocused = false
     init(tabID: ItemID) {
         self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
+        // AppKit's default resize policy can drive setFrame/redraw on every
+        // animation step. Prepare this layer once, then let the render server
+        // animate its bounds and position without re-entering the web subtree.
+        layerContentsRedrawPolicy = .beforeViewResize
+        clip.layerContentsRedrawPolicy = .beforeViewResize
         layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = PanelMetrics.shadowOpacity
         layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
         clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.cornerCurve = .continuous; clip.layer?.masksToBounds = true; addSubview(clip)

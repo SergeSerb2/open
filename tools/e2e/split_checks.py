@@ -91,7 +91,11 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         empty_menu = app.call('split', op='plus')
         row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split'), menu=empty_menu)
         a = opened('a'); original_page = app.page(a)['identifier']; app.call('focus', tab=a)
+        app.eval(a, "window.__splitResize=[];addEventListener('resize',()=>__splitResize.push([innerWidth,innerHeight]));true")
         key('='); s = settled(2)
+        add_resizes = app.eval(a, 'window.__splitResize')
+        row('pane_layer_redraw_prepared_once', all(p['layerRedrawPolicy'] == 3 for p in s['panes']), panes=s['panes'])
+        row('add_resizes_web_once', len(add_resizes) <= 1, sizes=add_resizes)
         b = next(p['id'] for p in s['panes'] if p['id'] != a)
         row('C1_shortcut', s['orientation'] == 'horizontal' and s['focused'] == b and len(app.call('tabs')) == 2 and app.page(a)['identifier'] == original_page, state=s)
         app.call('navigate', tab=b, url=origin+'/b'); app.call('wait', tab=b)
@@ -169,6 +173,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for appearance in ('light','dark'):
             app.call('appearance',name=appearance)
             path = Path(h.ROOT) / '.re/s9-split' / ('split-custom-' + appearance + '.png')
+            path.parent.mkdir(parents=True, exist_ok=True)
             app.call('snapshot',path=str(path))
             captures.append(str(path))
         app.call('appearance',name='system')
@@ -324,7 +329,10 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         # Separate All retains all tabs and selects its previously focused pane.
         a = opened('all-a'); b = opened('all-b'); select(a); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         all_ids = {p['id'] for p in s['panes']}; focused = s['focused']
+        app.eval(focused, "window.__splitRemoveResize=[];addEventListener('resize',()=>__splitRemoveResize.push([innerWidth,innerHeight]));true")
         app.call('sidebar-menu', node=s['id'], item='Separate All Tabs'); after = settled(1)
+        remove_resizes = app.eval(focused, 'window.__splitRemoveResize')
+        row('remove_resizes_web_once', len(remove_resizes) <= 1, sizes=remove_resizes)
         row('separate_all', after['focused'] == focused and not after['id'] and all_ids.issubset({n['id'] for n in app.call('sidebar-tree')['today']}), state=after)
         select(a); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         removed = s['focused']; survivor = next(p['id'] for p in s['panes'] if p['id'] != removed)
