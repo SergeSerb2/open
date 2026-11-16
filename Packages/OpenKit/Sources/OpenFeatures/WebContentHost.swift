@@ -31,6 +31,9 @@ public protocol WebContentHost: AnyObject {
     func goBack()
     func goForward()
     func focus()
+    /// Stop deferred creation before an exit animation retains the drawn page.
+    /// Existing page pixels stay available until close().
+    func prepareToClose()
     func close()
     var onURLChange: ((URL) -> Void)? { get set }
     var onTitleChange: ((String) -> Void)? { get set }
@@ -50,6 +53,7 @@ public protocol WebContentHost: AnyObject {
 }
 
 public extension WebContentHost {
+    func prepareToClose() {}
     var liveState: WebContentLiveState { WebContentLiveState(isLoading: isLoading, canGoBack: canGoBack, canGoForward: canGoForward) }
 }
 
