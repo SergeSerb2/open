@@ -70,6 +70,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private let bannerLabel = NSTextField(labelWithString: LittleOpenMetrics.bannerText)
     private let bannerButton = NSButton(title: "Got it", target: nil, action: nil)
     private var closed = false
+    private var hasPresented = false
     private var opening = true
     private var placingTrafficLights = false
     private var systemAppearanceObservation: NSKeyValueObservation?
@@ -86,6 +87,9 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         // The App lists sessions itself, with stable ids and MRU ordering.
         window.isExcludedFromWindowsMenu = true
         window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+        // The root paints the normal fill. An opaque WindowServer background
+        // would remain as a white rectangle while the native frame fades out.
+        window.isOpaque = false; window.backgroundColor = .clear
         window.isMovableByWindowBackground = true; window.animationBehavior = .none
         super.init(window: window)
         window.onDownloadsKey = { [weak self] in self?.onDownloadsKey?($0) ?? false }
@@ -169,16 +173,19 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         coordinator?.onChange?()
     }
     private func layoutContent() {
+        // Metadata, root layout and window notifications may request the same
+        // layout. Equal frame writes still enter the engine geometry bridge.
+        func setFrame(_ view: NSView, _ frame: CGRect) { if view.frame != frame { view.frame = frame } }
         let m = LittleOpenMetrics.self, w = root.bounds.width, h = root.bounds.height
         let isPage = state == .page
         titleBar.isHidden = !isPage; container.isHidden = !isPage
-        titleBar.frame = CGRect(x: 0, y: h - m.titleBarHeight, width: w, height: m.titleBarHeight)
+        setFrame(titleBar, CGRect(x: 0, y: h - m.titleBarHeight, width: w, height: m.titleBarHeight))
         let introHeight = isPage && !banner.isHidden ? m.bannerHeight : 0
-        banner.frame = CGRect(x: 0, y: h - m.titleBarHeight - introHeight, width: w, height: introHeight)
-        bannerLabel.frame = CGRect(x: m.bannerInset, y: m.bannerLabelY, width: max(0, w - 3 * m.bannerInset - m.bannerButtonWidth), height: m.hostHeight)
-        bannerButton.frame = CGRect(x: w - m.bannerInset - m.bannerButtonWidth, y: m.bannerButtonY, width: m.bannerButtonWidth, height: m.bannerHeight - 2 * m.bannerButtonY)
-        container.frame = CGRect(x: 0, y: 0, width: w, height: max(0, h - m.titleBarHeight - introHeight))
-        commandBar.view.frame = root.bounds
+        setFrame(banner, CGRect(x: 0, y: h - m.titleBarHeight - introHeight, width: w, height: introHeight))
+        setFrame(bannerLabel, CGRect(x: m.bannerInset, y: m.bannerLabelY, width: max(0, w - 3 * m.bannerInset - m.bannerButtonWidth), height: m.hostHeight))
+        setFrame(bannerButton, CGRect(x: w - m.bannerInset - m.bannerButtonWidth, y: m.bannerButtonY, width: m.bannerButtonWidth, height: m.bannerHeight - 2 * m.bannerButtonY))
+        setFrame(container, CGRect(x: 0, y: 0, width: w, height: max(0, h - m.titleBarHeight - introHeight)))
+        setFrame(commandBar.view, root.bounds)
         commandBar.view.overlayPanelWidth = isPage ? min(CommandBarMetrics.panelWidth, max(0, w - 2 * m.screenInset)) : nil
         placeTrafficLights()
     }
@@ -321,13 +328,88 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         }
         return menu
     }
+    private func presentationView() -> NSView {
+        // Include the native frame and its background, not only our content.
+        // Fading the content alone leaves an opaque empty window until close.
+        let frame = root.superview ?? root
+        frame.wantsLayer = true
+        return frame
+    }
+    /// Paint the final geometry once before revealing the native window layer.
+    /// Subsequent MRU resurfacing must not restart the initial fade.
+    func presentWindow() {
+        guard !closed, let window else { return }
+        let first = !hasPresented; hasPresented = true
+        let view = first && !Motion.reducesMotion ? presentationView() : nil
+        let layer = view?.layer
+        if let layer {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            view?.alphaValue = 0
+            layer.opacity = 0
+            CATransaction.commit()
+        }
+        window.makeKeyAndOrderFront(nil)
+        guard let layer else { return }
+        window.displayIfNeeded(); CATransaction.flush()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // Keep AppKit's model alpha in sync with its backing layer. A later
+        // native display pass must not restore the unfaded window contents.
+        view?.alphaValue = 1
+        layer.opacity = 1
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0; fade.toValue = 1; fade.duration = Motion.littleOpenFade
+        fade.timingFunction = Motion.easeOut
+        layer.add(fade, forKey: "littleOpen.opacity")
+        CATransaction.commit()
+    }
+    /// Retain the live page through the exit fade. The coordinator has already
+    /// removed the session, so a second close cannot schedule another teardown.
+    func closeWindow() {
+        let finish = { [self] in
+            // Page teardown can take several display intervals. Remove the
+            // finished window first. Still cancel deferred host creation on
+            // this turn: an immediate close must never create a Browser.
+            window?.orderOut(nil)
+            CATransaction.flush()
+            commandBar.dismiss(reason: .programmatic)
+            container.closeAll(); window?.delegate = nil; window?.close()
+        }
+        guard window?.isVisible == true, !Motion.reducesMotion else { finish(); return }
+        let view = presentationView()
+        guard let layer = view.layer else { finish(); return }
+        window?.ignoresMouseEvents = true
+        let start = layer.presentation()?.opacity ?? layer.opacity
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // Restore the next window's key/main appearance with the first fade
+        // transaction. Waiting for orderOut leaves a second visible change
+        // after the Little window is transparent. Do not change window order.
+        if let window, window.isKeyWindow,
+           let next = NSApp.orderedWindows.first(where: {
+               $0 !== window && $0.isVisible && !$0.isMiniaturized && !$0.ignoresMouseEvents && $0.isOnActiveSpace
+                   && $0.canBecomeKey && $0.canBecomeMain
+           }) {
+            (next.attachedSheet ?? next).makeKey(); next.makeMain()
+        }
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
+        layer.removeAnimation(forKey: "littleOpen.opacity")
+        view.alphaValue = 0
+        layer.opacity = 0
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = start; fade.toValue = 0; fade.duration = Motion.littleOpenFade
+        fade.timingFunction = Motion.easeInOut
+        layer.add(fade, forKey: "littleOpen.opacity")
+        CATransaction.commit()
+    }
     func prepareToClose() {
+        container.host(for: session.tab.id)?.prepareToClose()
         onCloseDownloads?(); onCloseDownloads = nil; onDownloadsKey = nil
         // Tear down this controller's appearance observation once during close preparation.
         systemAppearanceObservation = nil
         closed = true; extensionsMenu?.cancelTrackingWithoutAnimation(); extensionsMenu = nil
         if let extensionObservation { extensionsUI?.removeObserver(extensionObservation) }; extensionObservation = nil
-        commandBar.dismiss(reason: .programmatic); spacePopover?.close(); spacePicker = nil
+        // Keep the command-bar pixels alive until the root's exit fade ends.
+        // Submission is already guarded by `closed`.
+        spacePopover?.close(); spacePicker = nil
     }
     public func windowShouldClose(_ sender: NSWindow) -> Bool { coordinator?.close(sessionID: session.id, archiveReason: nil); return false }
     func updateVisibility() { session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false }
