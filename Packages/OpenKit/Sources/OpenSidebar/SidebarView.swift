@@ -525,6 +525,9 @@ public enum SidebarDiagnostics {
     /// Tab row layout passes and Peek badge draws (a badge change must not lay out every row).
     public internal(set) static var tabRowLayouts = 0
     public internal(set) static var peekBadgeDraws = 0
+    /// Diagnostic A/B only (automation): row motion asks Core Animation for a
+    /// fixed maximum frame rate. The App leaves it off (system default cadence).
+    public static var rowMotionRequestsFixedRate = false
     /// Animate even in windows that are not on screen (frame captures of transitions).
     public static var forceAnimations = false
     public static var mediaIncreaseContrastOverride: Bool?

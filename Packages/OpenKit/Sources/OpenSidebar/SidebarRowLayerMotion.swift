@@ -88,9 +88,11 @@ final class SidebarRowLayerMotion {
         }
     }
 
-    /// Keep motion at the active screen cadence without a main-thread display callback.
+    /// Optional fixed-rate request (min = max = screen maximum). Off: the
+    /// system default cadence for Core Animation. On the M1, the fixed request
+    /// coincided with first motion intervals of two or three refreshes.
     private func preferDisplayRefresh(_ animation: CAAnimation, on screen: NSScreen?) {
-        guard let screen else { return }
+        guard SidebarDiagnostics.rowMotionRequestsFixedRate, let screen else { return }
         let rate = Float(screen.maximumFramesPerSecond)
         guard rate > 0 else { return }
         animation.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
