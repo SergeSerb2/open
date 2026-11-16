@@ -421,7 +421,7 @@ public final class WebContentContainer: NSView {
         for (slot, frame) in zip(slots, frames) where !slot.isHidden {
             guard let view = slot.contentHostView else { continue }
             guard let host = host(for: slot.tabID),
-                  let source = (host as? WebContentProviding)?.webContent as? any WebContentRetainedSurfaceResizing,
+                  let source = host as? any WebContentRetainedSurfaceResizing,
                   let scale = view.window?.backingScaleFactor else { return nil }
             let bounds = maximizedTabID == slot.tabID ? content : frame
             let size = slot.libraryViewportSize(for: bounds.size)
