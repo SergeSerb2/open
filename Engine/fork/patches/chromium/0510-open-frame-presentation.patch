@@ -55,7 +55,7 @@ index a26fb60d607ca059f968a26065dc2fda1d59d5d3..f91253d5ecb16e9c37c532890c8a2465
  };
  
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
-index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..09b94ae4e0d958bcd06bef85ac4dce92f071b2c1 100644
+index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..703bd31883bf612fb2fc4cab7f8aa9c714842659 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.cc
 +++ b/third_party/blink/renderer/platform/widget/widget_base.cc
 @@ -5,6 +5,7 @@
@@ -66,7 +66,7 @@ index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..09b94ae4e0d958bcd06bef85ac4dce92
  
  #include "base/check.h"
  #include "base/command_line.h"
-@@ -420,6 +421,70 @@
+@@ -420,6 +421,91 @@ scheduler::WidgetScheduler* WidgetBase::WidgetScheduler() {
    return widget_scheduler_.get();
  }
  
@@ -99,9 +99,21 @@ index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..09b94ae4e0d958bcd06bef85ac4dce92
 +void WidgetBase::MaybeArmOpenFramePresentation() {
 +  if (!open_frame_callback_)
 +    return;
++  // Blink paints the device scale itself (use_painted_device_scale_factor),
++  // so cc's device_scale_factor() stays 1. Compare the painted scale, which
++  // UpdateSurfaceAndScreenInfo sets from the browser's visual properties.
++  const float painted_scale = LayerTreeHost()->painted_device_scale_factor();
 +  const bool matches =
 +      CompositorViewportRect().size() == open_frame_viewport_pixels_ &&
-+      LayerTreeHost()->device_scale_factor() == open_frame_scale_;
++      std::abs(painted_scale - open_frame_scale_) < 0.00001f;
++  VLOG(1) << "OpenFramePresentation arm id=" << open_frame_request_id_
++          << " want=" << open_frame_viewport_pixels_.ToString() << "@"
++          << open_frame_scale_
++          << " have=" << CompositorViewportRect().size().ToString() << "@"
++          << painted_scale
++          << " cc_dsf=" << LayerTreeHost()->device_scale_factor()
++          << " surface_valid=" << local_surface_id_from_parent_.is_valid()
++          << " armed=" << open_frame_armed_ << " matches=" << matches;
 +  if (open_frame_armed_) {
 +    if (!matches || open_frame_surface_ != local_surface_id_from_parent_)
 +      CancelOpenFramePresentation(open_frame_request_id_);
@@ -121,12 +133,21 @@ index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..09b94ae4e0d958bcd06bef85ac4dce92
 +
 +void WidgetBase::DidPresentOpenFrame(
 +    uint64_t epoch, const viz::FrameTimingDetails& details) {
++  VLOG(1) << "OpenFramePresentation presented epoch=" << epoch << "/"
++          << open_frame_epoch_ << " callback=" << !!open_frame_callback_
++          << " hidden=" << is_hidden_ << " armed=" << open_frame_armed_
++          << " same_surface="
++          << (open_frame_surface_ == local_surface_id_from_parent_)
++          << " have=" << CompositorViewportRect().size().ToString() << "@"
++          << LayerTreeHost()->painted_device_scale_factor()
++          << " at=" << details.presentation_feedback.timestamp;
 +  if (epoch != open_frame_epoch_ || !open_frame_callback_)
 +    return;
 +  if (is_hidden_ || !open_frame_armed_ ||
 +      open_frame_surface_ != local_surface_id_from_parent_ ||
 +      CompositorViewportRect().size() != open_frame_viewport_pixels_ ||
-+      LayerTreeHost()->device_scale_factor() != open_frame_scale_) {
++      std::abs(LayerTreeHost()->painted_device_scale_factor() -
++               open_frame_scale_) >= 0.00001f) {
 +    CancelOpenFramePresentation(open_frame_request_id_);
 +    return;
 +  }
@@ -137,7 +158,7 @@ index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..09b94ae4e0d958bcd06bef85ac4dce92
  void WidgetBase::ForceRedraw(
      mojom::blink::Widget::ForceRedrawCallback callback) {
    TRACE_EVENT0("renderer", "WidgetBase::ForceRedraw");
-@@ -1583,6 +1648,8 @@
+@@ -1583,6 +1669,8 @@ void WidgetBase::SetHidden(bool hidden) {
    // The status has changed.  Tell the RenderThread about it and ensure
    // throttled acks are released in case frame production ceases.
    is_hidden_ = hidden;
@@ -146,7 +167,7 @@ index 0a1ef6721b97e1c876c024a0bf59cf38c88dc550..09b94ae4e0d958bcd06bef85ac4dce92
  
    if (widget_scheduler_)
      widget_scheduler_->SetHidden(hidden);
-@@ -1928,7 +1995,10 @@
+@@ -1928,7 +2016,10 @@ void WidgetBase::UpdateSurfaceAndScreenInfo(
      }
    }
  

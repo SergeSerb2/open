@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cef/include/cef_open_page.h"
@@ -109,6 +110,28 @@ class OpenFramePresentation
   }
 
   void Presented(uint64_t epoch, base::TimeTicks time) {
+    if (VLOG_IS_ON(1)) {
+      auto* frame = document_.AsRenderFrameHostIfValid();
+      VLOG(1) << "OpenFramePresentation browser id=" << id_
+              << " epoch=" << epoch << "/" << epoch_
+              << " pending=" << !!callback_ << " null=" << time.is_null()
+              << " after_request=" << (time >= requested_at_)
+              << " frame=" << (frame && frame->IsRenderFrameLive() &&
+                               frame == web_contents()->GetPrimaryMainFrame())
+              << " view=" << (view_ && frame && frame->GetView() == view_.get() &&
+                              view_->IsShowing())
+              << " widget=" << (widget_ && frame &&
+                                frame->GetRenderWidgetHost() == widget_.get() &&
+                                !widget_->IsHidden())
+              << " native=" << (native_ && native_.window == window_ &&
+                                native_.superview == parent_ &&
+                                !native_.isHiddenOrHasHiddenAncestor)
+              << " have="
+              << (view_ ? view_->GetCompositorViewportPixelSize().ToString()
+                        : std::string("none"))
+              << "@" << (view_ ? view_->GetDeviceScaleFactor() : 0.f)
+              << " want=" << pixels_.ToString() << "@" << scale_;
+    }
     if (epoch != epoch_ || !callback_)
       return;
     const bool valid = MatchesCurrentView(time);
