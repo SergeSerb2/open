@@ -34,6 +34,11 @@ public protocol WebContentHost: AnyObject {
     /// Stop deferred creation before an exit animation retains the drawn page.
     /// Existing page pixels stay available until close().
     func prepareToClose()
+    /// Split motion (Close This Pane): the next close() does all of its work at once
+    /// except the page's engine teardown. The page stays drawn in its view, muted and
+    /// with no callbacks, until the returned closure runs (when the pane's collapse
+    /// ends). Nil: this host cannot keep its page; close() stays immediate.
+    func retainPageOnClose() -> (@MainActor () -> Void)?
     func close()
     var onURLChange: ((URL) -> Void)? { get set }
     var onTitleChange: ((String) -> Void)? { get set }
@@ -54,6 +59,7 @@ public protocol WebContentHost: AnyObject {
 
 public extension WebContentHost {
     func prepareToClose() {}
+    func retainPageOnClose() -> (@MainActor () -> Void)? { nil }
     var liveState: WebContentLiveState { WebContentLiveState(isLoading: isLoading, canGoBack: canGoBack, canGoForward: canGoForward) }
 }
 

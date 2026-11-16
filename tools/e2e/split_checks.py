@@ -322,7 +322,12 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             and max(widths) < 200 and geometry(narrow, 'horizontal', 4), state=narrow)
         app.call('window-frame', frame=[60, 60, 1360, 860], unconstrained=True); settled(4)
         # Closing the focused third pane keeps a split with a valid focused survivor.
-        closed = state()['focused']; key('-'); s = settled(3)
+        closed = state()['focused']; key('-'); closing = state(); s = settled(3)
+        # Close This Pane: the closed page stays drawn under its collapsing box, then its
+        # engine teardown finishes when the motion ends.
+        row('close_pane_page_drawn', motion_mode['reduced'] or (closing['retiringPages'] == 1 and closing['deferredTeardowns'] == 1),
+            closing=closing, reduced=motion_mode['reduced'])
+        row('close_pane_teardown_done', s['retiringPanes'] == 0 and s['deferredTeardowns'] == 0, state=s)
         row('close_focused_pane', closed not in [p['id'] for p in s['panes']] and s['focused'] == s['panes'][0]['id']
             and any(r['id'] == closed for r in app.call('archive')), state=s)
         separated = s['focused']; app.call('menu-perform', id='separate-from-split-view'); s = settled(1)
@@ -332,7 +337,10 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         # Select the remaining split through the real sidebar and close it down to one.
         app.call('sidebar-click', node=remaining['id']); s = settled(2)
         survivor = next(p['id'] for p in s['panes'] if p['id'] != s['focused'])
-        app.call('focus', tab=s['focused']); key('-'); s = settled(1)
+        app.call('focus', tab=s['focused']); key('-'); closing = state(); s = settled(1)
+        row('close_two_to_one_page_drawn', motion_mode['reduced'] or (closing['retiringPages'] == 1 and closing['deferredTeardowns'] == 1),
+            closing=closing, reduced=motion_mode['reduced'])
+        row('close_two_to_one_teardown_done', s['retiringPanes'] == 0 and s['deferredTeardowns'] == 0, state=s)
         row('collapse_two_to_one_selection', not s['id'] and s['focused'] == survivor and s['selected'] == survivor, state=s)
         # Separate All retains all tabs and selects its previously focused pane.
         a = opened('all-a'); b = opened('all-b'); select(a); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
