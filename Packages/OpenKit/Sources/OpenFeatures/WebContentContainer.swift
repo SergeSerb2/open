@@ -43,6 +43,9 @@ public final class PaneSlotView: NSView {
         layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
         clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.cornerCurve = .continuous; clip.layer?.masksToBounds = true; addSubview(clip)
         focusRing.zPosition = 10; focusRing.fillColor = nil; focusRing.lineWidth = SplitMetrics.ringWidth; layer?.addSublayer(focusRing)
+        // layoutContents sets the path on every pass. An implicit path animation would
+        // replace the split motion's ring animation and leave the ring at its final box.
+        focusRing.actions = ["path": NSNull()]
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, toolbar: Bool = false, fullURL: Bool = false, focused: Bool, style: SpaceThemeStyle,
