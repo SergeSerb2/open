@@ -552,7 +552,9 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
       if block == .h1 || block == .h2 || block == .h3, caret.location == NSMaxRange(paragraph) - (string.substring(with: paragraph).hasSuffix("\n") ? 1 : 0) {
         bodyView.insertNewline(nil)
         bodyView.typingAttributes = NoteRichText.typingAttributes(block: nil, level: 0, inline: [:], dark: isDark)
-        let next = string.paragraphRange(for: NSRange(location: min(bodyView.selectedRange().location, string.length), length: 0))
+        // `string` is the text before the newline; measure the new paragraph in the current text.
+        let current = bodyView.string as NSString
+        let next = current.paragraphRange(for: NSRange(location: min(bodyView.selectedRange().location, current.length), length: 0))
         if next.length > 0 { editAttributes(next) { $0.removeAttribute(.noteBlock, range: next) } }
         bodyView.needsDisplay = true
         return true

@@ -56,7 +56,8 @@ import OpenDesign
         return !others.isEmpty && others.allSatisfy { CommandRegistry.byID[$0]?.isCustomizable == true && CommandRegistry.byID[$0]?.isReserved == false }
     }
     public func importBindings(from url: URL) {
-        do { store = try KeyBindingStore.load(from: url); saveDraft() }
+        // An import replaces every binding, like Reset All, so it also resolves an unreadable saved file.
+        do { store = try KeyBindingStore.load(from: url); loadFailed = false; saveDraft() }
         catch { statusText = "Could not read key bindings. Your saved shortcuts were kept." }
     }
     public func exportBindings(to url: URL) {

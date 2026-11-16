@@ -219,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if quitWarning.beginAttempt(relaunch: updater?.userDriver.installationRelaunchRequested == true) {
       // The downloads approval belongs to one attempt, like the generic one.
       downloadsCenter.resetQuitApproval()
+      deepLinks.beginQuitAttempt()
     }
     let downloadsWarned = downloadsCenter.hasRunning
     if downloadsCenter.shouldKeepBrowsing(withoutPrompts: quitWarning.withoutPrompts) {
@@ -625,6 +626,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var frontStandardWindowController: BrowserWindowController? {
     let normal = windowControllers.filter { hostFactories[$0.windowID]?.isIncognito == false }
     return NSApp.orderedWindows.compactMap { window in normal.first { $0.window === window } }.first ?? normal.first
+  }
+
+  /// The front browser window of the main model: not Incognito and not a Blank Window, whose
+  /// models hold none of the main model's Spaces.
+  var frontMainModelWindowController: BrowserWindowController? {
+    let main = windowControllers.filter { hostFactories[$0.windowID].map { !$0.isIncognito && $0.model === model } ?? false }
+    return NSApp.orderedWindows.compactMap { window in main.first { $0.window === window } }.first ?? main.first
   }
 
   @discardableResult
