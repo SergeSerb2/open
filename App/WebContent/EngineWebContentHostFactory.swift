@@ -1306,22 +1306,12 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func restoreLastClosedTab(_ sender: Any?) {
-    // Incognito windows have no Archive (the menu item is disabled there); never pull a
-    // regular Profile's closed tab into a private window through the key path.
-    guard !isIncognito, !isClosing else { return }
     let store = app.archiveSink.store(for: focusedProfile?.id)
     Task { @MainActor in
-      // Read the row without deleting it: if the window closes or Open quits during the
-      // await, the closed tab must stay in the Archive. The model's restore discards the
-      // row only once the tab is placed.
-      guard let record = await store.recent(limit: 1).first else { return }
+      guard let recent = await store.recent(limit: 1).first,
+        let record = await store.restore(id: recent.id)
+      else { return }
       guard !self.isClosing, !self.app.terminationRequested else { return }
-      // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
-      // blank tab and drop its children.
-      if record.kind == .folder {
-        if let folder = self.model.restoreArchivedFolder(record) { self.controller?.sidebar.reveal(nodeID: folder.id) }
-        return
-      }
       let tab = self.model.restoreArchivedTab(record)
       self.select(nodeID: tab.id)
     }
@@ -1360,8 +1350,7 @@ extension EngineWebContentHostFactory {
   func cycleTab(by delta: Int) {
     let ids = orderedTabs.map(\.id)
     guard !ids.isEmpty else { return }
-    // With no selection, Next starts at the first tab and Previous at the last one.
-    let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? (delta > 0 ? -1 : 0)
+    let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? -delta
     select(nodeID: ids[(current + delta + ids.count) % ids.count])
   }
 
