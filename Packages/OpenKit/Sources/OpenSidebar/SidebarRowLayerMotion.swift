@@ -21,6 +21,7 @@ final class SidebarRowLayerMotion {
         depth += 1
         guard depth == 1 else { return }
         enabled = animated && !Motion.reducesMotion
+        SidebarDiagnostics.folderTrace?("rowMotion.begin enabled=\(enabled)")
         self.duration = duration; self.timing = timing
         generation += 1
         previous.removeAll(keepingCapacity: true)
@@ -93,12 +94,14 @@ final class SidebarRowLayerMotion {
         NSAnimationContext.endGrouping()
         guard enabled else { previous.removeAll(); return }
         outline.layoutSubtreeIfNeeded()
+        SidebarDiagnostics.folderTrace?("rowMotion.end.laidOut")
         let token = generation
         let batch = departing.filter { $0.generation == token }
         let retiring = Set(batch.map { ObjectIdentifier($0.layer) })
         CATransaction.begin(); CATransaction.setDisableActions(true)
         CATransaction.setCompletionBlock { [weak self] in
             MainActor.assumeIsolated {
+                SidebarDiagnostics.folderTrace?("rowMotion.complete")
                 guard let self else { return }
                 // A subsequent edit must not cut short an earlier departure.
                 // Each transaction retires only its own layers and releases
@@ -144,6 +147,7 @@ final class SidebarRowLayerMotion {
             layer.opacity = 0; layer.add(fade, forKey: "row.structure.opacity")
         }
         CATransaction.commit()
+        SidebarDiagnostics.folderTrace?("rowMotion.end.added departures=\(batch.count)")
         previous.removeAll(keepingCapacity: true)
     }
 }

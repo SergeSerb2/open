@@ -67,6 +67,48 @@
     }
   }
 
+  /// Opt-in, bounded main-thread timeline around one sidebar edit (diagnostic
+  /// only, never installed by the App itself). Records run-loop wake and
+  /// sleep edges on both sides of Core Animation's commit observer (order
+  /// 2000000) and the existing sidebar row hooks, in mach ticks, which is the
+  /// clock of the native capture timestamps. It adds no display link, so it
+  /// cannot keep the compositor awake by itself.
+  @MainActor
+  private final class AutomationMotionTrace {
+    private var events: [(UInt64, String)] = []
+    private var observers: [CFRunLoopObserver] = []
+    private var truncated = false
+    init() {
+      events.reserveCapacity(8192)
+      let edges: [(CFRunLoopActivity, CFIndex, String)] = [
+        (.afterWaiting, -1_000_000_000, "runloop.wake"),
+        (.beforeWaiting, -1_000_000_000, "runloop.idle.begin"),
+        (.beforeWaiting, 2_100_000, "runloop.idle.committed"),
+      ]
+      for (activity, order, name) in edges {
+        let observer = CFRunLoopObserverCreateWithHandler(nil, activity.rawValue, true, order) { [weak self] _, _ in
+          let now = mach_absolute_time()
+          MainActor.assumeIsolated { self?.record(now, name) }
+        }
+        if let observer { CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes); observers.append(observer) }
+      }
+      SidebarDiagnostics.folderTrace = { [weak self] text in self?.record(mach_absolute_time(), text) }
+    }
+    private func record(_ ticks: UInt64, _ text: String) {
+      guard events.count < 8192 else { truncated = true; return }
+      events.append((ticks, text))
+    }
+    func stop() -> [String: Any] {
+      for observer in observers { CFRunLoopObserverInvalidate(observer) }
+      observers.removeAll()
+      SidebarDiagnostics.folderTrace = nil
+      var base = mach_timebase_info_data_t(); mach_timebase_info(&base)
+      return ["events": events.map { [Double($0.0), $0.1] as [Any] }, "truncated": truncated,
+              "timebase": [Int(base.numer), Int(base.denom)],
+              "scope": "main run-loop edges, CA commit observer bracket and sidebar row hooks; not render-server or scanout"]
+    }
+  }
+
   /// A CG scroll event with an explicit local destination. AppKit's CG bridge
   /// does not populate a synthetic scroll's window-relative location.
   private final class AutomationScrollEvent: NSEvent {
@@ -130,6 +172,7 @@
     private var staleMenu: OEExtensionActionMenu?
     private var pointerRequestID = 0
     private var scrollCadence: AutomationScrollCadence?
+    private var motionTrace: AutomationMotionTrace?
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
@@ -652,6 +695,15 @@
         controller.contentView.layoutSubtreeIfNeeded()
         let frame = controller.sidebar.clearTodayFrame().map { controller.contentView.convert($0, from: controller.sidebar) }
         return ["visible": controller.sidebar.isClearTodayVisible, "frame": frame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? []] as [String: Any]
+      case "sidebar-motion-trace":
+        // Diagnostic: `start` installs the bounded trace, `stop` returns and removes it.
+        switch a["action"] as? String {
+        case "start": _ = motionTrace?.stop(); motionTrace = AutomationMotionTrace(); return true
+        case "stop":
+          guard let trace = motionTrace else { throw Failure(message: "no motion trace") }
+          motionTrace = nil; return trace.stop()
+        default: throw Failure(message: "invalid motion trace action")
+        }
       case "sidebar-row-motion-state":
         guard let outline = try sidebarController(a).sidebar.focusedOutline else { throw Failure(message: "no sidebar outline") }
         let layers = (outline.layer?.sublayers ?? []).filter {
