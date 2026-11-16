@@ -649,13 +649,19 @@ public final class WebContentContainer: NSView {
         // A departing pane collapses toward the end edge of the surviving pane before
         // it (old order), or toward the start edge when none precedes it.
         let endByID = Dictionary(boxes.map { ($0.slot.tabID, $0.end) }, uniquingKeysWith: { first, _ in first })
+        // Collapse along the axis the panes are drawn in now. A refresh in the same turn
+        // can already have changed `orientation` (Separate passes .horizontal) before
+        // anything was drawn in it.
+        let shown = oldIDs.compactMap { starts[$0] }
+        let stacked = shown.count > 1 && shown.allSatisfy { abs($0.minX - shown[0].minX) < 1 && abs($0.width - shown[0].width) < 1 }
+        let collapseAxis: SplitOrientation = shown.count > 1 ? (stacked ? .vertical : .horizontal) : oldOrientation
         for slot in retiringSlots {
             guard let start = starts[slot.tabID], let index = oldIDs.firstIndex(of: slot.tabID) else { continue }
-            let edge = oldIDs[..<index].reversed().compactMap { endByID[$0] }.first.map { Self.endEdge($0, oldOrientation) }
-                ?? Self.startEdge(bounds, oldOrientation)
+            let edge = oldIDs[..<index].reversed().compactMap { endByID[$0] }.first.map { Self.endEdge($0, collapseAxis) }
+                ?? Self.startEdge(bounds, collapseAxis)
             let origin = slot.frame.origin
             slot.moveBox(from: start.offsetBy(dx: -origin.x, dy: -origin.y),
-                         to: Self.collapsed(start, at: edge, oldOrientation).offsetBy(dx: -origin.x, dy: -origin.y),
+                         to: Self.collapsed(start, at: edge, collapseAxis).offsetBy(dx: -origin.x, dy: -origin.y),
                          duration: duration, timing: timing, holdEnd: true, fill: fill(slot.tabID))
         }
         CATransaction.commit()
