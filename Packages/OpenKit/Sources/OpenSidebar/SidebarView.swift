@@ -528,6 +528,8 @@ public enum SidebarDiagnostics {
     /// Diagnostic A/B only (automation): row motion asks Core Animation for a
     /// fixed maximum frame rate. The App leaves it off (system default cadence).
     public static var rowMotionRequestsFixedRate = false
+    /// Diagnostic A/B only (automation): commit an invisible clock animation before the edit.
+    public static var rowMotionStartsClockEarly = false
     /// Animate even in windows that are not on screen (frame captures of transitions).
     public static var forceAnimations = false
     public static var mediaIncreaseContrastOverride: Bool?

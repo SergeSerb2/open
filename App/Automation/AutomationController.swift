@@ -704,6 +704,10 @@
           motionTrace = nil; return trace.stop()
         default: throw Failure(message: "invalid motion trace action")
         }
+      case "row-motion-early-clock":
+        // Diagnostic A/B only: commit an invisible clock animation before each row edit.
+        if let early = a["early"] as? Bool { SidebarDiagnostics.rowMotionStartsClockEarly = early }
+        return SidebarDiagnostics.rowMotionStartsClockEarly
       case "row-motion-fixed-rate":
         // Diagnostic A/B only: request a fixed maximum frame rate for row motion.
         if let fixed = a["fixed"] as? Bool { SidebarDiagnostics.rowMotionRequestsFixedRate = fixed }
