@@ -352,7 +352,9 @@ public final class WebContentContainer: NSView {
         let movesPanes = paneMotionAllowed && old != tabIDs && (old.count > 1 || tabIDs.count > 1) && old.contains(where: tabIDs.contains)
         // Read every on-screen box first, so an interrupted motion continues from where it is.
         let starts = movesPanes ? visiblePaneBoxes() : [:]
-        finishPaneMotion()
+        // A refresh with the same panes (model observers, focus) keeps a running motion;
+        // layoutPanes ends it only if a target frame changes.
+        if old != tabIDs { finishPaneMotion() }
         for slot in slots where !tabIDs.contains(slot.tabID) {
             if cache[slot.tabID] != nil { parkedSlots[slot.tabID] = slot }
             if starts[slot.tabID] != nil { retiringSlots.append(slot) } else { slot.removeFromSuperview() }
