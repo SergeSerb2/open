@@ -183,6 +183,8 @@ class DeleteCookiesCallback : public CefDeleteCookiesCallback {
       dispatch_async(dispatch_get_main_queue(), done);
     }
   }
+  // The caller answers itself when DeleteCookies refuses the callback.
+  void Disarm() { done_ = nil; }
   void OnComplete(int num_deleted) override {
     void (^done)(void) = done_;
     done_ = nil;
@@ -877,16 +879,16 @@ static CefRefPtr<CefListValue> OEUserScriptsValue(NSArray<OEUserScript*>* script
   CefRefPtr<CefCookieManager> cookies = _context->GetCookieManager(nullptr);
   CefString url = origin ? OECef(origin.absoluteString) : CefString();
   void (^done)(void) = [completion copy];
-  if (!cookies ||
-      !cookies->DeleteCookies(url, CefString(),
-                              new DeleteCookiesCallback(^{
-                                if (!origin && self->_context && !self->_oe_closing) {
-                                  self->_context->ClearHttpCache(nullptr);
-                                }
-                                if (done) {
-                                  done();
-                                }
-                              }))) {
+  CefRefPtr<DeleteCookiesCallback> callback = new DeleteCookiesCallback(^{
+    if (!origin && self->_context && !self->_oe_closing) {
+      self->_context->ClearHttpCache(nullptr);
+    }
+    if (done) {
+      done();
+    }
+  });
+  if (!cookies || !cookies->DeleteCookies(url, CefString(), callback)) {
+    callback->Disarm();
     if (done) {
       done();
     }

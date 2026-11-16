@@ -302,6 +302,8 @@ class OEEndTracingCallback : public CefEndTracingCallback {
       });
     }
   }
+  // The caller answers itself when CefEndTracing refuses the callback.
+  void Disarm() { done_ = nil; }
   void OnEndTracingComplete(const CefString& tracing_file) override {
     void (^done)(NSString*) = done_;
     done_ = nil;
@@ -1038,6 +1040,7 @@ static NSArray* OELiveObjects(NSPointerArray* array) {
              written ? nil : failure(@"Chromium did not write the trace"));
       });
   if (!CefEndTracing(OECef(fileURL.path), callback)) {
+    callback->Disarm();
     done(nil, failure(@"Chromium refused to end the trace"));
     return;
   }
@@ -1064,6 +1067,8 @@ static NSArray* OELiveObjects(NSPointerArray* array) {
   if (CefEndTracing(CefString(), callback)) {
     _tracing = NO;
     _tracingEnding = YES;
+  } else {
+    callback->Disarm();
   }
 }
 
