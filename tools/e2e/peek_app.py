@@ -147,23 +147,58 @@ def run(factory, results, tmp, harness):
         undo = app.call('toast-action', index=0)
         results['peek_click_outside_undo'] = {'ok': bool(dismissed) and any(t['title'] == 'Peek closed' for t in toast) and undo and bool(opened())}
         clear()
+        # A real click inside the opening card before its page exists. The
+        # page is created only after card motion; the click must not dismiss
+        # Peek, reach the source page, or break the page that follows.
+        navigate(source, url())
+        app.eval(source, "window.__peekSourceDowns=0; addEventListener('mousedown',()=>{window.__peekSourceDowns++},true); true")
+        app.call('peek-open', tab=source, url=url('b.localhost'))
+        card_click_error = None
+        try:
+            app.call('mouse', action='click', x=panel[0]+panel[2]/2, y=panel[1]+panel[3]/2)
+        except Exception as error:
+            card_click_error = repr(error)
+        motion_at_click = app.call('peek-motion'); at_click = state()
+        content_at_click = at_click['stack'][-1]['content'] if at_click['stack'] else -1
+        card_ready = bool(opened()); card_page = top() if card_ready else 0
+        if card_page: app.call('wait', tab=card_page)
+        card_host = app.eval(card_page, 'location.hostname') if card_page else None
+        if card_page:
+            click(card_page, url('b.localhost') + '#after-early-click')
+        card_hash = wait_until(lambda: app.eval(card_page, 'location.hash') == '#after-early-click', timeout=5, step=.05) if card_page else False
+        card_toasts = [t['title'] for t in app.call('toasts')['toasts']]
+        source_downs = app.eval(source, 'window.__peekSourceDowns')
+        results['peek_click_card_before_page'] = {'ok': card_click_error is None and content_at_click == 0
+            and len(at_click['stack']) == 1 and at_click['shown'] and card_ready and card_host == 'b.localhost'
+            and bool(card_hash) and len(state()['stack']) == 1 and source_downs == 0 and 'Peek closed' not in card_toasts,
+            'pageAbsentAtClick': content_at_click == 0, 'contentAtClick': content_at_click,
+            'preparingAtClick': motion_at_click.get('preparingOpening'), 'stackAtClick': len(at_click['stack']),
+            'clickError': card_click_error, 'pageReady': card_ready, 'host': card_host, 'pageLinkWorks': bool(card_hash),
+            'sourceMouseDowns': source_downs, 'toasts': card_toasts, 'clickPoint': [panel[0]+panel[2]/2, panel[1]+panel[3]/2]}
+        clear()
         # A real link click in each nested page; the sixth target navigates in place.
+        # Each new item gets its page only after card motion: wait for it
+        # (content > 0) before every click and record that it arrived.
         app.call('peek-open', tab=source, url=url('n0.localhost'))
-        opened(); depths=[]; native_nesting=True
+        ready_pages=[bool(opened())]; depths=[]; native_nesting=True
         for i in range(1, 6):
-            page = top(); app.call('wait', tab=page)
+            if i > 1: ready_pages.append(bool(opened()))
+            page = top()
+            if not page: break
+            app.call('wait', tab=page)
             click(page, url('n%d.localhost' % i))
             wait_until(lambda: len(state()['stack']) == min(i+1, 5), timeout=5, step=.05)
             actual_depth=len(state()['stack']); native_nesting &= actual_depth == min(i+1,5)
             depths.append(len(state()['stack']))
-        at_cap = wait_until(lambda: app.eval(top(), 'location.hostname') == 'n5.localhost', timeout=8, step=.05)
+        ready_pages.append(bool(opened()))
+        at_cap = top() and wait_until(lambda: app.eval(top(), 'location.hostname') == 'n5.localhost', timeout=8, step=.05)
         stack=state()['stack']; ui=app.call('peek-ui'); pages={p['identifier']:p for p in app.call('pages')}
         results['peek_nested_visibility']={'ok':len(stack)==5 and stack[-1]['originalHostTab'] in ui['visible']
             and all(item['originalHostTab'] not in ui['visible'] and pages[item['content']]['hidden'] for item in stack[:-1]),
             'visible':ui['visible'],'stackHosts':[item['originalHostTab'] for item in stack]}
         app.call('key', key='escape', route='app')
         popped = wait_until(lambda: len(state()['stack']) == 4, timeout=5, step=.05)
-        results['peek_nesting_cap'] = {'ok': native_nesting and depths == [2,3,4,5,5] and bool(at_cap) and bool(popped), 'depths': depths}
+        results['peek_nesting_cap'] = {'ok': native_nesting and depths == [2,3,4,5,5] and all(ready_pages) and bool(at_cap) and bool(popped), 'depths': depths, 'pagesReady': ready_pages}
         clear()
         # Source becomes a split while its Peek is open. The Peek follows the source row.
         app.call('select', tab=source)
