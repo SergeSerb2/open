@@ -92,8 +92,16 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split'), menu=empty_menu)
         a = opened('a'); original_page = app.page(a)['identifier']; app.call('focus', tab=a)
         app.eval(a, "window.__splitResize=[];addEventListener('resize',()=>__splitResize.push([innerWidth,innerHeight]));true")
-        key('='); s = settled(2)
+        motion_mode = app.call('window-motion')
+        key('='); moving = state(); s = settled(2)
         add_resizes = app.eval(a, 'window.__splitResize')
+        # C14-6 motion: final frames commit at once; only clip layers move (render server).
+        row('pane_motion_render_server', motion_mode['reduced'] or (geometry(moving, 'horizontal', 2)
+            and all(p['clipAnimations'] for p in moving['panes'])
+            and not any(k for p in moving['panes'] for k in p['layerAnimations'] if not k.endswith('shadowPath'))),
+            moving=moving, reduced=motion_mode['reduced'])
+        row('pane_motion_settles', s['retiringPanes'] == 0
+            and not any(p['clipAnimations'] or p['holdingPage'] for p in s['panes']), state=s)
         row('pane_layer_redraw_prepared_once', all(p['layerRedrawPolicy'] == 3 for p in s['panes']), panes=s['panes'])
         row('add_resizes_web_once', len(add_resizes) <= 1, sizes=add_resizes)
         b = next(p['id'] for p in s['panes'] if p['id'] != a)
@@ -330,8 +338,13 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         a = opened('all-a'); b = opened('all-b'); select(a); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         all_ids = {p['id'] for p in s['panes']}; focused = s['focused']
         app.eval(focused, "window.__splitRemoveResize=[];addEventListener('resize',()=>__splitRemoveResize.push([innerWidth,innerHeight]));true")
-        app.call('sidebar-menu', node=s['id'], item='Separate All Tabs'); after = settled(1)
+        app.call('sidebar-menu', node=s['id'], item='Separate All Tabs'); leaving = state(); after = settled(1)
         remove_resizes = app.eval(focused, 'window.__splitRemoveResize')
+        # The departing pane stays drawn while its box collapses, then leaves.
+        row('remove_departing_pane_drawn', motion_mode['reduced'] or leaving['retiringPanes'] == 1,
+            leaving=leaving, reduced=motion_mode['reduced'])
+        row('remove_motion_settles', after['retiringPanes'] == 0
+            and not any(p['clipAnimations'] or p['holdingPage'] for p in after['panes']), state=after)
         row('remove_resizes_web_once', len(remove_resizes) <= 1, sizes=remove_resizes)
         row('separate_all', after['focused'] == focused and not after['id'] and all_ids.issubset({n['id'] for n in app.call('sidebar-tree')['today']}), state=after)
         select(a); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
