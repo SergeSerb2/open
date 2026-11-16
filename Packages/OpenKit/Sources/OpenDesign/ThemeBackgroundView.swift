@@ -8,7 +8,7 @@ import OpenModel
 ///
 /// Cost: the field is one solid color or a 64×64 float image stretched by the
 /// GPU, rebuilt only when the theme, the active state, or the window aspect
-/// changes. Editor fills sit over an opaque underlay layer, so the window
+/// changes. Static editor previews sit over an opaque underlay layer, so the window
 /// server blends them in the display's space. Grain is one tile repeated by
 /// replicator layers (shared contents, no large bitmaps).
 ///
@@ -65,6 +65,20 @@ public final class ThemeBackgroundView: NSView {
         didSet { if composesInDisplaySpace != oldValue { [current, incoming].compactMap { $0 }.forEach { $0.invalidateField() }; refresh() } }
     }
 
+    /// Only real browser windows opt in. Embedded previews and the page card
+    /// retain their fitted constant underlay.
+    public var usesWindowBackdrop = false {
+        didSet { if usesWindowBackdrop != oldValue { applyMaterial() } }
+    }
+    public var drawsWindowBackdrop: Bool { windowBlur?.isHidden == false }
+    public var windowBackdropMaterial: Int? { drawsWindowBackdrop ? windowBlur?.material.rawValue : nil }
+    public var isWindowBackdropActive: Bool { drawsWindowBackdrop && windowBlur?.state == .active }
+    private let themeSurface = ThemeSurfaceView()
+    private var windowBlur: NSVisualEffectView?
+    private var windowWash: NSView?
+    private struct WashKey: Equatable { var gray: Double; var opacity: Float }
+    private var appliedWash: WashKey?
+
     private var current = ThemeLayer(style: .defaultTheme(system: .light))
     /// Holds the theme layers. Its opacity is `1 − w` over the page blur, else 1.
     private let themeHost = CALayer()
@@ -90,12 +104,13 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func applyMaterial() {
+        updateWindowMaterial()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if material == .overPage, let blur = pageBlur ?? PageBlurLayer.make() {
             pageBlur = blur
             blur.frame = bounds
-            if blur.superlayer == nil { layer?.insertSublayer(blur, below: themeHost) }
+            if blur.superlayer == nil { (themeSurface.superview == nil ? layer : themeSurface.layer)?.insertSublayer(blur, below: themeHost) }
             themeHost.opacity = Float(1 - WindowMaterial.backdropWeight)
         } else {
             pageBlur?.removeFromSuperlayer()
@@ -104,6 +119,75 @@ public final class ThemeBackgroundView: NSView {
         CATransaction.commit()
         [current, incoming].compactMap { $0 }.forEach { $0.invalidateField() }
         refresh()
+    }
+
+    private func updateWindowMaterial() {
+        if usesWindowBackdrop, themeSurface.superview == nil {
+            // A sibling surface keeps the tint above AppKit's material layer.
+            // Static previews retain their original layer tree byte for byte.
+            themeSurface.wantsLayer = true
+            themeSurface.layerContentsRedrawPolicy = .never
+            themeSurface.frame = bounds
+            addSubview(themeSurface)
+            themeHost.removeFromSuperlayer()
+            themeSurface.layer?.addSublayer(themeHost)
+        }
+        let style = targetStyle
+        let enabled = usesWindowBackdrop && material == .window && style.isVibrant
+        if enabled, windowBlur == nil {
+            let blur = NSVisualEffectView(frame: bounds)
+            blur.blendingMode = .behindWindow
+            // The material sits below the theme. It must not apply vibrancy to
+            // the sidebar's already fitted text and semantic role colors.
+            blur.isEmphasized = false
+            addSubview(blur, positioned: .below, relativeTo: themeSurface)
+            windowBlur = blur
+            let wash = NSView(frame: bounds)
+            wash.wantsLayer = true
+            wash.layerContentsRedrawPolicy = .never
+            addSubview(wash, positioned: .above, relativeTo: blur)
+            windowWash = wash
+        }
+        if let blur = windowBlur, blur.isHidden == enabled { blur.isHidden = !enabled }
+        if let wash = windowWash, wash.isHidden == enabled { wash.isHidden = !enabled }
+        guard enabled, let blur = windowBlur else { return }
+        // The imported JSON is unchanged when macOS appearance changes (C14-T).
+        // Its stored translucency selects the material; window appearance selects
+        // the wash. Editor themes carry their explicit window scheme themselves.
+        let dark = style.usesLegacyIntensity ? ContentAppearance(effectiveAppearance) == .dark : style.windowColorScheme == .dark
+        // Raw values 1/2 are the legacy light/dark materials measured in C14-T.
+        // Their named cases emit SDK deprecation warnings; the semantic materials
+        // have a different measured wallpaper response and inactive behavior.
+        let material = NSVisualEffectView.Material(rawValue: style.translucency == .dark ? 2 : 1)!
+        let appearance: NSAppearance.Name = dark ? .darkAqua : .aqua
+        let state: NSVisualEffectView.State = isWindowActive ? .active : .inactive
+        // Reapplying an appearance can invalidate AppKit's material subtree.
+        // A field flush with unchanged inputs must not create another update.
+        if blur.material != material { blur.material = material }
+        if blur.appearance?.name != appearance { blur.appearance = NSAppearance(named: appearance) }
+        if blur.state != state { blur.state = state }
+        let isDefault: Bool
+        if case .corners = style.fill { isDefault = true } else { isDefault = false }
+        // Real-window C14-T output fit, with the existing theme coverage retained.
+        // This constant wash leaves the system material to perform the blur and
+        // saturation. Inactive windows cover it completely, as Arc's clear patches
+        // are invariant across all three wallpapers. See window-translucency.md.
+        let fit: (opacity: Float, gray: Double, inactiveGray: Double)
+        switch (isDefault, dark) {
+        case (false, false): fit = (0.4764, 1, 1)
+        case (false, true): fit = (0.1701, 0, 0.8292)
+        case (true, false): fit = (0.2319, 0.2641, 0.8366)
+        case (true, true): fit = (0.1729, 0, 0.1023)
+        }
+        let key = WashKey(gray: isWindowActive ? fit.gray : fit.inactiveGray, opacity: isWindowActive ? fit.opacity : 1)
+        if appliedWash != key {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            windowWash?.layer?.backgroundColor = NSColor(srgbRed: key.gray, green: key.gray, blue: key.gray, alpha: 1).cgColor
+            windowWash?.layer?.opacity = key.opacity
+            CATransaction.commit()
+            appliedWash = key
+        }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -120,6 +204,11 @@ public final class ThemeBackgroundView: NSView {
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         refresh()
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if usesWindowBackdrop { rebuildFields() }
     }
 
     public override func viewWillStartLiveResize() {
@@ -140,7 +229,10 @@ public final class ThemeBackgroundView: NSView {
         // field rebuilds on a display tick; static previews finish them below.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        themeHost.frame = bounds
+        if themeSurface.frame != bounds { themeSurface.frame = bounds }
+        if let blur = windowBlur, blur.frame != bounds { blur.frame = bounds }
+        if let wash = windowWash, wash.frame != bounds { wash.frame = bounds }
+        themeHost.frame = themeSurface.bounds
         pageBlur?.frame = bounds
         for layer in [current, incoming].compactMap({ $0 }) {
             layer.frame = fieldRect
@@ -169,11 +261,12 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func rebuildFields() {
+        updateWindowMaterial()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for l in [current, incoming].compactMap({ $0 }) {
             l.frame = fieldRect
-            if l.update(size: fieldRect.size, active: isWindowActive, cardTint: drawsPageBlur, scale: scale, displaySpace: composesInDisplaySpace) { fieldRebuildCount += 1 }
+            if l.update(size: fieldRect.size, active: isWindowActive, cardTint: drawsPageBlur, scale: scale, displaySpace: composesInDisplaySpace, windowTint: drawsWindowBackdrop) { fieldRebuildCount += 1 }
         }
         CATransaction.commit()
     }
@@ -182,8 +275,16 @@ public final class ThemeBackgroundView: NSView {
     public func beginTransition(to style: SpaceThemeStyle) {
         if let incoming, incoming.theme == style { return }
         incoming?.removeFromSuperlayer()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        current.removeAnimation(forKey: "opacity")
+        current.opacity = 1
+        CATransaction.commit()
         let l = ThemeLayer(style: style)
         l.opacity = 0
+        // Two translucent source-over layers would increase tint coverage in
+        // the middle of the fade. Add complementary premultiplied fields instead.
+        if drawsWindowBackdrop { l.compositingFilter = "plusL" }
         themeHost.addSublayer(l)
         incoming = l
         refresh()
@@ -195,6 +296,7 @@ public final class ThemeBackgroundView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         incoming.opacity = Float(min(max(progress, 0), 1))
+        if incoming.compositingFilter != nil { current.opacity = 1 - incoming.opacity }
         CATransaction.commit()
     }
 
@@ -202,9 +304,11 @@ public final class ThemeBackgroundView: NSView {
     public func endTransition(commit: Bool, duration: CFTimeInterval = Motion.themeCrossfade) {
         guard let incoming else { return }
         if commit { finish(to: incoming, duration: duration) } else {
-            animateOpacity(incoming, to: 0, duration: duration) { [weak self] in
+            let start = incoming.presentation()?.opacity ?? incoming.opacity
+            if incoming.compositingFilter != nil { animateOpacity(current, from: 1 - start, to: 1, duration: duration) {} }
+            animateOpacity(incoming, from: start, to: 0, duration: duration) { [weak self] in
                 incoming.removeFromSuperlayer()
-                if self?.incoming === incoming { self?.incoming = nil }
+                if self?.incoming === incoming { self?.incoming = nil; self?.refresh() }
             }
         }
     }
@@ -216,6 +320,11 @@ public final class ThemeBackgroundView: NSView {
         if animated, let incoming, incoming.theme == style, incoming.animation(forKey: "opacity") != nil { return }
         if !animated {
             incoming?.removeFromSuperlayer(); incoming = nil
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            current.removeAnimation(forKey: "opacity")
+            current.opacity = 1
+            CATransaction.commit()
             current.theme = style
             refresh()
             return
@@ -225,26 +334,37 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func finish(to layer: ThemeLayer, duration: CFTimeInterval) {
-        animateOpacity(layer, to: 1, duration: duration) { [weak self] in
+        let start = layer.presentation()?.opacity ?? layer.opacity
+        // A removed animation's presentation value can survive until the next
+        // frame. Derive both starts from the incoming layer so they still sum to 1.
+        if layer.compositingFilter != nil { animateOpacity(current, from: 1 - start, to: 0, duration: duration) {} }
+        animateOpacity(layer, from: start, to: 1, duration: duration) { [weak self] in
             guard let self, self.incoming === layer else { return }
             self.current.removeFromSuperlayer()
+            layer.compositingFilter = nil
             self.current = layer
             self.incoming = nil
+            self.refresh()
         }
     }
 
-    private func animateOpacity(_ layer: CALayer, to value: Float, duration: CFTimeInterval, completion: @escaping @MainActor () -> Void) {
+    private func animateOpacity(_ layer: CALayer, from start: Float, to value: Float, duration: CFTimeInterval, completion: @escaping @MainActor () -> Void) {
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
         CATransaction.setAnimationTimingFunction(Motion.themeCrossfadeTiming)
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
         let a = CABasicAnimation(keyPath: "opacity")
-        a.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        a.fromValue = start
         a.toValue = value
         layer.opacity = value
         layer.add(a, forKey: "opacity")
         CATransaction.commit()
     }
+}
+
+@MainActor
+private final class ThemeSurfaceView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 /// The blurred page under the hover-reveal card: a backdrop layer with a Gaussian
@@ -284,13 +404,12 @@ private final class ThemeDisplayTarget: NSObject {
     @objc func tick(_ link: CADisplayLink) { owner?.displayFrame() }
 }
 
-/// One theme: the underlay, the gradient field, and the grain tile layers.
-/// Editor fills keep the field unblended over an opaque underlay, so the
-/// layer tree is opaque and cross-fades as one group.
+/// One theme: the underlay, gradient field, and grain tile layers. Static
+/// previews include the opaque fitted underlay. Live windows instead draw the
+/// fitted tint over the system material; each theme cross-fades as one group.
 final class ThemeLayer: CALayer {
     var theme: SpaceThemeStyle { didSet { if theme != oldValue { fieldKey = nil; grainKey = nil } } }
-    /// Section 5 hook: replace this opaque gray with the window material here.
-    /// Keep it below the unblended fill and inside this theme's opacity group.
+    /// Constant neutral underlay for embedded previews and opaque themes.
     private let underlay = CALayer()
     private let field = CALayer()
     private let grainColumns = CAReplicatorLayer()
@@ -299,7 +418,7 @@ final class ThemeLayer: CALayer {
     private var fieldKey: FieldKey?
     private var grainKey: GrainKey?
 
-    private struct FieldKey: Equatable { var active: Bool; var cardTint: Bool; var aspect: Int; var displaySpace: Bool }
+    private struct FieldKey: Equatable { var active: Bool; var cardTint: Bool; var aspect: Int; var displaySpace: Bool; var windowTint: Bool }
     private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat; var texture: SpaceStyleTexture }
 
     init(style: SpaceThemeStyle) {
@@ -344,16 +463,22 @@ final class ThemeLayer: CALayer {
         grainColumns.instanceTransform = CATransform3DMakeTranslation(t, 0, 0)
     }
 
-    @MainActor func update(size: CGSize, active: Bool, cardTint: Bool, scale: CGFloat, displaySpace: Bool) -> Bool {
+    @MainActor func update(size: CGSize, active: Bool, cardTint: Bool, scale: CGFloat, displaySpace: Bool, windowTint: Bool) -> Bool {
         guard size.width > 0, size.height > 0 else { return false }
         resize(to: size)
         // Rebuild when the aspect ratio moves by more than 0.5 %.
-        // The card tint does not depend on the window's active state.
-        let key = FieldKey(active: active || cardTint, cardTint: cardTint, aspect: Int((size.width / size.height * 200).rounded()), displaySpace: displaySpace)
+        // The system material owns the live window's active state. Its tint,
+        // like the page-card tint, is independent of that state.
+        let key = FieldKey(active: (windowTint && theme.isVibrant) || active || cardTint, cardTint: cardTint, aspect: Int((size.width / size.height * 200).rounded()), displaySpace: displaySpace, windowTint: windowTint)
         let rebuilt = key != fieldKey
         if rebuilt {
             fieldKey = key
-            if displaySpace, !cardTint, let c = ThemeField.composition(style: theme, windowSize: size, isActive: active) {
+            if windowTint, theme.isVibrant {
+                underlay.isHidden = true
+                underlay.backgroundColor = nil
+                field.backgroundColor = nil
+                field.contents = ThemeField.makeWindowTint(style: theme, windowSize: size)
+            } else if displaySpace, !cardTint, let c = ThemeField.composition(style: theme, windowSize: size, isActive: active) {
                 underlay.backgroundColor = c.underlay
                 underlay.isHidden = false
                 field.backgroundColor = c.solid

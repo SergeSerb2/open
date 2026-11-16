@@ -77,6 +77,9 @@ public struct ImportZipArchive: Sendable {
         case 0: out = Data(body)
         case 8:
             guard member.size > 0 else { return Data() }
+            // A truncated or hand-made archive can claim bytes with an empty body; an empty
+            // buffer has no base address.
+            guard !body.isEmpty else { throw ZipError.corrupt }
             var buffer = [UInt8](repeating: 0, count: member.size)
             let written = body.withUnsafeBytes { source in
                 compression_decode_buffer(&buffer, member.size, source.bindMemory(to: UInt8.self).baseAddress!, body.count, nil, COMPRESSION_ZLIB)

@@ -22,7 +22,8 @@
 @interface OEDevToolsDock ()
 - (void)oe_adoptBrowserView:(CefRefPtr<CefBrowserView>)browserView;
 - (void)oe_windowReady:(NSWindow*)window;
-- (void)oe_windowDestroyed;
+/// `host`: the OEDockWindowDelegate whose window went away.
+- (void)oe_windowDestroyed:(const void*)host;
 - (void)oe_sync;
 @end
 
@@ -59,7 +60,7 @@ class OEDockWindowDelegate : public CefWindowDelegate {
   void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
     window_ = nullptr;
     browser_view_ = nullptr;
-    [dock_ oe_windowDestroyed];
+    [dock_ oe_windowDestroyed:this];
   }
   bool IsFrameless(CefRefPtr<CefWindow> window) override { return true; }
   bool WithStandardWindowButtons(CefRefPtr<CefWindow> window) override {
@@ -189,7 +190,13 @@ class OEDockBrowserViewDelegate : public CefBrowserViewDelegate {
                  });
 }
 
-- (void)oe_windowDestroyed {
+- (void)oe_windowDestroyed:(const void*)host {
+  // Views destroys a closed window on a later turn. By then -oe_adoptBrowserView:
+  // may have replaced it with a new host whose window is already up; the old
+  // window's destruction must not drop the new one.
+  if (_host && _host.get() != host) {
+    return;
+  }
   _window = nil;
   _host = nullptr;
 }

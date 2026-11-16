@@ -42,7 +42,10 @@ inline NSString* OEString(const CefString& s) {
 }
 
 inline CefString OECef(NSString* _Nullable s) {
-  return CefString(s ? std::string(s.UTF8String) : std::string());
+  // -UTF8String is NULL for a string that has no UTF-8 form (an unpaired
+  // surrogate); std::string(NULL) would crash.
+  const char* utf8 = s.UTF8String;
+  return CefString(utf8 ? std::string(utf8) : std::string());
 }
 
 inline NSURL* _Nullable OEURL(const CefString& s) {
