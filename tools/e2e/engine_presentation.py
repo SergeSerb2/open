@@ -204,3 +204,48 @@ def run(factory, results, wait, output, read_image):
             app.quit()
         server.shutdown()
         server.server_close()
+
+
+def run_unavailable(factory, results, wait):
+    """The same App source built against a distribution without the seam.
+
+    The capability must be false, a request must return nil (not accepted)
+    and no completion may ever arrive, even after a native resize."""
+    app = None
+
+    def call(action='state', **args):
+        return app.call('engine-api', action=action, **args)
+
+    def row(name, ok, **evidence):
+        results[name] = dict(ok=bool(ok), **evidence)
+
+    try:
+        app = factory(fresh=True, urls=('about:blank',),
+                      extra_args=['--style=chrome', '--engine-api-auth'])
+        call('start')
+        call('add', page='p', browser='a', url='about:blank')
+        assert wait(lambda: (lambda p: p['live'] and not p['loading'])(call()['pages']['p']), timeout=20)
+        state = call()
+        row('unavailable_capability_false', 'frameReceipts' in state
+            and state['pages']['p'].get('framePresentation') is False,
+            framePresentation=state['pages']['p'].get('framePresentation'))
+        assert results['unavailable_capability_false']['ok']
+        viewport = call('presentation-viewport', page='p')
+        identifier = str(uuid.uuid4()).upper()
+        reply = call('presentation-request', page='p', requestID=identifier,
+                     pixelWidth=int(viewport['pixelSize'][0]) + 74,
+                     pixelHeight=int(viewport['pixelSize'][1]),
+                     scale=viewport['scale'], retain=True,
+                     resizeTo=[viewport['logicalSize'][0] + 37, viewport['logicalSize'][1]])
+        row('unavailable_request_not_accepted', reply['accepted'] is False, request=reply)
+        # Observation window only: nothing in this flow may complete.
+        time.sleep(1)
+        state = call()
+        row('unavailable_never_completes', state['frameReceipts'] == []
+            and state['pages']['p']['live'], receipts=state['frameReceipts'])
+        call('presentation-cancel', requestID=identifier)
+        time.sleep(.1)
+        row('unavailable_cancel_is_noop', call()['frameReceipts'] == [])
+    finally:
+        if app:
+            app.quit()
