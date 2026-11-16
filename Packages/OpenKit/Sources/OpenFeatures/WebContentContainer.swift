@@ -204,8 +204,12 @@ public final class PaneSlotView: NSView {
             add(slotLayer, "shadowPath", Self.motionPath(start, radius: radius), Self.motionPath(end, radius: radius))
         }
         if !focusRing.isHidden {
-            add(focusRing, "path", Self.motionPath(start.insetBy(dx: 1, dy: 1), radius: radius - 1),
-                Self.motionPath(end.insetBy(dx: 1, dy: 1), radius: radius - 1))
+            // insetBy returns CGRect.null for a collapsed (zero-width) box; CA then drops the animation.
+            func ringBox(_ box: CGRect) -> CGRect {
+                CGRect(x: box.minX + min(1, box.width / 2), y: box.minY + min(1, box.height / 2),
+                       width: max(0, box.width - 2), height: max(0, box.height - 2))
+            }
+            add(focusRing, "path", Self.motionPath(ringBox(start), radius: radius - 1), Self.motionPath(ringBox(end), radius: radius - 1))
         }
         if let fill = fill ?? closedPageColor { clipLayer.backgroundColor = fill; motionFill = true }
     }
