@@ -28,7 +28,7 @@ public enum WebContentPresentationFailure: Error, Sendable {
 }
 
 /// Optional OpenEngine capability, adapted by the App alongside WebContent.
-/// OpenKit never imports Chromium or OpenEngine. Older engines do not conform.
+/// OpenKit never imports Chromium or OpenEngine. Baseline adapters return nil.
 @MainActor
 public protocol WebContentRetainedSurfaceResizing: AnyObject {
     /// Arm BEFORE the shell writes the native view's final geometry once.

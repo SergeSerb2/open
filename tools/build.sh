@@ -61,7 +61,7 @@ fi
 # The linked engine still decides runtime availability; header presence alone
 # never claims that a distribution can retain or present a resized surface.
 presentation_header="$ROOT/Engine/OpenEngine/include/OpenEngine/OEWebContent.h"
-if grep -q 'NS_SWIFT_NAME(requestFramePresentation(pixelSize:backingScale:requestID:retainingSurfaceForResize:completion:))' "$presentation_header"; then
+if grep -Fq 'NS_SWIFT_NAME(requestFramePresentation(pixelSize:backingScale:requestID:retainingSurfaceForResize:completion:))' "$presentation_header"; then
   conditions+=(OPEN_ENGINE_FRAME_PRESENTATION)
 fi
 if [[ ${#conditions[@]} -gt 0 ]]; then
