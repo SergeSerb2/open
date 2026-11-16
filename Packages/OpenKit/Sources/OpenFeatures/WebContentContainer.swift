@@ -114,6 +114,10 @@ public final class PaneSlotView: NSView {
         indicator.update(event)
     }
     /// Updates slot geometry without forcing layout in the embedded web subtree.
+    fileprivate func pageSize(in size: CGSize) -> CGSize {
+        let bar = developerPanel != nil ? DeveloperPanelMetrics.height : paneChrome == nil ? 0 : SplitMetrics.barHeight
+        return CGSize(width: size.width, height: max(0, size.height - bar))
+    }
     fileprivate func layoutContents() {
         if clip.frame != bounds { clip.frame = bounds }
         let bar = developerPanel != nil ? DeveloperPanelMetrics.height : paneChrome == nil ? 0 : SplitMetrics.barHeight
@@ -576,16 +580,30 @@ public final class WebContentContainer: NSView {
         let frames = SplitLayout.frames(content: bounds, orientation: orientation, fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
         let animate = animated && window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         transitioning = animate
+        for slot in slots { slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID }
+        if spaceMotionStorage?.plate.phase == .awaitingPresentation {
+            let scale = window?.backingScaleFactor ?? 1
+            let viewports = Dictionary(uniqueKeysWithValues: zip(slots, frames).map { slot, frame in
+                let size = slot.pageSize(in: maximizedTabID == slot.tabID ? bounds.size : frame.size)
+                return (slot.tabID, WebContentFrameViewport(width: Int(ceil(size.width * scale)),
+                    height: Int(ceil(size.height * scale)), scale: scale))
+            })
+            spaceMotionStorage?.prepareForLayout(viewports)
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animate ? Motion.splitExpand : 0; context.timingFunction = Motion.easeInOut
             for (slot, frame) in zip(slots, frames) {
-                slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID
                 let target = maximizedTabID == slot.tabID ? bounds : frame
                 if slot.frame != target {
                     if animate { slot.animator().frame = target } else { slot.frame = target }
                 }
             }
         } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
+        if spaceMotionStorage?.plate.phase == .awaitingPresentation {
+            // Finish the one native geometry transaction before reconciling the
+            // cover or accepting an asynchronously delivered engine receipt.
+            for slot in slots { slot.layoutContents() }
+        }
         layoutDividers()
     }
     public override func layout() { super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false); spaceMotionStorage?.layout() }

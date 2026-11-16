@@ -57,6 +57,12 @@ PY
 if [[ "$transfer" == "1" ]]; then
   conditions+=(OPEN_ENGINE_WEB_CONTENT_TRANSFER)
 fi
+# Space's optional adapter must also compile against baseline public headers.
+# The wrapper's runtime capability handles a new header with an older engine.
+if grep -Fq 'NS_SWIFT_NAME(requestFramePresentation(pixelSize:backingScale:requestID:retainingSurfaceForResize:completion:))' \
+    "$ROOT/Engine/OpenEngine/include/OpenEngine/OEWebContent.h"; then
+  conditions+=(OPEN_ENGINE_FRAME_PRESENTATION)
+fi
 if [[ ${#conditions[@]} -gt 0 ]]; then
   extra+=("SWIFT_ACTIVE_COMPILATION_CONDITIONS=${conditions[*]}")
 fi

@@ -82,7 +82,7 @@ final class SpaceContentTransitionController {
             self.nativeSelection = selection; self.nativeStyle = style
             self.container.applySpaceSelection(selection, animateSlots: false)
             self.applying = false
-            self.awaitPresentation()
+            self.awaitPresentation(rearm: false)
         }
         applyingCoveredSelection = apply
         plate.layer?.cornerRadius = container.fullBleed ? 0 : PanelMetrics.cornerRadius
@@ -141,7 +141,7 @@ final class SpaceContentTransitionController {
         guard let selection = requestedSelection else { return }
         let scale = container.window?.backingScaleFactor ?? 1
         guard let image = plate.capturePresentation(size: frame.size, scale: scale) else { return }
-        cancelRequests(); plate.invalidateAll()
+        plate.invalidateAll()
         CATransaction.begin(); CATransaction.setDisableActions(true); plate.frame = frame; CATransaction.commit()
         let token = generation
         _ = plate.begin(outgoing: image, destination: container.spaceSnapshotKey(selection),
@@ -151,7 +151,7 @@ final class SpaceContentTransitionController {
                 self.receipt = receipt
                 if let apply = self.applyingCoveredSelection {
                     self.applyingCoveredSelection = nil; apply()
-                } else { self.awaitPresentation() }
+                } else { self.awaitPresentation(rearm: false) }
             }
         lastViewport = viewport
     }
@@ -182,7 +182,23 @@ final class SpaceContentTransitionController {
         })
     }
 
-    private func awaitPresentation() {
+    /// Called with the final pane sizes before any native page frame changes.
+    /// It is not a frame driver; the render-server slide changes no geometry.
+    func prepareForLayout(_ viewports: [ItemID: WebContentFrameViewport]) {
+        guard plate.phase == .awaitingPresentation, let selection = nativeSelection else { return }
+        let visible = Set(visibleTabs(selection))
+        let targets = viewports.filter { visible.contains($0.key) }
+        guard targets != lastPresentationViewports else { return }
+        awaitPresentation(viewports: targets, retainingSurfaceForResize: true)
+    }
+
+    private func awaitPresentation(viewports: [ItemID: WebContentFrameViewport]? = nil,
+                                   retainingSurfaceForResize: Bool = false, rearm: Bool = true) {
+        // Native layout may have armed the future sizes before its one write.
+        // Keep those requests when the covering plate itself changes size.
+        if !rearm, !presentationUnavailable, !waiting.isEmpty,
+           requests.count == waiting.count, let selection = nativeSelection,
+           presentationViewports(selection) == lastPresentationViewports { return }
         cancelRequests(); presentationUnavailable = false
         guard let selection = nativeSelection, let receipt,
               plate.phase == .awaitingPresentation else { return }
@@ -194,27 +210,32 @@ final class SpaceContentTransitionController {
         let token = frameGeneration
         let visibleTabs = visibleTabs(selection)
         let hosts = visibleTabs.compactMap { container.host(for: $0) }.filter { !$0.view.isHiddenOrHasHiddenAncestor }
-        lastPresentationViewports = presentationViewports(selection)
+        lastPresentationViewports = viewports ?? presentationViewports(selection)
         guard hosts.count == visibleTabs.count else { presentationUnavailable = true; return }
         // Loading may finish before pixels are presented, so this is only a
         // prerequisite. Its callback re-arms the actual presentation request.
         guard hosts.allSatisfy({ !$0.isLoading }) else { return }
-        let specifications = hosts.map { host in (host, UUID(), container.spaceHostViewport(host), container.spaceHostRevision(host.tabID)) }
+        let specifications = hosts.compactMap { host in
+            lastPresentationViewports[host.tabID].map { (host, UUID(), $0, container.spaceHostRevision(host.tabID)) }
+        }
+        guard specifications.count == hosts.count else { presentationUnavailable = true; return }
         waiting = Set(specifications.map { $0.1 })
         for (host, id, viewport, revision) in specifications {
             guard let presenter = host.framePresentation else { presentationUnavailable = true; continue }
-            let request = presenter.firstFramePresented(at: viewport, requestID: id) { [weak self, weak host] frame in
+            let request = presenter.firstFramePresented(at: viewport, requestID: id,
+                retainingSurfaceForResize: retainingSurfaceForResize) { [weak self, weak host] frame in
                 guard let self, let host, self.frameGeneration == token,
                       self.nativeSelection == selection, self.container.host(for: host.tabID) === host,
                       !host.view.isHiddenOrHasHiddenAncestor,
                       self.container.spaceHostRevision(host.tabID) == revision,
                       self.container.spaceHostViewport(host) == viewport else { return }
                 self.requests[id] = nil
-                guard frame?.requestID == id, frame?.viewport == viewport else {
+                guard let frame, frame.requestID == id, frame.viewport == viewport,
+                      frame.presentedAt.isFinite, frame.presentedAt > 0 else {
                     self.presentationUnavailable = true; return
                 }
                 self.waiting.remove(id)
-                if self.waiting.isEmpty { self.plate.presented(receipt) }
+                if self.waiting.isEmpty, let currentReceipt = self.receipt { self.plate.presented(currentReceipt) }
             }
             if let request, waiting.contains(id) { requests[id] = request }
             else if request == nil, waiting.contains(id) { presentationUnavailable = true }

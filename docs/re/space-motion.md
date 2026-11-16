@@ -3,8 +3,9 @@
 The Space strip uses live backing layers with native pages inside the viewport.
 The Space content path now slides a retained viewport image or opaque Space
 field above the unchanged outgoing page. Native selection and final layout
-change once, after that incoming plate covers the viewport. The live reveal
-still requires the engine presentation adapter described below.
+change once, after that incoming plate covers the viewport. The optional App
+adapter is wired to E3's presentation API; live reveal still needs that engine
+seam and its runtime qualification described below.
 
 The M1 measurement on a4a53e77 records a critical spring with response 0.20 s,
 duration and settlingDuration 0.30 s, and travel 228 pt. Its physical response at
@@ -51,7 +52,7 @@ The same issue on main is retained as a finding. It is not waived for #575.
 
 `SpacePageSnapshotTransition` is now connected through
 `SpaceContentTransitionController` to Space selection. The live handoff is not
-accepted until the engine presentation adapter lands. It provides bounded memory-only images, a stationary
+accepted until the engine presentation seam is qualified. It provides bounded memory-only images, a stationary
 outgoing plate, an incoming snapshot/theme plate, a render-server spring and
 Reduce Motion, plus separate motion-complete and engine-presented receipts.
 A failed or stale presentation cannot retire the cover. Snapshot keys include
@@ -69,8 +70,9 @@ after the incoming plate covers it. Missing captures refuse cache insertion.
 
 The required shared engine contract is:
 
-1. Request a one-shot presentation **after** the destination view is attached,
-   visible and has its final viewport. Include a caller generation/request ID.
+1. Request a one-shot presentation after the destination view is attached and
+   visible. For resize retention, arm the final device-pixel viewport **before**
+   its single native geometry write. Include a caller generation/request ID.
 2. Success identifies this WebContents, document/renderer generation,
    view-attachment generation, viewport in device pixels and scale. It must
    follow a successful compositor presentation for that target, newer than the
@@ -94,9 +96,26 @@ the incoming plate contains the destination Space field. Empty Spaces complete
 against their explicitly rendered themed surface, rather than a nonexistent
 engine frame. The small `WebContentFramePresentation` protocol accepts a per-view device-pixel
 viewport and request UUID; cancellation returns no success. Its receipt echoes
-the UUID and viewport. The shell also validates host identity, document revision,
-selection and request generations. The default host provider is nil until E3
-implements the App adapter, so the snapshot/theme stays on top without a timer.
+the UUID and viewport and carries the engine's monotonic `presentedAt` value.
+The shell also validates host identity, document revision, selection and request
+generations. `SpaceFramePresentationAdapter` calls the exact optional
+`requestFramePresentation(pixelSize:backingScale:requestID:retainingSurfaceForResize:completion:)`
+API from E3's `OEWebContent.h`. `tools/build.sh` enables it only when that public
+header declares the API. Baseline headers keep the nil provider; a newer wrapper
+with an older engine still refuses through `supportsFramePresentation`.
+The snapshot/theme then stays on top without a timer. The adapter is local to
+the Space integration and defines no shared OpenWeb adapter symbol.
+
+Covered native pane layout computes the final visible-pane viewports, arms the
+engine with resize retention, and then writes the native frames once. Ordinary
+idle layout does not build these request specifications. Resize preserves valid
+pre-armed requests while replacing the retained cover; successful callbacks use
+the current cover generation. Cancellation clears shell ownership before
+calling the engine. The adapter forwards only exact UUID/size/scale matches with
+a finite positive engine timestamp. It does not compare engine timestamps to a
+different clock or infer presentation from a capture. The engine remains
+responsible for page, renderer, attachment and successful-presentation identity.
+This is source integration, not real-callback or native pacing proof.
 The first real-App rental flow at `cff14a2f` passed cached click/key/swipe,
 no timer reveal, reversal, resize, Cmd+S, Reduce Motion, empty-Space and document
 retention rows (14 passed, one close assertion failed). Cleanup found zero

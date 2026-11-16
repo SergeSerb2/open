@@ -14,8 +14,10 @@ public struct WebContentFrameViewport: Sendable, Equatable {
 public struct WebContentFrameReceipt: Sendable, Equatable {
     public let requestID: UUID
     public let viewport: WebContentFrameViewport
-    public init(requestID: UUID, viewport: WebContentFrameViewport) {
-        self.requestID = requestID; self.viewport = viewport
+    /// Seconds on the engine's monotonic host clock, not a capture timestamp.
+    public let presentedAt: TimeInterval
+    public init(requestID: UUID, viewport: WebContentFrameViewport, presentedAt: TimeInterval) {
+        self.requestID = requestID; self.viewport = viewport; self.presentedAt = presentedAt
     }
 }
 
@@ -24,7 +26,7 @@ public protocol WebContentFrameRequest: AnyObject {
     func cancel()
 }
 
-/// OpenEngine's App adapter implements this when the presentation seam lands.
+/// OpenEngine's optional App adapter implements this with the engine seam.
 /// A successful callback means this view has presented the matching document
 /// and viewport after the request. A matching retained surface is sufficient.
 /// Close, detach, document/renderer loss and supersession cancel with nil.
@@ -33,7 +35,10 @@ public protocol WebContentFrameRequest: AnyObject {
 public protocol WebContentFramePresentation: AnyObject {
     /// Nil means unavailable/refused, never successful. No deadline reveals
     /// live content when the engine cannot produce a qualifying receipt.
+    /// For resize, arm before the single native geometry write. The engine
+    /// retains the existing surface until the requested viewport presents.
     func firstFramePresented(at viewport: WebContentFrameViewport, requestID: UUID,
+                             retainingSurfaceForResize: Bool,
                              completion: @escaping @MainActor (WebContentFrameReceipt?) -> Void)
         -> (any WebContentFrameRequest)?
 }
