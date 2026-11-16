@@ -789,10 +789,11 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   for (OEOpenWorldCompletion done in pending) {
     done(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorWebContentClosed userInfo:nil]);
   }
-  if (_chromeHost) {
+  if (_chromeHost && !_closeRequested) {
     // A Views-window Chrome page whose browser closed on its own
     // (window.close()): its frameless window would otherwise stay up, empty,
-    // because a later -close finds no host left to close.
+    // because a later -close finds no host left to close. After -close the
+    // host was already closed there.
     OEChromeHostClose(_chromeHost);
   }
   _chromeHost = nullptr;
