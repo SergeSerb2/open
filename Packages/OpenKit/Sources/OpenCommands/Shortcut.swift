@@ -168,23 +168,11 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/", "~": "`",
     ]
 
-    /// The base-key form: a shifted glyph means its base key with Shift ("@" + Shift → "2" + Shift,
-    /// and Arc's menu form Cmd+"+" → Cmd+Shift+"="). Equality and hashing use this form, so a
-    /// definition can keep Arc's menu glyph (the menu shows "⌘+") and still match the key event.
+    /// The base-key form: a shifted glyph with Shift becomes its base key ("@" + Shift → "2" + Shift).
+    /// Without Shift the glyph is the key itself (keypad "*", or a layout that types it unshifted).
     public var normalized: KeyboardShortcut {
-        guard let base = Self.shiftedBaseKeys[key] else { return self }
-        return KeyboardShortcut(key: base, modifiers: modifiers.union(.shift))
-    }
-
-    public static func == (lhs: KeyboardShortcut, rhs: KeyboardShortcut) -> Bool {
-        let l = lhs.normalized, r = rhs.normalized
-        return l.key == r.key && l.modifiers == r.modifiers
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        let n = normalized
-        hasher.combine(n.key)
-        hasher.combine(n.modifiers)
+        guard modifiers.contains(.shift), let base = Self.shiftedBaseKeys[key] else { return self }
+        return KeyboardShortcut(key: base, modifiers: modifiers)
     }
 
     /// Builds a shortcut from an NSEvent, for routing and recording. Returns nil for bare modifier presses.
