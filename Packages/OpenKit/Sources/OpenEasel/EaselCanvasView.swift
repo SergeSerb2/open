@@ -77,6 +77,7 @@ public final class EaselCanvasView: NSView {
         toolbar.onAdd = { [weak self] in self?.onAddSplit?() }
         titleField.stringValue = document.title ?? ""
         titleField.onCommit = { [weak self] text in self?.setTitle(text) }
+        titleField.onBeginEditing = { [weak self] in self?.endTextEditing(commit: true) }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Easel")
         syncObjects()

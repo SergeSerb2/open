@@ -25,6 +25,9 @@ public final class EaselStore {
     /// The pending (unsaved) copy wins over the file.
     public func load(_ id: UUID) -> EaselDocument? {
         if let doc = pending[id] { return doc }
+        // A debounced flush hands its copy to the write queue and clears `pending`;
+        // wait for that write, or an Easel reopened at once reads the older file.
+        queue.sync {}
         let url = fileURL(for: id)
         guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int,
               size <= EaselDocument.maxFileBytes,

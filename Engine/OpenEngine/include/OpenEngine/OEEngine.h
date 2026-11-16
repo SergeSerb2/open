@@ -154,8 +154,9 @@ OE_EXPORT @interface OEEngine : NSObject
                                           directory:(NSURL*)directory
     NS_SWIFT_NAME(context(identifier:directory:));
 
-/// Same, in <userDataDirectory>/<identifier>.
-- (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
+/// Same, in <userDataDirectory>/<identifier>. nil in the same cases (also
+/// before start, while terminating, or when `identifier` names no direct child).
+- (nullable OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
     NS_SWIFT_NAME(context(identifier:));
 
 /// Closes every web content of `context`, forgets the context, and calls

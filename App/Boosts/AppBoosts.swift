@@ -211,7 +211,9 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
   func editFromLibrary(id: BoostID, profileID: ProfileID) {
     guard let boost = store(for: profileID).boost(id: id), let space = app.model.spaces.first(where: { $0.profileID == profileID }),
           let url = URL(string: "https://\(boost.siteMatch.targetsIPAddress && boost.siteMatch.domain.contains(":") ? "[\(boost.siteMatch.domain)]" : boost.siteMatch.domain)\(boost.siteMatch.pathPrefix ?? "/")"),
-          let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: space.id),
+          // A window of the main model: an Incognito or Blank Window front window has neither this
+          // Space nor an editable page for the Boost (canEdit refuses both).
+          let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: space.id),
           let factory = app.hostFactories[controller.windowID] else { return }
     factory.focus(space: space)
     if let tab = factory.openNewTab(url: url, background: false) { pendingEditors[tab.id] = id }

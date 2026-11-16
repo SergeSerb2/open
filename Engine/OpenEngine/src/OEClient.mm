@@ -239,10 +239,18 @@ void OEDevToolsClient::OnDevToolsMethodResult(CefRefPtr<CefBrowser> browser,
 }
 
 void OEClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
-  if (!OEIsPageBrowser(view_, browser)) {
+  OEWebContent* view = view_;
+  if (!view) {
+    // The page was deallocated while Chromium was still creating its browser
+    // (a hosted or Views popup has no creation keep-alive). Nobody owns this
+    // browser any more: close it instead of leaving an orphaned tab.
+    browser->GetHost()->CloseBrowser(true);
     return;
   }
-  [view_ oe_browserCreated:browser];
+  if (!OEIsPageBrowser(view, browser)) {
+    return;
+  }
+  [view oe_browserCreated:browser];
 }
 
 bool OEClient::DoClose(CefRefPtr<CefBrowser> browser) {

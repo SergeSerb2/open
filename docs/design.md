@@ -129,7 +129,7 @@ The field is computed on the CPU into a 64×64 float image (extended sRGB) and s
 1. Two linear gradients in window uv space: base (angle 111°, length × 1.015, center offset 0.021) and overlay (angle 146.3°, length × 0.332). Each gradient parameter is computed at the 4 window corners, clamped to 0…1, and interpolated over the 2 triangles of the window quad (bottom-left to top-right diagonal), like a per-vertex varying.
 2. Colors mix in OKLab. The base parameter is scaled by 4/3, so the base reaches its end color at 75 % of its line. An overlay whose first stop is clear fades in the second stop's own color, not black.
 3. The overlay composites over the base in linear light. The result is encoded to sRGB with a sign-preserving transfer, so extended components stay valid.
-4. The result is drawn at alpha 0.64 over a neutral underlay: gray 0.694 when the window is active, 0.83 when inactive (`translucencyStyle: light`).
+4. In the static fit, the result is drawn at alpha 0.64 over a neutral underlay: gray 0.694 when the window is active, 0.83 when inactive (`translucencyStyle: light`).
 
 Evidence for the structure: Arc's theme shader library (`ARC_WindowThemeUI`, `default.metallib`) has entry points `gradientVertex`, `gradientFragment`, `overlayVertex`, `overlayFragment`, `renderVertex`, `renderFragment`. The vertex stage uses `dot`, `clamp`, and `sqrt` (the per-vertex projection). The fragment stage holds the published OKLab constants: the LMS to linear sRGB matrix (4.0767417, −3.3077116, 0.2309699, −1.2684380, 2.6097574, −0.3413194, −0.7034186, 1.7076147) and the inverse cube matrix (0.3963378, 0.2158038, −0.1055613, −0.0894842, −1.2914855). It also holds the sRGB exponent 1/2.4 with `sign`, and `pow`. The angles, scales, alpha, and underlay grays are our fits to the captures. Our code is our own implementation of these facts. No shader code was copied.
 
@@ -138,7 +138,7 @@ Evidence for the structure: Arc's theme shader library (`ARC_WindowThemeUI`, `de
 The stored stops are saturated (`#FF8558`, `#F0E941`, `#FF5598` in Space 1). On screen the top-left reads `#F2A686`, about 27 % lighter. Two things cause this (fitted, RMS 1.3–1.6 / 255 on two Spaces):
 
 - The gradient layer draws at about 64 % opacity (`intensityFactor` 0.8 on both fitted Spaces).
-- Under it lies a light, neutral material (`translucencyStyle: light`, `isVibrant: true`). It reads gray 0.694 while the window is active and 0.83 while inactive. On a real active window this material is vibrancy over the desktop, so the true underlay varies with the wallpaper. We use the fitted constant. The App can swap in an `NSVisualEffectView` later if a vibrant capture shows a difference.
+- Under it lies a light, neutral material (`translucencyStyle: light`, `isVibrant: true`). It reads gray 0.694 while the window is active and 0.83 while inactive. On a real active window this material is vibrancy over the desktop, so the true underlay varies with the wallpaper. Real browser windows now place an `NSVisualEffectView` with `.behindWindow` blending below the fitted tint. The stored translucency selects the native `.light` or `.dark` material. Window appearance selects Aqua/Dark Aqua and a fitted neutral wash; existing window-activation events select its active state or an opaque inactive underlay. `isVibrant: false` keeps an opaque field. Embedded previews retain the fitted constant. The system owns the desktop blur; there is no polling or per-frame theme work. C14-T supplies 24 qualified wallpaper/activation frames. The clean product app passes all 24 matched states in the three source-verified sidebar/frame regions, worst median ΔE00 0.936, with the fitted tint coverage retained. See [window translucency evidence](re/window-translucency.md).
 
 ### 3.4 Text appearance
 
@@ -628,14 +628,14 @@ The two rewritten checks failed in about one run of two before (docs/followups.m
 
 ### 16.6 Window material: translucent card and inactive window (Section 5, 2026-11-06)
 
-One model now draws the window background in every state (`OpenDesign/WindowMaterial.swift`, interaction-states §13.1):
+The original static fit and the page card use this tint/backdrop model (`OpenDesign/WindowMaterial.swift`, interaction-states §13.1); live browser windows use the system material described in §3.3:
 
 ```text
 pixel = (1 − w) × tint + w × backdrop        w = 0.115
 tint  = (activeField − w × activeBackdrop) / (1 − w)
 ```
 
-Each theme's active field stays the reference: every earlier theme fit measured it, so active windows render as before. The backdrop is chosen per window scheme (`SpaceThemeStyle.backdropScheme`: an imported Arc theme's `translucencyStyle`; editor and default themes follow the macOS appearance, as their underlay wash does).
+The active field remains the reference for static previews and the hover-reveal card. Live browser windows instead remove the fitted constant underlay from that field and retain the fitted tint coverage over a system behind-window material (§3.3). The table below records the earlier constant-underlay fit, not wallpaper-independent live-window colors. The backdrop is chosen per window scheme (`SpaceThemeStyle.backdropScheme`: an imported Arc theme's `translucencyStyle`; editor and default themes follow the macOS appearance, as their underlay wash does).
 
 | State | Backdrop | Evidence |
 |---|---|---|
