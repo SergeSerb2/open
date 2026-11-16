@@ -1027,7 +1027,7 @@ extension AppDelegate: CommandDispatcher {
       // it settles (at most 1 s later), so the rebuild does not land mid-motion.
       // A Command/Control key or a key-window change rebuilds at once instead.
       let deadline = CACurrentMediaTime() + 1
-      while !Task.isCancelled, AppDelegate.menuRebuildWaitsForMotion {
+      while !Task.isCancelled {
         let wait = min(SidebarMotionClock.settlesAt, deadline) - CACurrentMediaTime()
         guard wait > 0 else { break }
         try? await Task.sleep(for: .seconds(wait))
@@ -1052,12 +1052,6 @@ extension AppDelegate: CommandDispatcher {
     // Menu rebuilds follow tab, Space and window changes: the same moments Handoff must follow.
     handoff.setNeedsUpdate()
   }
-  #if OPEN_AUTOMATION
-  /// Diagnostic A/B switch only (automation `menu-rebuild-motion`); the App always waits.
-  static var menuRebuildWaitsForMotion = true
-  #else
-  static let menuRebuildWaitsForMotion = true
-  #endif
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {
     guard engineReady, !shutdownPrepared, !terminationRequested,

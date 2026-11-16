@@ -88,16 +88,6 @@ final class SidebarRowLayerMotion {
         }
     }
 
-    /// Optional fixed-rate request (min = max = screen maximum). Off: the
-    /// system default cadence for Core Animation. On the M1, the fixed request
-    /// coincided with first motion intervals of two or three refreshes.
-    private func preferDisplayRefresh(_ animation: CAAnimation, on screen: NSScreen?) {
-        guard SidebarDiagnostics.rowMotionRequestsFixedRate, let screen else { return }
-        let rate = Float(screen.maximumFramesPerSecond)
-        guard rate > 0 else { return }
-        animation.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
-    }
-
     func end(_ outline: NSOutlineView) {
         guard depth > 0 else { return }
         depth -= 1; guard depth == 0 else { return }
@@ -139,13 +129,11 @@ final class SidebarRowLayerMotion {
             if abs(delta) > 0.01 {
                 let move = CABasicAnimation(keyPath: "transform.translation.y")
                 move.fromValue = delta; move.toValue = 0; move.duration = self.duration; move.timingFunction = self.timing
-                self.preferDisplayRefresh(move, on: outline.window?.screen)
                 layer.add(move, forKey: "row.structure.position")
             }
             if opacity < 1 {
                 let fade = CABasicAnimation(keyPath: "opacity")
                 fade.fromValue = opacity; fade.toValue = 1; fade.duration = self.duration; fade.timingFunction = self.timing
-                self.preferDisplayRefresh(fade, on: outline.window?.screen)
                 layer.add(fade, forKey: "row.structure.opacity")
             }
         }
@@ -154,7 +142,6 @@ final class SidebarRowLayerMotion {
             outline.layer?.addSublayer(layer)
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = layer.opacity; fade.toValue = 0; fade.duration = duration; fade.timingFunction = timing
-            preferDisplayRefresh(fade, on: outline.window?.screen)
             layer.opacity = 0; layer.add(fade, forKey: "row.structure.opacity")
         }
         CATransaction.commit()
