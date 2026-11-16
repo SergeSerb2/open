@@ -1023,12 +1023,14 @@ extension AppDelegate: CommandDispatcher {
     menuRebuildTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(30))
       // A full menu rebuild takes several milliseconds of main-thread work and
-      // replaces the menu bar. Sidebar row motion lasts <= 0.25 s; rebuild after
-      // it settles (at most 1 s later), so the rebuild does not land mid-motion.
+      // replaces the menu bar. Sidebar row motion lasts <= 0.25 s and its last
+      // frame reaches the screen 10-25 ms after its nominal end on the M1, so
+      // rebuild 50 ms after it settles (at most 1 s later), never mid-motion.
       // A Command/Control key or a key-window change rebuilds at once instead.
+      // The deferred rebuild also defers ThemeData and Handoff updates.
       let deadline = CACurrentMediaTime() + 1
       while !Task.isCancelled {
-        let wait = min(SidebarMotionClock.settlesAt, deadline) - CACurrentMediaTime()
+        let wait = min(SidebarMotionClock.settlesAt + 0.05, deadline) - CACurrentMediaTime()
         guard wait > 0 else { break }
         try? await Task.sleep(for: .seconds(wait))
       }

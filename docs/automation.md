@@ -1153,6 +1153,8 @@ commands activate the exact owned window and use the harness's focus tracking.
 |---|---|
 | `command` | `id=<registry ID>` aliases `menu-perform`. Rejects unknown or disabled native menu items. |
 | `sidebar-click` | `node=<visible ID> [modifiers=[cmd,shift,option]] [window=<model UUID>]` scrolls an existing outline row into view and sends native down/up at its center. Rejects missing/collapsed targets. Returns ordered `selection`, active `selected` ID, and folder `expanded`/`peekedChildID`. Optional `motion:true` captures the installed folder duration/curve plus eight presentation samples through this same click path. |
+| `sidebar-motion-trace` | `action=start|stop`. Diagnostic only: `start` installs a bounded (8192 events) main run-loop wake/idle trace around Core Animation's commit observer plus the sidebar row draw/layout hooks; `stop` returns `events` as `[mach ticks, name]`, `timebase` and `truncated`, and removes it. No display link; not render-server or scanout evidence. |
+| `sidebar-row-motion-state` | Departing-row bitmap layers still fading in the focused outline (`id`, presentation `opacity`), at most 256. |
 | `sidebar-key` | `key=<name> [modifiers=[cmd,opt,ctrl,shift]] [window=<model UUID>]` focuses the real outline and sends the App key path. Includes Delete, `forward-delete`, Esc, Shift+Up/Down, Cmd+D, Cmd+Shift+N and Cmd+Z. Use plain `key` to keep a text editor focused. |
 | `selection` | `[window=<model UUID>]` reads ordered multi-selection IDs without changing focus; empty is `[]`. |
 | `hover` | Exactly one `node=<visible ID>` or `favorite=<ID>`, plus `ms=0…5000`. Sends native hover and awaits the duration. `leave=true` with no target leaves for a stable page point. Returns `preview-state`. |
