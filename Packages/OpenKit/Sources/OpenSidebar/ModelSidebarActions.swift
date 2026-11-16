@@ -75,7 +75,8 @@ public struct ModelSidebarActions {
         case .resetSplitCustomization(let id):
             return model.resetSplitCustomization(id: id)
         case .renameSpace(let id, let title):
-            model.updateSpace(id: id, title: title)
+            // Trims and stores an empty name as untitled, like the App's rename path.
+            model.renameSpace(id: id, title: title)
         case .move(let id, let parent, let index):
             if case .favorites(let profile) = parent {
                 return model.addFavorite(tabID: id, to: profile, at: index)
