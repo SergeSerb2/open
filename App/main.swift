@@ -49,6 +49,9 @@ AutomationOwnerWatch.install()
 #endif
 // Reserved app shortcuts beat the page (Cmd-T, Cmd-W, Cmd-L, ...).
 app.keyEquivalentHandler = { event in
+  // A shortcut must see the menu of the current model, also while a rebuild
+  // waits for sidebar motion to settle.
+  appDelegate.flushPendingMenuRebuild()
   let handled = MainMenu.performReservedShortcut(event)
   #if OPEN_AUTOMATION
   LaunchTiming.shared.recordKeyReadiness(event, handled: handled)

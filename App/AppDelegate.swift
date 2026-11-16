@@ -1022,17 +1022,42 @@ extension AppDelegate: CommandDispatcher {
     guard !shutdownPrepared, menuRebuildTask == nil else { return }
     menuRebuildTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(30))
+      // A full menu rebuild takes several milliseconds of main-thread work and
+      // replaces the menu bar. Sidebar row motion lasts <= 0.25 s; rebuild after
+      // it settles (at most 1 s later), so the rebuild does not land mid-motion.
+      // A Command/Control key or a key-window change rebuilds at once instead.
+      let deadline = CACurrentMediaTime() + 1
+      while !Task.isCancelled, AppDelegate.menuRebuildWaitsForMotion {
+        let wait = min(SidebarMotionClock.settlesAt, deadline) - CACurrentMediaTime()
+        guard wait > 0 else { break }
+        try? await Task.sleep(for: .seconds(wait))
+      }
       guard let self, !Task.isCancelled else { return }
-      #if OPEN_AUTOMATION
-      let region = IntroPacingTrace.begin("menu.rebuild")
-      defer { region?.end() }
-      #endif
-      self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
-      ThemeData.refreshVisible(app: self)
-      // Menu rebuilds follow tab, Space and window changes: the same moments Handoff must follow.
-      self.handoff.setNeedsUpdate()
+      self.performMenuRebuild()
     }
   }
+  /// Rebuilds a pending menu now, so a shortcut never runs against a menu the
+  /// last model change has made stale. No work when nothing is pending.
+  func flushPendingMenuRebuild() {
+    guard menuRebuildTask != nil, !shutdownPrepared else { return }
+    performMenuRebuild()
+  }
+  private func performMenuRebuild() {
+    #if OPEN_AUTOMATION
+    let region = IntroPacingTrace.begin("menu.rebuild")
+    defer { region?.end() }
+    #endif
+    menuRebuildTask?.cancel(); menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
+    ThemeData.refreshVisible(app: self)
+    // Menu rebuilds follow tab, Space and window changes: the same moments Handoff must follow.
+    handoff.setNeedsUpdate()
+  }
+  #if OPEN_AUTOMATION
+  /// Diagnostic A/B switch only (automation `menu-rebuild-motion`); the App always waits.
+  static var menuRebuildWaitsForMotion = true
+  #else
+  static let menuRebuildWaitsForMotion = true
+  #endif
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {
     guard engineReady, !shutdownPrepared, !terminationRequested,

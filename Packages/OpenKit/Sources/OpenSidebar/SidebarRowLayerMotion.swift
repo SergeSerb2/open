@@ -1,6 +1,14 @@
 import AppKit
 import OpenDesign
 
+/// When the last sidebar row motion started so far settles, in
+/// `CACurrentMediaTime()` seconds. Deferrable main-thread work (the App's
+/// menu rebuild) waits for it. One store per animated edit; no timer.
+@MainActor
+public enum SidebarMotionClock {
+    public internal(set) static var settlesAt: CFTimeInterval = 0
+}
+
 /// Native list edits settle once. Only the already laid-out row layers move.
 /// The bookkeeping and optional departing-row bitmap happen at edit boundaries,
 /// never on a display timer. At most 256 visible rows and 8 MiB of departing bitmaps survive.
@@ -96,6 +104,7 @@ final class SidebarRowLayerMotion {
         outline.layoutSubtreeIfNeeded()
         SidebarDiagnostics.folderTrace?("rowMotion.end.laidOut")
         let token = generation
+        SidebarMotionClock.settlesAt = max(SidebarMotionClock.settlesAt, CACurrentMediaTime() + duration)
         let batch = departing.filter { $0.generation == token }
         let retiring = Set(batch.map { ObjectIdentifier($0.layer) })
         CATransaction.begin(); CATransaction.setDisableActions(true)

@@ -704,6 +704,11 @@
           motionTrace = nil; return trace.stop()
         default: throw Failure(message: "invalid motion trace action")
         }
+      case "menu-rebuild-motion":
+        // Diagnostic A/B only: whether the deferred menu rebuild waits for row motion.
+        if let waits = a["waits"] as? Bool { AppDelegate.menuRebuildWaitsForMotion = waits }
+        return ["waits": AppDelegate.menuRebuildWaitsForMotion, "settlesAt": SidebarMotionClock.settlesAt,
+                "pending": app.menuRebuildTask != nil] as [String: Any]
       case "sidebar-row-motion-state":
         guard let outline = try sidebarController(a).sidebar.focusedOutline else { throw Failure(message: "no sidebar outline") }
         let layers = (outline.layer?.sublayers ?? []).filter {
