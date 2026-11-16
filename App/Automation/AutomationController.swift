@@ -652,6 +652,14 @@
         controller.contentView.layoutSubtreeIfNeeded()
         let frame = controller.sidebar.clearTodayFrame().map { controller.contentView.convert($0, from: controller.sidebar) }
         return ["visible": controller.sidebar.isClearTodayVisible, "frame": frame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? []] as [String: Any]
+      case "sidebar-row-motion-state":
+        guard let outline = try sidebarController(a).sidebar.focusedOutline else { throw Failure(message: "no sidebar outline") }
+        let layers = (outline.layer?.sublayers ?? []).filter {
+          $0.contents != nil && $0.animation(forKey: "row.structure.opacity") != nil
+        }
+        return ["departures": layers.prefix(256).map { layer in
+          ["id": layer.name ?? "", "opacity": Double(layer.presentation()?.opacity ?? layer.opacity)] as [String: Any]
+        }] as [String: Any]
       case "sidebar-row":
         // A sidebar row's frame and center in the front browser window (top-left origin).
         guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),

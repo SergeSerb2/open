@@ -7,12 +7,13 @@ import OpenDesign
 @MainActor
 final class SidebarRowLayerMotion {
     private struct Previous { let origin: CGPoint; let view: NSTableRowView; let opacity: Float }
+    private struct Departure { let layer: CALayer; let pixels: Int; let generation: Int }
     private var previous: [ObjectIdentifier: Previous] = [:]
     private var depth = 0
     private var enabled = false
     private var duration: CFTimeInterval = Motion.rowStructure
     private var timing = Motion.easeInOut
-    private var departing: [CALayer] = []
+    private var departing: [Departure] = []
     private var bitmapPixels = 0
     private var generation = 0
 
@@ -22,7 +23,6 @@ final class SidebarRowLayerMotion {
         enabled = animated && !Motion.reducesMotion
         self.duration = duration; self.timing = timing
         generation += 1
-        departing.forEach { $0.removeFromSuperlayer() }; departing.removeAll(); bitmapPixels = 0
         previous.removeAll(keepingCapacity: true)
         if enabled {
             outline.enumerateAvailableRowViews { view, row in
@@ -32,6 +32,7 @@ final class SidebarRowLayerMotion {
                 self.previous[ObjectIdentifier(item)] = Previous(origin: point, view: view, opacity: view.layer?.presentation()?.opacity ?? view.layer?.opacity ?? 1)
             }
         } else {
+            departing.forEach { $0.layer.removeFromSuperlayer() }; departing.removeAll(); bitmapPixels = 0
             // An immediate edit can interrupt a prior animated edit (including
             // a Reduce Motion change). Do not carry its offset into new rows.
             CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -48,7 +49,8 @@ final class SidebarRowLayerMotion {
     }
 
     func captureDeparture(_ item: AnyObject, in outline: NSOutlineView) {
-        guard enabled, let old = previous[ObjectIdentifier(item)], !departing.contains(where: { $0.name == String(describing: ObjectIdentifier(item)) }) else { return }
+        guard enabled, departing.count < 256, let old = previous[ObjectIdentifier(item)],
+              !departing.contains(where: { $0.generation == generation && $0.layer.name == String(describing: ObjectIdentifier(item)) }) else { return }
         let view = old.view, scale = view.window?.backingScaleFactor ?? 1
         let width = ceil(view.bounds.width * scale), height = ceil(view.bounds.height * scale)
         // One allocation is <= 8 MiB; the whole transition has the same ceiling.
@@ -62,7 +64,7 @@ final class SidebarRowLayerMotion {
         copy.name = String(describing: ObjectIdentifier(item))
         copy.frame = CGRect(origin: old.origin, size: view.bounds.size)
         copy.opacity = old.opacity
-        departing.append(copy)
+        departing.append(Departure(layer: copy, pixels: Int(width * height), generation: generation))
     }
 
     func captureDescendants(of item: Any, in outline: NSOutlineView) {
@@ -92,11 +94,21 @@ final class SidebarRowLayerMotion {
         guard enabled else { previous.removeAll(); return }
         outline.layoutSubtreeIfNeeded()
         let token = generation
+        let batch = departing.filter { $0.generation == token }
+        let retiring = Set(batch.map { ObjectIdentifier($0.layer) })
         CATransaction.begin(); CATransaction.setDisableActions(true)
         CATransaction.setCompletionBlock { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.generation == token else { return }
-                self.departing.forEach { $0.removeFromSuperlayer() }; self.departing.removeAll()
+                guard let self else { return }
+                // A subsequent edit must not cut short an earlier departure.
+                // Each transaction retires only its own layers and releases
+                // their share of the same global 8 MiB bitmap budget.
+                self.departing.removeAll { entry in
+                    guard retiring.contains(ObjectIdentifier(entry.layer)) else { return false }
+                    entry.layer.removeFromSuperlayer()
+                    self.bitmapPixels -= entry.pixels
+                    return true
+                }
             }
         }
         outline.enumerateAvailableRowViews { view, row in
@@ -123,7 +135,8 @@ final class SidebarRowLayerMotion {
                 layer.add(fade, forKey: "row.structure.opacity")
             }
         }
-        for layer in departing {
+        for entry in batch {
+            let layer = entry.layer
             outline.layer?.addSublayer(layer)
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = layer.opacity; fade.toValue = 0; fade.duration = duration; fade.timingFunction = timing
