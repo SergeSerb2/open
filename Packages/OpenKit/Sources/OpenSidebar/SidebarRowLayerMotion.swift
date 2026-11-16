@@ -52,27 +52,9 @@ final class SidebarRowLayerMotion {
             }
             CATransaction.commit()
         }
-        if enabled, SidebarDiagnostics.rowMotionStartsClockEarly { startClock(outline, duration: duration) }
         NSAnimationContext.beginGrouping()
         NSAnimationContext.current.duration = 0
         NSAnimationContext.current.allowsImplicitAnimation = false
-    }
-
-    /// Diagnostic A/B (automation only): an empty 1x1 layer with no contents
-    /// never draws, so it changes no pixel. Its animation is committed at once,
-    /// before the edit's own work, so the render server's animation clock is
-    /// already running when the row motion commit arrives.
-    private let clock = CALayer()
-    private func startClock(_ outline: NSOutlineView, duration: CFTimeInterval) {
-        guard let host = outline.layer else { return }
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        if clock.superlayer !== host { clock.frame = CGRect(x: 0, y: 0, width: 1, height: 1); clock.opacity = 0; host.addSublayer(clock) }
-        let tick = CABasicAnimation(keyPath: "opacity")
-        tick.fromValue = 0; tick.toValue = 0.001; tick.duration = duration
-        clock.add(tick, forKey: "row.structure.clock")
-        CATransaction.commit()
-        CATransaction.flush()
-        SidebarDiagnostics.folderTrace?("rowMotion.clock.flushed")
     }
 
     func captureDeparture(_ item: AnyObject, in outline: NSOutlineView) {
