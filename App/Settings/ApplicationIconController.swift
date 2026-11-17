@@ -7,7 +7,8 @@ import OpenSettings
   unowned let app: AppDelegate
   private var restoreScheduled = false
   private var selectionGeneration = 0
-  private static let artworkVersion = 1
+  /// 2: the body sits on the macOS icon grid (824 of 1024 px). Version 1 files filled the whole canvas.
+  private static let artworkVersion = 2
   /// Read by `OpenDockTilePlugIn` (in the Dock's process) — keep the key in sync.
   static let dockTileFileKey = "open.appIcon.dockTileFile"
   private(set) var appliedID = "openDefault"
@@ -24,6 +25,14 @@ import OpenSettings
   private func cacheFile(_ option: AppIconOption) -> URL {
     app.directories.root.appendingPathComponent("Cache/AppIcons", isDirectory: true)
       .appendingPathComponent("\(option.rawValue)-v\(Self.artworkVersion).png")
+  }
+
+  /// Cached files of this option made by other artwork versions.
+  private func otherVersions(of option: AppIconOption) -> [URL] {
+    let current = cacheFile(option), folder = current.deletingLastPathComponent()
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+    return names.filter { $0.hasPrefix("\(option.rawValue)-v") && $0.hasSuffix(".png") && $0 != current.lastPathComponent }
+      .map { folder.appendingPathComponent($0) }
   }
 
   @discardableResult func apply(id: String) -> String? {
@@ -45,6 +54,7 @@ import OpenSettings
           attributes: [.posixPermissions: 0o700])
         try png.write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        for old in otherVersions(of: option) { try? FileManager.default.removeItem(at: old) }
       } catch {
         errorText = "The application icon could not be saved. Try selecting it again."; return errorText
       }
@@ -55,7 +65,16 @@ import OpenSettings
     // The Dock tile plug-in (DockTile/) draws this file while Open is not running; no file = bundle icon.
     if option == .openDefault { UserDefaults.standard.removeObject(forKey: Self.dockTileFileKey) }
     else { UserDefaults.standard.set(cacheFile(option).path, forKey: Self.dockTileFileKey) }
+    Self.notifyDockTile()
     return nil
+  }
+
+  /// The plug-in reads the preference only when the Dock loads it; this tells an already loaded plug-in to read
+  /// it again, so a pinned tile shows the new icon after Open quits without a Dock restart. No payload.
+  private static func notifyDockTile() {
+    guard let id = Bundle.main.bundleIdentifier else { return }
+    DistributedNotificationCenter.default().postNotificationName(.init(id + ".dockTileChanged"), object: nil,
+      userInfo: nil, deliverImmediately: true)
   }
 
   /// Restore only after content. Decode the cached 1024 px PNG on a worker;
@@ -75,9 +94,21 @@ import OpenSettings
       return
     }
     let file = cacheFile(option)
+    // An update changed the artwork version: the file of the earlier version proves the user chose this icon.
+    // Render the current version once, through the normal path, in the same late low-priority turn a restore uses
+    // (that also points the Dock tile plug-in at it). A missing file without an earlier version still fails below.
+    if !FileManager.default.fileExists(atPath: file.path), !otherVersions(of: option).isEmpty {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1, qos: .utility, flags: .enforceQoS) { [weak self] in
+        guard let self, generation == self.selectionGeneration,
+              !self.app.shutdownPrepared, !self.app.terminationRequested else { return }
+        if let error = self.apply(id: id) { self.app.settingsPresenter.settings.appIcon.errorText = error }
+      }
+      return
+    }
     // Selections made before the Dock tile plug-in existed: point it at the same cached file.
     if UserDefaults.standard.string(forKey: Self.dockTileFileKey) != file.path {
       UserDefaults.standard.set(file.path, forKey: Self.dockTileFileKey)
+      Self.notifyDockTile()
     }
     Task { [weak self] in
       let decoded = await Task.detached(priority: .utility) { Self.decode(file) }.value

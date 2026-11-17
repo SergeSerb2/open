@@ -175,7 +175,7 @@ def run(factory, results, tmp, wait_until, restore_defaults):
             'modes': list(modes.values())}
 
         # Missing and oversized owned cache files fail without a render or crash.
-        cache = Path(app.user_data)/'Cache/AppIcons/openDark-v1.png'
+        cache = Path(app.user_data)/'Cache/AppIcons/openDark-v2.png'  # ApplicationIconController.artworkVersion
         for kind in ('missing', 'oversized'):
             app.call('settings-icon', select='openDark')
             app.quit()
