@@ -31,6 +31,10 @@ M1_E2E = {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwo
 E2E_DEPENDENCIES = {'sidebar': ('profiles',)}
 OBSERVER_SUITES = {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'}
 M5_E2E = {'applescript'}  # No external AppleScript/osascript over SSH on the M1.
+# --allow-m5-functional (LEAD 2026-11-16 22:15): while the M1 is offline, the M5 may run
+# M1-required suites as FUNCTIONAL evidence. Their receipt row stays M1_REQUIRED, so the
+# gate still fails until an exact-head M1 receipt exists. Actions refuses non-M1 hosts.
+M5_FUNCTIONAL_REFUSED = {'actions'}
 # Rented Macs (NS-MACS.md) qualify functional merge/observers stages only for
 # suites that passed completely there, with clean cleanup, in one gate invocation
 # per suite at main 3ef4c11c (2026-11-11; table in docs/verification.md). Add a
@@ -671,6 +675,9 @@ def main():
     parser.add_argument('--lane', choices=('merge', 'observers', 'timing'), default='merge')
     parser.add_argument('--config', choices=('Debug', 'Release'), default='Release')
     parser.add_argument('--m1-receipts', type=Path, help='exact-head gate receipts produced on M1')
+    parser.add_argument('--allow-m5-functional', action='store_true',
+                        help='M5 merge lane only: run M1-required suites here as functional evidence; '
+                             'each keeps an M1_REQUIRED receipt row')
     parser.add_argument('--launch-continuation', type=Path, help='LEAD 07:10: complete the original M1 five-pair receipt with one pair')
     parser.add_argument('--log-dir', type=Path)
     options = parser.parse_args()
@@ -728,6 +735,8 @@ def main():
             parser.error('selected row has no timing lane')
     if 'timing-window' in selected and options.lane != 'timing':
         parser.error('timing-window requires --lane timing')
+    if options.allow_m5_functional and (machine() != 'M5' or options.lane != 'merge' or options.m1_receipts):
+        parser.error('--allow-m5-functional requires the M5 merge lane and no --m1-receipts')
     # The caller keeps one FIFO build slot throughout the gate.
     # Exclusive timing reruns use every machine slot; there is no private lock.
     source = fingerprint()
@@ -750,7 +759,9 @@ def main():
     receipt = dict(schema=1, machine=machine(), machineInfo=machine_info(), refusedReceipts=REFUSED,
                    source=source, config=options.config,
                    style='chrome', lane=options.lane, selected=selected, partialSelectors=sorted(partial),
-                   prReady=not options.only and not options.quick and not options.no_e2e and options.lane=='merge',
+                   m5Functional=options.allow_m5_functional,
+                   prReady=(not options.only and not options.quick and not options.no_e2e and options.lane=='merge'
+                            and not options.allow_m5_functional),
                    started=start, rows=rows, stages=stages)
     def cancelled(signum, _):
         global CANCELLED
@@ -763,8 +774,11 @@ def main():
         end = out/'screen-end.json'
         return end.is_file() and read_json(end).get('safe') is True
     e2e = [n[4:] for n in selected if n.startswith('e2e-')] + (['window'] if 'timing-window' in selected else [])
+    def m5_functional(name):
+        return (options.allow_m5_functional and machine() == 'M5' and (name in M1_E2E or name not in SAFE_M5)
+                and name not in M5_FUNCTIONAL_REFUSED)
     def required_elsewhere(name):
-        return ((machine() == 'M5' and (name in M1_E2E or name not in SAFE_M5))
+        return ((machine() == 'M5' and (name in M1_E2E or name not in SAFE_M5) and not m5_functional(name))
                 or (machine() == 'M1' and name in M5_E2E)
                 or (machine() == 'rented' and name in M5_E2E))
     local_e2e = [n for n in e2e if not required_elsewhere(n)]
@@ -906,6 +920,10 @@ def main():
                         for check in checks: check['row']=check['row'].replace('ntp/','ntp-alloy/',1)
                 if rc and not any(r['status']=='FAIL' or r.get('observedStatus') == 'FAIL' for r in checks):
                     checks.append(dict(row=label+'/exit',status='FAIL',reason='suite exit '+str(rc),evidence=str(out/'output.log')))
+                if m5_functional(name):
+                    for check in checks: check['sourceMachine'] = 'M5-functional'
+                    checks.append(dict(row=label+'/receipt', status='M1_REQUIRED', evidence='',
+                                       reason='M5 functional evidence only (--allow-m5-functional); exact-head M1 receipt still owed'))
                 rows.extend(checks)
                 stages.append(dict(name=label,style=style,rows=checks,exit=rc,queued=queued,evidence=str(out)))
             except Exception as error:
