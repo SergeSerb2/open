@@ -173,6 +173,9 @@ public final class IconPickerView: NSView, NSSearchFieldDelegate, NSCollectionVi
     }
     /// Called by the panel's event path, also while the search field owns focus.
     @discardableResult public func handleKey(_ event: NSEvent) -> Bool {
+        // The panel sees keys before the input method: while the search field composes (IME),
+        // Escape, Return, and the arrows belong to the composition.
+        if (search.currentEditor() as? NSTextView)?.hasMarkedText() == true { return false }
         if event.keyCode == 53 { onEscape?(); return true }
         let count = page == .icons ? NamedSpaceIcons.order.count : visibleEntries.count
         if [123, 124, 125, 126].contains(event.keyCode) {
