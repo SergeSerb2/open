@@ -58,6 +58,17 @@ engine distribution and the same config and lane:
   --config Release --log-dir .re/gate-m1
 ```
 
+While the M1 is offline, `--allow-m5-functional` (M5 merge lane only, not with
+`--m1-receipts`) runs those suites, and the other M1-required suites, on the M5 as
+functional evidence (LEAD 2026-11-16 22:15). Their rows keep their raw results and
+`sourceMachine: M5-functional`, and each suite adds an `e2e-NAME/receipt` row with
+status `M1_REQUIRED`, so the gate still fails and the receipt is never `prReady`.
+Rows that need the 2x display or a display-reference pixel baseline stay owed to
+the M1 even when they pass here. `actions` (it refuses any host but the M1) and the
+opt-in `passwords-probe` (some paths open system dialogs) stay `M1_REQUIRED` without
+a run. The M5 dispatcher (`queue_gate.py`) forwards the flag and gives each such
+suite its own chunk, so each one gets its own build ticket and screen stage.
+
 Copy that complete private receipt directory under the supplied receipt root.
 The importer checks the exact commit, clean source fingerprint, engine hash,
 config, style, lane and named stage. A failed, ambiguous, missing or interrupted
@@ -211,6 +222,25 @@ conditions, p95≤1.5×nominal and dropped intervals≤1% limits stay unchanged.
 The dispatcher retains its actual M5 PASS/FAIL and removes only the extra
 quiet-M1 receipt placeholder. This does not exempt latency or CPU budgets.
 
+### Pacing gate (LEAD 2026-11-16 22:15 and 22:55)
+
+`tools/perf/pacing_gate.py` scores existing stock frame-detector ledgers (one
+ledger per App launch) for animation acceptance. It never re-captures and never
+changes the detector, ROI or pixel thresholds. Every trial is reported. Gaps
+are measured between content changes (the detector's `changes`), never between
+capture timestamps. Per action: true late = gap >= 16.7 ms (an exactly-12.50 ms
+cadence gap is never late); at most one true late per trial; pooled motion
+p99 <= 16.7 ms; START = a true late that ends <= 50 ms after the first change in
+an app-idle trial, and the AFTER START rate may exceed the same-session BEFORE
+rate by at most 15 points; OTHER late gaps target 0; latency = AFTER median
+input -> first visible change <= BEFORE median + one refresh (display metadata,
+else measured capture cadence); the predeclared stop rule needs >= 9 trials from
+>= 3 launches. App-idle uses any native sample on a change-driven capture
+stream (M1) and only ROI changes on a continuous stream (M5), decided per launch
+(`--capture-mode` overrides). Run
+`python3 tools/perf/pacing_gate.py --before B1 B2 B3 --after A1 A2 A3`.
+Exit 0 = every action PASS, 1 = a FAIL, 2 = no BEFORE for an action or bad input.
+
 ### Timing lane (LEAD 06:30, 2026-11-11)
 
 Budget rows (launch, section/key latency and idle CPU) need a valid quiet M1
@@ -218,7 +248,11 @@ Release timing receipt. Run `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh tools/verify-all.sh
 --lane timing`; `--only timing-window` selects just the five cold/warm launch
 pairs. The lane holds the heavy and screen slots. Before each stage it waits
 at most six minutes for two load1 readings at or below 3.5, ten seconds apart,
-before each launch sample pair (LEAD 06:50). The top five foreign processes and
+before each launch sample pair (LEAD 06:50).
+`OPEN_QUIET_LOAD1` sets that limit (default 3.5, the 8-core M1 rule; M5 lanes
+set 7.0 per LEAD 2026-11-16 17:50/22:15). The same variable drives
+`launch_sample.py` and the Library `library_performance.py` /
+`library_first_use.py` quiet checks; a malformed value stops the run. The top five foreign processes and
 all load readings remain recorded, but foreign CPU has no validity threshold.
 After-run load has no validity condition. Do not stop the user's background jobs.
 Power guard (2026-11-12): the same preflight first reads `pmset -g batt` and

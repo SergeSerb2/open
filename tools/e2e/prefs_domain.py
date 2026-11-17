@@ -6,6 +6,7 @@ that every App this process launches inherits it. The creator deletes the domain
 """
 import atexit
 import os
+import plistlib
 import subprocess
 import uuid
 
@@ -29,6 +30,16 @@ def domain():
         atexit.register(remove, name)
     if not name.startswith(PREFIX): raise ValueError(ENV + ' must start with ' + PREFIX)
     return name
+
+
+def reset(values):
+    """Puts this run's private domain back to `values` (the dict that `defaults export` gave before the
+    first attempt). A foreground-loss retry then starts from the same preferences as attempt 1."""
+    name = domain()
+    remove(name)
+    if values:
+        subprocess.run(['/usr/bin/defaults', 'import', name, '-'], input=plistlib.dumps(values), check=True,
+                       capture_output=True)
 
 
 def real_snapshot():
