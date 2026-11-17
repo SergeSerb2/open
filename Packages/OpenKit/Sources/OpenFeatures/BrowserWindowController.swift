@@ -7,6 +7,7 @@ import OpenSpaceEditor
 import OpenCommands
 import OpenStore
 import OpenSiteControl
+import OpenWeb
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
@@ -828,6 +829,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// The optional engine capability is armed before any live viewport changes.
     /// Engines without the capability slide the live page (finishDismissingLibrary).
     private func beginLiveLibraryClose() -> Bool {
+        // Off until the D3 lane proves this path on the seam engine.
+        guard FramePresentationConsumer.libraryClose.isEnabled else { return false }
         let target = pageFrameOutsideLibrary()
         // Dormant unless an engine accepts the request: an empty Space or a
         // baseline engine (adapter returns nil) takes the live slide instead.

@@ -15,6 +15,23 @@ public struct WebContentPresentedFrame: Sendable {
     }
 }
 
+/// Kill switches for the consumers of the engine frame-presentation seam.
+/// Each consumer stays off (the shell keeps main's path) until its own lane
+/// proves it on the adopted engine: functional rows plus one timing set
+/// (lead ruling 2026-11-17 08:45). A proof run turns one on without a rebuild
+/// with a launch argument, for example `-OpenSeamLibraryClose YES`.
+public enum FramePresentationConsumer: String, CaseIterable, Sendable {
+    /// D3: Library close holds the page until the resized frame is presented.
+    case libraryClose = "OpenSeamLibraryClose"
+    /// NT: the Space-switch cover waits for the destination frame.
+    case spaceCover = "OpenSeamSpaceCover"
+    /// Split: the START pane resize holds the old surface until presentation.
+    case splitResize = "OpenSeamSplitResize"
+
+    /// Off unless the user defaults (or a launch argument) turn it on.
+    public var isEnabled: Bool { UserDefaults.standard.bool(forKey: rawValue) }
+}
+
 @MainActor
 public protocol WebContentSurfaceRetention: AnyObject {
     /// Idempotently stop observing. Never clear the currently displayed surface.
