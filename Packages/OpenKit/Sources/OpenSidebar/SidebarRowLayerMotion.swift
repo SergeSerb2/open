@@ -98,6 +98,14 @@ final class SidebarRowLayerMotion {
         let token = generation
         SidebarMotionClock.settlesAt = max(SidebarMotionClock.settlesAt, CACurrentMediaTime() + duration)
         let batch = departing.filter { $0.generation == token }
+        // A commit reaches the screen at the next refresh at the earliest. Start
+        // the curve one refresh before it, so the first presented frame already
+        // shows motion (as AppKit's own row animation does), not progress 0.
+        let rate = Double(outline.window?.screen?.maximumFramesPerSecond ?? 60)
+        let lead = 1 / min(max(rate, 60), 240)
+        func start(_ animation: CAAnimation, on layer: CALayer) {
+            animation.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) - lead
+        }
         let retiring = Set(batch.map { ObjectIdentifier($0.layer) })
         CATransaction.begin(); CATransaction.setDisableActions(true)
         CATransaction.setCompletionBlock { [weak self] in
@@ -129,11 +137,13 @@ final class SidebarRowLayerMotion {
             if abs(delta) > 0.01 {
                 let move = CABasicAnimation(keyPath: "transform.translation.y")
                 move.fromValue = delta; move.toValue = 0; move.duration = self.duration; move.timingFunction = self.timing
+                start(move, on: layer)
                 layer.add(move, forKey: "row.structure.position")
             }
             if opacity < 1 {
                 let fade = CABasicAnimation(keyPath: "opacity")
                 fade.fromValue = opacity; fade.toValue = 1; fade.duration = self.duration; fade.timingFunction = self.timing
+                start(fade, on: layer)
                 layer.add(fade, forKey: "row.structure.opacity")
             }
         }
@@ -142,6 +152,7 @@ final class SidebarRowLayerMotion {
             outline.layer?.addSublayer(layer)
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = layer.opacity; fade.toValue = 0; fade.duration = duration; fade.timingFunction = timing
+            start(fade, on: layer)
             layer.opacity = 0; layer.add(fade, forKey: "row.structure.opacity")
         }
         CATransaction.commit()
