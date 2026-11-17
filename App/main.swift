@@ -196,6 +196,14 @@ if CommandLine.arguments.contains("--open-allow-mock-keychain-secrets") {
 if AutomationNotificationSetup.suppressesSystemSetup {
   configuration.additionalSwitches.append(AutomationNotificationSetup.skipSwitch)
 }
+// Test Apps never list the user's protected Downloads folder (a macOS privacy
+// prompt): Chromium's Save As panels and downloads start in the harness's
+// synthetic folder, which DownloadsCenter already uses for Open's downloads.
+if let path = ProcessInfo.processInfo.environment["OPEN_DOWNLOADS_DEFAULT_DIRECTORY"], path.hasPrefix("/") {
+  let folder = URL(fileURLWithPath: path, isDirectory: true)
+  try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+  configuration.defaultDownloadDirectory = folder
+}
 #endif
 
 #if OPEN_AUTOMATION
