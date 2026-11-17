@@ -30,19 +30,21 @@ enum PeekHostSnapshot {
 extension PeekOverlayView {
     func isHostFrozen(_ view: NSView) -> Bool { motionHostView === view && motionHostFrozen }
 
-    func beginOpeningPreparation() {
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        motionKind = "prepare-open"; motionDuration = 0
-        layer?.removeAnimation(forKey: "peekVisibility"); backdrop.layer?.removeAnimation(forKey: "peekVisibility")
-        panel.layer?.removeAnimation(forKey: "peekGeometry")
-        layer?.opacity = 0; backdrop.layer?.opacity = 0
-        PeekMotionTrace.mark("opening.prepareSourceVisible")
-        CATransaction.commit()
+    func prepareOpeningPlate(_ view: NSView, color: NSColor) {
+        clearHost()
+        layoutSubtreeIfNeeded()
+        pageClip.layer?.backgroundColor = color.cgColor
+        freezeHost(view, image: nil)
+        motionSnapshotLayer?.backgroundColor = color.cgColor
+        // Only rounded solid backgrounds move here. Their own corner radii
+        // draw the outline without clipping a child subtree offscreen.
+        pageClip.layer?.masksToBounds = false
+        PeekMotionTrace.mark("opening.plateReady")
     }
 
-    /// Opening freezes the initial, empty page plate. A loaded page uses the
-    /// engine's viewport image for close/expand. Both keep the live view hidden
-    /// for the entire motion, including late load/reveal callbacks.
+    /// A loaded page uses a viewport image for close/expand. An opening uses
+    /// the source page color until ready content can fade over it. The live
+    /// compositor never participates in moving the card.
     func freezeHost(_ view: NSView, image: CGImage?, hide: Bool = true) {
         endHostSnapshot()
         guard let parent = pageClip.layer, !pageClip.bounds.isEmpty else { return }
@@ -54,14 +56,16 @@ extension PeekOverlayView {
         snapshot.contents = image
         snapshot.contentsScale = window?.backingScaleFactor ?? 1
         snapshot.contentsGravity = .resize
-        // Preserve the engine's initial plate when no viewport image exists;
-        // the clip's black backing is only a mask implementation detail.
-        snapshot.backgroundColor = view.layer?.backgroundColor ?? parent.backgroundColor
+        if image == nil { snapshot.cornerRadius = parent.cornerRadius }
+        // A known page color also covers transparent snapshot pixels.
+        snapshot.backgroundColor = parent.backgroundColor
         parent.addSublayer(snapshot)
         // The captured page, rounded clip, and fixed shadow are static while
         // only this ancestor's transform/position/opacity change. Cache that
         // subtree at this window's real scale until motion finishes.
-        if hide, let panelLayer = panel.layer {
+        // A solid opening plate needs no offscreen raster texture. Loaded
+        // viewport images still cache their masked subtree while moving.
+        if hide, image != nil, let panelLayer = panel.layer {
             panelLayer.rasterizationScale = window?.backingScaleFactor ?? 1
             panelLayer.shouldRasterize = true
         }
@@ -94,6 +98,7 @@ extension PeekOverlayView {
         hold.fromValue = snapshot.opacity; hold.toValue = snapshot.opacity
         hold.duration = 1 / Double(max(1, window?.screen?.maximumFramesPerSecond ?? 60))
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { ready() } }
+        requestDisplayRate(hold)
         snapshot.add(hold, forKey: "peekSnapshotReady")
         PeekMotionTrace.region("snapshot.readyCommit") { CATransaction.commit() }
     }
@@ -103,6 +108,7 @@ extension PeekOverlayView {
         PeekMotionTrace.mark("opening.attachCovered")
         CATransaction.begin(); CATransaction.setDisableActions(true)
         openingHandoff = true; motionHostFrozen = false; motionHostWasHidden = false
+        pageClip.layer?.masksToBounds = true
         panel.layer?.shouldRasterize = false
         hostedView = view
         if view.superview !== pageClip { pageClip.addSubview(view) }
@@ -113,16 +119,60 @@ extension PeekOverlayView {
         PeekMotionTrace.region("opening.attachCommit") { CATransaction.commit() }
     }
 
-    func finishOpeningHandoff(image: CGImage?, ready: @escaping @MainActor () -> Void) {
+    func holdOpeningPlate() {
+        guard let snapshot = motionSnapshotLayer else { return }
+        snapshot.opacity = (snapshot.presentation() ?? snapshot).opacity
+        snapshot.removeAllAnimations()
+        motionHostView?.isHidden = true; motionHostFrozen = true
+        openingHandoff = false
+    }
+
+    func finishOpeningHandoff(image: CGImage?, duration: CFTimeInterval, ready: @escaping @MainActor () -> Void) {
         guard openingHandoff, let snapshot = motionSnapshotLayer else { return }
-        if let image { snapshot.contents = image }
+        // The opaque plate stays in place until the image exists. Fade only
+        // destination pixels over the same page color with the engine hidden.
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if let image {
+            motionHostView?.isHidden = true; motionHostFrozen = true
+            snapshot.contents = image
+        }
+        snapshot.opacity = image == nil ? snapshot.opacity : 0
+        PeekMotionTrace.region("opening.imageCommit") { CATransaction.commit() }
+        // Keep engine visibility and image preparation out of the animation
+        // transaction. The source color stays opaque for this commit fence.
         afterSnapshotCommit(snapshot) { [weak self] in
-            guard let self, self.motionSnapshotLayer === snapshot else { return }
-            self.endHostSnapshot(); ready()
+            guard let self, self.openingHandoff, self.motionSnapshotLayer === snapshot else { return }
+            self.fadeOpeningImage(snapshot, hasImage: image != nil, duration: duration, ready: ready)
         }
     }
 
+    private func fadeOpeningImage(_ snapshot: CALayer, hasImage: Bool, duration: CFTimeInterval,
+                                  ready: @escaping @MainActor () -> Void) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = hasImage ? 0 : snapshot.opacity
+        fade.toValue = hasImage ? 1 : 0
+        fade.duration = duration
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { [weak self] in
+            guard let self, self.openingHandoff, self.motionSnapshotLayer === snapshot else { return }
+            // Reattach live pixels under the completed image before retiring
+            // it. Native captures verify that the last swap has no flash.
+            self.motionHostFrozen = false
+            self.motionHostView?.isHidden = false
+            self.afterSnapshotCommit(snapshot) { [weak self] in
+                guard let self, self.openingHandoff, self.motionSnapshotLayer === snapshot else { return }
+                self.endHostSnapshot(); ready()
+            }
+        } }
+        snapshot.opacity = hasImage ? 1 : 0
+        requestDisplayRate(fade)
+        snapshot.add(fade, forKey: "peekContentReveal")
+        PeekMotionTrace.mark("opening.contentFade", value: duration)
+        PeekMotionTrace.region("opening.fadeCommit") { CATransaction.commit() }
+    }
+
     func endHostSnapshot(reveal: Bool = true) {
+        pageClip.layer?.masksToBounds = true
         guard let snapshot = motionSnapshotLayer else { return }
         PeekMotionTrace.mark("snapshot.thaw")
         CATransaction.begin(); CATransaction.setDisableActions(true)
