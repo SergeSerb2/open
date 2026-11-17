@@ -12,7 +12,7 @@ import signal
 import tempfile
 import time
 
-from library_performance import seed, launch, quiet, other_processes
+from library_performance import seed, launch, quiet, other_processes, quiet_load1
 from library_ready_open import preparation_intervals
 
 
@@ -105,7 +105,7 @@ def run(args):
             row = {'index': index+1, 'quiet': preflight, 'preparationStates': states,
                    'preparation': states[-1], 'trace': trace, 'idle': idle,
                    'otherProcessesAfter': other_processes(app.bundle),
-                   'valid': max(preflight[0]) <= 3.5}
+                   'valid': max(preflight[0]) <= quiet_load1()}
             app.quit(); row['cleanup'] = app.quit_report; app = None
             result['launches'].append(row); save()
             assert row['cleanup']['ok'] and not row['cleanup']['forced'], row['cleanup']

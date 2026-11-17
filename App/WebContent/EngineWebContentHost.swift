@@ -8,7 +8,7 @@ import OpenWeb
 
 /// The sole delegate of a tab page. Closed generations never update the model.
 @MainActor
-final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding, OEWebContentDelegate {
+final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding, WebContentRetainedSurfaceResizing, OEWebContentDelegate {
   private(set) var tabID: ItemID
   private(set) var spaceID: SpaceID?
   let profileID: ProfileID
@@ -16,6 +16,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   weak var owner: EngineWebContentHostFactory?
   private(set) var closed = false
   private(set) var generation = 0
+  private var framePresentationRevision = 0
   let historyRecorder: AppHistoryRecorder
   var onURLChange: ((URL) -> Void)?
   var onTitleChange: ((String) -> Void)?
@@ -56,6 +57,19 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   /// Capture, selection, and translation reach the page through this (page-platform §3.2).
   var webContent: (any WebContent)? { closed ? nil : content }
   var isPrivateBrowsing: Bool { content.context.isEphemeral }
+
+  func retainSurfaceForResize(
+    to viewportSize: CGSize, backingScale: CGFloat, generation: Int,
+    completion: @escaping @MainActor (Result<WebContentPresentedFrame, WebContentPresentationFailure>) -> Void
+  ) -> (any WebContentSurfaceRetention)? {
+    guard !closed else { return nil }
+    let hostGeneration = self.generation, revision = framePresentationRevision
+    return content.retainSurfaceForResize(to: viewportSize, backingScale: backingScale, generation: generation,
+      isCurrent: { [weak self] in
+        guard let self else { return false }
+        return !self.closed && self.generation == hostGeneration && self.framePresentationRevision == revision
+      }, completion: completion)
+  }
 
   init(tabID: ItemID, profileID: ProfileID, content: OEWebContent, owner: EngineWebContentHostFactory) {
     self.tabID = tabID; self.profileID = profileID; self.content = content; self.owner = owner
@@ -108,6 +122,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
 
   func webContent(_ page: OEWebContent, didChange changes: OEWebContentChange) {
     guard !closed, let owner else { return }
+    if changes.contains(.URL) || (changes.contains(.loading) && page.isLoading)
+      || changes.contains(.live) || changes.contains(.crash) { framePresentationRevision += 1 }
     let token = generation
     if (changes.contains(.loading) && page.isLoading) ||
       (changes.contains(.live) && !page.isLive) || changes.contains(.crash) {
@@ -329,6 +345,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
     guard !closed else { return }
+    framePresentationRevision += 1
     owner?.app.stores.boosts.pageCommitted(self, url: url, newDocument: true)
     owner?.findController?.didNavigate(page)
     historyRecorder.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
