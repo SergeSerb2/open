@@ -241,11 +241,13 @@ def run(factory, results, tmp, harness):
         # Today tab, the second archives that Today tab.
         tx = new_tab(app, fixture('PF Double Today'))
         pd = new_tab(app, fixture('PF Double Pinned')); app.call('pin', tab=pd)
+        # A newer Today tab sits first in Today, so the strip neighbour of pd is ty, not tx.
+        ty = new_tab(app, fixture('PF Double Neighbour'))
         app.call('select', tab=tx); app.call('select', tab=pd); wait_until(lambda: tab(pd)['hasWebContent'], timeout=5, step=.05)
         app.call('key', key='w', modifiers=['command']); app.call('key', key='w', modifiers=['command'])
         after14 = settle(pd)
         record('PF14_double_cmdw_pinned_then_previous', after14 and after14['section'] == 'pinned' and not after14['hasWebContent']
-               and tx not in ids() and archived(tx), after=after14, selected=selected())
+               and tx not in ids() and archived(tx) and ty in ids(), after=after14, selected=selected())
 
         # PF15 (Arc P4, P5 after a relaunch): the selection restored at launch is the tab Cmd-W returns
         # to, and a pinned tab restored away from its pinned URL gets a title on reset (never blank).
