@@ -112,7 +112,7 @@ public final class PaneChromeView: NSView {
         if layer?.backgroundColor != background { layer?.backgroundColor = background }
         let text = host?.currentURL?.absoluteString == "open://welcome" ? "Welcome to Open"
             : role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
-            : host?.currentURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? ""
+            : host?.currentURL?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? ""
         var layoutChanged = false
         if label.stringValue != text { label.stringValue = text; layoutChanged = true }
         for (i, b) in buttons.enumerated() {
