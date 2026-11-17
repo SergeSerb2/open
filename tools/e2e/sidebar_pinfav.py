@@ -65,30 +65,40 @@ def run(factory, results, tmp, harness):
         def record(name, ok, **evidence):
             results[name] = dict(ok=bool(ok), **evidence)
 
-        # --- fixtures: two pinned tabs, two Today tabs, one Favorite -------------------------
+        def archived(t): return any(r['id'] == t for r in app.call('archive'))
+
+        # --- fixtures: three pinned tabs, two Today tabs, one Favorite -----------------------
         p1 = new_tab(app, fixture('PF Pinned One')); app.call('pin', tab=p1)
         p2 = new_tab(app, fixture('PF Pinned Two')); app.call('pin', tab=p2)
+        p3 = app.call('open', url=fixture('PF Pinned Never Loaded'), background=True)['id']; app.call('pin', tab=p3)
         t1 = new_tab(app, fixture('PF Today One'))
         t2 = new_tab(app, fixture('PF Today Two'))
         f1 = new_tab(app, fixture('PF Favorite One')); app.call('favorite', tab=f1)
         app.call('select', tab=t2)
 
-        # PF1: hover a loaded, unselected pinned row; its "−" unloads and keeps the row.
+        # PF1 (Arc P1): an unselected pinned row shows "×" even while its page is loaded, and "×"
+        # archives the pinned tab. The selection does not move.
         before = tab(p1)
         clicked = click_accessory(p1)
         after = settle(p1)
-        record('PF1_pinned_minus_unloads', clicked.get('glyph') == 'rowUnload' and after and after['section'] == 'pinned'
-               and not after['hasWebContent'] and selected() == t2,
+        record('PF1_unselected_loaded_pinned_x_archives', before['hasWebContent'] and clicked.get('glyph') == 'rowClose'
+               and after is None and archived(p1) and selected() == t2,
                before={k: before[k] for k in ('hasWebContent', 'loaded')}, clicked=clicked, after=after, selected=selected())
 
-        # PF2: the pointer has not moved; the same button now shows "×" for an unloaded pinned row.
-        again = accessory(p1)
-        clicked2 = {'clicked': False}
-        if again.get('shown'):
-            click_at(again['point']); clicked2 = {'clicked': True, 'glyph': again['glyph']}
-        after2 = settle(p1)
-        record('PF2_pinned_x_on_unloaded_acts', clicked2.get('clicked') and (after2 is None or after2['section'] != 'pinned'),
-               accessory=again, clicked=clicked2, after=after2, observe=True)
+        # PF2 (Arc P1): the same for a pinned row that never loaded (every pinned row after a relaunch).
+        clicked2 = click_accessory(p3)
+        after2 = settle(p3)
+        record('PF2_unloaded_pinned_x_archives', clicked2.get('glyph') == 'rowClose' and after2 is None and archived(p3)
+               and selected() == t2, clicked=clicked2, after=after2)
+
+        # PF2b (Arc P2, P5): the selected pinned row shows "−"; it unloads in place and the
+        # previously selected tab comes back.
+        app.call('select', tab=t1); app.call('select', tab=p2); wait_until(lambda: tab(p2)['hasWebContent'], timeout=5, step=.05)
+        clicked2b = click_accessory(p2)
+        after2b = settle(p2)
+        record('PF2b_selected_pinned_minus_unloads_back_to_previous', clicked2b.get('glyph') == 'rowUnload' and after2b
+               and after2b['section'] == 'pinned' and not after2b['hasWebContent'] and selected() == t1,
+               clicked=clicked2b, after=after2b, selected=selected(), expected=t1)
 
         # PF3: Favorite tile "−" unloads and keeps the tile.
         app.call('select', tab=f1); wait_until(lambda: tab(f1)['hasWebContent'], timeout=5, step=.05)
@@ -107,13 +117,14 @@ def run(factory, results, tmp, harness):
         record('PF4_favorite_x_on_unloaded_acts', clickedf2.get('clicked') and (afterf2 is None or afterf2['section'] != 'favorites'),
                accessory=againf, clicked=clickedf2, after=afterf2, observe=True)
 
-        # PF5: Cmd-W on the selected pinned tab (real key event).
-        app.call('select', tab=p2); wait_until(lambda: tab(p2)['hasWebContent'], timeout=5, step=.05)
+        # PF5 (Arc P3, P5): Cmd-W on the selected pinned tab keeps the row, unloads it, and selects
+        # the tab selected before it (here t2), not a strip neighbour.
+        app.call('select', tab=t2); app.call('select', tab=p2); wait_until(lambda: tab(p2)['hasWebContent'], timeout=5, step=.05)
         order = ids()
         app.call('key', key='w', modifiers=['command'])
         after5 = settle(p2)
-        record('PF5_cmdw_pinned_unloads', after5 and after5['section'] == 'pinned' and not after5['hasWebContent'] and selected() != p2,
-               after=after5, selected_after=selected(), order=order, observe_selection=True)
+        record('PF5_cmdw_pinned_unloads_back_to_previous', after5 and after5['section'] == 'pinned' and not after5['hasWebContent']
+               and selected() == t2, after=after5, selected_after=selected(), expected=t2, order=order)
 
         # PF6: Cmd-W on the selected Favorite.
         if f1 in ids():
@@ -123,17 +134,20 @@ def run(factory, results, tmp, harness):
             record('PF6_cmdw_favorite_unloads', after6 and after6['section'] == 'favorites' and not after6['hasWebContent'] and selected() != f1,
                    after=after6, selected_after=selected())
 
-        # PF7: two quick "−" clicks on two loaded pinned rows, no wait between them.
-        for t in (p1, p2):
-            app.call('select', tab=t); wait_until(lambda: tab(t)['hasWebContent'], timeout=5, step=.05)
+        # PF7: quick repeated "×" on two unselected pinned rows at one point: the lower row slides up
+        # under the still pointer, shows its "×" at once, and the second click archives it too.
+        q2 = new_tab(app, fixture('PF Pinned Quick Lower')); app.call('pin', tab=q2)
+        q1 = new_tab(app, fixture('PF Pinned Quick Upper')); app.call('pin', tab=q1)
+        app.call('sidebar-move', tab=q1, section='pinned', index=0); app.call('sidebar-move', tab=q2, section='pinned', index=1)
         app.call('select', tab=t2)
-        a1, a2 = hover(p1), None
-        click_at(a1['point'])
-        a2 = hover(p2)
-        if a2.get('shown'): click_at(a2['point'])
-        r1, r2 = settle(p1), settle(p2)
-        record('PF7_quick_two_pinned_unloads', a1.get('glyph') == 'rowUnload' and a2.get('glyph') == 'rowUnload'
-               and r1 and r2 and not r1['hasWebContent'] and not r2['hasWebContent'], first=a1, second=a2, after=[r1, r2])
+        first7 = click_accessory(q1)
+        gone7 = wait_until(lambda: q1 not in ids() or None, timeout=2, step=.02)
+        under7 = accessory(q2)
+        if under7.get('shown') and under7['point'] == first7.get('point'):
+            click_at(under7['point'])
+        closed7 = wait_until(lambda: q2 not in ids() or None, timeout=2, step=.02)
+        record('PF7_quick_repeated_pinned_x', first7.get('glyph') == 'rowClose' and gone7 and closed7
+               and archived(q1) and archived(q2) and selected() == t2, first=first7, under=under7, selected=selected())
 
         # PF8: close a pinned tab while it loads (3 s server delay): it unloads at once and stays unloaded.
         slow = app.call('open', url=base + '/slow-pin')['id']
@@ -147,25 +161,31 @@ def run(factory, results, tmp, harness):
         record('PF8_close_loading_pinned_stays_unloaded', early and late and late['section'] == 'pinned' and not late['hasWebContent']
                and not late['loading'] and not late['loaded'], loading=loading, early=early, late=late)
 
-        # PF9: close right after a drop: move t1 into Pinned through the real drop handler, then "−" at once.
-        space = next(s for s in app.call('spaces') if s['focused'])['id']
-        app.call('select', tab=t1); wait_until(lambda: tab(t1)['hasWebContent'], timeout=5, step=.05)
+        # PF9: close right after a drop: t1 moves into Pinned through the real drop handler, and its
+        # "×" (an unselected pinned row) archives it at once.
+        space = next(x for x in app.call('spaces') if x['focused'])['id']
         app.call('select', tab=t2)
         dropped = app.call('sidebar-drop', nodes=[t1], parent={'kind': 'pinned', 'id': space}, index=0)
         clicked9 = click_accessory(t1)
         after9 = settle(t1)
-        record('PF9_close_right_after_drop', dropped and clicked9.get('clicked') and after9 and after9['section'] == 'pinned'
-               and not after9['hasWebContent'], dropped=dropped, clicked=clicked9, after=after9)
+        record('PF9_close_right_after_drop', dropped and clicked9.get('glyph') == 'rowClose' and after9 is None and archived(t1),
+               dropped=dropped, clicked=clicked9, after=after9)
 
-        # PF10: navigated away, then Cmd-W: the row keeps its pinned URL (reset semantics: observe).
-        app.call('select', tab=p1); wait_until(lambda: tab(p1)['hasWebContent'], timeout=5, step=.05)
-        app.call('navigate', tab=p1, url=fixture('PF Away'))
-        wait_until(lambda: 'PF Away' in tab(p1)['url'] or None, timeout=5, step=.05)
-        away = tab(p1)
+        # PF10 (Arc P4): Cmd-W on a pinned tab that left its pinned URL puts the row back on the pinned
+        # URL and title, unloaded; selecting it again loads the pinned page.
+        app.call('select', tab=p2); wait_until(lambda: tab(p2)['hasWebContent'], timeout=5, step=.05)
+        app.call('navigate', tab=p2, url=fixture('PF Away'))
+        away = wait_until(lambda: (lambda t: t if 'PF Away' in t['url'] and t['title'] == 'PF Away' else None)(tab(p2)), timeout=5, step=.05) or tab(p2)
         app.call('key', key='w', modifiers=['command'])
-        after10 = settle(p1)
-        record('PF10_cmdw_navigated_pinned', after10 and after10['section'] == 'pinned' and not after10['hasWebContent'],
-               away={k: away[k] for k in ('url', 'pinnedURL', 'title')}, after=after10, observe=True)
+        after10 = settle(p2)
+        app.call('select', tab=p2)
+        reloaded = wait_until(lambda: (lambda t: t if t['hasWebContent'] and not t['loading'] and t['title'] == 'PF Pinned Two' else None)(tab(p2)), timeout=5, step=.05)
+        record('PF10_cmdw_navigated_pinned_returns_to_pinned_url', after10 and after10['section'] == 'pinned' and not after10['hasWebContent']
+               and after10['url'] == after10['pinnedURL'] and after10['title'] == 'PF Pinned Two' and bool(reloaded)
+               and reloaded['url'] == after10['pinnedURL'],
+               away={k: away[k] for k in ('url', 'title')}, after=after10, reloaded=reloaded)
+        app.call('select', tab=t2)
+
         # PF11: quick repeated "×" at one point: the row that slides up under the still pointer
         # shows its button at once, so the second click closes it instead of selecting it.
         lower = new_tab(app, fixture('PF Quick Lower')); upper = new_tab(app, fixture('PF Quick Upper'))
@@ -178,6 +198,25 @@ def run(factory, results, tmp, harness):
         closed = wait_until(lambda: lower not in ids() or None, timeout=2, step=.02)
         record('PF11_quick_repeated_x_closes_next_row', first.get('glyph') == 'rowClose' and gone and closed and selected() == t2,
                first=first, under=under, closed_second=bool(closed), selected=selected())
+        # PF12: a Favorite leaves the grid under a still pointer; the tile that moves into its place
+        # is the hovered one (its button shows), and no other tile keeps a stale hover.
+        fa = new_tab(app, fixture('PF Grid A')); app.call('favorite', tab=fa)
+        fb = new_tab(app, fixture('PF Grid B')); app.call('favorite', tab=fb)
+        # Six tiles before and five after both lay out in three columns (balanced rows), so B takes
+        # A's cell and the pointer stays inside a tile.
+        while sum(t['section'] == 'favorites' for t in app.call('tabs')) < 6:
+            app.call('favorite', tab=new_tab(app, fixture('PF Grid Extra')))
+        app.call('select', tab=t2)
+        grid = [t['id'] for t in app.call('tabs') if t['section'] == 'favorites']
+        held = hover(fa, favorite=True)
+        app.call('sidebar-move', tab=fa, section='today', index=0)
+        moved = wait_until(lambda: tab(fa)['section'] == 'today' or None, timeout=2, step=.02)
+        time.sleep(.4)
+        next_tile = accessory(fb, favorite=True)
+        others = {t: accessory(t, favorite=True).get('shown', False) for t in grid if t not in (fa, fb) and t in ids()}
+        record('PF12_favorite_grid_hover_follows_pointer', held.get('shown') and moved and next_tile.get('shown')
+               and next_tile['point'] == held['point'] and not any(others.values()),
+               grid=grid, held=held, next_tile=next_tile, others=others)
     finally:
         server.shutdown()
         app.quit()

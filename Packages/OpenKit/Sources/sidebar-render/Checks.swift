@@ -318,19 +318,25 @@ enum Checks {
                 click(scene.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button))
             }
         }
+        // docs/re/pinned-favorites-close.md P1–P2: "−" only on the selected pinned row; "×" archives.
+        let previous = context.selectedID(in: space.id)
         hover(pinned)
-        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "unloaded pinned tab shows × on hover")
+        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "unselected unloaded pinned tab shows × on hover")
         pinned.live.hasWebContent = true
         pump()
-        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowUnload, "loaded pinned tab changes to − while hovered")
+        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "unselected loaded pinned tab still shows ×")
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: pinned.id)
+        pump()
+        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowUnload, "selected pinned tab shows − while hovered")
         clickAction(pinned)
         check(delegate.log == [.unloadTab(pinned.id)] && model.tab(id: pinned.id) === pinned,
               "pinned − click sends unloadTab and keeps the entry")
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: previous)
         pinned.live.hasWebContent = false
         pump()
-        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "pinned tab returns to × when web content goes away")
+        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "pinned tab shows × again once it is not selected")
         clickAction(pinned)
-        check(delegate.log == [.close(nodeID: pinned.id)] && model.tab(id: pinned.id) == nil, "pinned × click closes the entry")
+        check(delegate.log == [.archiveNodes(ids: [pinned.id])] && model.tab(id: pinned.id) == nil, "pinned × click archives the entry")
         undo.undo(); pump()
         plain.live.hasWebContent = true
         hover(plain)

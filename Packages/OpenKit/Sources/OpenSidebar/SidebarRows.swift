@@ -473,7 +473,8 @@ final class TabCellView: SidebarCellView {
         b.plateColor = { _ in SidebarRole.rowPressed }
         b.action = { [weak self] in
             guard let self, let tab = self.tab else { return }
-            self.context?.send(self.showsUnload ? .unloadTab(tab.id) : .close(nodeID: tab.id))
+            // `.close` keeps a pinned tab (Cmd-W, keyboard Delete); the pinned "×" archives it.
+            self.context?.send(self.showsUnload ? .unloadTab(tab.id) : self.isPinned ? .archiveNodes(ids: [tab.id]) : .close(nodeID: tab.id))
         }
         addSubview(b)
         accessory = b
@@ -513,12 +514,10 @@ final class TabCellView: SidebarCellView {
         return context.model.isPinned(tabID: tab.id)
     }
 
-    /// A loaded pinned tab shows "−" (close and keep pinned), measured on a
-    /// selected pinned row (F0014). Today tabs show "×".
-    private var showsUnload: Bool {
-        guard let tab, isPinned else { return false }
-        return tab.live.hasWebContent
-    }
+    /// The selected pinned row shows "−" (close and keep pinned: F0014; docs/re/pinned-favorites-close.md
+    /// P2). Every other pinned row shows "×", also while its page is loaded, and "×" archives the
+    /// pinned tab (P1). Today tabs show "×".
+    private var showsUnload: Bool { isPinned && rowView?.isCurrent == true }
 
     /// The close or unload button follows the pointer, not the selection: a
     /// selected Today row made by Cmd+T shows none (F0066); hovered rows do (F0013).

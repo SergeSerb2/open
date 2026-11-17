@@ -823,9 +823,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // Auto-PiP runs in the same turn as the selection change, after the new tab is attached (§4.5.3).
     app.media.windowChanged(self)
   }
+  /// This window's selected nodes in this launch, newest last. Closing a pinned tab or Favorite
+  /// returns to the node selected before it, or to none (docs/re/pinned-favorites-close.md P5).
+  private var selectionHistory: [ItemID] = []
   func select(nodeID: ItemID?, focus: Bool = true) {
     controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
+    if let nodeID {
+      selectionHistory.removeAll { $0 == nodeID }; selectionHistory.append(nodeID)
+      if selectionHistory.count > 64 { selectionHistory.removeFirst(selectionHistory.count - 64) }
+    }
     withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nodeID) }
     controller?.dismissSidebarReveal()
     showSelection(focus: focus); scheduleSave()
@@ -1040,10 +1047,20 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let wasSelected = selectedTab?.id == id
     var isFavorite = false
     if case .favorites? = model.parent(of: id) { isFavorite = true }
-    if model.isPinned(tabID: id) || isFavorite {
+    let isPinned = model.isPinned(tabID: id)
+    var inSplit = false
+    if case .splitPane? = model.parent(of: id) { inSplit = true }
+    if isPinned || isFavorite {
       controller?.container.closeHost(for: id); hosts[id]?.close()
+      if isPinned { returnToPinnedURL(id) }
     } else { model.closeTab(id: id) }
-    if wasSelected {
+    selectionHistory.removeAll { $0 == id }
+    if wasSelected, (isPinned || isFavorite), !inSplit {
+      // A pinned tab or Favorite stays in the sidebar: go back to the node selected before it,
+      // or show no tab (Arc 1.172.2, docs/re/pinned-favorites-close.md P5).
+      let shown = Set(orderedTabs.map { model.sidebarSelectionID(for: $0.id) })
+      select(nodeID: selectionHistory.last { $0 != id && shown.contains($0) })
+    } else if wasSelected {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
     } else { controller?.refresh(); mirror.sync(); scheduleSave() }
@@ -1053,6 +1070,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       model.archiveSink?.discardArchived(ids: [id])
       DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) }
     }
+  }
+  /// A pinned tab closed after it left its pinned URL goes back to that URL, unloaded, with the
+  /// pinned page's title (docs/re/pinned-favorites-close.md P4). The next selection loads it.
+  private func returnToPinnedURL(_ id: ItemID) {
+    guard let tab = model.tab(id: id), let pinned = tab.pinnedURL, tab.url != pinned else { return }
+    withoutUndo { model.resetPinnedTab(id: id) }
+    tab.title = controller?.container.pinnedPageTitles[id] ?? ""
   }
   func closeAll() {
     guard !isClosing else { return }

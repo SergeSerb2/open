@@ -113,12 +113,24 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         // Bulk reloads have no precise edit sequence. Offscreen collection batches
         // can also retain stale items while AppKit waits for an animation commit.
         if animate && !isReload && plan.isSimple && !mixesMovesWithCountChanges {
-            collection.animator().performBatchUpdates(updates)
+            collection.animator().performBatchUpdates(updates) { [weak self] _ in self?.syncTileHover() }
         } else {
             tabs = new
             collection.reloadData()
         }
         superview?.needsLayout = true
+        syncTileHover()
+    }
+
+    /// Tiles reflowed or were reused under a still pointer, which sends no enter or exit: only the
+    /// tile now under the pointer is hovered, so its close button is where the next click lands.
+    private func syncTileHover() {
+        guard context.forcedHover == nil, let window else { return }
+        let pointer: NSPoint? = if let source = context.pointerLocation { source() } else { window.mouseLocationOutsideOfEventStream }
+        let hit = pointer.flatMap { collection.indexPathForItem(at: collection.convert($0, from: nil)) }
+        for case let item as FavoriteTileItem in collection.visibleItems() {
+            item.tile.syncPointer(inside: hit != nil && collection.indexPath(for: item) == hit)
+        }
     }
 
     // MARK: Data source
@@ -424,6 +436,7 @@ final class FavoriteTileView: NSView {
 
     override func mouseEntered(with event: NSEvent) { pointerInside = true }
     override func mouseExited(with event: NSEvent) { pointerInside = false }
+    func syncPointer(inside: Bool) { pointerInside = inside }
 
     private func hoverChanged() {
         guard let tab, let context, let space = context.focusedSpace else { return }
