@@ -86,7 +86,14 @@ final class TroubleshootingActions {
     finishRecording()
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-    let folder = traceDirectory ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+    #if OPEN_AUTOMATION
+    // Test Apps write traces to the harness's synthetic Downloads folder, never the user's.
+    let synthetic = ProcessInfo.processInfo.environment["OPEN_DOWNLOADS_DEFAULT_DIRECTORY"]
+      .flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0, isDirectory: true) : nil }
+    #else
+    let synthetic: URL? = nil
+    #endif
+    let folder = traceDirectory ?? synthetic ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
     let file = folder.appendingPathComponent("Open Trace \(formatter.string(from: started)).json")
     OEEngine.shared.endTracing(to: file) { [weak self] written, error in
       guard let self else { return }

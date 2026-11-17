@@ -1,0 +1,158 @@
+{
+  "boosteditor": {
+    "Z1_zap_one": {
+      "hoverHighlight": true,
+      "load": [
+        12.31787109375,
+        11.49072265625,
+        9.7041015625
+      ],
+      "ok": true,
+      "storedSelectors": [
+        "#promo-banner"
+      ]
+    },
+    "Z2_all_related_counts": {
+      "load": [
+        11.9716796875,
+        11.4326171875,
+        9.69384765625
+      ],
+      "nativeCount": 2,
+      "ok": true,
+      "relatedMatches": 3
+    },
+    "Z3_reload_renderer_navigation": {
+      "activeBeforeDeparture": true,
+      "crossSiteAndBack": true,
+      "firstScript": {
+        "css": "#promo-banner { display: none !important; }\nmain .card { display: none !important; }",
+        "picker": "undefined",
+        "style": true
+      },
+      "load": [
+        11.9716796875,
+        11.4326171875,
+        9.69384765625
+      ],
+      "nativeZapAfterBack": false,
+      "ok": true,
+      "replacementRenderers": 1,
+      "stableContent": true
+    },
+    "Z4_reveal_chip": {
+      "load": [
+        11.9716796875,
+        11.4326171875,
+        9.69384765625
+      ],
+      "ok": true,
+      "removedLiveAndReload": true
+    },
+    "Z5_selector_css_caret": {
+      "copied": true,
+      "insertedAtCaret": 23,
+      "jsUnchanged": true,
+      "load": [
+        11.9716796875,
+        11.4326171875,
+        9.69384765625
+      ],
+      "ok": true,
+      "related": "main .card",
+      "selected": "header"
+    },
+    "Z6_exit_cleanup": {
+      "done": true,
+      "editorClose": true,
+      "escape": true,
+      "load": [
+        11.9716796875,
+        11.4326171875,
+        9.69384765625
+      ],
+      "ok": true,
+      "pageClicks": 1
+    },
+    "Z7_native_authority_limits": {
+      "expiredRefused": true,
+      "labelBytesAccepted": 1024,
+      "load": [
+        11.9716796875,
+        11.4326171875,
+        9.69384765625
+      ],
+      "malformedRefused": 12,
+      "nativeReceiptsAwaited": true,
+      "ok": true,
+      "quotedStructureAccepted": true,
+      "selectorBytesAccepted": 4096,
+      "storedRemovalAccepted": true,
+      "unknownRemovalRefused": true
+    },
+    "Z8_unavailable": {
+      "closed": false,
+      "internal": false,
+      "load": [
+        11.9716796875,
+        11.4326171875,
+        9.69384765625
+      ],
+      "ok": true
+    }
+  },
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28568,
+          28593,
+          28594,
+          28595,
+          28596,
+          28597,
+          28650,
+          28698,
+          28758
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Release",
+  "engine": {
+    "distributionCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
+    "distributionSHA256": "cd76f997478c28f18c82d01429a62c2f2194b24daa7732b7af37bbf4babdaa6b",
+    "distributionUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+    "embeddedCodeSHA256": "a157cc71963406e07c633c28eaa84d7a3919ff953a23afd9a4a0bb42f0190508",
+    "embeddedSHA256": "4aa5dc9f266a0f3f1a0feae49dc2455fce47258a3fce66bb6d5ea94b9fbaddc7",
+    "embeddedUUID": "4C4C44F3-5555-3144-A1A2-041993A5F496",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794470169"
+  },
+  "interrupted_attempts": [],
+  "lane": "all",
+  "load": [
+    12.31787109375,
+    11.49072265625,
+    9.7041015625
+  ],
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "4662a6dc1364825a423b436dc39c4bbd0317c4db"
+  },
+  "started": "2026-11-12 03:11:49",
+  "style": "chrome"
+}

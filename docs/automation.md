@@ -650,6 +650,8 @@ See [the tray receipt](engine-spike/s11-littleopen-downloads-tray.md).
 
 ## End-to-end suites
 
+Direct `engine_e2e.py` runs use `--style chrome` by default: the shipping style, and the style the gate uses for every suite (only its `ntp-alloy` stage passes `--style alloy`). Pass `--style alloy` to run a suite on Alloy pages.
+
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence

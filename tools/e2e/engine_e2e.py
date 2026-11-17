@@ -6,7 +6,7 @@ automation socket (docs/automation.md), and writes results plus screenshots
 of OUR windows to docs/engine-spike/. Nothing here touches other apps or the
 system mouse and keyboard.
 
-  tools/e2e/engine_e2e.py --only shell
+  tools/e2e/engine_e2e.py --only shell            # Chrome style (the default, as in the gate)
   tools/e2e/engine_e2e.py --style alloy  --only features
   tools/e2e/engine_e2e.py --style alloy  --only extensions
   tools/e2e/engine_e2e.py --style chrome --only extensions
@@ -289,6 +289,27 @@ class CheckedResults(dict):
             begin_row('after ' + key)
 
 
+_USER_FOLDERS = None
+
+
+def automation_user_folders():
+    """Synthetic stand-ins for the user's protected folders, one set per harness process.
+
+    Every App this harness launches gets them (OPEN_DOWNLOADS_DEFAULT_DIRECTORY for
+    downloads, Chromium's Save As panels and trace export; OPEN_LIBRARY_MEDIA_FIXTURE for
+    Library media sources), so no test App lists the real Downloads, Desktop or Documents
+    and raises a macOS privacy prompt (2026-11-17: tabstrip context_menu_commands "Save
+    As..." opened Chromium's save panel in ~/Downloads). A suite's own values win."""
+    global _USER_FOLDERS
+    if _USER_FOLDERS is None:
+        root = Path(tempfile.mkdtemp(prefix='open-e2e-user-folders-'))
+        for name in ('Downloads', 'Media/Documents', 'Media/Desktop', 'Media/Downloads', 'Media/Screenshots'):
+            (root / name).mkdir(parents=True)
+        atexit.register(shutil.rmtree, str(root), True)
+        _USER_FOLDERS = root
+    return _USER_FOLDERS
+
+
 class Open:
     def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=(), first_run=False):
         check_suite_app_death()
@@ -345,6 +366,10 @@ class Open:
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
+        folders = automation_user_folders()
+        env.setdefault("OPEN_DOWNLOADS_DEFAULT_DIRECTORY", str(folders / "Downloads"))
+        env.setdefault("OPEN_LIBRARY_MEDIA_FIXTURE", str(folders / "Media"))
+        self.downloads_directory = env["OPEN_DOWNLOADS_DEFAULT_DIRECTORY"]
         self.world_audit_dir = env.get("OPEN_E2E_WORLD_AUDIT_DIR")
         self.world_audit_stderr = next((arg.split("=", 1)[1] for arg in reversed(extra_args)
                                        if arg.startswith("--enable-logging=")), None) == "stderr"
@@ -2609,6 +2634,15 @@ def context_menu_commands(app, results, *, run_all_commands=True):
     report["scope"] = "all_commands" if run_all_commands else "models_and_refusals"
     report["ok"] = not crashed and not report["failures"] and (not run_all_commands or report["ran"] >= 20) and len(report["targets"]) == len(setups)
     results["context_menu_commands"] = report
+    if run_all_commands:
+        # 2026-11-17: "Save As..." opened Chromium's save panel in the real ~/Downloads and
+        # raised a macOS privacy prompt. Every save panel must open in this App's test folder.
+        expected = os.path.realpath(app.downloads_directory)
+        folders = [entry[len("directory:"):] for item in report["dismissed"] for entry in item["closed"]
+                   if isinstance(entry, str) and entry.startswith("directory:")]
+        results["context_menu_save_folder"] = {
+            "ok": bool(folders) and all(os.path.realpath(folder) == expected for folder in folders),
+            "panels": len(folders), "folders": sorted(set(folders)), "expected": expected}
 
     # The allowlist: no dropped Chrome item, the kept ones, extension items,
     # and no empty, leading, trailing or doubled separators.
@@ -13640,8 +13674,10 @@ E2E_LANE = "all"
 def main():
     global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
     ap = argparse.ArgumentParser()
-    ap.add_argument("--style", choices=["alloy", "chrome"],
-                    help="runtime style (default: chrome for context-menus/routing/blank-window/media/extensions-ui, alloy for other suites)")
+    # Direct runs use the shipping Chrome style, as the gate does for every suite
+    # (only its ntp-alloy stage passes --style alloy). Alloy is an explicit choice.
+    ap.add_argument("--style", choices=["alloy", "chrome"], default="chrome",
+                    help="runtime style (default: chrome, the shipping style and the gate's; alloy only when asked)")
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
     ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
@@ -13702,15 +13738,6 @@ def main():
         ap.error('display key mismatch before launch: ' + display_before['key'])
     # Context menus assert Chrome's full model and extension contributions, as
     # used by normal Open launches. Alloy has CEF's shorter, different menu.
-    if opts.style is None:
-        # Routing includes web protocol registration, which requires the
-        # shipping Chrome runtime's BrowserWebContentsDelegate. Blank Window's
-        # live tab transfer moves hosted tabs, which only the shipping Chrome
-        # runtime has (Alloy pages take the URL reload fallback). Media's
-        # Document PiP and extensions-ui's toolbar popups are Chrome-runtime
-        # features too; the gate already runs every one of these in Chrome.
-        opts.style = "chrome" if opts.only in ("context-menus", "routing", "blank-window", "media",
-                                               "extensions-ui") else "alloy"
     if opts.page_site_data_only and opts.only != "page":
         ap.error("--page-site-data-only requires --only page")
     if opts.sitecontrol_final_only and opts.only != "sitecontrol":
@@ -13822,6 +13849,10 @@ def main():
         with open(rules_path, "w") as f:
             json.dump(MEDIA_RULES, f)
         extra += ["--pip-site-rules=" + rules_path]
+    if opts.only == "split" and opts.style == "chrome":
+        # close_pane_extension_events: the committed tabs probe only.
+        extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
+                  "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "sleep" and opts.style == "chrome":
         # chrome.tabs.discard row: the committed tabs probe only.
         extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),

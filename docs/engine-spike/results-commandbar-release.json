@@ -1,0 +1,3980 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          50892,
+          50927,
+          50928,
+          50929,
+          50932,
+          50933,
+          51032,
+          51182,
+          51254,
+          51255,
+          51258,
+          51264,
+          51265,
+          51266,
+          51267
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51277,
+          51283,
+          51284,
+          51285,
+          51286,
+          51287
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51313,
+          51317,
+          51318,
+          51319
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51346,
+          51349,
+          51350,
+          51351,
+          51353,
+          51354,
+          51414
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51425,
+          51435,
+          51436,
+          51437,
+          51438,
+          51439
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51535,
+          51542,
+          51543,
+          51544,
+          51545,
+          51546
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51566,
+          51592,
+          51593,
+          51595,
+          51596,
+          51597
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51611,
+          51619,
+          51620,
+          51621,
+          51622,
+          51623
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51634,
+          51638,
+          51639,
+          51641,
+          51643,
+          51644
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51688,
+          51710,
+          51711,
+          51712,
+          51713,
+          51714
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          51722,
+          51731,
+          51732,
+          51734,
+          51737,
+          51738
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "commandbar": {
+    "action_pin-tab": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "action_unpin-tab": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "calculator_copy": {
+      "clipboard": "84",
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "cmd_l_hidden_sidebar_centred": {
+      "bar": {
+        "mode": "editCurrentURL",
+        "panelFrame": [
+          256,
+          231,
+          768,
+          129
+        ],
+        "presentation": "overlay"
+      },
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "sidebarModeBefore": "anchored"
+    },
+    "cmd_l_inline_anchor": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "panelFrame": [
+        8,
+        45,
+        340,
+        114
+      ],
+      "sidebar": [
+        0,
+        0,
+        228,
+        800
+      ]
+    },
+    "cmd_l_selection": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "state": {
+        "allAnimationKeys": [],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:61567/new",
+        "fieldText": "http://127.0.0.1:61567/new",
+        "fieldWidth": 242,
+        "final": true,
+        "firstResultsMs": 0.2602916666664896,
+        "footer": false,
+        "hidden": false,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 0.6083749999997963,
+        "panelFrame": [
+          8,
+          45,
+          340,
+          114
+        ],
+        "panelOpacity": 1,
+        "pinnedEdit": "",
+        "presentation": "anchored",
+        "presented": true,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          0,
+          26
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "typed:url",
+            "keycaps": [],
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:61567/new",
+            "url": "http://127.0.0.1:61567/new"
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "http://127.0.0.1:61567/new",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      }
+    },
+    "cmd_l_twice_closes": {
+      "bar": {
+        "allAnimationKeys": [],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "fieldText": "http://127.0.0.1:61567/edited",
+        "fieldWidth": 242,
+        "final": true,
+        "firstResultsMs": 0.2788333333337505,
+        "footer": false,
+        "hidden": true,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 0.5742083333325354,
+        "panelFrame": [
+          8,
+          45,
+          340,
+          114
+        ],
+        "panelOpacity": 0,
+        "pinnedEdit": "",
+        "presentation": "anchored",
+        "presented": false,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          -1,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "typed:url",
+            "keycaps": [],
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:61567/edited",
+            "url": "http://127.0.0.1:61567/edited"
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "http://127.0.0.1:61567/edited",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "cmd_s_page_swallowing_keys": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "cmd_t_mode": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "state": {
+        "allAnimationKeys": [],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "fieldText": "",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 0.43520833333377595,
+        "footer": false,
+        "hidden": false,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 3.593291666667028,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          179
+        ],
+        "panelOpacity": 1,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": true,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:E6FF110E-2CB5-4F0B-AE0D-3FD09F76F685",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+            "tab": "E6FF110E-2CB5-4F0B-AE0D-3FD09F76F685",
+            "title": "Shell C /start",
+            "url": "http://127.0.0.1:61567/start"
+          },
+          {
+            "action": "contact-team",
+            "content": "",
+            "extension": "",
+            "id": "action:contact-team",
+            "keycaps": [],
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Contact the Team",
+            "url": ""
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      }
+    },
+    "cmd_t_twice_closes": {
+      "bar": {
+        "allAnimationKeys": [],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "fieldText": "",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 0.1085833333336268,
+        "footer": false,
+        "hidden": true,
+        "mode": "newTab",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 0.2844166666664023,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          329
+        ],
+        "panelOpacity": 0,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": false,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          -1,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:60421EA1-A1A9-4B79-94E9-8356042D3769",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+            "tab": "60421EA1-A1A9-4B79-94E9-8356042D3769",
+            "title": "Shell C /background2",
+            "url": "http://127.0.0.1:61567/background2"
+          },
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:5D5FE8C9-B53E-4CC3-992E-9AEC56F73BB3",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+            "tab": "5D5FE8C9-B53E-4CC3-992E-9AEC56F73BB3",
+            "title": "Shell C /background",
+            "url": "http://127.0.0.1:61567/background"
+          },
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+            "tab": "9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3",
+            "title": "Renamed through menu",
+            "url": "http://127.0.0.1:61567/edited"
+          },
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:E6FF110E-2CB5-4F0B-AE0D-3FD09F76F685",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+            "tab": "E6FF110E-2CB5-4F0B-AE0D-3FD09F76F685",
+            "title": "Shell C /start",
+            "url": "http://127.0.0.1:61567/start"
+          },
+          {
+            "action": "contact-team",
+            "content": "",
+            "extension": "",
+            "id": "action:contact-team",
+            "keycaps": [],
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Contact the Team",
+            "url": ""
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "command_return_background": {
+      "bar": {
+        "allAnimationKeys": [],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:61567/background",
+        "fieldText": "http://127.0.0.1:61567/background",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 7.257291666666788,
+        "focus": {
+          "findText": "",
+          "findVisible": false,
+          "lastNavigationRestored": true,
+          "navigationDecisions": 2,
+          "owner": "commandbar",
+          "responder": "CommandBarFieldEditor",
+          "sheet": false
+        },
+        "footer": false,
+        "hidden": false,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 0.36850000000049477,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          129
+        ],
+        "panelOpacity": 1,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": true,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          0,
+          33
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "typed:url",
+            "keycaps": [],
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:61567/background",
+            "url": "http://127.0.0.1:61567/background"
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "http://127.0.0.1:61567/background",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "beforeReturn": {
+        "allAnimationKeys": [
+          "opacity@CALayer"
+        ],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": true,
+        "editorText": "http://127.0.0.1:61567/background",
+        "fieldText": "http://127.0.0.1:61567/background",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 7.257291666666788,
+        "focus": {
+          "findText": "",
+          "findVisible": false,
+          "lastNavigationRestored": true,
+          "navigationDecisions": 2,
+          "owner": "commandbar",
+          "responder": "CommandBarFieldEditor",
+          "sheet": false
+        },
+        "footer": false,
+        "hidden": false,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 0.36850000000049477,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          129
+        ],
+        "panelOpacity": 1,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": true,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          33,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "typed:url",
+            "keycaps": [],
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:61567/background",
+            "url": "http://127.0.0.1:61567/background"
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "http://127.0.0.1:61567/background",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "command_return_twice": {
+      "bar": {
+        "allAnimationKeys": [],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:61567/background2",
+        "fieldText": "http://127.0.0.1:61567/background2",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 13.915458333332936,
+        "footer": false,
+        "hidden": false,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 0.36850000000049477,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          129
+        ],
+        "panelOpacity": 1,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": true,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          0,
+          34
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "typed:url",
+            "keycaps": [],
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:61567/background2",
+            "url": "http://127.0.0.1:61567/background2"
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "http://127.0.0.1:61567/background2",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "commandbar_actions_scope": {
+      "hint_rows": 1,
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "scope": "Actions",
+      "top": "toggle-sidebar"
+    },
+    "commandbar_cmd_i_footer": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "opened": false
+    },
+    "commandbar_footer_dismiss": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "state": {
+        "allowsRemote": true,
+        "footer": false,
+        "presented": true
+      }
+    },
+    "commandbar_footer_search_settings": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+      "settings": {
+        "pane": "profiles",
+        "selectedProfile": "97D19661-43C4-44BF-9937-F72FCBB64011"
+      }
+    },
+    "commandbar_info_shows_footer": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "state": {
+        "fieldWidth": 696,
+        "footer": true,
+        "presented": true
+      }
+    },
+    "commandbar_inline_completion": {
+      "afterBackspace": {
+        "fieldText": "localh",
+        "range": [
+          6,
+          0
+        ],
+        "text": "localh"
+      },
+      "completed": {
+        "fieldText": "localhost:61567",
+        "range": [
+          6,
+          9
+        ],
+        "text": "localh"
+      },
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "switched": true
+    },
+    "commandbar_new_document": {
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "rows": [
+        [
+          "new-document-google-doc",
+          "New Google Doc"
+        ],
+        [
+          "",
+          "new google doc"
+        ],
+        [
+          "settings-link:profiles/new-documents",
+          "Settings: New documents"
+        ]
+      ],
+      "tab": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1794493623.374459,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "iconOverride": null,
+        "id": "D177FE7F-A7AE-45D8-8D19-15CA37C6B3D2",
+        "lastActiveAt": 1794493623.3949308,
+        "loaded": true,
+        "loading": true,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 2,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 654382671,
+          "chromeWindowId": 654382642,
+          "context": "Default",
+          "crash": 0,
+          "ephemeral": false,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "D177FE7F-A7AE-45D8-8D19-15CA37C6B3D2",
+          "identifier": 18,
+          "kind": "tab",
+          "live": true,
+          "loading": true,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "",
+          "url": "",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "progress": 0.1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "title": "",
+        "unread": false,
+        "url": "https://doc.new",
+        "visible": true
+      }
+    },
+    "commandbar_new_document_word_starts": {
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": false,
+      "rows": [
+        "new d",
+        "doc.new",
+        "Settings: New documents",
+        "New Figma Document",
+        "New Google Doc"
+      ]
+    },
+    "commandbar_no_close_animation": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "state": {
+        "animationKeys": [],
+        "hidden": true,
+        "presented": false
+      }
+    },
+    "commandbar_no_open_animation": {
+      "atKey": {
+        "allAnimationKeys": [
+          "opacity@CALayer"
+        ],
+        "animationKeys": [],
+        "panelOpacity": 1,
+        "presented": true
+      },
+      "footer": false,
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "maxChannelDifference": 0,
+      "ok": true
+    },
+    "commandbar_privacy_link": {
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "tab": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1794493623.248944,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "iconOverride": null,
+        "id": "DDDE5C58-65BB-4AD5-9A29-3B133AABD467",
+        "lastActiveAt": 1794493623.259674,
+        "loaded": true,
+        "loading": true,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 2,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 654382669,
+          "chromeWindowId": 654382642,
+          "context": "Default",
+          "crash": 0,
+          "ephemeral": false,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "DDDE5C58-65BB-4AD5-9A29-3B133AABD467",
+          "identifier": 17,
+          "kind": "tab",
+          "live": true,
+          "loading": true,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "",
+          "url": "",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "progress": 0.1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "title": "",
+        "unread": false,
+        "url": "https://github.com/SergeSerb2/open/blob/main/docs/privacy.md",
+        "visible": true
+      }
+    },
+    "commandbar_search_settings_action_row": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "row": {
+        "action": "search-settings",
+        "content": "",
+        "extension": "",
+        "id": "action:search-settings",
+        "keycaps": [],
+        "kind": "action",
+        "space": "",
+        "tab": "",
+        "title": "Search Settings",
+        "url": ""
+      },
+      "settings": {
+        "pane": "profiles",
+        "selectedProfile": "97D19661-43C4-44BF-9937-F72FCBB64011"
+      }
+    },
+    "commandbar_split_one_row": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "panes": [
+        "425A59CD-EC6E-487B-A653-CB97A9C003FD",
+        "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465"
+      ],
+      "rows": [
+        [
+          "split:",
+          "Shell C /split | Shell C /cross",
+          true
+        ],
+        [
+          "typed:",
+          "Shell C /split",
+          false
+        ]
+      ],
+      "visible": [
+        "425A59CD-EC6E-487B-A653-CB97A9C003FD",
+        "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465"
+      ]
+    },
+    "commandbar_top_domain_row": {
+      "field": "netfl",
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "row": {
+        "action": "",
+        "content": "",
+        "extension": "",
+        "id": "topDomain:netflix.com",
+        "keycaps": [],
+        "kind": "navigate",
+        "space": "",
+        "tab": "",
+        "title": "Netflix",
+        "url": "https://netflix.com"
+      }
+    },
+    "commandbar_undo_by_name": {
+      "expected": 10,
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "row": {
+        "action": "undo-by-name",
+        "content": "",
+        "extension": "",
+        "id": "action:undo-by-name",
+        "keycaps": [],
+        "kind": "action",
+        "space": "",
+        "tab": "",
+        "title": "Undo",
+        "url": ""
+      },
+      "tabs": 10
+    },
+    "copy_url_without_trackers": {
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "pasteboard": "http://127.0.0.1:61567/plain",
+      "toasts": [
+        "Copied a clean link without trackers",
+        "Copied Current URL"
+      ]
+    },
+    "custom_search_engine_navigation": {
+      "expectedURL": "http://127.0.0.1:61567/search?q=local%20custom%20query",
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "double_press_shared_router": {
+      "first": false,
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true,
+      "second": true
+    },
+    "duplicate_folder_lazy": {
+      "folders": [
+        {
+          "children": [
+            {
+              "id": "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465",
+              "kind": "tab",
+              "loaded": true,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:61567/cross"
+            }
+          ],
+          "expanded": true,
+          "iconOverride": null,
+          "id": "5815F827-BF57-4D43-B0A7-82CB359CB8C1",
+          "kind": "folder",
+          "peekedChildID": "",
+          "title": "Copy subtree"
+        },
+        {
+          "children": [
+            {
+              "id": "5B13FB3E-95A1-4561-85A1-DEB39011AAAD",
+              "kind": "tab",
+              "loaded": false,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:61567/cross"
+            }
+          ],
+          "expanded": true,
+          "iconOverride": null,
+          "id": "93CFEA98-1F87-42C5-86A9-9C3457C968C5",
+          "kind": "folder",
+          "peekedChildID": "",
+          "title": "Copy subtree"
+        }
+      ],
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "duplicate_single_undo": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "duplicate_split_lazy": {
+      "copy": {
+        "children": [
+          {
+            "id": "90C930D4-C1FE-40CC-B9E9-F0D56CBD9BCC",
+            "kind": "tab",
+            "loaded": false,
+            "title": "Shell C /split",
+            "url": "http://127.0.0.1:61567/split"
+          },
+          {
+            "id": "22C25888-D4DB-429E-A449-1188F9271F55",
+            "kind": "tab",
+            "loaded": false,
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:61567/cross"
+          }
+        ],
+        "id": "69532504-2D1B-40E3-BAD9-5CE15F042AF4",
+        "kind": "split"
+      },
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "duplicate_tab_lazy": {
+      "copies": [
+        {
+          "id": "BF6EF2CF-82F3-4304-B0E1-A44F08CA0A39",
+          "kind": "tab",
+          "loaded": false,
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:61567/cross"
+        }
+      ],
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "dynamic_menus": {
+      "entries": 179,
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "edit_current_tab": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "title": "Shell C /edited"
+    },
+    "edit_pinned_url": {
+      "editing": {
+        "mode": "editCurrentURL",
+        "pinnedEdit": "38D85B3D-10DC-4D63-B62A-ED6EDF35571E",
+        "range": [
+          0,
+          29
+        ],
+        "text": "http://127.0.0.1:61567/pinned"
+      },
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "pinnedURL": "http://127.0.0.1:61567/pinned-new"
+    },
+    "empty_cmd_t_order": {
+      "actions": [
+        "contact-team"
+      ],
+      "kinds": [
+        "switchToTab",
+        "action"
+      ],
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true
+    },
+    "escape_then_page": {
+      "keys": [
+        "Escape"
+      ],
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "essential_shortcuts_window": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true,
+      "tabs": [
+        2,
+        2
+      ],
+      "window": {
+        "alpha": 1,
+        "appearance": "NSAppearanceNameDarkAqua",
+        "attachedSheet": 0,
+        "class": "EssentialShortcutsPanel",
+        "contentAppearance": "NSAppearanceNameDarkAqua",
+        "explicitAppearance": "",
+        "firstResponder": "EssentialShortcutsPanel",
+        "frame": "{{1060, 513}, {440, 384}}",
+        "key": true,
+        "level": 3,
+        "main": true,
+        "number": 90827,
+        "parent": 0,
+        "sheet": false,
+        "title": "Essential Keyboard Shortcuts",
+        "viewAppearances": [
+          {
+            "appearance": "NSAppearanceNameDarkAqua",
+            "class": "NSHostingView<EssentialShortcutsView>",
+            "explicitAppearance": ""
+          }
+        ],
+        "visible": true
+      }
+    },
+    "first_open_results_budget": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "loadAverage": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "milliseconds": 3.593291666667028,
+      "ok": true,
+      "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+    },
+    "first_results_budget": {
+      "functionalOK": true,
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "loadAverage": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "milliseconds": 0.2663750000001528,
+      "ok": true,
+      "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation",
+      "timing": true,
+      "timingAfter": {
+        "at": 1794493613.944829,
+        "foreignCPU": 337.90000000000015,
+        "load": [
+          29.61962890625,
+          19.32080078125,
+          18.1708984375
+        ],
+        "topFiveForeign": [
+          {
+            "cpu": 178.1,
+            "name": "swift-frontend",
+            "parent": 49689,
+            "pid": 50920
+          },
+          {
+            "cpu": 31.5,
+            "name": "Open",
+            "parent": 1,
+            "pid": 50892
+          },
+          {
+            "cpu": 21.1,
+            "name": "MenuBarAgent",
+            "parent": 1,
+            "pid": 721
+          },
+          {
+            "cpu": 13.3,
+            "name": "WindowManager",
+            "parent": 1,
+            "pid": 689
+          },
+          {
+            "cpu": 8.5,
+            "name": "Open Helper (Renderer)",
+            "parent": 50892,
+            "pid": 51033
+          }
+        ]
+      }
+    },
+    "global_hotkey_toggle": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "off": {
+        "attempts": 6,
+        "enabled": false,
+        "error": "",
+        "prepared": true,
+        "registered": false
+      },
+      "ok": true,
+      "on": {
+        "attempts": 7,
+        "enabled": true,
+        "error": "",
+        "prepared": true,
+        "registered": true
+      }
+    },
+    "incognito_available": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "invalid_overrides_fallback": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "lazy_commandbar": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true
+    },
+    "lazy_tab_switcher": {
+      "after": {
+        "active": false,
+        "created": false,
+        "items": [],
+        "monitoringModifiers": false,
+        "presented": false,
+        "selected": "",
+        "viewCount": 0,
+        "visible": []
+      },
+      "before": {
+        "active": false,
+        "created": false,
+        "items": [],
+        "monitoringModifiers": false,
+        "presented": false,
+        "selected": "",
+        "viewCount": 0,
+        "visible": []
+      },
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true
+    },
+    "library_archive_restore": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "library_history_profile_open": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "library_shared_window": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "native_field_undo_preserves_model": {
+      "after": {
+        "allAnimationKeys": [
+          "opacity@CALayer"
+        ],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "fieldText": "",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 7.3941249999998035,
+        "footer": false,
+        "hidden": false,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 0.4045833333329938,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          229
+        ],
+        "panelOpacity": 1,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": true,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+            "tab": "9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3",
+            "title": "Renamed through menu",
+            "url": "http://127.0.0.1:61567/edited"
+          },
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:E6FF110E-2CB5-4F0B-AE0D-3FD09F76F685",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+            "tab": "E6FF110E-2CB5-4F0B-AE0D-3FD09F76F685",
+            "title": "Shell C /start",
+            "url": "http://127.0.0.1:61567/start"
+          },
+          {
+            "action": "contact-team",
+            "content": "",
+            "extension": "",
+            "id": "action:contact-team",
+            "keycaps": [],
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Contact the Team",
+            "url": ""
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "before": {
+        "allAnimationKeys": [
+          "opacity@CALayer"
+        ],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": true,
+        "editorText": "word",
+        "fieldText": "word",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 3.602500000000873,
+        "footer": false,
+        "hidden": false,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 0.4045833333329938,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          329
+        ],
+        "panelOpacity": 1,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": true,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          4,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "topDomain:wordpress.com",
+            "keycaps": [],
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "WordPress.com",
+            "url": "https://wordpress.com"
+          },
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "typed:search",
+            "keycaps": [],
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "word",
+            "url": "https://www.google.com/search?q=word"
+          },
+          {
+            "action": "import-from-browser",
+            "content": "",
+            "extension": "",
+            "id": "action:import-from-browser",
+            "keycaps": [],
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Import from Another Browser",
+            "url": ""
+          },
+          {
+            "action": "manage-passwords",
+            "content": "",
+            "extension": "",
+            "id": "action:manage-passwords",
+            "keycaps": [],
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Manage Passwords",
+            "url": ""
+          },
+          {
+            "action": "settings-link:passwords-cards/cards",
+            "content": "",
+            "extension": "",
+            "id": "settings:passwords-cards/cards",
+            "keycaps": [],
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Settings: Credit Cards",
+            "url": ""
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "word",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "route": {
+        "barPresented": true,
+        "charactersIgnoringModifiers": "z",
+        "commands": [],
+        "dispatchMilliseconds": 9.760375003679655,
+        "firstResponder": "CommandBarFieldEditor",
+        "keyWindow": 90753,
+        "menuActions": [],
+        "sidebarMode": "anchored"
+      }
+    },
+    "native_font_traits": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "native_menu_registration": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "menus": {
+        "font": true,
+        "services": true,
+        "window": true
+      },
+      "ok": true
+    },
+    "new_window_opens_command_bar": {
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "state": {
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "presented": true
+      }
+    },
+    "option_return_full_split_loads_focused": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "window": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "attachedSheet": 0,
+        "automationPointer": null,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          }
+        ],
+        "canBecomeKey": true,
+        "childWindows": [],
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "confirmation": null,
+        "contentAppearance": "NSAppearanceNameDarkAqua",
+        "cursor": [
+          2297,
+          543
+        ],
+        "engineSelected": 7,
+        "engineURL": "http://127.0.0.1:61567/focused",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "hint": {
+          "frame": [],
+          "keys": "",
+          "plate": [],
+          "shows": 0,
+          "visible": false
+        },
+        "id": "544BE8A2-EC26-4412-9BFC-6E7D0BB9F396",
+        "isKeyWindow": true,
+        "key": true,
+        "keySameObject": true,
+        "keyWindow": 90753,
+        "layoutPasses": 775,
+        "mainScreenName": "AW2726DM",
+        "mainScreenScale": 1,
+        "mainScreenVisibleFrame": [
+          0,
+          0,
+          2560,
+          1410
+        ],
+        "menuTitles": {
+          "toggle-sidebar": "Hide Sidebar",
+          "toggle-toolbar": "Show Toolbar"
+        },
+        "miniaturized": false,
+        "number": 90753,
+        "onActiveSpace": true,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [
+              48,
+              45,
+              74,
+              255
+            ],
+            "tab": "043775FD-3169-4699-98B4-F956064517A8"
+          },
+          {
+            "color": [
+              48,
+              45,
+              74,
+              255
+            ],
+            "tab": "9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3"
+          },
+          {
+            "color": [
+              48,
+              45,
+              74,
+              255
+            ],
+            "tab": "060A3A04-776B-4877-9871-C23872935418"
+          },
+          {
+            "color": [
+              48,
+              45,
+              74,
+              255
+            ],
+            "tab": "CA8A914E-0AD4-4D5E-984D-327D372FEB20"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "pageBlur": false,
+          "phase": "idle",
+          "pointerEvents": 0,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "CA8A914E-0AD4-4D5E-984D-327D372FEB20",
+        "shownPages": [
+          "CA8A914E-0AD4-4D5E-984D-327D372FEB20",
+          "043775FD-3169-4699-98B4-F956064517A8",
+          "060A3A04-776B-4877-9871-C23872935418",
+          "9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarFrame": [
+          0,
+          0,
+          228,
+          800
+        ],
+        "sidebarGeometryChanges": 3,
+        "sidebarGestureHides": 0,
+        "sidebarLiveWidth": 228,
+        "sidebarMode": "anchored",
+        "sidebarResizeActive": false,
+        "sidebarResizeHandleDragging": false,
+        "sidebarResizeHandleVisible": true,
+        "sidebarResizeHasStart": false,
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "sidebarWidthCommits": 0,
+        "sidebarWidthOverride": null,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "spaceSwitcherFrames": {
+          "90913FBF-4130-4B41-BB22-6A54FAC31006": [
+            96,
+            758,
+            36,
+            34
+          ]
+        },
+        "systemAppearance": "dark",
+        "titlebar": [
+          0,
+          0,
+          1280,
+          32
+        ],
+        "titled": true,
+        "toast": "",
+        "toolbar": {
+          "controls": [],
+          "drawn": false,
+          "frame": [],
+          "menu": [],
+          "page": [],
+          "shown": false,
+          "text": ""
+        },
+        "toolbarButtons": [
+          "toggle"
+        ],
+        "toolbarFrames": {
+          "back": [
+            122,
+            7,
+            32,
+            32
+          ],
+          "forward": [
+            156,
+            7,
+            32,
+            32
+          ],
+          "more": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "reload": [
+            190,
+            7,
+            32,
+            32
+          ],
+          "toggle": [
+            77,
+            7,
+            32,
+            32
+          ]
+        },
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 0.001,
+            "hidden": false
+          }
+        ],
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsDimmed": true,
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "trafficLightsHovered": false,
+        "urlFieldText": "127.0.0.1",
+        "urlFieldVisible": true,
+        "visible": true,
+        "windowAppearance": "NSAppearanceNameDarkAqua",
+        "windowClass": "OpenFeatures.BrowserWindow",
+        "zoomed": false
+      }
+    },
+    "option_return_split": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "window": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "attachedSheet": 0,
+        "automationPointer": null,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          }
+        ],
+        "canBecomeKey": true,
+        "childWindows": [],
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "confirmation": null,
+        "contentAppearance": "NSAppearanceNameDarkAqua",
+        "cursor": [
+          2297,
+          543
+        ],
+        "engineSelected": 5,
+        "engineURL": "",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "hint": {
+          "frame": [],
+          "keys": "",
+          "plate": [],
+          "shows": 0,
+          "visible": false
+        },
+        "id": "544BE8A2-EC26-4412-9BFC-6E7D0BB9F396",
+        "isKeyWindow": true,
+        "key": true,
+        "keySameObject": true,
+        "keyWindow": 90753,
+        "layoutPasses": 611,
+        "mainScreenName": "AW2726DM",
+        "mainScreenScale": 1,
+        "mainScreenVisibleFrame": [
+          0,
+          0,
+          2560,
+          1410
+        ],
+        "menuTitles": {
+          "toggle-sidebar": "Hide Sidebar",
+          "toggle-toolbar": "Show Toolbar"
+        },
+        "miniaturized": false,
+        "number": 90753,
+        "onActiveSpace": true,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "tab": "043775FD-3169-4699-98B4-F956064517A8"
+          },
+          {
+            "color": [
+              48,
+              45,
+              74,
+              255
+            ],
+            "tab": "9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "pageBlur": false,
+          "phase": "idle",
+          "pointerEvents": 0,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "043775FD-3169-4699-98B4-F956064517A8",
+        "shownPages": [
+          "9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3",
+          "043775FD-3169-4699-98B4-F956064517A8"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarFrame": [
+          0,
+          0,
+          228,
+          800
+        ],
+        "sidebarGeometryChanges": 3,
+        "sidebarGestureHides": 0,
+        "sidebarLiveWidth": 228,
+        "sidebarMode": "anchored",
+        "sidebarResizeActive": false,
+        "sidebarResizeHandleDragging": false,
+        "sidebarResizeHandleVisible": true,
+        "sidebarResizeHasStart": false,
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "sidebarWidthCommits": 0,
+        "sidebarWidthOverride": null,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "spaceSwitcherFrames": {
+          "90913FBF-4130-4B41-BB22-6A54FAC31006": [
+            96,
+            758,
+            36,
+            34
+          ]
+        },
+        "systemAppearance": "dark",
+        "titlebar": [
+          0,
+          0,
+          1280,
+          32
+        ],
+        "titled": true,
+        "toast": "",
+        "toolbar": {
+          "controls": [],
+          "drawn": false,
+          "frame": [],
+          "menu": [],
+          "page": [],
+          "shown": false,
+          "text": ""
+        },
+        "toolbarButtons": [
+          "toggle"
+        ],
+        "toolbarFrames": {
+          "back": [
+            122,
+            7,
+            32,
+            32
+          ],
+          "forward": [
+            156,
+            7,
+            32,
+            32
+          ],
+          "more": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "reload": [
+            190,
+            7,
+            32,
+            32
+          ],
+          "toggle": [
+            77,
+            7,
+            32,
+            32
+          ]
+        },
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 0.001,
+            "hidden": false
+          }
+        ],
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsDimmed": true,
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "trafficLightsHovered": false,
+        "urlFieldText": "127.0.0.1",
+        "urlFieldVisible": true,
+        "visible": true,
+        "windowAppearance": "NSAppearanceNameDarkAqua",
+        "windowClass": "OpenFeatures.BrowserWindow",
+        "zoomed": false
+      }
+    },
+    "override_menu_and_router": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "page_copy_native_responder": {
+      "clipboard": "PAGE COPY",
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true
+    },
+    "page_cut_native_responder": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "page_paste_native_responder": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true
+    },
+    "page_select_all_native_responder": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true
+    },
+    "page_undo_native_responder": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "rename_tab_inline": {
+      "editor": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": true,
+        "navigationDecisions": 2,
+        "owner": "sidebar",
+        "responder": "NSTextView",
+        "sheet": false
+      },
+      "engineHeartbeatAdvanced": true,
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "save_page_capture": {
+      "bytes": 941,
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true,
+      "written": true
+    },
+    "save_page_sheet": {
+      "last": {
+        "number": 90834,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      },
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true,
+      "state": {
+        "number": 90834,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      }
+    },
+    "settings_app_icon_after_content": {
+      "load": [
+        23.66748046875,
+        18.63427734375,
+        17.95068359375
+      ],
+      "ok": true,
+      "restore": {
+        "applicationPixels": [
+          [
+            1024,
+            1024
+          ]
+        ],
+        "applied": "openDark",
+        "error": "",
+        "imageObject": "ObjectIdentifier(0x00000134014b1340)",
+        "matchesApplication": true,
+        "pixels": [
+          [
+            1024,
+            1024
+          ]
+        ],
+        "restoreDecodeMs": 8.576166670536622,
+        "restoreElapsedMs": 25.024416667292826,
+        "restorePreparationMs": 0.00020833977032452822,
+        "restoreSetterMs": 25.02391666348558,
+        "restoreStartedMs": 1674.4115,
+        "selected": "openDark"
+      },
+      "timing": {
+        "appIconRestoreStarted": 1674,
+        "appIconRestored": 1699,
+        "boostOwnerInitBegin": 222,
+        "boostOwnerInitEnd": 222,
+        "boostScriptsPrepareBegin": 412,
+        "boostScriptsPrepareEnd": 412,
+        "boostStoreLoadBegin": 412,
+        "boostStoreLoadEnd": 412,
+        "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+        "didFinishLaunching": 416,
+        "engineInitialized": 406,
+        "engineStart": 331,
+        "engineStarted": 400,
+        "firstContentfulPaint": 568,
+        "firstFrameConfirmed": true,
+        "firstLoadEnd": 560,
+        "firstPaintClockUncertaintyMs": 0.22,
+        "kernelProcessStart": true,
+        "main": 166,
+        "modelLoaded": 177,
+        "sidebarDrawn": 330,
+        "sleepStarted": 625,
+        "updaterCreated": 640,
+        "windowShown": 273
+      }
+    },
+    "settings_app_icon_cache_missing": {
+      "error": "The application icon could not be restored. Try selecting it again.",
+      "load": [
+        23.66748046875,
+        18.63427734375,
+        17.95068359375
+      ],
+      "ok": true
+    },
+    "settings_app_icon_cache_oversized": {
+      "error": "The application icon could not be restored. Try selecting it again.",
+      "load": [
+        22.57275390625,
+        18.49072265625,
+        17.90380859375
+      ],
+      "ok": true
+    },
+    "settings_app_icon_default_no_work": {
+      "load": [
+        22.57275390625,
+        18.49072265625,
+        17.90380859375
+      ],
+      "ok": true
+    },
+    "settings_app_icon_dock_tile": {
+      "dark": {
+        "image": [
+          1024,
+          1024
+        ],
+        "infoKey": "OpenDockTile.docktileplugin",
+        "loaded": true,
+        "principal": "OpenDockTilePlugIn"
+      },
+      "default": {
+        "image": null,
+        "infoKey": "OpenDockTile.docktileplugin",
+        "loaded": true,
+        "principal": "OpenDockTilePlugIn"
+      },
+      "load": [
+        25.29248046875,
+        18.86474609375,
+        18.02734375
+      ],
+      "ok": true
+    },
+    "settings_app_icon_failure_in_pane": {
+      "error": "This application icon is not available.",
+      "load": [
+        22.57275390625,
+        18.49072265625,
+        17.90380859375
+      ],
+      "ok": true
+    },
+    "settings_app_icon_live": {
+      "bundleReset": true,
+      "cacheReused": true,
+      "icons": {
+        "openColor": {
+          "ok": true,
+          "pixels": [
+            [
+              1024,
+              1024
+            ]
+          ],
+          "state": {
+            "applicationPixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "applied": "openColor",
+            "error": "",
+            "imageObject": "ObjectIdentifier(0x000001040ef9ff10)",
+            "matchesApplication": true,
+            "pixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "restoreDecodeMs": null,
+            "restoreElapsedMs": null,
+            "restorePreparationMs": null,
+            "restoreSetterMs": null,
+            "restoreStartedMs": null,
+            "selected": "openColor"
+          }
+        },
+        "openDark": {
+          "ok": true,
+          "pixels": [
+            [
+              1024,
+              1024
+            ]
+          ],
+          "state": {
+            "applicationPixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "applied": "openDark",
+            "error": "",
+            "imageObject": "ObjectIdentifier(0x000001040f489ab0)",
+            "matchesApplication": true,
+            "pixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "restoreDecodeMs": null,
+            "restoreElapsedMs": null,
+            "restorePreparationMs": null,
+            "restoreSetterMs": null,
+            "restoreStartedMs": null,
+            "selected": "openDark"
+          }
+        },
+        "openLight": {
+          "ok": true,
+          "pixels": [
+            [
+              1024,
+              1024
+            ]
+          ],
+          "state": {
+            "applicationPixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "applied": "openLight",
+            "error": "",
+            "imageObject": "ObjectIdentifier(0x000001040ef9f620)",
+            "matchesApplication": true,
+            "pixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "restoreDecodeMs": null,
+            "restoreElapsedMs": null,
+            "restorePreparationMs": null,
+            "restoreSetterMs": null,
+            "restoreStartedMs": null,
+            "selected": "openLight"
+          }
+        },
+        "openMono": {
+          "ok": true,
+          "pixels": [
+            [
+              1024,
+              1024
+            ]
+          ],
+          "state": {
+            "applicationPixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "applied": "openMono",
+            "error": "",
+            "imageObject": "ObjectIdentifier(0x000001040f45bdc0)",
+            "matchesApplication": true,
+            "pixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "restoreDecodeMs": null,
+            "restoreElapsedMs": null,
+            "restorePreparationMs": null,
+            "restoreSetterMs": null,
+            "restoreStartedMs": null,
+            "selected": "openMono"
+          }
+        },
+        "openRetro": {
+          "ok": true,
+          "pixels": [
+            [
+              1024,
+              1024
+            ]
+          ],
+          "state": {
+            "applicationPixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "applied": "openRetro",
+            "error": "",
+            "imageObject": "ObjectIdentifier(0x000001040ef9f0a0)",
+            "matchesApplication": true,
+            "pixels": [
+              [
+                1024,
+                1024
+              ]
+            ],
+            "restoreDecodeMs": null,
+            "restoreElapsedMs": null,
+            "restorePreparationMs": null,
+            "restoreSetterMs": null,
+            "restoreStartedMs": null,
+            "selected": "openRetro"
+          }
+        }
+      },
+      "load": [
+        23.66748046875,
+        18.63427734375,
+        17.95068359375
+      ],
+      "ok": true
+    },
+    "settings_cmd_comma_typing_guard": {
+      "escapeDismissed": true,
+      "load": [
+        25.29248046875,
+        18.86474609375,
+        18.02734375
+      ],
+      "ok": true
+    },
+    "settings_cmd_w_closes_library_not_tab": {
+      "load": [
+        25.29248046875,
+        18.86474609375,
+        18.02734375
+      ],
+      "ok": true,
+      "tabsAfter": [
+        "B8619930-A34F-4E82-86BB-3B6BE478D646"
+      ],
+      "tabsBefore": [
+        "B8619930-A34F-4E82-86BB-3B6BE478D646"
+      ]
+    },
+    "settings_general_action_error": {
+      "error": "Updates are not set up in this build.",
+      "load": [
+        25.29248046875,
+        18.86474609375,
+        18.02734375
+      ],
+      "ok": true
+    },
+    "settings_new_profile_command": {
+      "load": [
+        25.29248046875,
+        18.86474609375,
+        18.02734375
+      ],
+      "ok": true,
+      "sheet": {
+        "creating": true,
+        "error": "",
+        "pane": "profiles",
+        "sheet": 90880,
+        "spaces": []
+      }
+    },
+    "settings_new_profile_sidebar_source": {
+      "load": [
+        25.29248046875,
+        18.86474609375,
+        18.02734375
+      ],
+      "ok": true,
+      "sheet": {
+        "creating": true,
+        "error": "",
+        "pane": "profiles",
+        "sheet": 90886,
+        "spaces": [
+          "4FA807CD-6A08-4A29-8B67-A58A8DAFF27E"
+        ]
+      }
+    },
+    "settings_peek_migration": {
+      "canonicalWins": [
+        true,
+        true
+      ],
+      "legacyCopiedWhenMissing": [
+        false,
+        false
+      ],
+      "load": [
+        21.00537109375,
+        18.2333984375,
+        17.81640625
+      ],
+      "ok": true
+    },
+    "settings_persist_relaunch": {
+      "load": [
+        26.36279296875,
+        18.9638671875,
+        18.05712890625
+      ],
+      "ok": true
+    },
+    "settings_shared_window": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true
+    },
+    "settings_sleep_launch_reconcile": {
+      "load": [
+        23.66748046875,
+        18.63427734375,
+        17.95068359375
+      ],
+      "modes": [
+        "off",
+        "off"
+      ],
+      "ok": true
+    },
+    "settings_sleep_new_profile": {
+      "load": [
+        23.66748046875,
+        18.63427734375,
+        17.95068359375
+      ],
+      "modes": [
+        "off",
+        "off"
+      ],
+      "ok": true
+    },
+    "settings_view_boosts_library": {
+      "advancedStatus": "",
+      "legacyExpectedError": "Boost editing is not available in this build.",
+      "library": {
+        "section": "boosts",
+        "visible": true
+      },
+      "load": [
+        25.29248046875,
+        18.86474609375,
+        18.02734375
+      ],
+      "nativeWindow": {
+        "alpha": 1,
+        "appearance": "NSAppearanceNameDarkAqua",
+        "attachedSheet": 0,
+        "class": "BrowserWindow",
+        "contentAppearance": "NSAppearanceNameDarkAqua",
+        "explicitAppearance": "NSAppearanceNameDarkAqua",
+        "firstResponder": "LibraryControl",
+        "frame": "{{100, 100}, {1280, 800}}",
+        "key": true,
+        "level": 0,
+        "main": true,
+        "number": 90878,
+        "parent": 0,
+        "sheet": false,
+        "title": "Settings fixture",
+        "viewAppearances": [
+          {
+            "appearance": "NSAppearanceNameDarkAqua",
+            "class": "BrowserRootView",
+            "explicitAppearance": "NSAppearanceNameDarkAqua"
+          },
+          {
+            "appearance": "NSAppearanceNameDarkAqua",
+            "class": "ExtensionStripView",
+            "explicitAppearance": ""
+          }
+        ],
+        "visible": true
+      },
+      "negativeBeforeWindow": true,
+      "negativeClosed": {
+        "section": null,
+        "visible": false
+      },
+      "negativeOldAssertionRejected": true,
+      "ok": true,
+      "window": 90878
+    },
+    "suggest_profile_isolation": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "switch_tab_across_spaces": {
+      "barAfterReturn": {
+        "allAnimationKeys": [],
+        "allowsRemote": false,
+        "animationKeys": [],
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "fieldText": "Shell C /cross",
+        "fieldWidth": 654,
+        "final": true,
+        "firstResultsMs": 7.405916666667508,
+        "footer": false,
+        "hidden": true,
+        "mode": "newTab",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 0.29562499999974534,
+        "panelFrame": [
+          256,
+          231,
+          768,
+          179
+        ],
+        "panelOpacity": 0,
+        "pinnedEdit": "",
+        "presentation": "overlay",
+        "presented": false,
+        "profile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "range": [
+          -1,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "tab:A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465",
+            "keycaps": [],
+            "kind": "switchToTab",
+            "space": "C65B0A07-1B7E-48DA-94B7-FFA6C44D2D7E",
+            "tab": "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465",
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:61567/cross"
+          },
+          {
+            "action": "",
+            "content": "",
+            "extension": "",
+            "id": "typed:search",
+            "keycaps": [],
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "Shell C /cross",
+            "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+          }
+        ],
+        "scope": "",
+        "selected": 0,
+        "space": "90913FBF-4130-4B41-BB22-6A54FAC31006",
+        "text": "Shell C /cross",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "expectedSpace": "C65B0A07-1B7E-48DA-94B7-FFA6C44D2D7E",
+      "expectedTab": "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465",
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "returnRouting": {
+        "barPresented": false,
+        "charactersIgnoringModifiers": "\r",
+        "commands": [],
+        "dispatchMilliseconds": 8.832625011564232,
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "keyWindow": 90753,
+        "menuActions": [],
+        "sidebarMode": "anchored"
+      },
+      "rows": [
+        {
+          "action": "",
+          "content": "",
+          "extension": "",
+          "id": "tab:A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465",
+          "keycaps": [],
+          "kind": "switchToTab",
+          "space": "C65B0A07-1B7E-48DA-94B7-FFA6C44D2D7E",
+          "tab": "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465",
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:61567/cross"
+        },
+        {
+          "action": "",
+          "content": "",
+          "extension": "",
+          "id": "typed:search",
+          "keycaps": [],
+          "kind": "search",
+          "space": "",
+          "tab": "",
+          "title": "Shell C /cross",
+          "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+        }
+      ],
+      "state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "attachedSheet": 0,
+        "automationPointer": null,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          }
+        ],
+        "canBecomeKey": true,
+        "childWindows": [],
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "confirmation": null,
+        "contentAppearance": "NSAppearanceNameDarkAqua",
+        "cursor": [
+          2297,
+          543
+        ],
+        "engineSelected": 8,
+        "engineURL": "http://127.0.0.1:61567/cross",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "hint": {
+          "frame": [],
+          "keys": "",
+          "plate": [],
+          "shows": 0,
+          "visible": false
+        },
+        "id": "544BE8A2-EC26-4412-9BFC-6E7D0BB9F396",
+        "isKeyWindow": true,
+        "key": true,
+        "keySameObject": true,
+        "keyWindow": 90753,
+        "layoutPasses": 1334,
+        "mainScreenName": "AW2726DM",
+        "mainScreenScale": 1,
+        "mainScreenVisibleFrame": [
+          0,
+          0,
+          2560,
+          1410
+        ],
+        "menuTitles": {
+          "toggle-sidebar": "Hide Sidebar",
+          "toggle-toolbar": "Show Toolbar"
+        },
+        "miniaturized": false,
+        "number": 90753,
+        "onActiveSpace": true,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "pageBlur": false,
+          "phase": "idle",
+          "pointerEvents": 0,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465",
+        "shownPages": [
+          "A4A8C65D-9EEE-4DDA-82B3-5E81AEBB4465"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarFrame": [
+          0,
+          0,
+          228,
+          800
+        ],
+        "sidebarGeometryChanges": 5,
+        "sidebarGestureHides": 0,
+        "sidebarLiveWidth": 228,
+        "sidebarMode": "anchored",
+        "sidebarResizeActive": false,
+        "sidebarResizeHandleDragging": false,
+        "sidebarResizeHandleVisible": true,
+        "sidebarResizeHasStart": false,
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "sidebarWidthCommits": 0,
+        "sidebarWidthOverride": null,
+        "space": "C65B0A07-1B7E-48DA-94B7-FFA6C44D2D7E",
+        "spaceSwitcherFrames": {
+          "90913FBF-4130-4B41-BB22-6A54FAC31006": [
+            79,
+            758,
+            36,
+            34
+          ],
+          "C65B0A07-1B7E-48DA-94B7-FFA6C44D2D7E": [
+            113,
+            758,
+            36,
+            34
+          ]
+        },
+        "systemAppearance": "dark",
+        "titlebar": [
+          0,
+          0,
+          1280,
+          32
+        ],
+        "titled": true,
+        "toast": "Copied",
+        "toolbar": {
+          "controls": [],
+          "drawn": false,
+          "frame": [],
+          "menu": [],
+          "page": [
+            0,
+            0,
+            1042,
+            780
+          ],
+          "shown": false,
+          "text": ""
+        },
+        "toolbarButtons": [
+          "toggle",
+          "back",
+          "forward",
+          "reload"
+        ],
+        "toolbarFrames": {
+          "back": [
+            122,
+            7,
+            32,
+            32
+          ],
+          "forward": [
+            156,
+            7,
+            32,
+            32
+          ],
+          "more": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "reload": [
+            190,
+            7,
+            32,
+            32
+          ],
+          "toggle": [
+            77,
+            7,
+            32,
+            32
+          ]
+        },
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 0.001,
+            "hidden": false
+          }
+        ],
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsDimmed": true,
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "trafficLightsHovered": false,
+        "urlFieldText": "127.0.0.1",
+        "urlFieldVisible": true,
+        "visible": true,
+        "windowAppearance": "NSAppearanceNameDarkAqua",
+        "windowClass": "OpenFeatures.BrowserWindow",
+        "zoomed": false
+      }
+    },
+    "system_menu_nil_targets": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "action": "hide:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "hide-open",
+          "key": "h",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Open"
+        },
+        {
+          "action": "hideOtherApplications:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "hide-others",
+          "key": "h",
+          "modifierMask": 1572864,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Others"
+        },
+        {
+          "action": "unhideAllApplications:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": false,
+          "hidden": false,
+          "id": "show-all",
+          "key": "",
+          "modifierMask": 0,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show All"
+        },
+        {
+          "action": "terminate:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "quit-open",
+          "key": "q",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Quit Open"
+        },
+        {
+          "action": "performClose:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "close-window",
+          "key": "W",
+          "modifierMask": 1179648,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Close Window"
+        },
+        {
+          "action": "undo:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "undo",
+          "key": "z",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Undo"
+        },
+        {
+          "action": "redo:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "redo",
+          "key": "Z",
+          "modifierMask": 1179648,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Redo"
+        },
+        {
+          "action": "cut:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "cut",
+          "key": "x",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Cut"
+        },
+        {
+          "action": "copy:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "copy",
+          "key": "c",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Copy"
+        },
+        {
+          "action": "paste:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "paste",
+          "key": "v",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste"
+        },
+        {
+          "action": "pasteAsPlainText:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": false,
+          "hidden": false,
+          "id": "paste-and-match-style",
+          "key": "V",
+          "modifierMask": 1179648,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste and Match Style"
+        },
+        {
+          "action": "selectAll:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "select-all",
+          "key": "a",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Select All"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "find",
+          "key": "f",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Find\u2026"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "find-next",
+          "key": "g",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Find Next"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "find-previous",
+          "key": "G",
+          "modifierMask": 1179648,
+          "payload": "",
+          "tag": 3,
+          "targetNil": true,
+          "title": "Find Previous"
+        },
+        {
+          "action": "startSpeaking:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "start-speaking",
+          "key": "",
+          "modifierMask": 0,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Start Speaking"
+        },
+        {
+          "action": "stopSpeaking:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "stop-speaking",
+          "key": "",
+          "modifierMask": 0,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Stop Speaking"
+        },
+        {
+          "action": "orderFrontFontPanel:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "show-fonts",
+          "key": "",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show Fonts"
+        },
+        {
+          "action": "addFontTrait:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": false,
+          "hidden": false,
+          "id": "font-bold",
+          "key": "b",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Bold"
+        },
+        {
+          "action": "addFontTrait:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": false,
+          "hidden": false,
+          "id": "font-italic",
+          "key": "i",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Italic"
+        },
+        {
+          "action": "underline:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "font-underline",
+          "key": "u",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Underline"
+        },
+        {
+          "action": "orderFrontCharacterPalette:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "emoji-and-symbols",
+          "key": " ",
+          "modifierMask": 1310720,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Emoji & Symbols"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "modifierMask": 8388608,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": true,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "modifierMask": 1310720,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "performMiniaturize:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "minimize-window",
+          "key": "m",
+          "modifierMask": 1048576,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Minimize"
+        },
+        {
+          "action": "performZoom:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "zoom-window",
+          "key": "",
+          "modifierMask": 0,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Zoom"
+        },
+        {
+          "action": "arrangeInFront:",
+          "badgeCount": 0,
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "bring-all-to-front",
+          "key": "",
+          "modifierMask": 0,
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Bring All to Front"
+        }
+      ]
+    },
+    "tabs_reveal_registered": {
+      "load": [
+        29.61962890625,
+        19.32080078125,
+        18.1708984375
+      ],
+      "ok": true
+    },
+    "typed_top_today": {
+      "load": [
+        31.4150390625,
+        19.4951171875,
+        18.22509765625
+      ],
+      "ok": true,
+      "tab": "9AB0E893-AD5E-4B36-AFC2-71F2D9926AD3"
+    },
+    "view-archive_real_library": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true,
+      "state": {
+        "advancedStatus": "",
+        "archive": [
+          {
+            "id": "CA8A914E-0AD4-4D5E-984D-327D372FEB20",
+            "url": "http://127.0.0.1:61567/focused"
+          },
+          {
+            "id": "060A3A04-776B-4877-9871-C23872935418",
+            "url": "http://127.0.0.1:61567/pane0"
+          },
+          {
+            "id": "043775FD-3169-4699-98B4-F956064517A8",
+            "url": "http://127.0.0.1:61567/beside"
+          }
+        ],
+        "archiveRows": 3,
+        "boostsPresentation": "list",
+        "boostsProfile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "external": true,
+        "generalError": "",
+        "historyRows": 0,
+        "hotkey": true,
+        "library": 90753,
+        "librarySection": "archive",
+        "pane": "profiles",
+        "sameSnapshot": true,
+        "scrollTarget": "",
+        "selectedProfile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "settings": 90765,
+        "settingsVisible": true,
+        "sharedArchives": true
+      }
+    },
+    "view-downloads_real_library": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true,
+      "state": {
+        "advancedStatus": "",
+        "archive": [
+          {
+            "id": "CA8A914E-0AD4-4D5E-984D-327D372FEB20",
+            "url": "http://127.0.0.1:61567/focused"
+          },
+          {
+            "id": "060A3A04-776B-4877-9871-C23872935418",
+            "url": "http://127.0.0.1:61567/pane0"
+          },
+          {
+            "id": "043775FD-3169-4699-98B4-F956064517A8",
+            "url": "http://127.0.0.1:61567/beside"
+          }
+        ],
+        "archiveRows": 3,
+        "boostsPresentation": "list",
+        "boostsProfile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "external": true,
+        "generalError": "",
+        "historyRows": 0,
+        "hotkey": true,
+        "library": 90753,
+        "librarySection": "downloads",
+        "pane": "profiles",
+        "sameSnapshot": true,
+        "scrollTarget": "",
+        "selectedProfile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "settings": 90765,
+        "settingsVisible": true,
+        "sharedArchives": true
+      }
+    },
+    "view-history_real_library": {
+      "load": [
+        28.04833984375,
+        19.166015625,
+        18.12255859375
+      ],
+      "ok": true,
+      "state": {
+        "advancedStatus": "",
+        "archive": [
+          {
+            "id": "CA8A914E-0AD4-4D5E-984D-327D372FEB20",
+            "url": "http://127.0.0.1:61567/focused"
+          },
+          {
+            "id": "060A3A04-776B-4877-9871-C23872935418",
+            "url": "http://127.0.0.1:61567/pane0"
+          },
+          {
+            "id": "043775FD-3169-4699-98B4-F956064517A8",
+            "url": "http://127.0.0.1:61567/beside"
+          }
+        ],
+        "archiveRows": 3,
+        "boostsPresentation": "list",
+        "boostsProfile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "external": true,
+        "generalError": "",
+        "historyRows": 11,
+        "hotkey": true,
+        "library": 90753,
+        "librarySection": "history",
+        "pane": "profiles",
+        "sameSnapshot": true,
+        "scrollTarget": "",
+        "selectedProfile": "97D19661-43C4-44BF-9937-F72FCBB64011",
+        "settings": 90765,
+        "settingsVisible": true,
+        "sharedArchives": true
+      }
+    }
+  },
+  "config": "Release",
+  "engine": {
+    "distributionCodeSHA256": "c217d559481cdd05f82d5387929e1ef325fe66fa1009c13a2839165e17f31055",
+    "distributionSHA256": "b8d6e3363eec07f880bbc1505580480c143b4625a7247d84032753852751259f",
+    "distributionUUID": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+    "embeddedCodeSHA256": "c217d559481cdd05f82d5387929e1ef325fe66fa1009c13a2839165e17f31055",
+    "embeddedSHA256": "562447e801a0a40ebfd65529b1652edf53505f22af7a000a5ffe14dd44cc30c9",
+    "embeddedUUID": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794480495"
+  },
+  "interrupted_attempts": [],
+  "lane": "all",
+  "load": [
+    28.666015625,
+    18.7607421875,
+    17.96142578125
+  ],
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "f8d65ff944fff1a1afbe4e54617bd633edb2f8c9"
+  },
+  "started": "2026-11-12 07:26:44",
+  "style": "chrome"
+}
