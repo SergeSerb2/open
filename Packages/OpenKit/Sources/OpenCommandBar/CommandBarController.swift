@@ -632,9 +632,13 @@ public final class CommandBarController: NSObject {
         // Cmd+Return on a page or a search opens a background tab and keeps the bar open, the text selected so
         // the next entry replaces it (Arc 11-returns; plan D3 §2.3, lead decision on the text).
         if modifiers.contains(.command), !modifiers.contains(.option), [.navigate, .history, .search, .searchSuggestion, .siteSearch].contains(s.kind) {
-            if completion.shown != nil, activeEditor != nil { completion.accept() }
+            let acceptedCompletion = completion.shown != nil && activeEditor != nil
+            if acceptedCompletion { completion.accept() }
             delegate?.commandBar(self, perform: intent)
             guard isPresented else { return }
+            // The accepted completion is now typed text: query it, or the next Return waits for a
+            // snapshot of this text that never comes (`returnPressed`).
+            if acceptedCompletion { runQuery(text) }
             // The new page must not take the keyboard: the field keeps it, all of its text selected.
             focusSelection = NSRange(location: 0, length: (fieldText as NSString).length)
             focusInput()
