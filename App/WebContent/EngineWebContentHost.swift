@@ -123,8 +123,21 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     additionalKeyHandler = nil; onCloseRequest = nil
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
     owner?.pageChrome.cancel(content)
-    content.delegate = nil; content.close(); content.view.removeFromSuperview()
+    content.delegate = nil
+    if keepsPageOnClose { content.isMuted = true } else { content.close(); content.view.removeFromSuperview() }
     owner?.hostDidClose(self)
+  }
+  /// Close This Pane (Split motion): close() leaves the page drawn until the pane's
+  /// collapse ends. The closure keeps this host (and its page) alive until then.
+  private var keepsPageOnClose = false
+  func retainPageOnClose() -> (@MainActor () -> Void)? {
+    guard !closed, !keepsPageOnClose else { return nil }
+    keepsPageOnClose = true
+    return { [self] in
+      guard keepsPageOnClose else { return }
+      keepsPageOnClose = false
+      if closed { content.close(); content.view.removeFromSuperview() }
+    }
   }
 
   func webContent(_ page: OEWebContent, didChange changes: OEWebContentChange) {
