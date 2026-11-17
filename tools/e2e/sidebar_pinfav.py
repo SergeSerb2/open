@@ -8,6 +8,8 @@ import http.server
 import threading
 import time
 
+from loopback_http import LoopbackHTTPServer
+
 
 def run(factory, results, tmp, harness):
     wait_until, new_tab, fixture = harness['wait_until'], harness['new_tab'], harness['fixture']
@@ -24,7 +26,7 @@ def run(factory, results, tmp, harness):
 
         def log_message(self, *a): pass
 
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Slow)
+    server = LoopbackHTTPServer(Slow)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = 'http://127.0.0.1:%d' % server.server_address[1]
     app = factory(urls=(), fresh=True)
