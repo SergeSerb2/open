@@ -53,6 +53,10 @@ public enum Motion {
     public static let selectionFade: CFTimeInterval = 0.12
     /// General row insert/remove. Folder expansion has dedicated tokens below.
     public static let rowStructure: CFTimeInterval = 0.22
+    /// Row insert/remove pacing: linear, the pacing main already gives `rowStructure`
+    /// (its animation group leaves `timingFunction` nil). An ease-in start keeps the first
+    /// frames below a visible change and delays the response to the edit.
+    public static var rowStructureTiming: CAMediaTimingFunction { CAMediaTimingFunction(name: .linear) }
     /// S2 folder motion fit: RE interaction-states §20.12 (not general row edits).
     public static let folderExpand: CFTimeInterval = 0.20
     public static let folderCollapse: CFTimeInterval = 0.25

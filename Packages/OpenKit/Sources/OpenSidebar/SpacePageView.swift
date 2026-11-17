@@ -266,7 +266,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
         }
         guard root || !folders.isEmpty else { return }
-        rowMotion.begin(outline, animated: animatesChanges, duration: Motion.rowStructure, timing: Motion.easeInOut)
+        rowMotion.begin(outline, animated: animatesChanges, duration: Motion.rowStructure, timing: Motion.rowStructureTiming)
         defer { rowMotion.end(outline) }
         applyingBulk = true
         outline.beginUpdates()
@@ -336,7 +336,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         var src = srcList
         src.remove(at: fromIndex)
         guard src.map(ObjectIdentifier.init) == target(for: from).map(ObjectIdentifier.init) else { return false }
-        rowMotion.begin(outline, animated: animatesChanges, duration: Motion.rowStructure, timing: Motion.easeInOut)
+        rowMotion.begin(outline, animated: animatesChanges, duration: Motion.rowStructure, timing: Motion.rowStructureTiming)
         defer { rowMotion.end(outline) }
         setList(src, for: from)
         setList(dstNew, for: to)
@@ -420,7 +420,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         let steps = ListDiff.steps(old: list(for: d).map(ObjectIdentifier.init), new: new.map(ObjectIdentifier.init))
         guard !steps.isEmpty else { return }
         let animate = animated ?? animatesChanges
-        rowMotion.begin(outline, animated: animate, duration: Motion.rowStructure, timing: Motion.easeInOut)
+        rowMotion.begin(outline, animated: animate, duration: Motion.rowStructure, timing: Motion.rowStructureTiming)
         defer { rowMotion.end(outline) }
         let parent = parentItem(d)
         if syncingExpansion, case .folder = d {

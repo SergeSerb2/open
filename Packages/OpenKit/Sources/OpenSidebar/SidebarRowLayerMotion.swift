@@ -20,7 +20,7 @@ final class SidebarRowLayerMotion {
     private var depth = 0
     private var enabled = false
     private var duration: CFTimeInterval = Motion.rowStructure
-    private var timing = Motion.easeInOut
+    private var timing = Motion.rowStructureTiming
     private var departing: [Departure] = []
     private var bitmapPixels = 0
     private var generation = 0
