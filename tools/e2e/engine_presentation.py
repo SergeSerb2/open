@@ -90,9 +90,12 @@ def run(factory, results, wait, output, read_image):
                 if app.process_path(pid) == path:
                     os.kill(pid, signal.SIGSTOP)
                     stopped.append((pid, path))
+            # Change only the width. The window keeps its own height (the M5
+            # host window settles at 1362 pt whatever setContentSize asks).
+            height = viewport['logicalSize'][1]
             target = dict(viewport, pixelSize=[round(910 * viewport['scale']),
-                                               round(600 * viewport['scale'])])
-            identifier, reply = request(target, retain=True, resizeTo=[910, 600])
+                                               round(height * viewport['scale'])])
+            identifier, reply = request(target, retain=True, resizeTo=[910, height])
             # Observe beyond the normal surface deadline while no renderer
             # can produce the requested frame. This delay cannot complete a
             # request; only the engine's successful presentation receipt can.
@@ -152,16 +155,17 @@ def run(factory, results, wait, output, read_image):
         viewport = call('presentation-viewport', page='p')
 
         for index, width in enumerate((680, 910, 800)):
+            height = viewport['logicalSize'][1]
             target = dict(viewport, pixelSize=[round(width * viewport['scale']),
-                                               round(600 * viewport['scale'])])
-            identifier, reply = request(target, retain=True, resizeTo=[width, 600])
+                                               round(height * viewport['scale'])])
+            identifier, reply = request(target, retain=True, resizeTo=[width, height])
             actual = receipt(identifier)
             dom = call('eval', page='p', js='({width:innerWidth,height:innerHeight,nonce:fixtureNonce})')
             row('retained_resize_%d' % index, actual and actual['success']
                 and not actual['synchronous'] and actual['receiptID'] == identifier
                 and actual['pixelSize'] == target['pixelSize']
                 and actual['scale'] == target['scale']
-                and dom['width'] == width and dom['height'] == 600
+                and dom['width'] == width and dom['height'] == height
                 and dom['nonce'] == 'same-document', request=reply, receipt=actual, document=dom)
             assert results['retained_resize_%d' % index]['ok']
             viewport = call('presentation-viewport', page='p')
