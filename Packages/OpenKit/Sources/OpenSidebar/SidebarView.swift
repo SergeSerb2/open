@@ -595,8 +595,11 @@ extension SidebarView {
         row.layoutSubtreeIfNeeded(); return row
     }
 
-    /// Horizontal offset of the pager strip (model value) and the focused page index.
-    public var pagerOffset: CGFloat { -pager.strip.frame.minX }
+    /// Horizontal offset of the pager strip (model value). The strip's frame stays
+    /// at the pager's bounds; the slide lives in its layer's translation (#575).
+    public var pagerOffset: CGFloat {
+        -((pager.strip.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat) ?? 0)
+    }
 
     /// Context menu titles for a row (or the Space menu for nil).
     public func menuTitles(nodeID: ItemID?) -> [String] {
