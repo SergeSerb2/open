@@ -467,6 +467,13 @@ bool OEClient::OnJSDialog(CefRefPtr<CefBrowser> browser,
                           CefRefPtr<CefJSDialogCallback> callback,
                           bool& suppress_message) {
   OEWebContent* view = view_;
+  if (!view || closing_) {
+    // The page is closing or its owner is gone (the shell clears the delegate
+    // before -close). Returning false alone would show CEF's default dialog
+    // for a page nobody shows any more; suppress it (the call fails).
+    suppress_message = true;
+    return false;
+  }
   if (![view.delegate respondsToSelector:@selector(webContent:
                                              runJavaScriptDialog:)]) {
     return false;
@@ -490,6 +497,12 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
                                     bool is_reload,
                                     CefRefPtr<CefJSDialogCallback> callback) {
   OEWebContent* view = view_;
+  if (!view || closing_) {
+    // The shell already closed this page: let it unload instead of showing
+    // CEF's default beforeunload dialog for a page that is gone.
+    callback->Continue(true, CefString());
+    return true;
+  }
   if (![view.delegate respondsToSelector:@selector(webContent:
                                              runJavaScriptDialog:)]) {
     return false;
@@ -513,6 +526,10 @@ bool OEClient::OnRequestMediaAccessPermission(
     uint32_t requested_permissions,
     CefRefPtr<CefMediaAccessCallback> callback) {
   OEWebContent* view = view_;
+  if (!view || closing_) {
+    callback->Cancel();  // No prompt for a page that is closing.
+    return true;
+  }
   if (![view.delegate respondsToSelector:@selector(webContent:
                                              decidePermissionRequest:)]) {
     return false;
@@ -534,6 +551,12 @@ bool OEClient::OnShowPermissionPrompt(
     uint32_t requested_permissions,
     CefRefPtr<CefPermissionPromptCallback> callback) {
   OEWebContent* view = view_;
+  if (!view || closing_) {
+    // No prompt for a page that is closing (Chrome style would otherwise
+    // show its own bubble).
+    callback->Continue(CEF_PERMISSION_RESULT_IGNORE);
+    return true;
+  }
   if (![view.delegate respondsToSelector:@selector(webContent:
                                              decidePermissionRequest:)]) {
     return false;
@@ -576,6 +599,10 @@ bool OEClient::RunContextMenu(CefRefPtr<CefBrowser> browser,
                               CefRefPtr<CefMenuModel> model,
                               CefRefPtr<CefRunContextMenuCallback> callback) {
   OEWebContent* view = view_;
+  if (!view || closing_) {
+    callback->Cancel();  // Not CEF's default menu over a closing page.
+    return true;
+  }
   if (![view.delegate respondsToSelector:@selector(webContent:showContextMenu:)]) {
     return false;
   }

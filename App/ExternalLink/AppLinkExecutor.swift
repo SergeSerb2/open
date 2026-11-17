@@ -35,7 +35,7 @@ final class AppLinkExecutor: LinkDestinationExecutor {
     if controller == nil {
       // makeWindow reuses the retained final standard state. Set its Space
       // before composition, so it cannot create a page in the old Space first.
-      if app.frontStandardWindowController == nil, let retained = app.model.windows.first(where: { $0.style == .standard }) {
+      if app.frontMainModelWindowController == nil, let retained = app.model.windows.first(where: { $0.style == .standard }) {
         app.model.focusSpace(windowID: retained.id, spaceID: spaceID)
       }
       controller = app.makeWindow(focusedSpaceID: spaceID)

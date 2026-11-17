@@ -8,9 +8,15 @@ import OpenDesign
 @MainActor
 public final class PeekBackdropView: NSView {
     var onDismiss: (() -> Void)?
+    /// False for a click inside the card's final frame. While Peek opens, the
+    /// card may not take hits yet; such a click must not fall through to the dim.
+    var shouldDismiss: ((NSEvent) -> Bool)?
     public override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    public override func mouseDown(with event: NSEvent) { onDismiss?() }
+    public override func mouseDown(with event: NSEvent) {
+        guard shouldDismiss?(event) ?? true else { return }
+        onDismiss?()
+    }
 }
 
 /// The Peek panel and its three buttons. It spans the window above the sidebar but
@@ -51,6 +57,7 @@ public final class PeekOverlayView: NSView {
     var expansionViewport: CGRect?
     var expansionOriginalViewport: CGRect?
     public var hasMotionSnapshot: Bool { motionSnapshotLayer != nil }
+    public var isOpeningContentFading: Bool { motionSnapshotLayer?.animation(forKey: "peekContentReveal") != nil }
     public var hasSnapshotPixels: Bool { motionSnapshotLayer?.contents != nil }
     public var motionPanelLayer: CALayer? { expansionCard ?? panel.layer }
     public var expandedImageFrame: CGRect? { expansionImage?.frame }
@@ -62,6 +69,12 @@ public final class PeekOverlayView: NSView {
     public init() {
         super.init(frame: .zero); wantsLayer = true; backdrop.layer?.backgroundColor = scrimColor.cgColor
         backdrop.onDismiss = { [weak self] in self?.onDismiss?() }
+        backdrop.shouldDismiss = { [weak self] event in
+            guard let self else { return true }
+            // Model frame, not the moving presentation: the same card area as at rest.
+            self.layoutSubtreeIfNeeded()
+            return !self.panel.frame.contains(self.convert(event.locationInWindow, from: nil))
+        }
         panel.wantsLayer = true; pageClip.wantsLayer = true; pageClip.layer?.masksToBounds = true
         pageClip.layer?.cornerRadius = PanelMetrics.cornerRadius; pageClip.layer?.backgroundColor = NSColor.black.cgColor
         panel.layer?.shadowColor = NSColor.black.cgColor; panel.layer?.shadowOpacity = PeekMetrics.shadowOpacity
@@ -109,11 +122,9 @@ public final class PeekOverlayView: NSView {
     func clearHost() { endHostSnapshot(reveal: false); pageClip.subviews.forEach { $0.removeFromSuperview() }; hostedView = nil; swipeIndicator = nil; sadTabView = nil }
     func showHost(_ host: any WebContentHost, close: @escaping () -> Void) {
         PeekMotionTrace.watch(host.view)
-        // The empty/loading host is transparent. Keep its actual initial plate
-        // underneath it rather than exposing the mask's black backing.
-        if let color = host.view.layer?.backgroundColor { pageClip.layer?.backgroundColor = color }
+        if !hasMotionSnapshot, let color = host.pageBackgroundColor { pageClip.layer?.backgroundColor = color.cgColor }
         if isHostFrozen(host.view), host.view.superview !== pageClip {
-            // Opening uses the engine's initial plate. Attaching now would
+            // Opening uses the source page color. Attaching now would
             // create Chromium and make its first commits during the motion.
             if host.view.frame != pageClip.bounds {
                 PeekMotionTrace.mark("host.setFrame", value: pageClip.bounds.width)
