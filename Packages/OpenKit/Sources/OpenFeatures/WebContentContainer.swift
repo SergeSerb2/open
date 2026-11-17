@@ -512,10 +512,12 @@ public final class WebContentContainer: NSView {
             guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             self.advanceMotionRevision(id)
             // No engine-to-model bridge exists before the App target; property writes are the bridge.
+            if let tab = self.tabProvider(id), tab.url != url, tab.url == tab.pinnedURL, !tab.title.isEmpty { self.pinnedPageTitles[id] = tab.title }
             self.tabProvider(id)?.url = url; self.onTabURLChanged?(id, url); self.metadataChanged(id)
         }
         host.onTitleChange = { [weak self, weak host] title in
             guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
+            if let tab = self.tabProvider(id), tab.pinnedURL == tab.url, !title.isEmpty { self.pinnedPageTitles[id] = title }
             self.tabProvider(id)?.title = title; self.metadataChanged(id)
         }
         host.onLoadingChange = { [weak self, weak host] loading in
@@ -706,6 +708,10 @@ public final class WebContentContainer: NSView {
         }
         refreshPlaceholders(); trimCache()
     }
+    /// The last title each pinned tab or Favorite showed at its pinned URL in this launch. A close
+    /// that puts the tab back on its pinned URL shows this title until the page loads again.
+    public private(set) var pinnedPageTitles: [ItemID: String] = [:]
+
     public func closeHost(for id: ItemID) {
         if previewHosts[id] != nil { onReturnPreviewHost?() }
         parkedSlots[id] = nil

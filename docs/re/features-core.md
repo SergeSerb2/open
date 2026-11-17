@@ -639,7 +639,9 @@ the fit script are local in `.re/theme-pad/`):
 5. "Close and Keep Pinned" closes the web content but keeps the Pinned entry.
    Evidence: string "Close and Keep Pinned" (`strings:113987`). Closing a
    Pinned tab with the normal close archives/removes the entry instead
-   (**Guess** distinction — verify both paths).
+   (**Guess** distinction — verify both paths). Verified at runtime 2026-11-17:
+   `pinned-favorites-close.md` P1–P5 ("−" and Cmd-W keep the row; "×" on an
+   unselected row removes it; Cmd-W resets a navigated pinned tab).
 6. "Replace Pinned Tab with the Current Site" / "Replace Pin with Current
    Page" sets pinned URL := current URL. Evidence: action strings
    `strings:131536-131556`, menu "Replace Pinned URL with Current",
