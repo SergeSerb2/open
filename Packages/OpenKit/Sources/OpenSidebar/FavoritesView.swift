@@ -126,10 +126,14 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     /// tile now under the pointer is hovered, so its close button is where the next click lands.
     private func syncTileHover() {
         guard context.forcedHover == nil, let window else { return }
+        let tiles = collection.visibleItems().compactMap { $0 as? FavoriteTileItem }
+        // Only while the pointer is in the sidebar or a tile still shows hover: no hover, tooltip or
+        // preview starts for an inactive or covered window.
+        guard context.pointerInSidebar || tiles.contains(where: { $0.tile.showsHover }) else { return }
         let pointer: NSPoint? = if let source = context.pointerLocation { source() } else { window.mouseLocationOutsideOfEventStream }
         // Tile frames, not indexPathForItem(at:): the grid layout answers nil for that query.
         let local = pointer.map { collection.convert($0, from: nil) }
-        for case let item as FavoriteTileItem in collection.visibleItems() {
+        for item in tiles {
             item.tile.syncPointer(inside: local.map { item.view.frame.contains($0) } ?? false)
         }
     }

@@ -823,15 +823,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // Auto-PiP runs in the same turn as the selection change, after the new tab is attached (§4.5.3).
     app.media.windowChanged(self)
   }
-  /// This window's selected nodes in this launch, newest last. Closing a pinned tab or Favorite
-  /// returns to the node selected before it, or to none (docs/re/pinned-favorites-close.md P5).
-  private var selectionHistory: [ItemID] = []
+  /// This window's selected nodes in this launch, per Space, newest last. Closing a pinned tab or
+  /// Favorite returns to the node selected before it in that Space, or to none
+  /// (docs/re/pinned-favorites-close.md P5). Favorites are shared by a Profile's Spaces, so a
+  /// Favorite chosen in another Space does not count.
+  private var selectionHistory: [SpaceID: [ItemID]] = [:]
   func select(nodeID: ItemID?, focus: Bool = true) {
     controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
     if let nodeID {
-      selectionHistory.removeAll { $0 == nodeID }; selectionHistory.append(nodeID)
-      if selectionHistory.count > 64 { selectionHistory.removeFirst(selectionHistory.count - 64) }
+      var history = selectionHistory[space.id, default: []]
+      // The outgoing node counts too: a selection restored at launch or by a Space switch never
+      // passed through here, and a close must still be able to return to it.
+      if let outgoing = selectedNodeID, outgoing != nodeID, history.last != outgoing {
+        history.removeAll { $0 == outgoing }; history.append(outgoing)
+      }
+      history.removeAll { $0 == nodeID }; history.append(nodeID)
+      if history.count > 64 { history.removeFirst(history.count - 64) }
+      selectionHistory[space.id] = history
     }
     withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nodeID) }
     controller?.dismissSidebarReveal()
@@ -1054,16 +1063,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       controller?.container.closeHost(for: id); hosts[id]?.close()
       returnToPinnedURL(id)
     } else { model.closeTab(id: id) }
-    selectionHistory.removeAll { $0 == id }
-    if wasSelected, (isPinned || isFavorite), !inSplit {
+    forgetSelection(id)
+    if wasSelected, (isPinned || isFavorite), !inSplit, let space = focusedSpace {
       // A pinned tab or Favorite stays in the sidebar: go back to the node selected before it,
       // or show no tab (Arc 1.172.2, docs/re/pinned-favorites-close.md P5).
       let shown = Set(orderedTabs.map { model.sidebarSelectionID(for: $0.id) })
-      select(nodeID: selectionHistory.last { $0 != id && shown.contains($0) })
+      select(nodeID: selectionHistory[space.id]?.last { $0 != id && shown.contains($0) })
     } else if wasSelected {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
     } else { controller?.refresh(); mirror.sync(); scheduleSave() }
+    // select() records the outgoing node, which was the closed tab.
+    forgetSelection(id)
     // Capture C10: ⌘W on a Blank Window's last tab closes the whole window, with no prompt.
     // C-report-s11 1(b): the other closed tabs are in the Archive, this last one is not.
     if isBlankWindow, orderedTabs.isEmpty {
@@ -1071,12 +1082,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) }
     }
   }
+  private func forgetSelection(_ id: ItemID) {
+    for space in Array(selectionHistory.keys) { selectionHistory[space]?.removeAll { $0 == id } }
+  }
   /// A pinned tab or Favorite closed after it left its pinned URL goes back to that URL, unloaded,
   /// with the pinned page's title (docs/re/pinned-favorites-close.md P4, F4). The next selection loads it.
   private func returnToPinnedURL(_ id: ItemID) {
     guard let tab = model.tab(id: id), let pinned = tab.pinnedURL, tab.url != pinned else { return }
     withoutUndo { model.resetPinnedTab(id: id) }
-    tab.title = controller?.container.pinnedPageTitles[id] ?? ""
+    // No title seen at the pinned URL in this launch (restored away, or an edited pinned URL):
+    // name the row by the pinned host until the page loads, never by the page it left or blank.
+    tab.title = controller?.container.pinnedPageTitles[id] ?? pinned.host ?? pinned.absoluteString
   }
   func closeAll() {
     guard !isClosing else { return }

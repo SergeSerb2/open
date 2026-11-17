@@ -84,7 +84,7 @@ def run(factory, results, tmp, harness):
         clicked = click_accessory(p1)
         after = settle(p1)
         record('PF1_unselected_loaded_pinned_x_archives', before['hasWebContent'] and clicked.get('glyph') == 'rowClose'
-               and after is None and archived(p1) and selected() == t2,
+               and after is None and archived(p1) and selected() == t2 and p1 not in app.call('window-state')['shownPages'],
                before={k: before[k] for k in ('hasWebContent', 'loaded')}, clicked=clicked, after=after, selected=selected())
 
         # PF2 (Arc P1): the same for a pinned row that never loaded (every pinned row after a relaunch).
@@ -223,6 +223,48 @@ def run(factory, results, tmp, harness):
         others = {t: accessory(t, favorite=True).get('tileHovered') for t in grid if t not in (fa, fb) and t in ids()}
         record('PF12_favorite_grid_hover_follows_pointer', held.get('tileHovered') is True and moved and next_tile.get('tileHovered') is True
                and not any(others.values()), grid=grid, held=held, next_tile=next_tile, others=others)
+        # PF13 (Arc P5): with no earlier selection in this Space, Cmd-W on a pinned tab shows no tab;
+        # it does not select a tab that was opened in the background and never shown.
+        home = next(x for x in app.call('spaces') if x['focused'])['id']
+        other = app.call('space-create', title='PF Empty History')
+        app.call('space', space=other)
+        background = app.call('open', url=fixture('PF Never Shown'), background=True)['id']
+        pz = new_tab(app, fixture('PF Pinned Alone')); app.call('pin', tab=pz)
+        app.call('key', key='w', modifiers=['command'])
+        after13 = settle(pz)
+        record('PF13_cmdw_pinned_without_history_selects_none', after13 and after13['section'] == 'pinned' and not after13['hasWebContent']
+               and not selected() and not tab(background)['hasWebContent'], after=after13, selected=selected(),
+               shown=app.call('window-state')['shownPages'])
+        app.call('space', space=home)
+
+        # PF14 (Arc c5): two quick Cmd-W: the first unloads the pinned tab and returns to the previous
+        # Today tab, the second archives that Today tab.
+        tx = new_tab(app, fixture('PF Double Today'))
+        pd = new_tab(app, fixture('PF Double Pinned')); app.call('pin', tab=pd)
+        app.call('select', tab=tx); app.call('select', tab=pd); wait_until(lambda: tab(pd)['hasWebContent'], timeout=5, step=.05)
+        app.call('key', key='w', modifiers=['command']); app.call('key', key='w', modifiers=['command'])
+        after14 = settle(pd)
+        record('PF14_double_cmdw_pinned_then_previous', after14 and after14['section'] == 'pinned' and not after14['hasWebContent']
+               and tx not in ids() and archived(tx), after=after14, selected=selected())
+
+        # PF15 (Arc P4, P5 after a relaunch): the selection restored at launch is the tab Cmd-W returns
+        # to, and a pinned tab restored away from its pinned URL gets a title on reset (never blank).
+        pr = app.call('open', url=base + '/pin-restore')['id']; app.call('wait', tab=pr); app.call('pin', tab=pr)
+        app.call('navigate', tab=pr, url=base + '/away-restore')
+        wait_until(lambda: tab(pr)['url'].endswith('/away-restore') or None, timeout=5, step=.05)
+        tr = new_tab(app, fixture('PF Restored Today'))
+        app.call('select', tab=tr); app.call('save')
+        app.quit()
+        app = factory(urls=(), fresh=False)
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        restored = selected()
+        app.call('select', tab=pr); wait_until(lambda: tab(pr)['hasWebContent'] and not tab(pr)['loading'], timeout=8, step=.05)
+        away15 = tab(pr)
+        app.call('key', key='w', modifiers=['command'])
+        after15 = settle(pr)
+        record('PF15_relaunch_restored_selection_and_title', restored == tr and selected() == tr and after15
+               and after15['url'] == after15['pinnedURL'] and after15['title'] == '127.0.0.1' and not after15['hasWebContent'],
+               restored=restored, away={k: away15[k] for k in ('url', 'title')}, after=after15, selected=selected())
     finally:
         server.shutdown()
         app.quit()
