@@ -442,12 +442,15 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             get = "chrome.tabs.get(%d).then(()=>Date.now(),()=>-Date.now())" % cid
             t0 = app.eval(reporter, 'Date.now()'); menu('Close This Pane')
             answers = []
-            for _ in range(60):
+            for _ in range(150):  # about 1.5 s: until tabs.get fails (the tab is gone)
                 answers.append(app.eval(reporter, get))
                 if answers[-1] < 0: break
+                time.sleep(.01)
             time.sleep(.2); removed = app.eval(reporter, 'window.__closeRemoved')
             before_removed = [v for v in answers if removed and abs(v) < removed]
-            row('close_pane_extension_events', bool(removed) and removed - t0 <= 400 and all(v > 0 for v in before_removed),
+            # tabs.get answered right up to onRemoved: one answer within 60 ms before it.
+            row('close_pane_extension_events', bool(removed) and removed - t0 <= 400 and all(v > 0 for v in before_removed)
+                and any(removed - 60 <= v < removed for v in before_removed),
                 removed_after_ms=(removed - t0) if removed else None, answers=[v - t0 if v > 0 else -(abs(v) - t0) for v in answers])
     finally:
         try:
