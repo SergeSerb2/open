@@ -224,8 +224,11 @@ def run(factory, results, tmp, h):
     _, nodes = sidebar(app)
     def safari_roots(found): return sum(1 for n in found if n[0] == 'folder' and n[1][1:] == ['Imported from Safari'])
     roots_before, roots_after = safari_roots(before_nodes), safari_roots(nodes)
+    # #580 (reviewed design, LEAD Q4 2026-11-17): a separate Passwords.csv adds to the export ZIP's
+    # password count, so the wizard shows 3 + 3 = 6. The import itself saves 3 new logins and reports
+    # the 3 that repeat as duplicates.
     row('safari_export_csv', "doesn't look like a passwords file" in refused and chosen.get('settingsSafariExport') == 'Safari Export.zip'
-        and labels == {'Bookmarks': 'Found: 5', 'History': 'Found: 6,002', 'Passwords': 'Found: 3'} and chosen.get('settingsPasswords') is True
+        and labels == {'Bookmarks': 'Found: 5', 'History': 'Found: 6,002', 'Passwords': 'Found: 6'} and chosen.get('settingsPasswords') is True
         and outcome.get('Bookmarks') == 5 and (roots_before, roots_after) == (1, 2)
         and outcome.get('History') == 6000 and visit_count(app) - before_visits == 6000
         and outcome.get('Passwords') == 3 and outcome.get('Password duplicates') == 3 and logins() - before_logins == 3,
