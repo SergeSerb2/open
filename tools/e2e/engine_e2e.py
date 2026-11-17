@@ -5120,6 +5120,12 @@ def sidebar_checks(factory, results, tmp):
         _restore_defaults(app, saved)
         app.quit()
     static_window_comparison(factory, results, tmp, "sidebar")
+    sidebar_pinfav_checks(factory, results, tmp)
+
+
+def sidebar_pinfav_checks(factory, results, tmp):
+    """Pinned rows and Favorites: every close path with real input (tools/e2e/sidebar_pinfav.py)."""
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_pinfav.py"))["run"](factory, results, tmp, globals())
 
 
 def static_window_comparison(factory, results, tmp, suite):
@@ -13640,6 +13646,7 @@ def main():
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
+    ap.add_argument("--sidebar-pinfav-only", action="store_true", help="run only the pinned-tab and Favorite close rows of the sidebar suite")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
                     help='features: prove ignored save offers with main App code and no password delegate')
@@ -14176,7 +14183,10 @@ def main():
                           launch_continuation=opts.window_launch_continuation)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
-            sidebar_checks(factory, results["sidebar"], tmp)
+            if opts.sidebar_pinfav_only:
+                sidebar_pinfav_checks(factory, results["sidebar"], tmp)
+            else:
+                sidebar_checks(factory, results["sidebar"], tmp)
         elif opts.only == "calendar":
             results["calendar"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "calendar_app.py"))["run"](factory, results["calendar"], tmp, globals())
