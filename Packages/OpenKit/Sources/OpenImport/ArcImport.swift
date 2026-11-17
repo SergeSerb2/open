@@ -493,9 +493,13 @@ public struct ArcImporter {
         report.containers = itemsByID.values.filter { (($0["data"] as? [String: Any])?.keys.first) == "itemContainer" }.count
 
         var spacesRaw: [(id: String, obj: [String: Any])] = []
+        // A repeated Space ID would give two Spaces one Open ID and trap the
+        // `uniqueKeysWithValues` maps below. The first pair wins.
+        var seenSpaceIDs: Set<SpaceID> = []
         i = 0
         while i + 1 < spacesArr.count {
-            if let id = spacesArr[i] as? String, let obj = spacesArr[i + 1] as? [String: Any] {
+            if let id = spacesArr[i] as? String, let obj = spacesArr[i + 1] as? [String: Any],
+               seenSpaceIDs.insert(Self.spaceID(forArcID: id)).inserted {
                 spacesRaw.append((id, obj))
             }
             i += 2
