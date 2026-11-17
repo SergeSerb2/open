@@ -211,6 +211,21 @@ conditions, p95≤1.5×nominal and dropped intervals≤1% limits stay unchanged.
 The dispatcher retains its actual M5 PASS/FAIL and removes only the extra
 quiet-M1 receipt placeholder. This does not exempt latency or CPU budgets.
 
+### Pacing gate (LEAD 2026-11-16 22:15)
+
+`tools/perf/pacing_gate.py` scores existing stock frame-detector ledgers (one
+ledger per App launch) for animation acceptance. It never re-captures and never
+changes the detector, ROI or pixel thresholds. Per action it reports every
+trial and applies: true late = interval >= 16.7 ms (an exactly-12.50 ms cadence
+interval is never late); at most one true late per trial; pooled motion
+p99 <= 16.7 ms; START = a true late that ends <= 50 ms after the first change
+in an app-idle trial, and the AFTER START rate may exceed the same-session
+BEFORE rate by at most 15 points; OTHER late intervals target 0; the
+predeclared stop rule needs >= 9 trials from >= 3 launches. Run
+`python3 tools/perf/pacing_gate.py --before B1 B2 B3 --after A1 A2 A3`
+(`--first-change-latency` adds the Split #569 start rule). Exit 0 = every action
+PASS, 1 = a FAIL, 2 = no BEFORE for an action or bad input.
+
 ### Timing lane (LEAD 06:30, 2026-11-11)
 
 Budget rows (launch, section/key latency and idle CPU) need a valid quiet M1
@@ -218,7 +233,11 @@ Release timing receipt. Run `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh tools/verify-all.sh
 --lane timing`; `--only timing-window` selects just the five cold/warm launch
 pairs. The lane holds the heavy and screen slots. Before each stage it waits
 at most six minutes for two load1 readings at or below 3.5, ten seconds apart,
-before each launch sample pair (LEAD 06:50). The top five foreign processes and
+before each launch sample pair (LEAD 06:50).
+`OPEN_QUIET_LOAD1` sets that limit (default 3.5, the 8-core M1 rule; M5 lanes
+set 7.0 per LEAD 2026-11-16 17:50/22:15). The same variable drives
+`launch_sample.py` and the Library `library_performance.py` /
+`library_first_use.py` quiet checks; a malformed value stops the run. The top five foreign processes and
 all load readings remain recorded, but foreign CPU has no validity threshold.
 After-run load has no validity condition. Do not stop the user's background jobs.
 Power guard (2026-11-12): the same preflight first reads `pmset -g batt` and
