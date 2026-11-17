@@ -1,9 +1,11 @@
 # Pinned tabs and Favorites: close, unload, reset, select
 
-Lane PINFAV, 2026-11-17. Runtime capture of Arc **1.172.2** on the M1 (the M1 has no 1.170 build), under the
+Lane PINFAV, 2026-11-17. Runtime capture of Arc **1.172.2** on the M1, under the
 screen lock, with the session-13 capture harness (AX-resolved pointer clicks and approved keys, LEAD 19:30 and
 23:45 rulings). Synthetic loopback pages only (`http://127.0.0.1:39191/PF*`, titles `Open-capture page /PF*`),
-in a throwaway Space that the last block deleted. Raw evidence (AX dumps, PNGs, session logs) stays in
+in a throwaway Space that the last block deleted.
+
+**Version difference:** the reference build is Arc **1.170.0** (build 89123, `/Applications/Arc.app` on the M5), but the M1, the only machine where Arc may be driven, has 1.172.2 (`CFBundleShortVersionString`). These facts are from 1.172.2; no change in this area between the two versions is known, but none was checked against 1.170.0 at runtime. Raw evidence (AX dumps, PNGs, session logs) stays in
 `.re/pinfav/out/s1`–`s4` (git-ignored). Each row names the block and frame.
 
 ## Pinned rows

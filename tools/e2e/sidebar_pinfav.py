@@ -249,6 +249,26 @@ def run(factory, results, tmp, harness):
         record('PF14_double_cmdw_pinned_then_previous', after14 and after14['section'] == 'pinned' and not after14['hasWebContent']
                and tx not in ids() and archived(tx) and ty in ids(), after=after14, selected=selected())
 
+        # PF16 (lead 12:24): a pinned tab moved to Today and back through the drop handler keeps both
+        # close routes: "×" on the unselected row archives it; Cmd-W on the selected row keeps it.
+        # Drag behaviour itself is unchanged and was not captured in Arc.
+        here = next(x for x in app.call('spaces') if x['focused'])['id']
+        m1 = new_tab(app, fixture('PF Moved One')); app.call('pin', tab=m1)
+        m2 = new_tab(app, fixture('PF Moved Two')); app.call('pin', tab=m2)
+        moves = []
+        for t in (m1, m2):
+            moves.append(app.call('sidebar-drop', nodes=[t], parent={'kind': 'today', 'id': here}, index=0) and tab(t)['section'] == 'today')
+            moves.append(app.call('sidebar-drop', nodes=[t], parent={'kind': 'pinned', 'id': here}, index=0) and tab(t)['section'] == 'pinned')
+        app.call('select', tab=t2)
+        clicked16 = click_accessory(m1)
+        after16a = settle(m1)
+        app.call('select', tab=t2); app.call('select', tab=m2); wait_until(lambda: tab(m2)['hasWebContent'], timeout=5, step=.05)
+        app.call('key', key='w', modifiers=['command'])
+        after16b = settle(m2)
+        record('PF16_section_round_trip_then_close', all(moves) and clicked16.get('glyph') == 'rowClose' and after16a is None and archived(m1)
+               and after16b and after16b['section'] == 'pinned' and not after16b['hasWebContent'] and selected() == t2,
+               moves=moves, clicked=clicked16, after_x=after16a, after_cmdw=after16b, selected=selected())
+
         # PF15 (Arc P4, P5 after a relaunch): the selection restored at launch is the tab Cmd-W returns
         # to, and a pinned tab restored away from its pinned URL gets a title on reset (never blank).
         pr = app.call('open', url=base + '/pin-restore')['id']; app.call('wait', tab=pr); app.call('pin', tab=pr)
