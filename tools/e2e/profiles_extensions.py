@@ -232,7 +232,8 @@ def run(factory, results, tmp, root, wait, engine):
             omega = math.sqrt(motion.get('stiffness', 0) / motion.get('mass', 1))
             travel = abs(motion.get('to', 0) - motion.get('from', 0))
             remainder = travel * (1 + omega * .30) * math.exp(-omega * .30)
-            row(label, bool(selected_state) and scheduled_spring(motion, .20, 1, 'position.x')
+            # #575 moved the Space switch to the layer's transform (as engine_e2e.py's motion_space_switch).
+            row(label, bool(selected_state) and scheduled_spring(motion, .20, 1, 'transform.translation.x')
                 and remainder <= .5 and travel > .5, scheduled=motion, remainingAt300msPt=remainder,
                 observationMs=observed_ms, load=list(os.getloadavg()),
                 scope='existing Space motion gate; RPC observation is diagnostic, not physical presentation')
