@@ -147,6 +147,36 @@ def run(factory, results, tmp, harness):
         undo = app.call('toast-action', index=0)
         results['peek_click_outside_undo'] = {'ok': bool(dismissed) and any(t['title'] == 'Peek closed' for t in toast) and undo and bool(opened())}
         clear()
+        # A real click inside the card's final frame while Peek still opens
+        # (before its page is shown). Only a click outside the card dismisses;
+        # this one must not dismiss, reach the source page, or break the page.
+        navigate(source, url())
+        app.eval(source, "window.__peekSourceDowns=0; addEventListener('mousedown',()=>{window.__peekSourceDowns++},true); true")
+        app.call('peek-open', tab=source, url=url('b.localhost'))
+        card_click_error = None
+        try:
+            app.call('mouse', action='click', x=panel[0]+panel[2]/2, y=panel[1]+panel[3]/2)
+        except Exception as error:
+            card_click_error = repr(error)
+        motion_at_click = app.call('peek-motion'); at_click = state()
+        content_at_click = at_click['stack'][-1]['content'] if at_click['stack'] else -1
+        card_ready = bool(opened()); card_page = top() if card_ready else 0
+        if card_page: app.call('wait', tab=card_page)
+        card_host = app.eval(card_page, 'location.hostname') if card_page else None
+        if card_page:
+            click(card_page, url('b.localhost') + '#after-early-click')
+        card_hash = wait_until(lambda: app.eval(card_page, 'location.hash') == '#after-early-click', timeout=5, step=.05) if card_page else False
+        card_toasts = [t['title'] for t in app.call('toasts')['toasts']]
+        source_downs = app.eval(source, 'window.__peekSourceDowns')
+        opening_at_click = bool(motion_at_click.get('preparingOpening')) or (motion_at_click.get('kind') == 'open' and bool(motion_at_click.get('hostHidden')))
+        results['peek_click_card_before_page'] = {'ok': card_click_error is None and opening_at_click
+            and len(at_click['stack']) == 1 and at_click['shown'] and card_ready and card_host == 'b.localhost'
+            and bool(card_hash) and len(state()['stack']) == 1 and source_downs == 0 and 'Peek closed' not in card_toasts,
+            'openingAtClick': opening_at_click, 'hostHiddenAtClick': motion_at_click.get('hostHidden'), 'motionKindAtClick': motion_at_click.get('kind'), 'contentAtClick': content_at_click,
+            'preparingAtClick': motion_at_click.get('preparingOpening'), 'stackAtClick': len(at_click['stack']),
+            'clickError': card_click_error, 'pageReady': card_ready, 'host': card_host, 'pageLinkWorks': bool(card_hash),
+            'sourceMouseDowns': source_downs, 'toasts': card_toasts, 'clickPoint': [panel[0]+panel[2]/2, panel[1]+panel[3]/2]}
+        clear()
         # A real link click in each nested page; the sixth target navigates in place.
         app.call('peek-open', tab=source, url=url('n0.localhost'))
         opened(); depths=[]; native_nesting=True
