@@ -2776,15 +2776,21 @@ def shutdown_order_checks(factory, results, tmp):
         return value if value and value[-1]['phase'] == 'engineShutdownEnd' else None
     trace = wait_until(completed_trace, timeout=10, step=.02)
     assert trace, {'quit': app.quit_report, 'traceExists': os.path.exists(path)}
-    phases = [r['phase'] for r in trace]
     expected = ['prepare', 'hostsClosed', 'engineShutdownBegin', 'engineShutdownEnd']
-    closed = trace[1:]
+    # #603 records each quit attempt and flush step in the same trace (diagnostics for
+    # onboarding). The ordering gate reads only its four steps, in trace order.
+    steps = [r for r in trace if r['phase'] in expected]
+    diagnostics = [r['phase'] for r in trace if r['phase'] not in expected]
+    phases = [r['phase'] for r in steps]
+    closed = steps[1:]
     results['quit_order_owned_work'] = {'ok': phases == expected and not app.quit_report.get('forced', False)
-        and trace[0]['captureTasks'] > 0 and trace[0]['backgroundTasks'] > 0
+        and steps[0]['captureTasks'] > 0 and steps[0]['backgroundTasks'] > 0
         and all(r['captureTasks'] == r['backgroundTasks'] == r['selectionTasks'] == r['hosts'] == 0
                 and r['closedFactories'] == r['factories'] and r['lateAsyncEngineCalls'] == 0 for r in closed)
         and all(a['uptime'] <= b['uptime'] for a, b in zip(trace, trace[1:]))
-        and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
+        and all(p.startswith(('shouldTerminate.', 'historyFlush.', 'sleepCapture.', 'faviconFlush.')) for p in diagnostics)
+        and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report,
+        'diagnosticPhases': diagnostics, 'trace': trace}
 
 
 def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False, launch_only=False, launch_continuation=None):

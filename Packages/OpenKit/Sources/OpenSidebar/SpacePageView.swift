@@ -718,10 +718,23 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         tracking = t
     }
 
+    /// The pager stacks every built page in its viewport and hides the others
+    /// only in the layer tree (#575), so AppKit still sends their tracking
+    /// events. Only the page that receives input follows the pointer; another
+    /// page must not retarget or end the shared hover preview.
+    private var receivesPointer: Bool {
+        guard let strip = superview as? PagerStrip else { return true }
+        return strip.inputPage === self
+    }
+
     override func mouseMoved(with event: NSEvent) { updateHover(at: convert(event.locationInWindow, from: nil)) }
-    override func mouseExited(with event: NSEvent) { hoveredItem = nil; header.pointerInside = false; context.existingHoverPreviews?.leaveTarget() }
+    override func mouseExited(with event: NSEvent) {
+        hoveredItem = nil; header.pointerInside = false
+        if receivesPointer { context.existingHoverPreviews?.leaveTarget() }
+    }
 
     private func updateHover(at point: NSPoint, allowPreview: Bool = true) {
+        guard receivesPointer else { hoveredItem = nil; header.pointerInside = false; return }
         header.pointerInside = header.frame.contains(point)
         let p = outline.convert(point, from: self)
         guard scroll.frame.contains(point) else { hoveredItem = nil; context.existingHoverPreviews?.leaveTarget(); return }
