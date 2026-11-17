@@ -241,6 +241,9 @@ def run(factory, results, tmp, harness):
                 and app.call('window-state')['space'] == target and tree['today'][0]['id'] == tab['id'], 'menu': chosen, 'tab': tab['id'], 'tree': tree}
         select_source()
         app.call('peek-open', tab=source, url=url('b.localhost', 'ticker.html')); opened(); page=top(); app.call('wait', tab=page)
+        # The page loads before the 0.18 s opening card motion, which keeps the
+        # live host hidden under its snapshot. Measure the settled Peek only.
+        open_settled = wait_until(lambda: not app.call('peek-ui')['hostHidden'], timeout=5, step=.02)
         app.call('sleep-start')
         app.call('sleep-clock', advance=31.0); app.call('sleep-tick')
         ui=app.call('peek-ui'); transient=state()['stack'][-1]['originalHostTab']
@@ -251,7 +254,7 @@ def run(factory, results, tmp, harness):
         source_gate=app.call('sleep-state',tab=source)['tabs'][0]['freezeGate']
         results['peek_visibility_ticker'] = {'ok': transient in ui['visible'] and source in ui['visible'] and not ui['hostHidden']
             and page_visible=='visible' and source_gate=='visible' and bool(progressed) and freeze.get('ok') is False and not freeze['frozen'], 'ui': ui, 'pageVisibility': page_visible,
-            'sourceGate': source_gate, 'freeze':freeze, 'pastFreezeDelay':31, 'ticksBefore':before, 'load':os.getloadavg()}
+            'sourceGate': source_gate, 'freeze':freeze, 'pastFreezeDelay':31, 'openSettled': bool(open_settled), 'ticksBefore':before, 'load':os.getloadavg()}
         close()
         results['peek_visibility_dismissed'] = {'ok': transient not in app.call('peek-ui')['visible'] and source in app.call('peek-ui')['visible']}
         app.call('peek-open',tab=source,url=url('b.localhost')); opened(); transient=state()['stack'][-1]['originalHostTab']
