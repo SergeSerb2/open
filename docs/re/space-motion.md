@@ -170,3 +170,19 @@ E3 reported at 19:34 that its A/B run is done and the seam is active in a
 separate worktree, but no callback or SEAM READY head is available. Chromium
 ownership stays with E3; #575 remains draft pending the engine adapter and
 runtime proof.
+
+## Engines without the seam (lead ruling 2026-11-16 22:15)
+
+The M5 run on 2026-11-16 showed that, with `framePresentation == nil`, the
+cover never retired: page clicks did not reach the page, live changes did not
+show, and a new tab in the same Space showed only the theme field. The ruling
+replaces the earlier "never a timer" clause for this case:
+
+- `WebContentContainer.usesSpacePageMotion` is true only while a cover
+  transition is in flight or when a cached host exposes `framePresentation`.
+- Otherwise `show` and `showEmptySpace` run main's exact path: no cover, no
+  snapshot capture, no extra layout pass, and the empty Space hides the
+  container as before.
+- With the seam, the snapshot transition is unchanged. No timer reveals a page.
+- The sidebar Space pager keeps its layer-transform slide in both cases; it does
+  not cover web content.

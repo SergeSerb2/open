@@ -263,13 +263,29 @@ public final class WebContentContainer: NSView {
     isolated deinit { spaceMotionStorage?.cancel(clearCache: true); if let monitor { NSEvent.removeMonitor(monitor) }; for host in Array(cache.values) + Array(previewHosts.values) { host.close() } }
     public func show(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID) {
         guard (1...4).contains(tabIDs.count), Set(tabIDs).count == tabIDs.count, tabIDs.contains(focusedTabID) else { return }
+        guard usesSpacePageMotion else {
+            // No frame-presentation seam: main's exact path, with no cover.
+            isHidden = false
+            showNative(tabIDs: tabIDs, focusedTabID: focusedTabID, orientation: orientation, fractions: fractions,
+                spaceID: spaceID, profileID: profileID, animateSlots: true)
+            return
+        }
         if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
         spaceMotion.select(SpaceContentSelection(tabs: tabIDs, focused: focusedTabID, orientation: orientation,
             fractions: fractions, space: spaceID, profile: profileID))
     }
     public func showEmptySpace(spaceID: SpaceID, profileID: ProfileID) {
+        guard usesSpacePageMotion else { clearNativeSelection(); isHidden = true; return }
         spaceMotion.select(SpaceContentSelection(tabs: [], focused: nil, orientation: .horizontal,
             fractions: [], space: spaceID, profile: profileID))
+    }
+    /// The snapshot cover is only correct when the engine can say that the
+    /// live page has presented. Without that seam (framePresentation == nil
+    /// on every host) Space switching keeps main's path: no cover and no timer.
+    /// A transition already in flight finishes on the cover path.
+    private var usesSpacePageMotion: Bool {
+        if let motion = spaceMotionStorage, motion.plate.phase != .idle { return true }
+        return cache.values.contains { $0.framePresentation != nil }
     }
     func applySpaceSelection(_ selection: SpaceContentSelection, animateSlots: Bool, notify: Bool = true) {
         if let focused = selection.focused {
@@ -310,8 +326,9 @@ public final class WebContentContainer: NSView {
             for id in tabIDs { ensureHost(id) }
         } else { ensureHost(focusedTabID) }
         updateSlots(); trimCache(); layoutPanes(animated: animateSlots && old != ids)
-        // Apply the final viewport now. No layout work is driven by the slide.
-        for slot in slots { slot.layoutContents() }
+        // Apply the final viewport now behind the cover. No layout work is
+        // driven by the slide. Main's uncovered path skips this extra pass.
+        if spaceMotionStorage.map({ $0.plate.phase != .idle }) == true { for slot in slots { slot.layoutContents() } }
         if previousFocus != focusedTabID { focusContent(focusedTabID) }
         let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
         if !pending.isEmpty {
@@ -470,8 +487,8 @@ public final class WebContentContainer: NSView {
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }
     public func clearSelection() {
-        spaceMotionStorage?.reset()
-        clearNativeSelection(); currentSpace = nil
+        if let spaceMotionStorage { spaceMotionStorage.reset(); clearNativeSelection(); currentSpace = nil }
+        else { clearNativeSelection() }
     }
     private func clearNativeSelection() {
         onReturnPreviewHost?()
