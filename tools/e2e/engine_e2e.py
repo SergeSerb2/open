@@ -14257,6 +14257,11 @@ def main():
                                stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
+        if attempt > 1:
+            # The earlier attempt wrote to this run's private domain (for example the
+            # sidebar hide hint that E17 reads). A retry starts from the preferences
+            # attempt 1 had. The gate passes --focus-attempts 1, so it never retries.
+            prefs_domain.reset(domain_before)
         interruption = None
         try:
             if opts.only in ('firstrun', 'onboarding', 'import-robust', 'welcome'):
