@@ -71,7 +71,7 @@ final class LibraryClosePresentation {
             do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
             guard let self, !self.cancelled, !self.delivered else { return }
             self.timedOut = true
-            // Keep the old retained pixels (or the stationary cover) until a
+            // Keep the old retained pixels (or the theme fill) until a
             // genuine presentation arrives. Never expose a cleared live layer.
             self.onDeadline?()
         }

@@ -875,7 +875,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         request.onInvalidated = { [weak self] in self?.cancelLibraryPageMotion(); self?.layoutContent() }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         isLibraryOpen = false
-        layoutContent() // Records the final target without changing the old viewport.
+        layoutContent() // Records the final target; moves only the origin, not the viewport size.
         libraryPageMotion = nil
         libraryUsesLiveTransform = true
         // No PNG readback, hidden view, engine sleep or snapshot in the moving tree.
@@ -1017,6 +1017,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if let motion = libraryPageMotion {
             if motion.target == nil || motion.target == frame {
                 libraryPageMotion?.target = frame
+                // Hit testing follows the final origin at once, as on main, while
+                // the size (the engine viewport) waits for the one end commit.
+                // The motion animation still draws the slide from the source.
+                CATransaction.begin(); CATransaction.setDisableActions(true)
+                if container.frame.origin != frame.origin { container.setFrameOrigin(frame.origin) }
+                if emptyPanel.frame.origin != frame.origin { emptyPanel.frame.origin = frame.origin }
+                CATransaction.commit()
                 return
             }
             // Window resize or a different layout wins over an in-flight

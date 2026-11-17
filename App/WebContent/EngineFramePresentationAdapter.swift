@@ -3,7 +3,7 @@ import OpenEngine
 import OpenWeb
 
 /// Keep the engine capability at the App boundary. Baseline headers compile
-/// this adapter too, but refuse requests and keep the snapshot fallback.
+/// this adapter too, but refuse requests; the shell then slides the live page.
 extension OEWebContent {
   func retainSurfaceForResize(
     to viewportSize: CGSize, backingScale: CGFloat, generation: Int,

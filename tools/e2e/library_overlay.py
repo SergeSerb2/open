@@ -187,13 +187,16 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             opened = state(action='open', section='downloads')
             motion = app.call('window-motion')
             check('open_moves_page', 'libraryFrame' in motion['active']['panel'], motion=motion)
-            check('open_keeps_live_page_geometry', opened['motion']['page']['frame'] == closed_frame,
+            # The viewport (size) waits for the one end commit; hit testing uses the final origin at once.
+            check('open_keeps_live_page_size', opened['motion']['page']['frame'][2:] == closed_frame[2:],
                   before=closed_frame, during=opened['motion']['page']['frame'])
             properties = next(a['properties'] for a in opened['motion']['page']['animations'] if a['key'] == 'libraryFrame')
             check('page_motion_is_position_only', properties == ['position'], properties=properties)
             time.sleep(.25)
             motion = state()['motion']
             check('open_motion_settles', settled(motion), motion=motion)
+            check('open_moves_hit_origin_first', opened['motion']['page']['frame'][:2] == motion['page']['frame'][:2],
+                  during=opened['motion']['page']['frame'], settled=motion['page']['frame'])
             state(action='select', section='spaces')
             check('spaces_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
             time.sleep(.25)
@@ -222,7 +225,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
                 # No engine presentation seam: the open path in reverse. The live
                 # page keeps its width while it slides; it reflows once at the end.
                 check('close_slides_live_page', close_mode == 'live-slide', motion=closed['motion'])
-                check('close_keeps_live_page_geometry', closed['motion']['page']['frame'] == open_frame,
+                check('close_keeps_live_page_size', closed['motion']['page']['frame'][2:] == open_frame[2:],
                       before=open_frame, during=closed['motion']['page']['frame'])
                 check('close_starts_in_input_turn', not timing['opening'] and timing['layoutCommit'] == 0
                       and 0 <= timing['start'] - closed['motion']['closeRequestedAt'] <= 1/120, timing=timing,
@@ -239,6 +242,8 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
                 check('close_commits_width_once_at_end', motion['page']['frame'] == closed_frame
                       and motion['timing']['layoutCommit'] >= timing['end'], page=motion['page']['frame'],
                       expected=closed_frame, timing=motion['timing'])
+                check('close_moves_hit_origin_first', closed['motion']['page']['frame'][:2] == closed_frame[:2],
+                      during=closed['motion']['page']['frame'], settled=closed_frame)
             for section in ['downloads', 'spaces', 'downloads']:
                 state(action='open', section=section)
                 time.sleep(.025)
