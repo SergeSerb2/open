@@ -211,20 +211,24 @@ conditions, p95≤1.5×nominal and dropped intervals≤1% limits stay unchanged.
 The dispatcher retains its actual M5 PASS/FAIL and removes only the extra
 quiet-M1 receipt placeholder. This does not exempt latency or CPU budgets.
 
-### Pacing gate (LEAD 2026-11-16 22:15)
+### Pacing gate (LEAD 2026-11-16 22:15 and 22:55)
 
 `tools/perf/pacing_gate.py` scores existing stock frame-detector ledgers (one
 ledger per App launch) for animation acceptance. It never re-captures and never
-changes the detector, ROI or pixel thresholds. Per action it reports every
-trial and applies: true late = interval >= 16.7 ms (an exactly-12.50 ms cadence
-interval is never late); at most one true late per trial; pooled motion
-p99 <= 16.7 ms; START = a true late that ends <= 50 ms after the first change
-in an app-idle trial, and the AFTER START rate may exceed the same-session
-BEFORE rate by at most 15 points; OTHER late intervals target 0; the
-predeclared stop rule needs >= 9 trials from >= 3 launches. Run
-`python3 tools/perf/pacing_gate.py --before B1 B2 B3 --after A1 A2 A3`
-(`--first-change-latency` adds the Split #569 start rule). Exit 0 = every action
-PASS, 1 = a FAIL, 2 = no BEFORE for an action or bad input.
+changes the detector, ROI or pixel thresholds. Every trial is reported. Gaps
+are measured between content changes (the detector's `changes`), never between
+capture timestamps. Per action: true late = gap >= 16.7 ms (an exactly-12.50 ms
+cadence gap is never late); at most one true late per trial; pooled motion
+p99 <= 16.7 ms; START = a true late that ends <= 50 ms after the first change in
+an app-idle trial, and the AFTER START rate may exceed the same-session BEFORE
+rate by at most 15 points; OTHER late gaps target 0; latency = AFTER median
+input -> first visible change <= BEFORE median + one refresh (display metadata,
+else measured capture cadence); the predeclared stop rule needs >= 9 trials from
+>= 3 launches. App-idle uses any native sample on a change-driven capture
+stream (M1) and only ROI changes on a continuous stream (M5), decided per launch
+(`--capture-mode` overrides). Run
+`python3 tools/perf/pacing_gate.py --before B1 B2 B3 --after A1 A2 A3`.
+Exit 0 = every action PASS, 1 = a FAIL, 2 = no BEFORE for an action or bad input.
 
 ### Timing lane (LEAD 06:30, 2026-11-11)
 
