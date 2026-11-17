@@ -29,10 +29,10 @@ def run(output, config, factory=None):
             if image: (output/'application-icon-failure.png').write_bytes(base64.b64decode(image))
         assert ok, (name, evidence)
     with tempfile.TemporaryDirectory(prefix='open-icons-') as tmp:
-        first = [True]
+        fresh_next = [True]
         def launch():
             if factory is not None:
-                fresh, first[0] = first[0], False
+                fresh, fresh_next[0] = fresh_next[0], False
                 return factory(urls=(), fresh=fresh)
             return Open(config, 'alloy', str(Path(tmp)/'data'), [], str(Path(tmp)/'app.log'), urls=())
         try:
