@@ -58,6 +58,14 @@ public final class PaneSlotView: NSView {
     public var isDrawingPage: Bool { contentHostView.map { $0.superview === clip && !$0.isHidden } ?? false }
     public var hasDeferredTeardown: Bool { pageTeardown != nil }
     fileprivate func finishPageTeardown() { let teardown = pageTeardown; pageTeardown = nil; teardown?() }
+    /// Split motion sets each page frame once, at the start. A page that the engine
+    /// hosts or creates after that frame (a new pane's page joins the engine tab
+    /// strip a turn later) can keep its creation size. Re-enter OpenEngine's
+    /// geometry bridge once at the end; an already-correct page gets no resize.
+    fileprivate func resendPageGeometry() {
+        guard let view = contentHostView, view.superview === clip else { return }
+        view.setFrameSize(view.frame.size)
+    }
     func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, toolbar: Bool = false, fullURL: Bool = false, focused: Bool, style: SpaceThemeStyle,
                    close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping (Bool) -> Void,
                    toolbarMenu: (() -> NSMenu?)? = nil, reload: @escaping () -> Void, closeSadTab: @escaping () -> Void,
@@ -749,6 +757,7 @@ public final class WebContentContainer: NSView {
         for slot in slots {
             slot.endMotion()
             if slot.heldPageSize != nil { slot.heldPageSize = nil; slot.needsLayout = true; slot.layoutSubtreeIfNeeded() }
+            slot.resendPageGeometry()
         }
         CATransaction.commit()
         layoutDividers()

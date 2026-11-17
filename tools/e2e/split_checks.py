@@ -106,6 +106,11 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         row('add_resizes_web_once', len(add_resizes) <= 1, sizes=add_resizes)
         b = next(p['id'] for p in s['panes'] if p['id'] != a)
         row('C1_shortcut', s['orientation'] == 'horizontal' and s['focused'] == b and len(app.call('tabs')) == 2 and app.page(a)['identifier'] == original_page, state=s)
+        # The engine viewport of every pane equals its page frame once the motion ends
+        # (a new pane's page joins the engine tab strip after the start commit).
+        viewports = {p['id']: app.eval(p['id'], '[innerWidth, innerHeight]') for p in s['panes']}
+        row('pane_viewports_match_frames', all(abs(viewports[p['id']][0] - p['pageFrame'][2]) <= 1
+            and abs(viewports[p['id']][1] - p['pageFrame'][3]) <= 1 for p in s['panes']), viewports=viewports, panes=s['panes'])
         app.call('navigate', tab=b, url=origin+'/b'); app.call('wait', tab=b)
         ok, pages = live([a, b]); row('E1_two_live_pages', ok, pages=pages)
         # Real page focus and input, plus independent navigation histories.
