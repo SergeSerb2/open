@@ -204,36 +204,41 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             closed = state()
             check('close_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'], motion=closed['motion'])
             timing = closed['motion']['timing']
-            check('close_commits_width_before_motion', closed['motion']['page']['frame'] == closed_frame
-                  and not timing['opening'] and 0 < timing['layoutCommit'] <= timing['start'],
-                  before=open_frame, during=closed['motion']['page']['frame'], timing=timing)
             close_mode = closed['motion']['closeMode']
-            if close_mode in ['retained-live', 'empty-live']:
-                check('close_moves_full_width_live_host', closed['motion']['snapshotCount'] == 0
-                      and not closed['motion']['snapshotLiveViewsHidden'], motion=closed['motion'])
+            properties = next(a['properties'] for a in closed['motion']['page']['animations'] if a['key'] == 'libraryFrame')
+            if close_mode == 'retained-live':
+                check('close_commits_width_before_motion', closed['motion']['page']['frame'] == closed_frame
+                      and not timing['opening'] and 0 < timing['layoutCommit'] <= timing['start'],
+                      before=open_frame, during=closed['motion']['page']['frame'], timing=timing)
                 check('close_starts_within_deadline', not closed['motion']['closeDeadlineMissed']
                       and 0 < timing['start'] - closed['motion']['closeRequestedAt'] <= .050,
                       motion=closed['motion'])
-                if close_mode == 'retained-live':
-                    presented_frames = closed['motion']['presentedFrames']
-                    check('close_waits_for_real_present', bool(presented_frames) and all(f['presented'] for f in presented_frames)
-                          and 0 < closed['motion']['framePresentedAt'] <= timing['start'], frames=presented_frames)
-                properties = next(a['properties'] for a in closed['motion']['page']['animations'] if a['key'] == 'libraryFrame')
+                presented_frames = closed['motion']['presentedFrames']
+                check('close_waits_for_real_present', bool(presented_frames) and all(f['presented'] for f in presented_frames)
+                      and 0 < closed['motion']['framePresentedAt'] <= timing['start'], frames=presented_frames)
                 check('live_close_is_translation_only', properties == ['transform.translation.x', 'transform.translation.y'],
                       properties=properties)
             else:
-                check('close_retains_snapshot_fallback', close_mode == 'snapshot-fallback', motion=closed['motion'])
-                check('close_uses_page_snapshot', closed['motion']['snapshotCount'] > 0, motion=closed['motion'])
-                check('close_hides_live_views', closed['motion']['snapshotLiveViewsHidden'], motion=closed['motion'])
+                # No engine presentation seam: the open path in reverse. The live
+                # page keeps its width while it slides; it reflows once at the end.
+                check('close_slides_live_page', close_mode == 'live-slide', motion=closed['motion'])
+                check('close_keeps_live_page_geometry', closed['motion']['page']['frame'] == open_frame,
+                      before=open_frame, during=closed['motion']['page']['frame'])
+                check('close_starts_in_input_turn', not timing['opening'] and timing['layoutCommit'] == 0
+                      and 0 <= timing['start'] - closed['motion']['closeRequestedAt'] <= 1/120, timing=timing,
+                      requested=closed['motion']['closeRequestedAt'])
+                check('close_motion_is_position_only', properties == ['position'], properties=properties)
                 check('fallback_does_not_claim_presentation', closed['motion']['framePresentedAt'] == 0
                       and not closed['motion']['presentedFrames'], motion=closed['motion'])
-                check('close_separates_preparation_commit', timing['start'] - timing['layoutCommit'] >= 1/240,
-                      timing=timing)
             second = state()['motion']
-            check('close_keeps_final_viewport_fixed', second['page']['frame'] == closed['motion']['page']['frame'], motion=second)
+            check('close_keeps_viewport_fixed_while_moving', second['page']['frame'] == closed['motion']['page']['frame'], motion=second)
             time.sleep(.25)
             motion = state()['motion']
             check('closed_motion_stops', settled(motion), motion=motion)
+            if close_mode == 'live-slide':
+                check('close_commits_width_once_at_end', motion['page']['frame'] == closed_frame
+                      and motion['timing']['layoutCommit'] >= timing['end'], page=motion['page']['frame'],
+                      expected=closed_frame, timing=motion['timing'])
             for section in ['downloads', 'spaces', 'downloads']:
                 state(action='open', section=section)
                 time.sleep(.025)

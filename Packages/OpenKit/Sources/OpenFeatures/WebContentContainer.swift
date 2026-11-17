@@ -6,7 +6,6 @@ import OpenExtensionsUI
 
 @MainActor
 public final class PaneSlotView: NSView {
-    var libraryMotionHidesContent = false
     var fullBleed = false {
         didSet { if fullBleed != oldValue { clip.layer?.cornerRadius = fullBleed ? 0 : PanelMetrics.cornerRadius; layer?.shadowOpacity = fullBleed ? 0 : PanelMetrics.shadowOpacity } }
     }
@@ -88,7 +87,7 @@ public final class PaneSlotView: NSView {
             sadTabView?.removeFromSuperview(); sadTabView = nil
             if contentHostView !== host.view { contentHostView?.removeFromSuperview(); lastHostWindowRect = nil }
             placeholderView?.removeFromSuperview(); placeholderView = nil
-            contentHostView = host.view; host.view.isHidden = libraryMotionHidesContent
+            contentHostView = host.view; host.view.isHidden = false
             if host.view.superview !== clip { clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome) }
             if hadPageFocus && wasSad { host.focus() }
         } else {
@@ -154,20 +153,6 @@ public final class PaneSlotView: NSView {
 
 @MainActor
 public final class WebContentContainer: NSView {
-    var librarySnapshotReadInFlight = false
-    public internal(set) var librarySnapshotStatus = "idle"
-    private var libraryMotionHiddenViews: Set<ObjectIdentifier> = []
-    func setLibraryMotionHiddenViews(_ views: [NSView]) {
-        libraryMotionHiddenViews = Set(views.map(ObjectIdentifier.init))
-        for slot in slots {
-            let hidden = slot.contentHostView.map { libraryMotionHiddenViews.contains(ObjectIdentifier($0)) } ?? false
-            slot.libraryMotionHidesContent = hidden
-            slot.contentHostView?.isHidden = hidden
-            // The closing snapshot already contains the pane's rounded edge.
-            // Keep the ordinary live clip for opening and restore it on cancel.
-            slot.clip.layer?.masksToBounds = !hidden
-        }
-    }
     public static let maxCachedHiddenHosts = 8
     public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
     public var extensionsUI: ExtensionsUIContext? { didSet { for slot in slots { slot.paneChrome?.extensionsUI = extensionsUI } } }
@@ -371,8 +356,6 @@ public final class WebContentContainer: NSView {
     private func updateSlots() {
         for slot in slots {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
-            slot.libraryMotionHidesContent = cache[id].map { libraryMotionHiddenViews.contains(ObjectIdentifier($0.view)) } ?? false
-            slot.clip.layer?.masksToBounds = !slot.libraryMotionHidesContent
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },

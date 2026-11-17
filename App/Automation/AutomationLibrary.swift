@@ -168,9 +168,6 @@ extension AutomationController {
     }
     state["motion"]=["page":motion(controller.container.layer),"panel":motion(session.panel?.layer),
       "sidebar":motion(controller.sidebar.layer),"occlusion":controller.window?.occlusionState.rawValue ?? 0,
-      "snapshotCount":controller.libraryMotionSnapshotCount,
-      "snapshotLiveViewsHidden":controller.libraryMotionLiveViewsHidden,
-      "snapshotStatus":controller.container.librarySnapshotStatus,
       "closeMode":controller.libraryCloseMode,"closePhase":controller.libraryClosePhase,
       "closeRequestedAt":controller.libraryCloseRequestedAt,
       "framePresentedAt":controller.libraryFramePresentedAt,
