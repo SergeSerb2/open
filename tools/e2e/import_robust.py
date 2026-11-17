@@ -12,6 +12,7 @@ import runpy
 import shutil
 import sqlite3
 import subprocess
+import tempfile
 import time
 import uuid
 
@@ -102,8 +103,10 @@ def inventory(app):
 
 
 def run(factory, results, tmp, h):
-    root = Path(tmp)/'import-robust'
-    root.mkdir(exist_ok=True)
+    # engine_e2e.py calls run() again in the same scratch directory after a
+    # foreground loss. Each attempt builds its fixtures in a new directory, so a
+    # retry never meets the earlier attempt's files (FileExistsError).
+    root = Path(tempfile.mkdtemp(prefix='import-robust-', dir=tmp))
     evidence = Path(h.OUT)/'import-robust'
     evidence.mkdir(exist_ok=True)
     negative = os.environ.get('OPEN_E2E_IMPORT_ROBUST_NEGATIVE') == '1'
