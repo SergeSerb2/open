@@ -351,6 +351,8 @@ public final class WebContentContainer: NSView {
     /// bookkeeping (ids, slots, cache, parked slots, LRU) is already final.
     private var retiringSlots: [PaneSlotView] = []
     private var paneMotionGeneration = 0
+    /// Pane order before the running motion; a retarget collapses departing panes in it.
+    private var paneMotionOrder: [ItemID] = []
     private var paneMotionAllowed: Bool { window?.isVisible == true && !Motion.reducesMotion }
     public var retiringPaneCount: Int { retiringSlots.count }
     /// Automation readback: why the last show() did or did not start a pane motion.
@@ -406,7 +408,11 @@ public final class WebContentContainer: NSView {
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
         hiddenLRU.removeAll { tabIDs.contains($0) }
         ensureHost(focusedTabID); updateSlots(); trimCache()
-        layoutPanes(animated: movesPanes, starts: starts, oldIDs: old, oldOrientation: oldOrientation)
+        // A same-pane refresh in a running motion (Close This Pane refreshes again after the
+        // model applies the split's stored fractions) retargets it from the presented boxes.
+        let retarget = !movesPanes && old == tabIDs && paneMotionAllowed && (transitioning || !retiringSlots.isEmpty)
+        layoutPanes(animated: movesPanes || retarget, starts: retarget ? visiblePaneBoxes() : starts, oldIDs: old,
+                    oldOrientation: oldOrientation, retarget: retarget)
         // A closed page stays in the window while its box collapses, so AppKit does not
         // drop its first responder. Take it before the new focus is set.
         if let responder = window?.firstResponder as? NSView, retiringSlots.contains(where: { responder.isDescendant(of: $0) }) {
@@ -679,12 +685,14 @@ public final class WebContentContainer: NSView {
     /// completion, never a timer); the engine's old, larger frame stays cropped by the
     /// final box until its new frame arrives. Departing panes keep their page drawn
     /// while their box collapses toward the pane that takes their place.
-    private func layoutPanes(animated: Bool, starts: [ItemID: CGRect], oldIDs: [ItemID], oldOrientation: SplitOrientation) {
+    private func layoutPanes(animated: Bool, starts: [ItemID: CGRect], oldIDs: [ItemID], oldOrientation: SplitOrientation,
+                             retarget: Bool = false) {
         let frames = SplitLayout.frames(content: bounds, orientation: orientation, fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
         let targets = zip(slots, frames).map { slot, frame in (slot: slot, frame: maximizedTabID == slot.tabID ? bounds : frame) }
         for (slot, _) in targets { slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID }
         let changed = targets.contains { $0.slot.frame != $0.frame }
-        guard animated, changed || !retiringSlots.isEmpty else {
+        // A retarget with unchanged targets leaves the running motion alone.
+        guard animated, changed || (!retiringSlots.isEmpty && !retarget) else {
             // A layout pass during a motion with unchanged targets keeps the motion.
             if changed { finishPaneMotion() }
             for (slot, target) in targets where slot.frame != target { slot.frame = target }
@@ -692,6 +700,8 @@ public final class WebContentContainer: NSView {
         }
         paneMotionGeneration += 1; let generation = paneMotionGeneration
         let duration = Motion.splitExpand, timing = Motion.easeInOut
+        if !retarget { paneMotionOrder = oldIDs }
+        let order = retarget ? paneMotionOrder : oldIDs
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // Must precede the animations it waits for.
         CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated { self?.finishPaneMotion(generation) } }
@@ -722,12 +732,12 @@ public final class WebContentContainer: NSView {
         // Collapse along the axis the panes are drawn in now. A refresh in the same turn
         // can already have changed `orientation` (Separate passes .horizontal) before
         // anything was drawn in it.
-        let shown = oldIDs.compactMap { starts[$0] }
+        let shown = order.compactMap { starts[$0] }
         let stacked = shown.count > 1 && shown.allSatisfy { abs($0.minX - shown[0].minX) < 1 && abs($0.width - shown[0].width) < 1 }
         let collapseAxis: SplitOrientation = shown.count > 1 ? (stacked ? .vertical : .horizontal) : oldOrientation
         for slot in retiringSlots {
-            guard let start = starts[slot.tabID], let index = oldIDs.firstIndex(of: slot.tabID) else { continue }
-            let edge = oldIDs[..<index].reversed().compactMap { endByID[$0] }.first.map { Self.endEdge($0, collapseAxis) }
+            guard let start = starts[slot.tabID], let index = order.firstIndex(of: slot.tabID) else { continue }
+            let edge = order[..<index].reversed().compactMap { endByID[$0] }.first.map { Self.endEdge($0, collapseAxis) }
                 ?? Self.startEdge(bounds, collapseAxis)
             let origin = slot.frame.origin
             slot.moveBox(from: start.offsetBy(dx: -origin.x, dy: -origin.y),
