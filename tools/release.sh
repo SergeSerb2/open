@@ -556,7 +556,13 @@ app_build() {
     rm -rf "$REL/symbols/Open.app.dSYM"
     ditto "$dsym" "$REL/symbols/Open.app.dSYM"
     [[ "$(app_uuid "$STAGE/built/Open.app/Contents/MacOS/Open")" == "$(app_uuid "$REL/symbols/Open.app.dSYM")" ]] || die 'archived Open.app.dSYM UUID differs from the built App binary'
-    output "$STAGE/built" "$STAGE/app-build.log" "$REL/symbols/Open.app.dSYM"
+    # Hygiene also strips OpenEngine; archive its dSYM the same way first.
+    local engine_dsym="$ROOT/build/Release/OpenEngine.framework.dSYM"
+    [[ -d "$engine_dsym" ]] || die 'OpenEngine.framework.dSYM missing from the Release build; cannot strip OpenEngine without its symbols'
+    rm -rf "$REL/symbols/OpenEngine.framework.dSYM"
+    ditto "$engine_dsym" "$REL/symbols/OpenEngine.framework.dSYM"
+    [[ "$(app_uuid "$STAGE/built/Open.app/Contents/Frameworks/OpenEngine.framework/OpenEngine")" == "$(app_uuid "$REL/symbols/OpenEngine.framework.dSYM")" ]] || die 'archived OpenEngine.framework.dSYM UUID differs from the built framework'
+    output "$STAGE/built" "$STAGE/app-build.log" "$REL/symbols/Open.app.dSYM" "$REL/symbols/OpenEngine.framework.dSYM"
 }
 app_uuid() { xcrun dwarfdump --uuid "$1" | awk '/arm64/{print $2; exit}'; }
 bundle_check() {
@@ -619,6 +625,12 @@ hygiene() {
     before=$(app_uuid "$binary")
     xcrun strip -x "$binary"
     [[ "$(app_uuid "$binary")" == "$before" && "$before" == "$(app_uuid "$REL/symbols/Open.app.dSYM")" ]] || die 'stripped App binary no longer matches the archived dSYM UUID'
+    # OpenEngine ships its debug map (about 0.7 MB of STABS and local symbols).
+    # Exported symbols stay; the archived OpenEngine.framework.dSYM resolves crashes.
+    local engine="$STAGE/hygiene/Open.app/Contents/Frameworks/OpenEngine.framework/OpenEngine"
+    before=$(app_uuid "$engine")
+    xcrun strip -S -x "$engine"
+    [[ "$(app_uuid "$engine")" == "$before" && "$before" == "$(app_uuid "$REL/symbols/OpenEngine.framework.dSYM")" ]] || die 'stripped OpenEngine no longer matches the archived dSYM UUID'
     grep -Eq -- '-D[[:space:]]*OPEN_AUTOMATION|automation.sock' "$STAGE/app-build.log" && die 'automation condition found in release build log'
     bundle_check "$STAGE/hygiene/Open.app"
     output "$STAGE/hygiene"
