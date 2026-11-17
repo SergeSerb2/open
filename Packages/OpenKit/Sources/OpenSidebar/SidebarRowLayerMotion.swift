@@ -64,10 +64,18 @@ final class SidebarRowLayerMotion {
         let width = ceil(view.bounds.width * scale), height = ceil(view.bounds.height * scale)
         // One allocation is <= 8 MiB; the whole transition has the same ceiling.
         guard width > 0, height > 0, width <= 2048, height <= 1024,
-              bitmapPixels + Int(width * height) <= 2_097_152,
-              let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
-        view.cacheDisplay(in: view.bounds, to: bitmap)
-        guard let image = bitmap.cgImage else { return }
+              bitmapPixels + Int(width * height) <= 2_097_152, let source = view.layer,
+              let context = CGContext(data: nil, width: Int(width), height: Int(height), bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: view.window?.colorSpace?.cgColorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return }
+        // Composite the row's already drawn layer backing stores. Redrawing the
+        // row (cacheDisplay) laid out and drew its text again on the main thread
+        // before the edit's commit: about 0.7 ms per row on the M5.
+        context.scaleBy(x: scale, y: scale)
+        if source.contentsAreFlipped() { context.translateBy(x: 0, y: view.bounds.height); context.scaleBy(x: 1, y: -1) }
+        source.render(in: context)
+        guard let image = context.makeImage() else { return }
         bitmapPixels += Int(width * height)
         let copy = CALayer(); copy.contents = image; copy.contentsScale = scale
         copy.name = String(describing: ObjectIdentifier(item))
