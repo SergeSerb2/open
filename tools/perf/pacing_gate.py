@@ -12,7 +12,8 @@ Rules (per action = trial label without its trailing "-N"):
   motion p99     pooled over every change interval of the action (nearest rank): <= 16.7 ms.
   START          a true late interval that ends <= 50 ms after the trial's first change, in an app-idle trial
                  (no native sample in the 25 ms before the first change). Everything else is OTHER.
-  START rate     AFTER (trials with START / app-idle trials) <= same-session BEFORE rate + 15 points.
+  START rate     AFTER (trials with START / app-idle motion trials) <= same-session BEFORE rate + 15 points.
+                 Only trials with >= 3 changes count; with no such BEFORE trial the reference rate is 0.
   OTHER          target 0 (reported); each OTHER interval still uses the trial's late budget.
   stop rule      >= 9 trials from >= 3 launches per action (predeclared run set).
   motion         every trial has >= 3 stock changes (the stock detector's own minimum).
@@ -198,7 +199,8 @@ def score_side(ledgers):
     summary = {}
     for name, trials in actions.items():
         intervals = [ms for t in trials for ms in t['intervals_ms']]
-        idle = [t for t in trials if t['app_idle']]
+        # START rate counts motion trials only (>= 3 changes): an instant BEFORE change has no motion start.
+        idle = [t for t in trials if t['app_idle'] and t['motion_ok']]
         with_start = [t for t in idle if t['start']]
         firsts = [t['first_change_ms'] for t in trials if t['first_change_ms'] is not None]
         summary[name] = {
