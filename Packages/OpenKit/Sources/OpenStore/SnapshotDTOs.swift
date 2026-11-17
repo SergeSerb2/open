@@ -313,12 +313,72 @@ public enum SnapshotMapper {
     }
 
     public static func model(from dto: SnapshotFileDTO) -> BrowserModel {
+        let (dto, repairs) = removingDuplicateIDs(dto)
+        for line in repairs { FileHandle.standardError.write(Data("Open: snapshot repair: \(line)\n".utf8)) }
         let profiles = dto.profiles.map { profile(from: $0) }
         let spaces = dto.spaces.map { space(from: $0) }
         let windows = dto.windows.map { window(from: $0) }
         let rules = dto.routingRules.map { rule(from: $0) }
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination(from: dto.defaultDestination))
+        model.loadRepairs = repairs
         return model
+    }
+
+    /// A damaged snapshot can repeat an ID. The first Profile or Space with an ID wins and later
+    /// ones are dropped. A repeated node ID: a tab identical to the first one is dropped, any
+    /// other node (a different tab, a folder or a split) keeps its contents under a fresh ID.
+    static func removingDuplicateIDs(_ input: SnapshotFileDTO) -> (SnapshotFileDTO, [String]) {
+        var dto = input, repairs: [String] = []
+        func key(_ id: String) -> String? { UUID(uuidString: id)?.uuidString }
+        var profileIDs = Set<String>(), spaceIDs = Set<String>()
+        dto.profiles = dto.profiles.filter { profile in
+            guard let id = key(profile.id), !profileIDs.insert(id).inserted else { return true }
+            repairs.append("dropped duplicate Profile \(id)"); return false
+        }
+        dto.spaces = dto.spaces.filter { space in
+            guard let id = key(space.id), !spaceIDs.insert(id).inserted else { return true }
+            repairs.append("dropped duplicate Space \(id)"); return false
+        }
+        var seen: [String: Data] = [:]
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        func fresh() -> String { UUID().uuidString }
+        func tab(_ tab: TabDTO) -> TabDTO? {
+            var tab = tab
+            let body = (try? encoder.encode(tab)) ?? Data()
+            guard let id = key(tab.id) else { return tab }
+            guard let first = seen[id] else { seen[id] = body; return tab }
+            if first == body { repairs.append("dropped duplicate tab \(id)"); return nil }
+            tab.id = fresh(); seen[key(tab.id)!] = body
+            repairs.append("gave tab \(id) a new ID \(tab.id)")
+            return tab
+        }
+        func claim(_ id: inout String, _ kind: String) {
+            guard let current = key(id) else { return }
+            guard seen[current] != nil else { seen[current] = Data(); return }
+            id = fresh(); seen[key(id)!] = Data()
+            repairs.append("gave \(kind) \(current) a new ID \(id)")
+        }
+        func nodes(_ list: [NodeDTO]) -> [NodeDTO] {
+            list.compactMap { node in
+                switch node {
+                case .tab(let t): return tab(t).map(NodeDTO.tab)
+                case .folder(var folder):
+                    claim(&folder.id, "folder")
+                    folder.children = nodes(folder.children)
+                    return .folder(folder)
+                case .split(var split):
+                    claim(&split.id, "split")
+                    split.panes = split.panes.compactMap(tab)
+                    return split.panes.isEmpty ? nil : .split(split)
+                }
+            }
+        }
+        for index in dto.profiles.indices { dto.profiles[index].favorites = nodes(dto.profiles[index].favorites) }
+        for index in dto.spaces.indices {
+            dto.spaces[index].pinned = nodes(dto.spaces[index].pinned)
+            dto.spaces[index].today = nodes(dto.spaces[index].today)
+        }
+        return (dto, repairs)
     }
 
     static func iconDTO(_ icon: SpaceIcon?) -> SpaceIconDTO? {
