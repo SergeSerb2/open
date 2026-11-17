@@ -363,6 +363,7 @@ public final class WebContentContainer: NSView {
             guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             self.advanceMotionRevision(id)
             // No engine-to-model bridge exists before the App target; property writes are the bridge.
+            if let tab = self.tabProvider(id), tab.url != url, tab.url == tab.pinnedURL, !tab.title.isEmpty { self.pinnedPageTitles[id] = tab.title }
             self.tabProvider(id)?.url = url; self.onTabURLChanged?(id, url); self.metadataChanged(id)
         }
         host.onTitleChange = { [weak self, weak host] title in

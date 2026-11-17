@@ -127,9 +127,10 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     private func syncTileHover() {
         guard context.forcedHover == nil, let window else { return }
         let pointer: NSPoint? = if let source = context.pointerLocation { source() } else { window.mouseLocationOutsideOfEventStream }
-        let hit = pointer.flatMap { collection.indexPathForItem(at: collection.convert($0, from: nil)) }
+        // Tile frames, not indexPathForItem(at:): the grid layout answers nil for that query.
+        let local = pointer.map { collection.convert($0, from: nil) }
         for case let item as FavoriteTileItem in collection.visibleItems() {
-            item.tile.syncPointer(inside: hit != nil && collection.indexPath(for: item) == hit)
+            item.tile.syncPointer(inside: local.map { item.view.frame.contains($0) } ?? false)
         }
     }
 
@@ -320,7 +321,6 @@ final class FavoriteTileView: NSView {
     weak var owner: FavoritesView?
     private let fill = CALayer()
     private let favicon = FaviconView()
-    private(set) var accessory: PlateButton?
     private var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; hoverChanged() } } }
     private var tracking: NSTrackingArea?
 
@@ -400,30 +400,6 @@ final class FavoriteTileView: NSView {
             liveSubtitle.selected = selected; liveSubtitle.dark = appearance == .dark
             needsLayout = true
         }
-        updateAccessory(hovered: hovered)
-    }
-
-    private func updateAccessory(hovered: Bool) {
-        let unload = tracked({ tab?.live.hasWebContent ?? false }) { [weak self] in self?.needsDisplay = true }
-        guard hovered || accessory != nil else { return }
-        let button: PlateButton
-        if let accessory { button = accessory }
-        else {
-            button = PlateButton(glyph: .rowClose)
-            button.plateRadius = 6
-            button.accessibleTitle = { [weak self] in self?.tab?.live.hasWebContent == true ? "Unload tab" : "Archive tab" }
-            button.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
-            button.plateColor = { _ in SidebarRole.rowPressed }
-            button.action = { [weak self] in
-                guard let self, let tab = self.tab else { return }
-                self.context?.send(tab.live.hasWebContent ? .unloadTab(tab.id) : .close(nodeID: tab.id))
-            }
-            addSubview(button)
-            accessory = button
-        }
-        button.glyphView.glyph = unload ? .rowUnload : .rowClose
-        button.frame = CGRect(x: bounds.width - 22, y: 1, width: 22, height: 22)
-        button.isHidden = !hovered
     }
 
     override func updateTrackingAreas() {
@@ -436,7 +412,9 @@ final class FavoriteTileView: NSView {
 
     override func mouseEntered(with event: NSEvent) { pointerInside = true }
     override func mouseExited(with event: NSEvent) { pointerInside = false }
-    func syncPointer(inside: Bool) { pointerInside = inside }
+    func syncPointer(inside: Bool) {
+        pointerInside = inside
+    }
 
     private func hoverChanged() {
         guard let tab, let context, let space = context.focusedSpace else { return }
@@ -451,15 +429,17 @@ final class FavoriteTileView: NSView {
         }
     }
 
-    /// The action owns its hit target; the rest of the tile hits the tile itself. NSCollectionView
-    /// (macOS 27) finds the clicked item by hit-testing item views, so a tile that returns nil
-    /// is never selected or dragged. The tile does not handle mouse events: they travel up the
-    /// responder chain (tile → item → collection view), which does selection and drags.
+    /// The tile hits itself. NSCollectionView (macOS 27) finds the clicked item by hit-testing item
+    /// views, so a tile that returns nil is never selected or dragged. The tile does not handle mouse
+    /// events: they travel up the responder chain (tile → item → collection view), which does
+    /// selection and drags. A tile has no close or unload button: Arc 1.172.2 shows none on a hovered
+    /// Favorite, selected or not (docs/re/pinned-favorites-close.md F2); Cmd-W closes a Favorite.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let local = convert(point, from: superview)
-        if let accessory, !accessory.isHidden, accessory.frame.contains(local) { return accessory.hitTest(local) }
-        return bounds.contains(local) ? self : nil
+        bounds.contains(convert(point, from: superview)) ? self : nil
     }
+
+    /// Hover as drawn (the pointer, or a forced render hover).
+    var showsHover: Bool { isHovered }
 
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }

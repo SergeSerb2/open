@@ -658,7 +658,8 @@
         let controller = try sidebarController(a)
         guard let raw = (a["node"] ?? a["favorite"]) as? String, let uuid = UUID(uuidString: raw) else { throw Failure(message: "invalid sidebar node") }
         controller.contentView.layoutSubtreeIfNeeded()
-        guard let action = controller.sidebar.tabAction(tabID: ItemID(rawValue: uuid)) else { return ["shown": false] as [String: Any] }
+        let hovered = controller.sidebar.isFavoriteTileHovered(tabID: ItemID(rawValue: uuid)).map { $0 as Any } ?? NSNull()
+        guard let action = controller.sidebar.tabAction(tabID: ItemID(rawValue: uuid)) else { return ["shown": false, "tileHovered": hovered] as [String: Any] }
         let frame = controller.contentView.convert(action.view.bounds, from: action.view)
         return ["shown": true, "glyph": action.glyph.map { String(describing: $0) } ?? "", "label": action.view.accessibilityLabel() ?? "",
           "frame": [frame.minX, frame.minY, frame.width, frame.height], "point": [frame.midX, frame.midY]] as [String: Any]

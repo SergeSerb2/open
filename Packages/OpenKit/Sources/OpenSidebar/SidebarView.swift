@@ -558,16 +558,18 @@ extension SidebarView {
 
     /// The rendered action button and its actual glyph, for host diagnostics.
     public func tabAction(tabID: ItemID) -> (view: NSView, glyph: Glyph?)? {
-        if let index = favorites.tabs.firstIndex(where: { $0.id == tabID }),
-           let tile = favorites.collection.item(at: IndexPath(item: index, section: 0))?.view as? FavoriteTileView,
-           let button = tile.accessory, !button.isHidden {
-            return (button, button.glyphView.glyph)
-        }
         guard let page = pager.currentPage, let object = context.model.node(id: tabID)?.object else { return nil }
         let row = page.outline.row(forItem: object)
         guard row >= 0, let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? TabCellView,
               let button = cell.accessory, !button.isHidden else { return nil }
         return (button, button.glyphView.glyph)
+    }
+
+    /// Whether the Favorite's tile draws its hover state now; nil when no tile shows that tab.
+    public func isFavoriteTileHovered(tabID: ItemID) -> Bool? {
+        guard let index = favorites.tabs.firstIndex(where: { $0.id == tabID }),
+              let tile = favorites.collection.item(at: IndexPath(item: index, section: 0))?.view as? FavoriteTileView else { return nil }
+        return tile.showsHover
     }
 
     public var displayedSpaceTitle: String? { pager.currentPage?.header.displayedTitle }

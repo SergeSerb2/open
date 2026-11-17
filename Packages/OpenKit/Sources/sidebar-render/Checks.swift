@@ -341,20 +341,15 @@ enum Checks {
         plain.live.hasWebContent = true
         hover(plain)
         check(sidebar.tabAction(tabID: plain.id)?.glyph == .rowClose, "Today tab shows × even with live web content")
+        // docs/re/pinned-favorites-close.md F2: a hovered Favorite tile shows no close or unload button.
         hover(favorite, favorite: true)
-        check(sidebar.tabAction(tabID: favorite.id)?.glyph == .rowClose, "unloaded Favorite shows × on hover")
+        check(sidebar.tabAction(tabID: favorite.id) == nil, "unloaded Favorite shows no button on hover")
         favorite.live.hasWebContent = true
         pump()
-        check(sidebar.tabAction(tabID: favorite.id)?.glyph == .rowUnload, "loaded Favorite changes to − while hovered")
-        clickAction(favorite)
-        check(delegate.log == [.unloadTab(favorite.id)] && model.tab(id: favorite.id) === favorite,
-              "Favorite − click sends unloadTab and keeps the entry")
+        check(sidebar.tabAction(tabID: favorite.id) == nil && sidebar.isFavoriteTileHovered(tabID: favorite.id) == true,
+              "loaded Favorite shows its hover fill and no button")
         favorite.live.hasWebContent = false
         pump()
-        check(sidebar.tabAction(tabID: favorite.id)?.glyph == .rowClose, "Favorite returns to × when web content goes away")
-        clickAction(favorite)
-        check(delegate.log == [.close(nodeID: favorite.id)] && model.tab(id: favorite.id) == nil, "Favorite × click closes the entry")
-        undo.undo(); pump()
         context.forcedHover = .header
         pump()
         func button(_ label: String, in view: NSView) -> NSView? {

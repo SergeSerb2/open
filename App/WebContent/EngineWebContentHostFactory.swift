@@ -1052,7 +1052,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if case .splitPane? = model.parent(of: id) { inSplit = true }
     if isPinned || isFavorite {
       controller?.container.closeHost(for: id); hosts[id]?.close()
-      if isPinned { returnToPinnedURL(id) }
+      returnToPinnedURL(id)
     } else { model.closeTab(id: id) }
     selectionHistory.removeAll { $0 == id }
     if wasSelected, (isPinned || isFavorite), !inSplit {
@@ -1071,8 +1071,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       DispatchQueue.main.async { [weak self] in self?.window?.performClose(nil) }
     }
   }
-  /// A pinned tab closed after it left its pinned URL goes back to that URL, unloaded, with the
-  /// pinned page's title (docs/re/pinned-favorites-close.md P4). The next selection loads it.
+  /// A pinned tab or Favorite closed after it left its pinned URL goes back to that URL, unloaded,
+  /// with the pinned page's title (docs/re/pinned-favorites-close.md P4, F4). The next selection loads it.
   private func returnToPinnedURL(_ id: ItemID) {
     guard let tab = model.tab(id: id), let pinned = tab.pinnedURL, tab.url != pinned else { return }
     withoutUndo { model.resetPinnedTab(id: id) }

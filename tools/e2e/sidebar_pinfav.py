@@ -40,7 +40,7 @@ def run(factory, results, tmp, harness):
 
         def hover(t, favorite=False):
             app.call('hover', **({'favorite': t} if favorite else {'node': t}))
-            return wait_until(lambda: (lambda a: a if a.get('shown') else None)(accessory(t, favorite)), timeout=2, step=.02) or accessory(t, favorite)
+            return wait_until(lambda: (lambda a: a if a.get('shown') or a.get('tileHovered') else None)(accessory(t, favorite)), timeout=2, step=.02) or accessory(t, favorite)
 
         def click_at(point):
             app.call('mouse', action='click', x=point[0], y=point[1], queued=True)
@@ -100,22 +100,16 @@ def run(factory, results, tmp, harness):
                and after2b['section'] == 'pinned' and not after2b['hasWebContent'] and selected() == t1,
                clicked=clicked2b, after=after2b, selected=selected(), expected=t1)
 
-        # PF3: Favorite tile "−" unloads and keeps the tile.
+        # PF3 (Arc F2): a hovered Favorite tile shows no close or unload button, loaded or not,
+        # selected or not; it shows its hover fill.
         app.call('select', tab=f1); wait_until(lambda: tab(f1)['hasWebContent'], timeout=5, step=.05)
+        on_selected = hover(f1, favorite=True)
         app.call('select', tab=t2)
-        clickedf = click_accessory(f1, favorite=True)
-        afterf = settle(f1)
-        record('PF3_favorite_minus_unloads', clickedf.get('glyph') == 'rowUnload' and afterf and afterf['section'] == 'favorites'
-               and not afterf['hasWebContent'], clicked=clickedf, after=afterf)
-
-        # PF4: the unloaded Favorite's "×" under the same pointer.
-        againf = accessory(f1, favorite=True)
-        clickedf2 = {'clicked': False}
-        if againf.get('shown'):
-            click_at(againf['point']); clickedf2 = {'clicked': True, 'glyph': againf['glyph']}
-        afterf2 = settle(f1)
-        record('PF4_favorite_x_on_unloaded_acts', clickedf2.get('clicked') and (afterf2 is None or afterf2['section'] != 'favorites'),
-               accessory=againf, clicked=clickedf2, after=afterf2, observe=True)
+        on_loaded = hover(f1, favorite=True)
+        app.call('sidebar-unload', tab=f1); wait_until(lambda: not tab(f1)['hasWebContent'], timeout=5, step=.05)
+        on_unloaded = hover(f1, favorite=True)
+        states = [on_selected, on_loaded, on_unloaded]
+        record('PF3_favorite_hover_has_no_button', all(not x.get('shown') and x.get('tileHovered') is True for x in states), states=states)
 
         # PF5 (Arc P3, P5): Cmd-W on the selected pinned tab keeps the row, unloads it, and selects
         # the tab selected before it (here t2), not a strip neighbour.
@@ -126,13 +120,24 @@ def run(factory, results, tmp, harness):
         record('PF5_cmdw_pinned_unloads_back_to_previous', after5 and after5['section'] == 'pinned' and not after5['hasWebContent']
                and selected() == t2, after=after5, selected_after=selected(), expected=t2, order=order)
 
-        # PF6: Cmd-W on the selected Favorite.
-        if f1 in ids():
-            app.call('select', tab=f1); wait_until(lambda: tab(f1)['hasWebContent'], timeout=5, step=.05)
-            app.call('key', key='w', modifiers=['command'])
-            after6 = settle(f1)
-            record('PF6_cmdw_favorite_unloads', after6 and after6['section'] == 'favorites' and not after6['hasWebContent'] and selected() != f1,
-                   after=after6, selected_after=selected())
+        # PF6 (Arc F3): Cmd-W on the selected Favorite keeps the tile, unloads it, and selects the tab
+        # selected before it.
+        app.call('select', tab=t1); app.call('select', tab=f1); wait_until(lambda: tab(f1)['hasWebContent'], timeout=5, step=.05)
+        app.call('key', key='w', modifiers=['command'])
+        after6 = settle(f1)
+        record('PF6_cmdw_favorite_unloads_back_to_previous', after6 and after6['section'] == 'favorites' and not after6['hasWebContent']
+               and selected() == t1, after=after6, selected_after=selected(), expected=t1)
+
+        # PF6b (Arc F4): Cmd-W on a Favorite that left its saved URL puts it back on that URL and title.
+        app.call('select', tab=f1); wait_until(lambda: tab(f1)['hasWebContent'], timeout=5, step=.05)
+        app.call('navigate', tab=f1, url=fixture('PF Favorite Away'))
+        wait_until(lambda: (lambda t: t if 'PF%20Favorite%20Away' in t['url'] and t['title'] == 'PF Favorite Away' else None)(tab(f1)), timeout=5, step=.05)
+        app.call('key', key='w', modifiers=['command'])
+        after6b = settle(f1)
+        record('PF6b_cmdw_navigated_favorite_returns_to_saved_url', after6b and after6b['section'] == 'favorites'
+               and not after6b['hasWebContent'] and after6b['url'] == after6b['pinnedURL'] and after6b['title'] == 'PF Favorite One',
+               after=after6b)
+        app.call('select', tab=t2)
 
         # PF7: quick repeated "×" on two unselected pinned rows at one point: the lower row slides up
         # under the still pointer, shows its "×" at once, and the second click archives it too.
@@ -213,10 +218,9 @@ def run(factory, results, tmp, harness):
         moved = wait_until(lambda: tab(fa)['section'] == 'today' or None, timeout=2, step=.02)
         time.sleep(.4)
         next_tile = accessory(fb, favorite=True)
-        others = {t: accessory(t, favorite=True).get('shown', False) for t in grid if t not in (fa, fb) and t in ids()}
-        record('PF12_favorite_grid_hover_follows_pointer', held.get('shown') and moved and next_tile.get('shown')
-               and next_tile['point'] == held['point'] and not any(others.values()),
-               grid=grid, held=held, next_tile=next_tile, others=others)
+        others = {t: accessory(t, favorite=True).get('tileHovered') for t in grid if t not in (fa, fb) and t in ids()}
+        record('PF12_favorite_grid_hover_follows_pointer', held.get('tileHovered') is True and moved and next_tile.get('tileHovered') is True
+               and not any(others.values()), grid=grid, held=held, next_tile=next_tile, others=others)
     finally:
         server.shutdown()
         app.quit()
