@@ -319,7 +319,8 @@ enum Checks {
             }
         }
         // docs/re/pinned-favorites-close.md P1–P2: "−" only on the selected pinned row; "×" archives.
-        let previous = context.selectedID(in: space.id)
+        let previous = plain.id
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: previous)
         hover(pinned)
         check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "unselected unloaded pinned tab shows × on hover")
         pinned.live.hasWebContent = true

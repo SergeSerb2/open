@@ -357,6 +357,9 @@ extension CompletionChecks {
             return rows ?? []
         }
         let ids = [space.pinned[1].id, space.pinned[3].id, space.today[1].id]
+        // The pressed row is the current one, so its accessory is "−" (docs/re/pinned-favorites-close.md P2);
+        // "×" on another pinned row would archive the fixture this check still needs.
+        model.selectNode(windowID: state.id, spaceID: space.id, nodeID: ids[0])
         select(ids)
         model.tab(id: ids[0])?.live.hasWebContent = true
         context.forcedHover = .row(ids[0]); pump()
