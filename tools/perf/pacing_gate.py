@@ -51,11 +51,27 @@ MIN_LAUNCHES = 3
 MIN_CHANGES = 3
 DEFAULT_TIMEBASE = (125, 3)
 SKIP_FILES = {'frame-config.json', 'frame-ready.json'}
+# Input limits (ledgers come from disk). The stock frames helper itself stops at 4096 frames per trial.
+MAX_LEDGER_BYTES = 64 * 1024 * 1024
+MAX_ROWS = 4096
+MAX_SAMPLES = 4096
+MAX_LEDGERS = 64
 
 
 def _load(path):
+    if Path(path).stat().st_size > MAX_LEDGER_BYTES:
+        raise ValueError('%s exceeds %d bytes' % (path, MAX_LEDGER_BYTES))
     with open(path) as handle:
-        return json.load(handle)
+        return json.load(handle)  # json refuses trailing data after the value
+
+
+def _checked(rows, path):
+    if len(rows) > MAX_ROWS:
+        raise ValueError('%s: %d rows exceeds %d' % (path, len(rows), MAX_ROWS))
+    for row in rows:
+        if len(row['changes']) > MAX_SAMPLES or len(row['frames']) > MAX_SAMPLES:
+            raise ValueError('%s: trial %r exceeds %d samples' % (path, row.get('label'), MAX_SAMPLES))
+    return rows
 
 
 def _is_row(value):
@@ -96,7 +112,7 @@ def read_ledger(path):
             rows = document if isinstance(document, list) else document.get('trials') if isinstance(document, dict) else None
             if isinstance(rows, list) and rows and all(_is_row(r) for r in rows):
                 tb, source = _timebase(path, document)
-                return rows, {'path': str(path / 'result.json'), 'timebase': tb, 'timebase_source': source,
+                return _checked(rows, path), {'path': str(path / 'result.json'), 'timebase': tb, 'timebase_source': source,
                               'refresh_hz': _refresh_hz(path, document)}
         frames = path / 'frames' if (path / 'frames').is_dir() else path
         rows = []
@@ -109,7 +125,7 @@ def read_ledger(path):
         if not rows:
             raise ValueError('%s: no stock rows found (result.json or frames/*.json)' % path)
         tb, source = _timebase(frames)
-        return rows, {'path': str(frames), 'timebase': tb, 'timebase_source': source, 'refresh_hz': _refresh_hz(frames)}
+        return _checked(rows, frames), {'path': str(frames), 'timebase': tb, 'timebase_source': source, 'refresh_hz': _refresh_hz(frames)}
     document = _load(path)
     rows = document if isinstance(document, list) else document.get('trials') if isinstance(document, dict) else None
     if _is_row(document):
@@ -117,7 +133,7 @@ def read_ledger(path):
     if not isinstance(rows, list) or not rows or not all(_is_row(r) for r in rows):
         raise ValueError('%s: not a stock ledger (list of rows or {"trials": [...]})' % path)
     tb, source = _timebase(path.parent, document)
-    return rows, {'path': str(path), 'timebase': tb, 'timebase_source': source, 'refresh_hz': _refresh_hz(path.parent, document)}
+    return _checked(rows, path), {'path': str(path), 'timebase': tb, 'timebase_source': source, 'refresh_hz': _refresh_hz(path.parent, document)}
 
 
 def action_name(label):
@@ -163,6 +179,8 @@ def score_side(ledgers):
     actions = {}
     provenance = []
     seen = set()
+    if len(ledgers) > MAX_LEDGERS:
+        raise ValueError('%d ledgers exceeds %d' % (len(ledgers), MAX_LEDGERS))
     for launch, path in enumerate(ledgers):
         resolved = str(Path(path).resolve())
         if resolved in seen:
