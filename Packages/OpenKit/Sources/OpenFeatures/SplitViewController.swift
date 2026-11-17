@@ -40,8 +40,8 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public func refresh() {
-        guard let space, let focused = focusedTab else { container.clearSelection(); container.isHidden = true; return }
-        container.isHidden = false
+        guard let space else { container.clearSelection(); container.isHidden = true; return }
+        guard let focused = focusedTab else { container.showEmptySpace(spaceID: space.id, profileID: space.profileID); return }
         let panes = split?.panes ?? [focused]
         container.show(tabIDs: panes.map(\.id), focusedTabID: focused.id, orientation: split?.orientation ?? .horizontal,
                        fractions: split?.fractions ?? [1], spaceID: space.id, profileID: space.profileID)
