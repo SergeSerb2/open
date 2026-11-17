@@ -306,17 +306,23 @@ typedef void (^OEPiPCompletion)(BOOL);
     dispatch_async(dispatch_get_main_queue(), ^{ done(NO); });
     return;
   }
-  [media.pipCallbacks addObject:done];
+  // Answers exactly once: from the media state, or from the deadline below
+  // (also when the page and its media state were deallocated meanwhile,
+  // which drops pipCallbacks unrun).
+  __block BOOL settled = NO;
+  OEPiPCompletion once = ^(BOOL entered) {
+    if (settled) return;
+    settled = YES;
+    done(entered);
+  };
+  [media.pipCallbacks addObject:once];
   // Chromium has no direct reply: a page that never enters (navigated away,
   // the request was dropped) fails after 2 s.
   __weak OEMediaState* weakMedia = media;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC),
                  dispatch_get_main_queue(), ^{
-                   OEMediaState* state = weakMedia;
-                   if (state && [state.pipCallbacks containsObject:done]) {
-                     [state.pipCallbacks removeObject:done];
-                     done(NO);
-                   }
+                   [weakMedia.pipCallbacks removeObject:once];
+                   once(NO);
                  });
 }
 
