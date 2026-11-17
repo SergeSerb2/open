@@ -11152,6 +11152,10 @@ def sidebar_favicon_checks(app, require, tmp, launch):
         same_hash = same['rowFaviconHash']
         app.call('navigate', tab=route, url=origin + '/b'); app.call('wait', tab=route)
         wait_until(lambda: app.tab(route)['url'] == origin + '/b', timeout=5)
+        # Close puts a pinned tab back on its pinned URL (docs/re/pinned-favorites-close.md P4), so
+        # make /b the pinned URL first: the closed row must then draw /b's stored pixels.
+        app.call('sidebar-menu', node=route, item='Edit Pinned Page/Replace Pinned URL with Current')
+        wait_until(lambda: app.tab(route)['pinnedURL'] == origin + '/b' or None, timeout=5)
         # Unload via the production pin Close route, then require storage pixels.
         app.call('open', url=fixture('Unchanged icon neighbor')); app.call('close', tab=route)
         same_stored = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t['url'] == origin + '/b' and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == same_hash else None)(app.tab(route)), timeout=5)
@@ -11168,6 +11172,9 @@ def sidebar_favicon_checks(app, require, tmp, launch):
             destination = missing_origin + path
             app.call('navigate', tab=candidate, url=destination); app.call('wait', tab=candidate)
             wait_until(lambda: app.tab(candidate)['url'] == destination, timeout=5)
+            # Close returns a pinned tab to its pinned URL (P4); pin the destination so the row stays there.
+            app.call('sidebar-menu', node=candidate, item='Edit Pinned Page/Replace Pinned URL with Current')
+            wait_until(lambda: app.tab(candidate)['pinnedURL'] == destination or None, timeout=5)
             app.call('open', url=fixture('Missing icon neighbor')); app.call('close', tab=candidate)
             wait_until(lambda: not app.tab(candidate)['hasWebContent'], timeout=5)
             # Drain the real cache worker by orderly quit before read-only SQL.
