@@ -14154,7 +14154,7 @@ def main():
             import app_icons
             icon_out = Path(tmp) / 'app-icons'
             try:
-                app_icons.run(icon_out, opts.config)
+                app_icons.run(icon_out, opts.config, factory)
             finally:
                 receipt = icon_out / 'results.json'
                 for row, value in (json.loads(receipt.read_text()).items() if receipt.is_file() else ()):

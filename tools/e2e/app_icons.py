@@ -12,7 +12,8 @@ from engine_e2e import Open
 from library_overlay import capture_window
 
 
-def run(output, config):
+def run(output, config, factory=None):
+    """`factory` (engine_e2e's suite factory) records each launch for the gate's owned-process cleanup."""
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     checks = {}
@@ -28,7 +29,11 @@ def run(output, config):
             if image: (output/'application-icon-failure.png').write_bytes(base64.b64decode(image))
         assert ok, (name, evidence)
     with tempfile.TemporaryDirectory(prefix='open-icons-') as tmp:
+        first = [True]
         def launch():
+            if factory is not None:
+                fresh, first[0] = first[0], False
+                return factory(urls=(), fresh=fresh)
             return Open(config, 'alloy', str(Path(tmp)/'data'), [], str(Path(tmp)/'app.log'), urls=())
         try:
             app = launch()
