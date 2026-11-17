@@ -25,16 +25,48 @@ public final class PaneSlotView: NSView {
     let clip = NSView()
     public let focusRing = CAShapeLayer()
     var isFocused = false
+    /// Split motion (C14-6): while this pane's box shrinks, its page keeps the size
+    /// it had before the change, pinned to the top-left corner, and the moving box
+    /// crops it. The page then resizes once, when the motion ends.
+    fileprivate var heldPageSize: CGSize?
+    /// Close This Pane: the closed page stays drawn (muted, disconnected) under its
+    /// collapsing box. This finishes its engine teardown when the motion ends.
+    fileprivate var pageTeardown: (@MainActor () -> Void)?
+    /// A departing pane takes no pointer input while its box collapses.
+    fileprivate var isRetiring = false
+    private var motionFill = false
+    public var isHoldingPage: Bool { heldPageSize != nil }
+    public var clipAnimationKeys: [String] { clip.layer?.animationKeys() ?? [] }
     init(tabID: ItemID) {
         self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
+        // Split motion sets each slot frame once and moves its box on the render
+        // server. Never redraw these layers during a resize.
+        layerContentsRedrawPolicy = .beforeViewResize
+        clip.layerContentsRedrawPolicy = .beforeViewResize
         layer?.allowsGroupOpacity = false; clip.layer?.allowsGroupOpacity = false
         layer?.needsDisplayOnBoundsChange = false; clip.layer?.needsDisplayOnBoundsChange = false
         layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = PanelMetrics.shadowOpacity
         layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
         clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.cornerCurve = .continuous; clip.layer?.masksToBounds = true; addSubview(clip)
         focusRing.zPosition = 10; focusRing.fillColor = nil; focusRing.lineWidth = SplitMetrics.ringWidth; layer?.addSublayer(focusRing)
+        // layoutContents sets the path on every pass. An implicit path animation would
+        // replace the split motion's ring animation and leave the ring at its final box.
+        focusRing.actions = ["path": NSNull()]
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    public override func hitTest(_ point: NSPoint) -> NSView? { isRetiring ? nil : super.hitTest(point) }
+    /// The page view is still attached and drawn in this pane's box.
+    public var isDrawingPage: Bool { contentHostView.map { $0.superview === clip && !$0.isHidden } ?? false }
+    public var hasDeferredTeardown: Bool { pageTeardown != nil }
+    fileprivate func finishPageTeardown() { let teardown = pageTeardown; pageTeardown = nil; teardown?() }
+    /// Split motion sets each page frame once, at the start. A page that the engine
+    /// hosts or creates after that frame (a new pane's page joins the engine tab
+    /// strip a turn later) can keep its creation size. Re-enter OpenEngine's
+    /// geometry bridge once at the end; an already-correct page gets no resize.
+    fileprivate func resendPageGeometry() {
+        guard let view = contentHostView, view.superview === clip else { return }
+        view.setFrameSize(view.frame.size)
+    }
     func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, toolbar: Bool = false, fullURL: Bool = false, focused: Bool, style: SpaceThemeStyle,
                    close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping (Bool) -> Void,
                    toolbarMenu: (() -> NSMenu?)? = nil, reload: @escaping () -> Void, closeSadTab: @escaping () -> Void,
@@ -128,10 +160,15 @@ public final class PaneSlotView: NSView {
     fileprivate func layoutContents() {
         if clip.frame != bounds { clip.frame = bounds }
         let bar = developerPanel != nil ? DeveloperPanelMetrics.height : paneChrome == nil ? 0 : SplitMetrics.barHeight
-        let chromeFrame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
+        var chromeFrame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
+        var page = CGRect(origin: .zero, size: libraryViewportSize(for: bounds.size))
+        if let held = heldPageSize {
+            // Same top-left corner, old size. The moving box crops the rest.
+            page = CGRect(x: 0, y: page.maxY - held.height, width: held.width, height: held.height)
+            chromeFrame.size.width = max(chromeFrame.width, held.width)
+        }
         if paneChrome?.frame != chromeFrame { paneChrome?.frame = chromeFrame }
         if developerPanel?.frame != chromeFrame { developerPanel?.frame = chromeFrame }
-        let page = CGRect(origin: .zero, size: libraryViewportSize(for: bounds.size))
         // Frame setters enter OpenEngine's geometry bridge even for equal values.
         // A cached slot can move while the page's local frame stays equal: keep
         // that window-coordinate change so Chrome's child window still follows.
@@ -143,7 +180,7 @@ public final class PaneSlotView: NSView {
         if sadTabView?.frame != page { sadTabView?.frame = page }
         if swipeIndicator?.frame != page { swipeIndicator?.frame = page }
         if focusRing.frame != bounds {
-            // The ring follows the slot's 0.22 s view motion. A reused layer must
+            // Split motion animates only the ring path. A reused layer must
             // not add its own default 0.25 s bounds/position animation.
             CATransaction.begin(); CATransaction.setDisableActions(true)
             focusRing.frame = bounds
@@ -153,6 +190,82 @@ public final class PaneSlotView: NSView {
                                cornerHeight: PanelMetrics.cornerRadius - 1, transform: nil)
         focusRing.isHidden = !isFocused
         layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
+    }
+
+    // MARK: Split motion (render server only)
+
+    private static let motionKey = "open.split."
+    /// The box this pane shows now, in its own coordinates (presentation value).
+    fileprivate func presentedBox() -> CGRect {
+        guard let model = clip.layer else { return bounds }
+        let layer = model.presentation() ?? model
+        let size = layer.bounds.size
+        return CGRect(x: layer.position.x - layer.anchorPoint.x * size.width,
+                      y: layer.position.y - layer.anchorPoint.y * size.height, width: size.width, height: size.height)
+    }
+    /// The clip layer geometry that shows `box` (own coordinates). The clip keeps
+    /// its content pinned to the top-left corner, so the page is cropped, never scaled.
+    private func clipGeometry(_ box: CGRect) -> (bounds: CGRect, position: CGPoint) {
+        let anchor = clip.layer?.anchorPoint ?? .zero
+        return (CGRect(x: 0, y: clip.frame.height - box.height, width: box.width, height: box.height),
+                CGPoint(x: box.minX + anchor.x * box.width, y: box.minY + anchor.y * box.height))
+    }
+    /// Moves this pane's visible box from `start` to `end` (own coordinates) on the
+    /// render server. No frame, layout or page geometry changes during the motion.
+    fileprivate func moveBox(from start: CGRect, to end: CGRect, duration: CFTimeInterval, timing: CAMediaTimingFunction,
+                             holdEnd: Bool, fill: CGColor?) {
+        guard let clipLayer = clip.layer, let slotLayer = layer else { return }
+        func add(_ target: CALayer, _ keyPath: String, _ from: Any, _ to: Any) {
+            let animation = CABasicAnimation(keyPath: keyPath)
+            animation.fromValue = from; animation.toValue = to
+            animation.duration = duration; animation.timingFunction = timing
+            animation.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            if holdEnd { animation.fillMode = .forwards; animation.isRemovedOnCompletion = false }
+            target.add(animation, forKey: Self.motionKey + keyPath)
+        }
+        let from = clipGeometry(start), to = clipGeometry(end)
+        add(clipLayer, "bounds", NSValue(rect: from.bounds), NSValue(rect: to.bounds))
+        add(clipLayer, "position", NSValue(point: from.position), NSValue(point: to.position))
+        let radius = fullBleed ? 0 : PanelMetrics.cornerRadius
+        if slotLayer.shadowOpacity > 0 {
+            add(slotLayer, "shadowPath", Self.motionPath(start, radius: radius), Self.motionPath(end, radius: radius))
+        }
+        if !focusRing.isHidden {
+            // insetBy returns CGRect.null for a collapsed (zero-width) box; CA then drops the animation.
+            func ringBox(_ box: CGRect) -> CGRect {
+                CGRect(x: box.minX + min(1, box.width / 2), y: box.minY + min(1, box.height / 2),
+                       width: max(0, box.width - 2), height: max(0, box.height - 2))
+            }
+            add(focusRing, "path", Self.motionPath(ringBox(start), radius: radius - 1), Self.motionPath(ringBox(end), radius: radius - 1))
+        }
+        if let fill { clipLayer.backgroundColor = fill; motionFill = true }
+    }
+    fileprivate func endMotion() {
+        for keyPath in ["bounds", "position"] { clip.layer?.removeAnimation(forKey: Self.motionKey + keyPath) }
+        layer?.removeAnimation(forKey: Self.motionKey + "shadowPath")
+        focusRing.removeAnimation(forKey: Self.motionKey + "path")
+        if motionFill { clip.layer?.backgroundColor = nil; motionFill = false }
+    }
+    /// A rounded rectangle with the same path elements for every size, so the
+    /// render server can interpolate between a full box and a collapsed one.
+    private static func motionPath(_ rect: CGRect, radius: CGFloat) -> CGPath {
+        let r = max(0, min(radius, rect.width / 2, rect.height / 2)), k = r * 0.4477
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: rect.minX + r, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
+        path.addCurve(to: CGPoint(x: rect.maxX, y: rect.minY + r), control1: CGPoint(x: rect.maxX - k, y: rect.minY),
+                      control2: CGPoint(x: rect.maxX, y: rect.minY + k))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+        path.addCurve(to: CGPoint(x: rect.maxX - r, y: rect.maxY), control1: CGPoint(x: rect.maxX, y: rect.maxY - k),
+                      control2: CGPoint(x: rect.maxX - k, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+        path.addCurve(to: CGPoint(x: rect.minX, y: rect.maxY - r), control1: CGPoint(x: rect.minX + k, y: rect.maxY),
+                      control2: CGPoint(x: rect.minX, y: rect.maxY - k))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
+        path.addCurve(to: CGPoint(x: rect.minX + r, y: rect.minY), control1: CGPoint(x: rect.minX, y: rect.minY + k),
+                      control2: CGPoint(x: rect.minX + k, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -257,6 +370,20 @@ public final class WebContentContainer: NSView {
     public let dropOverlay = SplitDropOverlayView()
     private var monitor: Any?
     private var transitioning = false
+    /// Panes that left the layout stay drawn under the motion until it ends. Their
+    /// bookkeeping (ids, slots, cache, parked slots, LRU) is already final.
+    private var retiringSlots: [PaneSlotView] = []
+    private var paneMotionGeneration = 0
+    /// Pane order before the running motion; a retarget collapses departing panes in it.
+    private var paneMotionOrder: [ItemID] = []
+    private var paneMotionAllowed: Bool { window?.isVisible == true && !Motion.reducesMotion }
+    public var retiringPaneCount: Int { retiringSlots.count }
+    /// Automation readback: why the last show() did or did not start a pane motion.
+    public private(set) var lastPaneMotionDecision = ""
+    /// Retiring panes whose page is still attached and drawn.
+    public var retiringPageCount: Int { retiringSlots.filter(\.isDrawingPage).count }
+    /// Closed pages whose engine teardown waits for the end of the motion.
+    public var deferredTeardownCount: Int { (slots + retiringSlots).filter(\.hasDeferredTeardown).count }
 
     public init(factory: any WebContentHostFactory) {
         self.factory = factory; super.init(frame: .zero); wantsLayer = true
@@ -313,11 +440,23 @@ public final class WebContentContainer: NSView {
         if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
         if let currentProfile, currentProfile != profileID { closeAll(preservingSpaceMotion: true) }
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
-        let old = ids, previousFocus = focused
-        for id in old where !tabIDs.contains(id) { cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
+        let old = ids, previousFocus = focused, oldOrientation = orientation
+        // Split add/remove/convert moves panes. A plain tab switch shares no pane and stays instant.
+        let movesPanes = animateSlots && paneMotionAllowed && old != tabIDs && (old.count > 1 || tabIDs.count > 1) && old.contains(where: tabIDs.contains)
+        // Read every on-screen box first, so an interrupted motion continues from where it is.
+        let starts = movesPanes ? visiblePaneBoxes() : [:]
+        lastPaneMotionDecision = "moves=\(movesPanes) visible=\(window?.isVisible == true) reduced=\(Motion.reducesMotion) old=\(old.count) new=\(tabIDs.count) starts=\(starts.count)"
+        // A refresh with the same panes (model observers, focus) keeps a running motion;
+        // layoutPanes ends it only if a target frame changes.
+        if old != tabIDs { finishPaneMotion() }
         for slot in slots where !tabIDs.contains(slot.tabID) {
-            slot.removeFromSuperview()
             if cache[slot.tabID] != nil { parkedSlots[slot.tabID] = slot }
+            if starts[slot.tabID] != nil { slot.isRetiring = true; retiringSlots.append(slot) } else { slot.removeFromSuperview(); slot.finishPageTeardown() }
+        }
+        for id in old where !tabIDs.contains(id) {
+            // A departing pane keeps its page drawn until its box has collapsed.
+            if !retiringSlots.contains(where: { $0.tabID == id }) { cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview() }
+            hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id)
         }
         let byID = Dictionary(uniqueKeysWithValues: slots.map { ($0.tabID, $0) })
         slots = tabIDs.map { id in
@@ -332,10 +471,20 @@ public final class WebContentContainer: NSView {
         if spaceMotionStorage?.plate.phase == .awaitingPresentation {
             for id in tabIDs { ensureHost(id) }
         } else { ensureHost(focusedTabID) }
-        updateSlots(); trimCache(); layoutPanes(animated: animateSlots && old != ids)
+        updateSlots(); trimCache()
+        // A same-pane refresh in a running motion (Close This Pane refreshes again after the
+        // model applies the split's stored fractions) retargets it from the presented boxes.
+        let retarget = animateSlots && !movesPanes && old == tabIDs && paneMotionAllowed && (transitioning || !retiringSlots.isEmpty)
+        layoutPanes(animated: movesPanes || retarget, starts: retarget ? visiblePaneBoxes() : starts, oldIDs: old,
+                    oldOrientation: oldOrientation, retarget: retarget)
         // Apply the final viewport now behind the cover. No layout work is
         // driven by the slide. Main's uncovered path skips this extra pass.
         if spaceMotionStorage.map({ $0.plate.phase != .idle }) == true { for slot in slots { slot.layoutContents() } }
+        // A closed page stays in the window while its box collapses, so AppKit does not
+        // drop its first responder. Take it before the new focus is set.
+        if let responder = window?.firstResponder as? NSView, retiringSlots.contains(where: { responder.isDescendant(of: $0) }) {
+            window?.makeFirstResponder(nil)
+        }
         if previousFocus != focusedTabID { focusContent(focusedTabID) }
         let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
         if !pending.isEmpty {
@@ -442,6 +591,7 @@ public final class WebContentContainer: NSView {
     /// Install the normal callbacks before a new preview starts loading, or renew
     /// them after takeHost invalidated a cached host's generation.
     public func connectPreviewHost(_ host: any WebContentHost, for id: ItemID) {
+        if retiringSlots.contains(where: { $0.tabID == id }) { finishPaneMotion() }
         bind(host, as: id)
         parkedSlots[id] = nil
         previewHosts[id] = cache.removeValue(forKey: id)
@@ -501,6 +651,7 @@ public final class WebContentContainer: NSView {
     }
     private func clearNativeSelection() {
         onReturnPreviewHost?()
+        finishPaneMotion()
         showGeneration += 1
         for id in ids {
             cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview()
@@ -547,6 +698,7 @@ public final class WebContentContainer: NSView {
         generations[id] = nil; parkedSlots[id] = nil; hiddenLRU.removeAll { $0 == id }; return cache.removeValue(forKey: id)
     }
     public func adopt(_ host: any WebContentHost, for id: ItemID) {
+        if retiringSlots.contains(where: { $0.tabID == id }) { finishPaneMotion() }
         previewHosts[id] = nil
         guard factory.adoptHost(host, as: id) else { host.close(); return }
         if cache[id] !== host { cache[id]?.close(); bind(host, as: id) }
@@ -567,6 +719,23 @@ public final class WebContentContainer: NSView {
         let host = cache.removeValue(forKey: id) ?? previewHosts.removeValue(forKey: id)
         motionRevisions[id] = nil; spaceMotionStorage?.invalidate(tab: id)
         hiddenLRU.removeAll { $0 == id }
+        // Close This Pane closes the page before the layout changes. When that pane will
+        // collapse (a visible pane of a split, motion allowed), the page's engine teardown
+        // waits until the motion ends, so its box collapses over the page's own last
+        // pixels. Everything else about the close (callbacks, history, strip, focus) is
+        // immediate. A remote CA layer cannot be snapshotted synchronously in the App.
+        if let host, paneMotionAllowed, slots.filter({ !$0.isHidden && !$0.frame.isEmpty }).count > 1,
+           let slot = slots.first(where: { $0.tabID == id && $0.contentHostView === host.view && !$0.isHidden && !$0.frame.isEmpty }) {
+            slot.finishPageTeardown()
+            slot.pageTeardown = host.retainPageOnClose()
+            if slot.pageTeardown != nil {
+                // show() claims it in this turn. If no layout change follows, close at once.
+                DispatchQueue.main.async { [weak self, weak slot] in
+                    guard let self, let slot, !self.retiringSlots.contains(where: { $0 === slot }) else { return }
+                    slot.finishPageTeardown()
+                }
+            }
+        }
         host?.close()
         if host != nil {
             if let remaining = factory.remainingLiveState(for: id) {
@@ -588,6 +757,7 @@ public final class WebContentContainer: NSView {
     }
     private func closeAll(preservingSpaceMotion: Bool) {
         if !preservingSpaceMotion { spaceMotionStorage?.reset() }
+        finishPaneMotion()
         if !previewHosts.isEmpty { onReturnPreviewHost?() }
         for id in Set(cache.keys).union(previewHosts.keys) { closeHost(for: id) }
         parkedSlots.removeAll()
@@ -634,10 +804,22 @@ public final class WebContentContainer: NSView {
     }
 
     public func layoutPanes(animated: Bool) {
+        layoutPanes(animated: animated && paneMotionAllowed, starts: animated ? visiblePaneBoxes() : [:], oldIDs: ids, oldOrientation: orientation)
+    }
+    /// ANIMATION-PASS rule 1 / C14-6. Every slot frame and page size is set once, in
+    /// the same commit that starts the motion. Only clip layer bounds/position, the
+    /// shadow path and the ring path move, on the render server; pages are cropped,
+    /// never scaled or resized per frame. Growing and entering panes lay out their
+    /// page at its final size at the start. A shrinking pane holds its old page size,
+    /// cropped by its moving box, and resizes once when the motion ends (the CA
+    /// completion, never a timer); the engine's old, larger frame stays cropped by the
+    /// final box until its new frame arrives. Departing panes keep their page drawn
+    /// while their box collapses toward the pane that takes their place.
+    private func layoutPanes(animated: Bool, starts: [ItemID: CGRect], oldIDs: [ItemID], oldOrientation: SplitOrientation,
+                             retarget: Bool = false) {
         let frames = SplitLayout.frames(content: bounds, orientation: orientation, fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
-        let animate = animated && window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        transitioning = animate
-        for slot in slots { slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID }
+        let targets = zip(slots, frames).map { slot, frame in (slot: slot, frame: maximizedTabID == slot.tabID ? bounds : frame) }
+        for (slot, _) in targets { slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID }
         if spaceMotionStorage?.plate.phase == .awaitingPresentation {
             let scale = window?.backingScaleFactor ?? 1
             let viewports = Dictionary(uniqueKeysWithValues: zip(slots, frames).map { slot, frame in
@@ -647,21 +829,110 @@ public final class WebContentContainer: NSView {
             })
             spaceMotionStorage?.prepareForLayout(viewports)
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = animate ? Motion.splitExpand : 0; context.timingFunction = Motion.easeInOut
-            for (slot, frame) in zip(slots, frames) {
-                let target = maximizedTabID == slot.tabID ? bounds : frame
-                if slot.frame != target {
-                    if animate { slot.animator().frame = target } else { slot.frame = target }
-                }
+        let changed = targets.contains { $0.slot.frame != $0.frame }
+        // A retarget with unchanged targets leaves the running motion alone.
+        guard animated, changed || (!retiringSlots.isEmpty && !retarget) else {
+            // A layout pass during a motion with unchanged targets keeps the motion.
+            if changed { finishPaneMotion() }
+            for (slot, target) in targets where slot.frame != target { slot.frame = target }
+            if spaceMotionStorage?.plate.phase == .awaitingPresentation {
+                // Finish the one native geometry transaction before reconciling the
+                // cover or accepting an asynchronously delivered engine receipt.
+                for slot in slots { slot.layoutContents() }
             }
-        } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
-        if spaceMotionStorage?.plate.phase == .awaitingPresentation {
-            // Finish the one native geometry transaction before reconciling the
-            // cover or accepting an asynchronously delivered engine receipt.
-            for slot in slots { slot.layoutContents() }
+            layoutDividers(); return
         }
+        paneMotionGeneration += 1; let generation = paneMotionGeneration
+        let duration = Motion.splitExpand, timing = Motion.easeInOut
+        if !retarget { paneMotionOrder = oldIDs }
+        let order = retarget ? paneMotionOrder : oldIDs
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // Must precede the animations it waits for.
+        CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated { self?.finishPaneMotion(generation) } }
+        // Entering panes start collapsed at the trailing edge of the pane before them.
+        var boxes: [(slot: PaneSlotView, start: CGRect, end: CGRect)] = []
+        var previous: CGRect?
+        for (slot, target) in targets where !slot.isHidden {
+            let edge = previous.map { Self.endEdge($0, orientation) } ?? Self.startEdge(bounds, orientation)
+            let start = starts[slot.tabID] ?? Self.collapsed(target, at: edge, orientation)
+            boxes.append((slot, start, target)); previous = start
+            let shrinks = start.width >= target.width - 0.5 && start.height >= target.height - 0.5
+                && (start.width > target.width + 0.5 || start.height > target.height + 0.5)
+            if shrinks, starts[slot.tabID] != nil, let page = slot.contentHostView?.frame.size, page.width > 0, page.height > 0 {
+                slot.heldPageSize = page
+            }
+            if slot.frame != target { slot.frame = target }
+            slot.needsLayout = true; slot.layoutSubtreeIfNeeded()
+        }
+        let fill = { (id: ItemID) in (self.cache[id] ?? self.previewHosts[id])?.pageBackgroundColor?.cgColor }
+        for (slot, start, end) in boxes where start != end {
+            let origin = end.origin
+            slot.moveBox(from: start.offsetBy(dx: -origin.x, dy: -origin.y), to: slot.bounds, duration: duration, timing: timing,
+                         holdEnd: false, fill: fill(slot.tabID))
+        }
+        // A departing pane collapses toward the end edge of the surviving pane before
+        // it (old order), or toward the start edge when none precedes it.
+        let endByID = Dictionary(boxes.map { ($0.slot.tabID, $0.end) }, uniquingKeysWith: { first, _ in first })
+        // Collapse along the axis the panes are drawn in now. A refresh in the same turn
+        // can already have changed `orientation` (Separate passes .horizontal) before
+        // anything was drawn in it.
+        let shown = order.compactMap { starts[$0] }
+        let stacked = shown.count > 1 && shown.allSatisfy { abs($0.minX - shown[0].minX) < 1 && abs($0.width - shown[0].width) < 1 }
+        let collapseAxis: SplitOrientation = shown.count > 1 ? (stacked ? .vertical : .horizontal) : oldOrientation
+        for slot in retiringSlots {
+            guard let start = starts[slot.tabID], let index = order.firstIndex(of: slot.tabID) else { continue }
+            let edge = order[..<index].reversed().compactMap { endByID[$0] }.first.map { Self.endEdge($0, collapseAxis) }
+                ?? Self.startEdge(bounds, collapseAxis)
+            let origin = slot.frame.origin
+            slot.moveBox(from: start.offsetBy(dx: -origin.x, dy: -origin.y),
+                         to: Self.collapsed(start, at: edge, collapseAxis).offsetBy(dx: -origin.x, dy: -origin.y),
+                         duration: duration, timing: timing, holdEnd: true, fill: fill(slot.tabID))
+        }
+        CATransaction.commit()
+        transitioning = true
         layoutDividers()
+    }
+    /// Ends any pane motion at its final state: departing panes leave the window,
+    /// closed pages finish their engine teardown, held pages take their final size
+    /// (their one web resize), and pointer input routes again.
+    private func finishPaneMotion(_ generation: Int? = nil) {
+        if let generation, generation != paneMotionGeneration { return }
+        paneMotionGeneration += 1
+        let moving = transitioning || !retiringSlots.isEmpty || slots.contains { $0.heldPageSize != nil }
+        transitioning = false
+        guard moving else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        for slot in retiringSlots {
+            slot.endMotion()
+            if let view = slot.contentHostView, view.superview === slot.clip, !ids.contains(slot.tabID) {
+                view.isHidden = true; view.removeFromSuperview()
+            }
+            if !slots.contains(where: { $0 === slot }) { slot.removeFromSuperview() }
+            slot.isRetiring = false; slot.finishPageTeardown()
+        }
+        retiringSlots.removeAll()
+        for slot in slots {
+            slot.endMotion()
+            if slot.heldPageSize != nil { slot.heldPageSize = nil; slot.needsLayout = true; slot.layoutSubtreeIfNeeded() }
+            slot.resendPageGeometry()
+        }
+        CATransaction.commit()
+        layoutDividers()
+    }
+    /// On-screen pane boxes in container coordinates, including any motion in flight.
+    private func visiblePaneBoxes() -> [ItemID: CGRect] {
+        var boxes: [ItemID: CGRect] = [:]
+        for slot in retiringSlots + slots where slot.superview === self && !slot.isHidden && !slot.frame.isEmpty {
+            boxes[slot.tabID] = slot.presentedBox().offsetBy(dx: slot.frame.minX, dy: slot.frame.minY)
+        }
+        return boxes
+    }
+    // Panes run left to right, or top to bottom (unflipped: from maxY down).
+    private static func startEdge(_ box: CGRect, _ orientation: SplitOrientation) -> CGFloat { orientation == .horizontal ? box.minX : box.maxY }
+    private static func endEdge(_ box: CGRect, _ orientation: SplitOrientation) -> CGFloat { orientation == .horizontal ? box.maxX : box.minY }
+    private static func collapsed(_ box: CGRect, at edge: CGFloat, _ orientation: SplitOrientation) -> CGRect {
+        orientation == .horizontal ? CGRect(x: edge, y: box.minY, width: 0, height: box.height)
+            : CGRect(x: box.minX, y: edge, width: box.width, height: 0)
     }
     public override func layout() {
         let region = WindowSpeedTrace.begin("webContainer.layout")

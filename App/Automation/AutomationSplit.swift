@@ -27,10 +27,14 @@ extension AutomationController {
                 "renameEditor":rename, "fractions": split.split?.fractions ?? [], "focused": split.focusedTab?.id.description ?? "",
                 "selected": controller.context.window?.selectedNodeBySpace[controller.context.window!.focusedSpaceID]?.description ?? "",
                 "maximized": split.maximizedPaneID?.description ?? "", "container": frame(container), "retainedSlots": container.retainedSlotCount,
+                "retiringPanes": container.retiringPaneCount, "motionDecision": container.lastPaneMotionDecision, "retiringPages": container.retiringPageCount, "deferredTeardowns": container.deferredTeardownCount,
                 "sidebarURL": controller.sidebar.urlFieldText, "sidebarText": controller.sidebar.displayedURLText, "title": window.title,
                 "sidebarCurrent": split.split.map { controller.sidebar.isCurrentRow(nodeID: $0.id) } ?? false,
                 "panes": container.slots.map { slot -> [String: Any] in
                     ["id": slot.tabID.description, "frame": frame(slot), "hidden": slot.isHidden,
+                     "layerRedrawPolicy": slot.layerContentsRedrawPolicy.rawValue,
+                     "layerAnimations": slot.layer?.animationKeys() ?? [], "clipAnimations": slot.clipAnimationKeys,
+                     "holdingPage": slot.isHoldingPage, "pageFrame": slot.contentHostView.map(frame) ?? [],
                      "ring": !slot.focusRing.isHidden, "bar": slot.paneChrome != nil,
                      "host": container.host(for: slot.tabID) != nil]
                 }, "dividers": (0..<max(0, container.slots.count - 1)).compactMap { container.divider(at: $0).map(frame) }] as [String: Any]
