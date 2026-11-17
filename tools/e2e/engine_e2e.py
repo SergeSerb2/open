@@ -150,6 +150,20 @@ def supervise_suite(arguments):
         resources.cleanup()
 
 
+def unpacked_fixture_problems(directory):
+    """Files that an unpacked store fixture's manifest names but that are missing. Chromium answers a
+    missing icon with a modal "Failed to load extension" alert, so the App never finishes starting."""
+    try:
+        manifest = json.loads(Path(directory, 'manifest.json').read_text(encoding='utf-8-sig'))
+    except (OSError, ValueError) as error:
+        return ['%s: manifest.json unreadable (%s)' % (os.path.basename(directory), error)]
+    paths = set(v for v in (manifest.get('icons') or {}).values() if isinstance(v, str))
+    for section in ('action', 'browser_action', 'page_action'):
+        icon = (manifest.get(section) or {}).get('default_icon')
+        paths.update(v for v in (icon.values() if isinstance(icon, dict) else [icon]) if isinstance(v, str))
+    return ['%s: missing %s' % (os.path.basename(directory), p) for p in sorted(paths) if not Path(directory, p).is_file()]
+
+
 def check_suite_app_death(app=None):
     if _SUITE_CRASH_BASELINE is None:
         return
@@ -4236,7 +4250,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         key(); settled()
         app.call("space-create", title="Motion Space")
         switched = wait_until(lambda: app.call("window-motion")["space"], timeout=3, step=.01) or {}
-        results["motion_space_switch"] = {"ok": spring(switched, .2, 1, "position.x"), "scheduled": switched}
+        results["motion_space_switch"] = {"ok": spring(switched, .2, 1, "transform.translation.x"), "scheduled": switched}
         # Reduce Motion uses the same real input and frame paths, with no animated slide/fade.
         app.call("window-motion", reduced=True)
         key(); reduced_hide = app.call("window-motion")
@@ -5040,7 +5054,7 @@ def sidebar_checks(factory, results, tmp):
         travel = abs(switched.get("to", 0) - switched.get("from", 0))
         results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
             and after_click["selected"] == e and after_click["shownPages"] == [e]
-            and scheduled_spring(switched, .20, 1, "position.x") and remainder <= .5 and travel > .5,
+            and scheduled_spring(switched, .20, 1, "transform.translation.x") and remainder <= .5 and travel > .5,
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
             "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
@@ -13627,7 +13641,7 @@ def main():
     global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", choices=["alloy", "chrome"],
-                    help="runtime style (default: chrome for context-menus/routing/blank-window, alloy for other suites)")
+                    help="runtime style (default: chrome for context-menus/routing/blank-window/media/extensions-ui, alloy for other suites)")
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
     ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
@@ -13692,8 +13706,11 @@ def main():
         # Routing includes web protocol registration, which requires the
         # shipping Chrome runtime's BrowserWebContentsDelegate. Blank Window's
         # live tab transfer moves hosted tabs, which only the shipping Chrome
-        # runtime has (Alloy pages take the URL reload fallback).
-        opts.style = "chrome" if opts.only in ("context-menus", "routing", "blank-window") else "alloy"
+        # runtime has (Alloy pages take the URL reload fallback). Media's
+        # Document PiP and extensions-ui's toolbar popups are Chrome-runtime
+        # features too; the gate already runs every one of these in Chrome.
+        opts.style = "chrome" if opts.only in ("context-menus", "routing", "blank-window", "media",
+                                               "extensions-ui") else "alloy"
     if opts.page_site_data_only and opts.only != "page":
         ap.error("--page-site-data-only requires --only page")
     if opts.sitecontrol_final_only and opts.only != "sitecontrol":
@@ -13846,6 +13863,16 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    # Private store fixtures must be complete before any launch (MAINFIX 2026-11-17: their icons were
+    # gone, and the App waited behind Chromium's modal load-error alert until the 60 s ready timeout).
+    damaged = [problem for arg in extra if arg.startswith("--load-extension=")
+               for directory in arg.split("=", 1)[1].split(",")
+               if os.path.realpath(directory).startswith(os.path.realpath(opts.extensions) + os.sep)
+               for problem in unpacked_fixture_problems(directory)]
+    if damaged:
+        sys.exit("damaged unpacked extension fixtures in %s (%d problems, first: %s). Re-unpack each from "
+                 ".re/ext/downloads: tools/crx-unpack.py <name>.crx %s/<name>" % (
+                     opts.extensions, len(damaged), "; ".join(damaged[:4]), opts.extensions))
     log = os.path.join(tmp, "open.log")
 
     tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))

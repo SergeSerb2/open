@@ -470,6 +470,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         root.addSubview(toastOverlay)
         root.onLayout = { [weak self] in self?.layoutContent() }
+        container.onSpaceSelectionApplied = { [weak self] in self?.layoutContent() }
         root.onDragBackground = { [weak self] event in self?.window?.performDrag(with: event) }
         treeObserver = model.addObserver { [weak self] _ in self?.scheduleRefresh() }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -497,6 +498,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if let editor = themeEditor, let id = editor.session?.spaceID,
            model.space(id: id) == nil || context.window?.focusedSpaceID != id { closeThemeEditor() }
         guard let space = context.focusedSpace else { return }
+        // Same turn as the input: the slide shares the content swap's commit.
+        sidebar.showFocusedSpaceIfChanged()
         if !observationArmed {
         observationArmed = true
         withObservationTracking {
@@ -510,6 +513,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Sidebar's pager owns theme transitions. Never reset its cross-fade here.
         if spaceCreationController == nil, background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion && !context.isLiveThemePreview(space.id)) }
         container.style = context.style(for: space)
+        container.spaceOrder = model.spaces.map(\.id)
         container.showsToolbar = context.window?.showsToolbar == true
         let style = context.style(for: space)
         peekStorage?.overlay.style = style
@@ -571,7 +575,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if libraryPanel.frame != libraryFrame { libraryPanel.frame = libraryFrame; libraryPanel.needsLayout = true }
             layoutPageFrame(panel)
             emptyPanelHost.frame = root.bounds
-            emptyPanelHost.isHidden = !container.isHidden
+            emptyPanelHost.isHidden = !container.isHidden && !container.spacePageRetainsEmptySurface
             sidebar.isHidden = CACurrentMediaTime() >= librarySidebarFadeUntil
             cardShadow.isHidden = true
             resizeHandle.isHidden = true
@@ -596,7 +600,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             hint.setFrameOrigin(CGPoint(x: size.width - HintToastMetrics.trailingInset - w, y: HintToastMetrics.topInset))
         }
         if emptyPanelHost.frame != root.bounds { emptyPanelHost.frame = root.bounds }
-        emptyPanelHost.isHidden = !container.isHidden
+        emptyPanelHost.isHidden = !container.isHidden && !container.spacePageRetainsEmptySurface
         let animate = animated && window?.isVisible == true && !Motion.reducesMotion
         let continuingPanelMotion = anchoredSliding && !animated && !Motion.reducesMotion
             && sidebarPanelTarget == panelFrame && sidebarPanelRootSize == size

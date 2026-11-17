@@ -57,6 +57,13 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   /// Capture, selection, and translation reach the page through this (page-platform §3.2).
   var webContent: (any WebContent)? { closed ? nil : content }
   var isPrivateBrowsing: Bool { content.context.isEphemeral }
+  #if OPEN_ENGINE_FRAME_PRESENTATION
+  private lazy var spaceFramePresentation = SpaceFramePresentationAdapter(content: content)
+  var framePresentation: (any WebContentFramePresentation)? {
+    guard !closed, content.supportsFramePresentation else { return nil }
+    return spaceFramePresentation
+  }
+  #endif
 
   func retainSurfaceForResize(
     to viewportSize: CGSize, backingScale: CGFloat, generation: Int,
