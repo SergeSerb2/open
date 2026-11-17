@@ -13855,6 +13855,10 @@ def main():
         with open(rules_path, "w") as f:
             json.dump(MEDIA_RULES, f)
         extra += ["--pip-site-rules=" + rules_path]
+    if opts.only == "split" and opts.style == "chrome":
+        # close_pane_extension_events: the committed tabs probe only.
+        extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
+                  "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "sleep" and opts.style == "chrome":
         # chrome.tabs.discard row: the committed tabs probe only.
         extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
