@@ -78,7 +78,8 @@ final class EaselContentHost: WebContentHost {
     panel.beginSheetModal(for: window) { [weak self] response in
       guard let self else { return }
       self.openPanel = nil
-      guard response == .OK else { return }
+      // The tab can close (or its Easel be deleted) while the sheet is up: never write to it then.
+      guard response == .OK, !self.closed else { return }
       let pb = NSPasteboard(name: NSPasteboard.Name("open.easel.pick.\(UUID().uuidString)"))
       pb.clearContents(); pb.writeObjects(panel.urls as [NSURL])
       self.canvas.ingest(pb, at: self.canvas.visibleCenter, name: "Add Image")
@@ -124,8 +125,9 @@ final class EaselContentHost: WebContentHost {
     let documentID = self.documentID
     Task { [weak self] in
       let (meta, picture) = await EaselLinkFetcher.fetch(url)
-      guard let self, !self.closed else { return }
+      guard let self else { return }
       self.pendingLinks -= 1
+      guard !self.closed else { return }
       let image = picture.flatMap { self.owner?.app.easels.addImage($0, document: documentID) }
       self.canvas.updateLink(id) { link in
         link.title = meta.title; link.summary = meta.summary; link.imageFile = image?.file
