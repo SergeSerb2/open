@@ -44,14 +44,16 @@ extension AutomationController {
             let animation = layer.animation(forKey: key)
             let paths = (animation as? CAAnimationGroup)?.animations?.compactMap { ($0 as? CAPropertyAnimation)?.keyPath }
               ?? (animation as? CAPropertyAnimation).map { [$0.keyPath ?? ""] } ?? []
-            return ["key": key, "duration": animation?.duration ?? 0, "paths": paths] as [String: Any]
+            return ["key": key, "duration": animation?.duration ?? 0,
+              "requestedHz": animation?.preferredFrameRateRange.preferred ?? 0, "paths": paths] as [String: Any]
           }]
       }
       return ["shown": peek.isShown, "expanding": peek.isExpanding, "kind": overlay.motionKind,
         "overlayHidden": overlay.isHidden, "backdropHidden": overlay.backdrop.isHidden,
         "snapshot": overlay.hasMotionSnapshot,
+        "clipMasksToBounds": overlay.pageClip.layer?.masksToBounds ?? false,
         "snapshotPixels": overlay.hasSnapshotPixels, "preparingOpening": peek.isPreparingOpening,
-        "openingHandoff": overlay.isOpeningHandoff, "promotionHandoff": peek.isPromotionHandoff,
+        "openingHandoff": overlay.isOpeningHandoff, "contentFading": overlay.isOpeningContentFading, "promotionHandoff": peek.isPromotionHandoff,
         "expandedImage": overlay.hasExpansionImage,
         "expandedImageFrame": overlay.expandedImageFrame.map(rect) ?? [],
         "expandedImageScale": overlay.expandedImageScale ?? 0,
@@ -59,6 +61,7 @@ extension AutomationController {
         "hostHidden": peek.stack.last?.host?.view.isHiddenOrHasHiddenAncestor ?? true,
         "hostAttached": peek.stack.last?.host?.view.window != nil,
         "backingScale": overlay.window?.backingScaleFactor ?? 1,
+        "displayHz": overlay.window?.screen?.maximumFramesPerSecond ?? 60,
         "duration": overlay.motionDuration, "startedAt": overlay.motionStartedAt,
         "layouts": overlay.layoutCount, "hostFrameChanges": overlay.hostFrameChangeCount,
         "panelFrame": rect(overlay.panel.frame), "clipFrame": rect(overlay.pageClip.frame),

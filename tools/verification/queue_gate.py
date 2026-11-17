@@ -29,11 +29,14 @@ def plan():
     parser.add_argument('--lane', choices=('merge', 'observers', 'timing'), default='merge')
     parser.add_argument('--config', choices=('Debug', 'Release'), default='Release')
     parser.add_argument('--m1-receipts', type=Path)
+    parser.add_argument('--allow-m5-functional', action='store_true')
     parser.add_argument('--launch-continuation', type=Path)
     parser.add_argument('--log-dir', type=Path)
     options = parser.parse_args()
     if GATE['machine']() != 'M5' or options.lane != 'merge' or options.launch_continuation:
         parser.error('the queued M5 dispatcher supports the merge lane only')
+    if options.allow_m5_functional and options.m1_receipts:
+        parser.error('--allow-m5-functional conflicts with --m1-receipts')
     if GATE['inside_heavy']():
         parser.error('do not put the M5 dispatcher inside an outer heavy ticket; call heavy.sh tools/verify-all.sh directly')
     names = GATE['suite_names']()
@@ -77,7 +80,8 @@ def plan():
     dependent = {'e2e-' + item for suite, items in GATE['E2E_DEPENDENCIES'].items()
                  if 'e2e-' + suite in selected for item in items}
     imports = [name for name in selected if name.startswith('e2e-') and name not in dependent and
-               (name[4:] in GATE['M1_E2E'] or name[4:] not in GATE['SAFE_M5'])]
+               (name[4:] in GATE['M1_E2E'] or name[4:] not in GATE['SAFE_M5'])
+               and not (options.allow_m5_functional and name[4:] not in GATE['M5_FUNCTIONAL_REFUSED'])]
     if imports:
         chunks.append(imports)
     chunks += [[name, *('e2e-' + item for item in GATE['E2E_DEPENDENCIES'].get(name[4:], ()))]
@@ -178,7 +182,8 @@ def main():
         raise RuntimeError('commit source changes before queuing a merge gate')
     receipt = dict(schema=1, machine='M5', config=options.config, style='chrome', lane='merge',
                    selected=selected, partialSelectors=partial, started=time.time(),
-                   prReady=not options.only and not options.quick and not options.no_e2e,
+                   m5Functional=options.allow_m5_functional,
+                   prReady=not options.only and not options.quick and not options.no_e2e and not options.allow_m5_functional,
                    chunks=[], stages=[], rows=[], source=None, refusedReceipts=[])
     rows = {}; stages = {}; unsafe = False
     def cancel(signum, _):
@@ -203,6 +208,8 @@ def main():
             command += ['--m1-receipts', str(options.m1_receipts.resolve())]
         if options.with_arc_data:
             command.append('--with-arc-data')
+        if options.allow_m5_functional:
+            command.append('--allow-m5-functional')
         queued = time.time(); acquired = None; stopping = False
         print(name + ' queued: ' + ', '.join(selection), flush=True)
         with (directory/(name+'.log')).open('x') as output:
