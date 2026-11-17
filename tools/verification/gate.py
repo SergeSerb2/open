@@ -33,8 +33,9 @@ OBSERVER_SUITES = {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'}
 M5_E2E = {'applescript'}  # No external AppleScript/osascript over SSH on the M1.
 # --allow-m5-functional (LEAD 2026-11-16 22:15): while the M1 is offline, the M5 may run
 # M1-required suites as FUNCTIONAL evidence. Their receipt row stays M1_REQUIRED, so the
-# gate still fails until an exact-head M1 receipt exists. Actions refuses non-M1 hosts.
-M5_FUNCTIONAL_REFUSED = {'actions'}
+# gate still fails until an exact-head M1 receipt exists. Actions refuses non-M1 hosts;
+# the opt-in passwords probe has paths that open system dialogs.
+M5_FUNCTIONAL_REFUSED = {'actions', 'passwords-probe'}
 # Rented Macs (NS-MACS.md) qualify functional merge/observers stages only for
 # suites that passed completely there, with clean cleanup, in one gate invocation
 # per suite at main 3ef4c11c (2026-11-11; table in docs/verification.md). Add a
