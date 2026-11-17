@@ -13627,7 +13627,7 @@ def main():
     global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", choices=["alloy", "chrome"],
-                    help="runtime style (default: chrome for context-menus/routing, alloy for other suites)")
+                    help="runtime style (default: chrome for context-menus/routing/blank-window, alloy for other suites)")
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
     ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
@@ -13690,8 +13690,10 @@ def main():
     # used by normal Open launches. Alloy has CEF's shorter, different menu.
     if opts.style is None:
         # Routing includes web protocol registration, which requires the
-        # shipping Chrome runtime's BrowserWebContentsDelegate.
-        opts.style = "chrome" if opts.only in ("context-menus", "routing") else "alloy"
+        # shipping Chrome runtime's BrowserWebContentsDelegate. Blank Window's
+        # live tab transfer moves hosted tabs, which only the shipping Chrome
+        # runtime has (Alloy pages take the URL reload fallback).
+        opts.style = "chrome" if opts.only in ("context-menus", "routing", "blank-window") else "alloy"
     if opts.page_site_data_only and opts.only != "page":
         ap.error("--page-site-data-only requires --only page")
     if opts.sitecontrol_final_only and opts.only != "sitecontrol":
