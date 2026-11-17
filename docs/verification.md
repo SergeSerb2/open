@@ -58,6 +58,17 @@ engine distribution and the same config and lane:
   --config Release --log-dir .re/gate-m1
 ```
 
+While the M1 is offline, `--allow-m5-functional` (M5 merge lane only, not with
+`--m1-receipts`) runs those suites, and the other M1-required suites, on the M5 as
+functional evidence (LEAD 2026-11-16 22:15). Their rows keep their raw results and
+`sourceMachine: M5-functional`, and each suite adds an `e2e-NAME/receipt` row with
+status `M1_REQUIRED`, so the gate still fails and the receipt is never `prReady`.
+Rows that need the 2x display or a display-reference pixel baseline stay owed to
+the M1 even when they pass here. `actions` (it refuses any host but the M1) and the
+opt-in `passwords-probe` (some paths open system dialogs) stay `M1_REQUIRED` without
+a run. The M5 dispatcher (`queue_gate.py`) forwards the flag and gives each such
+suite its own chunk, so each one gets its own build ticket and screen stage.
+
 Copy that complete private receipt directory under the supplied receipt root.
 The importer checks the exact commit, clean source fingerprint, engine hash,
 config, style, lane and named stage. A failed, ambiguous, missing or interrupted
