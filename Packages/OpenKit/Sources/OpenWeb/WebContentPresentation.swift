@@ -15,6 +15,26 @@ public struct WebContentPresentedFrame: Sendable {
     }
 }
 
+extension WebContentPresentedFrame {
+    /// How far a presentation time may lie after the moment it is checked.
+    /// On macOS, Chromium reports the frame's target display time
+    /// (`feedback.timestamp = display_time` in ca_layer_tree_coordinator.mm),
+    /// in the same mach_absolute_time base as CACurrentMediaTime(). The
+    /// receipt can arrive before that display time: up to 15 ms seen at 2x
+    /// on the M1. 100 ms covers more than two refreshes at 30 Hz and still
+    /// refuses a value from another clock.
+    public static let maximumDisplayLead: TimeInterval = 0.1
+
+    /// True when `presentedAt` is a plausible presentation time for a request
+    /// armed at `armedAt` (0 when unknown), checked at `now`.
+    public static func isValidPresentationTime(_ presentedAt: TimeInterval,
+                                               armedAt: TimeInterval,
+                                               now: TimeInterval) -> Bool {
+        presentedAt.isFinite && presentedAt > 0 && presentedAt >= armedAt
+            && presentedAt <= now + maximumDisplayLead
+    }
+}
+
 /// Kill switches for the consumers of the engine frame-presentation seam.
 /// Each consumer stays off (the shell keeps main's path) until its own lane
 /// proves it on the adopted engine: functional rows plus one timing set
