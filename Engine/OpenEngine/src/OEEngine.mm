@@ -293,8 +293,23 @@ class OEDefaultClient : public CefClient,
 class OEEndTracingCallback : public CefEndTracingCallback {
  public:
   explicit OEEndTracingCallback(void (^done)(NSString*)) : done_([done copy]) {}
+  ~OEEndTracingCallback() override {
+    // Released unrun (tracing stopped at shutdown): answer once with no file,
+    // so the completion runs and isTracing does not stay YES.
+    if (void (^done)(NSString*) = done_) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(@"");
+      });
+    }
+  }
+  // The caller answers itself when CefEndTracing refuses the callback.
+  void Disarm() { done_ = nil; }
   void OnEndTracingComplete(const CefString& tracing_file) override {
-    done_(OEString(tracing_file));
+    void (^done)(NSString*) = done_;
+    done_ = nil;
+    if (done) {
+      done(OEString(tracing_file));
+    }
   }
 
  private:
@@ -795,6 +810,9 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   [_closingDirectories addObject:context.directory.path];
   [context oe_whenReady:^{
     if (!context.oe_isReady) {
+      // Nothing was closed or deleted: release the folder again, or this
+      // Profile could never be opened until relaunch.
+      [self->_closingDirectories removeObject:context.directory.path];
       done([NSError errorWithDomain:OEErrorDomain code:OEErrorProfileDeletionFailed
           userInfo:@{NSLocalizedDescriptionKey: @"profile-not-initialized"}]);
       return;
@@ -1022,6 +1040,7 @@ static NSArray* OELiveObjects(NSPointerArray* array) {
              written ? nil : failure(@"Chromium did not write the trace"));
       });
   if (!CefEndTracing(OECef(fileURL.path), callback)) {
+    callback->Disarm();
     done(nil, failure(@"Chromium refused to end the trace"));
     return;
   }
@@ -1048,6 +1067,8 @@ static NSArray* OELiveObjects(NSPointerArray* array) {
   if (CefEndTracing(CefString(), callback)) {
     _tracing = NO;
     _tracingEnding = YES;
+  } else {
+    callback->Disarm();
   }
 }
 

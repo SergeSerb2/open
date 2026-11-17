@@ -26,8 +26,13 @@ final class LiveFetchHost {
     // One page at a time: later fetches wait their turn (bounded by the same timeout).
     let queued = Date().addingTimeInterval(Self.timeout)
     while running { guard Date() < queued else { throw Failure.busy }; try await Task.sleep(for: .milliseconds(50)) }
-    guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito }),
+    // A main-model window: a Blank Window's model holds only its own stand-in Profile.
+    guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito && $0.model === app.model }),
           let context = factory.context(for: profileID) else { throw Failure.noProfile }
+    // Engine pages are created once their view is in a window (as the container's hidden cached
+    // pages are). The fetch page sits hidden under the window's content view: never drawn, never a tab.
+    // Checked before the page exists, so a missing window cannot leave an unclosed page.
+    guard let root = app.frontWindowController?.contentView ?? app.windowControllers.first?.contentView else { throw Failure.noWindow }
     running = true
     defer { running = false }
     let config = OEWebContentConfiguration(context: context)
@@ -35,9 +40,6 @@ final class LiveFetchHost {
     let content = OEWebContent(configuration: config, url: nil)
     created += 1
     content.isMuted = true
-    // Engine pages are created once their view is in a window (as the container's hidden cached
-    // pages are). The fetch page sits hidden under the window's content view: never drawn, never a tab.
-    guard let root = app.frontWindowController?.contentView ?? app.windowControllers.first?.contentView else { throw Failure.noWindow }
     content.view.isHidden = true
     content.view.frame = CGRect(x: 0, y: 0, width: 1024, height: 768)
     root.addSubview(content.view, positioned: .below, relativeTo: nil)
