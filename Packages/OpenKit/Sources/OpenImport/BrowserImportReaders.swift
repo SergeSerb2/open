@@ -60,12 +60,15 @@ public struct BrowserImportReader: Sendable {
                 do { c.bookmarks = try live.readBookmarks().report.urls } catch { mark(&c, "Bookmarks", error) }
                 do { c.historyVisits = try live.visitCount() } catch { mark(&c, "History", error) }
             }
+            // `passwords()` imports the archive's member and the CSV together, so the count is their sum.
+            // A readable CSV must not clear the archive's unreadable mark: the import would still fail on it.
             if let csv = safari.passwordsCSV {
-                if let data = try? Data(contentsOf: csv), let read = try? PasswordsCSVReader.read(data) {
+                var data = (try? Data(contentsOf: csv)) ?? Data()
+                defer { data.resetBytes(in: 0..<data.count) }
+                if !data.isEmpty, let read = try? PasswordsCSVReader.read(data) {
                     var logins = read.logins
                     for i in logins.indices { logins[i].zeroSecrets() }
-                    c.passwords = read.report.kept
-                    c.unreadable.remove("Passwords")
+                    c.passwords = (c.passwords ?? 0) + read.report.kept
                 } else { c.passwords = nil; c.unreadable.insert("Passwords") }
             }
         case .arc, .chromium: break

@@ -106,13 +106,16 @@ extension AppDelegate {
       let id = item.document.id
       let (doc, _) = EaselImporter.resolvePictures(item) { data in store.addImage(data, document: id) }
       guard doc.isValid, let encoded = try? EaselStore.encoder.encode(doc) else { continue }
-      // `updateValue` keeps a nil entry ("no file before"); a subscript nil assignment would drop the key.
-      change.before.updateValue(try? Data(contentsOf: store.fileURL(for: id)), forKey: id)
       for factory in hostFactories.values {
         if let row = factory.easelRow(documentID: id), let host = factory.easelHosts[row.id] {
           factory.controller?.container.closeHost(for: row.id); host.close()
         }
       }
+      // Closing commits the canvas, and saves wait 500 ms: write them now, so Undo
+      // restores the Easel as it was, not the file from before the last edits.
+      store.flush()
+      // `updateValue` keeps a nil entry ("no file before"); a subscript nil assignment would drop the key.
+      change.before.updateValue(try? Data(contentsOf: store.fileURL(for: id)), forKey: id)
       store.save(doc)
       change.after[id] = encoded
       change.titles[id] = doc.displayTitle
@@ -178,13 +181,17 @@ extension AppDelegate {
 
   /// Puts document files back (nil removes the document folder's `document.json`).
   private func writeEaselFiles(_ files: [UUID: Data?]) {
-    easels.flush()
-    for (id, data) in files {
+    // Close the canvases first: a close commits open edits and queues their write, which
+    // would land after (and overwrite) the file put back below.
+    for id in files.keys {
       for factory in hostFactories.values {
         if let row = factory.easelRow(documentID: id), let host = factory.easelHosts[row.id] {
           factory.controller?.container.closeHost(for: row.id); host.close()
         }
       }
+    }
+    easels.flush()
+    for (id, data) in files {
       let url = easels.fileURL(for: id)
       if let data {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
