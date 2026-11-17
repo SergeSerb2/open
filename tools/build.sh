@@ -67,6 +67,13 @@ fi
 if [[ ${#conditions[@]} -gt 0 ]]; then
   extra+=("SWIFT_ACTIVE_COMPILATION_CONDITIONS=${conditions[*]}")
 fi
+# Shipping build only (Release without OPEN_AUTOMATION): the App executable
+# exports no symbols. Nothing resolves symbols in it at run time (only the
+# automation build's dlsym looks up injected observer libraries), and the
+# release hygiene step then strips them (about 3.6 MB; Open.app.dSYM keeps them).
+if [[ "$CONFIG" == "Release" && "${OPEN_AUTOMATION:-}" != "1" ]]; then
+  extra+=("OPEN_APP_EXTRA_LDFLAGS=-Wl,-no_exported_symbols")
+fi
 
 LOG="$OUT/xcodebuild-$CONFIG.log"
 mkdir -p "$OUT"
