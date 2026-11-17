@@ -471,7 +471,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard hoveredItem != nil, context.forcedHover == nil, let window else { return }
         let pointer: NSPoint? = if let source = context.pointerLocation { source() } else { window.mouseLocationOutsideOfEventStream }
         guard let pointer else { hoveredItem = nil; return }
-        updateHover(at: convert(pointer, from: nil), allowPreview: false)
+        let point = convert(pointer, from: nil)
+        // The same row is still under the pointer: keep its hover, tooltip and armed preview.
+        let row = scroll.frame.contains(point) ? outline.row(at: outline.convert(point, from: self)) : -1
+        if row >= 0, outline.item(atRow: row) as AnyObject? === hoveredItem { return }
+        updateHover(at: point, allowPreview: false)
     }
 
     private func observeFolder(_ folder: Folder) {
