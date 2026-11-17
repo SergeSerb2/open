@@ -353,6 +353,8 @@ public final class WebContentContainer: NSView {
     private var paneMotionGeneration = 0
     private var paneMotionAllowed: Bool { window?.isVisible == true && !Motion.reducesMotion }
     public var retiringPaneCount: Int { retiringSlots.count }
+    /// Automation readback: why the last show() did or did not start a pane motion.
+    public private(set) var lastPaneMotionDecision = ""
     /// Retiring panes whose page is still attached and drawn.
     public var retiringPageCount: Int { retiringSlots.filter(\.isDrawingPage).count }
     /// Closed pages whose engine teardown waits for the end of the motion.
@@ -380,6 +382,7 @@ public final class WebContentContainer: NSView {
         let movesPanes = paneMotionAllowed && old != tabIDs && (old.count > 1 || tabIDs.count > 1) && old.contains(where: tabIDs.contains)
         // Read every on-screen box first, so an interrupted motion continues from where it is.
         let starts = movesPanes ? visiblePaneBoxes() : [:]
+        lastPaneMotionDecision = "moves=\(movesPanes) visible=\(window?.isVisible == true) reduced=\(Motion.reducesMotion) old=\(old.count) new=\(tabIDs.count) starts=\(starts.count)"
         // A refresh with the same panes (model observers, focus) keeps a running motion;
         // layoutPanes ends it only if a target frame changes.
         if old != tabIDs { finishPaneMotion() }

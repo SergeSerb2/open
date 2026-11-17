@@ -27,7 +27,7 @@ extension AutomationController {
                 "renameEditor":rename, "fractions": split.split?.fractions ?? [], "focused": split.focusedTab?.id.description ?? "",
                 "selected": controller.context.window?.selectedNodeBySpace[controller.context.window!.focusedSpaceID]?.description ?? "",
                 "maximized": split.maximizedPaneID?.description ?? "", "container": frame(container), "retainedSlots": container.retainedSlotCount,
-                "retiringPanes": container.retiringPaneCount, "retiringPages": container.retiringPageCount, "deferredTeardowns": container.deferredTeardownCount,
+                "retiringPanes": container.retiringPaneCount, "motionDecision": container.lastPaneMotionDecision, "retiringPages": container.retiringPageCount, "deferredTeardowns": container.deferredTeardownCount,
                 "sidebarURL": controller.sidebar.urlFieldText, "sidebarText": controller.sidebar.displayedURLText, "title": window.title,
                 "sidebarCurrent": split.split.map { controller.sidebar.isCurrentRow(nodeID: $0.id) } ?? false,
                 "panes": container.slots.map { slot -> [String: Any] in
