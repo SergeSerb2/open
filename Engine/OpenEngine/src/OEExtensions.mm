@@ -260,6 +260,12 @@ class OEExtensionsHandler : public CefExtensionManagerHandler {
 class OEInstallCompletion : public CefExtensionInstallCallback {
  public:
   explicit OEInstallCompletion(void (^completion)(BOOL, NSString*)) : completion_([completion copy]) {}
+  ~OEInstallCompletion() override {
+    // Released unrun (the profile's extension system closed mid-install).
+    if (auto completion = completion_) dispatch_async(dispatch_get_main_queue(), ^{
+      completion(NO, @"The extension install did not complete");
+    });
+  }
   void OnComplete(bool installed, const CefString& error) override {
     auto completion = completion_; completion_ = nil;
     if (completion) completion(installed, error.empty() ? nil : OEString(error));
@@ -272,6 +278,12 @@ class OELocalInstallCompletion : public CefExtensionLocalInstallCallback {
  public:
   explicit OELocalInstallCompletion(void (^completion)(OEExtensionInstallResult, NSString*, NSString*))
       : completion_([completion copy]) {}
+  ~OELocalInstallCompletion() override {
+    // Released unrun (the profile's extension system closed mid-install).
+    if (auto completion = completion_) dispatch_async(dispatch_get_main_queue(), ^{
+      completion(OEExtensionInstallResultFailed, nil, @"The extension install did not complete");
+    });
+  }
   void OnComplete(int result, const CefString& identifier, const CefString& error) override {
     auto completion = completion_; completion_ = nil;
     NSString* extensionID = identifier.empty() ? nil : OEString(identifier);
