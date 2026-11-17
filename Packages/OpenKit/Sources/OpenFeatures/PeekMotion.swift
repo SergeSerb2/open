@@ -79,6 +79,13 @@ extension PeekOverlayView {
         PeekMotionTrace.region("host.explicitCommit") { CATransaction.commit() }
     }
 
+    /// A slow scale/opacity change must still use the active ProMotion panel's
+    /// cadence. The render server owns the ticks; no display-link work is added.
+    func requestDisplayRate(_ animation: CAAnimation) {
+        let hz = Float(window?.screen?.maximumFramesPerSecond ?? 60)
+        animation.preferredFrameRateRange = CAFrameRateRange(minimum: hz, maximum: hz, preferred: hz)
+    }
+
     private func beginMotion(_ kind: String, duration: CFTimeInterval, completion: (@MainActor () -> Void)?) {
         motionKind = kind; motionDuration = duration; motionStartedAt = CACurrentMediaTime()
         PeekMotionTrace.mark("motion." + kind, value: duration)
@@ -93,6 +100,7 @@ extension PeekOverlayView {
         animation.fromValue = from; animation.toValue = to; animation.duration = duration
         animation.timingFunction = CAMediaTimingFunction(name: .default)
         layer.opacity = to
+        requestDisplayRate(animation)
         layer.add(animation, forKey: "peekVisibility")
     }
 
@@ -109,6 +117,7 @@ extension PeekOverlayView {
         // The backing layer's model geometry always remains the view's real
         // frame. Retain only the visual endpoint until dismissal/promotion.
         group.fillMode = .forwards; group.isRemovedOnCompletion = !holdsEnd
+        requestDisplayRate(group)
         layer.add(group, forKey: "peekGeometry")
     }
 }
