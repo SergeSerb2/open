@@ -497,6 +497,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if let editor = themeEditor, let id = editor.session?.spaceID,
            model.space(id: id) == nil || context.window?.focusedSpaceID != id { closeThemeEditor() }
         guard let space = context.focusedSpace else { return }
+        // Same turn as the input: the slide shares the content swap's commit.
+        sidebar.showFocusedSpaceIfChanged()
         if !observationArmed {
         observationArmed = true
         withObservationTracking {

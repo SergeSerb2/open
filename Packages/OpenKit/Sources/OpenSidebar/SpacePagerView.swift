@@ -109,6 +109,15 @@ final class SpacePagerView: NSView {
         CATransaction.commit()
     }
 
+    /// Starts the slide in the caller's turn when focus moved. The observation
+    /// loop otherwise reaches the pager one turn later, after the window's
+    /// synchronous content swap, so the slide began 20-40 ms after the input.
+    func showFocusedIfChanged() {
+        guard creationPage == nil, swipe == nil, window != nil,
+              let focused = context.focusedSpace, focused.id != shownSpaceID else { return }
+        showFocused(animated: true)
+    }
+
     /// Slides to the focused Space. Every page between the old and the new one is
     /// shown during the slide (Arc passes through them, A0227).
     func showFocused(animated: Bool) {
@@ -285,6 +294,18 @@ final class SpacePagerView: NSView {
             swipe = nil
             context.suppressPreviews(.swipe, false)
             if target != s.baseIndex { context.selection.clear() }
+            let animate = animatesSidebarChanges && !Motion.reducesMotion
+            var snapping = false
+            if animate, target != s.baseIndex {
+                // Commit the snap before the synchronous Space switch swaps the
+                // web content; that work otherwise held the last drag frame.
+                let from = -offset
+                shownSpaceID = spaces[target].id
+                offset = CGFloat(target) * w
+                placeStrip(); slide(from: from, spring: Motion.spaceSwipeSnap)
+                CATransaction.flush()
+                snapping = true
+            }
             // The delegate changes focus synchronously; snap to whatever is focused now.
             if target != s.baseIndex { context.send(.switchSpace(spaces[target].id)) }
             let landed = focusedIndex
@@ -293,9 +314,9 @@ final class SpacePagerView: NSView {
                 themeBackground?.crossfade(to: context.style(for: f), animated: true)
             }
             shownSpaceID = context.focusedSpace?.id
-            let from = -offset
+            if snapping, landed == target { return true }
+            let from = snapping ? presentationOffset : -offset
             offset = CGFloat(landed) * w
-            let animate = animatesSidebarChanges && !Motion.reducesMotion
             placeStrip()
             if animate { slide(from: from, spring: Motion.spaceSwipeSnap) }
             else { lastSlideAnimation = nil; animating = false; finishSlide() }
