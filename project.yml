@@ -244,6 +244,8 @@ targets:
         SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY: YES
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # tools/build.sh sets OPEN_APP_EXTRA_LDFLAGS for the shipping build only.
+        OTHER_LDFLAGS: $(inherited) $(OPEN_APP_EXTRA_LDFLAGS)
     postBuildScripts:
       - name: Embed verified ad-block lists
         script: '"$SRCROOT/tools/embed-adblock.sh"'

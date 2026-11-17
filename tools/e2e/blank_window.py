@@ -246,6 +246,14 @@ def live_transfer_checks(factory, results, h, origin):
             return
         main = app.call('window-state')['id']
         control = app.call('tabs')[0]['id']; app.call('wait', tab=control)
+        # Only hosted tabs (the shipping Chrome runtime) can move live. Alloy
+        # pages take the URL reload fallback by design (dropTabs), so an
+        # explicit --style alloy run cannot judge these rows.
+        style = page(control).get('style')
+        if style != 'chrome':
+            results['live_transfer_engine_capability'] = dict(status='DEFERRED', style=style,
+                reason='Live tab transfer moves hosted Chrome-runtime tabs; this run uses %s pages. Run with --style chrome.' % style)
+            return
         app.call('window-frame', frame=[100, 220, 900, 480])
         tab = h.new_tab(app, origin + '/transfer-before')
         app.call('navigate', tab=tab, url=origin + '/transfer-form'); app.call('wait', tab=tab)

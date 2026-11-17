@@ -8,6 +8,7 @@ is reported separately from the still-unqualified compositor dropped frames.
 import argparse
 import copy
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -48,12 +49,25 @@ def other_processes(exclude_bundle=None):
     return sorted(rows,key=lambda row:row['cpuPercent'],reverse=True)[:5]
 
 
+def quiet_load1():
+    """Quiet-machine load1 limit. Default 3.5 (the 8-core M1 rule). M5 lanes set OPEN_QUIET_LOAD1=7.0
+    (LEAD rulings 2026-11-16 17:50 and 22:15). A malformed value is an error, never a silent default."""
+    raw = os.environ.get('OPEN_QUIET_LOAD1', '3.5')
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValueError('OPEN_QUIET_LOAD1 must be a number, got %r' % raw) from None
+    if not math.isfinite(value) or not 0 < value <= 64:
+        raise ValueError('OPEN_QUIET_LOAD1 must be in (0, 64], got %r' % raw)
+    return value
+
+
 def quiet(deadline=None):
     attempts=[];deadline=deadline if deadline is not None else time.monotonic()+900
     while time.monotonic()<deadline:
         loads=[os.getloadavg()[0]];time.sleep(10);loads.append(os.getloadavg()[0]);foreign=cpu()
         attempts.append({'loads':loads,'foreignCPU':foreign,'otherProcesses':other_processes()})
-        if max(loads)<=3.5:return loads,foreign,attempts
+        if max(loads)<=quiet_load1():return loads,foreign,attempts
         print('WAIT quiet prerequisites '+json.dumps(attempts[-1]),flush=True)
     raise RuntimeError('quiet-sample prerequisites did not pass in fifteen minutes: '+json.dumps(attempts))
 
@@ -169,7 +183,7 @@ def scroll_fixture(root,snapshot):
 
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
-    receipt={'configuration':'Release','samples':[],'method':'LEAD 06:50 clocks/validity; LEAD 09:20 provider and scroll qualification. App-side event dispatch to the CATransaction flush containing the complete first screen or filtered result. Physical clocks and row-setup sub-targets are informational. Idle median is open minus mean(closed before, closed after); high samples fail only when attributed to the main thread or Library activity.','validity':{'load1Maximum':3.5,'loadReadings':2,'spacingSeconds':10,'foreignCPUThreshold':None,'quietDeadlineSecondsPerPair':900},'limits':{'firstSubmittedMilliseconds':8,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
+    receipt={'configuration':'Release','samples':[],'method':'LEAD 06:50 clocks/validity; LEAD 09:20 provider and scroll qualification. App-side event dispatch to the CATransaction flush containing the complete first screen or filtered result. Physical clocks and row-setup sub-targets are informational. Idle median is open minus mean(closed before, closed after); high samples fail only when attributed to the main thread or Library activity.','validity':{'load1Maximum':quiet_load1(),'loadReadings':2,'spacingSeconds':10,'foreignCPUThreshold':None,'quietDeadlineSecondsPerPair':900},'limits':{'firstSubmittedMilliseconds':8,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
     if args.resume_from:
         previous=json.loads(args.resume_from.read_text())
         assert previous['configuration']==receipt['configuration'] and previous['limits']==receipt['limits']
@@ -179,7 +193,7 @@ def main(args):
         for row,baseline in zip(previous['samples'],previous['baseline']['samples']):
             if not row['valid']:break
             assert row['cleanup']['ok'] and baseline['cleanup']['ok']
-            assert max(row['loads'])<=3.5 and max(baseline['loads'])<=3.5
+            assert max(row['loads'])<=quiet_load1() and max(baseline['loads'])<=quiet_load1()
             assert row['search']['providerRows']==1
             valid.append(row);baselines.append(baseline)
         assert 0<len(valid)<args.samples
@@ -279,7 +293,7 @@ def main(args):
                 end_cpu=cpu(active.bundle)
                 row={'index':index,'attempt':attempt,'physicalDirectory':'physical-'+attempt_tag,'loads':loads,'quietAttempts':quiet_attempts,'candidateLoadBefore':candidate_load_before,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'otherProcessesBefore':candidate_other_before,'otherProcessesAfter':other_processes(active.bundle),'startup':startup,'open':opened,'physicalOpen':physical,'providerWarmup':provider_warm,'coldSections':cold,'warmSections':warm,'search':search,'idleWindows':{'closedBefore':closed_before,'open':opened_idle,'closedAfter':closed_after},'idleAttribution':{key:window['attribution'] for key,window in [('closedBefore',closed_before),('open',opened_idle),('closedAfter',closed_after)]},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':opened_idle['counters'],'idleCounterDelta':opened_idle['counterDelta'],'prebuild':prebuild}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
-                row['valid']=max(loads)<=3.5
+                row['valid']=max(loads)<=quiet_load1()
                 receipt['samples'].append(row)
                 if baseline_row:receipt['baseline']['samples'].append(baseline_row)
                 receipt.pop('pendingBaseline',None)
