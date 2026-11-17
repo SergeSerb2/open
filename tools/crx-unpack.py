@@ -5,6 +5,9 @@
 
 Adds the CRX public key as manifest "key", so the unpacked extension keeps
 its Chrome Web Store id (needed for stores, native messaging and allowlists).
+The key is the one whose id matches the crx_id in the CRX's signed header (a
+store CRX also carries the Web Store's own key). With an expected id, a CRX
+that has no key for that id is refused.
 """
 import base64
 import hashlib
@@ -54,17 +57,20 @@ def main(crx_path, out_dir, expected=None):
     if magic != b"Cr24" or version != 3:
         raise SystemExit("not a CRX3 file")
     header = data[12:12 + header_len]
-    keys = []
+    keys, crx_id = [], None
     for num, value in fields(header):
         if num in (2, 3):  # sha256_with_rsa, sha256_with_ecdsa
             for n, v in fields(value):
                 if n == 1:
                     keys.append(v)
-    key = None
-    for k in keys:
-        if expected is None or ext_id(k) == expected:
-            key = k
-            break
+        elif num == 10000:  # signed_header_data: SignedData { bytes crx_id = 1; }
+            for n, v in fields(value):
+                if n == 1 and len(v) == 16:
+                    crx_id = "".join(chr(ord("a") + int(c, 16)) for c in v.hex())
+    wanted = expected or crx_id
+    key = next((k for k in keys if wanted is None or ext_id(k) == wanted), None)
+    if key is None and wanted is not None:
+        raise SystemExit("no key in the CRX matches extension id %s" % wanted)
     with zipfile.ZipFile(io.BytesIO(data[12 + header_len:])) as z:
         z.extractall(out_dir)
     manifest_path = os.path.join(out_dir, "manifest.json")

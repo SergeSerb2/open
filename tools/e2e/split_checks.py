@@ -425,6 +425,30 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for i in range(12):
             opened('slot-cache-'+str(i)); retained.append(state()['retainedSlots'])
         row('slot_cache_bounded', max(retained) <= 9, retainedSlots=retained, hiddenLimit=8)
+        # LEAD 11:50: Close This Pane keeps the closed page drawn while its box collapses,
+        # so chrome.tabs reports onRemoved after the strip change. onRemoved must arrive
+        # <= 400 ms after the command, and tabs.get must answer for the tab until then.
+        probe = next((x for x in app.call('extensions')['installed'] if x['name'] == 'Open tabs probe'), None)
+        if probe is None:
+            results['close_pane_extension_events'] = dict(status='DEFERRED', reason='tabs-probe extension not loaded (Chrome style only)')
+        else:
+            reporter = app.call('open', url='chrome-extension://%s/popup.html' % probe['id'])['id']; app.call('wait', tab=reporter)
+            ea = opened('ext-a'); ec = opened('ext-c'); select(ea)
+            s = state(); x, y, w, height = s['container']
+            assert app.call('split', op='drop', node=ec, point=[x+w-12, y+height/2])['accepted']; settled(2)
+            app.call('focus', tab=ec); time.sleep(.3)
+            cid = next(t for t in app.call('tabs') if t['id'] == ec)['page']['chromeTabId']
+            app.eval(reporter, "window.__closeRemoved=0;chrome.tabs.onRemoved.addListener(id=>{if(id===%d&&!__closeRemoved)__closeRemoved=Date.now()});true" % cid)
+            get = "chrome.tabs.get(%d).then(()=>Date.now(),()=>-Date.now())" % cid
+            t0 = app.eval(reporter, 'Date.now()'); menu('Close This Pane')
+            answers = []
+            for _ in range(60):
+                answers.append(app.eval(reporter, get))
+                if answers[-1] < 0: break
+            time.sleep(.2); removed = app.eval(reporter, 'window.__closeRemoved')
+            before_removed = [v for v in answers if removed and abs(v) < removed]
+            row('close_pane_extension_events', bool(removed) and removed - t0 <= 400 and all(v > 0 for v in before_removed),
+                removed_after_ms=(removed - t0) if removed else None, answers=[v - t0 if v > 0 else -(abs(v) - t0) for v in answers])
     finally:
         try:
             h._restore_defaults(app, saved)

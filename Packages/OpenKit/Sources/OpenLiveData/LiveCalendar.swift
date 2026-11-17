@@ -59,8 +59,9 @@ public enum LiveCalendar {
         let offset = until.truncatingRemainder(dividingBy: 60)
         var next = now.addingTimeInterval(offset > 0 ? offset : 60 + offset)
         if let lead = interval.lead, until > lead { next = min(next, event.start.addingTimeInterval(-lead)) }
-        // After the joinable window the event drops out.
-        return min(next, event.start.addingTimeInterval(NextMeeting.joinableAfterStart + 1))
+        // The event drops out when it ends or after the joinable window, whichever is first.
+        let dropsOut = min(event.end, event.start.addingTimeInterval(NextMeeting.joinableAfterStart + 1))
+        return min(next, max(dropsOut, now.addingTimeInterval(1)))
     }
 
     /// Reminder time before the start (Arc `LiveCalendarInterval`, LD §4: `S:116292–116299`).

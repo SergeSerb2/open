@@ -1436,6 +1436,12 @@
           "card": controller.cardAnimations.mapValues(describeAnimation),
           "cardSamples": controller.cardMotionSamples.map { ["time": $0.time, "offset": $0.offset] },
           "space": controller.sidebar.spaceSlideAnimation.map(describeAnimation) ?? [:],
+          "spacePage": ["phase": controller.container.spacePageMotionPhase,
+            "cachedDestination": controller.container.spacePageUsesSnapshot,
+            "cacheBytes": controller.container.spacePageSnapshotBytes,
+            "captures": controller.container.spacePageCaptureCount,
+            "presentationUnavailable": controller.container.spacePagePresentationUnavailable,
+            "animation": controller.container.spacePageAnimation.map(describeAnimation) ?? [:]] as [String: Any],
           "active": ["sidebar": controller.sidebar.layer?.animationKeys() ?? [],
             "panel": controller.container.layer?.animationKeys() ?? []]] as [String: Any]
       case "window-state":
@@ -2681,7 +2687,8 @@
       if code >= 123 { mods.insert([.function, .numericPad]) }
       // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
       // equivalents such as Redo need "Z", even though the key router folds case.
-      let eventCharacters = mods.contains(.shift) ? chars.uppercased() : chars
+      // `characters` sends what real hardware gives (Cmd+Shift+2 carries "@"), for the base-key check.
+      let eventCharacters = (a["characters"] as? String).flatMap { $0.count == 1 ? $0 : nil } ?? (mods.contains(.shift) ? chars.uppercased() : chars)
       let route = a["route"] as? String ?? "app"
       let observeCommands = a["observeCommands"] as? Bool == true
       var menuObserver: (any NSObjectProtocol)?

@@ -134,9 +134,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         super.layout()
         SidebarDiagnostics.spacePageLayouts += 1
         let w = bounds.width
-        header.frame = CGRect(x: 0, y: 0, width: w, height: SpaceListMetrics.headerHeight)
+        let headerFrame = CGRect(x: 0, y: 0, width: w, height: SpaceListMetrics.headerHeight)
+        if header.frame != headerFrame { header.frame = headerFrame }
         let headerHeight = headerVisible ? SpaceListMetrics.headerHeight : 0
-        scroll.frame = CGRect(x: 0, y: headerHeight, width: w, height: max(0, bounds.height - headerHeight))
+        let scrollFrame = CGRect(x: 0, y: headerHeight, width: w, height: max(0, bounds.height - headerHeight))
+        if scroll.frame != scrollFrame { scroll.frame = scrollFrame }
         if let column = outline.tableColumns.first, column.width != w { column.width = w }
     }
 

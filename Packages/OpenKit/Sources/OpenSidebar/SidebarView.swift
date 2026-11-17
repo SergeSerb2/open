@@ -394,6 +394,8 @@ public final class SidebarView: NSView {
     /// as menus and drops, including selection consumption and view batching.
     @discardableResult
     public func perform(_ intent: SidebarIntent) -> Bool { context.send(intent) }
+    /// Starts a pending Space slide now, before the window's content work.
+    public func showFocusedSpaceIfChanged() { pager.showFocusedIfChanged() }
 
     public func beginSpaceCreation(page: NSView) {
         isCreatingSpace = true; context.existingHoverPreviews?.dismiss()

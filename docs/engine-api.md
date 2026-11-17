@@ -199,6 +199,8 @@ Tab requests from Chromium (P1). The shell owns its tabs; Chromium's own changes
 
 `chrome.tabs.remove` and `window.close()` arrive as `webContentDidRequestClose(_:)`, as before. `insert(_:at:)` refuses a page of another profile, or a hosted tab of another window: tabs stay in their window. A browser whose context gets no hidden Chrome window (`CefTabStrip::Create` refused it) hosts its `.chrome` tabs as `.alloy` pages. Extension action popups are Chrome popups (P2): `chrome.extension.getViews({type: "popup"})` lists them, and their `chrome.tabs` calls see this window as the current window, so `query({active: true, currentWindow: true})` returns the shell's selected tab. A window without a live Chrome style tab opens no popup (no plain page with the manifest popup URL either: extensions such as Bitwarden do not work there).
 
+Split View **Close This Pane** keeps the closed page drawn while its box collapses (0.22 s; the App cannot snapshot a remote-layer page synchronously). The App drops the tab from `webContents` at once, but Chromium removes a tab from its strip only when the page closes, at the end of the collapse. An extension therefore sees `onActivated` (the surviving pane) and an `onMoved` for a neighbour first, and `onRemoved` for the closed tab about 0.25 s after the command (main's order: `onRemoved` first). Until `onRemoved`, `chrome.tabs.get` still answers for that tab. The e2e row `split/close_pane_extension_events` keeps `onRemoved` within 400 ms. Removing a tab from Chromium's strip without closing the page is a later engine item.
+
 ## OEWebContent (page)
 
 Creation and lifetime:
