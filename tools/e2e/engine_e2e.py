@@ -13651,7 +13651,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -14117,6 +14117,17 @@ def main():
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "app-icons":
+            # tools/e2e/app_icons.py: picker, cache, reset, relaunch, and the macOS icon grid of every icon.
+            results[opts.only] = CheckedResults(tracker)
+            import app_icons
+            icon_out = Path(tmp) / 'app-icons'
+            try:
+                app_icons.run(icon_out, opts.config)
+            finally:
+                receipt = icon_out / 'results.json'
+                for row, value in (json.loads(receipt.read_text()).items() if receipt.is_file() else ()):
+                    results[opts.only]['app_icons_' + row] = value
         elif opts.only == "space-editor":
             results[opts.only] = CheckedResults(tracker)
             space_editor_creation_checks(factory, results[opts.only], tmp)
@@ -14376,14 +14387,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode"):
+    for group in ("engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode")
+    failures = [k for group in ("engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

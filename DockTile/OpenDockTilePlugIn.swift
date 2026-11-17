@@ -5,14 +5,36 @@ import AppKit
 /// While Open runs, `ApplicationIconController` sets the icon itself. The Dock loads this bundle in its own
 /// process: it reads only Open's preference `open.appIcon.dockTileFile` (the cached icon PNG Open wrote) and
 /// never writes anything. No file → the bundle icon (Open's default).
+///
+/// The Dock calls `setDockTile(_:)` once, when it loads the plug-in (login or a Dock restart), and keeps showing
+/// that content after Open quits. So Open posts `<bundle id>.dockTileChanged` (a distributed notification, no
+/// payload) after each change of the preference, and the plug-in reads the preference again and redraws.
 @objc(OpenDockTilePlugIn)
 final class OpenDockTilePlugIn: NSObject, NSDockTilePlugIn {
   static let fileKey = "open.appIcon.dockTileFile"
   /// The PNG is a 1024 px icon from Open's cache; refuse anything much larger.
   static let maxBytes = 16 << 20
+  static let changedSuffix = ".dockTileChanged"
+  private var tile: NSDockTile?
+  private var observing = false
 
   func setDockTile(_ dockTile: NSDockTile?) {
-    guard let dockTile else { return }
+    tile = dockTile
+    let center = DistributedNotificationCenter.default()
+    if dockTile != nil, !observing, let host = Self.hostBundleIdentifier {
+      center.addObserver(self, selector: #selector(selectionChanged), name: .init(host + Self.changedSuffix),
+                         object: nil, suspensionBehavior: .deliverImmediately)
+      observing = true
+    } else if dockTile == nil, observing {
+      center.removeObserver(self); observing = false
+    }
+    redraw()
+  }
+
+  @objc private func selectionChanged(_ notification: Notification) { redraw() }
+
+  private func redraw() {
+    guard let dockTile = tile else { return }
     if let image = Self.selectedIcon() {
       let view = NSImageView(image: image)
       view.imageScaling = .scaleProportionallyUpOrDown

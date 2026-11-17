@@ -65,7 +65,16 @@ import OpenSettings
     // The Dock tile plug-in (DockTile/) draws this file while Open is not running; no file = bundle icon.
     if option == .openDefault { UserDefaults.standard.removeObject(forKey: Self.dockTileFileKey) }
     else { UserDefaults.standard.set(cacheFile(option).path, forKey: Self.dockTileFileKey) }
+    Self.notifyDockTile()
     return nil
+  }
+
+  /// The plug-in reads the preference only when the Dock loads it; this tells an already loaded plug-in to read
+  /// it again, so a pinned tile shows the new icon after Open quits without a Dock restart. No payload.
+  private static func notifyDockTile() {
+    guard let id = Bundle.main.bundleIdentifier else { return }
+    DistributedNotificationCenter.default().postNotificationName(.init(id + ".dockTileChanged"), object: nil,
+      userInfo: nil, deliverImmediately: true)
   }
 
   /// Restore only after content. Decode the cached 1024 px PNG on a worker;
@@ -99,6 +108,7 @@ import OpenSettings
     // Selections made before the Dock tile plug-in existed: point it at the same cached file.
     if UserDefaults.standard.string(forKey: Self.dockTileFileKey) != file.path {
       UserDefaults.standard.set(file.path, forKey: Self.dockTileFileKey)
+      Self.notifyDockTile()
     }
     Task { [weak self] in
       let decoded = await Task.detached(priority: .utility) { Self.decode(file) }.value
