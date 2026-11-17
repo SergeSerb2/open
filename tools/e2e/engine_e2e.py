@@ -4526,8 +4526,10 @@ def peek_checks(factory, results, tmp):
         results['peek_open_starts_card_without_waiting_for_page'] = {'ok': preparation.get('preparingOpening')
             and preparation.get('kind') == 'open' and preparation.get('duration') == .1
             and preparation.get('snapshot') and not preparation.get('snapshotPixels')
-            and preparation.get('clipMasksToBounds') is False
-            and preparation.get('hostHidden') and not preparation.get('hostAttached')
+            # The page is created and loads from the click on, attached under the
+            # opaque source-colour plate (clipped to the rounded card).
+            and preparation.get('clipMasksToBounds') is True
+            and preparation.get('hostAttached') and preparation.get('openingHandoff')
             and bool(preparation['panel']['animations'])
             and all(a['requestedHz'] == preparation['displayHz']
                     for a in preparation['panel']['animations'] + preparation['overlay']['animations']), 'motion': preparation}
@@ -4538,9 +4540,9 @@ def peek_checks(factory, results, tmp):
                 break
             opening_samples.append(motion)
             time.sleep(.005)
-        results['peek_open_moves_plate_with_fixed_hidden_viewport'] = {'ok': bool(opening_samples)
-            and all(s.get('snapshot') and s.get('hostHidden') and not s.get('hostAttached')
-                    and s.get('clipMasksToBounds') is False
+        results['peek_open_moves_plate_over_attached_fixed_viewport'] = {'ok': bool(opening_samples)
+            and all(s.get('snapshot') and s.get('hostAttached')
+                    and s.get('clipMasksToBounds') is True
                     and not s['panel'].get('rasterized')
                     and s['hostFrame'] == preparation['hostFrame']
                     and s['hostFrameChanges'] == preparation['hostFrameChanges'] for s in opening_samples),
