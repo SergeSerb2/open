@@ -187,14 +187,16 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             opened = state(action='open', section='downloads')
             motion = app.call('window-motion')
             check('open_moves_page', 'libraryFrame' in motion['active']['panel'], motion=motion)
-            # The viewport (size) waits for the one end commit; hit testing uses the final origin at once.
-            check('open_keeps_live_page_size', opened['motion']['page']['frame'][2:] == closed_frame[2:],
-                  before=closed_frame, during=opened['motion']['page']['frame'])
+            # Main's motion: the final frame (one viewport change) commits before the slide starts.
+            opened_timing = opened['motion']['timing']
             properties = next(a['properties'] for a in opened['motion']['page']['animations'] if a['key'] == 'libraryFrame')
-            check('page_motion_is_position_only', properties == ['position'], properties=properties)
+            check('page_motion_matches_main', properties == ['position', 'bounds.size'], properties=properties)
             time.sleep(.25)
             motion = state()['motion']
             check('open_motion_settles', settled(motion), motion=motion)
+            check('open_commits_width_once_at_start', opened['motion']['page']['frame'] == motion['page']['frame']
+                  and opened_timing['opening'] and 0 < opened_timing['layoutCommit'] <= opened_timing['start'],
+                  during=opened['motion']['page']['frame'], settled=motion['page']['frame'], timing=opened_timing)
             check('open_moves_hit_origin_first', opened['motion']['page']['frame'][:2] == motion['page']['frame'][:2],
                   during=opened['motion']['page']['frame'], settled=motion['page']['frame'])
             state(action='select', section='spaces')
@@ -222,15 +224,15 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
                 check('live_close_is_translation_only', properties == ['transform.translation.x', 'transform.translation.y'],
                       properties=properties)
             else:
-                # No engine presentation seam: the open path in reverse. The live
-                # page keeps its width while it slides; it reflows once at the end.
+                # No engine presentation seam: main's close. The final width commits
+                # once in the input's turn, while the closing panel covers the page.
                 check('close_slides_live_page', close_mode == 'live-slide', motion=closed['motion'])
-                check('close_keeps_live_page_size', closed['motion']['page']['frame'][2:] == open_frame[2:],
-                      before=open_frame, during=closed['motion']['page']['frame'])
-                check('close_starts_in_input_turn', not timing['opening'] and timing['layoutCommit'] == 0
-                      and 0 <= timing['start'] - closed['motion']['closeRequestedAt'] <= 1/120, timing=timing,
-                      requested=closed['motion']['closeRequestedAt'])
-                check('close_motion_is_position_only', properties == ['position'], properties=properties)
+                check('close_commits_width_once_at_start', closed['motion']['page']['frame'] == closed_frame
+                      and not timing['opening'] and 0 < timing['layoutCommit'] <= timing['start'],
+                      before=open_frame, during=closed['motion']['page']['frame'], timing=timing)
+                check('close_starts_in_input_turn', 0 <= timing['start'] - closed['motion']['closeRequestedAt'] <= 1/120,
+                      timing=timing, requested=closed['motion']['closeRequestedAt'])
+                check('close_motion_matches_main', properties == ['position', 'bounds.size'], properties=properties)
                 check('fallback_does_not_claim_presentation', closed['motion']['framePresentedAt'] == 0
                       and not closed['motion']['presentedFrames'], motion=closed['motion'])
             second = state()['motion']
@@ -239,9 +241,6 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             motion = state()['motion']
             check('closed_motion_stops', settled(motion), motion=motion)
             if close_mode == 'live-slide':
-                check('close_commits_width_once_at_end', motion['page']['frame'] == closed_frame
-                      and motion['timing']['layoutCommit'] >= timing['end'], page=motion['page']['frame'],
-                      expected=closed_frame, timing=motion['timing'])
                 check('close_moves_hit_origin_first', closed['motion']['page']['frame'][:2] == closed_frame[:2],
                       during=closed['motion']['page']['frame'], settled=closed_frame)
             for section in ['downloads', 'spaces', 'downloads']:

@@ -791,7 +791,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         panel.isHidden = false
         layoutContent()
         panel.layoutSubtreeIfNeeded()
-        animateLibrary(opening: true, duration: wasOpen ? 0.20 : 0.12, animated: animated)
+        animateLibrary(from: oldFrame, opening: true, duration: wasOpen ? 0.20 : 0.12, animated: animated)
         if !wasOpen, animated { fadeLibrary(panel, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : 0.12) }
         if fadesSidebar {
             let generation = libraryMotionGeneration
@@ -809,9 +809,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         libraryFramePresentedAt = 0; libraryCloseDeadlineMissed = false; libraryPresentedFrames = []
         if animated, !Motion.reducesMotion, window?.isVisible == true {
             if beginLiveLibraryClose() { return }
-            // No engine presentation seam: mirror the open path. The live page
-            // slides at its current width from this turn; its width commits once
-            // when the slide ends. No readback, hidden page or stationary hold.
+            // No engine presentation seam: main's close. The final width commits
+            // once in this turn, while the fading panel still covers the page,
+            // and the live page slides from here. No readback or hidden page.
             libraryCloseMode = "live-slide"
             finishDismissingLibrary(animated: true)
             return
@@ -839,7 +839,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard request.arm() else { return false }
         libraryMotionGeneration += 1
         let generation = libraryMotionGeneration
-        prepareLibraryPageMotion(from: source, animated: true)
+        prepareLibraryPageMotion(from: source, animated: true, defersLayout: true)
         libraryClosePresentation = request
         libraryCloseMode = "retained-live"
         libraryClosePhase = "awaiting-present"
@@ -937,9 +937,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let generation = libraryMotionGeneration
         prepareLibraryPageMotion(from: oldFrame, animated: animated)
         isLibraryOpen = false
-        layoutContent() // Records the final frame; the live viewport keeps its width.
-        libraryClosePhase = libraryPageMotion?.target != nil ? "sliding-live" : "settled"
-        animateLibrary(opening: false, duration: 0.20, animated: animated)
+        layoutContent() // Commits the final frame once, while the closing panel covers it.
+        libraryClosePhase = animated && !Motion.reducesMotion && window?.isVisible == true ? "sliding-live" : "settled"
+        animateLibrary(from: oldFrame, opening: false, duration: 0.20, animated: animated)
         fadeLibraryClosePanel(animated: animated, generation: generation)
     }
     private func fadeLibraryClosePanel(animated: Bool, generation: Int) {
@@ -973,18 +973,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         fade.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
         view.layer?.add(fade, forKey: "libraryFade")
     }
-    /// Only the position moves during Library motion. Opening and closing both
-    /// reflow the live page once, at the end. The optional engine seam path
-    /// (beginLiveLibraryClose) instead reflows once at the start, behind
-    /// retained engine pixels.
-    private func prepareLibraryPageMotion(from source: CGRect, animated: Bool) {
+    /// Open and close commit the final frame once, at the start (main's motion).
+    /// Only the optional engine seam close (beginLiveLibraryClose) defers the
+    /// frame: it records the target here, then resizes behind retained pixels.
+    private func prepareLibraryPageMotion(from source: CGRect, animated: Bool, defersLayout: Bool = false) {
         cancelLibraryClosePreparation()
         resetLibraryLiveTransform()
         emptyPanel.isHidden = false
         container.layer?.backgroundColor = nil
         libraryCloseCommitPending = false
         libraryPageMotionGeneration += 1
-        if animated, !Motion.reducesMotion, window?.isVisible == true {
+        if defersLayout, animated, !Motion.reducesMotion, window?.isVisible == true {
             libraryPageMotion = (source, nil)
         } else {
             cancelLibraryPageMotion()
@@ -1033,58 +1032,33 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if container.frame != frame { container.frame = frame }
         if emptyPanel.frame != frame { emptyPanel.frame = frame }
     }
-    private func animateLibrary(opening: Bool, duration: Double, animated: Bool) {
+    /// Main's proven Library motion: the final frame (and with it the one engine
+    /// viewport change) is already committed, before the motion starts. The page
+    /// host's layer slides from the old frame and its bounds follow, so a close
+    /// reflows while the closing panel still covers it and no frame shows an
+    /// unpainted strip. Only the dormant seam close defers its viewport.
+    private func animateLibrary(from old: CGRect, opening: Bool, duration: Double, animated: Bool) {
         let region = WindowSpeedTrace.begin("library.animation.setup")
         defer { region?() }
-        if let motion = libraryPageMotion, let target = motion.target {
-            let generation = libraryPageMotionGeneration
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            libraryLayoutCommittedAt = 0
-            CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
-                guard let self, self.libraryPageMotionGeneration == generation,
-                      self.libraryPageMotion != nil else { return }
-                CATransaction.begin()
-                CATransaction.setDisableActions(true)
-                // The one native viewport resize, after the last motion frame.
-                // Closing grows the page into the theme fill it uncovered.
-                self.libraryPageMotion = nil
-                self.layoutPageFrame(target)
-                self.container.needsLayout = true
-                self.container.layoutSubtreeIfNeeded()
-                self.libraryLayoutCommittedAt = CACurrentMediaTime()
-                if !opening { self.libraryClosePhase = "settled" }
-                self.container.layer?.removeAnimation(forKey: "libraryFrame")
-                self.emptyPanel.removeAnimation(forKey: "libraryFrame")
-                CATransaction.commit()
-            } }
-            // Start in the input's turn, as main and the open path do.
-            let startedAt = CACurrentMediaTime()
-            libraryMotionStartedAt = startedAt
-            libraryMotionEndsAt = startedAt + duration
-            libraryMotionOpening = opening
-            for layer in [container.layer, Optional(emptyPanel)].compactMap({ $0 }) {
-                layer.allowsGroupOpacity = false
-                layer.needsDisplayOnBoundsChange = false
-                layer.removeAnimation(forKey: "sidebarToggle")
-                layer.removeAnimation(forKey: "libraryFrame")
-                guard layer.bounds.width > 0, layer.bounds.height > 0 else { continue }
-                let old = motion.source
-                let position = CABasicAnimation(keyPath: "position")
-                position.fromValue = NSValue(point: CGPoint(x: old.minX + layer.bounds.width * layer.anchorPoint.x, y: old.minY + layer.bounds.height * layer.anchorPoint.y))
-                position.toValue = NSValue(point: CGPoint(x: target.minX + layer.bounds.width * layer.anchorPoint.x, y: target.minY + layer.bounds.height * layer.anchorPoint.y))
-                let group = CAAnimationGroup(); group.animations = [position]; group.duration = duration
-                group.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
-                group.beginTime = layer.convertTime(startedAt, from: nil)
-                group.fillMode = .both; group.isRemovedOnCompletion = false
-                layer.add(group, forKey: "libraryFrame")
-            }
-            CATransaction.commit()
+        let moves = animated && !Motion.reducesMotion && window?.isVisible == true
+        let now = CACurrentMediaTime()
+        libraryLayoutCommittedAt = now
+        libraryMotionStartedAt = moves ? now : 0
+        libraryMotionEndsAt = moves ? now + duration : 0
+        libraryMotionOpening = opening
+        for layer in [container.layer, Optional(emptyPanel)] {
+            layer?.removeAnimation(forKey: "libraryFrame")
+            guard moves, let layer else { continue }
+            let position = CABasicAnimation(keyPath: "position")
+            position.fromValue = NSValue(point: CGPoint(x: old.minX + old.width * layer.anchorPoint.x, y: old.minY + old.height * layer.anchorPoint.y))
+            position.toValue = NSValue(point: layer.position)
+            let size = CABasicAnimation(keyPath: "bounds.size")
+            size.fromValue = NSValue(size: old.size); size.toValue = NSValue(size: layer.bounds.size)
+            let group = CAAnimationGroup(); group.animations = [position, size]; group.duration = duration
+            group.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
+            layer.add(group, forKey: "libraryFrame")
         }
-        if !opening, animated, !sidebar.isHidden {
-            fadeLibrary(sidebar, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : duration,
-                        beginAt: libraryPageMotion != nil ? libraryMotionStartedAt : nil)
-        }
+        if !opening, animated, !sidebar.isHidden { fadeLibrary(sidebar, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : duration) }
     }
     private func addMotion(_ animation: CAAnimation, to layer: CALayer, key: String, requestedAt: CFTimeInterval? = nil) {
         // Ask ProMotion to keep the active display's cadence during this finite
