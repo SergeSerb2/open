@@ -1167,6 +1167,8 @@ and visible direct children; plain `tabs` keeps its array response. `tab-strip` 
 commands accept `cmd`/`command`, `opt`/`option`, and `ctrl`/`control` aliases.
 `sidebar-menu` rejects malformed node IDs and empty/ambiguous title paths.
 
+`sidebar-accessory node:|favorite:` reads the close (×) or unload (−) button a row shows now, from the real view tree: `shown`, `glyph` (`rowClose`/`rowUnload`), AX `label`, and `frame`/`point` in window coordinates (top-left origin), so a check can hover with `hover` and click the real button with `mouse action:click queued:true`. For a Favorite it also reports `tileHovered` (Favorite tiles have no button; docs/re/pinned-favorites-close.md F2). The pinned and Favorite close rows (`tools/e2e/sidebar_pinfav.py`, PF1–PF16) run at the end of the `sidebar` suite, or alone with `engine_e2e.py --only sidebar --sidebar-pinfav-only`.
+
 The A3 flows and Today sweeper flows share the read-only `archive-list` command
 listed above. `sidebar-completion` runs both sets of checks, including E16 and
 the scheduler checks, through one definition of each helper.
