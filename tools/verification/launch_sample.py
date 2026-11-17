@@ -7,6 +7,19 @@ from pathlib import Path
 import subprocess
 
 
+def quiet_load1():
+    """Quiet-machine load1 limit. Default 3.5 (the 8-core M1 rule). M5 lanes set OPEN_QUIET_LOAD1=7.0
+    (LEAD rulings 2026-11-16 17:50 and 22:15). A malformed value is an error, never a silent default."""
+    raw = os.environ.get('OPEN_QUIET_LOAD1', '3.5')
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValueError('OPEN_QUIET_LOAD1 must be a number, got %r' % raw) from None
+    if not math.isfinite(value) or not 0 < value <= 64:
+        raise ValueError('OPEN_QUIET_LOAD1 must be in (0, 64], got %r' % raw)
+    return value
+
+
 def read(path, limit=64 * 1024 * 1024):
     if path.stat().st_size > limit:
         raise ValueError('launch receipt exceeds size limit')
@@ -57,7 +70,7 @@ def continuation(directory, root, engine):
     for pair in validity:
         before = pair['before']
         if (len(before) != 2 or before[1]['at']-before[0]['at'] < 10
-                or any(not r['load'][0] <= 3.5 for r in before)):
+                or any(not r['load'][0] <= quiet_load1() for r in before)):
             raise ValueError('prior pair did not meet LEAD 06:50')
     binary = root/'build/Release/Open.app/Contents/MacOS/Open'
     stat = binary.stat()

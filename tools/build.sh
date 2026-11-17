@@ -57,14 +57,22 @@ PY
 if [[ "$transfer" == "1" ]]; then
   conditions+=(OPEN_ENGINE_WEB_CONTENT_TRANSFER)
 fi
-# Space's optional adapter must also compile against baseline public headers.
-# The wrapper's runtime capability handles a new header with an older engine.
-if grep -Fq 'NS_SWIFT_NAME(requestFramePresentation(pixelSize:backingScale:requestID:retainingSurfaceForResize:completion:))' \
-    "$ROOT/Engine/OpenEngine/include/OpenEngine/OEWebContent.h"; then
+# The optional presentation adapter must also compile with baseline OE headers.
+# The linked engine still decides runtime availability; header presence alone
+# never claims that a distribution can retain or present a resized surface.
+presentation_header="$ROOT/Engine/OpenEngine/include/OpenEngine/OEWebContent.h"
+if grep -Fq 'NS_SWIFT_NAME(requestFramePresentation(pixelSize:backingScale:requestID:retainingSurfaceForResize:completion:))' "$presentation_header"; then
   conditions+=(OPEN_ENGINE_FRAME_PRESENTATION)
 fi
 if [[ ${#conditions[@]} -gt 0 ]]; then
   extra+=("SWIFT_ACTIVE_COMPILATION_CONDITIONS=${conditions[*]}")
+fi
+# Shipping build only (Release without OPEN_AUTOMATION): the App executable
+# exports no symbols. Nothing resolves symbols in it at run time (only the
+# automation build's dlsym looks up injected observer libraries), and the
+# release hygiene step then strips them (about 3.6 MB; Open.app.dSYM keeps them).
+if [[ "$CONFIG" == "Release" && "${OPEN_AUTOMATION:-}" != "1" ]]; then
+  extra+=("OPEN_APP_EXTRA_LDFLAGS=-Wl,-no_exported_symbols")
 fi
 
 LOG="$OUT/xcodebuild-$CONFIG.log"
