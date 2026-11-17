@@ -203,6 +203,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var quitWarning = QuitWarningCoordinator()
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    let reply = terminateReply(sender)
+    #if OPEN_AUTOMATION
+    // OPEN_AUTOMATION_SHUTDOWN_TRACE only: every quit attempt's reply, so a quit that never
+    // completes names the step it waits on (onboarding closing_setup row, LEAD Q3).
+    recordShutdownPhase("shouldTerminate.\(reply == .terminateNow ? "now" : "cancel") history=\(historyQuitTask != nil) "
+      + "sleep=\(sleepQuitTask != nil) favicon=\(faviconShutdownTask != nil) requested=\(terminationRequested)")
+    #endif
+    return reply
+  }
+
+  private func terminateReply(_ sender: NSApplication) -> NSApplication.TerminateReply {
     // A Dock or AppleScript quit can re-enter from inside a quit alert's modal loop. One
     // alert at a time; the open alert decides this attempt.
     if quitWarning.presenting || downloadsCenter.presentingQuitAlert { return .terminateCancel }
@@ -229,9 +240,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let now = ProcessInfo.processInfo.systemUptime
     if !shutdownPrepared, downloadsCenter.needsHistoryFlush || importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true) {
       historyQuitTask = Task { @MainActor in
+        self.recordShutdownPhase("historyFlush.begin")
         await self.stores.flushHistory()
+        self.recordShutdownPhase("historyFlush.history")
         await self.downloadsCenter.flushHistory()
+        self.recordShutdownPhase("historyFlush.downloads")
         await self.importRunner.flushUndoForQuit()
+        self.recordShutdownPhase("historyFlush.end")
         self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
         NSApp.terminate(nil)
       }
@@ -248,7 +263,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       // then ask again. The snapshot save and engine shutdown follow below.
       sleepQuitTask = Task { @MainActor [weak self] in
         guard let self else { return }
+        self.recordShutdownPhase("sleepCapture.begin")
         await self.tabSleep.captureForQuit()
+        self.recordShutdownPhase("sleepCapture.end")
         self.sleepQuitCaptured = true; self.sleepQuitTask = nil
         NSApp.terminate(nil)
       }
@@ -276,7 +293,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       // OEApplication supports terminateCancel, not terminateLater. Close hosts
       // above, drain accepted cache work, then request shutdown via OpenEngine.
       faviconShutdownTask = Task { @MainActor in
+        self.recordShutdownPhase("faviconFlush.begin")
         await icons.flush()
+        self.recordShutdownPhase("faviconFlush.end")
         OEEngine.shared.terminate()
       }
       return .terminateCancel
