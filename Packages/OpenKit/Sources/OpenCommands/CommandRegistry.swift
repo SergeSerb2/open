@@ -440,9 +440,9 @@ public enum CommandRegistry {
                           defaultShortcuts: [.ctrlShift(String(number))], enabledKey: EnabledKey.currentTabInSplit)
     } + [
         CommandDefinition(id: "next-split-pane", title: "Next Split Pane",
-                          defaultShortcuts: [.ctrlShift("}")], enabledKey: EnabledKey.currentTabInSplit),
+                          defaultShortcuts: [.ctrlShift("]")], enabledKey: EnabledKey.currentTabInSplit),
         CommandDefinition(id: "previous-split-pane", title: "Previous Split Pane",
-                          defaultShortcuts: [.ctrlShift("{")], enabledKey: EnabledKey.currentTabInSplit),
+                          defaultShortcuts: [.ctrlShift("[")], enabledKey: EnabledKey.currentTabInSplit),
     ]
 
     // MARK: - Reserved out-of-scope commands (keys stay taken; no menu item)
