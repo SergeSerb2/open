@@ -1388,14 +1388,20 @@
         for owner in app.hostFactories.values {
           while owner.completePendingDialog(accept: false, text: nil) { dismissed.append("javascript") }
         }
+        // The folder a Save/Open panel opened in: tests prove it is the synthetic folder.
+        func panelFolder(_ window: NSWindow) {
+          if let panel = window as? NSSavePanel { dismissed.append("directory:" + (panel.directoryURL?.path ?? "")) }
+        }
         if let modal = NSApp.modalWindow {
           dismissed.append("modal:" + String(describing: type(of: modal)))
+          panelFolder(modal)
           NSApp.abortModal()
         }
         let ours = Set(app.windowControllers.compactMap { $0.window.map(ObjectIdentifier.init) })
         for win in NSApp.windows {
           if let sheet = win.attachedSheet {
             dismissed.append("sheet:" + String(describing: type(of: sheet)))
+            panelFolder(sheet)
             win.endSheet(sheet, returnCode: .cancel)
           }
           // Chromium's own windows (DevTools, Chrome windows, Picture in

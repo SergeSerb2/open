@@ -59,6 +59,7 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
   c.keychainServiceName = _keychainServiceName;
   c.keychainAccountName = _keychainAccountName;
   c.useMockKeychain = _useMockKeychain;
+  c.defaultDownloadDirectory = _defaultDownloadDirectory;
   return c;
 }
 
@@ -907,6 +908,24 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
 
 - (void)oe_registerContext:(OEBrowserContext*)context {
   [_allContexts addPointer:(__bridge void*)context];
+  NSString* downloads = _configuration.defaultDownloadDirectory.path;
+  if (!downloads.length) return;
+  std::string path(downloads.fileSystemRepresentation);
+  __weak OEBrowserContext* weakContext = context;
+  [context oe_whenReady:^{
+    // oe_whenReady also runs when the context closed (no request context).
+    OEBrowserContext* ready = weakContext;
+    if (!ready || !ready.oe_isReady) return;
+    CefRefPtr<CefRequestContext> request = ready.oe_requestContext;
+    if (!request) return;
+    for (const char* name : {"savefile.default_directory", "download.default_directory"}) {
+      if (!request->CanSetPreference(name)) continue;
+      CefRefPtr<CefValue> value = CefValue::Create();
+      value->SetString(path);
+      CefString error;
+      request->SetPreference(name, value, error);
+    }
+  }];
 }
 
 - (NSArray<OEBrowserContext*>*)oe_allContexts {
