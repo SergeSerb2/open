@@ -134,7 +134,8 @@ public final class PeekController {
             if loading { self.openingLoadStarted = true }
             PeekMotionTrace.region("host.onPageChange") { self.onPageChange?() }
             if !loading {
-                if self.isPreparingOpening { return }
+                // The page is attached (covered) from the click on, so its
+                // content fades in when it is ready, during card motion too.
                 if self.overlay.openingHandoff {
                     // Chromium emits its initial false state before starting
                     // the pending navigation. That is not ready page content.
@@ -161,6 +162,10 @@ public final class PeekController {
             // the source page's known color, never an empty engine/white plate.
             isPreparingOpening = true
             overlay.prepareOpeningPlate(host.view, color: sourceColor)
+            // Create and load the page now, under the opaque plate, at the
+            // same readiness point as a non-animated open. Only its ready
+            // image fades in; the live page never moves uncovered.
+            overlay.attachOpeningHost(host.view)
         }
         host.load(url); refresh(); installKeys()
         openingFocus = overlay.window?.firstResponder
@@ -170,12 +175,7 @@ public final class PeekController {
             guard let self, let host, self.motionGeneration == generation, self.stack.last?.id == itemID else { return }
             self.isPreparingOpening = false
             PeekMotionTrace.mark("opening.cardComplete")
-            if interval > 0 {
-                // Attach once at the final viewport, after card motion. Fresh
-                // Chromium creation and commits cannot compete with its frames.
-                self.overlay.attachOpeningHost(host.view)
-                self.refresh()
-            }
+            if interval > 0 { self.refresh() }
             if self.isShown, self.overlay.window?.isKeyWindow == true,
                self.overlay.window?.firstResponder === self.openingFocus { host.focus() }
         }
