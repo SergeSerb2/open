@@ -283,6 +283,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         applyingBulk = false
         syncExpansion(animated: animatesChanges)
         updateRowStates(animated: false)
+        refreshHoverAfterRowChange()
         pruneSelection()
         syncSelectionIndexes()
     }
@@ -342,6 +343,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.endUpdates()
         syncExpansion(animated: animatesChanges)
         updateRowStates(animated: false)
+        refreshHoverAfterRowChange()
         return true
     }
 
@@ -458,7 +460,18 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         if !applyingBulk && !syncingExpansion {
             syncExpansion(animated: animate)
             updateRowStates(animated: false)
+            refreshHoverAfterRowChange()
         }
+    }
+
+    /// Rows moved under a still pointer (a close, an insert, a drop). AppKit sends no mouse event,
+    /// so hover would stay on the old item and the row now under the pointer would show no close
+    /// button: a quick second click would select that row instead of closing it.
+    private func refreshHoverAfterRowChange() {
+        guard hoveredItem != nil, context.forcedHover == nil, let window else { return }
+        let pointer: NSPoint? = if let source = context.pointerLocation { source() } else { window.mouseLocationOutsideOfEventStream }
+        guard let pointer else { hoveredItem = nil; return }
+        updateHover(at: convert(pointer, from: nil), allowPreview: false)
     }
 
     private func observeFolder(_ folder: Folder) {

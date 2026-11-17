@@ -166,6 +166,18 @@ def run(factory, results, tmp, harness):
         after10 = settle(p1)
         record('PF10_cmdw_navigated_pinned', after10 and after10['section'] == 'pinned' and not after10['hasWebContent'],
                away={k: away[k] for k in ('url', 'pinnedURL', 'title')}, after=after10, observe=True)
+        # PF11: quick repeated "×" at one point: the row that slides up under the still pointer
+        # shows its button at once, so the second click closes it instead of selecting it.
+        lower = new_tab(app, fixture('PF Quick Lower')); upper = new_tab(app, fixture('PF Quick Upper'))
+        app.call('select', tab=t2)
+        first = click_accessory(upper)
+        gone = wait_until(lambda: upper not in ids() or None, timeout=2, step=.02)
+        under = accessory(lower)
+        if under.get('shown') and under['point'] == first.get('point'):
+            click_at(under['point'])
+        closed = wait_until(lambda: lower not in ids() or None, timeout=2, step=.02)
+        record('PF11_quick_repeated_x_closes_next_row', first.get('glyph') == 'rowClose' and gone and closed and selected() == t2,
+               first=first, under=under, closed_second=bool(closed), selected=selected())
     finally:
         server.shutdown()
         app.quit()
