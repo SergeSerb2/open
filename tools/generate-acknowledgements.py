@@ -199,6 +199,98 @@ class CreditsParser(html.parser.HTMLParser):
             self.parts.append(data)
 
 
+class ProductParser(html.parser.HTMLParser):
+    """CREDITS.html components: <div class="product"> with a title span, a homepage link and one <pre>."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.products, self.current, self.field = [], None, None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'div' and attrs.get('class') == 'product':
+            if len(self.products) >= 8192:
+                raise ValueError('CREDITS.html has more than 8192 components')
+            self.current = {'title': '', 'homepage': '', 'license': ''}
+            self.products.append(self.current)
+        elif self.current is not None and tag == 'span' and attrs.get('class') == 'title':
+            self.field = 'title'
+        elif self.current is not None and tag == 'a' and not self.current['homepage']:
+            self.current['homepage'] = attrs.get('href') or ''
+        elif self.current is not None and tag == 'pre':
+            self.field = 'license'
+
+    def handle_endtag(self, tag):
+        if tag in ('span', 'pre'):
+            self.field = None
+
+    def handle_data(self, data):
+        if self.current is not None and self.field:
+            self.current[self.field] += data
+
+
+# License bodies that many components share. Matching is byte-exact, so a merged
+# text is the same text; each component's own copyright and notice lines stay in place.
+APACHE_BODY = re.compile(
+    r'[ \t]*Apache License[ \t]*\n[ \t]*Version 2\.0, January 2004.*?END OF TERMS AND CONDITIONS[ \t]*\n'
+    r'(?:\s*APPENDIX: How to apply the Apache License to your work\..*?limitations under the License\.[ \t]*\n)?', re.S)
+LICENSE_PARAGRAPHS = ('Permission is hereby granted', 'THIS SOFTWARE IS PROVIDED', 'THE SOFTWARE IS PROVIDED',
+                      'Redistribution and use in source and binary forms', 'Permission to use, copy, modify',
+                      'Licensed under the Apache License', 'This library is free software', 'IN NO EVENT')
+SHARED_MINIMUM = 300  # characters; shorter paragraphs (copyright lines, short notices) always stay in place
+
+
+def license_pieces(text):
+    """Splits one component's license text into kept text and candidate shared bodies (in order)."""
+    pieces, position = [], 0
+    for match in APACHE_BODY.finditer(text):
+        pieces.append(('text', text[position:match.start()]))
+        pieces.append(('body', match.group(0)))
+        position = match.end()
+    pieces.append(('text', text[position:]))
+    result = []
+    for kind, value in pieces:
+        if kind == 'body':
+            result.append(('body', value))
+            continue
+        for part in re.split(r'(\n[ \t]*\n)', value):
+            key = part.strip()
+            result.append(('body', key) if len(key) >= SHARED_MINIMUM and key.startswith(LICENSE_PARAGRAPHS) else ('text', part))
+    return result
+
+
+def shared_credits(products):
+    """Every component with its title, homepage and own text. A body that two or more components share
+    is printed once under 'Shared license texts' and named where it applies."""
+    split = [license_pieces(p['license']) for p in products]
+    uses = {}
+    for pieces in split:
+        for kind, value in pieces:
+            if kind == 'body':
+                uses[value] = uses.get(value, 0) + 1
+    names = {}
+    for pieces in split:
+        for kind, value in pieces:
+            if kind == 'body' and uses[value] > 1 and value not in names:
+                names[value] = 'S%d' % (len(names) + 1)
+    if len(names) > 4096:
+        raise ValueError('more than 4096 shared license texts')
+    def title(body):
+        first = next((line.strip() for line in body.splitlines() if line.strip()), '')
+        return 'Apache License, Version 2.0' if APACHE_BODY.match(body) else first[:72] + ('…' if len(first) > 72 else '')
+    out = ['Each component keeps its own copyright and notice lines. A license text that several components '
+           'share is printed once, under "Shared license texts" at the end, and named where it applies.', '']
+    for product, pieces in zip(products, split):
+        out.extend([product['title'].strip(), product['homepage'].strip()])
+        text = ''.join('[Shared license text %s: %s]\n' % (names[value], title(value))
+                       if kind == 'body' and value in names else
+                       (value + '\n' if kind == 'body' else value) for kind, value in pieces)
+        out.extend([text.strip('\n'), ''])
+    out.extend(['Shared license texts', ''])
+    for body, name in names.items():
+        out.extend(['%s: %s (used by %d components)' % (name, title(body), uses[body]), body.strip('\n'), ''])
+    return '\n'.join(out)
+
+
 def rtf(text):
     # RTF uses signed UTF-16 code units, including surrogate pairs for non-BMP
     # text. Escape braces/backslashes before emitting control words.
@@ -299,10 +391,16 @@ def main():
         raw = cef_bytes.decode('utf-8')
         complete = len(raw) > 10000 and 'This is sample credits page' not in raw
         if complete:
-            parser = CreditsParser()
-            parser.feed(raw)
-            paragraphs.extend(['Chromium and third-party credits (HTML twin: CREDITS.html)',
-                               ''.join(parser.parts).strip(), ''])
+            products = ProductParser()
+            products.feed(raw)
+            if products.products:
+                body = shared_credits(products.products)
+            else:
+                # Unknown layout: keep every word of it, as before.
+                parser = CreditsParser()
+                parser.feed(raw)
+                body = ''.join(parser.parts).strip()
+            paragraphs.extend(['Chromium and third-party credits (HTML twin: CREDITS.html)', body, ''])
     if not complete:
         message = 'INCOMPLETE PREVIEW: full Chromium/codec CREDITS.html is missing or is the upstream sample.'
         if a.require_cef_credits:
