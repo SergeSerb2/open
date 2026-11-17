@@ -65,6 +65,15 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// macOS would ask for keychain access each time. Default: NO.
 @property(nonatomic) BOOL useMockKeychain;
 
+/// Folder that Chromium's own Save As / Save Link As / Save Image As panels
+/// open in, and Chromium's default download folder (the prefs
+/// `savefile.default_directory` and `download.default_directory`), for every
+/// context. nil keeps Chromium's default, the user's Downloads folder.
+/// Automation sets a folder in its disposable test root, so a test never
+/// lists the user's protected Downloads folder (that raises a macOS privacy
+/// prompt). Default: nil.
+@property(nonatomic, copy, nullable) NSURL* defaultDownloadDirectory;
+
 @end
 
 /// Engine-level callbacks. All on the main thread.
