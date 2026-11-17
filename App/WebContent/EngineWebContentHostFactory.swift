@@ -87,7 +87,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let profile = focusedProfile else { return nil }
     return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)
   }
-  var contentContainer: NSView { controller!.container }
+  /// Nil for a Little Open factory (no browser window controller).
+  var contentContainer: NSView? { controller?.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
   var welcomeHosts: [ItemID: WelcomeContentHost] = [:]
   /// Native Note pages (`open://note/<uuid>`), one per shown Note tab.
@@ -743,7 +744,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let host = makeHost(tabID: tab.id, profileID: profileID, url: history == nil ? nil : tab.url, history: history)
       as? EngineWebContentHost else { return nil }
     controller?.container.adopt(host, for: tab.id)
-    if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
+    if host.view.superview == nil, let contentContainer { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     if history == nil { host.load(tab.url) }
     return host.content
   }
@@ -754,7 +755,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     tab.live.sleepPhase = .live
     guard let host = makeHost(tabID: tab.id, profileID: profile.id, url: nil) as? EngineWebContentHost else { return nil }
     controller?.container.adopt(host, for: tab.id)
-    if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
+    if host.view.superview == nil, let contentContainer { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     if let url { host.load(url) }; mirror.sync(); return host.content
   }
   private func dropContent(id: ItemID, content: OEWebContent) { controller?.container.closeHost(for: id); hosts[id]?.close() }
@@ -1063,6 +1064,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     easelHosts.removeAll()
     controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
+    // Block observers stay in NotificationCenter until removed, one pair per closed window.
+    for observer in [developerModeObserver, swipeActivationObserver].compactMap({ $0 }) { NotificationCenter.default.removeObserver(observer) }
+    developerModeObserver = nil; swipeActivationObserver = nil
     savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
@@ -1921,7 +1925,7 @@ extension EngineWebContentHostFactory {
     tab.live.sleepPhase = .live
     content.isMuted = tab.isMuted
     controller?.container.adopt(host, for: tab.id)
-    if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
+    if host.view.superview == nil, let contentContainer { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     mirror.sync()
     app.tabSleep.contentCreated(tabID: tab.id, host: host)
   }
