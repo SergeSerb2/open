@@ -281,12 +281,21 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     if finishing { return true }
+    #if OPEN_AUTOMATION
+    (NSApp.delegate as? AppDelegate)?.recordShutdownPhase("onboarding.setupClose")
+    #endif
     closingForHandoff = true
     onHandoff = nil
     finish()
+    #if OPEN_AUTOMATION
+    (NSApp.delegate as? AppDelegate)?.recordShutdownPhase("onboarding.fadeStarted")
+    #endif
     // Deferred: this delegate may be retained only by the window it closes.
     Task { @MainActor in
       try? await Task.sleep(for: .seconds(intro.reduceMotion ? 0.3:2.5))
+      #if OPEN_AUTOMATION
+      (NSApp.delegate as? AppDelegate)?.recordShutdownPhase("onboarding.terminateAfterFade")
+      #endif
       NSApp.terminate(nil)
     }
     return false

@@ -31,10 +31,11 @@ def run(factory, results, tmp, h):
     app = None
     negatives = {}
 
-    def launch(*args, fresh=True):
+    def launch(*args, fresh=True, env=None):
         nonlocal app
         if app and not app.closed: app.quit()
-        app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(source), '--intro-sound=silent', *args])
+        app = factory(urls=(), fresh=fresh, extra_env=env,
+                      extra_args=['--arc-dir='+str(source), '--intro-sound=silent', *args])
         # Answer main's native quit confirmation for this suite's setup close.
         # Keep the product-only frame launch free of automation calls.
         if '--measure-intro-frames' not in args:
@@ -208,7 +209,9 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='fresh')
         until(lambda: state().get('sound', {}).get('playerCreated') is False)
         gate('finish_releases_player', lambda s: not s.get('sound', {}).get('playerCreated') and s.get('sound', {}).get('decision')=='played', state(), music_after_continue)
-        launch()
+        # Automation-only shutdown trace (LEAD Q3): the App writes each quit step to
+        # State/shutdown-order.json as it happens, so a quit that hangs keeps its last step.
+        launch(env={'OPEN_AUTOMATION_SHUTDOWN_TRACE': '1'})
         elapsed(.3)
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
         until(lambda: app.call('first-run')['active'])
@@ -222,12 +225,25 @@ def run(factory, results, tmp, h):
         app.quit()
         closed_pred = lambda s: s.get('exited') and s.get('cleanup') and not s.get('forced') \
             and s.get('windows')==0 and not s.get('snapshot')
-        gate('closing_setup_releases_music_and_dim', closed_pred,
-            dict(exited=exited, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced',False),
-                 windows=app.quit_report['windows_after_quit']['count'],
-                 snapshot=Path(app.user_data,'State/browser.json').exists()),
+        closed = dict(exited=exited, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced',False),
+                      windows=app.quit_report['windows_after_quit']['count'],
+                      snapshot=Path(app.user_data,'State/browser.json').exists())
+        trace_file = Path(app.user_data, 'State/shutdown-order.json')
+        try: trace = json.loads(trace_file.read_text()) if trace_file.is_file() else []
+        except ValueError: trace = []
+        phases = [[step.get('phase'), round(step.get('uptime', 0), 3)] for step in trace if isinstance(step, dict)]
+        diagnostics = dict(shutdownPhases=phases)
+        if not closed_pred(closed):
+            # Keep the full trace and the App's own log tail; the data root is wiped at the next launch.
+            kept = evidence/('closing-setup-failure-%d' % close_pid); kept.mkdir(parents=True, exist_ok=True)
+            if trace_file.is_file(): shutil.copyfile(trace_file, kept/'shutdown-order.json')
+            log_path = Path(app.launch_log_path)
+            tail = log_path.read_text(errors='replace').splitlines()[-80:] if log_path.is_file() else []
+            (kept/'app-log-tail.txt').write_text('\n'.join(tail) + '\n')
+            diagnostics.update(failureEvidence=str(kept), appLogTail=[line for line in tail if line.startswith('Open:')][-10:])
+        gate('closing_setup_releases_music_and_dim', closed_pred, closed,
             dict(exited=not before_close['active'], cleanup=False, forced=False,
-                 windows=before_close_windows['count'], snapshot=False))
+                 windows=before_close_windows['count'], snapshot=False), **diagnostics)
         launch('--reduce-motion')
         reduced_initial = state()
         reduced = elapsed(1.2)

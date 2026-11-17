@@ -115,6 +115,13 @@ def run(factory, results, tmp, h):
     owned_writer = None
     def row(name, ok, **detail):
         results[name] = dict(ok=bool(ok), negative=negative, load=os.getloadavg(), **detail)
+    def start_fresh():
+        # Start Fresh finishes first run after the onboarding hand-off, not inside the
+        # automation call. Wait for it, or the next save/Settings call races it.
+        app.call('first-run', action='fresh')
+        if not h.wait_until(lambda: not app.call('first-run')['active'], timeout=15, step=.05):
+            raise AssertionError('Start Fresh did not finish first run within 15 s')
+
     def launch(source, **env):
         nonlocal app
         if os.environ.get('OPEN_E2E_APP_BUNDLE'):
@@ -204,7 +211,7 @@ def run(factory, results, tmp, h):
                 for entry in ('first-run', 'settings'):
                     launch(directory)
                     if entry == 'settings':
-                        app.call('first-run', action='fresh')
+                        start_fresh()
                         outcome = settings_import(directory)
                         counts, review = outcome.get('settingsOutcome', {}), outcome.get('settingsCounts', {})
                     else:
@@ -245,7 +252,7 @@ def run(factory, results, tmp, h):
             for mode in ('settings_twice', 'first_then_settings'):
                 launch(source)
                 if mode == 'settings_twice':
-                    app.call('first-run', action='fresh'); empty = inventory(app)
+                    start_fresh(); empty = inventory(app)
                     first = settings_import(source)
                 else:
                     first = first_import(); finish_first()
@@ -271,7 +278,7 @@ def run(factory, results, tmp, h):
                 if negative:
                     shutil.rmtree(source); fixture(source, h)
 
-            launch(source); app.call('first-run', action='fresh'); empty = inventory(app)
+            launch(source); start_fresh(); empty = inventory(app)
             settings_import(source); first = inventory(app)
             expanded_ordered = root/'expanded-ordered'; shutil.copytree(source, expanded_ordered); expand(expanded_ordered)
             settings_import(expanded_ordered); second = inventory(app)
@@ -291,7 +298,7 @@ def run(factory, results, tmp, h):
                 before=before, imported=imported, after=after)
             app.quit(); app = None
 
-            launch(source); app.call('first-run', action='fresh')
+            launch(source); start_fresh()
             before = inventory(app)
             settings_import(source); imported = inventory(app)
             after = undo()
@@ -311,7 +318,7 @@ def run(factory, results, tmp, h):
             app.quit(); app = None
 
             launch(source, OPEN_AUTOMATION_IMPORT_UNDO_DELAY_MS='1000')
-            app.call('first-run', action='fresh'); before = inventory(app)
+            start_fresh(); before = inventory(app)
             settings_import(source)
             app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
             if negative: app.call('profiles-shell', action='create', name='Example intervening quit command')
@@ -326,7 +333,7 @@ def run(factory, results, tmp, h):
             app.quit(); app = None
 
             launch(source, OPEN_AUTOMATION_HISTORY_DELAY_MS='1000')
-            app.call('first-run', action='fresh'); before = inventory(app)
+            start_fresh(); before = inventory(app)
             app.call('first-run', action='settings-import', directory=str(source))
             app.call('first-run', action='settings-select', history=True)
             app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
@@ -342,7 +349,7 @@ def run(factory, results, tmp, h):
                 before=before, after=after, error=state().get('importUndoError'))
             app.call('first-run', action='settings-done'); app.quit(); app = None
 
-            launch(source); app.call('first-run', action='fresh'); settings_import(source)
+            launch(source); start_fresh(); settings_import(source)
             # Synthetic pre-existing ordinary visit, exactly equal to the next
             # imported visit's URL/time/transition. Full App import and native
             # Undo must retain it; deleting by URL/time would remove both.
@@ -436,7 +443,7 @@ def run(factory, results, tmp, h):
             wal = Path(str(partial/'User Data/Default/History')+'-wal')
             if not negative: wal.chmod(0)
             try:
-                launch(partial); app.call('first-run', action='fresh'); before = inventory(app)
+                launch(partial); start_fresh(); before = inventory(app)
                 outcome = settings_import(partial, finish=False)
                 shot = str(evidence/'partial-report.png'); app.call('snapshot', path=shot)
                 partial_counts = inventory(app)
@@ -453,7 +460,7 @@ def run(factory, results, tmp, h):
         large = root/'large'; fixture(large, h, large=True)
         if negative: expand(large)
         env = dict(OPEN_AUTOMATION_IMPORT_STALL_MS='80', OPEN_AUTOMATION_HISTORY_DELAY_MS='90') if negative else {}
-        launch(large, **env); app.call('first-run', action='fresh')
+        launch(large, **env); start_fresh()
         started_load = os.getloadavg()
         outcome = settings_import(large)
         metrics = outcome.get('importMetrics', {})
