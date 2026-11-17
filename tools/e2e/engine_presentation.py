@@ -230,6 +230,14 @@ def run_unavailable(factory, results, wait):
         call('add', page='p', browser='a', url='about:blank')
         assert wait(lambda: (lambda p: p['live'] and not p['loading'])(call()['pages']['p']), timeout=20)
         state = call()
+        if state['pages']['p'].get('framePresentation') is True:
+            # The linked engine has the seam (the pinned distribution since
+            # #602), so the refusal path cannot run here. Its proof against an
+            # earlier engine (61709cc0) is recorded with the adoption in
+            # Engine/fork/official-distrib.json; engine-presentation covers this engine.
+            row('unavailable_not_applicable_engine_has_seam', 'frameReceipts' in state,
+                framePresentation=True)
+            return
         row('unavailable_capability_false', 'frameReceipts' in state
             and state['pages']['p'].get('framePresentation') is False,
             framePresentation=state['pages']['p'].get('framePresentation'))
