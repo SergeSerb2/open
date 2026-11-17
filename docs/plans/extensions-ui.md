@@ -339,7 +339,7 @@ command back. It does not add or reorder items. It relabels these titles
 | "Remove from Chrome…" | "Remove from Open…" |
 | "Pin to Toolbar" | "Pin" |
 | "Unpin from Toolbar" | "Unpin" |
-| any other title containing "Chrome" | the same title with "Open" |
+| any other title | unchanged: it can hold the extension's name or its own `chrome.contextMenus` items, and the engine already brands Chromium's strings (patch 0509) |
 
 "Pin"/"Unpin" match Arc's own pin tooltips (EX-6). Open choice until
 S-6 shows Arc's labels.

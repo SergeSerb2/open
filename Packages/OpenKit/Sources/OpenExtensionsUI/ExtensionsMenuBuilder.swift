@@ -61,9 +61,12 @@ public struct ExtensionsMenuEntry: Codable, Equatable, Sendable {
         // Engine #532 brands this upstream label as Open. Keep the ellipsis:
         // selecting the item still opens our removal confirmation sheet.
         if ["Remove from Chrome", "Remove from Chrome…", "Remove from Chromium", "Remove from Chromium…", "Remove from Open"].contains(title) { return "Remove from Open…" }
-        if title == "Pin to Toolbar" { return "Pin" }
-        if title == "Unpin from Toolbar" { return "Unpin" }
-        return title.replacingOccurrences(of: "Chromium", with: "Open").replacingOccurrences(of: "Chrome", with: "Open")
+        if title == "Pin to Toolbar" || title == "Pin to toolbar" { return "Pin" }
+        if title == "Unpin from Toolbar" || title == "Unpin from toolbar" { return "Unpin" }
+        // Only Chromium's own labels are rebranded. Every other title can carry an
+        // extension's name or its own chrome.contextMenus items ("Chrome Tools"),
+        // which must stay exactly as the extension wrote them.
+        return title
     }
     /// Bound total decoded nodes, depth and UTF-8 title length before NSMenu allocation.
     public static func accepts(_ items: [ExtensionMenuItem]) -> Bool {
