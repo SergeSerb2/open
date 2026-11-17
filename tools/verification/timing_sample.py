@@ -1,8 +1,22 @@
 """Quiet-sample evidence for budget rows; never changes a numerical limit."""
+import math
 import os
 from pathlib import Path
 import subprocess
 import time
+
+
+def quiet_load1():
+    """Quiet-machine load1 limit. Default 3.5 (the 8-core M1 rule). M5 lanes set OPEN_QUIET_LOAD1=7.0
+    (LEAD rulings 2026-11-16 17:50 and 22:15). A malformed value is an error, never a silent default."""
+    raw = os.environ.get('OPEN_QUIET_LOAD1', '3.5')
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValueError('OPEN_QUIET_LOAD1 must be a number, got %r' % raw) from None
+    if not math.isfinite(value) or not 0 < value <= 64:
+        raise ValueError('OPEN_QUIET_LOAD1 must be in (0, 64], got %r' % raw)
+    return value
 
 
 def snapshot():
@@ -59,9 +73,10 @@ def preflight(require_quiet=False, cancelled=lambda: False):
                 raise InterruptedError('timing preflight cancelled before App launch')
             time.sleep(.25)
         readings.append(snapshot())
-        valid = all(r['load'][0] <= 3.5 for r in readings[-2:])
+        limit = quiet_load1()
+        valid = all(r['load'][0] <= limit for r in readings[-2:])
         if valid or time.monotonic() >= deadline:
-            return dict(before=readings[-2:], validBefore=valid, power=state,
+            return dict(before=readings[-2:], validBefore=valid, power=state, quietLoad1Limit=limit,
                         readings=readings, waitSeconds=readings[-1]['at']-readings[0]['at'])
 
 
