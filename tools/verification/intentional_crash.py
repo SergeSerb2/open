@@ -20,7 +20,8 @@ def expected_reports(names, markers, report_root):
 
     Retain reports on disk. PID ownership is recorded before the command;
     the report must name that App parent and a renderer alive at that point.
-    The abort must occur on the DevTools command thread within 30 seconds.
+    The fault (a symbolized abort, or the official build's trap) must occur on the
+    DevTools command thread (the renderer IO thread) within 30 seconds.
     One declared command can account for at most one report.
     """
     accepted = set()
@@ -35,12 +36,19 @@ def expected_reports(names, markers, report_root):
             timestamp = datetime.datetime.strptime(body['captureTime'], '%Y-%m-%d %H:%M:%S.%f %z').timestamp()
             thread = body['threads'][body['faultingThread']]
             symbols = [frame.get('symbol', '') for frame in thread['frames']]
+            exception = body.get('exception', {})
+            # A symbolized engine reports Page.crash as an abort in the DevTools IO session.
+            symbolized = (exception.get('signal') == 'SIGABRT' and 'abort' in symbols
+                          and any(symbol.startswith('blink::DevToolsSession::IOSession::DispatchProtocolCommand(')
+                                  for symbol in symbols))
+            # The adopted official engine has no such symbols, and its immediate crash is a
+            # trap: EXC_BREAKPOINT / SIGTRAP on the renderer IO thread, where that session
+            # dispatches the command (M1 report 2026-11-17 12:11:25, pid and parent in the ledger).
+            official = (exception.get('type') == 'EXC_BREAKPOINT' and exception.get('signal') == 'SIGTRAP'
+                        and thread.get('name') == 'Chrome_ChildIOThread')
             if (header.get('bundleID') != 'io.github.sergeserb2.open.helper.renderer'
                     or body.get('procName') != 'Open Helper (Renderer)'
-                    or body.get('exception', {}).get('signal') != 'SIGABRT'
-                    or 'abort' not in symbols
-                    or not any(symbol.startswith('blink::DevToolsSession::IOSession::DispatchProtocolCommand(')
-                               for symbol in symbols)):
+                    or not (symbolized or official)):
                 continue
             matches = [i for i, marker in enumerate(markers) if i not in used
                        and marker.get('method') == 'Page.crash'

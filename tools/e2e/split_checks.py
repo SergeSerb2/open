@@ -91,9 +91,26 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         empty_menu = app.call('split', op='plus')
         row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split'), menu=empty_menu)
         a = opened('a'); original_page = app.page(a)['identifier']; app.call('focus', tab=a)
-        key('='); s = settled(2)
+        app.eval(a, "window.__splitResize=[];addEventListener('resize',()=>__splitResize.push([innerWidth,innerHeight]));true")
+        motion_mode = app.call('window-motion')
+        key('='); moving = state(); s = settled(2)
+        add_resizes = app.eval(a, 'window.__splitResize')
+        # C14-6 motion: final frames commit at once; only clip layers move (render server).
+        row('pane_motion_render_server', motion_mode['reduced'] or (geometry(moving, 'horizontal', 2)
+            and all(p['clipAnimations'] for p in moving['panes'])
+            and not any(k for p in moving['panes'] for k in p['layerAnimations'] if not k.endswith('shadowPath'))),
+            moving=moving, reduced=motion_mode['reduced'])
+        row('pane_motion_settles', s['retiringPanes'] == 0
+            and not any(p['clipAnimations'] or p['holdingPage'] for p in s['panes']), state=s)
+        row('pane_layer_redraw_prepared_once', all(p['layerRedrawPolicy'] == 3 for p in s['panes']), panes=s['panes'])
+        row('add_resizes_web_once', len(add_resizes) <= 1, sizes=add_resizes)
         b = next(p['id'] for p in s['panes'] if p['id'] != a)
         row('C1_shortcut', s['orientation'] == 'horizontal' and s['focused'] == b and len(app.call('tabs')) == 2 and app.page(a)['identifier'] == original_page, state=s)
+        # The engine viewport of every pane equals its page frame once the motion ends
+        # (a new pane's page joins the engine tab strip after the start commit).
+        viewports = {p['id']: app.eval(p['id'], '[innerWidth, innerHeight]') for p in s['panes']}
+        row('pane_viewports_match_frames', all(abs(viewports[p['id']][0] - p['pageFrame'][2]) <= 1
+            and abs(viewports[p['id']][1] - p['pageFrame'][3]) <= 1 for p in s['panes']), viewports=viewports, panes=s['panes'])
         app.call('navigate', tab=b, url=origin+'/b'); app.call('wait', tab=b)
         ok, pages = live([a, b]); row('E1_two_live_pages', ok, pages=pages)
         # Real page focus and input, plus independent navigation histories.
@@ -169,10 +186,13 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for appearance in ('light','dark'):
             app.call('appearance',name=appearance)
             path = Path(h.ROOT) / '.re/s9-split' / ('split-custom-' + appearance + '.png')
+            path.parent.mkdir(parents=True, exist_ok=True)
             app.call('snapshot',path=str(path))
             captures.append(str(path))
         app.call('appearance',name='system')
-        app.call('save'); app.quit(); app = factory(urls=()); settled(2)
+        # Keep the idle observer: speed_idle_after_drag (below, before the latency relaunch) reads it.
+        app.call('save'); app.quit(); app = factory(urls=(), extra_env=environment); settled(2)
+        if environment: app.call('split', op='observe')  # re-arm in the new process, as at first launch
         restored_node = next(n for n in app.call('sidebar-tree')['today'] if n['id'] == custom_id)
         row('custom_relaunch', restored_node['customTitle'] == 'D2 Persisted Split'
             and restored_node['iconOverride'] == {'type':'emoji','value':'😀'}
@@ -309,7 +329,12 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             and max(widths) < 200 and geometry(narrow, 'horizontal', 4), state=narrow)
         app.call('window-frame', frame=[60, 60, 1360, 860], unconstrained=True); settled(4)
         # Closing the focused third pane keeps a split with a valid focused survivor.
-        closed = state()['focused']; key('-'); s = settled(3)
+        closed = state()['focused']; key('-'); closing = state(); s = settled(3)
+        # Close This Pane: the closed page stays drawn under its collapsing box, then its
+        # engine teardown finishes when the motion ends.
+        row('close_pane_page_drawn', motion_mode['reduced'] or (closing['retiringPages'] == 1 and closing['deferredTeardowns'] == 1),
+            closing=closing, reduced=motion_mode['reduced'])
+        row('close_pane_teardown_done', s['retiringPanes'] == 0 and s['deferredTeardowns'] == 0, state=s)
         row('close_focused_pane', closed not in [p['id'] for p in s['panes']] and s['focused'] == s['panes'][0]['id']
             and any(r['id'] == closed for r in app.call('archive')), state=s)
         separated = s['focused']; app.call('menu-perform', id='separate-from-split-view'); s = settled(1)
@@ -319,12 +344,23 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         # Select the remaining split through the real sidebar and close it down to one.
         app.call('sidebar-click', node=remaining['id']); s = settled(2)
         survivor = next(p['id'] for p in s['panes'] if p['id'] != s['focused'])
-        app.call('focus', tab=s['focused']); key('-'); s = settled(1)
+        app.call('focus', tab=s['focused']); key('-'); closing = state(); s = settled(1)
+        row('close_two_to_one_page_drawn', motion_mode['reduced'] or (closing['retiringPages'] == 1 and closing['deferredTeardowns'] == 1),
+            closing=closing, reduced=motion_mode['reduced'])
+        row('close_two_to_one_teardown_done', s['retiringPanes'] == 0 and s['deferredTeardowns'] == 0, state=s)
         row('collapse_two_to_one_selection', not s['id'] and s['focused'] == survivor and s['selected'] == survivor, state=s)
         # Separate All retains all tabs and selects its previously focused pane.
         a = opened('all-a'); b = opened('all-b'); select(a); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         all_ids = {p['id'] for p in s['panes']}; focused = s['focused']
-        app.call('sidebar-menu', node=s['id'], item='Separate All Tabs'); after = settled(1)
+        app.eval(focused, "window.__splitRemoveResize=[];addEventListener('resize',()=>__splitRemoveResize.push([innerWidth,innerHeight]));true")
+        app.call('sidebar-menu', node=s['id'], item='Separate All Tabs'); leaving = state(); after = settled(1)
+        remove_resizes = app.eval(focused, 'window.__splitRemoveResize')
+        # The departing pane stays drawn while its box collapses, then leaves.
+        row('remove_departing_pane_drawn', motion_mode['reduced'] or leaving['retiringPanes'] == 1,
+            leaving=leaving, reduced=motion_mode['reduced'])
+        row('remove_motion_settles', after['retiringPanes'] == 0
+            and not any(p['clipAnimations'] or p['holdingPage'] for p in after['panes']), state=after)
+        row('remove_resizes_web_once', len(remove_resizes) <= 1, sizes=remove_resizes)
         row('separate_all', after['focused'] == focused and not after['id'] and all_ids.issubset({n['id'] for n in app.call('sidebar-tree')['today']}), state=after)
         select(a); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         removed = s['focused']; survivor = next(p['id'] for p in s['panes'] if p['id'] != removed)
@@ -389,6 +425,33 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for i in range(12):
             opened('slot-cache-'+str(i)); retained.append(state()['retainedSlots'])
         row('slot_cache_bounded', max(retained) <= 9, retainedSlots=retained, hiddenLimit=8)
+        # LEAD 11:50: Close This Pane keeps the closed page drawn while its box collapses,
+        # so chrome.tabs reports onRemoved after the strip change. onRemoved must arrive
+        # <= 400 ms after the command, and tabs.get must answer for the tab until then.
+        probe = next((x for x in app.call('extensions')['installed'] if x['name'] == 'Open tabs probe'), None)
+        if probe is None:
+            results['close_pane_extension_events'] = dict(status='DEFERRED', reason='tabs-probe extension not loaded (Chrome style only)')
+        else:
+            reporter = app.call('open', url='chrome-extension://%s/popup.html' % probe['id'])['id']; app.call('wait', tab=reporter)
+            ea = opened('ext-a'); ec = opened('ext-c'); select(ea)
+            s = state(); x, y, w, height = s['container']
+            assert app.call('split', op='drop', node=ec, point=[x+w-12, y+height/2])['accepted']; settled(2)
+            app.call('focus', tab=ec); time.sleep(.3)
+            cid = next(t for t in app.call('tabs') if t['id'] == ec)['page']['chromeTabId']
+            app.eval(reporter, "window.__closeRemoved=0;chrome.tabs.onRemoved.addListener(id=>{if(id===%d&&!__closeRemoved)__closeRemoved=Date.now()});true" % cid)
+            get = "chrome.tabs.get(%d).then(()=>Date.now(),()=>-Date.now())" % cid
+            t0 = app.eval(reporter, 'Date.now()'); menu('Close This Pane')
+            answers = []
+            for _ in range(150):  # about 1.5 s: until tabs.get fails (the tab is gone)
+                answers.append(app.eval(reporter, get))
+                if answers[-1] < 0: break
+                time.sleep(.01)
+            time.sleep(.2); removed = app.eval(reporter, 'window.__closeRemoved')
+            before_removed = [v for v in answers if removed and abs(v) < removed]
+            # tabs.get answered right up to onRemoved: one answer within 60 ms before it.
+            row('close_pane_extension_events', bool(removed) and removed - t0 <= 400 and all(v > 0 for v in before_removed)
+                and any(removed - 60 <= v < removed for v in before_removed),
+                removed_after_ms=(removed - t0) if removed else None, answers=[v - t0 if v > 0 else -(abs(v) - t0) for v in answers])
     finally:
         try:
             h._restore_defaults(app, saved)

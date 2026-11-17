@@ -1,0 +1,2462 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          78121,
+          78143,
+          78144,
+          78145,
+          78150,
+          78151,
+          78167,
+          78249
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          88549,
+          88561,
+          88562,
+          88565,
+          88577,
+          88578,
+          88711,
+          88713
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          88821,
+          88896,
+          88897,
+          88898,
+          88899,
+          88900,
+          88989,
+          88990,
+          89075,
+          89155,
+          89156,
+          89162
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Release",
+  "engine": {
+    "distributionCodeSHA256": "c217d559481cdd05f82d5387929e1ef325fe66fa1009c13a2839165e17f31055",
+    "distributionSHA256": "b8d6e3363eec07f880bbc1505580480c143b4625a7247d84032753852751259f",
+    "distributionUUID": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+    "embeddedCodeSHA256": "c217d559481cdd05f82d5387929e1ef325fe66fa1009c13a2839165e17f31055",
+    "embeddedSHA256": "562447e801a0a40ebfd65529b1652edf53505f22af7a000a5ffe14dd44cc30c9",
+    "embeddedUUID": "4C4C445D-5555-3144-A19E-A98D4CE75780",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal 1794500712"
+  },
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "media_audio_state": {
+          "elementMuted": false,
+          "load": [
+            6.8486328125,
+            7.5341796875,
+            8.4345703125
+          ],
+          "muted": {
+            "actions": [
+              "play",
+              "pause",
+              "previousTrack",
+              "nextTrack",
+              "seekBackward",
+              "seekForward",
+              "seekTo",
+              "stop"
+            ],
+            "album": "Fixtures",
+            "artist": "Open",
+            "audible": true,
+            "capturing": false,
+            "controllable": true,
+            "decision": null,
+            "duration": 12,
+            "hasAudio": true,
+            "hasVideo": false,
+            "largestVideoArea": 0,
+            "live": true,
+            "modelMuted": true,
+            "muted": true,
+            "pageVolume": 1,
+            "pictureInPicture": false,
+            "pictureInPictureDisabled": false,
+            "playback": "playing",
+            "position": 0.000252,
+            "session": true,
+            "source": {
+              "kind": "audioVideo",
+              "pip": "none",
+              "playback": "playing",
+              "window": "AFB83CA9-C04C-479E-B206-8C7290639944"
+            },
+            "tab": "49F64923-86FD-4B1A-BC74-44ADCA038349",
+            "title": "Open Test Tone",
+            "volume": 1
+          },
+          "ok": true,
+          "state": {
+            "actions": [
+              "play",
+              "pause",
+              "previousTrack",
+              "nextTrack",
+              "seekBackward",
+              "seekForward",
+              "seekTo",
+              "stop"
+            ],
+            "album": "Fixtures",
+            "artist": "Open",
+            "audible": true,
+            "capturing": false,
+            "controllable": true,
+            "decision": null,
+            "duration": 12,
+            "hasAudio": true,
+            "hasVideo": false,
+            "largestVideoArea": 0,
+            "live": true,
+            "modelMuted": false,
+            "muted": false,
+            "pageVolume": 1,
+            "pictureInPicture": false,
+            "pictureInPictureDisabled": false,
+            "playback": "playing",
+            "position": 0.000252,
+            "session": true,
+            "source": {
+              "kind": "audioVideo",
+              "pip": "none",
+              "playback": "playing",
+              "window": "AFB83CA9-C04C-479E-B206-8C7290639944"
+            },
+            "tab": "49F64923-86FD-4B1A-BC74-44ADCA038349",
+            "title": "Open Test Tone",
+            "volume": 1
+          }
+        },
+        "media_card_controls": {
+          "cardPaused": true,
+          "counts": {
+            "nexttrack": 1,
+            "pause": 0,
+            "play": 0,
+            "previoustrack": 1
+          },
+          "load": [
+            6.8486328125,
+            7.5341796875,
+            8.4345703125
+          ],
+          "ok": true,
+          "paused": true,
+          "resumed": true
+        },
+        "media_card_on_leave": {
+          "appearMs": 15.8,
+          "card": {
+            "accessibility": "Media audio, 127.0.0.1, Playing",
+            "buttons": {
+              "favicon": {
+                "enabled": true,
+                "frame": [
+                  18,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": ""
+              },
+              "next": {
+                "enabled": true,
+                "frame": [
+                  144,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Next Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              },
+              "play": {
+                "enabled": true,
+                "frame": [
+                  102,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Pause\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              },
+              "previous": {
+                "enabled": true,
+                "frame": [
+                  60,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Previous Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              },
+              "volume": {
+                "enabled": true,
+                "frame": [
+                  186,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Adjust Tab Volume\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              }
+            },
+            "cameraOn": null,
+            "drawerOpen": false,
+            "expanded": false,
+            "frame": [
+              8,
+              737,
+              212,
+              33
+            ],
+            "hasVideo": false,
+            "height": 33,
+            "kind": "audioVideo",
+            "level": 0,
+            "microphoneOn": null,
+            "muted": false,
+            "pip": "none",
+            "playback": "playing",
+            "retiring": false,
+            "slider": null,
+            "tab": "49F64923-86FD-4B1A-BC74-44ADCA038349",
+            "timing": {
+              "event": "leave",
+              "handledAt": 84673.30280066667,
+              "handledTurn": 279,
+              "insertedAt": 84673.30533916668,
+              "insertedTurn": 279
+            },
+            "title": "",
+            "volume": 1
+          },
+          "insertMs": 2.5385000044479966,
+          "insertTurns": 0,
+          "load": [
+            6.8486328125,
+            7.5341796875,
+            8.4345703125
+          ],
+          "ok": true
+        },
+        "media_card_scope": {
+          "load": [
+            6.8486328125,
+            7.5341796875,
+            8.4345703125
+          ],
+          "ok": true,
+          "secondWindowCards": []
+        },
+        "media_cards_max_three": {
+          "cards": [
+            "5E3ABAA7-6411-434F-A6A1-0329A8A98D7E",
+            "EC9CA2C8-1FAA-45E2-80D3-54C4AE2C63A9",
+            "68B8F4BD-D7AA-474F-A7E8-0443EE202EF9"
+          ],
+          "load": [
+            6.8486328125,
+            7.5341796875,
+            8.4345703125
+          ],
+          "ok": true,
+          "sources": [
+            "49F64923-86FD-4B1A-BC74-44ADCA038349",
+            "68B8F4BD-D7AA-474F-A7E8-0443EE202EF9",
+            "EC9CA2C8-1FAA-45E2-80D3-54C4AE2C63A9",
+            "5E3ABAA7-6411-434F-A6A1-0329A8A98D7E"
+          ]
+        },
+        "media_idle_cpu": {
+          "assertion": {
+            "browserMinWith": 0.0183,
+            "browserMinWithout": 0.0213,
+            "early": {
+              "browserDelta": 0.0166,
+              "complete": true,
+              "delta": 0.2502,
+              "minWith": 0.2794,
+              "minWithout": 0.0292,
+              "reason": "Chromium keeps the mixer output for 10 s after pause (audio_renderer_mixer.cc kPauseDelay)",
+              "status": "INFO",
+              "windowSecondsAfterPause": [
+                6,
+                14
+              ]
+            },
+            "functionalOK": true,
+            "load": [
+              7.5419921875,
+              7.43408203125,
+              8.25
+            ],
+            "minWith": 0.0572,
+            "minWithout": 0.0292,
+            "ok": true,
+            "pendingCollapse": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "reason": "paused-card total and browser CPU floor deltas must be at most 0.5 percentage points",
+            "restAnimations": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "samples": {
+              "early": [
+                {
+                  "by_kind": {
+                    "browser": 0.1367,
+                    "gpu": 0.0086,
+                    "network": 0.01,
+                    "renderer": 0.0975,
+                    "utility": 0.1555
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.1367,
+                      "cpu_time_ticks": 263074,
+                      "interrupt_wakeups_per_second": 3.368,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.017
+                    },
+                    {
+                      "cpu_percent": 0.0086,
+                      "cpu_time_ticks": 16642,
+                      "interrupt_wakeups_per_second": 0.499,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.02
+                    },
+                    {
+                      "cpu_percent": 0.01,
+                      "cpu_time_ticks": 19131,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.0003,
+                      "cpu_time_ticks": 636,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.009
+                    },
+                    {
+                      "cpu_percent": 0.0599,
+                      "cpu_time_ticks": 115091,
+                      "interrupt_wakeups_per_second": 0.749,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.012
+                    },
+                    {
+                      "cpu_percent": 0.029,
+                      "cpu_time_ticks": 55843,
+                      "interrupt_wakeups_per_second": 1.123,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.015
+                    },
+                    {
+                      "cpu_percent": 0.1552,
+                      "cpu_time_ticks": 298819,
+                      "interrupt_wakeups_per_second": 8.848,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.02,
+                      "seconds": 8.024
+                    },
+                    {
+                      "cpu_percent": 0.0086,
+                      "cpu_time_ticks": 16587,
+                      "interrupt_wakeups_per_second": 0.249,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.022
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 6.35 7.39 8.37 }",
+                  "load_start": "{ 6.56 7.45 8.39 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.4083
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.2393,
+                    "gpu": 0.021,
+                    "network": 0.0002,
+                    "renderer": 0.0657,
+                    "utility": 0.1821
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.2393,
+                      "cpu_time_ticks": 459115,
+                      "interrupt_wakeups_per_second": 2.502,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.02,
+                      "seconds": 7.994
+                    },
+                    {
+                      "cpu_percent": 0.021,
+                      "cpu_time_ticks": 40218,
+                      "interrupt_wakeups_per_second": 3.256,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.986
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 330,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 303,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.004
+                    },
+                    {
+                      "cpu_percent": 0.054,
+                      "cpu_time_ticks": 103659,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.0
+                    },
+                    {
+                      "cpu_percent": 0.0117,
+                      "cpu_time_ticks": 22529,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.997
+                    },
+                    {
+                      "cpu_percent": 0.182,
+                      "cpu_time_ticks": 347746,
+                      "interrupt_wakeups_per_second": 8.918,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 7.962
+                    },
+                    {
+                      "cpu_percent": 0.0,
+                      "cpu_time_ticks": 0,
+                      "interrupt_wakeups_per_second": 0.0,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.972
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 8.50 7.79 8.47 }",
+                  "load_start": "{ 8.46 7.77 8.47 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.5083
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.0668,
+                    "gpu": 0.0037,
+                    "network": 0.0018,
+                    "renderer": 0.0636,
+                    "utility": 0.1704
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.0668,
+                      "cpu_time_ticks": 128449,
+                      "interrupt_wakeups_per_second": 1.747,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.014
+                    },
+                    {
+                      "cpu_percent": 0.0037,
+                      "cpu_time_ticks": 7026,
+                      "interrupt_wakeups_per_second": 0.749,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.016
+                    },
+                    {
+                      "cpu_percent": 0.0018,
+                      "cpu_time_ticks": 3396,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.997
+                    },
+                    {
+                      "cpu_percent": 0.0015,
+                      "cpu_time_ticks": 2824,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.003
+                    },
+                    {
+                      "cpu_percent": 0.0524,
+                      "cpu_time_ticks": 100738,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.0099,
+                      "cpu_time_ticks": 19108,
+                      "interrupt_wakeups_per_second": 1.123,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.011
+                    },
+                    {
+                      "cpu_percent": 0.169,
+                      "cpu_time_ticks": 325304,
+                      "interrupt_wakeups_per_second": 9.1,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.022
+                    },
+                    {
+                      "cpu_percent": 0.0013,
+                      "cpu_time_ticks": 2481,
+                      "interrupt_wakeups_per_second": 0.249,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.019
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 6.45 7.37 8.29 }",
+                  "load_start": "{ 6.98 7.50 8.35 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.3063
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.0379,
+                    "gpu": 0.0032,
+                    "network": 0.0053,
+                    "renderer": 0.0522,
+                    "utility": 0.1808
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.0379,
+                      "cpu_time_ticks": 72764,
+                      "interrupt_wakeups_per_second": 1.249,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.0032,
+                      "cpu_time_ticks": 6131,
+                      "interrupt_wakeups_per_second": 0.624,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.0053,
+                      "cpu_time_ticks": 10152,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.009
+                    },
+                    {
+                      "cpu_percent": 0.0011,
+                      "cpu_time_ticks": 2066,
+                      "interrupt_wakeups_per_second": 0.25,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.009
+                    },
+                    {
+                      "cpu_percent": 0.052,
+                      "cpu_time_ticks": 99990,
+                      "interrupt_wakeups_per_second": 0.25,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.0,
+                      "cpu_time_ticks": 0,
+                      "interrupt_wakeups_per_second": 0.0,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.1797,
+                      "cpu_time_ticks": 345408,
+                      "interrupt_wakeups_per_second": 8.991,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 423,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 6.55 7.26 8.21 }",
+                  "load_start": "{ 6.27 7.23 8.21 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.2794
+                }
+              ],
+              "with": [
+                {
+                  "by_kind": {
+                    "browser": 0.0183,
+                    "gpu": 0.0014,
+                    "network": 0.0123,
+                    "renderer": 0.0131,
+                    "utility": 0.0122
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.0183,
+                      "cpu_time_ticks": 34872,
+                      "interrupt_wakeups_per_second": 0.754,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.953
+                    },
+                    {
+                      "cpu_percent": 0.0014,
+                      "cpu_time_ticks": 2576,
+                      "interrupt_wakeups_per_second": 0.504,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.934
+                    },
+                    {
+                      "cpu_percent": 0.0123,
+                      "cpu_time_ticks": 23651,
+                      "interrupt_wakeups_per_second": 0.25,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.003
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 328,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.002
+                    },
+                    {
+                      "cpu_percent": 0.0111,
+                      "cpu_time_ticks": 21338,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 7.998
+                    },
+                    {
+                      "cpu_percent": 0.0018,
+                      "cpu_time_ticks": 3363,
+                      "interrupt_wakeups_per_second": 0.251,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.956
+                    },
+                    {
+                      "cpu_percent": 0.012,
+                      "cpu_time_ticks": 22929,
+                      "interrupt_wakeups_per_second": 0.504,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.934
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 377,
+                      "interrupt_wakeups_per_second": 0.126,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.934
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 6.62 7.41 8.36 }",
+                  "load_start": "{ 6.35 7.39 8.37 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.0572
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.0346,
+                    "gpu": 0.0016,
+                    "network": 0.0002,
+                    "renderer": 0.013,
+                    "utility": 0.0162
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.0346,
+                      "cpu_time_ticks": 66505,
+                      "interrupt_wakeups_per_second": 1.625,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.998
+                    },
+                    {
+                      "cpu_percent": 0.0016,
+                      "cpu_time_ticks": 3116,
+                      "interrupt_wakeups_per_second": 0.5,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.996
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 330,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.004
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 303,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.004
+                    },
+                    {
+                      "cpu_percent": 0.0126,
+                      "cpu_time_ticks": 24219,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.003
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 404,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.0
+                    },
+                    {
+                      "cpu_percent": 0.0161,
+                      "cpu_time_ticks": 30805,
+                      "interrupt_wakeups_per_second": 0.751,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 7.992
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 433,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.994
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 8.54 7.81 8.48 }",
+                  "load_start": "{ 8.50 7.79 8.47 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.0657
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.0553,
+                    "gpu": 0.0073,
+                    "network": 0.0066,
+                    "renderer": 0.0318,
+                    "utility": 0.0204
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.0553,
+                      "cpu_time_ticks": 106146,
+                      "interrupt_wakeups_per_second": 2.376,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.125,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 7.998
+                    },
+                    {
+                      "cpu_percent": 0.0073,
+                      "cpu_time_ticks": 14041,
+                      "interrupt_wakeups_per_second": 1.125,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.997
+                    },
+                    {
+                      "cpu_percent": 0.0066,
+                      "cpu_time_ticks": 12668,
+                      "interrupt_wakeups_per_second": 0.875,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.002
+                    },
+                    {
+                      "cpu_percent": 0.0023,
+                      "cpu_time_ticks": 4367,
+                      "interrupt_wakeups_per_second": 0.5,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.001
+                    },
+                    {
+                      "cpu_percent": 0.0112,
+                      "cpu_time_ticks": 21447,
+                      "interrupt_wakeups_per_second": 0.625,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.0
+                    },
+                    {
+                      "cpu_percent": 0.0207,
+                      "cpu_time_ticks": 39680,
+                      "interrupt_wakeups_per_second": 3.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.999
+                    },
+                    {
+                      "cpu_percent": 0.0181,
+                      "cpu_time_ticks": 34790,
+                      "interrupt_wakeups_per_second": 0.876,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.995
+                    },
+                    {
+                      "cpu_percent": 0.0,
+                      "cpu_time_ticks": 0,
+                      "interrupt_wakeups_per_second": 0.0,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.996
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 6.25 7.31 8.27 }",
+                  "load_start": "{ 6.45 7.37 8.29 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.1215
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.101,
+                    "gpu": 0.0128,
+                    "network": 0.0073,
+                    "renderer": 0.029,
+                    "utility": 0.0378
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.101,
+                      "cpu_time_ticks": 194095,
+                      "interrupt_wakeups_per_second": 2.621,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.011
+                    },
+                    {
+                      "cpu_percent": 0.0128,
+                      "cpu_time_ticks": 24579,
+                      "interrupt_wakeups_per_second": 0.999,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.011
+                    },
+                    {
+                      "cpu_percent": 0.0073,
+                      "cpu_time_ticks": 14049,
+                      "interrupt_wakeups_per_second": 0.625,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.005
+                    },
+                    {
+                      "cpu_percent": 0.0085,
+                      "cpu_time_ticks": 16418,
+                      "interrupt_wakeups_per_second": 0.5,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0171,
+                      "cpu_time_ticks": 32841,
+                      "interrupt_wakeups_per_second": 0.749,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.0073,
+                      "cpu_time_ticks": 14115,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.009
+                    },
+                    {
+                      "cpu_percent": 0.0293,
+                      "cpu_time_ticks": 56281,
+                      "interrupt_wakeups_per_second": 1.248,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.013
+                    },
+                    {
+                      "cpu_percent": 0.0046,
+                      "cpu_time_ticks": 8864,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.012
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 6.66 7.27 8.21 }",
+                  "load_start": "{ 6.33 7.23 8.20 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.1879
+                }
+              ],
+              "without": [
+                {
+                  "by_kind": {
+                    "browser": 0.2361,
+                    "gpu": 0.0168,
+                    "network": 0.0399,
+                    "renderer": 0.2291,
+                    "utility": 0.0051
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.2361,
+                      "cpu_time_ticks": 454002,
+                      "interrupt_wakeups_per_second": 5.741,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.02,
+                      "seconds": 8.012
+                    },
+                    {
+                      "cpu_percent": 0.0168,
+                      "cpu_time_ticks": 32345,
+                      "interrupt_wakeups_per_second": 0.374,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.011
+                    },
+                    {
+                      "cpu_percent": 0.0399,
+                      "cpu_time_ticks": 76668,
+                      "interrupt_wakeups_per_second": 0.625,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.003
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 341,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.013
+                    },
+                    {
+                      "cpu_percent": 0.1103,
+                      "cpu_time_ticks": 212152,
+                      "interrupt_wakeups_per_second": 0.873,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.014
+                    },
+                    {
+                      "cpu_percent": 0.1183,
+                      "cpu_time_ticks": 227412,
+                      "interrupt_wakeups_per_second": 0.749,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.013
+                    },
+                    {
+                      "cpu_percent": 0.0049,
+                      "cpu_time_ticks": 9413,
+                      "interrupt_wakeups_per_second": 0.25,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.01
+                    },
+                    {
+                      "cpu_percent": 0.0005,
+                      "cpu_time_ticks": 959,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.011
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 7.46 7.56 8.40 }",
+                  "load_start": "{ 6.97 7.47 8.38 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.527
+                },
+                {
+                  "by_kind": {
+                    "browser": 27.9991,
+                    "gpu": 0.0099,
+                    "network": 0.0195,
+                    "renderer": 13.7831,
+                    "utility": 0.0072
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 27.9991,
+                      "cpu_time_ticks": 53798244,
+                      "interrupt_wakeups_per_second": 1.749,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 2.23,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0099,
+                      "cpu_time_ticks": 18980,
+                      "interrupt_wakeups_per_second": 0.999,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0195,
+                      "cpu_time_ticks": 37465,
+                      "interrupt_wakeups_per_second": 0.749,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 0.003,
+                      "cpu_time_ticks": 5744,
+                      "interrupt_wakeups_per_second": 0.5,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.008
+                    },
+                    {
+                      "cpu_percent": 7.1055,
+                      "cpu_time_ticks": 13654815,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.57,
+                      "seconds": 8.007
+                    },
+                    {
+                      "cpu_percent": 6.6737,
+                      "cpu_time_ticks": 12823752,
+                      "interrupt_wakeups_per_second": 0.874,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.54,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0042,
+                      "cpu_time_ticks": 7994,
+                      "interrupt_wakeups_per_second": 0.625,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.004
+                    },
+                    {
+                      "cpu_percent": 0.0039,
+                      "cpu_time_ticks": 7468,
+                      "interrupt_wakeups_per_second": 0.375,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.005
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 7.24 7.56 8.37 }",
+                  "load_start": "{ 7.61 7.64 8.41 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 41.8188
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.0705,
+                    "gpu": 0.0038,
+                    "network": 0.0017,
+                    "renderer": 0.0028,
+                    "utility": 0.0035
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.0705,
+                      "cpu_time_ticks": 135042,
+                      "interrupt_wakeups_per_second": 1.253,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 7.982
+                    },
+                    {
+                      "cpu_percent": 0.0038,
+                      "cpu_time_ticks": 7211,
+                      "interrupt_wakeups_per_second": 0.752,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.982
+                    },
+                    {
+                      "cpu_percent": 0.0017,
+                      "cpu_time_ticks": 3190,
+                      "interrupt_wakeups_per_second": 0.376,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.986
+                    },
+                    {
+                      "cpu_percent": 0.0014,
+                      "cpu_time_ticks": 2593,
+                      "interrupt_wakeups_per_second": 0.376,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.985
+                    },
+                    {
+                      "cpu_percent": 0.0011,
+                      "cpu_time_ticks": 2176,
+                      "interrupt_wakeups_per_second": 0.251,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.984
+                    },
+                    {
+                      "cpu_percent": 0.0014,
+                      "cpu_time_ticks": 2737,
+                      "interrupt_wakeups_per_second": 0.251,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.983
+                    },
+                    {
+                      "cpu_percent": 0.0021,
+                      "cpu_time_ticks": 4108,
+                      "interrupt_wakeups_per_second": 0.376,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.98
+                    },
+                    {
+                      "cpu_percent": 0.0003,
+                      "cpu_time_ticks": 481,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 7.981
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 5.78 7.15 8.19 }",
+                  "load_start": "{ 5.99 7.24 8.23 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.0822
+                },
+                {
+                  "by_kind": {
+                    "browser": 0.0213,
+                    "gpu": 0.0028,
+                    "network": 0.001,
+                    "renderer": 0.0011,
+                    "utility": 0.003
+                  },
+                  "by_process": [
+                    {
+                      "cpu_percent": 0.0213,
+                      "cpu_time_ticks": 40933,
+                      "interrupt_wakeups_per_second": 1.499,
+                      "kind": "browser",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78121,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0028,
+                      "cpu_time_ticks": 5449,
+                      "interrupt_wakeups_per_second": 0.625,
+                      "kind": "gpu",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78143,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.001,
+                      "cpu_time_ticks": 1913,
+                      "interrupt_wakeups_per_second": 0.25,
+                      "kind": "network",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78144,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.005
+                    },
+                    {
+                      "cpu_percent": 0.0011,
+                      "cpu_time_ticks": 2088,
+                      "interrupt_wakeups_per_second": 0.25,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78145,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.005
+                    },
+                    {
+                      "cpu_percent": 0.0009,
+                      "cpu_time_ticks": 1737,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78150,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0,
+                      "cpu_time_ticks": 0,
+                      "interrupt_wakeups_per_second": 0.0,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78151,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.006
+                    },
+                    {
+                      "cpu_percent": 0.0019,
+                      "cpu_time_ticks": 3688,
+                      "interrupt_wakeups_per_second": 0.25,
+                      "kind": "utility",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78167,
+                      "ps_cpu_seconds_delta": 0.01,
+                      "seconds": 8.005
+                    },
+                    {
+                      "cpu_percent": 0.0002,
+                      "cpu_time_ticks": 372,
+                      "interrupt_wakeups_per_second": 0.125,
+                      "kind": "renderer",
+                      "package_idle_wakeups_per_second": 0.0,
+                      "pid": 78249,
+                      "ps_cpu_seconds_delta": 0.0,
+                      "seconds": 8.005
+                    }
+                  ],
+                  "complete": true,
+                  "load_end": "{ 7.54 7.43 8.25 }",
+                  "load_start": "{ 7.01 7.33 8.22 }",
+                  "mach_timebase": [
+                    125,
+                    3
+                  ],
+                  "processes_exited": [],
+                  "processes_started": [],
+                  "requested_seconds": 8,
+                  "total_cpu_percent": 0.0292
+                }
+              ]
+            },
+            "timing": true,
+            "timingAfter": {
+              "at": 1794501623.777086,
+              "foreignCPU": 496.30000000000035,
+              "load": [
+                7.5419921875,
+                7.43408203125,
+                8.25
+              ],
+              "topFiveForeign": [
+                {
+                  "cpu": 98.3,
+                  "name": "swift-frontend",
+                  "parent": 85012,
+                  "pid": 87187
+                },
+                {
+                  "cpu": 97.9,
+                  "name": "swift-frontend",
+                  "parent": 85012,
+                  "pid": 87737
+                },
+                {
+                  "cpu": 97.3,
+                  "name": "swift-frontend",
+                  "parent": 85012,
+                  "pid": 88213
+                },
+                {
+                  "cpu": 97.0,
+                  "name": "swift-frontend",
+                  "parent": 85012,
+                  "pid": 88214
+                },
+                {
+                  "cpu": 17.6,
+                  "name": "swift-build",
+                  "parent": 84970,
+                  "pid": 85012
+                }
+              ]
+            },
+            "verifyBreak": null,
+            "windowSecondsAfterPause": [
+              12,
+              20
+            ]
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostBundleID": "com.sergeserb.t3code",
+              "frontmostPID": 79919,
+              "openPID": 78121,
+              "uptime": 84720.119033625
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostBundleID": "com.sergeserb.t3code",
+              "frontmostPID": 79919,
+              "keyWindow": 0,
+              "openPID": 78121,
+              "uptime": 84720.12668095833
+            },
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "cmux",
+              "frontmostBundleID": "com.cmuxterm.app",
+              "frontmostPID": 733,
+              "openPID": 78121,
+              "uptime": 84756.94284495834
+            },
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostBundleID": "com.sergeserb.t3code",
+              "frontmostPID": 79919,
+              "openPID": 78121,
+              "uptime": 84774.27568983333
+            },
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "ChatGPT",
+              "frontmostBundleID": "com.openai.codex",
+              "frontmostPID": 73855,
+              "openPID": 78121,
+              "uptime": 84785.28984358333
+            },
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "cmux",
+              "frontmostBundleID": "com.cmuxterm.app",
+              "frontmostPID": 733,
+              "openPID": 78121,
+              "uptime": 84789.39632829167
+            }
+          ],
+          "status": "INTERRUPTED"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundleID": "com.sergeserb.t3code",
+          "frontmostPID": 79919,
+          "openPID": 78121,
+          "uptime": 84720.119033625
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundleID": "com.sergeserb.t3code",
+          "frontmostPID": 79919,
+          "keyWindow": 0,
+          "openPID": 78121,
+          "uptime": 84720.12668095833
+        },
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "openPID": 78121,
+          "uptime": 84756.94284495834
+        },
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundleID": "com.sergeserb.t3code",
+          "frontmostPID": 79919,
+          "openPID": 78121,
+          "uptime": 84774.27568983333
+        },
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "ChatGPT",
+          "frontmostBundleID": "com.openai.codex",
+          "frontmostPID": 73855,
+          "openPID": 78121,
+          "uptime": 84785.28984358333
+        },
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "openPID": 78121,
+          "uptime": 84789.39632829167
+        }
+      ],
+      "reason": "foreground lost during media_idle_cpu",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 2,
+      "checks": {
+        "media_audio_state": {
+          "assertion": {
+            "elementMuted": false,
+            "load": [
+              7.5419921875,
+              7.43408203125,
+              8.25
+            ],
+            "muted": {
+              "actions": [
+                "play",
+                "pause",
+                "previousTrack",
+                "nextTrack",
+                "seekBackward",
+                "seekForward",
+                "seekTo",
+                "stop"
+              ],
+              "album": "Fixtures",
+              "artist": "Open",
+              "audible": true,
+              "capturing": false,
+              "controllable": true,
+              "decision": null,
+              "duration": 12,
+              "hasAudio": true,
+              "hasVideo": false,
+              "largestVideoArea": 0,
+              "live": true,
+              "modelMuted": true,
+              "muted": true,
+              "pageVolume": 1,
+              "pictureInPicture": false,
+              "pictureInPictureDisabled": false,
+              "playback": "playing",
+              "position": 0.000204,
+              "session": true,
+              "source": {
+                "kind": "audioVideo",
+                "pip": "none",
+                "playback": "playing",
+                "window": "BF6D8006-E63B-414B-A168-8944A72E4075"
+              },
+              "tab": "5869F055-4A7C-4C29-B907-245E60569372",
+              "title": "Open Test Tone",
+              "volume": 1
+            },
+            "ok": true,
+            "state": {
+              "actions": [
+                "play",
+                "pause",
+                "previousTrack",
+                "nextTrack",
+                "seekBackward",
+                "seekForward",
+                "seekTo",
+                "stop"
+              ],
+              "album": "Fixtures",
+              "artist": "Open",
+              "audible": true,
+              "capturing": false,
+              "controllable": true,
+              "decision": null,
+              "duration": 12,
+              "hasAudio": true,
+              "hasVideo": false,
+              "largestVideoArea": 0,
+              "live": true,
+              "modelMuted": false,
+              "muted": false,
+              "pageVolume": 1,
+              "pictureInPicture": false,
+              "pictureInPictureDisabled": false,
+              "playback": "playing",
+              "position": 0.000204,
+              "session": true,
+              "source": {
+                "kind": "audioVideo",
+                "pip": "none",
+                "playback": "playing",
+                "window": "BF6D8006-E63B-414B-A168-8944A72E4075"
+              },
+              "tab": "5869F055-4A7C-4C29-B907-245E60569372",
+              "title": "Open Test Tone",
+              "volume": 1
+            }
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "cmux",
+              "frontmostBundleID": "com.cmuxterm.app",
+              "frontmostPID": 733,
+              "openPID": 88549,
+              "uptime": 84814.57348375
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "cmux",
+              "frontmostBundleID": "com.cmuxterm.app",
+              "frontmostPID": 733,
+              "keyWindow": 0,
+              "openPID": 88549,
+              "uptime": 84814.57880579167
+            }
+          ],
+          "status": "INTERRUPTED"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "openPID": 88549,
+          "uptime": 84814.57348375
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "keyWindow": 0,
+          "openPID": 88549,
+          "uptime": 84814.57880579167
+        }
+      ],
+      "reason": "foreground lost during media_audio_state",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 3,
+      "checks": {
+        "media_audio_state": {
+          "elementMuted": false,
+          "load": [
+            8.05908203125,
+            7.54296875,
+            8.28369140625
+          ],
+          "muted": {
+            "actions": [
+              "play",
+              "pause",
+              "previousTrack",
+              "nextTrack",
+              "seekBackward",
+              "seekForward",
+              "seekTo",
+              "stop"
+            ],
+            "album": "Fixtures",
+            "artist": "Open",
+            "audible": true,
+            "capturing": false,
+            "controllable": true,
+            "decision": null,
+            "duration": 12,
+            "hasAudio": true,
+            "hasVideo": false,
+            "largestVideoArea": 0,
+            "live": true,
+            "modelMuted": true,
+            "muted": true,
+            "pageVolume": 1,
+            "pictureInPicture": false,
+            "pictureInPictureDisabled": false,
+            "playback": "playing",
+            "position": 0.00019,
+            "session": true,
+            "source": {
+              "kind": "audioVideo",
+              "pip": "none",
+              "playback": "playing",
+              "window": "BA2156DA-A268-4A71-9688-44B6EDBEA7D5"
+            },
+            "tab": "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+            "title": "Open Test Tone",
+            "volume": 1
+          },
+          "ok": true,
+          "state": {
+            "actions": [
+              "play",
+              "pause",
+              "previousTrack",
+              "nextTrack",
+              "seekBackward",
+              "seekForward",
+              "seekTo",
+              "stop"
+            ],
+            "album": "Fixtures",
+            "artist": "Open",
+            "audible": true,
+            "capturing": false,
+            "controllable": true,
+            "decision": null,
+            "duration": 12,
+            "hasAudio": true,
+            "hasVideo": false,
+            "largestVideoArea": 0,
+            "live": true,
+            "modelMuted": false,
+            "muted": false,
+            "pageVolume": 1,
+            "pictureInPicture": false,
+            "pictureInPictureDisabled": false,
+            "playback": "playing",
+            "position": 0.00019,
+            "session": true,
+            "source": {
+              "kind": "audioVideo",
+              "pip": "none",
+              "playback": "playing",
+              "window": "BA2156DA-A268-4A71-9688-44B6EDBEA7D5"
+            },
+            "tab": "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+            "title": "Open Test Tone",
+            "volume": 1
+          }
+        },
+        "media_card_controls": {
+          "cardPaused": true,
+          "counts": {
+            "nexttrack": 1,
+            "pause": 0,
+            "play": 0,
+            "previoustrack": 1
+          },
+          "load": [
+            8.05908203125,
+            7.54296875,
+            8.28369140625
+          ],
+          "ok": true,
+          "paused": true,
+          "resumed": true
+        },
+        "media_card_on_leave": {
+          "appearMs": 19.1,
+          "card": {
+            "accessibility": "Media audio, 127.0.0.1, Playing",
+            "buttons": {
+              "favicon": {
+                "enabled": true,
+                "frame": [
+                  18,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": ""
+              },
+              "next": {
+                "enabled": true,
+                "frame": [
+                  144,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Next Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              },
+              "play": {
+                "enabled": true,
+                "frame": [
+                  102,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Pause\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              },
+              "previous": {
+                "enabled": true,
+                "frame": [
+                  60,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Previous Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              },
+              "volume": {
+                "enabled": true,
+                "frame": [
+                  186,
+                  742,
+                  24,
+                  24
+                ],
+                "tooltip": "Tooltip(showDelay: 0.45, title: \"Adjust Tab Volume\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+              }
+            },
+            "cameraOn": null,
+            "drawerOpen": false,
+            "expanded": false,
+            "frame": [
+              8,
+              737,
+              212,
+              33
+            ],
+            "hasVideo": false,
+            "height": 33,
+            "kind": "audioVideo",
+            "level": 0,
+            "microphoneOn": null,
+            "muted": false,
+            "pip": "none",
+            "playback": "playing",
+            "retiring": false,
+            "slider": null,
+            "tab": "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+            "timing": {
+              "event": "leave",
+              "handledAt": 84817.54505,
+              "handledTurn": 314,
+              "insertedAt": 84817.54870179167,
+              "insertedTurn": 314
+            },
+            "title": "",
+            "volume": 1
+          },
+          "insertMs": 3.6517916742013767,
+          "insertTurns": 0,
+          "load": [
+            8.05908203125,
+            7.54296875,
+            8.28369140625
+          ],
+          "ok": true
+        },
+        "media_card_scope": {
+          "load": [
+            8.05908203125,
+            7.54296875,
+            8.28369140625
+          ],
+          "ok": true,
+          "secondWindowCards": []
+        },
+        "media_cards_max_three": {
+          "assertion": {
+            "cards": [
+              "438FFA9A-0DD0-4711-8BE6-203A4F03EC22",
+              "2BDE96FE-4498-46EF-9FF0-052456CCF7EC",
+              "FEF6B779-D88E-4823-9428-3B402D94A2C1"
+            ],
+            "load": [
+              8.05908203125,
+              7.54296875,
+              8.28369140625
+            ],
+            "ok": true,
+            "sources": [
+              "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+              "FEF6B779-D88E-4823-9428-3B402D94A2C1",
+              "2BDE96FE-4498-46EF-9FF0-052456CCF7EC",
+              "438FFA9A-0DD0-4711-8BE6-203A4F03EC22"
+            ]
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "cmux",
+              "frontmostBundleID": "com.cmuxterm.app",
+              "frontmostPID": 733,
+              "openPID": 88821,
+              "uptime": 84818.83960033333
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "cmux",
+              "frontmostBundleID": "com.cmuxterm.app",
+              "frontmostPID": 733,
+              "keyWindow": 0,
+              "openPID": 88821,
+              "uptime": 84818.85242020834
+            }
+          ],
+          "status": "INTERRUPTED"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "openPID": 88821,
+          "uptime": 84818.83960033333
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "keyWindow": 0,
+          "openPID": 88821,
+          "uptime": 84818.85242020834
+        }
+      ],
+      "reason": "foreground lost during media_cards_max_three",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "lane": "all",
+  "load": [
+    6.9228515625,
+    7.560546875,
+    8.44921875
+  ],
+  "media": {
+    "media_audio_state": {
+      "elementMuted": false,
+      "load": [
+        8.05908203125,
+        7.54296875,
+        8.28369140625
+      ],
+      "muted": {
+        "actions": [
+          "play",
+          "pause",
+          "previousTrack",
+          "nextTrack",
+          "seekBackward",
+          "seekForward",
+          "seekTo",
+          "stop"
+        ],
+        "album": "Fixtures",
+        "artist": "Open",
+        "audible": true,
+        "capturing": false,
+        "controllable": true,
+        "decision": null,
+        "duration": 12,
+        "hasAudio": true,
+        "hasVideo": false,
+        "largestVideoArea": 0,
+        "live": true,
+        "modelMuted": true,
+        "muted": true,
+        "pageVolume": 1,
+        "pictureInPicture": false,
+        "pictureInPictureDisabled": false,
+        "playback": "playing",
+        "position": 0.00019,
+        "session": true,
+        "source": {
+          "kind": "audioVideo",
+          "pip": "none",
+          "playback": "playing",
+          "window": "BA2156DA-A268-4A71-9688-44B6EDBEA7D5"
+        },
+        "tab": "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+        "title": "Open Test Tone",
+        "volume": 1
+      },
+      "ok": true,
+      "state": {
+        "actions": [
+          "play",
+          "pause",
+          "previousTrack",
+          "nextTrack",
+          "seekBackward",
+          "seekForward",
+          "seekTo",
+          "stop"
+        ],
+        "album": "Fixtures",
+        "artist": "Open",
+        "audible": true,
+        "capturing": false,
+        "controllable": true,
+        "decision": null,
+        "duration": 12,
+        "hasAudio": true,
+        "hasVideo": false,
+        "largestVideoArea": 0,
+        "live": true,
+        "modelMuted": false,
+        "muted": false,
+        "pageVolume": 1,
+        "pictureInPicture": false,
+        "pictureInPictureDisabled": false,
+        "playback": "playing",
+        "position": 0.00019,
+        "session": true,
+        "source": {
+          "kind": "audioVideo",
+          "pip": "none",
+          "playback": "playing",
+          "window": "BA2156DA-A268-4A71-9688-44B6EDBEA7D5"
+        },
+        "tab": "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+        "title": "Open Test Tone",
+        "volume": 1
+      }
+    },
+    "media_card_controls": {
+      "cardPaused": true,
+      "counts": {
+        "nexttrack": 1,
+        "pause": 0,
+        "play": 0,
+        "previoustrack": 1
+      },
+      "load": [
+        8.05908203125,
+        7.54296875,
+        8.28369140625
+      ],
+      "ok": true,
+      "paused": true,
+      "resumed": true
+    },
+    "media_card_on_leave": {
+      "appearMs": 19.1,
+      "card": {
+        "accessibility": "Media audio, 127.0.0.1, Playing",
+        "buttons": {
+          "favicon": {
+            "enabled": true,
+            "frame": [
+              18,
+              742,
+              24,
+              24
+            ],
+            "tooltip": ""
+          },
+          "next": {
+            "enabled": true,
+            "frame": [
+              144,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Next Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "play": {
+            "enabled": true,
+            "frame": [
+              102,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Pause\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "previous": {
+            "enabled": true,
+            "frame": [
+              60,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Previous Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "volume": {
+            "enabled": true,
+            "frame": [
+              186,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Adjust Tab Volume\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          }
+        },
+        "cameraOn": null,
+        "drawerOpen": false,
+        "expanded": false,
+        "frame": [
+          8,
+          737,
+          212,
+          33
+        ],
+        "hasVideo": false,
+        "height": 33,
+        "kind": "audioVideo",
+        "level": 0,
+        "microphoneOn": null,
+        "muted": false,
+        "pip": "none",
+        "playback": "playing",
+        "retiring": false,
+        "slider": null,
+        "tab": "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+        "timing": {
+          "event": "leave",
+          "handledAt": 84817.54505,
+          "handledTurn": 314,
+          "insertedAt": 84817.54870179167,
+          "insertedTurn": 314
+        },
+        "title": "",
+        "volume": 1
+      },
+      "insertMs": 3.6517916742013767,
+      "insertTurns": 0,
+      "load": [
+        8.05908203125,
+        7.54296875,
+        8.28369140625
+      ],
+      "ok": true
+    },
+    "media_card_scope": {
+      "load": [
+        8.05908203125,
+        7.54296875,
+        8.28369140625
+      ],
+      "ok": true,
+      "secondWindowCards": []
+    },
+    "media_cards_max_three": {
+      "assertion": {
+        "cards": [
+          "438FFA9A-0DD0-4711-8BE6-203A4F03EC22",
+          "2BDE96FE-4498-46EF-9FF0-052456CCF7EC",
+          "FEF6B779-D88E-4823-9428-3B402D94A2C1"
+        ],
+        "load": [
+          8.05908203125,
+          7.54296875,
+          8.28369140625
+        ],
+        "ok": true,
+        "sources": [
+          "FB77758C-5823-4D19-9D64-A3DBEF191B0E",
+          "FEF6B779-D88E-4823-9428-3B402D94A2C1",
+          "2BDE96FE-4498-46EF-9FF0-052456CCF7EC",
+          "438FFA9A-0DD0-4711-8BE6-203A4F03EC22"
+        ]
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "openPID": 88821,
+          "uptime": 84818.83960033333
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "keyWindow": 0,
+          "openPID": 88821,
+          "uptime": 84818.85242020834
+        }
+      ],
+      "status": "INTERRUPTED"
+    },
+    "suite": {
+      "attempts": 3,
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "openPID": 88821,
+          "uptime": 84818.83960033333
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "cmux",
+          "frontmostBundleID": "com.cmuxterm.app",
+          "frontmostPID": 733,
+          "keyWindow": 0,
+          "openPID": 88821,
+          "uptime": 84818.85242020834
+        }
+      ],
+      "reason": "foreground lost during media_cards_max_three",
+      "status": "INTERRUPTED"
+    }
+  },
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "0040b47764110174fecd16aa986509b2c6a335f5"
+  },
+  "started": "2026-11-12 09:38:00",
+  "style": "chrome"
+}
