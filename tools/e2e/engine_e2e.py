@@ -4523,22 +4523,38 @@ def peek_checks(factory, results, tmp):
         baseline = app.call("host-counts")
         app.call("peek-open", tab=source, url=fixture("Peek page"))
         preparation = app.call('peek-motion')
-        results['peek_open_preparation_retains_source'] = {'ok': preparation.get('preparingOpening')
-            and preparation['overlay']['opacity'] == 0 and preparation['backdrop']['opacity'] == 0,
-            'motion': preparation}
-        wait_until(lambda: app.call('peek-motion').get('kind') == 'open', timeout=5, step=.005)
-        opening_samples = []
+        results['peek_open_starts_card_without_waiting_for_page'] = {'ok': preparation.get('preparingOpening')
+            and preparation.get('kind') == 'open' and preparation.get('duration') == .1
+            and preparation.get('snapshot') and not preparation.get('snapshotPixels')
+            # The page is created and loads from the click on, attached under the
+            # opaque source-colour plate (clipped to the rounded card).
+            and preparation.get('clipMasksToBounds') is True
+            and preparation.get('hostAttached') and preparation.get('openingHandoff')
+            and bool(preparation['panel']['animations'])
+            and all(a['requestedHz'] == preparation['displayHz']
+                    for a in preparation['panel']['animations'] + preparation['overlay']['animations']), 'motion': preparation}
+        opening_samples = [preparation]
         for _ in range(8):
             motion = app.call('peek-motion')
-            if not motion.get('overlay', {}).get('animations'):
+            if not motion.get('preparingOpening'):
                 break
             opening_samples.append(motion)
-            time.sleep(.01)
-        results['peek_open_animates_ready_page_snapshot'] = {'ok': bool(opening_samples)
-            and all(s.get('snapshot') and s.get('snapshotPixels') and s.get('hostHidden') and s.get('hostAttached')
-                    and s['panel'].get('rasterized')
-                    and s['panel'].get('rasterScale') == s.get('backingScale') for s in opening_samples),
+            time.sleep(.005)
+        results['peek_open_moves_plate_over_attached_fixed_viewport'] = {'ok': bool(opening_samples)
+            and all(s.get('snapshot') and s.get('hostAttached')
+                    and s.get('clipMasksToBounds') is True
+                    and not s['panel'].get('rasterized')
+                    and s['hostFrame'] == preparation['hostFrame']
+                    and s['hostFrameChanges'] == preparation['hostFrameChanges'] for s in opening_samples),
             'samples': opening_samples}
+        fading = wait_until(lambda: (lambda s: s if s.get('contentFading') else None)(app.call('peek-motion')),
+                            timeout=5, step=.005)
+        settled_open = wait_until(lambda: (lambda s: s if not s.get('preparingOpening')
+            and not s.get('openingHandoff') else None)(app.call('peek-motion')), timeout=5, step=.01)
+        results['peek_ready_content_fades_then_retires_cover'] = {'ok': bool(fading) and fading.get('snapshotPixels')
+            and fading.get('hostHidden') and fading.get('clipMasksToBounds') is True
+            and bool(settled_open) and settled_open.get('clipMasksToBounds') is True and not settled_open.get('snapshot')
+            and not settled_open.get('hostHidden'), 'fade': fading, 'settled': settled_open}
         app.call("wait")
         state = app.call("peek-state")
         content = state["stack"][-1]["content"]
@@ -13611,7 +13627,7 @@ def main():
     global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", choices=["alloy", "chrome"],
-                    help="runtime style (default: chrome for context-menus/routing, alloy for other suites)")
+                    help="runtime style (default: chrome for context-menus/routing/blank-window, alloy for other suites)")
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
     ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
@@ -13674,8 +13690,10 @@ def main():
     # used by normal Open launches. Alloy has CEF's shorter, different menu.
     if opts.style is None:
         # Routing includes web protocol registration, which requires the
-        # shipping Chrome runtime's BrowserWebContentsDelegate.
-        opts.style = "chrome" if opts.only in ("context-menus", "routing") else "alloy"
+        # shipping Chrome runtime's BrowserWebContentsDelegate. Blank Window's
+        # live tab transfer moves hosted tabs, which only the shipping Chrome
+        # runtime has (Alloy pages take the URL reload fallback).
+        opts.style = "chrome" if opts.only in ("context-menus", "routing", "blank-window") else "alloy"
     if opts.page_site_data_only and opts.only != "page":
         ap.error("--page-site-data-only requires --only page")
     if opts.sitecontrol_final_only and opts.only != "sitecontrol":
@@ -14239,6 +14257,11 @@ def main():
                                stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
+        if attempt > 1:
+            # The earlier attempt wrote to this run's private domain (for example the
+            # sidebar hide hint that E17 reads). A retry starts from the preferences
+            # attempt 1 had. The gate passes --focus-attempts 1, so it never retries.
+            prefs_domain.reset(domain_before)
         interruption = None
         try:
             if opts.only in ('firstrun', 'onboarding', 'import-robust', 'welcome'):
