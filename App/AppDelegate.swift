@@ -610,10 +610,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func makeWindow(focusedSpaceID: SpaceID? = nil) -> BrowserWindowController? {
     guard (!isFirstRun || firstRunSaved) else { return nil }
     // Closing the final window keeps its state for reopen and relaunch.
-    if frontStandardWindowController == nil, let state = model.windows.first(where: { $0.style == .standard }) {
+    // A Blank Window is not a main-model window: its Space is not in `model`.
+    if frontMainModelWindowController == nil, let state = model.windows.first(where: { $0.style == .standard }) {
       return createWindowController(state: state)
     }
-    guard let spaceID = focusedSpaceID ?? frontStandardWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
+    guard let spaceID = focusedSpaceID ?? frontMainModelWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
       let state = withoutWindowUndo({ model.createWindow(focusedSpaceID: spaceID) }) else { return nil }
     let offset = Double(windowControllers.count * 24)
     state.frameX += offset; state.frameY -= offset
