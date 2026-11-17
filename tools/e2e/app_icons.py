@@ -38,10 +38,21 @@ def run(output, config):
             before = output/'default-before.png'
             before.write_bytes(base64.b64decode(baseline['applicationIconPNG']))
             app.call('settings-pane', pane='appIcon')
+            def bounds(path):
+                return json.loads(subprocess.run([str(probe), 'bounds', str(path)], capture_output=True, text=True, check=True).stdout)
+            # macOS draws a bundle icon's body 824 of 1024 px, 100 px in (Calculator and Terminal measure the same).
+            # A runtime icon is shown as is, so each alternate must carry the same margin (Dock, Cmd-Tab, plug-in).
+            grid = bounds(app.bundle)
+            check('bundle_icon_grid', all(abs(a - b) <= 2 for a, b in zip(grid, [100, 100, 924, 924])), bounds=grid)
             for option in ['openDefault', 'openDark', 'openLight', 'openMono', 'openColor', 'openRetro']:
                 state = app.call('settings-icon', select=option)
                 check('select_'+option, state['selected'] == option and state['applied'] == option
                       and state['matchesApplication'] and not state['error'], state=state)
+                if option != 'openDefault':
+                    cached = sorted((Path(app.user_data)/'Cache/AppIcons').glob(option + '-v*.png'))
+                    measured = bounds(cached[-1]) if cached else None
+                    check('grid_'+option, measured is not None and all(abs(a - b) <= 2 for a, b in zip(measured, grid)),
+                          bounds=measured, bundle=grid, files=[p.name for p in cached])
             first = app.call('settings-icon', select='openDark')
             again = app.call('settings-icon', select='openDark')
             check('cached_alternate', first['imageObject'] == again['imageObject'])
