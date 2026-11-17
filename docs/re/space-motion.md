@@ -186,3 +186,22 @@ replaces the earlier "never a timer" clause for this case:
 - With the seam, the snapshot transition is unchanged. No timer reveals a page.
 - The sidebar Space pager keeps its layer-transform slide in both cases; it does
   not cover web content.
+
+## Pager slide start (2026-11-17)
+
+Strip region analysis on the M5 showed that, on main and in this branch,
+the web panel changes about 12 ms after a key or click switch. The sidebar
+slide started only at 30–40 ms: `SpacePagerView` learned of the focus change
+through its `ObservationLoop` (a `Task` one turn later), after the window's
+synchronous content swap and Chromium's main-thread work. A swipe's snap was
+likewise committed after the synchronous `switchSpace` in the `ended` turn.
+
+- `BrowserWindowController.refresh()` calls `sidebar.showFocusedSpaceIfChanged()`
+  first, so the slide shares the input turn's commit with the content swap.
+- Swipe `ended` starts the snap slide, flushes it with `CATransaction.flush()`,
+  and only then sends `switchSpace`. If focus lands elsewhere, it re-slides from
+  the presentation offset. Reduce Motion keeps its no-slide path.
+
+Nothing is delayed; the slide only starts earlier. M5 timing set
+`timing-102256` (pacing_gate.py, 9 trials per action per side): every Space
+action PASS, with p99 16.7 ms against main's 20.8–50.0 ms.
