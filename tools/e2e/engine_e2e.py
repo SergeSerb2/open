@@ -150,6 +150,20 @@ def supervise_suite(arguments):
         resources.cleanup()
 
 
+def unpacked_fixture_problems(directory):
+    """Files that an unpacked store fixture's manifest names but that are missing. Chromium answers a
+    missing icon with a modal "Failed to load extension" alert, so the App never finishes starting."""
+    try:
+        manifest = json.loads(Path(directory, 'manifest.json').read_text(encoding='utf-8-sig'))
+    except (OSError, ValueError) as error:
+        return ['%s: manifest.json unreadable (%s)' % (os.path.basename(directory), error)]
+    paths = set(v for v in (manifest.get('icons') or {}).values() if isinstance(v, str))
+    for section in ('action', 'browser_action', 'page_action'):
+        icon = (manifest.get(section) or {}).get('default_icon')
+        paths.update(v for v in (icon.values() if isinstance(icon, dict) else [icon]) if isinstance(v, str))
+    return ['%s: missing %s' % (os.path.basename(directory), p) for p in sorted(paths) if not Path(directory, p).is_file()]
+
+
 def check_suite_app_death(app=None):
     if _SUITE_CRASH_BASELINE is None:
         return
@@ -13846,6 +13860,16 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    # Private store fixtures must be complete before any launch (MAINFIX 2026-11-17: their icons were
+    # gone, and the App waited behind Chromium's modal load-error alert until the 60 s ready timeout).
+    damaged = [problem for arg in extra if arg.startswith("--load-extension=")
+               for directory in arg.split("=", 1)[1].split(",")
+               if os.path.realpath(directory).startswith(os.path.realpath(opts.extensions) + os.sep)
+               for problem in unpacked_fixture_problems(directory)]
+    if damaged:
+        sys.exit("damaged unpacked extension fixtures in %s (%d problems, first: %s). Re-unpack each from "
+                 ".re/ext/downloads: tools/crx-unpack.py <name>.crx %s/<name>" % (
+                     opts.extensions, len(damaged), "; ".join(damaged[:4]), opts.extensions))
     log = os.path.join(tmp, "open.log")
 
     tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
