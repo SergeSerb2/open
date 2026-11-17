@@ -190,7 +190,8 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             app.call('snapshot',path=str(path))
             captures.append(str(path))
         app.call('appearance',name='system')
-        app.call('save'); app.quit(); app = factory(urls=()); settled(2)
+        # Keep the idle observer: speed_idle_after_drag (below, before the latency relaunch) reads it.
+        app.call('save'); app.quit(); app = factory(urls=(), extra_env=environment); settled(2)
         restored_node = next(n for n in app.call('sidebar-tree')['today'] if n['id'] == custom_id)
         row('custom_relaunch', restored_node['customTitle'] == 'D2 Persisted Split'
             and restored_node['iconOverride'] == {'type':'emoji','value':'😀'}
