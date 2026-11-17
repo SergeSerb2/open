@@ -119,14 +119,17 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
             collection.reloadData()
         }
         superview?.needsLayout = true
-        syncTileHover()
+        // A bulk reload (another Profile's Favorites, a Space switch) re-binds every tile: clear a
+        // hover the reused tiles kept, but start none, so no preview arms during the switch.
+        syncTileHover(clearOnly: isReload)
     }
 
     /// Tiles reflowed or were reused under a still pointer, which sends no enter or exit: only the
     /// tile now under the pointer is hovered, so its close button is where the next click lands.
-    private func syncTileHover() {
+    private func syncTileHover(clearOnly: Bool = false) {
         guard context.forcedHover == nil, let window else { return }
         let tiles = collection.visibleItems().compactMap { $0 as? FavoriteTileItem }
+        if clearOnly { for item in tiles where item.tile.showsHover { item.tile.syncPointer(inside: false) }; return }
         // Only while the pointer is in the sidebar or a tile still shows hover: no hover, tooltip or
         // preview starts for an inactive or covered window.
         guard context.pointerInSidebar || tiles.contains(where: { $0.tile.showsHover }) else { return }
