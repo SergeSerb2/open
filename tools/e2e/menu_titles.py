@@ -122,6 +122,20 @@ def run(factory, results, tmp, h):
         row('menu_selection_titles', 'Pin Tabs' in many.get('Tabs', []) and 'New Folder from Selection…' in many.get('Tabs', [])
             and after.get('Tabs', [])[1:3] == ['Pin Tab', 'New Folder…'], tabs=many.get('Tabs'), after=after.get('Tabs'))
 
+        # A new tab's row motion defers the main-menu rebuild (at most 1 s). A Command key on the real
+        # App path (OEApplication.sendEvent -> keyEquivalentHandler) must rebuild it first, so Cmd+3
+        # right after the third tab opens already sees that tab in the Tabs menu.
+        def tab_tail():
+            return flatten(app.call('menu-tree'), windows).get('Tabs', [])[len(EXPECTED['Tabs']):]
+        settled = tab_tail()
+        third = app.call('open', url=origin + '/three', background=True)['id']
+        pending = tab_tail()
+        app.call('key', key='3', modifiers=['command'], route='app')
+        after_key = tab_tail()
+        selected = [t['id'] for t in app.call('tabs') if t.get('selected')]
+        row('menu_shortcut_sees_new_tab', len(after_key) == len(settled) + 1,
+            settled=settled, before_key=pending, after_key=after_key, selected=selected, third=third)
+
         # Window ▸ Stay On Top floats this window and shows a checkmark; choosing it again restores it.
         def level():
             return app.call('shell-windows')[0]['level']
