@@ -124,7 +124,7 @@ def process(rec, out, name, crf):
         while index + 1 < len(times) and times[index + 1] <= host + 0.002: index += 1
         pixels = np.frombuffer(frames[index], np.uint8).reshape(height, width, 3).copy()
         pixels[corner_targets[0], corner_targets[1]] = pixels[corner_sources[0], corner_sources[1]]
-        frame = Image.fromarray(pixels, 'RGB').convert('RGBA')
+        frame = Image.fromarray(pixels).convert('RGBA')
         x, y = pointer_at(timeline['moves'], host)
         for start, end, image, offset in drags:
             if start <= host < end:

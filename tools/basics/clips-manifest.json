@@ -5,16 +5,16 @@
    "crf": 18,
    "files": {
     "basics-newtab-blur.jpg": {
-     "bytes": 23332,
-     "sha256": "9a236bdf70ad95bcff1a4f1fb90c63e7f894bd09d3de1020489d1b6e6cd08155"
+     "bytes": 23662,
+     "sha256": "2aaae25876d619f0f2fcff8fc8d0d447b51ef0e2fa581c6884c595b775381b33"
     },
     "basics-newtab-poster.jpg": {
-     "bytes": 165214,
-     "sha256": "c6d3e0f8c4074e701eb1097afde94d9dded65ed77ae969f6e306ed46dbcc849c"
+     "bytes": 166493,
+     "sha256": "690342f1dc638411a8de75643daf341b76961d088f22b33ad0e8715580a9e882"
     },
     "basics-newtab.mp4": {
-     "bytes": 557430,
-     "sha256": "f9728a9a7fd9614c4f1a1e09fa0a249402d117223227ceedb4cea45a7bbcc4d0"
+     "bytes": 571718,
+     "sha256": "77d52a2e22ca1e1ad7ab393892d20682a985d35168085e4a83689c7dc24c7eb6"
     }
    },
    "fps": 60,
@@ -30,29 +30,31 @@
      960,
      600
     ],
-    "number": 22090,
-    "pid": 11830,
+    "number": 22302,
+    "pendingTooltip": null,
+    "pid": 19828,
     "scale": 2,
-    "sidebarWidth": 228
+    "sidebarWidth": 228,
+    "tooltip": null
    },
-   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
-   "sourceFrames": 161
+   "source": "23d0f2965cbdf48180034d5d3f7315e46761865c",
+   "sourceFrames": 153
   },
   "pin": {
    "clip": "pin",
    "crf": 18,
    "files": {
     "basics-pin-blur.jpg": {
-     "bytes": 23499,
-     "sha256": "11601bf638b99b69fb288be7f94dbf69eb9f8138db7e129a15beeb0a5bd4f206"
+     "bytes": 23704,
+     "sha256": "462aecc882736462cef544d17351b7d4fa013ea140443582c9ffc8561906affa"
     },
     "basics-pin-poster.jpg": {
-     "bytes": 181842,
-     "sha256": "a773dfe897dc4725ffd60effa7e4bdbacd9e97a154698fd69256222acf207d25"
+     "bytes": 183045,
+     "sha256": "42c48cc2c1673aac1802cbe42a6967d98f875101608eb38ae098949972bb9998"
     },
     "basics-pin.mp4": {
-     "bytes": 615009,
-     "sha256": "7e66db0c61fbe83d64ddbb277e9aaecee9566e05b8086464932e4a479d83c94b"
+     "bytes": 639125,
+     "sha256": "e13c7487fa71e3b6dba4d4474a9d645cf216077086c689f62c689d35651f675c"
     }
    },
    "fps": 60,
@@ -68,29 +70,31 @@
      960,
      600
     ],
-    "number": 22048,
-    "pid": 11627,
+    "number": 22266,
+    "pendingTooltip": null,
+    "pid": 19347,
     "scale": 2,
-    "sidebarWidth": 228
+    "sidebarWidth": 228,
+    "tooltip": null
    },
-   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
-   "sourceFrames": 213
+   "source": "23d0f2965cbdf48180034d5d3f7315e46761865c",
+   "sourceFrames": 207
   },
   "spaces": {
    "clip": "spaces",
    "crf": 18,
    "files": {
     "basics-spaces-blur.jpg": {
-     "bytes": 16456,
-     "sha256": "a7a25fa344e741efddf27e5621cd97546f83aa2551a8b7f462951af3b76e2088"
+     "bytes": 17334,
+     "sha256": "4a4f4e262b819939cf3842423f7abb20f95475c380a688986878ccc8a1a3db7a"
     },
     "basics-spaces-poster.jpg": {
-     "bytes": 127531,
-     "sha256": "ee5783a801c27d7f7ff9b17e9557afb038ba018ac792c49d399952e89fc9e66a"
+     "bytes": 129283,
+     "sha256": "4029246d2961ca8be0d036706aac31572c63a2f09a089f73f4aa251d405d0646"
     },
     "basics-spaces.mp4": {
-     "bytes": 742838,
-     "sha256": "2bb8dfa08429a994ee9bcd62588f5fcaf1fe20ecf86d333c6891ef88c57784ce"
+     "bytes": 777977,
+     "sha256": "ee649b5256d1738fb9c4b687bf84355e7a6289d0245956af234ae8ef493dfe9c"
     }
    },
    "fps": 60,
@@ -106,29 +110,31 @@
      960,
      600
     ],
-    "number": 22064,
-    "pid": 11684,
+    "number": 22280,
+    "pendingTooltip": null,
+    "pid": 19542,
     "scale": 2,
-    "sidebarWidth": 228
+    "sidebarWidth": 228,
+    "tooltip": null
    },
-   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
-   "sourceFrames": 203
+   "source": "23d0f2965cbdf48180034d5d3f7315e46761865c",
+   "sourceFrames": 208
   },
   "split": {
    "clip": "split",
    "crf": 18,
    "files": {
     "basics-split-blur.jpg": {
-     "bytes": 25386,
-     "sha256": "dfd7726046b1cfbf801d7769caa097b4d50168fb6dfc3d0342f44d0ed10ca97b"
+     "bytes": 25727,
+     "sha256": "48fdf1c254a00c6a73e4e645fbcf2097348e611ab9fdf444b199ec1e8c4c3b5a"
     },
     "basics-split-poster.jpg": {
-     "bytes": 213433,
-     "sha256": "e02985be6dcd3dbad5f121d298a66660c2b0f17054dbd4c97284aaa0cc8c4d5d"
+     "bytes": 215369,
+     "sha256": "454fce9cbe9651855410a114146723895da4a44b77eb31e8609afa80ce0b49b5"
     },
     "basics-split.mp4": {
-     "bytes": 711041,
-     "sha256": "55484852f4edd85db67aa57dad7121167a57d1112d1b924f2a1e3c7c05dd1ad1"
+     "bytes": 763958,
+     "sha256": "2ddb35f720051b36a5d4bb4f50179c69a1e2c53f122ee089f44d407a4cf9ed45"
     }
    },
    "fps": 60,
@@ -144,13 +150,15 @@
      960,
      600
     ],
-    "number": 22076,
-    "pid": 11748,
+    "number": 22290,
+    "pendingTooltip": null,
+    "pid": 19672,
     "scale": 2,
-    "sidebarWidth": 228
+    "sidebarWidth": 228,
+    "tooltip": null
    },
-   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
-   "sourceFrames": 133
+   "source": "23d0f2965cbdf48180034d5d3f7315e46761865c",
+   "sourceFrames": 144
   }
  },
  "tool": "tools/basics (demo.py, recorder.swift, post.py)"
