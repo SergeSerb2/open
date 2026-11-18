@@ -158,8 +158,10 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
     inside = ink_columns(x + 3, x + w - 3) if chip else []  # Inside the 1.5 pt selected border.
     outside = (ink_columns(panel[0] + 112, x - 1) if x - 1 > panel[0] + 112 else []) + (ink_columns(x + w + 1, panel[0] + panel[2] - 2) if chip else [])
     span = (inside[-1] - inside[0]) / scale if inside else 0
-    check('history_filter_chip_long_profile', bool(chip) and w <= 289 and span >= (w - 24) * .7 and not outside,
-          chip=chip, inkSpanPoints=round(span, 1), inkColumnsOutsideChip=len(outside), capture=str(path))
+    # The label keeps the chip's padding: a clipped label (cut at both chip edges, no ellipsis) has none.
+    pads = [round(inside[0] / scale - x, 1), round(x + w - inside[-1] / scale, 1)] if inside else [0, 0]
+    check('history_filter_chip_long_profile', bool(chip) and w <= 289 and span >= (w - 24) * .7 and not outside and min(pads) >= 8,
+          chip=chip, inkSpanPoints=round(span, 1), paddingPoints=pads, inkColumnsOutsideChip=len(outside), capture=str(path))
     lib(action='filter', open=False)
 
 
