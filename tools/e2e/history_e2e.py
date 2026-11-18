@@ -94,6 +94,72 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
     lib(action='select', section='downloads'); lib(action='select', section='history'); lib(action='refresh')
     measure('reload_during_animation')
 
+    def luma(c): return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    def grab(name):
+        time.sleep(.4)
+        state = lib(); window = app.call('window-state')['frame']
+        path = Path(tmp) / ('history-' + name + '.png'); capture_window(state['window'], path)
+        width, _, pixel = read_image(str(path)); return state, window, width / window[2], pixel, path
+    def peak(pixel, scale, left, top, right, bottom):
+        """Background (most common color) and the pixel with the largest luma contrast to it."""
+        xs, ys = range(int(left * scale), int(right * scale)), range(int(top * scale), int(bottom * scale))
+        colors = {}
+        for py in ys:
+            for px in xs: c = pixel(px, py); colors[c] = colors.get(c, 0) + 1
+        bg = max(colors, key=colors.get)
+        best = max((pixel(px, py) for py in ys for px in xs), key=lambda c: abs(luma(c) - luma(bg)))
+        return bg, best
+    def globes(name):
+        """Placeholder globe vs the row's subtitle text: both are the Library's secondary tint (foreground at 0.68)."""
+        state, window, scale, pixel, path = grab(name)
+        rows, failures = [], []
+        for row in state['rows']:
+            x, y, w, h = row['frame']
+            if row['kind'] != 'history' or y < 56 or y + h > window[3]: continue
+            bg, globe = peak(pixel, scale, x + 20, y + 18, x + 40, y + 38)
+            _, text = peak(pixel, scale, x + 52, y + 31, x + w - 20, y + 48)
+            delta = luma(globe) - luma(text)
+            same_side = (luma(globe) - luma(bg)) * (luma(text) - luma(bg)) > 0
+            rows.append(dict(id=row['id'][len(base):], background=bg, globePeak=globe, subtitlePeak=text, lumaDelta=round(delta, 1)))
+            if abs(delta) > 30 or not same_side or abs(luma(globe) - luma(bg)) < 40: failures.append(rows[-1])
+        return rows, failures, str(path)
+    def appearance_row(mode):
+        app.call('appearance', name=mode)
+        lib(action='close'); wait_until(lambda: not lib()['open'], timeout=3, step=.05)
+        app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
+        app.call('library-performance', operation='scroll', row=0)
+        rows, failures, top = globes('globe-' + mode)
+        # Rows prepared in overscan before the switch must take the new tint when they scroll in.
+        app.call('library-performance', operation='scroll', row=16)
+        more, more_failures, scrolled = globes('globe-' + mode + '-scrolled')
+        app.call('library-performance', operation='scroll', row=0)
+        check('history_placeholder_globe_' + mode, len(rows) >= 8 and len(more) >= 8 and not failures and not more_failures,
+              rows=len(rows) + len(more), failures=(failures + more_failures)[:4], sample=rows[:1], captures=[top, scrolled])
+    try:
+        appearance_row('dark'); appearance_row('light')
+    finally:
+        app.call('appearance', name='system')
+
+    # Filter chips show user text (Profile and Space names): a long name stays inside its chip and truncates.
+    long_name = 'History Profile With An Extremely Long Name That Never Fits Inside One Filter Chip'
+    app.call('space-create', profile=long_name, title='History Long Name')
+    app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
+    lib(action='filter', open=True)
+    chip = wait_until(lambda: next((c for c in lib()['header']['chips'] if c['title'] == long_name), None), timeout=3, step=.05)
+    state, window, scale, pixel, path = grab('filter-chip-long-profile')
+    x, y, w, h = chip['frame'] if chip else (0, 0, 0, 0)
+    panel = state['panelFrame']
+    def ink_columns(left, right):
+        bg, _ = peak(pixel, scale, left, y + 4, right, y + h - 4)
+        return [px for px in range(int(left * scale), int(right * scale))
+                if any(max(abs(a - b) for a, b in zip(pixel(px, py), bg)) > 40 for py in range(int((y + 6) * scale), int((y + h - 6) * scale)))]
+    inside = ink_columns(x + 1, x + w - 1) if chip else []
+    outside = (ink_columns(panel[0] + 112, x - 1) if x - 1 > panel[0] + 112 else []) + (ink_columns(x + w + 1, panel[0] + panel[2] - 2) if chip else [])
+    span = (inside[-1] - inside[0]) / scale if inside else 0
+    check('history_filter_chip_long_profile', bool(chip) and w <= 289 and span >= (w - 24) * .7 and not outside,
+          chip=chip, inkSpanPoints=round(span, 1), inkColumnsOutsideChip=len(outside), capture=str(path))
+    lib(action='filter', open=False)
+
 
 def history_checks(factory, results, tmp, wait_until, restore_defaults):
     class Handler(http.server.BaseHTTPRequestHandler):

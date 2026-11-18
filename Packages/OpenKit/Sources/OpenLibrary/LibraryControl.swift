@@ -94,11 +94,16 @@ final class LibraryControl: NSButton {
         if (textLayer.string as? NSAttributedString) !== text { textLayer.string = text }; textLayer.contentsScale = window?.backingScaleFactor ?? 2
         iconLayer.isHidden = glyph == nil
         let iconWidth: CGFloat = isTile ? 28 : glyph == nil ? 0 : glyphSize ?? (title.isEmpty ? 18 : 16)
-        let group = textSize.width + (title.isEmpty || glyph == nil ? 0 : 5) + iconWidth
+        let gap: CGFloat = title.isEmpty || glyph == nil ? 0 : 5
+        // A label wider than the control (a long Profile or Space name in a filter chip) keeps the
+        // chip's inner padding and ends in "…" (LibraryTextLayer truncates); labels that fit are unchanged.
+        let natural = ceil(textSize.width), room = bounds.width-iconWidth-gap
+        let textWidth = !isTile && natural > room ? max(0,room-(isChip ? 24 : 16)) : natural
+        let group = (textWidth < natural ? textWidth : textSize.width) + gap + iconWidth
         let x = (bounds.width-group)/2
         iconLayer.frame = CGRect(x:isTile ? (bounds.width-28)/2 : x,y:isTile ? 17 : (bounds.height-iconWidth)/2,width:iconWidth,height:iconWidth)
         if let glyph { iconLayer.contents = glyph.image(size:iconWidth,color:color,selected:selected,scale:window?.backingScaleFactor ?? 2) }
-        textLayer.frame = CGRect(x:isTile ? (bounds.width-textSize.width)/2 : x+(glyph == nil ? 0 : iconWidth+5),y:isTile ? 51 : (bounds.height-textSize.height)/2,width:ceil(textSize.width),height:ceil(textSize.height))
+        textLayer.frame = CGRect(x:isTile ? (bounds.width-textSize.width)/2 : x+(glyph == nil ? 0 : iconWidth+5),y:isTile ? 51 : (bounds.height-textSize.height)/2,width:textWidth,height:ceil(textSize.height))
         textLayer.isHidden = title.isEmpty
     }
 }

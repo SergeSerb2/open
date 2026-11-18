@@ -55,7 +55,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
     private var entries: [Entry] = []
     private var lastSelectedRow = -1
     private enum Entry: Equatable { case heading(String), item(Int) }
-    var foreground = NSColor.labelColor { didSet { if foreground != oldValue { cancelPrefetch(); for source in sources { source.preparedText = nil }; reloadVisible(); table.scheduleSettle() } } }
+    /// A theme change also retires prepared overscan rows: their text and placeholder tint use the old color.
+    var foreground = NSColor.labelColor { didSet { if foreground != oldValue { cancelPrefetch(); for source in sources { source.preparedText = nil }; reloadLive(); table.scheduleSettle() } } }
     var overlay = NSColor.labelColor { didSet { if overlay != oldValue { reloadVisible() } } }
     var gallery = false { didSet { if gallery != oldValue { rebuild(); reloadVisible() } } }
     var onSelection: ((String?) -> Void)?
@@ -203,7 +204,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
                 source.preparedText = text
                 let item = source.resolve()
                 if let url = item.fileURL { _ = FilePreviewCache.shared.image(for:url,onReady:{}) }
-                _ = LibraryImages.value(item.image)
+                _ = LibraryImages.icon(item.image,foreground:foreground)
                 item.loadImage? { image in _ = LibraryImages.value(image) }
             }
             self.prefetch = nil; self.prefetchWorker = nil
@@ -260,6 +261,11 @@ final class LibraryListView: NSView, NSMenuDelegate {
         defer { layoutMilliseconds += (ProcessInfo.processInfo.systemUptime-started)*1000 }
         super.layout(); scroll.frame = bounds
         if table.frame.width != scroll.contentSize.width { table.setFrameSize(CGSize(width:scroll.contentSize.width,height:table.frame.height)) }; table.reconcile()
+    }
+    func reloadLive() {
+        guard table.numberOfRows > 0 else { return }
+        reloads += 1
+        table.reloadData(forRowIndexes:IndexSet(integersIn:0..<table.numberOfRows),columnIndexes:IndexSet(integer:0))
     }
     func reloadVisible() {
         let range = table.rows(in:table.visibleRect)
@@ -584,7 +590,7 @@ private final class LibraryItemView: NSView {
                 "windowScale": window?.backingScaleFactor ?? 0, "title": describe(title), "subtitle": describe(subtitle)]
     }
     private func setIcon(_ image:NSImage?) {
-        icon.contents = LibraryImages.value(image)
+        icon.contents = LibraryImages.icon(image,foreground:foreground)
     }
     override func updateLayer() {
         plate.backgroundColor = overlay.withAlphaComponent(hovered || selected ? 0.105 : gallery ? 0.045 : 0).cgColor

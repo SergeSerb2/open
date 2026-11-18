@@ -95,6 +95,26 @@ enum LibraryImages {
         cache.setObject(contents,forKey:image,cost:contents.bytesPerRow*contents.height)
         return contents
     }
+    private final class Tinted { var images: [String:CGImage] = [:] }
+    private static let tinted: NSCache<NSImage,Tinted> = { let cache = NSCache<NSImage,Tinted>(); cache.countLimit = 64; return cache }()
+    /// Row icon contents. A template placeholder (an SF Symbol such as the History globe) takes the
+    /// Library's secondary tint, `foreground` at 0.68 like the search and row button glyphs; as a raw
+    /// CGImage it would draw black. Favicons and file previews keep their own colors.
+    static func icon(_ image:NSImage?,foreground:NSColor) -> CGImage? {
+        guard let image, image.isTemplate, let mask = value(image) else { return value(image) }
+        let color = foreground.withAlphaComponent(0.68), key = "\(color)"
+        let box = tinted.object(forKey:image) ?? Tinted()
+        if let cached = box.images[key] { return cached }
+        let rect = CGRect(x:0,y:0,width:mask.width,height:mask.height)
+        guard let context = CGContext(data:nil,width:mask.width,height:mask.height,bitsPerComponent:8,bytesPerRow:0,
+            space:CGColorSpace(name:CGColorSpace.sRGB)!,bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue) else { return mask }
+        context.draw(mask,in:rect)
+        context.setBlendMode(.sourceIn); context.setFillColor((color.usingColorSpace(.sRGB) ?? color).cgColor); context.fill(rect)
+        guard let result = context.makeImage() else { return mask }
+        if box.images.count >= 8 { box.images.removeAll() }
+        box.images[key] = result; tinted.setObject(box,forKey:image)
+        return result
+    }
 }
 
 @MainActor
