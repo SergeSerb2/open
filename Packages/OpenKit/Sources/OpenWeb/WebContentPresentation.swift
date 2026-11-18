@@ -48,8 +48,16 @@ public enum FramePresentationConsumer: String, CaseIterable, Sendable {
     /// Split: the START pane resize holds the old surface until presentation.
     case splitResize = "OpenSeamSplitResize"
 
-    /// Off unless the user defaults (or a launch argument) turn it on.
-    public var isEnabled: Bool { UserDefaults.standard.bool(forKey: rawValue) }
+    /// The default when no user default or launch argument is set. The Space
+    /// cover is proven on the adopted seam engine (basics lane, #616); the
+    /// others stay off until their own lanes prove them.
+    public var isOnByDefault: Bool { self == .spaceCover }
+
+    /// A user default or launch argument (`-OpenSeamSpaceCover NO`) overrides
+    /// the default in either direction.
+    public var isEnabled: Bool {
+        (UserDefaults.standard.object(forKey: rawValue) as? Bool) ?? isOnByDefault
+    }
 }
 
 @MainActor
