@@ -87,6 +87,14 @@ contrast on real window pixels (at least 7:1), and Reduce Motion.
 `OPEN_E2E_WELCOME_IDLE_ONLY=1` runs the idle contract (complete playlist, then
 below 1 % App CPU in Release). Evidence goes to `.re/welcome-e2e/`.
 
+`W40_space_switch_*` (tools/e2e/space_cover_frames.py) check the Space switch
+the Spaces clip shows, frame by frame: no empty page frame and no position jump
+for a warm tab, after a hidden resize, for a loading destination, for Split
+Spaces, for a Welcome (native) destination and, on the M1, after a renderer
+crash. `OPEN_E2E_WELCOME_COVER_ONLY=1` runs only these rows;
+`OPEN_E2E_SPACE_COVER_OFF=1` runs them with the cover's kill switch (they fail
+on main's path). See [re/space-motion.md](re/space-motion.md).
+
 `tools/basics/pacing.py` records stock frame-detector ledgers for the step change,
 Replay All and the steps' reveal fade; score them with `tools/perf/pacing_gate.py`.
 

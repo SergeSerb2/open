@@ -93,12 +93,13 @@
      "sha256": "4029246d2961ca8be0d036706aac31572c63a2f09a089f73f4aa251d405d0646"
     },
     "basics-spaces.mp4": {
-     "bytes": 777977,
-     "sha256": "ee649b5256d1738fb9c4b687bf84355e7a6289d0245956af234ae8ef493dfe9c"
+     "bytes": 1132316,
+     "sha256": "4542a7502f6c20747014c47db76ed2e2637ef363566ff548319cb7b5b645b509"
     }
    },
    "fps": 60,
    "frames": 510,
+   "note": "re-recorded with the Space cover (engine presentation seam 591b21a6, -OpenSeamSpaceCover YES)",
    "pixels": [
     1920,
     1200
@@ -110,15 +111,15 @@
      960,
      600
     ],
-    "number": 22280,
+    "number": 25254,
     "pendingTooltip": null,
-    "pid": 19542,
+    "pid": 46394,
     "scale": 2,
     "sidebarWidth": 228,
     "tooltip": null
    },
-   "source": "23d0f2965cbdf48180034d5d3f7315e46761865c",
-   "sourceFrames": 208
+   "source": "265b0c74f3bbd5b293a84adb07618ac078cc210d",
+   "sourceFrames": 216
   },
   "split": {
    "clip": "split",
