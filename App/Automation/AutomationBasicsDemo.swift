@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
 import AppKit
 import OpenModel
+import OpenDesign
 
 /// Recorder support for the basics clips (tools/basics). A sidebar drag cannot
 /// start a WindowServer drag loop from the socket, so the recorder drives the
@@ -41,7 +42,9 @@ extension AutomationController {
       return ["number": target.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
         "frame": [target.frame.minX, target.frame.minY, target.frame.width, target.frame.height],
         "scale": target.backingScaleFactor,
-        "sidebarWidth": controller.sidebar.frame.width] as [String: Any]
+        "sidebarWidth": controller.sidebar.frame.width,
+        "tooltip": TooltipController.shared.visibleTooltip?.title ?? NSNull(),
+        "pendingTooltip": TooltipController.shared.visibleOrPendingTooltip?.title ?? NSNull()] as [String: Any]
     case "targets":
       // Frames in window points, top-left origin (the `mouse` command's space).
       controller.contentView.layoutSubtreeIfNeeded()

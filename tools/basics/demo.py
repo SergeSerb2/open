@@ -249,11 +249,12 @@ def clip_spaces(tl, app, ids, scratch):
     page = t['page']
     switch = {s['title']: s['frame'] for s in t['spaces']}
     tl.place([page[0] + 260, page[1] + 380])
-    tl.move(0.3, center(switch['Work']), 1.2)
+    # Each click waits for the switcher's tooltip (0.6 s hover delay), as on the reference.
+    tl.move(0.2, center(switch['Work']), 1.0)
     tl.click(2.3)
-    tl.move(3.6, center(switch['Personal']), 0.8)
+    tl.move(3.4, center(switch['Personal']), 0.6)
     tl.click(4.8)
-    tl.move(5.6, center(switch['Work']), 0.6)
+    tl.move(5.3, center(switch['Work']), 0.5)
     tl.click(6.6)
     tl.move(7.2, [tl.pointer[0] + 40, tl.pointer[1] - 90], 0.8)
 
@@ -314,6 +315,12 @@ def record(options, name, h, port):
                         raise RuntimeError('recorder did not start; see %s' % log)
                     time.sleep(0.02)
                 t0 = float((out / 'ready').read_text()) + LEAD_IN
+                # Launching the recorder through its app can take activation.
+                # Take it back within the lead-in: an inactive window draws gray
+                # traffic lights and hides tooltip panels.
+                app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+                if not app.call('native-focus-state').get('active'):
+                    raise RuntimeError('Open is not active for the recording')
             else:
                 t0 = host_now() + LEAD_IN
             tl = Timeline(app, t0, options.dry)

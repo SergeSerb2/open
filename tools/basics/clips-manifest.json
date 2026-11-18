@@ -1,0 +1,157 @@
+{
+ "clips": {
+  "newtab": {
+   "clip": "newtab",
+   "crf": 18,
+   "files": {
+    "basics-newtab-blur.jpg": {
+     "bytes": 23332,
+     "sha256": "9a236bdf70ad95bcff1a4f1fb90c63e7f894bd09d3de1020489d1b6e6cd08155"
+    },
+    "basics-newtab-poster.jpg": {
+     "bytes": 165214,
+     "sha256": "c6d3e0f8c4074e701eb1097afde94d9dded65ed77ae969f6e306ed46dbcc849c"
+    },
+    "basics-newtab.mp4": {
+     "bytes": 557430,
+     "sha256": "f9728a9a7fd9614c4f1a1e09fa0a249402d117223227ceedb4cea45a7bbcc4d0"
+    }
+   },
+   "fps": 60,
+   "frames": 510,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "recordedOn": {
+    "frame": [
+     40,
+     40,
+     960,
+     600
+    ],
+    "number": 22090,
+    "pid": 11830,
+    "scale": 2,
+    "sidebarWidth": 228
+   },
+   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
+   "sourceFrames": 161
+  },
+  "pin": {
+   "clip": "pin",
+   "crf": 18,
+   "files": {
+    "basics-pin-blur.jpg": {
+     "bytes": 23499,
+     "sha256": "11601bf638b99b69fb288be7f94dbf69eb9f8138db7e129a15beeb0a5bd4f206"
+    },
+    "basics-pin-poster.jpg": {
+     "bytes": 181842,
+     "sha256": "a773dfe897dc4725ffd60effa7e4bdbacd9e97a154698fd69256222acf207d25"
+    },
+    "basics-pin.mp4": {
+     "bytes": 615009,
+     "sha256": "7e66db0c61fbe83d64ddbb277e9aaecee9566e05b8086464932e4a479d83c94b"
+    }
+   },
+   "fps": 60,
+   "frames": 510,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "recordedOn": {
+    "frame": [
+     40,
+     40,
+     960,
+     600
+    ],
+    "number": 22048,
+    "pid": 11627,
+    "scale": 2,
+    "sidebarWidth": 228
+   },
+   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
+   "sourceFrames": 213
+  },
+  "spaces": {
+   "clip": "spaces",
+   "crf": 18,
+   "files": {
+    "basics-spaces-blur.jpg": {
+     "bytes": 16456,
+     "sha256": "a7a25fa344e741efddf27e5621cd97546f83aa2551a8b7f462951af3b76e2088"
+    },
+    "basics-spaces-poster.jpg": {
+     "bytes": 127531,
+     "sha256": "ee5783a801c27d7f7ff9b17e9557afb038ba018ac792c49d399952e89fc9e66a"
+    },
+    "basics-spaces.mp4": {
+     "bytes": 742838,
+     "sha256": "2bb8dfa08429a994ee9bcd62588f5fcaf1fe20ecf86d333c6891ef88c57784ce"
+    }
+   },
+   "fps": 60,
+   "frames": 510,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "recordedOn": {
+    "frame": [
+     40,
+     40,
+     960,
+     600
+    ],
+    "number": 22064,
+    "pid": 11684,
+    "scale": 2,
+    "sidebarWidth": 228
+   },
+   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
+   "sourceFrames": 203
+  },
+  "split": {
+   "clip": "split",
+   "crf": 18,
+   "files": {
+    "basics-split-blur.jpg": {
+     "bytes": 25386,
+     "sha256": "dfd7726046b1cfbf801d7769caa097b4d50168fb6dfc3d0342f44d0ed10ca97b"
+    },
+    "basics-split-poster.jpg": {
+     "bytes": 213433,
+     "sha256": "e02985be6dcd3dbad5f121d298a66660c2b0f17054dbd4c97284aaa0cc8c4d5d"
+    },
+    "basics-split.mp4": {
+     "bytes": 711041,
+     "sha256": "55484852f4edd85db67aa57dad7121167a57d1112d1b924f2a1e3c7c05dd1ad1"
+    }
+   },
+   "fps": 60,
+   "frames": 510,
+   "pixels": [
+    1920,
+    1200
+   ],
+   "recordedOn": {
+    "frame": [
+     40,
+     40,
+     960,
+     600
+    ],
+    "number": 22076,
+    "pid": 11748,
+    "scale": 2,
+    "sidebarWidth": 228
+   },
+   "source": "5a7879d0fb7d644711ac4eaf58036a0cd5ca1386",
+   "sourceFrames": 133
+  }
+ },
+ "tool": "tools/basics (demo.py, recorder.swift, post.py)"
+}
