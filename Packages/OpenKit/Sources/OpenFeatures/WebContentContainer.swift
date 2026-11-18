@@ -305,6 +305,11 @@ public final class WebContentContainer: NSView {
     public var spacePageSnapshotBytes: Int { spaceMotionStorage?.plate.cachedBytes ?? 0 }
     public var spacePageCaptureCount: Int { spaceMotionStorage?.captureCount ?? 0 }
     public var spacePagePresentationUnavailable: Bool { spaceMotionStorage?.presentationUnavailable ?? false }
+    /// The pane shows native content instead of its engine view: Open's
+    /// sad-tab page (renderer gone) or the placeholder of a tab without a page.
+    func paneShowsNativeContent(_ id: ItemID) -> Bool {
+        slots.first(where: { $0.tabID == id }).map { $0.contentHostView == nil } ?? false
+    }
     public var spacePageAnimation: CAAnimation? { spaceMotionStorage?.plate.lastAnimation }
     public private(set) var slots: [PaneSlotView] = []
     // Reuse the chrome with its cached host. Rebuilding fourteen AppKit buttons

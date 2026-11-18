@@ -213,10 +213,13 @@ final class SpaceContentTransitionController {
             plate.presented(receipt); container.finishEmptySpaceSelection(); return
         }
         let token = frameGeneration
-        let visibleTabs = visibleTabs(selection)
+        // A pane showing native content (sad tab, placeholder) has no engine
+        // frame to wait for; only panes showing their engine view do.
+        let visibleTabs = visibleTabs(selection).filter { !container.paneShowsNativeContent($0) }
         let hosts = visibleTabs.compactMap { container.host(for: $0) }.filter { !$0.view.isHiddenOrHasHiddenAncestor }
         lastPresentationViewports = viewports ?? presentationViewports(selection)
         guard hosts.count == visibleTabs.count else { presentationUnavailable = true; return }
+        if hosts.isEmpty { plate.presented(receipt); return }
         // Loading may finish before pixels are presented, so this is only a
         // prerequisite. Its callback re-arms the actual presentation request.
         guard hosts.allSatisfy({ !$0.isLoading }) else { return }
