@@ -299,7 +299,8 @@ def record(options, name, h, port):
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='open-basics-%s-' % name, dir='/tmp') as scratch:
         scratch = Path(scratch)
-        args = ['--use-mock-keychain', '--skip-first-run', '--no-proxy-server',
+        # The Space cover (engine presentation seam): no empty page frame on a switch.
+        args = ['--use-mock-keychain', '--skip-first-run', '--no-proxy-server', '-OpenSeamSpaceCover', 'YES',
                 '--host-resolver-rules=MAP *.example 127.0.0.1:%d, MAP * ~NOTFOUND' % port]  # no network
         env = {'OPEN_E2E_APP_BUNDLE': options.app, 'OPEN_E2E_REDUCE_MOTION': '0'}
         app = h['Open']('Release', 'chrome', str(scratch / 'root'), args, str(scratch / 'app.log'),
