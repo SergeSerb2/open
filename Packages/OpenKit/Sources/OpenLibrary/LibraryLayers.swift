@@ -16,9 +16,9 @@ enum LibraryRaster {
 }
 
 /// One line of Library text. Core Text draws and truncates the line here:
-/// CATextLayer's own `.end` truncation on macOS 27 draws only the top 3 points
-/// of a line wider than the layer, so long History titles showed as a thin
-/// slice and long subtitles disappeared. A line that fits draws byte-identical
+/// CATextLayer's own `.end` and `.middle` truncation on macOS 27.2 draws only a
+/// 3-point slice of a line wider than the layer, so long History titles showed
+/// as a thin slice and long URL subtitles disappeared. A line that fits draws byte-identical
 /// to CATextLayer (same baseline: top of bounds plus the line ascent).
 final class LibraryTextLayer: CATextLayer {
     /// Scale and size of the last raster (automation evidence).
