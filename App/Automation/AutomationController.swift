@@ -425,7 +425,6 @@
         // cached executableURL. CEF may use a persistent hard link; the peer
         // must map this exact file, never a separate copy with equal bytes.
         guard let pid = a["pid"] as? Int32, pid != getpid(),
-          let target = NSRunningApplication(processIdentifier: pid),
           let targetFile = Self.mappedExecutableURL(pid),
           let ownFile = Self.mappedExecutableURL(getpid()),
           let targetAttributes = try? FileManager.default.attributesOfItem(atPath: targetFile.path),
@@ -436,6 +435,17 @@
           let ownInode = ownAttributes[.systemFileNumber] as? NSNumber,
           targetDevice == ownDevice, targetInode == ownInode
         else { throw Failure(message: "activation peer must be another instance of this exact Open executable") }
+        // A peer that has just launched can answer its automation socket before this
+        // process sees it as a running application: NSRunningApplication returns nil
+        // once, then the peer (M5 gate, 2026-11-17). Wait up to 2 s for it.
+        var running = NSRunningApplication(processIdentifier: pid)
+        for _ in 0..<100 where running == nil {
+          try await Task.sleep(for: .milliseconds(20))
+          running = NSRunningApplication(processIdentifier: pid)
+        }
+        guard let target = running else {
+          throw Failure(message: "activation peer \(pid) maps this executable but is not a running application after 2 s")
+        }
         NSApp.yieldActivation(to: target); return true
       case "native-focus-state":
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
