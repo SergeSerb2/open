@@ -56,7 +56,10 @@ public enum FramePresentationConsumer: String, CaseIterable, Sendable {
     /// A user default or launch argument (`-OpenSeamSpaceCover NO`) overrides
     /// the default in either direction.
     public var isEnabled: Bool {
-        (UserDefaults.standard.object(forKey: rawValue) as? Bool) ?? isOnByDefault
+        // A launch argument arrives as the string "NO"/"YES"; bool(forKey:)
+        // reads both forms. Only a missing value takes the default.
+        let defaults = UserDefaults.standard
+        return defaults.object(forKey: rawValue) == nil ? isOnByDefault : defaults.bool(forKey: rawValue)
     }
 }
 

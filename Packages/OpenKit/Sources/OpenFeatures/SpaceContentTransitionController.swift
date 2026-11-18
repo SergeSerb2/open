@@ -11,8 +11,10 @@ struct SpaceContentSelection: Equatable {
     let profile: ProfileID
 }
 
-/// Selection changes once, behind the incoming plate. A missing engine seam
-/// leaves that plate visible; it never creates a synthetic presentation receipt.
+/// Selection changes once, behind the incoming plate. The plate retires on the
+/// engine's presented-frame receipt for every visible engine pane. It never
+/// fabricates a receipt and no timer removes it: native panes are ready at
+/// once, and a request the engine refuses or ends shows the live page.
 @MainActor
 final class SpaceContentTransitionController {
     unowned let container: WebContentContainer
@@ -221,7 +223,9 @@ final class SpaceContentTransitionController {
         guard specifications.count == hosts.count else { presentationUnavailable = true; return }
         waiting = Set(specifications.map { $0.1 })
         for (host, id, viewport, revision) in specifications {
-            guard let presenter = host.framePresentation else { presentationUnavailable = true; continue }
+            // A native host (Welcome, Notes, Easels) has no engine frame to wait
+            // for: its content is drawn natively and is ready now.
+            guard let presenter = host.framePresentation else { waiting.remove(id); continue }
             let request = presenter.firstFramePresented(at: viewport, requestID: id,
                 retainingSurfaceForResize: retainingSurfaceForResize) { [weak self, weak host] frame in
                 guard let self, let host, self.frameGeneration == token,
@@ -232,14 +236,28 @@ final class SpaceContentTransitionController {
                 self.requests[id] = nil
                 guard let frame, frame.requestID == id, frame.viewport == viewport,
                       frame.presentedAt.isFinite, frame.presentedAt > 0 else {
-                    self.presentationUnavailable = true; return
+                    // The engine ended this request for good (navigation
+                    // replacement, renderer loss). Show the live page now,
+                    // never a stuck cover; no timer is involved.
+                    self.presentationUnavailable = true; self.revealLivePage(); return
                 }
                 self.waiting.remove(id)
                 if self.waiting.isEmpty, let currentReceipt = self.receipt { self.plate.presented(currentReceipt) }
             }
             if let request, waiting.contains(id) { requests[id] = request }
-            else if request == nil, waiting.contains(id) { presentationUnavailable = true }
+            else if request == nil, waiting.contains(id) {
+                // The engine refused the request: no receipt will come.
+                presentationUnavailable = true; revealLivePage(); return
+            }
         }
+        if waiting.isEmpty { plate.presented(receipt) }
+    }
+
+    /// The presentation fallback: retire the cover over the live page. Our own
+    /// superseded requests never come here (their generation no longer matches).
+    private func revealLivePage() {
+        cancelRequests()
+        if let receipt, plate.phase == .awaitingPresentation { plate.presented(receipt) }
     }
 
     func cancel(clearCache: Bool = false, preservingCapture: Bool = false) {
