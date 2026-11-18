@@ -67,10 +67,15 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
                 if labels['title']['frame'][1] + labels['title']['frame'][3] > labels['subtitle']['frame'][1]: geometry += 'title overlaps subtitle; '
             # Glyph ink: a 15 pt title spans >= 9 pt of rows, a 13 pt subtitle >= 7 pt; both
             # long lines truncate near the band's right edge.
+            if row['id'] == hovered and not (labels or {}).get('hovered', True): geometry += 'probe row not hovered; '
             ok = title[0] >= 9 and subtitle[0] >= 7 and title[1] >= (right - x - 52) * .7 and subtitle[1] >= (right - x - 52) * .7 and not geometry
             rows.append(dict(id=row['id'][len(base):], titleInkPoints=title, subtitleInkPoints=subtitle, hovered=row['id'] == hovered))
             if not ok: failures.append(dict(rows[-1], geometry=geometry))
-        check('history_row_labels_' + name, len(rows) >= 8 and not failures, rows=len(rows), failures=failures[:4], capture=str(path), scale=scale)
+        least = lambda key, i: min((r[key][i] for r in rows), default=0)
+        check('history_row_labels_' + name, len(rows) >= 8 and not failures, rows=len(rows), failures=failures[:4], capture=str(path), scale=scale,
+              minimumInkPoints=dict(titleHeight=least('titleInkPoints', 0), titleSpan=least('titleInkPoints', 1),
+                                    subtitleHeight=least('subtitleInkPoints', 0), subtitleSpan=least('subtitleInkPoints', 1)),
+              hoveredMeasured=any(r['hovered'] for r in rows) if hovered else None)
 
     lib(action='close'); wait_until(lambda: not lib()['open'], timeout=3, step=.05)
     app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
