@@ -75,11 +75,14 @@ final class SpaceContentTransitionController {
         let newIndex = container.spaceOrder.firstIndex(of: selection.space) ?? oldIndex
         let direction: CGFloat = newIndex == oldIndex ? 0 : newIndex < oldIndex ? -1 : 1
         let themeFrame = container.convert(parent.bounds, from: parent)
-        // Source remains attached and visible throughout the slide. Capture it
-        // once for a later return, without waiting to begin the layer motion.
-        if let source, source.space != selection.space { captureSource(source) }
+        // Capture the source for a later return once the incoming plate covers
+        // it, just before the selection changes behind the plate. On the input
+        // turn this work (theme field plus every pane, 14–25 ms at 1280 × 800)
+        // delayed the slide's first frame; here nothing visible waits for it.
+        let captureFrom = source.flatMap { $0.space != selection.space ? $0 : nil }
         let apply = { [weak self] in
             guard let self, self.generation == token else { return }
+            if let captureFrom, self.nativeSelection == captureFrom { self.captureSource(captureFrom) }
             self.applying = true
             self.nativeSelection = selection; self.nativeStyle = style
             self.container.applySpaceSelection(selection, animateSlots: false)

@@ -48,10 +48,11 @@ public enum FramePresentationConsumer: String, CaseIterable, Sendable {
     /// Split: the START pane resize holds the old surface until presentation.
     case splitResize = "OpenSeamSplitResize"
 
-    /// The default when no user default or launch argument is set. The Space
-    /// cover is proven on the adopted seam engine (basics lane, #616); the
-    /// others stay off until their own lanes prove them.
-    public var isOnByDefault: Bool { self == .spaceCover }
+    /// The default when no user default or launch argument is set. All stay
+    /// off until the lead's ruling on each consumer's proof (2026-11-17 08:45).
+    /// The Space cover's functional rows pass on 591b21a6 (welcome W40); its
+    /// latency row awaits a ruling (#616).
+    public var isOnByDefault: Bool { false }
 
     /// A user default or launch argument (`-OpenSeamSpaceCover NO`) overrides
     /// the default in either direction.

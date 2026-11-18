@@ -60,8 +60,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   #if OPEN_ENGINE_FRAME_PRESENTATION
   private lazy var spaceFramePresentation = SpaceFramePresentationAdapter(content: content)
   var framePresentation: (any WebContentFramePresentation)? {
-    // On by default with the seam engine (FramePresentationConsumer); nil
-    // keeps main's Space-switch path (kill switch, or an engine without it).
+    // FramePresentationConsumer.spaceCover decides; nil keeps main's
+    // Space-switch path (switch off, or an engine without the seam).
     guard !closed, content.supportsFramePresentation,
           FramePresentationConsumer.spaceCover.isEnabled else { return nil }
     return spaceFramePresentation
