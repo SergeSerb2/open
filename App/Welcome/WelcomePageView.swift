@@ -12,7 +12,7 @@ final class WelcomePageView: NSScrollView {
       symbol: "pin", keys: []),
     .init(title: "A Space for every part of life", detail: "Spaces give you separate sidebars for work, projects, and home. Click a Space or swipe to switch.",
       symbol: "square.stack", keys: []),
-    .init(title: "Two tabs side by side", detail: "Drag a tab from the sidebar into the middle of the page to make a Split View.",
+    .init(title: "Two tabs side by side", detail: "Drag a tab from the sidebar to the side of the page to make a Split View.",
       symbol: "rectangle.split.2x1", keys: []),
     .init(title: "Open your first tab", detail: "Click New Tab in the sidebar, or press",
       symbol: "plus", keys: ["⌘", "T"]),

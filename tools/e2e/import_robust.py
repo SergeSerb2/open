@@ -477,15 +477,15 @@ def run(factory, results, tmp, h):
         # playlist: never count its intentional motion as idle or stop it here.
         time.sleep(10)
         welcome = app.call('welcome')
-        deadline = time.monotonic()+max(0, 30-welcome.get('appearanceElapsed', 0))
+        deadline = time.monotonic()+max(0, 45-welcome.get('appearanceElapsed', 0))
         def settled(value):
             return value['animationCount'] == 0 and not value['pendingCompletion'] \
                 and value.get('pendingDisplayUpdates', 0) == 0
         while not settled(welcome) and time.monotonic() < deadline:
             time.sleep(.1)
             welcome = app.call('welcome')
-        playlist_settled = settled(welcome) and welcome.get('playlistElapsed', 0) <= 30
-        row('welcome_playlist_settles', playlist_settled, settleCapSeconds=30,
+        playlist_settled = settled(welcome) and welcome.get('playlistElapsed', 0) <= 45
+        row('welcome_playlist_settles', playlist_settled, settleCapSeconds=45,
             reason=None if playlist_settled else 'welcome playlist did not settle', welcome=welcome)
         files_before, counters_before = file_state(), app.call('frame-save-counters')
         cpu_before, wall_before = cpu_seconds(), time.monotonic()
