@@ -319,11 +319,24 @@ def run(h, factory, results, tmp):
         row('F26_toolbar_viewport', rect_ok(p) and clear_of_chrome(p), pane=p)
         viewport_close('F33_toolbar_on_viewport_close', tab)
         app.call('menu-perform', id='toggle-toolbar')
-        # A narrow split pane shrinks the preferred 300 pt width.
+        # A narrow split pane shrinks the preferred 300 pt width. Cmd-F lands while the
+        # Split motion runs: the shrinking pane still holds its old, larger page until the
+        # motion ends (#569), and the bar must fit the pane's final page from the start.
         app.call('window-frame', frame=[100,70,600,760]); app.call('split')
-        key('f', ['cmd']); p = pane()
+        key('f', ['cmd']); moving = pane(); moving_split = app.call('split', op='state')
+        def split_settled():
+            s = app.call('split', op='state')
+            return s if s['retiringPanes'] == 0 and not any(p['clipAnimations'] or p['holdingPage'] for p in s['panes']) else None
+        settled_split = h.wait_until(split_settled, timeout=3, step=.02)
+        p = pane()
         expected_width = max(0, min(300, p['viewportFrame'][2]-20)) if p.get('viewportFrame') else 0
-        row('F27_narrow', p['visible'] and expected_width < 300 and rect_ok(p, width=expected_width) and clear_of_chrome(p), pane=p)
+        row('F27_narrow', bool(settled_split) and p['visible'] and expected_width < 300 and rect_ok(p, width=expected_width) and clear_of_chrome(p),
+            pane=p, split=settled_split)
+        box, bar = moving.get('paneFrame', []), moving.get('frame', [])
+        target = max(0, min(300, box[2]-20)) if len(box) == 4 else 0
+        row('F27_narrow_during_motion', moving['visible'] and 0 < target < 300 and len(bar) == 4 and abs(bar[2]-target) < .1
+            and bar[0] >= box[0]+10-.1 and abs(box[0]+box[2]-bar[0]-bar[2]-10) < .1 and bar == p['frame'],
+            pane=moving, settled=p['frame'], inMotion=any(q['holdingPage'] for q in moving_split['panes']), split=moving_split)
         resizes=[]
         for width in [640,720,600]:
             app.call('window-frame', frame=[100,70,width,760])
