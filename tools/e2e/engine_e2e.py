@@ -2776,15 +2776,21 @@ def shutdown_order_checks(factory, results, tmp):
         return value if value and value[-1]['phase'] == 'engineShutdownEnd' else None
     trace = wait_until(completed_trace, timeout=10, step=.02)
     assert trace, {'quit': app.quit_report, 'traceExists': os.path.exists(path)}
-    phases = [r['phase'] for r in trace]
     expected = ['prepare', 'hostsClosed', 'engineShutdownBegin', 'engineShutdownEnd']
-    closed = trace[1:]
+    # #603 records each quit attempt and flush step in the same trace (diagnostics for
+    # onboarding). The ordering gate reads only its four steps, in trace order.
+    steps = [r for r in trace if r['phase'] in expected]
+    diagnostics = [r['phase'] for r in trace if r['phase'] not in expected]
+    phases = [r['phase'] for r in steps]
+    closed = steps[1:]
     results['quit_order_owned_work'] = {'ok': phases == expected and not app.quit_report.get('forced', False)
-        and trace[0]['captureTasks'] > 0 and trace[0]['backgroundTasks'] > 0
+        and steps[0]['captureTasks'] > 0 and steps[0]['backgroundTasks'] > 0
         and all(r['captureTasks'] == r['backgroundTasks'] == r['selectionTasks'] == r['hosts'] == 0
                 and r['closedFactories'] == r['factories'] and r['lateAsyncEngineCalls'] == 0 for r in closed)
         and all(a['uptime'] <= b['uptime'] for a, b in zip(trace, trace[1:]))
-        and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
+        and all(p.startswith(('shouldTerminate.', 'historyFlush.', 'sleepCapture.', 'faviconFlush.')) for p in diagnostics)
+        and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report,
+        'diagnosticPhases': diagnostics, 'trace': trace}
 
 
 def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False, launch_only=False, launch_continuation=None):
@@ -5168,6 +5174,12 @@ def sidebar_checks(factory, results, tmp):
         _restore_defaults(app, saved)
         app.quit()
     static_window_comparison(factory, results, tmp, "sidebar")
+    sidebar_pinfav_checks(factory, results, tmp)
+
+
+def sidebar_pinfav_checks(factory, results, tmp):
+    """Pinned rows and Favorites: every close path with real input (tools/e2e/sidebar_pinfav.py)."""
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_pinfav.py"))["run"](factory, results, tmp, globals())
 
 
 def static_window_comparison(factory, results, tmp, suite):
@@ -11180,6 +11192,10 @@ def sidebar_favicon_checks(app, require, tmp, launch):
         same_hash = same['rowFaviconHash']
         app.call('navigate', tab=route, url=origin + '/b'); app.call('wait', tab=route)
         wait_until(lambda: app.tab(route)['url'] == origin + '/b', timeout=5)
+        # Close puts a pinned tab back on its pinned URL (docs/re/pinned-favorites-close.md P4), so
+        # make /b the pinned URL first: the closed row must then draw /b's stored pixels.
+        app.call('sidebar-menu', node=route, item='Edit Pinned Page/Replace Pinned URL with Current')
+        wait_until(lambda: app.tab(route)['pinnedURL'] == origin + '/b' or None, timeout=5)
         # Unload via the production pin Close route, then require storage pixels.
         app.call('open', url=fixture('Unchanged icon neighbor')); app.call('close', tab=route)
         same_stored = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t['url'] == origin + '/b' and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == same_hash else None)(app.tab(route)), timeout=5)
@@ -11196,6 +11212,9 @@ def sidebar_favicon_checks(app, require, tmp, launch):
             destination = missing_origin + path
             app.call('navigate', tab=candidate, url=destination); app.call('wait', tab=candidate)
             wait_until(lambda: app.tab(candidate)['url'] == destination, timeout=5)
+            # Close returns a pinned tab to its pinned URL (P4); pin the destination so the row stays there.
+            app.call('sidebar-menu', node=candidate, item='Edit Pinned Page/Replace Pinned URL with Current')
+            wait_until(lambda: app.tab(candidate)['pinnedURL'] == destination or None, timeout=5)
             app.call('open', url=fixture('Missing icon neighbor')); app.call('close', tab=candidate)
             wait_until(lambda: not app.tab(candidate)['hasWebContent'], timeout=5)
             # Drain the real cache worker by orderly quit before read-only SQL.
@@ -13687,9 +13706,10 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
+    ap.add_argument("--sidebar-pinfav-only", action="store_true", help="run only the pinned-tab and Favorite close rows of the sidebar suite")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
                     help='features: prove ignored save offers with main App code and no password delegate')
@@ -14148,6 +14168,17 @@ def main():
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "app-icons":
+            # tools/e2e/app_icons.py: picker, cache, reset, relaunch, and the macOS icon grid of every icon.
+            results[opts.only] = CheckedResults(tracker)
+            import app_icons
+            icon_out = Path(tmp) / 'app-icons'
+            try:
+                app_icons.run(icon_out, opts.config, factory)
+            finally:
+                receipt = icon_out / 'results.json'
+                for row, value in (json.loads(receipt.read_text()).items() if receipt.is_file() else ()):
+                    results[opts.only]['app_icons_' + row] = value
         elif opts.only == "space-editor":
             results[opts.only] = CheckedResults(tracker)
             space_editor_creation_checks(factory, results[opts.only], tmp)
@@ -14234,7 +14265,10 @@ def main():
                           launch_continuation=opts.window_launch_continuation)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
-            sidebar_checks(factory, results["sidebar"], tmp)
+            if opts.sidebar_pinfav_only:
+                sidebar_pinfav_checks(factory, results["sidebar"], tmp)
+            else:
+                sidebar_checks(factory, results["sidebar"], tmp)
         elif opts.only == "calendar":
             results["calendar"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "calendar_app.py"))["run"](factory, results["calendar"], tmp, globals())
@@ -14415,14 +14449,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode"):
+    for group in ("engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode")
+    failures = [k for group in ("engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

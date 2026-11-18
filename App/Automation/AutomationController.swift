@@ -652,6 +652,17 @@
         controller.contentView.layoutSubtreeIfNeeded()
         let frame = controller.sidebar.clearTodayFrame().map { controller.contentView.convert($0, from: controller.sidebar) }
         return ["visible": controller.sidebar.isClearTodayVisible, "frame": frame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? []] as [String: Any]
+      case "sidebar-accessory":
+        // The close (×) or unload (−) button that a row or Favorite tile shows now, read from the
+        // real view tree: frame and center in the browser window (top-left origin), glyph and label.
+        let controller = try sidebarController(a)
+        guard let raw = (a["node"] ?? a["favorite"]) as? String, let uuid = UUID(uuidString: raw) else { throw Failure(message: "invalid sidebar node") }
+        controller.contentView.layoutSubtreeIfNeeded()
+        let hovered = controller.sidebar.isFavoriteTileHovered(tabID: ItemID(rawValue: uuid)).map { $0 as Any } ?? NSNull()
+        guard let action = controller.sidebar.tabAction(tabID: ItemID(rawValue: uuid)) else { return ["shown": false, "tileHovered": hovered] as [String: Any] }
+        let frame = controller.contentView.convert(action.view.bounds, from: action.view)
+        return ["shown": true, "glyph": action.glyph.map { String(describing: $0) } ?? "", "label": action.view.accessibilityLabel() ?? "",
+          "frame": [frame.minX, frame.minY, frame.width, frame.height], "point": [frame.midX, frame.midY]] as [String: Any]
       case "sidebar-row":
         // A sidebar row's frame and center in the front browser window (top-left origin).
         guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),

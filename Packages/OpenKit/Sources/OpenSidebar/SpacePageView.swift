@@ -283,6 +283,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         applyingBulk = false
         syncExpansion(animated: animatesChanges)
         updateRowStates(animated: false)
+        refreshHoverAfterRowChange()
         pruneSelection()
         syncSelectionIndexes()
     }
@@ -342,6 +343,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.endUpdates()
         syncExpansion(animated: animatesChanges)
         updateRowStates(animated: false)
+        refreshHoverAfterRowChange()
         return true
     }
 
@@ -458,7 +460,22 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         if !applyingBulk && !syncingExpansion {
             syncExpansion(animated: animate)
             updateRowStates(animated: false)
+            refreshHoverAfterRowChange()
         }
+    }
+
+    /// Rows moved under a still pointer (a close, an insert, a drop). AppKit sends no mouse event,
+    /// so hover would stay on the old item and the row now under the pointer would show no close
+    /// button: a quick second click would select that row instead of closing it.
+    private func refreshHoverAfterRowChange() {
+        guard hoveredItem != nil, context.forcedHover == nil, let window else { return }
+        let pointer: NSPoint? = if let source = context.pointerLocation { source() } else { window.mouseLocationOutsideOfEventStream }
+        guard let pointer else { hoveredItem = nil; return }
+        let point = convert(pointer, from: nil)
+        // The same row is still under the pointer: keep its hover, tooltip and armed preview.
+        let row = scroll.frame.contains(point) ? outline.row(at: outline.convert(point, from: self)) : -1
+        if row >= 0, outline.item(atRow: row) as AnyObject? === hoveredItem { return }
+        updateHover(at: point, allowPreview: false)
     }
 
     private func observeFolder(_ folder: Folder) {
@@ -718,10 +735,23 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         tracking = t
     }
 
+    /// The pager stacks every built page in its viewport and hides the others
+    /// only in the layer tree (#575), so AppKit still sends their tracking
+    /// events. Only the page that receives input follows the pointer; another
+    /// page must not retarget or end the shared hover preview.
+    private var receivesPointer: Bool {
+        guard let strip = superview as? PagerStrip else { return true }
+        return strip.inputPage === self
+    }
+
     override func mouseMoved(with event: NSEvent) { updateHover(at: convert(event.locationInWindow, from: nil)) }
-    override func mouseExited(with event: NSEvent) { hoveredItem = nil; header.pointerInside = false; context.existingHoverPreviews?.leaveTarget() }
+    override func mouseExited(with event: NSEvent) {
+        hoveredItem = nil; header.pointerInside = false
+        if receivesPointer { context.existingHoverPreviews?.leaveTarget() }
+    }
 
     private func updateHover(at point: NSPoint, allowPreview: Bool = true) {
+        guard receivesPointer else { hoveredItem = nil; header.pointerInside = false; return }
         header.pointerInside = header.frame.contains(point)
         let p = outline.convert(point, from: self)
         guard scroll.frame.contains(point) else { hoveredItem = nil; context.existingHoverPreviews?.leaveTarget(); return }

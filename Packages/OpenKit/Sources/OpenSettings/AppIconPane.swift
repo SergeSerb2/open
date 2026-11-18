@@ -27,12 +27,16 @@ public struct AppIconPane:View {
 /// Reuses the picker artwork. Six cached 1024 px RGBA images: at most 24 MiB;
 /// the largest bitmap allocation is 1024 * 1024 * 4 = 4,194,304 bytes.
 @MainActor public enum AppIconArtwork {
+    /// macOS draws an app icon's body 824 px wide, 100 px in from each edge of the 1024 px canvas: the system's
+    /// render of Calculator, Terminal and Open's own bundle icon all measure x/y 100..924. The Dock, Cmd-Tab and
+    /// the Dock tile plug-in show a runtime icon as is, so the image carries that transparent margin itself.
+    static let canvas: CGFloat = 1024, body: CGFloat = 824
     private static var images: [AppIconOption: NSImage] = [:]
     public static func image(for option: AppIconOption) -> NSImage? {
         if let cached = images[option] { return cached }
         guard let index = AppIconOption.allCases.firstIndex(of: option) else { return nil }
-        let renderer = ImageRenderer(content: OriginalOpenIcon(index: index)
-            .frame(width: 1024, height: 1024).environment(\.colorScheme, .light))
+        let renderer = ImageRenderer(content: OriginalOpenIcon(index: index).frame(width: body, height: body)
+            .frame(width: canvas, height: canvas).environment(\.colorScheme, .light))
         renderer.scale = 1
         guard let cgImage = renderer.cgImage, cgImage.width == 1024, cgImage.height == 1024 else { return nil }
         let image = NSImage(size: .init(width: 1024, height: 1024))

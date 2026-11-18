@@ -29,6 +29,9 @@ public final class SidebarContext {
     @ObservationIgnored public var foreignNodeDrop: (@MainActor (_ ids: [ItemID], _ parent: NodeParent, _ index: Int, _ perform: Bool) -> Bool)?
     /// Native tab-drag lifetime. The App opens destination rails only during a drag.
     @ObservationIgnored public var tabDragChanged: (@MainActor (_ ids: [ItemID]?) -> Void)?
+    /// The pointer in window coordinates, or nil when it is not in this window. The window controller
+    /// sets it so own-window automation input counts as the pointer; nil uses the hardware pointer.
+    @ObservationIgnored public var pointerLocation: (@MainActor () -> NSPoint?)?
     /// Incognito and Blank Windows show no Favorites, pinned section, Space dots or Space header controls.
     public var hidesSpaceChrome: Bool { isIncognito || isWindowOnly }
     public var extensionsUI: ExtensionsUIContext?

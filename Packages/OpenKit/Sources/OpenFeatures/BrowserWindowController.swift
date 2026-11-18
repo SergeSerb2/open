@@ -345,6 +345,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
         super.init(window: window); window.contentView = root; window.delegate = self
+        // The same pointer rule as the traffic-light hover: own-window automation input wins.
+        context.pointerLocation = { [weak window] in
+            guard let window else { return nil }
+            guard Self.pointerEventFilter != nil else { return window.mouseLocationOutsideOfEventStream }
+            guard let pointer = Self.automationPointer, pointer.window == window.windowNumber else { return nil }
+            return pointer.location
+        }
         window.refusesFirstResponder = { [weak self] responder in
             guard let self, self.isCommandBarPresented, let bar = self.commandBarView, let view = responder as? NSView else { return false }
             if let type = NSApp.currentEvent?.type, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type) { return false }
