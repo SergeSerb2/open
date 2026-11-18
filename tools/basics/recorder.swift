@@ -61,9 +61,11 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendabl
       NSRunningApplication(processIdentifier: pid)?.bundleIdentifier?.hasPrefix("io.github.sergeserb2.open") == true else { exit(3) }
     let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
     guard let window = content.windows.first(where: { $0.windowID == number && $0.owningApplication?.processID == pid }) else { exit(3) }
-    // A display filter with this app's windows only, cropped to the browser
-    // window: tooltips and popovers (their own windows) show as on screen, and
-    // transparent child windows (the sidebar drop rails) cannot shift the frame.
+    // Display sharing minus every other app, cropped to the browser window.
+    // Window or application sharing would make macOS mark the window as shared
+    // (an indicator over its traffic lights). This scope keeps tooltips and
+    // popovers (their own windows) and cannot be shifted by transparent child
+    // windows (the sidebar drop rails).
     guard let display = content.displays.first(where: { $0.frame.contains(CGPoint(x: window.frame.midX, y: window.frame.midY)) }) else { exit(3) }
     let config = SCStreamConfiguration()
     config.sourceRect = CGRect(x: window.frame.minX - display.frame.minX + x, y: window.frame.minY - display.frame.minY + y, width: w, height: h)
@@ -74,8 +76,8 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendabl
     config.colorSpaceName = CGColorSpace.sRGB
     config.backgroundColor = .clear
     let sink = try Sink(url: directory.appendingPathComponent("capture.mov"), width: config.width, height: config.height)
-    guard let app = content.applications.first(where: { $0.processID == pid }) else { exit(3) }
-    let stream = SCStream(filter: SCContentFilter(display: display, including: [app], exceptingWindows: []), configuration: config, delegate: sink)
+    let others = content.applications.filter { $0.processID != pid }
+    let stream = SCStream(filter: SCContentFilter(display: display, excludingApplications: others, exceptingWindows: []), configuration: config, delegate: sink)
     try stream.addStreamOutput(sink, type: .screen, sampleHandlerQueue: DispatchQueue(label: "open.basics.recorder"))
     try await stream.startCapture()
     let start = CACurrentMediaTime()

@@ -121,7 +121,9 @@ class Timeline:
 
     def click(self, t):
         self.at(t)
-        self.log['clicks'].append({'time': host_now(), 'point': self.pointer})
+        state = self.app.call('basics-demo', op='window')
+        active = self.app.call('native-focus-state').get('active')
+        self.log['clicks'].append({'time': host_now(), 'point': self.pointer, 'tooltip': state.get('tooltip'), 'active': active})
         self.app.call('mouse', action='click', x=self.pointer[0], y=self.pointer[1])
 
     def drag_begin(self, t, node, image):
@@ -306,7 +308,7 @@ def record(options, name, h, port):
             recorder = None
             if not options.dry:
                 log = out / 'recorder.log'
-                recorder = subprocess.Popen(['/usr/bin/open', '-n', '-W', options.launcher, '--args', options.pixels, str(log),
+                recorder = subprocess.Popen(['/usr/bin/open', '-g', '-n', '-W', options.launcher, '--args', options.pixels, str(log),
                     options.recorder, str(window['pid']), str(window['number']), str(out),
                     str(LEAD_IN + CLIP_SECONDS + TAIL), str(window['scale']), *map(str, CROP)])
                 deadline = time.monotonic() + 15
@@ -318,7 +320,9 @@ def record(options, name, h, port):
                 # Launching the recorder through its app can take activation.
                 # Take it back within the lead-in: an inactive window draws gray
                 # traffic lights and hides tooltip panels.
-                app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+                for _ in range(3):
+                    app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+                    time.sleep(0.12)
                 if not app.call('native-focus-state').get('active'):
                     raise RuntimeError('Open is not active for the recording')
             else:

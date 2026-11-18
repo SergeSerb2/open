@@ -15,9 +15,11 @@ never retimed or edited.
 """
 import argparse, hashlib, json, subprocess, sys
 from pathlib import Path
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 FPS = 60
+WINDOW_RADIUS = 16.5  # points: macOS 26 window corner, measured on the M1 capture
 DRAG_ALPHA = 0.8  # Approximation: system drag images draw slightly translucent.
 
 
@@ -59,6 +61,24 @@ def make_pointer(scale):
     return out, (pad * scale, pad * scale)
 
 
+def corner_map(width, height, scale):
+    """Pixels outside the window's rounded corners, and the inner pixel that
+    replaces each one (sampled inward along the corner radius). The display
+    capture shows the desktop there; a window capture would be transparent."""
+    r = WINDOW_RADIUS * scale
+    targets, sources = [], []
+    for cx, cy, sx, sy in ((r, r, 0, 0), (width - r, r, width - int(r) - 1, 0),
+                           (r, height - r, 0, height - int(r) - 1), (width - r, height - r, width - int(r) - 1, height - int(r) - 1)):
+        for y in range(sy, sy + int(r) + 1):
+            for x in range(sx, sx + int(r) + 1):
+                dx, dy = x + 0.5 - cx, y + 0.5 - cy
+                d = (dx * dx + dy * dy) ** 0.5
+                if d > r - 2.0 and (x < r or x >= width - r) and (y < r or y >= height - r):
+                    k = (r - 6) / d
+                    targets.append((y, x)); sources.append((int(cy + dy * k), int(cx + dx * k)))
+    return np.array(targets).T, np.array(sources).T
+
+
 def decode(movie, width, height):
     raw = subprocess.run(['ffmpeg', '-loglevel', 'error', '-i', str(movie), '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'],
                          capture_output=True, check=True).stdout
@@ -77,6 +97,7 @@ def process(rec, out, name, crf):
     if len(frames) != len(times):
         raise SystemExit('%s: %d decoded frames for %d timestamps' % (name, len(frames), len(times)))
     pointer, hotspot = make_pointer(scale)
+    corner_targets, corner_sources = corner_map(width, height, scale)
     drags = []
     for d in timeline['drags']:
         image = Image.open(folder / d['image']).convert('RGBA')
@@ -101,7 +122,9 @@ def process(rec, out, name, crf):
     for k in range(count):
         host = t0 + k / FPS
         while index + 1 < len(times) and times[index + 1] <= host + 0.002: index += 1
-        frame = Image.frombytes('RGB', (width, height), frames[index]).convert('RGBA')
+        pixels = np.frombuffer(frames[index], np.uint8).reshape(height, width, 3).copy()
+        pixels[corner_targets[0], corner_targets[1]] = pixels[corner_sources[0], corner_sources[1]]
+        frame = Image.fromarray(pixels, 'RGB').convert('RGBA')
         x, y = pointer_at(timeline['moves'], host)
         for start, end, image, offset in drags:
             if start <= host < end:
