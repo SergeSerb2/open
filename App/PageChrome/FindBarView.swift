@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import OpenFeatures
 
 /// Recreated from page-chrome §1; no reference assets. The dedicated field
 /// editor consumes navigation keys before the embedded page can see them.
@@ -313,7 +314,10 @@ final class FindPaneOverlay: FindBarView {
     if frame != target { frame = target; needsLayout = true }
   }
   static func placement(in parent: NSView, viewport: NSView) -> CGRect {
-    let area = parent.convert(viewport.bounds, from: viewport)
+    var area = parent.convert(viewport.bounds, from: viewport)
+    // A shrinking Split pane holds its old, larger page until its motion ends. Fit the
+    // pane's final page from the start; the bar must not reach past the pane.
+    if let slot = parent as? PaneSlotView, slot.isHoldingPage { area = area.intersection(slot.settledPageFrame) }
     let width = min(300, max(0, area.width - 20))
     let y = parent.isFlipped ? area.minY + 10 : area.maxY - 10 - 32
     return CGRect(x: area.maxX - 10 - width, y: y, width: width, height: 32)

@@ -36,6 +36,9 @@ public final class PaneSlotView: NSView {
     fileprivate var isRetiring = false
     private var motionFill = false
     public var isHoldingPage: Bool { heldPageSize != nil }
+    /// The page frame in this pane's coordinates once any Split motion ends. While the
+    /// pane holds its old, larger page, overlays anchored to the page (Find) fit this frame.
+    public var settledPageFrame: CGRect { CGRect(origin: .zero, size: libraryViewportSize(for: bounds.size)) }
     public var clipAnimationKeys: [String] { clip.layer?.animationKeys() ?? [] }
     init(tabID: ItemID) {
         self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
