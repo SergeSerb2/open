@@ -74,8 +74,6 @@ enum LibraryText {
     }
     static func layer() -> LibraryTextLayer {
         let layer = LibraryTextLayer(); layer.truncationMode = .end; layer.contentsScale = 2
-        // A narrower title (hover reveals the row buttons) must truncate again, not crop the old raster.
-        layer.needsDisplayOnBoundsChange = true
         layer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "string": NSNull()]
         return layer
     }
