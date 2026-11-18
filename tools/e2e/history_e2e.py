@@ -126,10 +126,9 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
             if abs(delta) > 30 or not same_side or abs(luma(globe) - luma(bg)) < 40: failures.append(rows[-1])
         return rows, failures, str(path)
     def appearance_row(mode):
+        # Switch while the list stays open, after its idle overscan pass has prepared the rows below.
+        app.call('library-performance', operation='scroll', row=0); time.sleep(1.5)
         app.call('appearance', name=mode)
-        lib(action='close'); wait_until(lambda: not lib()['open'], timeout=3, step=.05)
-        app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
-        app.call('library-performance', operation='scroll', row=0)
         rows, failures, top = globes('globe-' + mode)
         # Rows prepared in overscan before the switch must take the new tint when they scroll in.
         app.call('library-performance', operation='scroll', row=16)
