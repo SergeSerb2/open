@@ -1,8 +1,7 @@
 {
- "status": "adoption candidate (draft PR, lead GO required): frame-presentation seam, Chromium 0510; framework link unchanged (--lto-O0)",
- "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
- "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-official_minimal",
- "candidate_package_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/e3-presentation-20261117-seam_minimal",
+ "status": "adopted with #602: frame-presentation seam (Chromium 0510); framework link unchanged (--lto-O0)",
+ "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-591b21a6-official_minimal",
+ "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-591b21a6-official_minimal",
  "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",
  "framework_sha256": "591b21a6f2b6f53f2a99582385d1b8d8cf3615293ea8b2a1484e5f90363be868",
  "framework_uuid": "4C4C44DF-5555-3144-A1F7-40AE6E460D18",
@@ -65,5 +64,6 @@
    "reason": "before patch 0012"
   }
  ],
- "english_pak_sha256": "372eb8401de3b431f570f230af008ff8577244537d14979bf8e52e17eabd5cc4"
+ "english_pak_sha256": "372eb8401de3b431f570f230af008ff8577244537d14979bf8e52e17eabd5cc4",
+ "distribution_built": "2026-11-18 09:4x local: cef/tools/make_distrib.py with the engine-distrib --config release arguments (--ninja-build --arm64-build --minimal --no-symbols --no-docs --no-archive --release-build-dir=out/Release_Official_arm64), named with --distrib-subdir because the -official suffix name belongs to 61709cc0; 1046 files, 349264 KiB; engine-status --config release --strict 8/0/0"
 }
