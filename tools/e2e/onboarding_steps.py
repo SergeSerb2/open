@@ -201,7 +201,7 @@ def run(factory, results, tmp, h):
             and s.get('style',{}).get('colorCount')==1 and bool(s.get('style',{}).get('keyColor')), data, pending)
         gate('handoff_done', lambda s: not s['active'] and not s['dim']['exists'] and s['screen']=='done', final, handoff)
         results['steps_browser_key'] = dict(ok=any(w.get('key') for w in app.call('windows') if w.get('class')=='BrowserWindow'), load=os.getloadavg())
-        until(lambda: app.call('welcome')['playlist']=='stopped' and not app.call('welcome')['animating'], timeout=48)
+        until(lambda: (lambda w: w['playlist']=='stopped' and not w['animating'] and w['animationCount']==0)(app.call('welcome')), timeout=48)  # incl. the 0.28 s end fade
         stopped = app.call('welcome')
         gate('welcome_playlist_ends', lambda s: s.get('playedCards')==[1,2,3,4] and not s.get('animating')
             and s.get('animationCount')==0 and not s.get('pendingCompletion'), stopped, welcome)
