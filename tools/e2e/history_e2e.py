@@ -20,6 +20,7 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
     from library_overlay import capture_window
     from engine_e2e import read_image
     lib = lambda **kw: app.call('library', **kw)
+    frames = Path(os.environ.get('OPEN_E2E_HISTORY_FRAMES') or tmp); frames.mkdir(parents=True, exist_ok=True)
     tab = app.call('open', url=base + '/label-seed')['id']; loaded(tab, '/label-seed')
     paths = ['/label-%02d-a-long-history-title-that-is-much-wider-than-the-library-row' % i for i in range(30)]
     for path in paths:
@@ -31,7 +32,7 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
     def measure(name, hovered=None):
         time.sleep(.3)  # Past the 0.10 s section fade and the next display commit.
         state = lib(); window = app.call('window-state')['frame']
-        path = Path(tmp) / ('history-labels-' + name + '.png'); capture_window(state['window'], path)
+        path = frames / ('history-labels-' + name + '.png'); capture_window(state['window'], path)
         width, height, pixel = read_image(str(path)); scale = width / window[2]
         try: probe = {r['id']: r for r in lib(action='row-labels')['rows']}
         except RuntimeError as error: probe = {'error': str(error)}
@@ -98,17 +99,17 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
     def grab(name):
         time.sleep(.4)
         state = lib(); window = app.call('window-state')['frame']
-        path = Path(tmp) / ('history-' + name + '.png'); capture_window(state['window'], path)
+        path = frames / ('history-' + name + '.png'); capture_window(state['window'], path)
         width, _, pixel = read_image(str(path)); return state, window, width / window[2], pixel, path
-    def peak(pixel, scale, left, top, right, bottom):
-        """Background (most common color) and the pixel with the largest luma contrast to it."""
+    def background(pixel, scale, left, top, right, bottom):
+        """Per-channel median of an empty strip. The panel is a dithered gradient: a solid glyph
+        stroke can be the most common single color in a small box, so a mode is not the background."""
+        samples = [pixel(px, py) for py in range(int(top * scale), int(bottom * scale)) for px in range(int(left * scale), int(right * scale))]
+        return tuple(sorted(c[i] for c in samples)[len(samples) // 2] for i in range(3))
+    def peak(pixel, scale, left, top, right, bottom, bg):
+        """The pixel with the largest luma contrast to the background."""
         xs, ys = range(int(left * scale), int(right * scale)), range(int(top * scale), int(bottom * scale))
-        colors = {}
-        for py in ys:
-            for px in xs: c = pixel(px, py); colors[c] = colors.get(c, 0) + 1
-        bg = max(colors, key=colors.get)
-        best = max((pixel(px, py) for py in ys for px in xs), key=lambda c: abs(luma(c) - luma(bg)))
-        return bg, best
+        return max((pixel(px, py) for py in ys for px in xs), key=lambda c: abs(luma(c) - luma(bg)))
     def globes(name):
         """Placeholder globe vs the row's subtitle text: both are the Library's secondary tint (foreground at 0.68)."""
         state, window, scale, pixel, path = grab(name)
@@ -116,8 +117,9 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
         for row in state['rows']:
             x, y, w, h = row['frame']
             if row['kind'] != 'history' or y < 56 or y + h > window[3]: continue
-            bg, globe = peak(pixel, scale, x + 20, y + 18, x + 40, y + 38)
-            _, text = peak(pixel, scale, x + 52, y + 31, x + w - 20, y + 48)
+            bg = background(pixel, scale, x + 42, y + 6, x + 50, y + 50)  # Between the icon and the text.
+            globe = peak(pixel, scale, x + 20, y + 18, x + 40, y + 38, bg)
+            text = peak(pixel, scale, x + 52, y + 31, x + w - 20, y + 48, bg)
             delta = luma(globe) - luma(text)
             same_side = (luma(globe) - luma(bg)) * (luma(text) - luma(bg)) > 0
             rows.append(dict(id=row['id'][len(base):], background=bg, globePeak=globe, subtitlePeak=text, lumaDelta=round(delta, 1)))
@@ -141,7 +143,7 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
         app.call('appearance', name='system')
 
     # Filter chips show user text (Profile and Space names): a long name stays inside its chip and truncates.
-    long_name = 'History Profile With An Extremely Long Name That Never Fits Inside One Filter Chip'
+    long_name = 'History Profile With A Very Long Name That Cannot Fit One Chip'  # 62 characters; Profile names allow 64.
     app.call('space-create', profile=long_name, title='History Long Name')
     app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
     lib(action='filter', open=True)
@@ -150,10 +152,10 @@ def label_checks(app, check, tmp, base, loaded, wait_until):
     x, y, w, h = chip['frame'] if chip else (0, 0, 0, 0)
     panel = state['panelFrame']
     def ink_columns(left, right):
-        bg, _ = peak(pixel, scale, left, y + 4, right, y + h - 4)
+        bg = background(pixel, scale, left, y + 4, right, y + h - 4)
         return [px for px in range(int(left * scale), int(right * scale))
                 if any(max(abs(a - b) for a, b in zip(pixel(px, py), bg)) > 40 for py in range(int((y + 6) * scale), int((y + h - 6) * scale)))]
-    inside = ink_columns(x + 1, x + w - 1) if chip else []
+    inside = ink_columns(x + 3, x + w - 3) if chip else []  # Inside the 1.5 pt selected border.
     outside = (ink_columns(panel[0] + 112, x - 1) if x - 1 > panel[0] + 112 else []) + (ink_columns(x + w + 1, panel[0] + panel[2] - 2) if chip else [])
     span = (inside[-1] - inside[0]) / scale if inside else 0
     check('history_filter_chip_long_profile', bool(chip) and w <= 289 and span >= (w - 24) * .7 and not outside,
