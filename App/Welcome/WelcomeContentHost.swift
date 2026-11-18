@@ -14,7 +14,7 @@ final class WelcomeContentHost: WebContentHost {
   var canGoBack: Bool { false }
   var canGoForward: Bool { false }
   var isLoading: Bool { false }
-  var pageBackgroundColor: NSColor? { page.backgroundColor }
+  var pageBackgroundColor: NSColor? { page.backgroundTop }
   var onURLChange: ((URL) -> Void)?
   var onTitleChange: ((String) -> Void)?
   var onLoadingChange: ((Bool) -> Void)?
@@ -25,26 +25,20 @@ final class WelcomeContentHost: WebContentHost {
 
   init(tabID: ItemID, owner: EngineWebContentHostFactory) {
     self.tabID = tabID; self.owner = owner
-    page.styleProvider = { [weak owner] in
-      guard let owner, let space = owner.space(for: tabID) else { return nil }
-      guard space.theme.style != nil || space.theme.importedArcThemeJSON != nil else { return nil }
-      return owner.controller?.context.style(for: space)
-    }
-    page.themeProvider = { [weak owner] in owner?.space(for: tabID)?.theme }
     page.openShortcuts = { [weak owner] in owner?.app.performCommand("keyboard-shortcuts-edu") }
-    page.openSettings = { [weak owner] in owner?.app.settingsPresenter.show(pane: .general) }
+    page.openHelp = { [weak owner] in owner?.app.performCommand("help-center") }
   }
   func load(_ url: URL) {
     guard !closed else { return }
     if WelcomeTab.matches(url) {
       onURLChange?(WelcomeTab.url); onTitleChange?(title); onFaviconChange?(WelcomeTab.faviconPNG)
-      page.updateColors(); onPageBackgroundChange?(pageBackgroundColor)
+      onPageBackgroundChange?(pageBackgroundColor)
     } else if !WelcomeTab.isInternal(url) {
       // load is a caller action, not an engine delegate. Replacement is safe here.
       owner?.leaveWelcome(tabID: tabID, for: url)
     }
   }
-  func reload() { page.replay(card: 0) }
+  func reload() { page.replayAll() }
   func stop() { page.stop() }
   func goBack() {}
   func goForward() {}

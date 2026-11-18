@@ -764,7 +764,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     treeChangeCount += 1
     for (id, host) in welcomeHosts {
       if model.tab(id: id) == nil { controller?.container.closeHost(for: id); host.close() }
-      else { host.page.updateColors() }
     }
     for (id, host) in noteHosts where model.tab(id: id).map({ NoteLink.id(from: $0.url) != host.noteID }) ?? true {
       controller?.container.closeHost(for: id); host.close()

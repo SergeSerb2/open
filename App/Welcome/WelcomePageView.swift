@@ -1,59 +1,48 @@
 import AppKit
 import QuartzCore
-import OpenDesign
 import OpenOnboarding
-import OpenModel
 
-enum WelcomeColors {
-  /// Match a white/black overlay in the content's encoded sRGB space. AppKit's
-  /// calibrated-color blend otherwise changes the requested contrast amount.
-  static func surface(_ background: NSColor, dark: Bool) -> NSColor {
-    guard let rgb = background.usingColorSpace(.sRGB) else { return background }
-    let fraction: CGFloat = dark ? 0.04 : 0.06, ink: CGFloat = dark ? 1 : 0
-    return NSColor(srgbRed: rgb.redComponent * (1 - fraction) + ink * fraction,
-      green: rgb.greenComponent * (1 - fraction) + ink * fraction,
-      blue: rgb.blueComponent * (1 - fraction) + ink * fraction, alpha: 1)
-  }
-}
-
+/// The basics page: heading, a four-step accordion and one clip panel, laid out
+/// and timed as measured on the reference page (docs/re/onboarding.md §6).
+/// All motion is Core Animation; layout runs only for size or step changes.
 @MainActor
 final class WelcomePageView: NSScrollView {
-  static let cardDurations = OnboardingMiniature.demoDurations
-  static let cardTextHeight: CGFloat = 88
-  static let copy: [(String, String)] = [
-    ("Open your first tab", "Click New Tab in the sidebar or press ⌘T, then type a site or a search."),
-    ("Pin what matters", "Drag a tab above the line to pin it. Today's tabs tidy themselves away."),
-    ("A Space for every part of life", "Spaces give you separate sidebars for work, projects, and home. Swipe with two fingers to switch."),
-    ("Two tabs side by side", "Drag a tab from the sidebar onto the page to make a Split View.")
+  static let steps: [WelcomeStepView.Copy] = [
+    .init(title: "Pin what matters", detail: "Drag a tab above the line to pin it. Pinned tabs stay put; today's tabs tidy themselves away.",
+      symbol: "pin", keys: []),
+    .init(title: "A Space for every part of life", detail: "Spaces give you separate sidebars for work, projects, and home. Click a Space or swipe to switch.",
+      symbol: "square.stack", keys: []),
+    .init(title: "Two tabs side by side", detail: "Drag a tab from the sidebar into the middle of the page to make a Split View.",
+      symbol: "rectangle.split.2x1", keys: []),
+    .init(title: "Open your first tab", detail: "Click New Tab in the sidebar, or press",
+      symbol: "plus", keys: ["⌘", "T"]),
   ]
-  var themeProvider: (() -> SpaceTheme?)?
-  var styleProvider: (() -> SpaceThemeStyle?)?
+  /// Reveal schedule after the page first shows (seconds), measured at 60 fps.
+  enum Reveal {
+    static let logo = 0.28, heading = 1.2, steps = 2.26, clip = 2.9, links = 3.85, fade = 0.28
+  }
+  static var cardDurations: [Double] { Array(repeating: WelcomeClips.duration, count: 4) }
+
   var openShortcuts: (() -> Void)?
-  var openSettings: (() -> Void)?
+  var openHelp: (() -> Void)?
   let canvas = WelcomeCanvas()
-  private let room = OnboardingRoomView(frame: .zero)
+  private let backdrop = WelcomeBackdropView()
+  private let mark = WelcomeMarkView()
   let heading = NSTextField(labelWithString: "You're all set.")
   let subheading = NSTextField(labelWithString: "Here are the basics.")
-  private(set) var cards: [WelcomeCardView] = []
-  private let shortcuts = WelcomeFooterButton(title: "Essential Shortcuts", target: nil, action: nil)
-  private let settings = WelcomeFooterButton(title: "Settings", target: nil, action: nil)
-  func footerLabelFrame(_ button: NSButton) -> NSRect {
-    (button as? WelcomeFooterButton)?.labelRect ?? button.bounds
-  }
-  var footerFrame: NSRect { shortcuts.frame.union(settings.frame) }
-  #if OPEN_AUTOMATION
-  var footerLinks: [NSButton] { [shortcuts, settings] }
-  #endif
+  private(set) var cards: [WelcomeStepView] = []
+  let clipPanel = WelcomeClipPanel()
+  private let shortcuts = WelcomeLinkButton(title: "Learn Essential Shortcuts", symbol: "keyboard")
+  private let help = WelcomeLinkButton(title: "Help & Resources", symbol: "questionmark.circle")
+  var footerLinks: [NSButton] { [shortcuts, help] }
+  var footerFrame: NSRect { shortcuts.frame.union(help.frame) }
+  func footerLabelFrame(_ button: NSButton) -> NSRect { (button as? WelcomeLinkButton)?.labelRect ?? button.bounds }
+  var backgroundTop: NSColor { WelcomeBackdropView.top }
+
   private var observers: [NSObjectProtocol] = []
-  private var appearanceObservation: NSKeyValueObservation?
-  private struct ColorInputs: Equatable {
-    let style: SpaceThemeStyle?
-    let system: ContentAppearance
-    let key: Bool
-  }
-  private var colorInputs: ColorInputs?
   private var completion: Timer?
-  var hasCompletion: Bool { completion != nil }
+  private var revealTimer: Timer?
+  var hasCompletion: Bool { completion != nil || revealTimer != nil }
   private var appearedAt: CFTimeInterval?
   private var playlistEndedAt: CFTimeInterval?
   var appearanceElapsed: Double { appearedAt.map { CACurrentMediaTime() - $0 } ?? 0 }
@@ -61,13 +50,18 @@ final class WelcomePageView: NSScrollView {
   private var started = false
   private var closed = false
   private(set) var visible = false
-  private(set) var activeCard: Int? { // zero based inside the view; automation is 1…4
-    didSet { for card in cards { card.isActive = card.index == activeCard } }
-  }
+  private(set) var revealed = false
+  private(set) var activeCard: Int? { didSet { if activeCard != oldValue { relayoutSteps(animated: activeCard != nil && oldValue != nil && !reduceMotion) } } }
   private(set) var playlistPlaying = false
+  /// A clip is playing (or about to show its first frame).
   private(set) var animating = false
   private(set) var playedCards: [Int] = []
   private(set) var completionCount = 0
+  private(set) var ended = false
+  /// Interrupted clip: where to resume when the page shows again.
+  private var paused: (index: Int, playlist: Bool, elapsed: Double)?
+  private var clipStartedAt: CFTimeInterval?
+  private var clipOffset: Double = 0
   var reduceMotion: Bool {
     (NSApp.delegate as? AppDelegate)?.options.resolvedReduceMotion
       ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -75,122 +69,139 @@ final class WelcomePageView: NSScrollView {
 
   init() {
     super.init(frame: .zero)
-    drawsBackground = true; hasVerticalScroller = true; autohidesScrollers = true
-    // The content pane already accounts for browser chrome. A second automatic
-    // titlebar inset offsets the whole page and consumes its bottom margin.
+    drawsBackground = true; backgroundColor = WelcomeBackdropView.top
+    hasVerticalScroller = true; autohidesScrollers = true
+    // The content pane already accounts for browser chrome.
     automaticallyAdjustsContentInsets = false; contentInsets = NSEdgeInsets()
     borderType = .noBorder; documentView = canvas
+    appearance = NSAppearance(named: .aqua)
     setAccessibilityLabel("Welcome to Open. Here are the basics.")
-    room.isWelcome = true; canvas.addSubview(room)
-    heading.font = .systemFont(ofSize: 40, weight: .semibold)
-    subheading.font = .systemFont(ofSize: 40, weight: .semibold)
-    canvas.addSubview(heading); canvas.addSubview(subheading)
-    for (i, copy) in Self.copy.enumerated() {
-      let card = WelcomeCardView(index: i, title: copy.0, detail: copy.1)
-      card.replay = { [weak self] in self?.replay(card: i) }
+    canvas.wantsLayer = true; canvas.layer?.masksToBounds = true
+    canvas.addSubview(backdrop); canvas.addSubview(mark)
+    for label in [heading, subheading] {
+      label.font = .systemFont(ofSize: 32, weight: .heavy)
+      label.textColor = WelcomeStyle.ink
+      label.wantsLayer = true
+      canvas.addSubview(label)
+    }
+    canvas.addSubview(clipPanel)
+    for (i, copy) in Self.steps.enumerated() {
+      let card = WelcomeStepView(index: i, copy: copy)
+      card.press = { [weak self] in self?.replay(card: i) }
       cards.append(card); canvas.addSubview(card)
     }
-    for (button, symbol) in [(shortcuts, "keyboard"), (settings, "gearshape")] {
-      button.isBordered = false; button.font = .systemFont(ofSize: 13, weight: .medium)
-      button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-      button.imagePosition = .imageLeading; button.contentTintColor = .linkColor
-      button.setAccessibilityLabel(button.title); canvas.addSubview(button)
-    }
+    clipPanel.replay = { [weak self] in self?.replayAll() }
+    for button in [shortcuts, help] { canvas.addSubview(button) }
     shortcuts.target = self; shortcuts.action = #selector(showShortcuts)
-    settings.target = self; settings.action = #selector(showSettings)
+    help.target = self; help.action = #selector(showHelp)
     for i in 0..<3 { cards[i].nextKeyView = cards[i + 1] }
-    cards[3].nextKeyView = shortcuts; shortcuts.nextKeyView = settings
+    cards[3].nextKeyView = clipPanel.replayAll; clipPanel.replayAll.nextKeyView = shortcuts; shortcuts.nextKeyView = help
     let center = NotificationCenter.default
-    for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
-      observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-        MainActor.assumeIsolated { self?.updateColors() }
-      })
-    }
-    appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
-      MainActor.assumeIsolated { self?.updateColors() }
-    }
     for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
-                 NSWindow.didDeminiaturizeNotification,
-                 NSApplication.didHideNotification, NSApplication.didUnhideNotification] {
+                 NSWindow.didDeminiaturizeNotification, NSApplication.didHideNotification, NSApplication.didUnhideNotification] {
       observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-        MainActor.assumeIsolated {
-          self?.syncVisibility()
-        }
+        MainActor.assumeIsolated { self?.syncVisibility() }
       })
     }
     observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
       object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated {
-        guard let self else { return }
-        if self.reduceMotion { self.stop(); self.cards.forEach { $0.illustration.finish() } }
-        self.updateColors()
+        guard let self, self.reduceMotion else { return }
+        self.finishReveal(); self.stop()
       } })
-    updateColors()
+    activeCard = 0
+    cards[0].setActive(true, animated: false)
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   isolated deinit {
-    completion?.invalidate()
+    completion?.invalidate(); revealTimer?.invalidate()
     for observer in observers {
       NotificationCenter.default.removeObserver(observer)
       NSWorkspace.shared.notificationCenter.removeObserver(observer)
     }
   }
-  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateColors(); syncVisibility() }
+  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); syncVisibility() }
   override func viewDidHide() { super.viewDidHide(); syncVisibility() }
   override func viewDidUnhide() { super.viewDidUnhide(); syncVisibility() }
-  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
+
+  // MARK: Layout
+
+  struct Metrics {
+    var column: CGRect = .zero, mark: CGRect = .zero, heading: CGRect = .zero, subheading: CGRect = .zero
+    var stepsTop: CGFloat = 0, clip: CGRect = .zero, clipShown: CGRect = .zero, document: CGSize = .zero
+  }
+  private(set) var metrics = Metrics()
+
+  func computeMetrics(width rawWidth: CGFloat, height: CGFloat) -> Metrics {
+    var m = Metrics()
+    let width = max(320, rawWidth)
+    let margin: CGFloat = 31
+    let columnWidth = min(336, width - margin * 2)
+    let clipTop = round(height * 0.196), clipBottom = round(height * 0.045)
+    let top = clipTop + 10
+    m.mark = CGRect(x: margin, y: top, width: 32, height: 47)
+    m.heading = CGRect(x: margin, y: top + 66, width: columnWidth + 40, height: 36)
+    m.subheading = CGRect(x: margin, y: top + 66 + 35, width: columnWidth + 40, height: 36)
+    m.stepsTop = top + 66 + 70 + 24
+    let tallest = (0..<4).map { cards[$0].expandedHeight(width: columnWidth) }.max() ?? 182
+    let stepsBottom = m.stepsTop + WelcomeStyle.collapsedHeight * 3 + WelcomeStyle.cardGap * 3 + tallest
+    m.column = CGRect(x: margin, y: top, width: columnWidth, height: stepsBottom - top)
+    let clipX = margin + columnWidth + 32
+    if width - clipX >= 260 {
+      let clipHeight = max(240, height - clipTop - clipBottom)
+      m.clip = CGRect(x: clipX, y: clipTop, width: round(clipHeight * 1.6), height: clipHeight)
+      m.document = CGSize(width: width, height: max(height, stepsBottom + 32, m.clip.maxY + clipBottom))
+    } else {
+      let clipWidth = width - margin * 2
+      m.clip = CGRect(x: margin, y: stepsBottom + 24, width: clipWidth, height: round(clipWidth / 1.6))
+      m.document = CGSize(width: width, height: max(height, m.clip.maxY + 32))
+    }
+    m.clipShown = CGRect(x: 0, y: 0, width: min(m.clip.width, m.document.width - m.clip.minX),
+      height: min(m.clip.height, m.document.height - m.clip.minY))
+    return m
+  }
+
   override func layout() {
     super.layout()
-    let width = max(200, contentSize.width), height = contentSize.height
-    let column = min(1100, max(180, width - 96)), x = (width-column)/2
-    let top: CGFloat = 48, gridTop: CGFloat = 170, gap: CGFloat = 16
-    let cardWidth = (column-gap)/2
-    let imageHeight = max(96, min(230, (height-gridTop-84-gap)/2-Self.cardTextHeight))
-    let cardHeight = imageHeight+Self.cardTextHeight
-    let footerTop = gridTop+cardHeight*2+gap+22
-    canvas.frame = CGRect(x: 0, y: 0, width: width, height: max(height, footerTop+62))
-    room.frame = canvas.bounds
-    heading.frame = CGRect(x: x, y: top, width: column-120, height: 44)
-    subheading.frame = CGRect(x: x, y: top+43, width: column-120, height: 44)
-    for label in [heading,subheading] {
-      label.attributedStringValue = NSAttributedString(string: label.stringValue, attributes: [.font: label.font!, .kern: -1.2,
-        .foregroundColor: label.textColor ?? .white])
-    }
-    for i in 0..<4 { cards[i].frame = CGRect(x: x+CGFloat(i%2)*(cardWidth+gap),
-      y: gridTop+CGFloat(i/2)*(cardHeight+gap), width: cardWidth, height: cardHeight) }
-    shortcuts.frame = CGRect(x: x, y: footerTop, width: 184, height: 32)
-    settings.frame = CGRect(x: x+194, y: footerTop, width: 112, height: 32)
-    updateColors(); syncVisibility()
+    let m = computeMetrics(width: contentSize.width, height: contentSize.height)
+    metrics = m
+    canvas.frame = CGRect(origin: .zero, size: m.document)
+    backdrop.frame = canvas.bounds
+    mark.frame = m.mark
+    heading.frame = m.heading; subheading.frame = m.subheading
+    clipPanel.shownRect = m.clipShown
+    clipPanel.frame = m.clip
+    let linkTop: CGFloat = 23.5
+    let helpSize = help.intrinsicContentSize, shortcutSize = shortcuts.intrinsicContentSize
+    help.frame = CGRect(x: m.document.width - 23.5 - helpSize.width, y: linkTop, width: helpSize.width, height: 42)
+    shortcuts.frame = CGRect(x: help.frame.minX - 9 - shortcutSize.width, y: linkTop, width: shortcutSize.width, height: 42)
+    relayoutSteps(animated: false)
+    syncVisibility()
   }
-  func updateColors() {
-    // A Space can override the window appearance. The system fallback must
-    // come from the app, not from that already-overridden window/view.
-    let system: ContentAppearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
-    let style = styleProvider?()
-    let inputs = ColorInputs(style: style, system: system, key: window?.isKeyWindow == true)
-    guard inputs != colorInputs else { return }; colorInputs = inputs
-    // Welcome is a view into the dark room in either system appearance.
-    let dark = true
-    backgroundColor = OnboardingTokens.Room.far
-    let primary = OnboardingTokens.Room.white
-    let secondary = primary.withAlphaComponent(0.60)
-    let header = WelcomeTextColors.pair(primary: primary, secondary: primary.withAlphaComponent(0.52), surface: OnboardingTokens.Room.lit)
-    heading.textColor = header.primary; subheading.textColor = header.secondary
-    shortcuts.contentTintColor = primary.withAlphaComponent(0.9); settings.contentTintColor = primary.withAlphaComponent(0.9)
-    let fill = WelcomeTextColors.opaque(primary.withAlphaComponent(0.055), over: backgroundColor)
-    let cardText = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: OnboardingTokens.Room.lit)
-    let tint: NSColor
-    if let style {
-      let field = ThemeField.Evaluator(style: style, windowSize: CGSize(width: 1000, height: 1000), isActive: true)
-      let (red, green, blue) = field.color(u: 0.12, v: 0.5)
-      tint = NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
-    } else { tint = OnboardingTokens.Room.space }
-    room.tint = tint
-    for card in cards { card.illustration.applyTheme(themeProvider?(),dark: style?.resolvedAppearance(system: system) == .dark) }
+
+  /// Step frames for the current active step. Animated changes run as one
+  /// spring per moved step on its layer; AppKit sees only the final frames.
+  private func relayoutSteps(animated: Bool) {
+    guard !cards.isEmpty, metrics.column.width > 0 else { return }
+    var y = metrics.stepsTop
     for card in cards {
-      card.apply(fill: fill, primary: cardText.primary, secondary: cardText.secondary,
-        background: backgroundColor, sidebarTint: tint, dark: dark)
+      let height = card.index == activeCard ? card.expandedHeight(width: metrics.column.width) : WelcomeStyle.collapsedHeight
+      let target = CGRect(x: metrics.column.minX, y: y, width: metrics.column.width, height: height)
+      if animated, let layer = card.layer, card.frame != target {
+        let fromPosition = layer.presentation()?.position ?? layer.position
+        let fromBounds = layer.presentation()?.bounds ?? layer.bounds
+        card.frame = target
+        card.layoutSubtreeIfNeeded()
+        let position = WelcomeStyle.spring("position"); position.fromValue = NSValue(point: fromPosition); position.toValue = NSValue(point: layer.position)
+        let bounds = WelcomeStyle.spring("bounds"); bounds.fromValue = NSValue(rect: fromBounds); bounds.toValue = NSValue(rect: layer.bounds)
+        layer.add(position, forKey: "step-position"); layer.add(bounds, forKey: "step-bounds")
+      } else {
+        card.frame = target
+      }
+      y += height + WelcomeStyle.cardGap
     }
   }
+
+  // MARK: Visibility
 
   func syncVisibility() {
     let shown = !closed && window?.isVisible == true && window?.isMiniaturized == false
@@ -199,162 +210,264 @@ final class WelcomePageView: NSScrollView {
   }
   private func setVisible(_ shown: Bool) {
     guard shown != visible else { return }; visible = shown
-    if !shown { cards.forEach { $0.resetHover() }; stop(); return }
-    guard !started else { return }
-    started = true; appearedAt = CACurrentMediaTime()
-    if reduceMotion { playlistEndedAt = appearedAt; cards.forEach { $0.illustration.finish() }; return }
-    play(0, playlist: true)
+    if !shown { cards.forEach { $0.resetHover() }; pause(); return }
+    if !started {
+      started = true; appearedAt = CACurrentMediaTime()
+      if reduceMotion { finishReveal(); clipPanel.showPoster(0); playlistEndedAt = appearedAt; return }
+      startReveal(); return
+    }
+    resume()
   }
-  func replay(card index: Int) {
-    guard (0..<4).contains(index), visible, !closed else { return }
-    if playlistPlaying, playlistEndedAt == nil { playlistEndedAt = CACurrentMediaTime() }
-    if reduceMotion { halt(); activeCard = index; cards[index].illustration.finish(); return }
-    play(index, playlist: false)
+
+  // MARK: Reveal
+
+  private var revealLayers: [(CALayer, Double)] {
+    var layers: [(CALayer, Double)] = []
+    if let l = mark.layer { layers.append((l, Reveal.logo)) }
+    for label in [heading, subheading] { if let l = label.layer { layers.append((l, Reveal.heading)) } }
+    for card in cards { if let l = card.layer { layers.append((l, Reveal.steps)) } }
+    if let l = clipPanel.layer { layers.append((l, Reveal.clip)) }
+    for button in [shortcuts, help] { if let l = button.layer { layers.append((l, Reveal.links)) } }
+    return layers
   }
-  private func play(_ index: Int, playlist: Bool) {
-    halt(); activeCard = index; playlistPlaying = playlist; animating = true
-    playedCards.append(index + 1); if playedCards.count > 32 { playedCards.removeFirst() }
-    cards[index].illustration.play(duration: Self.cardDurations[index])
-    completion = Timer.scheduledTimer(withTimeInterval: Self.cardDurations[index], repeats: false) { [weak self] _ in
+  private func startReveal() {
+    layoutSubtreeIfNeeded()
+    let now = CACurrentMediaTime()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    for (layer, delay) in revealLayers {
+      let fade = CABasicAnimation(keyPath: "opacity")
+      fade.fromValue = 0; fade.toValue = 1; fade.duration = Reveal.fade
+      fade.beginTime = layer.convertTime(now, from: nil) + delay
+      fade.fillMode = .backwards; fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      layer.add(fade, forKey: "reveal")
+    }
+    CATransaction.commit()
+    // Prepare the first clip under the panel's fade; it starts with the panel.
+    clipPanel.play(0, crossfade: false, autostart: false) {}
+    playlistPlaying = true
+    revealTimer = Timer.scheduledTimer(withTimeInterval: Reveal.clip, repeats: false) { [weak self] _ in
       MainActor.assumeIsolated {
-        guard let self, self.visible, self.animating, self.activeCard == index else { return }
-        self.completion = nil; self.completionCount += 1
-        self.cards[index].illustration.finish(); self.animating = false; self.playlistPlaying = false
-        if playlist, index < 3 { self.play(index + 1, playlist: true) }
-        else if playlist { self.playlistEndedAt = CACurrentMediaTime() }
+        guard let self else { return }
+        self.revealTimer = nil
+        self.revealed = true
+        guard self.visible, self.playlistPlaying else { return }
+        self.play(0, playlist: true, crossfade: false)
       }
     }
   }
-  private func halt() {
-    completion?.invalidate(); completion = nil
-    for card in cards { card.illustration.freeze() }
-    animating = false; playlistPlaying = false
+  private func finishReveal() {
+    revealTimer?.invalidate(); revealTimer = nil
+    revealed = true
+    for (layer, _) in revealLayers { layer.removeAnimation(forKey: "reveal") }
   }
+  private var revealAnimationCount: Int { revealLayers.filter { $0.0.animation(forKey: "reveal") != nil }.count }
+
+  // MARK: Playlist
+
+  func replay(card index: Int) {
+    guard (0..<4).contains(index), visible, !closed else { return }
+    if playlistPlaying, playlistEndedAt == nil { playlistEndedAt = CACurrentMediaTime() }
+    finishReveal()
+    play(index, playlist: false, crossfade: true)
+  }
+  func replayAll() {
+    guard visible, !closed else { return }
+    finishReveal()
+    playlistEndedAt = nil; appearedAt = CACurrentMediaTime()
+    play(0, playlist: true, crossfade: true)
+  }
+
+  private func play(_ index: Int, playlist: Bool, crossfade: Bool, from offset: Double = 0) {
+    halt(release: false)
+    ended = false
+    let animate = !reduceMotion
+    if activeCard != index {
+      cards.forEach { $0.setActive($0.index == index, animated: animate) }
+      activeCard = index
+    }
+    playlistPlaying = playlist; animating = true; paused = nil
+    if offset == 0 { playedCards.append(index + 1); if playedCards.count > 32 { playedCards.removeFirst() } }
+    let remaining = max(0.1, WelcomeClips.duration - offset)
+    clipPanel.play(index, crossfade: crossfade && animate, autostart: true, from: offset) { [weak self] in
+      guard let self, self.animating, self.activeCard == index else { return }
+      self.clipStartedAt = CACurrentMediaTime(); self.clipOffset = offset
+      self.cards[index].startProgress(duration: WelcomeClips.duration, from: offset)
+      self.completion = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
+        MainActor.assumeIsolated { self?.clipFinished(index) }
+      }
+    }
+  }
+
+  private func clipFinished(_ index: Int) {
+    guard visible, animating, activeCard == index else { return }
+    completion = nil; completionCount += 1; animating = false
+    cards[index].finishProgress()
+    if playlistPlaying, index < 3 {
+      // The reference holds the last frame for the gap, then moves on.
+      clipPanel.stop(release: false)
+      completion = Timer.scheduledTimer(withTimeInterval: WelcomeClips.gap, repeats: false) { [weak self] _ in
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          self.completion = nil
+          guard self.visible, self.playlistPlaying else { return }
+          self.play(index + 1, playlist: true, crossfade: false)
+        }
+      }
+      return
+    }
+    if playlistPlaying { playlistEndedAt = CACurrentMediaTime() }
+    playlistPlaying = false; ended = true
+    clipPanel.setEnd(true, animated: !reduceMotion)
+  }
+
+  /// Stop timers and the clip, keep the active step.
+  private func halt(release: Bool) {
+    completion?.invalidate(); completion = nil
+    for card in cards { card.stopProgress(hide: true) }
+    clipPanel.stop(release: release)
+    animating = false
+  }
+
+  /// Hidden or covered: pause where we are and release the decoder.
+  private func pause() {
+    if revealTimer != nil || revealAnimationCount > 0 {
+      finishReveal()
+      if playlistPlaying { paused = (0, true, 0) }
+      clipPanel.stop(release: true)
+      return
+    }
+    if animating, let index = activeCard {
+      let elapsed = clipOffset + (clipStartedAt.map { CACurrentMediaTime() - $0 } ?? 0)
+      paused = (index, playlistPlaying, min(elapsed, WelcomeClips.duration - 0.05))
+      completion?.invalidate(); completion = nil
+      cards[index].stopProgress(hide: false)
+      clipPanel.stop(release: true)
+      animating = false
+    } else if completion != nil, playlistPlaying, let index = activeCard {
+      // In the gap between two clips: resume with the next one.
+      completion?.invalidate(); completion = nil
+      paused = (min(3, index + 1), true, 0)
+      clipPanel.stop(release: true)
+    } else {
+      clipPanel.stop(release: true)
+    }
+  }
+  private func resume() {
+    guard let state = paused, !reduceMotion else { return }
+    paused = nil
+    play(state.index, playlist: state.playlist, crossfade: false, from: state.elapsed)
+  }
+
   func stop() {
     if playlistPlaying, playlistEndedAt == nil { playlistEndedAt = CACurrentMediaTime() }
-    halt()
+    paused = nil; playlistPlaying = false
+    halt(release: true)
   }
-  func close() { closed = true; visible = false; stop() }
+  func close() { closed = true; visible = false; finishReveal(); stop() }
+  var isPaused: Bool { paused != nil }
+
+  // MARK: Links
+
   func activateFooter(_ link: String) {
-    if link == "shortcuts" { shortcuts.performClick(nil) }
-    else if link == "settings" { settings.performClick(nil) }
+    if link == "shortcuts" { shortcuts.performClick(nil) } else if link == "help" { help.performClick(nil) }
   }
-  func reveal(card: Int) {
-    let rect = card == 3 ? cards[card].frame.union(settings.frame) : cards[card].frame
-    _ = canvas.scrollToVisible(rect)
-  }
+  func reveal(card: Int) { _ = canvas.scrollToVisible(cards[card].frame) }
   @objc private func showShortcuts() { openShortcuts?() }
-  @objc private func showSettings() { openSettings?() }
+  @objc private func showHelp() { openHelp?() }
+
+  /// Automation: every CA animation the page holds.
+  var animationCount: Int {
+    revealAnimationCount + clipPanel.animationCount
+      + cards.reduce(0) { $0 + ($1.layer?.animationKeys()?.count ?? 0) + ($1.progressAnimating ? 1 : 0) }
+  }
 }
 
 @MainActor
 final class WelcomeCanvas: NSView { override var isFlipped: Bool { true } }
 
+/// Our own light backdrop: a lavender wash with a cool and a warm glow.
+/// Static layers; nothing redraws after layout.
 @MainActor
-final class WelcomeCardView: NSControl {
-  let index: Int
-  let illustration: WelcomeIllustrationView
-  let heading: NSTextField
-  let detail: NSTextField
-  var replay: (() -> Void)?
-  private var tracking: NSTrackingArea?
-  /// Automation: the hover area this card installed, matched by identity.
-  /// AppKit may add its own tooltip area to the same view.
-  var ownTrackingAreaCount: Int {
-    guard let tracking else { return 0 }
-    return trackingAreas.filter { area in area === tracking }.count
-  }
-  var isActive = false { didSet { updateBorder() } }
-  private var keyboardFocused = false
-  private func updateBorder() {
-    layer?.borderWidth = 1
-    layer?.borderColor = (isHovered || keyboardFocused ? OnboardingTokens.Room.sunMiddle.withAlphaComponent(0.6):NSColor.white.withAlphaComponent(0.09)).cgColor
-  }
-  private(set) var isHovered = false
-  init(index: Int, title: String, detail: String) {
-    self.index = index; illustration = WelcomeIllustrationView(kind: index)
-    heading = NSTextField(labelWithString: title); self.detail = NSTextField(wrappingLabelWithString: detail)
-    super.init(frame: .zero); wantsLayer = true; layer?.cornerRadius = 16; layer?.masksToBounds = true
-    heading.font = .systemFont(ofSize: 15, weight: .semibold); self.detail.font = .systemFont(ofSize: 12.5)
-    addSubview(illustration); addSubview(heading); addSubview(self.detail); updateBorder()
-    setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel("\(title). \(detail)")
-    setAccessibilityChildren([])
-    setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Replay", target: self, selector: #selector(accessibilityPerformPress))])
-    toolTip = "Replay \(title)"
-    // One hover area for the card's life. inVisibleRect follows bounds, so it
-    // never needs replacing (a replaced area synthesizes a new entered event
-    // beneath a stationary pointer and restarts the demo). Installing it here,
-    // not in updateTrackingAreas, guarantees it exists even when AppKit never
-    // calls updateTrackingAreas for this view.
-    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
-    addTrackingArea(area); tracking = area
+final class WelcomeBackdropView: NSView {
+  static let top = WelcomeStyle.rgb(0xE6E5F8)
+  private let base = CAGradientLayer()
+  private let cool = CAGradientLayer()
+  private let warm = CAGradientLayer()
+  private let haze = CAGradientLayer()
+  override init(frame: NSRect) {
+    super.init(frame: frame); wantsLayer = true
+    base.colors = [Self.top.cgColor, WelcomeStyle.rgb(0xDCDFF4).cgColor]
+    base.startPoint = CGPoint(x: 0.5, y: 0); base.endPoint = CGPoint(x: 0.5, y: 1)
+    for (layer, color, alpha) in [(cool, WelcomeStyle.rgb(0xB9DCEF), 0.75), (warm, WelcomeStyle.rgb(0xFFD7B5), 0.6),
+                                  (haze, WelcomeStyle.rgb(0x8E8FE8), 0.22)] as [(CAGradientLayer, NSColor, CGFloat)] {
+      layer.type = .radial
+      layer.colors = [color.withAlphaComponent(alpha).cgColor, color.withAlphaComponent(0).cgColor]
+      layer.startPoint = CGPoint(x: 0.5, y: 0.5); layer.endPoint = CGPoint(x: 1, y: 1)
+    }
+    for sub in [base, haze, cool, warm] { layer?.addSublayer(sub) }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   override var isFlipped: Bool { true }
-  override var acceptsFirstResponder: Bool { true }
-  override var canBecomeKeyView: Bool { true }
-  override var focusRingType: NSFocusRingType { get { .exterior } set {} }
-  override var focusRingMaskBounds: NSRect { bounds }
-  override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill() }
-  override func updateTrackingAreas() {
-    super.updateTrackingAreas()
-    // Restore the single hover area only if something removed it.
-    if let tracking, !trackingAreas.contains(where: { $0 === tracking }) { addTrackingArea(tracking) }
-  }
-  func resetHover() { isHovered = false; updateBorder() }
-  override func viewDidHide() { super.viewDidHide(); resetHover() }
-  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { resetHover() } }
-  override func mouseEntered(with event: NSEvent) {
-    guard !isHovered else { return }
-    isHovered = true; updateBorder(); replay?()
-  }
-  override func mouseExited(with event: NSEvent) { resetHover() }
-  override func becomeFirstResponder() -> Bool { keyboardFocused = true; updateBorder(); return true }
-  override func resignFirstResponder() -> Bool { keyboardFocused = false; updateBorder(); return true }
-  override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); updateBorder(); replay?() }
-  override func keyDown(with event: NSEvent) {
-    if event.keyCode == 36 || event.keyCode == 49 { replay?() } else { super.keyDown(with: event) }
-  }
-  override func accessibilityPerformPress() -> Bool { replay?(); return true }
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
   override func layout() {
-    super.layout(); let imageHeight = max(0, bounds.height - WelcomePageView.cardTextHeight)
-    illustration.frame = CGRect(x: 12,y: 12,width: max(0,bounds.width-24),height: max(0,imageHeight-12))
-    illustration.layer?.cornerRadius = 8
-    heading.frame = CGRect(x: 18, y: imageHeight + 12, width: max(0, bounds.width - 36), height: 19)
-    detail.frame = CGRect(x: 18, y: imageHeight + 34, width: max(0, bounds.width - 36), height: 48)
-  }
-  func apply(fill: NSColor, primary: NSColor, secondary: NSColor,
-    background: NSColor, sidebarTint: NSColor, dark: Bool) {
-    layer?.backgroundColor = fill.cgColor; heading.textColor = primary; detail.textColor = secondary
-    illustration.apply(background: background, sidebarTint: sidebarTint, dark: dark)
+    super.layout()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    let b = bounds
+    base.frame = b
+    cool.frame = CGRect(x: -b.width * 0.25, y: b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
+    warm.frame = CGRect(x: b.width * 0.45, y: b.height * 0.55, width: b.width * 0.9, height: b.height * 0.8)
+    haze.frame = CGRect(x: b.width * 0.35, y: -b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
+    CATransaction.commit()
   }
 }
 
-/// Native controls with explicit room surfaces, including an inactive-window ink.
-@MainActor private final class WelcomeFooterButton: NSButton {
+/// Open's doorway mark, drawn once at the backing scale.
+@MainActor
+final class WelcomeMarkView: NSView {
+  override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay; setAccessibilityElement(false) }
+  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+  override var isFlipped: Bool { true }
+  override func draw(_ dirtyRect: NSRect) { OnboardingBrandMark.draw(in: bounds.insetBy(dx: 1, dy: 1), flipped: true) }
+}
+
+/// Top-right link: a frosted white button with a symbol and a label.
+@MainActor
+final class WelcomeLinkButton: NSButton {
   private var hovered = false
-  override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
-  required init?(coder: NSCoder) { nil }
+  private let symbol: String
+  private let labelFont = NSFont.systemFont(ofSize: 15, weight: .medium)
+  init(title: String, symbol: String) {
+    self.symbol = symbol
+    super.init(frame: .zero)
+    self.title = title; isBordered = false; wantsLayer = true
+    setAccessibilityLabel(title)
+  }
+  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+  override var isFlipped: Bool { true }
+  override var intrinsicContentSize: NSSize {
+    let width = (title as NSString).size(withAttributes: [.font: labelFont]).width
+    return NSSize(width: ceil(width) + 26 + 20 + 10 + 24, height: 42)
+  }
   override func updateTrackingAreas() {
     super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea)
-    addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect], owner: self))
+    addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
   }
   override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
   override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
   var labelRect: CGRect {
-    let font = font ?? .systemFont(ofSize: 13,weight: .medium)
-    let size = (title as NSString).size(withAttributes: [.font:font])
-    return CGRect(x: 37,y: (bounds.height-size.height)/2,width: min(size.width,bounds.width-51),height: size.height)
+    let size = (title as NSString).size(withAttributes: [.font: labelFont])
+    return CGRect(x: 26 + 20 + 10, y: (bounds.height - size.height) / 2, width: min(size.width, bounds.width - 66), height: size.height)
   }
   override func draw(_ dirtyRect: NSRect) {
-    OnboardingTokens.Room.white.withAlphaComponent(hovered ? 0.14:0.08).setFill()
-    let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 10,yRadius: 10); path.fill()
-    OnboardingTokens.Room.white.withAlphaComponent(0.1).setStroke(); path.lineWidth = 1; path.stroke()
-    let ink = OnboardingTokens.Room.white.withAlphaComponent(0.9)
-    let symbol = image?.withSymbolConfiguration(.init(pointSize: 14,weight: .medium))?.withSymbolConfiguration(.init(paletteColors: [ink]))
-    symbol?.draw(in: CGRect(x: 14,y: (bounds.height-15)/2,width: 15,height: 15),from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: isFlipped,hints: nil)
-    (title as NSString).draw(in: labelRect,withAttributes: [.font:font ?? .systemFont(ofSize: 13,weight: .medium),.foregroundColor:ink])
-    if window?.firstResponder === self { ink.setStroke(); path.lineWidth = 2; path.stroke() }
-
+    let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 8, yRadius: 8)
+    NSColor.white.withAlphaComponent(hovered || isHighlighted ? 0.92 : 0.72).setFill(); path.fill()
+    WelcomeStyle.cardBorder.setStroke(); path.lineWidth = 1; path.stroke()
+    let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+      .withSymbolConfiguration(.init(pointSize: 15, weight: .medium))?
+      .withSymbolConfiguration(.init(paletteColors: [WelcomeStyle.ink]))
+    image?.draw(in: CGRect(x: 26, y: (bounds.height - 18) / 2, width: 20, height: 18), from: .zero, operation: .sourceOver,
+      fraction: 1, respectFlipped: true, hints: nil)
+    (title as NSString).draw(in: labelRect, withAttributes: [.font: labelFont, .foregroundColor: WelcomeStyle.ink])
+    if window?.firstResponder === self { NSColor.keyboardFocusIndicatorColor.setStroke(); path.lineWidth = 2; path.stroke() }
   }
 }

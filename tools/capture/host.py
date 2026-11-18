@@ -45,6 +45,9 @@ def remote_session(args):
     with tarfile.open(fileobj=archive, mode='w') as bundle:
         for name in ('session.py', 'host.py', 'series.py', 'native.swift', 'burst.swift', 'pixels.sh', 'decode.py', 'fixture.py'):
             bundle.add(HERE / name, arcname=name, recursive=False)
+        # session.py imports the shared loopback server. The stage directory is
+        # the script directory, so Python finds it there.
+        bundle.add(HERE.parent / 'e2e/loopback_http.py', arcname='loopback_http.py', recursive=False)
         for name, data in [('script.json', args.script.read_bytes()), ('lead-rulings.txt', rulings.encode())]:
             member = tarfile.TarInfo(name)
             member.size = len(data)
