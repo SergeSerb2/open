@@ -461,6 +461,14 @@ public final class SidebarView: NSView {
         return convert(page.outline.rect(ofRow: row), from: page.outline)
     }
 
+    /// The focused page's "New Tab" row, in this view.
+    public var newTabRowFrame: CGRect? {
+        guard let page = pager.currentPage else { return nil }
+        let row = page.outline.row(forItem: page.newTab)
+        guard row >= 0 else { return nil }
+        return convert(page.outline.rect(ofRow: row), from: page.outline)
+    }
+
     /// Actual current-row highlight state, without creating an offscreen row.
     public func isCurrentRow(nodeID: ItemID) -> Bool {
         guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return false }
@@ -595,6 +603,25 @@ extension SidebarView {
         row.layer?.shadowColor = NSColor.black.cgColor; row.layer?.shadowOpacity = 0.35
         row.layer?.shadowRadius = 12; row.layer?.shadowOffset = CGSize(width: 0,height: 6)
         row.layoutSubtreeIfNeeded(); return row
+    }
+
+    /// Product demonstration (automation recorder): the drag-source state of
+    /// a sidebar drag for `ids` on the focused page, or its end with nil.
+    public func demoDragChanged(_ ids: [ItemID]?) {
+        guard let page = pager.currentPage else { return }
+        if let ids { page.dragBegan(ids: Set(ids)) } else { page.dragEnded() }
+    }
+
+    /// The drag image AppKit builds for a tab row, and the row's frame in this
+    /// view, for the product demonstration recorder.
+    public func demoDragImage(tabID: ItemID, mouseDown event: NSEvent) -> (image: NSImage, rowFrame: CGRect)? {
+        guard let page = pager.currentPage, let tab = context.model.tab(id: tabID) else { return nil }
+        let row = page.outline.row(forItem: tab)
+        guard row >= 0 else { return nil }
+        var offset = NSPoint.zero
+        let image = page.outline.dragImageForRows(with: IndexSet(integer: row), tableColumns: page.outline.tableColumns,
+            event: event, offset: &offset)
+        return (image, convert(page.outline.rect(ofRow: row), from: page.outline))
     }
 
     /// Horizontal offset of the pager strip (model value). The strip's frame stays

@@ -129,6 +129,7 @@
     /// An action menu kept by `ext-menu keep`, for a later `stale` select.
     private var staleMenu: OEExtensionActionMenu?
     private var pointerRequestID = 0
+    var basicsDrag: BasicsDemoDrag?
     private var scrollCadence: AutomationScrollCadence?
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
@@ -329,6 +330,7 @@
       case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
         return try await mouse(a, nil)
       case "welcome": return try welcome(a)
+      case "basics-demo": return try basicsDemo(a)
       case "easel": return try easel(a)
       case "note": return try note(a)
       case "blank-window":
