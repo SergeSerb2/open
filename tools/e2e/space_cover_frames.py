@@ -225,7 +225,11 @@ def run(factory, results, tmp, api, prefix='W'):
                 # document's first presented frame can be its blank first
                 # paint: reported, allowed only after the load.
                 for v in verdicts:
-                    end = max(v['themeFieldFrames'] or [0])
+                    # The load ends with the last theme-field frame. With no
+                    # field (no cover), only frames just before the page shows
+                    # can be its first paint; earlier flat frames are empty.
+                    shown = v['destinationAt'] or 0
+                    end = max(v['themeFieldFrames']) if v['themeFieldFrames'] else shown - .15
                     v['blankFirstPaint'] = [t for t in v['emptyFrames'] if t > end]
                     v['emptyFrames'] = [t for t in v['emptyFrames'] if t <= end]
             ok = all(v['frames'] >= 3 and not v['emptyFrames'] and not v['restsAwayFromFinal'] for v in verdicts) \
