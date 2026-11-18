@@ -183,6 +183,9 @@ def build_profile(app, clip):
     ids = {}
     # Favorites: three of our own sites.
     app.call('appearance', name='light')
+    # Size the window first: every tab renders at the size the clip shows, as
+    # for a user who visited both Spaces (the resize case is welcome W40).
+    app.call('window-frame', frame=list(WINDOW))
     for name in ('plans-week', 'notes-reading', 'convert-scale'):
         tab = open_tab(URL[name]); app.call('favorite', tab=tab)
     # Pinned folders with a few saved pages.
@@ -220,7 +223,6 @@ def build_profile(app, clip):
         app.call('basics-demo', op='space-icon', space=work, emoji='🚀', title='Work')
         app.call('theme-set', space=work, style=WORK_THEME)
         app.call('space', space=personal)
-    app.call('window-frame', frame=list(WINDOW))
     time.sleep(1.0)
     return ids
 

@@ -102,7 +102,11 @@ def run(factory, results, tmp, api):
         return run_restore_contract(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_IDLE_ONLY') == '1':
         return run_idle_contract(factory, results, tmp, api)
+    if os.environ.get('OPEN_E2E_WELCOME_COVER_ONLY') == '1':
+        return space_cover_rows(factory, results, tmp, api)
     run_restore_contract(factory, results, tmp, api)
+    # The Spaces clip shows a Space switch: no empty page frame, no jump (W40).
+    space_cover_rows(factory, results, tmp, api)
     root = Path(api.ROOT)
     evidence = root / '.re/welcome-e2e'
     evidence.mkdir(parents=True, exist_ok=True)
@@ -361,6 +365,11 @@ def run(factory, results, tmp, api):
         for source in Path(tmp).glob('open.log*'):
             shutil.copyfile(source, evidence / source.name)
         (evidence / 'welcome-checks.json').write_text(json.dumps(dict(results), indent=2))
+
+
+def space_cover_rows(factory, results, tmp, api):
+    from space_cover_frames import run as cover_run
+    cover_run(factory, results, tmp, api, prefix='W40')
 
 
 def design_gates(state):
