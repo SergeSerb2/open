@@ -16,6 +16,25 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 @class OEContextMenu;
 @class OEFindResult;
 
+/// A successful screen presentation for one requested native-view viewport.
+/// presentedAt uses the engine's host monotonic clock, in seconds.
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEWebContentPresentedFrame : NSObject
+@property(nonatomic, readonly, copy) NSUUID* requestID;
+@property(nonatomic, readonly) NSSize pixelSize;
+@property(nonatomic, readonly) double backingScale;
+@property(nonatomic, readonly) NSTimeInterval presentedAt;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+/// One-shot request. Cancel is idempotent and never clears displayed pixels.
+/// A cancelled request completes with nil; its receipt can never arrive later.
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEWebContentFrameRequest : NSObject
+- (void)cancel;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
 /// Creation options for an OEWebContent.
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEWebContentConfiguration : NSObject <NSCopying>
@@ -249,6 +268,23 @@ typedef NS_ENUM(NSInteger, OEDevToolsPanel) {
 /// timers and painting.
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEWebContent : NSObject
+/// Whether the linked distribution exposes genuine presentation requests.
+/// Older recorded distributions keep this NO and return nil for requests.
+@property(nonatomic, readonly) BOOL supportsFramePresentation;
+/// Arms a genuine renderer-frame presentation for the attached current page.
+/// pixelSize is an integral device-pixel viewport. The call does not resize.
+/// Arm before the shell's one geometry write when retainingSurfaceForResize
+/// is YES. Navigation, detach, hide, renderer loss, size/scale changes after
+/// matching, close and supersession cancel without success. Static pages are
+/// asked to redraw. Completion is always deferred on main. Nil return means
+/// unavailable; otherwise completion runs once, with nil on cancellation.
+- (nullable OEWebContentFrameRequest*)requestFramePresentationForPixelSize:(NSSize)pixelSize
+    backingScale:(double)backingScale
+    requestID:(NSUUID*)requestID
+    retainingSurfaceForResize:(BOOL)retainingSurfaceForResize
+    completion:(void (^NS_SWIFT_UI_ACTOR)(OEWebContentPresentedFrame* _Nullable))completion
+    NS_SWIFT_NAME(requestFramePresentation(pixelSize:backingScale:requestID:retainingSurfaceForResize:completion:));
+
 
 - (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
                                   URL:(nullable NSURL*)URL
