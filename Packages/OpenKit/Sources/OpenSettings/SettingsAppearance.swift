@@ -22,9 +22,9 @@ struct SettingsAppearance: View {
         }
         OpenSettingsGroup("App icon") {
             HStack(spacing: 12) {
-                ForEach(Array(AppIconOption.allCases.enumerated()), id: \.element) { index, option in
+                ForEach(AppIconOption.allCases, id: \.self) { option in
                     Button { root.appIcon.select(option) } label: {
-                        OriginalOpenIcon(index: index).frame(width: 44, height: 44)
+                        AppIconPreview(option: option).frame(width: 44, height: 44)
                             .padding(3).overlay(RoundedRectangle(cornerRadius: 13).stroke(root.appIcon.selected == option.rawValue ? accent : Color.clear, lineWidth: 2))
                     }.buttonStyle(.plain).help(option.title).accessibilityLabel(option.title)
                         .accessibilityAddTraits(root.appIcon.selected == option.rawValue ? [.isSelected] : [])

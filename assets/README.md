@@ -1,13 +1,27 @@
-`icon.svg` is Open's own doorway-and-sun mark, based on the existing App Icon
-picker artwork. The transparent margin is part of the macOS bundle icon.
+`icon.svg` is Open's own doorway-and-sun mark, flat, for the README. The App
+icon is built from the same shapes as macOS 26 Icon Composer documents, so the
+system draws the squircle, rim, glass and shadow, as it does for Apple's icons.
 
-The ten macOS AppIcon PNGs (16–1024 pixels) and `App/Resources/Open.icns` are
-committed, so builds do not need a renderer or network access. Regenerate on macOS:
+- `App/Resources/AppIcon.icon` is the bundle icon: a vertical blue gradient
+  fill, a white doorway layer and an orange sun layer, with a navy fill and
+  white doorway in the Dark appearance. Xcode's `actool` compiles it into
+  `Assets.car` and `AppIcon.icns`; `project.yml` selects `AppIcon`.
+- `assets/app-icons/<option>.icon` are the five alternates of the App Icon
+  picker (Midnight, Daylight, Graphite, Spectrum, Notebook). Open sets them at
+  run time, and macOS shows a runtime icon as is, so each is committed as the
+  system's own 1024 px render, `App/Resources/AppIcons/<option>.png`.
+
+Edit the documents in Xcode's Icon Composer, or as JSON and SVG. Then
+regenerate the alternate renders (macOS 26+, Default icon style):
 
 ```sh
-npm install --prefix .re/icon-renderer --no-save --package-lock=false @resvg/resvg-js@2.6.2
-NODE_PATH="$PWD/.re/icon-renderer/node_modules" node tools/generate-app-icon.cjs
+tools/generate-app-icons.sh
 ```
 
-Xcode compiles the catalog into `Assets.car`. `project.yml` selects `AppIcon`
-for all configurations. The plist also declares the standalone ICNS fallback.
+Check every appearance of a document with Xcode's `ictool`, for example:
+
+```sh
+"$(xcode-select -p)/../Applications/Icon Composer.app/Contents/Executables/ictool" \
+  App/Resources/AppIcon.icon --export-image --output-file /tmp/dark.png \
+  --platform macOS --rendition Dark --width 512 --height 512 --scale 2
+```

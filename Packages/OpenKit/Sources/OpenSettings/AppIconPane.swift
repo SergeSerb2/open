@@ -18,48 +18,46 @@ public struct AppIconPane:View {
         ForEach(Array(AppIconOption.allCases.enumerated()),id:\.element) {index,option in
             SettingsRow(height:80,divider:index != AppIconOption.allCases.count-1) {Button {model.select(option)} label:{HStack(spacing:0) {
                 ZStack {Circle().stroke(Color.secondary,lineWidth:1).frame(width:20,height:20);if model.selected == option.rawValue {Circle().fill(Color(nsColor:SettingsTokens.link.nsColor)).frame(width:12,height:12)}}.frame(width:22).padding(.leading,6).padding(.trailing,25)
-                OriginalOpenIcon(index:index).frame(width:52,height:52).padding(.trailing,15)
+                AppIconPreview(option:option).frame(width:52,height:52).padding(.trailing,15)
                 VStack(alignment:.leading,spacing:4) {Text(option.title).font(.system(size:13,weight:.semibold));if model.selected == option.rawValue {Text("CURRENT ICON").font(.system(size:10,weight:.bold)).foregroundStyle(Color(nsColor:SettingsTokens.link.nsColor))}};Spacer()
             }}.buttonStyle(.plain).accessibilityLabel(option.title).accessibilityAddTraits(model.selected == option.rawValue ? .isSelected:[]) }
         }
     };SettingsError(text:model.errorText)}}
 }
-/// Reuses the picker artwork. Six cached 1024 px RGBA images: at most 24 MiB;
-/// the largest bitmap allocation is 1024 * 1024 * 4 = 4,194,304 bytes.
+/// Open's App Icon images. Each one is the system's own render of an Icon Composer document, so it has the
+/// macOS squircle, rim, glass and shadow, and the transparent margin of a bundle icon (body 824 of 1024 px,
+/// 100 px in). The default is the bundle icon (App/Resources/AppIcon.icon, compiled into Assets.car). Each
+/// alternate is assets/app-icons/<option>.icon, rendered by tools/generate-app-icons.sh into
+/// Contents/Resources/AppIcons/<option>.png. The Dock, Cmd-Tab and the Dock tile plug-in show a runtime icon as is.
 @MainActor public enum AppIconArtwork {
-    /// macOS draws an app icon's body 824 px wide, 100 px in from each edge of the 1024 px canvas: the system's
-    /// render of Calculator, Terminal and Open's own bundle icon all measure x/y 100..924. The Dock, Cmd-Tab and
-    /// the Dock tile plug-in show a runtime icon as is, so the image carries that transparent margin itself.
-    static let canvas: CGFloat = 1024, body: CGFloat = 824
+    /// The Dock draws a runtime image about 1.5 % smaller and lower than a bundle icon, so each alternate's body is
+    /// scaled 1.015 and lifted 5 px (of 1024) to match (tools/generate-app-icons.sh). The bundle icon's body is 824 px.
+    public static let alternateScale: CGFloat = 1.015, alternateLift: CGFloat = 5
+    /// The committed render of an alternate; nil for the bundle icon.
+    public static func url(for option: AppIconOption) -> URL? {
+        option == .openDefault ? nil : Bundle.main.url(forResource: option.rawValue, withExtension: "png", subdirectory: "AppIcons")
+    }
+    /// The six images stay cached once the picker or a selection asks for them (each alternate is 1024 px, 4 MiB decoded).
     private static var images: [AppIconOption: NSImage] = [:]
     public static func image(for option: AppIconOption) -> NSImage? {
         if let cached = images[option] { return cached }
-        guard let index = AppIconOption.allCases.firstIndex(of: option) else { return nil }
-        let renderer = ImageRenderer(content: OriginalOpenIcon(index: index).frame(width: body, height: body)
-            .frame(width: canvas, height: canvas).environment(\.colorScheme, .light))
-        renderer.scale = 1
-        guard let cgImage = renderer.cgImage, cgImage.width == 1024, cgImage.height == 1024 else { return nil }
-        let image = NSImage(size: .init(width: 1024, height: 1024))
-        image.addRepresentation(NSBitmapImageRep(cgImage: cgImage))
-        images[option] = image
+        // The bundle icon as the system draws it now (it follows the system's icon style).
+        let image = option == .openDefault ? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+            : url(for: option).flatMap(NSImage.init(contentsOf:))
+        if let image { images[option] = image }
         return image
     }
 }
-/// Original doorway and sun artwork, drawn in normalized coordinates. No reference art.
-struct OriginalOpenIcon:View {
-    let index:Int
-    private var colors:[Color] {switch index {
-    case 1:[Color(red:0.02,green:0.03,blue:0.10),Color(red:0.07,green:0.10,blue:0.19)]
-    case 2:[.white,Color(white:0.94)]
-    case 3:[Color(white:0.42),Color(white:0.24)]
-    case 4:[.pink,.orange,.yellow,.green,.blue,.purple]
-    case 5:[Color(red:1,green:0.98,blue:0.88),Color(red:0.96,green:0.94,blue:0.81)]
-    default:[Color(red:0.12,green:0.4,blue:0.95),Color(red:0.08,green:0.18,blue:0.6)]
-    }}
-    var body:some View {GeometryReader {g in ZStack {
-        RoundedRectangle(cornerRadius:11).fill(LinearGradient(colors:colors,startPoint:.topLeading,endPoint:.bottomTrailing))
-        if index == 5 {ForEach(0..<5) {line in Path {p in p.move(to:.init(x:0,y:CGFloat(line)*9+8));p.addLine(to:.init(x:52,y:CGFloat(line)*9+8))}.stroke(.blue.opacity(0.25),lineWidth:0.6)};Rectangle().fill(.red.opacity(0.4)).frame(width:1).offset(x:-17)}
-        RoundedRectangle(cornerRadius:12).trim(from:0.08,to:0.88).stroke(index == 2 || index == 5 ? Color.blue:Color.white,style:StrokeStyle(lineWidth:4,lineCap:.round)).frame(width:25,height:34)
-        Circle().fill(index == 1 ? Color.yellow:Color.orange).frame(width:8,height:8).offset(x:6,y:-7)
-    }.frame(width:52,height:52).clipShape(RoundedRectangle(cornerRadius:11)).overlay(RoundedRectangle(cornerRadius:11).stroke(.black.opacity(0.12))).scaleEffect(g.size.width/52,anchor:.topLeading)}}
+/// One App Icon at the given body (plate) size. The image's transparent margin and shadow extend past the frame.
+struct AppIconPreview: View {
+    let option: AppIconOption
+    var body: some View {
+        GeometryReader { g in
+            let alternate = option != .openDefault
+            let side = g.size.width * 1024 / (824 * (alternate ? AppIconArtwork.alternateScale : 1))
+            let lift = alternate ? side * AppIconArtwork.alternateLift / 1024 : 0
+            Group { if let image = AppIconArtwork.image(for: option) { Image(nsImage: image).resizable().interpolation(.high) } }
+                .frame(width: side, height: side).position(x: g.size.width / 2, y: g.size.height / 2 + lift)
+        }.accessibilityHidden(true)
+    }
 }

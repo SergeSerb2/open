@@ -7,8 +7,9 @@ import OpenSettings
   unowned let app: AppDelegate
   private var restoreScheduled = false
   private var selectionGeneration = 0
-  /// 2: the body sits on the macOS icon grid (824 of 1024 px). Version 1 files filled the whole canvas.
-  private static let artworkVersion = 2
+  /// 3: the system's render of each alternate's Icon Composer document (squircle, rim, glass, shadow).
+  /// 2: SwiftUI art on the macOS icon grid (824 of 1024 px). Version 1 files filled the whole canvas.
+  private static let artworkVersion = 3
   /// Read by `OpenDockTilePlugIn` (in the Dock's process) — keep the key in sync.
   static let dockTileFileKey = "open.appIcon.dockTileFile"
   private(set) var appliedID = "openDefault"
@@ -43,10 +44,10 @@ import OpenSettings
     let image: NSImage?
     if option == .openDefault { image = nil }
     else {
-      guard let rendered = AppIconArtwork.image(for: option),
-            let bitmap = rendered.representations.first as? NSBitmapImageRep,
-            let png = bitmap.representation(using: .png, properties: [:]) else {
-        errorText = "The application icon could not be rendered. Try selecting it again."; return errorText
+      // The committed system render (AppIconArtwork); the cache holds a byte copy for the Dock tile plug-in.
+      guard let source = AppIconArtwork.url(for: option), let png = try? Data(contentsOf: source),
+            let rendered = AppIconArtwork.image(for: option) else {
+        errorText = "The application icon could not be loaded. Try selecting it again."; return errorText
       }
       do {
         let file = cacheFile(option)
