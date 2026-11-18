@@ -90,8 +90,9 @@ final class LibraryClosePresentation {
         guard isCurrent else { onInvalidated?(); return }
         let target = targets[index]
         guard frame.generation == generation, frame.viewportSize == target.size,
-              frame.backingScale == target.scale, frame.presentedAt.isFinite,
-              frame.presentedAt > 0, frame.presentedAt <= CACurrentMediaTime() else { return }
+              frame.backingScale == target.scale,
+              WebContentPresentedFrame.isValidPresentationTime(
+                frame.presentedAt, armedAt: 0, now: CACurrentMediaTime()) else { return }
         frames[index] = frame
         deliverIfReady()
     }

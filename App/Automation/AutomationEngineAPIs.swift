@@ -16,6 +16,9 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
   var synchronousCallbacks = 0
   var handlesAuth = true
   private var nextRequest = 1
+  var frameRequests: [String: OEWebContentFrameRequest] = [:]
+  var frameReceipts: [[String: Any]] = []
+  var armingFrameRequest = false
 
   init(context: OEBrowserContext, other: OEBrowserContext) {
     super.init()
@@ -67,6 +70,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
     ["pages": pages.mapValues { page in
       ["id": page.identifier, "tabID": page.chromeTabIdentifier,
        "live": page.isLive, "loading": page.isLoading,
+       "framePresentation": page.supportsFramePresentation,
        "url": page.url?.absoluteString ?? "",
        "pinned": page.browser?.isPinned(page) ?? false,
        "view": String(describing: ObjectIdentifier(page.view)),
@@ -81,12 +85,14 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
       return ["id": id, "pending": pending, "origin": r.originURL?.absoluteString ?? "",
         "realm": r.realm, "scheme": r.scheme, "proxy": proxy,
         "host": r.host, "port": r.port] as [String: Any]
-    }, "received": received, "cancelled": cancelled,
+    }, "frameReceipts": frameReceipts, "received": received, "cancelled": cancelled,
      "synchronousCallbacks": synchronousCallbacks,
      "visibleWindows": NSApp.windows.filter(\.isVisible).count]
   }
 
   func close() {
+    for request in frameRequests.values { request.cancel() }
+    frameRequests.removeAll()
     for request in requests.values { request.cancel() }
     requests.removeAll()
     for page in pages.values { page.delegate = nil; page.close(); page.view.removeFromSuperview() }
@@ -126,6 +132,65 @@ extension AutomationController {
       guard let page = proof.pages[args["page"] as? String ?? ""],
         let js = args["js"] as? String, js.count <= 16384 else { throw Failure(message: "invalid eval") }
       return try await page.evaluateJavaScript(js) ?? NSNull()
+    case "presentation-request":
+      guard let page = proof.pages[args["page"] as? String ?? ""],
+        let width = args["pixelWidth"] as? Int,
+        let height = args["pixelHeight"] as? Int,
+        width > 0, height > 0, width <= 32768, height <= 32768,
+        proof.frameRequests.count < 64,
+        let requestID = UUID(uuidString: args["requestID"] as? String ?? ""),
+        let window = page.view.window else { throw Failure(message: "invalid presentation request") }
+      let id = requestID.uuidString
+      let scale = args["scale"] as? Double ?? Double(window.backingScaleFactor)
+      let started = ProcessInfo.processInfo.systemUptime
+      proof.armingFrameRequest = true
+      let request = page.requestFramePresentation(pixelSize: NSSize(width: CGFloat(width), height: CGFloat(height)),
+        backingScale: scale, requestID: requestID,
+        retainingSurfaceForResize: args["retain"] as? Bool ?? false) { [weak proof] receipt in
+          guard let proof else { return }
+          var row: [String: Any] = ["requestID": id, "success": receipt != nil,
+            "startedAt": started, "callbackAt": ProcessInfo.processInfo.systemUptime,
+            "synchronous": proof.armingFrameRequest]
+          if let receipt {
+            row["receiptID"] = receipt.requestID.uuidString
+            row["pixelSize"] = [receipt.pixelSize.width, receipt.pixelSize.height]
+            row["scale"] = receipt.backingScale
+            row["presentedAt"] = receipt.presentedAt
+          }
+          proof.frameReceipts.append(row)
+        }
+      proof.armingFrameRequest = false
+      if let request { proof.frameRequests[id] = request }
+      if let size = args["resizeTo"] as? [Double], size.count == 2,
+        size.allSatisfy({ $0 >= 100 && $0 <= 4096 }) {
+        window.setContentSize(NSSize(width: size[0], height: size[1]))
+      }
+      switch args["then"] as? String {
+      case "cancel": request?.cancel(); request?.cancel()
+      case "detach": page.view.removeFromSuperview()
+      case "navigate": page.load(URL(string: "about:blank")!)
+      case "same-document":
+        if let url = page.url,
+          var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+          components.fragment = "presentation-cancel"
+          if let destination = components.url { page.load(destination) }
+        }
+      case "close": page.close()
+      default: break
+      }
+      return ["accepted": request != nil, "requestID": id,
+        "requestedPixelSize": [width, height], "scale": scale,
+        "actualLogicalSize": [page.view.bounds.width, page.view.bounds.height]] as [String: Any]
+    case "presentation-cancel":
+      guard let id = args["requestID"] as? String else { throw Failure(message: "missing request") }
+      proof.frameRequests[id]?.cancel()
+    case "presentation-viewport":
+      guard let page = proof.pages[args["page"] as? String ?? ""],
+        let window = page.view.window else { throw Failure(message: "missing viewport") }
+      return ["logicalSize": [page.view.bounds.width, page.view.bounds.height],
+        "pixelSize": [round(page.view.bounds.width * window.backingScaleFactor),
+          round(page.view.bounds.height * window.backingScaleFactor)],
+        "scale": window.backingScaleFactor, "window": window.windowNumber] as [String: Any]
     case "transfer":
       guard let page = proof.pages[args["page"] as? String ?? ""],
         let source = proof.browsers[args["from"] as? String ?? ""],

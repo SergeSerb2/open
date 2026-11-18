@@ -41,8 +41,8 @@ extension OEWebContent {
         guard let receipt,
               receipt.requestID == requestID, receipt.pixelSize == pixels,
               receipt.backingScale == Double(backingScale),
-              receipt.presentedAt.isFinite, receipt.presentedAt >= armedAt,
-              receipt.presentedAt <= CACurrentMediaTime() else {
+              WebContentPresentedFrame.isValidPresentationTime(
+                receipt.presentedAt, armedAt: armedAt, now: CACurrentMediaTime()) else {
           retention?.deliver(.failure(.invalidated)); return
         }
         retention?.deliver(.success(.init(generation: generation, viewportSize: viewportSize,
