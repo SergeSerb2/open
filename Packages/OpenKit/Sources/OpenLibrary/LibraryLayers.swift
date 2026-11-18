@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 
 /// Counts raster work owned by the Library, not WindowServer or the engine.
 @MainActor
@@ -14,8 +15,42 @@ enum LibraryRaster {
     }
 }
 
+/// One line of Library text. Core Text draws and truncates the line here:
+/// CATextLayer's own `.end` truncation on macOS 27 draws only the top 3 points
+/// of a line wider than the layer, so long History titles showed as a thin
+/// slice and long subtitles disappeared. A line that fits draws byte-identical
+/// to CATextLayer (same baseline: top of bounds plus the line ascent).
 final class LibraryTextLayer: CATextLayer {
+    /// Scale and size of the last raster (automation evidence).
+    nonisolated(unsafe) private(set) var rasterScale: CGFloat = 0
+    nonisolated(unsafe) private(set) var rasterSize = CGSize.zero
+    override func draw(in context: CGContext) {
+        guard let text = string as? NSAttributedString else { super.draw(in:context); return }
+        guard text.length > 0, bounds.width > 0 else { return }
+        var line = CTLineCreateWithAttributedString(text)
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        var width = CGFloat(CTLineGetTypographicBounds(line,&ascent,&descent,&leading))
+        if width > bounds.width, truncationMode != .none {
+            let token = CTLineCreateWithAttributedString(NSAttributedString(string:"\u{2026}",attributes:text.attributes(at:0,effectiveRange:nil)))
+            let type: CTLineTruncationType = truncationMode == .start ? .start : truncationMode == .middle ? .middle : .end
+            if let truncated = CTLineCreateTruncatedLine(line,Double(bounds.width),type,token) {
+                line = truncated; width = CGFloat(CTLineGetTypographicBounds(line,nil,nil,nil))
+            }
+        }
+        let x: CGFloat = switch alignmentMode {
+        case .center: max(0,(bounds.width-width)/2)
+        case .right: max(0,bounds.width-width)
+        default: 0
+        }
+        context.saveGState()
+        if contentsAreFlipped() { context.translateBy(x:0,y:bounds.height); context.scaleBy(x:1,y:-1) }
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(x:x,y:bounds.height-ascent)
+        CTLineDraw(line,context)
+        context.restoreGState()
+    }
     override func display() {
+        rasterScale = contentsScale; rasterSize = bounds.size
         let area = bounds.width*bounds.height*contentsScale*contentsScale
         let start = ProcessInfo.processInfo.systemUptime
         super.display()
@@ -39,6 +74,8 @@ enum LibraryText {
     }
     static func layer() -> LibraryTextLayer {
         let layer = LibraryTextLayer(); layer.truncationMode = .end; layer.contentsScale = 2
+        // A narrower title (hover reveals the row buttons) must truncate again, not crop the old raster.
+        layer.needsDisplayOnBoundsChange = true
         layer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "string": NSNull()]
         return layer
     }

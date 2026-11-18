@@ -9,6 +9,87 @@ import time
 from loopback_http import LoopbackHTTPServer
 
 
+def label_checks(app, check, tmp, base, loaded, wait_until):
+    """HISTFIX (0.1.6): every History row draws its whole title and subtitle in every state.
+
+    CATextLayer's own end truncation drew only the top 3 points of a line wider than
+    the row, so long titles showed as a thin slice and long subtitles vanished. Pixels
+    come from the real window capture; label geometry comes from `library row-labels`.
+    """
+    from pathlib import Path
+    from library_overlay import capture_window
+    from engine_e2e import read_image
+    lib = lambda **kw: app.call('library', **kw)
+    tab = app.call('open', url=base + '/label-seed')['id']; loaded(tab, '/label-seed')
+    paths = ['/label-%02d-a-long-history-title-that-is-much-wider-than-the-library-row' % i for i in range(30)]
+    for path in paths:
+        app.call('navigate', tab=tab, url=base + path); loaded(tab, path)
+    app.call('menu-perform', id='view-history')
+    seeded = wait_until(lambda: sum(r['kind'] == 'history' for r in lib().get('rows', [])) >= len(paths) + 1, timeout=8, step=.05)
+    assert seeded, lib().get('rows', [])[:3]
+
+    def measure(name, hovered=None):
+        time.sleep(.3)  # Past the 0.10 s section fade and the next display commit.
+        state = lib(); window = app.call('window-state')['frame']
+        path = Path(tmp) / ('history-labels-' + name + '.png'); capture_window(state['window'], path)
+        width, height, pixel = read_image(str(path)); scale = width / window[2]
+        try: probe = {r['id']: r for r in lib(action='row-labels')['rows']}
+        except RuntimeError as error: probe = {'error': str(error)}
+        rows, failures = [], []
+        for row in state['rows']:
+            x, y, w, h = row['frame']
+            if row['kind'] != 'history' or y < 56 or y + h > window[3]: continue  # Fully visible rows only.
+            right = x + w - len(row['buttons']) * 34 - 8 if row['id'] == hovered else x + w - 20
+            def ink(top, bottom):
+                xs = range(int((x + 52) * scale), int(right * scale)); ys = range(int((y + top) * scale), int((y + bottom) * scale))
+                colors = {}
+                for py in ys:
+                    for px in xs[::3]: c = pixel(px, py); colors[c] = colors.get(c, 0) + 1
+                bg = max(colors, key=colors.get)
+                lines, left, end = 0, None, None
+                for py in ys:
+                    hits = [px for px in xs if max(abs(a - b) for a, b in zip(pixel(px, py), bg)) > 40]
+                    if hits:
+                        lines += 1; left = hits[0] if left is None else min(left, hits[0]); end = hits[-1] if end is None else max(end, hits[-1])
+                span = (end - left) / scale if left is not None else 0
+                return round(lines / scale, 1), round(span, 1)
+            title, subtitle = ink(11, 30), ink(31, 48)
+            labels = probe.get(row['id'])
+            geometry = 'probe ' + probe['error'] if 'error' in probe else 'not realized' if not labels else ''
+            if labels:
+                for key in ('title', 'subtitle'):
+                    layer = labels[key]; frame = layer['frame']
+                    if not (frame[0] >= x and frame[1] >= y and frame[0] + frame[2] <= x + w and frame[1] + frame[3] <= y + h
+                            and layer['rasterSize'] == frame[2:] and layer['rasterScale'] == layer['contentsScale'] == labels['windowScale']
+                            and not layer['needsDisplay'] and not layer['animations'] and not any(layer['presentationOffset'])
+                            and not layer['hidden'] and layer['opacity'] == 1):
+                        geometry += key + ' layer ' + repr(layer) + '; '
+                if labels['title']['frame'][1] + labels['title']['frame'][3] > labels['subtitle']['frame'][1]: geometry += 'title overlaps subtitle; '
+            # Glyph ink: a 15 pt title spans >= 9 pt of rows, a 13 pt subtitle >= 7 pt; both
+            # long lines truncate near the band's right edge.
+            ok = title[0] >= 9 and subtitle[0] >= 7 and title[1] >= (right - x - 52) * .7 and subtitle[1] >= (right - x - 52) * .7 and not geometry
+            rows.append(dict(id=row['id'][len(base):], titleInkPoints=title, subtitleInkPoints=subtitle, hovered=row['id'] == hovered))
+            if not ok: failures.append(dict(rows[-1], geometry=geometry))
+        check('history_row_labels_' + name, len(rows) >= 8 and not failures, rows=len(rows), failures=failures[:4], capture=str(path), scale=scale)
+
+    lib(action='close'); wait_until(lambda: not lib()['open'], timeout=3, step=.05)
+    app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
+    measure('open')
+    for row in (24, 0): app.call('library-performance', operation='scroll', row=row)
+    measure('scroll_reuse')
+    target = next(r for r in lib()['rows'] if r['kind'] == 'history' and r['frame'][1] >= 120)
+    lib(action='hover-row', id=target['id'], hovered=True)
+    measure('hover', hovered=target['id'])
+    lib(action='hover-row', id=target['id'], hovered=False)
+    app.call('navigate', tab=tab, url=base + '/label-live-row-that-arrives-while-the-library-history-list-is-visible')
+    wait_until(lambda: any(r['id'].endswith('/label-live-row-that-arrives-while-the-library-history-list-is-visible') for r in lib()['rows']), timeout=5, step=.05)
+    lib(action='refresh')
+    measure('reload')
+    # Section fade (0.10 s opacity animation) with a reload issued inside it.
+    lib(action='select', section='downloads'); lib(action='select', section='history'); lib(action='refresh')
+    measure('reload_during_animation')
+
+
 def history_checks(factory, results, tmp, wait_until, restore_defaults):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -271,6 +352,7 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         check('history_default_profile_without_window', len(owners) == 1 and fallback == profile1
               and fallback != profile2 and owner_profile == profile1, profile=fallback,
               windowsBefore=without_windows, windowsAfter=owners, ownerProfile=owner_profile)
+        label_checks(app, check, tmp, base, loaded, wait_until)
     finally:
         if app:
             restore_defaults(app, saved)

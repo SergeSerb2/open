@@ -85,6 +85,7 @@ extension AutomationController {
         guard let id = args["id"] as? String, panel.selectRow(id) else { throw Failure(message:"unknown row") }
       case "hover-row":
         guard let id = args["id"] as? String, panel.hoverRow(id,hovered:args["hovered"] as? Bool ?? true) else { throw Failure(message:"row is not visible") }
+      case "row-labels": return ["rows": panel.rowLabels()]
       case "row-action":
         guard let id = args["id"] as? String, let name = args["name"] as? String, panel.performRow(id,action:name) else { throw Failure(message:"row action unavailable") }
       case "row-menu":

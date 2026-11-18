@@ -419,6 +419,13 @@ final class LibraryListView: NSView, NSMenuDelegate {
         board.writeObjects([writer])
         return ["types":board.types?.map(\.rawValue) ?? [],"url":board.string(forType: .fileURL) ?? board.string(forType: .URL) ?? ""]
     }
+    /// Title and subtitle layers of the realized rows (automation evidence).
+    func labelStates(in root: NSView) -> [[String:Any]] {
+        entries.indices.compactMap { row in
+            guard let item = item(at: row), let view = table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView, !view.isHidden else { return nil }
+            var state = view.labelState(in: root); state["id"] = item.id; return state
+        }
+    }
     func state(in root: NSView) -> [[String:Any]] {
         entries.indices.compactMap { row in
             guard let item = item(at: row) else { return nil }
@@ -561,6 +568,20 @@ private final class LibraryItemView: NSView {
             let frame = root.convert(button.bounds,from:button)
             return ["title":button.toolTip ?? "","frame":[frame.minX,frame.minY,frame.width,frame.height]]
         }
+    }
+    func labelState(in root: NSView) -> [String:Any] {
+        func describe(_ layer: LibraryTextLayer) -> [String:Any] {
+            let frame = root.convert(layer.frame, from: self), presented = layer.presentation()?.frame ?? layer.frame
+            return ["frame": [frame.minX, frame.minY, frame.width, frame.height],
+                    "presentationOffset": [presented.minX-layer.frame.minX, presented.minY-layer.frame.minY, presented.width-layer.frame.width, presented.height-layer.frame.height],
+                    "rasterSize": [layer.rasterSize.width, layer.rasterSize.height], "rasterScale": layer.rasterScale,
+                    "contentsScale": layer.contentsScale, "needsDisplay": layer.needsDisplay(), "hidden": layer.isHidden,
+                    "opacity": layer.opacity, "animations": layer.animationKeys() ?? [],
+                    "length": (layer.string as? NSAttributedString)?.length ?? 0]
+        }
+        let frame = root.convert(bounds, from: self)
+        return ["row": [frame.minX, frame.minY, frame.width, frame.height], "hovered": hovered,
+                "windowScale": window?.backingScaleFactor ?? 0, "title": describe(title), "subtitle": describe(subtitle)]
     }
     private func setIcon(_ image:NSImage?) {
         icon.contents = LibraryImages.value(image)
