@@ -250,5 +250,10 @@ on p99 12.5 ms, no late or START trials; cover off p99 50–58 ms (the swap
 through empty frames). The latency row fails: off's first page change is the
 blank swap at ~9–12 ms, on's is the plate at ~34 ms. The sidebar pager's own
 first visible change is 30–36 ms in both modes (same spring from rest), so with
-the cover the page and the sidebar now start together. `.spaceCover` stays off
-by default pending the lead's ruling on that row.
+the cover the page and the sidebar now start together.
+
+Lead ruling 2026-11-18 21:25: off's first change is the blank swap (the
+defect), so it is no baseline. The latency rule for the cover is: in the same
+session, the page's first visible change comes no later than the sidebar
+pager's own first change plus one display frame. The off value is kept only
+as evidence of the defect. `.spaceCover` is on by default.
