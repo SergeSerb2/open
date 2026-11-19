@@ -634,3 +634,11 @@ cannot be observed. Open keeps its current behaviour and builds no guessed surfa
 
 ## Firefox `logins.db` (IMF 20:15, post-1.0)
 - Firefox 159 ships a Rust logins store (`logins.db`; off by default: `signon.storage.rust.enabled=false`). Open reads `logins.json`. Watch Mozilla's default; when it turns on, add a `logins.db` reader.
+
+## App icon known gaps (DOCKSIZE, LEAD 09:35, 2026-11-18)
+
+- The five alternate App icons are fixed images (system renders made by `tools/generate-app-icons.sh`). They do not follow the Dark, Clear or Tinted icon styles; only the bundle icon (`App/Resources/AppIcon.icon`) does.
+- The standard About window shows the bundle icon also when an alternate is selected (M1 capture, `about-open` command). Unchanged from 0.1.5.
+- Cmd-Tab and Launchpad (Apps) are not verified: both need keyboard input, which tests of Open never send.
+- The runtime correction (scale 1.015, lift 5 px of 1024) was measured on the M1 Dock at its default tile size. Other tile sizes and magnification are not measured.
+- The `dock_*` rows of `app-icons` run only where the Dock stays visible (the M1). Where it auto-hides (the M5) they print `SKIP real Dock rows` and do not run.

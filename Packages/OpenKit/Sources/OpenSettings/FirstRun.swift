@@ -248,7 +248,7 @@ public struct FirstRunView:View {
             .task {if startsProbe && model.probe == nil {await model.refreshProbe()}}
     }
     private func primary(_ title:String,action:@escaping ()->Void)->some View {Button(title,action:action).keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))}
-    private var brand:some View {OriginalOpenIcon(index:0).frame(width:64,height:64)}
+    private var brand:some View {AppIconPreview(option:.openDefault).frame(width:64,height:64)}
     private var welcome:some View {VStack(spacing:0) {
         Spacer(minLength:0)
         brand.frame(width:SettingsTokens.firstRunIconSize,height:SettingsTokens.firstRunIconSize)

@@ -578,7 +578,7 @@ if p.get('CFBundleIconName')!='AppIcon' or not p.get('CFBundleIconFile'):
 resources=a/'Contents/Resources'
 icon=resources/p['CFBundleIconFile']
 if not icon.suffix:icon=icon.with_suffix('.icns')
-for resource in [icon,resources/'Open.icns',resources/'Assets.car']:
+for resource in [icon,resources/'AppIcon.icns',resources/'Assets.car']:
  if not resource.is_file() or not resource.stat().st_size:raise SystemExit('app icon resource missing: '+str(resource))
 print('AppIcon metadata, compiled asset catalog and ICNS fallback: PASS')
 if stamp!=f'Chromium {chromium} · CEF {cef[:7]}':raise SystemExit('engine display stamp differs from VERSIONS')
@@ -808,7 +808,7 @@ dmg() {
     ditto "$APP" "$staging/Open.app"
     ln -s /Applications "$staging/Applications"
     install -m 0644 "$ROOT/assets/release/dmg-background.png" "$staging/.background/background.png"
-    install -m 0644 "$APP/Contents/Resources/Open.icns" "$staging/.VolumeIcon.icns"
+    install -m 0644 "$APP/Contents/Resources/AppIcon.icns" "$staging/.VolumeIcon.icns"
     log 'DMG uses Open artwork; Finder geometry/positions retain the existing layout'
     local writable="$REL/dmg-writable.dmg"
     hdiutil create -volname "Open $VERSION" -srcfolder "$staging" -ov -format UDRW "$writable"
@@ -825,7 +825,7 @@ dmg() {
     "$HEAVY" xcrun swiftc "$ROOT/tools/release-icon.swift" -o "$STAGE/release-icon"
     # This file icon is local resource-fork metadata, which download hosts may
     # strip. The embedded volume icon survives ordinary file transfers.
-    "$STAGE/release-icon" set "$DMG" "$APP/Contents/Resources/Open.icns"
+    "$STAGE/release-icon" set "$DMG" "$APP/Contents/Resources/AppIcon.icns"
     # Sign the disk image itself (Developer ID + secure timestamp in production),
     # before its notarization: Gatekeeper's open check (A-5) needs a DMG signature;
     # a stapled ticket alone reads "no usable signature".
