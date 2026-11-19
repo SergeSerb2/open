@@ -1,8 +1,8 @@
 // Read-only Dock probe for tools/e2e/app_icons.py. No input events, no Dock settings.
 //   dock-tiles frames               -> JSON {trusted, scale, tiles: [{title, url, running, badge, x, y, w, h}]} (points, top-left origin)
 //   dock-tiles measure PNG X Y W H  -> JSON plate geometry of one tile in a screen capture (pixel rect)
-// Measurement (pixels of the capture): each edge is the outermost clear colour step (sum |dRGB| between neighbours;
-// see `edges`). The plate's top is searched below the Dock's own glass border (18 % of the tile width), its sides on
+// Measurement (pixels of the capture): each edge is the outermost clear colour step, placed at half contrast (see
+// `edge`). The plate's top is searched below the Dock's own glass border (18 % of the tile width), its sides on
 // the plate's middle row. A tile over a one-sided wallpaper boundary can still mislead a side edge, so callers check
 // that a reference tile's own geometry is consistent before they use it.
 // `corner`: the left edge's inset from the plate's left side, 1 ... 16 px below its top (the corner profile).
@@ -63,31 +63,30 @@ func pixel(_ x: Int, _ y: Int) -> RGB {
 }
 func luminance(_ p: RGB) -> Double { 0.2126 * p.0 + 0.7152 * p.1 + 0.0722 * p.2 }
 func step(_ a: RGB, _ b: RGB) -> Double { abs(a.0 - b.0) + abs(a.1 - b.1) + abs(a.2 - b.2) }
-/// Sub-pixel positions of the clear colour steps in `line` (walking from outside in), outermost first. A step counts
-/// when it is >= 45 % of the window's largest step (or >= 24: a dark plate on the dark Dock steps by about 40 per px,
-/// the Dock's backdrop by under 10) and >= 45 % of the largest step within 3 px: a wallpaper gradient seen through the
-/// Dock's glass (about 25 per px) just outside a plate's much stronger edge is not the edge (M1, 48 pt tiles, Mail).
-/// Each step moves up to its local peak, then a parabolic fit gives the sub-pixel position.
-func edges(_ line: [RGB], _ window: Int) -> [Double] {
+/// Sub-pixel position of the plate's edge in `line` (walking from outside in).
+/// Finding it: the first step (sum |dRGB| between neighbours) that is >= 45 % of the window's largest step (or >= 24:
+/// a dark plate on the dark Dock steps by about 40 per px, the Dock's backdrop by under 10) and >= 45 % of the largest
+/// step within 3 px: a wallpaper gradient seen through the Dock's glass (about 25 per px) just outside a plate's much
+/// stronger edge is not the edge (M1, 48 pt tiles: Mail).
+/// Placing it: where the colour distance from the background just outside first reaches half of its peak within the
+/// next 7 px. This does not depend on the plate's colour: a grey plate whose system rim brightens its edge and a white
+/// plate reach their peaks at different depths, so the steepest step lands up to 1 px apart on the same geometry
+/// (M1, 48 pt: Graphite and Daylight start in the same pixel columns but measured 10.6 and 11.6).
+func edge(_ line: [RGB], _ window: Int) -> Double {
   let g = (0..<min(window, line.count - 1)).map { step(line[$0], line[$0 + 1]) }
   let big = min(0.45 * (g.max() ?? 0), 24)
   func dominant(_ j: Int) -> Bool { g[j] >= 0.45 * (g[max(0, j - 3)...min(g.count - 1, j + 3)].max() ?? 0) }
-  var found: [Double] = [], j = 0
-  while j < g.count {
-    guard g[j] >= big && dominant(j) else { j += 1; continue }
-    var i = j
-    while i + 1 < g.count && g[i + 1] > g[i] { i += 1 }
-    var offset = 0.0
-    if i > 0 && i < g.count - 1 {
-      let denominator = g[i - 1] - 2 * g[i] + g[i + 1]
-      if denominator != 0 { offset = 0.5 * (g[i - 1] - g[i + 1]) / denominator }
-    }
-    found.append(Double(i) + 0.5 + offset)
-    j = i + 2
-  }
-  return found.isEmpty ? [0.5] : found
+  guard let j = g.indices.first(where: { g[$0] >= big && dominant($0) }) else { return 0.5 }
+  let outside = line[max(0, j - 2)...j]
+  let background: RGB = (outside.map(\.0).reduce(0, +) / Double(outside.count),
+                         outside.map(\.1).reduce(0, +) / Double(outside.count),
+                         outside.map(\.2).reduce(0, +) / Double(outside.count))
+  let end = min(line.count - 1, j + 7)
+  let distance = (j...end).map { step(line[$0], background) }
+  let half = 0.5 * (distance.max() ?? 0)
+  guard let k = distance.indices.first(where: { $0 > 0 && distance[$0] >= half }) else { return Double(j) + 0.5 }
+  return Double(j + k - 1) + (half - distance[k - 1]) / max(distance[k] - distance[k - 1], 1e-9)
 }
-func edge(_ line: [RGB], _ window: Int) -> Double { edges(line, window)[0] }
 let cx = w / 2
 let column = (0..<h).map { pixel(cx, $0) }
 let t0 = Int((Double(w) * 0.18).rounded())
