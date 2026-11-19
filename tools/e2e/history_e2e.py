@@ -9,6 +9,161 @@ import time
 from loopback_http import LoopbackHTTPServer
 
 
+def label_checks(app, check, tmp, base, loaded, wait_until):
+    """HISTFIX (0.1.6): every History row draws its whole title and subtitle in every state.
+
+    CATextLayer's own end truncation drew only the top 3 points of a line wider than
+    the row, so long titles showed as a thin slice and long subtitles vanished. Pixels
+    come from the real window capture; label geometry comes from `library row-labels`.
+    """
+    from pathlib import Path
+    from library_overlay import capture_window
+    from engine_e2e import read_image
+    lib = lambda **kw: app.call('library', **kw)
+    frames = Path(os.environ.get('OPEN_E2E_HISTORY_FRAMES') or tmp); frames.mkdir(parents=True, exist_ok=True)
+    tab = app.call('open', url=base + '/label-seed')['id']; loaded(tab, '/label-seed')
+    paths = ['/label-%02d-a-long-history-title-that-is-much-wider-than-the-library-row' % i for i in range(30)]
+    for path in paths:
+        app.call('navigate', tab=tab, url=base + path); loaded(tab, path)
+    app.call('menu-perform', id='view-history')
+    seeded = wait_until(lambda: sum(r['kind'] == 'history' for r in lib().get('rows', [])) >= len(paths) + 1, timeout=8, step=.05)
+    assert seeded, lib().get('rows', [])[:3]
+
+    def measure(name, hovered=None):
+        time.sleep(.3)  # Past the 0.10 s section fade and the next display commit.
+        state = lib(); window = app.call('window-state')['frame']
+        path = frames / ('history-labels-' + name + '.png'); capture_window(state['window'], path)
+        width, height, pixel = read_image(str(path)); scale = width / window[2]
+        try: probe = {r['id']: r for r in lib(action='row-labels')['rows']}
+        except RuntimeError as error: probe = {'error': str(error)}
+        rows, failures = [], []
+        for row in state['rows']:
+            x, y, w, h = row['frame']
+            if row['kind'] != 'history' or y < 56 or y + h > window[3]: continue  # Fully visible rows only.
+            right = x + w - len(row['buttons']) * 34 - 8 if row['id'] == hovered else x + w - 20
+            def ink(top, bottom):
+                xs = range(int((x + 52) * scale), int(right * scale)); ys = range(int((y + top) * scale), int((y + bottom) * scale))
+                colors = {}
+                for py in ys:
+                    for px in xs[::3]: c = pixel(px, py); colors[c] = colors.get(c, 0) + 1
+                bg = max(colors, key=colors.get)
+                lines, left, end = 0, None, None
+                for py in ys:
+                    hits = [px for px in xs if max(abs(a - b) for a, b in zip(pixel(px, py), bg)) > 40]
+                    if hits:
+                        lines += 1; left = hits[0] if left is None else min(left, hits[0]); end = hits[-1] if end is None else max(end, hits[-1])
+                span = (end - left) / scale if left is not None else 0
+                return round(lines / scale, 1), round(span, 1)
+            title, subtitle = ink(11, 30), ink(31, 48)
+            labels = probe.get(row['id'])
+            geometry = 'probe ' + probe['error'] if 'error' in probe else 'not realized' if not labels else ''
+            if labels:
+                for key in ('title', 'subtitle'):
+                    layer = labels[key]; frame = layer['frame']
+                    if not (frame[0] >= x and frame[1] >= y and frame[0] + frame[2] <= x + w and frame[1] + frame[3] <= y + h
+                            and layer['rasterSize'] == frame[2:] and layer['rasterScale'] == layer['contentsScale'] == labels['windowScale']
+                            and not layer['needsDisplay'] and not layer['animations'] and not any(layer['presentationOffset'])
+                            and not layer['hidden'] and layer['opacity'] == 1):
+                        geometry += key + ' layer ' + repr(layer) + '; '
+                if labels['title']['frame'][1] + labels['title']['frame'][3] > labels['subtitle']['frame'][1]: geometry += 'title overlaps subtitle; '
+            # Glyph ink: a 15 pt title spans >= 9 pt of rows, a 13 pt subtitle >= 7 pt; both
+            # long lines truncate near the band's right edge.
+            if row['id'] == hovered and not (labels or {}).get('hovered', True): geometry += 'probe row not hovered; '
+            ok = title[0] >= 9 and subtitle[0] >= 7 and title[1] >= (right - x - 52) * .7 and subtitle[1] >= (right - x - 52) * .7 and not geometry
+            rows.append(dict(id=row['id'][len(base):], titleInkPoints=title, subtitleInkPoints=subtitle, hovered=row['id'] == hovered))
+            if not ok: failures.append(dict(rows[-1], geometry=geometry))
+        least = lambda key, i: min((r[key][i] for r in rows), default=0)
+        check('history_row_labels_' + name, len(rows) >= 8 and not failures, rows=len(rows), failures=failures[:4], capture=str(path), scale=scale,
+              minimumInkPoints=dict(titleHeight=least('titleInkPoints', 0), titleSpan=least('titleInkPoints', 1),
+                                    subtitleHeight=least('subtitleInkPoints', 0), subtitleSpan=least('subtitleInkPoints', 1)),
+              hoveredMeasured=any(r['hovered'] for r in rows) if hovered else None)
+
+    lib(action='close'); wait_until(lambda: not lib()['open'], timeout=3, step=.05)
+    app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
+    measure('open')
+    for row in (24, 0): app.call('library-performance', operation='scroll', row=row)
+    measure('scroll_reuse')
+    target = next(r for r in lib()['rows'] if r['kind'] == 'history' and r['frame'][1] >= 120)
+    lib(action='hover-row', id=target['id'], hovered=True)
+    measure('hover', hovered=target['id'])
+    lib(action='hover-row', id=target['id'], hovered=False)
+    app.call('navigate', tab=tab, url=base + '/label-live-row-that-arrives-while-the-library-history-list-is-visible')
+    wait_until(lambda: any(r['id'].endswith('/label-live-row-that-arrives-while-the-library-history-list-is-visible') for r in lib()['rows']), timeout=5, step=.05)
+    lib(action='refresh')
+    measure('reload')
+    # Section fade (0.10 s opacity animation) with a reload issued inside it.
+    lib(action='select', section='downloads'); lib(action='select', section='history'); lib(action='refresh')
+    measure('reload_during_animation')
+
+    def luma(c): return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    def grab(name):
+        time.sleep(.4)
+        state = lib(); window = app.call('window-state')['frame']
+        path = frames / ('history-' + name + '.png'); capture_window(state['window'], path)
+        width, _, pixel = read_image(str(path)); return state, window, width / window[2], pixel, path
+    def background(pixel, scale, left, top, right, bottom):
+        """Per-channel median of an empty strip. The panel is a dithered gradient: a solid glyph
+        stroke can be the most common single color in a small box, so a mode is not the background."""
+        samples = [pixel(px, py) for py in range(int(top * scale), int(bottom * scale)) for px in range(int(left * scale), int(right * scale))]
+        return tuple(sorted(c[i] for c in samples)[len(samples) // 2] for i in range(3))
+    def peak(pixel, scale, left, top, right, bottom, bg):
+        """The pixel with the largest luma contrast to the background."""
+        xs, ys = range(int(left * scale), int(right * scale)), range(int(top * scale), int(bottom * scale))
+        return max((pixel(px, py) for py in ys for px in xs), key=lambda c: abs(luma(c) - luma(bg)))
+    def globes(name):
+        """Placeholder globe vs the row's subtitle text: both are the Library's secondary tint (foreground at 0.68)."""
+        state, window, scale, pixel, path = grab(name)
+        rows, failures = [], []
+        for row in state['rows']:
+            x, y, w, h = row['frame']
+            if row['kind'] != 'history' or y < 56 or y + h > window[3]: continue
+            bg = background(pixel, scale, x + 42, y + 6, x + 50, y + 50)  # Between the icon and the text.
+            globe = peak(pixel, scale, x + 20, y + 18, x + 40, y + 38, bg)
+            text = peak(pixel, scale, x + 52, y + 31, x + w - 20, y + 48, bg)
+            delta = luma(globe) - luma(text)
+            same_side = (luma(globe) - luma(bg)) * (luma(text) - luma(bg)) > 0
+            rows.append(dict(id=row['id'][len(base):], background=bg, globePeak=globe, subtitlePeak=text, lumaDelta=round(delta, 1)))
+            if abs(delta) > 30 or not same_side or abs(luma(globe) - luma(bg)) < 40: failures.append(rows[-1])
+        return rows, failures, str(path)
+    def appearance_row(mode):
+        # Switch while the list stays open, after its idle overscan pass has prepared the rows below.
+        app.call('library-performance', operation='scroll', row=0); time.sleep(1.5)
+        app.call('appearance', name=mode)
+        rows, failures, top = globes('globe-' + mode)
+        # Rows prepared in overscan before the switch must take the new tint when they scroll in.
+        app.call('library-performance', operation='scroll', row=16)
+        more, more_failures, scrolled = globes('globe-' + mode + '-scrolled')
+        app.call('library-performance', operation='scroll', row=0)
+        check('history_placeholder_globe_' + mode, len(rows) >= 8 and len(more) >= 8 and not failures and not more_failures,
+              rows=len(rows) + len(more), failures=(failures + more_failures)[:4], sample=rows[:1], captures=[top, scrolled])
+    try:
+        appearance_row('dark'); appearance_row('light')
+    finally:
+        app.call('appearance', name='system')
+
+    # Filter chips show user text (Profile and Space names): a long name stays inside its chip and truncates.
+    long_name = 'History Profile With A Very Long Name That Cannot Fit One Chip'  # 62 characters; Profile names allow 64.
+    app.call('space-create', profile=long_name, title='History Long Name')
+    app.call('menu-perform', id='view-history'); wait_until(lambda: lib()['open'], timeout=3, step=.05)
+    lib(action='filter', open=True)
+    chip = wait_until(lambda: next((c for c in lib()['header']['chips'] if c['title'] == long_name), None), timeout=3, step=.05)
+    state, window, scale, pixel, path = grab('filter-chip-long-profile')
+    x, y, w, h = chip['frame'] if chip else (0, 0, 0, 0)
+    panel = state['panelFrame']
+    def ink_columns(left, right):
+        bg = background(pixel, scale, left, y + 4, right, y + h - 4)
+        return [px for px in range(int(left * scale), int(right * scale))
+                if any(max(abs(a - b) for a, b in zip(pixel(px, py), bg)) > 40 for py in range(int((y + 6) * scale), int((y + h - 6) * scale)))]
+    inside = ink_columns(x + 3, x + w - 3) if chip else []  # Inside the 1.5 pt selected border.
+    outside = (ink_columns(panel[0] + 112, x - 1) if x - 1 > panel[0] + 112 else []) + (ink_columns(x + w + 1, panel[0] + panel[2] - 2) if chip else [])
+    span = (inside[-1] - inside[0]) / scale if inside else 0
+    # The label keeps the chip's padding: a clipped label (cut at both chip edges, no ellipsis) has none.
+    pads = [round(inside[0] / scale - x, 1), round(x + w - inside[-1] / scale, 1)] if inside else [0, 0]
+    check('history_filter_chip_long_profile', bool(chip) and w <= 289 and span >= (w - 24) * .7 and not outside and min(pads) >= 8,
+          chip=chip, inkSpanPoints=round(span, 1), paddingPoints=pads, inkColumnsOutsideChip=len(outside), capture=str(path))
+    lib(action='filter', open=False)
+
+
 def history_checks(factory, results, tmp, wait_until, restore_defaults):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -271,6 +426,7 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         check('history_default_profile_without_window', len(owners) == 1 and fallback == profile1
               and fallback != profile2 and owner_profile == profile1, profile=fallback,
               windowsBefore=without_windows, windowsAfter=owners, ownerProfile=owner_profile)
+        label_checks(app, check, tmp, base, loaded, wait_until)
     finally:
         if app:
             restore_defaults(app, saved)

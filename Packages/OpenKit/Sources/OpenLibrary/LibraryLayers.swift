@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 
 /// Counts raster work owned by the Library, not WindowServer or the engine.
 @MainActor
@@ -14,8 +15,42 @@ enum LibraryRaster {
     }
 }
 
+/// One line of Library text. Core Text draws and truncates the line here:
+/// CATextLayer's own `.end` and `.middle` truncation on macOS 27.2 draws only a
+/// 3-point slice of a line wider than the layer, so long History titles showed
+/// as a thin slice and long URL subtitles disappeared. A line that fits draws byte-identical
+/// to CATextLayer (same baseline: top of bounds plus the line ascent).
 final class LibraryTextLayer: CATextLayer {
+    /// Scale and size of the last raster (automation evidence).
+    nonisolated(unsafe) private(set) var rasterScale: CGFloat = 0
+    nonisolated(unsafe) private(set) var rasterSize = CGSize.zero
+    override func draw(in context: CGContext) {
+        guard let text = string as? NSAttributedString else { super.draw(in:context); return }
+        guard text.length > 0, bounds.width > 0 else { return }
+        var line = CTLineCreateWithAttributedString(text)
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        var width = CGFloat(CTLineGetTypographicBounds(line,&ascent,&descent,&leading))
+        if width > bounds.width, truncationMode != .none {
+            let token = CTLineCreateWithAttributedString(NSAttributedString(string:"\u{2026}",attributes:text.attributes(at:0,effectiveRange:nil)))
+            let type: CTLineTruncationType = truncationMode == .start ? .start : truncationMode == .middle ? .middle : .end
+            if let truncated = CTLineCreateTruncatedLine(line,Double(bounds.width),type,token) {
+                line = truncated; width = CGFloat(CTLineGetTypographicBounds(line,nil,nil,nil))
+            }
+        }
+        let x: CGFloat = switch alignmentMode {
+        case .center: max(0,(bounds.width-width)/2)
+        case .right: max(0,bounds.width-width)
+        default: 0
+        }
+        context.saveGState()
+        if contentsAreFlipped() { context.translateBy(x:0,y:bounds.height); context.scaleBy(x:1,y:-1) }
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(x:x,y:bounds.height-ascent)
+        CTLineDraw(line,context)
+        context.restoreGState()
+    }
     override func display() {
+        rasterScale = contentsScale; rasterSize = bounds.size
         let area = bounds.width*bounds.height*contentsScale*contentsScale
         let start = ProcessInfo.processInfo.systemUptime
         super.display()
@@ -59,6 +94,26 @@ enum LibraryImages {
         guard let contents = LibraryIdleWork.measure("image.decode", { image.cgImage(forProposedRect:&rect,context:nil,hints:nil) }) else { return nil }
         cache.setObject(contents,forKey:image,cost:contents.bytesPerRow*contents.height)
         return contents
+    }
+    private final class Tinted { var images: [String:CGImage] = [:] }
+    private static let tinted: NSCache<NSImage,Tinted> = { let cache = NSCache<NSImage,Tinted>(); cache.countLimit = 64; return cache }()
+    /// Row icon contents. A template placeholder (an SF Symbol such as the History globe) takes the
+    /// Library's secondary tint, `foreground` at 0.68 like the search and row button glyphs; as a raw
+    /// CGImage it would draw black. Favicons and file previews keep their own colors.
+    static func icon(_ image:NSImage?,foreground:NSColor) -> CGImage? {
+        guard let image, image.isTemplate, let mask = value(image) else { return value(image) }
+        let color = foreground.withAlphaComponent(0.68), key = "\(color)"
+        let box = tinted.object(forKey:image) ?? Tinted()
+        if let cached = box.images[key] { return cached }
+        let rect = CGRect(x:0,y:0,width:mask.width,height:mask.height)
+        guard let context = CGContext(data:nil,width:mask.width,height:mask.height,bitsPerComponent:8,bytesPerRow:0,
+            space:CGColorSpace(name:CGColorSpace.sRGB)!,bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue) else { return mask }
+        context.draw(mask,in:rect)
+        context.setBlendMode(.sourceIn); context.setFillColor((color.usingColorSpace(.sRGB) ?? color).cgColor); context.fill(rect)
+        guard let result = context.makeImage() else { return mask }
+        if box.images.count >= 8 { box.images.removeAll() }
+        box.images[key] = result; tinted.setObject(box,forKey:image)
+        return result
     }
 }
 

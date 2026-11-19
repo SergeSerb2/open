@@ -95,6 +95,8 @@ extension LibraryPanelView {
     }
     public func focusList() { listView.focus() }
     @discardableResult public func hoverRow(_ id:String,hovered:Bool) -> Bool { listView.hover(id:id,value:hovered) }
+    /// Title and subtitle layer state of the realized rows (automation evidence).
+    public func rowLabels() -> [[String:Any]] { listView.labelStates(in:self) }
     @discardableResult public func performRow(_ id:String,action:String) -> Bool { listView.perform(id:id,action:action) }
     public func rowMenu(_ id:String,select:String? = nil) -> [[String:Any]]? { listView.menuState(id:id,select:select) }
     /// Automation: the row's right-click result (menu item titles, or nil for no menu) and its selection.

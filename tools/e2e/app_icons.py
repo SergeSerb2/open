@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Real App Icon picker, reset and relaunch. Socket actions only; no OS events."""
+"""Real App Icon picker, reset and relaunch, and the real Dock tile. Socket actions only; no OS events."""
 import argparse
 import base64
 import json
+import math
+import os
 import plistlib
 import subprocess
 from pathlib import Path
@@ -10,6 +12,58 @@ import tempfile
 import time
 from engine_e2e import Open
 from library_overlay import capture_window
+
+
+DOCK_REFERENCES = ['Mail', 'Calculator', 'Finder']  # Apple icons; Finder is always in the Dock.
+
+
+class RealDock:
+    """Open's real Dock tile against an Apple icon's tile in the same capture. Read-only: the Dock's accessibility
+    frames and a screen capture, never input or Dock settings. It runs only where the Dock stays visible on a 2x
+    panel with the accessibility and pixel grants (the M1 rule); elsewhere it reports why it did not run."""
+
+    def __init__(self, root, output):
+        self.output = output
+        self.helper = output/'dock-tiles'
+        subprocess.run(['xcrun', 'swiftc', '-O', str(root/'tools/e2e/dock-tiles.swift'), '-o', str(self.helper)], check=True)
+        self.pixels = root/'tools/capture/pixels.sh'
+        self.launcher = Path.home()/'Applications/OpenCapture.app'
+        autohide = subprocess.run(['defaults', 'read', 'com.apple.dock', 'autohide'], capture_output=True, text=True).stdout.strip()
+        frames = self.frames()
+        self.skip = ('the Dock auto-hides' if autohide in ('1', 'true') else
+                     'no accessibility grant to read Dock frames' if not frames['trusted'] else
+                     'the main display is not 2x' if frames['scale'] != 2 else None)
+
+    def frames(self):
+        return json.loads(subprocess.run([str(self.helper), 'frames'], capture_output=True, text=True, check=True).stdout)
+
+    def capture(self, region, path):
+        command = ['/usr/sbin/screencapture', '-x', '-R', ','.join(map(str, region)), str(path)]
+        if self.launcher.exists():  # the approved pixel launcher (library_overlay.capture_window)
+            log = path.with_suffix('.pixels.log')
+            subprocess.run(['/usr/bin/open', '-n', '-W', str(self.launcher), '--args', str(self.pixels), str(log), *command], timeout=15)
+            return Path(str(log) + '.rc').read_text().strip() == '0' and path.is_file()
+        return subprocess.run(command, timeout=15).returncode == 0 and path.is_file()
+
+    def measure(self, bundle, name):
+        """Plate geometry (2x px) of Open's tile and the first Apple reference tile in one Dock capture."""
+        frames = self.frames()
+        target = os.path.realpath(bundle)
+        tiles = frames['tiles']
+        mine = [t for t in tiles if t['url'] and os.path.realpath(t['url']) == target]
+        reference = next((t for title in DOCK_REFERENCES for t in tiles if t['title'] == title), None)
+        if len(mine) != 1 or reference is None:
+            return dict(error='Dock tiles not found', open=len(mine), reference=reference)
+        x0 = math.floor(min(t['x'] for t in tiles)); y0 = math.floor(min(t['y'] for t in tiles))
+        x1 = math.ceil(max(t['x'] + t['w'] for t in tiles)); y1 = math.ceil(max(t['y'] + t['h'] for t in tiles))
+        path = self.output/('dock-' + name + '.png')
+        if not self.capture([x0, y0, x1 - x0, y1 - y0], path):
+            return dict(error='screen capture failed (no pixel grant?)')
+        def geometry(tile):
+            rect = [round((tile['x'] - x0) * 2), round((tile['y'] - y0) * 2), round(tile['w'] * 2), round(tile['h'] * 2)]
+            out = subprocess.run([str(self.helper), 'measure', str(path), *map(str, rect)], capture_output=True, text=True, check=True)
+            return dict(json.loads(out.stdout), rect=rect)
+        return dict(open=geometry(mine[0]), reference=dict(geometry(reference), title=reference['title']), capture=path.name)
 
 
 def run(output, config, factory=None):
@@ -46,9 +100,24 @@ def run(output, config, factory=None):
             def bounds(path):
                 return json.loads(subprocess.run([str(probe), 'bounds', str(path)], capture_output=True, text=True, check=True).stdout)
             # macOS draws a bundle icon's body 824 of 1024 px, 100 px in (Calculator and Terminal measure the same).
-            # A runtime icon is shown as is, so each alternate must carry the same margin (Dock, Cmd-Tab, plug-in).
+            # A runtime icon is shown as is, so each alternate carries that margin itself (Dock, Cmd-Tab, plug-in),
+            # with the body scaled 1.015 and lifted 5 px, because the Dock draws a runtime image that much smaller
+            # and lower (tools/generate-app-icons.sh; the real Dock rows below measure the result).
             grid = bounds(app.bundle)
             check('bundle_icon_grid', all(abs(a - b) <= 2 for a, b in zip(grid, [100, 100, 924, 924])), bounds=grid)
+            middle, half = (grid[0] + grid[2]) / 2, (grid[2] - grid[0]) / 2 * 1.015
+            runtime_grid = [middle - half, middle - half - 5, middle + half, middle + half - 5]
+            # The bundle icon is an Icon Composer document: Assets.car holds its layered image stack, so macOS draws
+            # the squircle, rim and glass itself (a flat PNG icon set has no IconImageStack rendition).
+            car = subprocess.run(['xcrun', 'assetutil', '--info', str(Path(app.bundle)/'Contents/Resources/Assets.car')],
+                                 capture_output=True, text=True)
+            stacks = sorted({r.get('Name') for r in (json.loads(car.stdout)[1:] if car.returncode == 0 else [])
+                             if r.get('AssetType') == 'IconImageStack'})
+            check('bundle_icon_native', 'AppIcon' in stacks, imageStacks=stacks)
+            dock = RealDock(root, output)
+            if dock.skip:
+                print('SKIP real Dock rows: ' + dock.skip, flush=True)
+                (output/'dock-rows-skipped.txt').write_text(dock.skip + '\n')
             for option in ['openDefault', 'openDark', 'openLight', 'openMono', 'openColor', 'openRetro']:
                 state = app.call('settings-icon', select=option)
                 check('select_'+option, state['selected'] == option and state['applied'] == option
@@ -56,8 +125,26 @@ def run(output, config, factory=None):
                 if option != 'openDefault':
                     cached = sorted((Path(app.user_data)/'Cache/AppIcons').glob(option + '-v*.png'))
                     measured = bounds(cached[-1]) if cached else None
-                    check('grid_'+option, measured is not None and all(abs(a - b) <= 2 for a, b in zip(measured, grid)),
-                          bounds=measured, bundle=grid, files=[p.name for p in cached])
+                    check('grid_'+option, measured is not None and all(abs(a - b) <= 2 for a, b in zip(measured, runtime_grid)),
+                          bounds=measured, expected=runtime_grid, files=[p.name for p in cached])
+                if not dock.skip:
+                    # The Dock redraws a changed application icon within a frame or two; allow a generous second.
+                    time.sleep(1)
+                    tile = dock.measure(app.bundle, option)
+                    mine, apple = tile.get('open'), tile.get('reference')
+                    check('dock_found_'+option, mine is not None and apple is not None, tile=tile)
+                    # Plate width and top edge within 1 px (2x) of the Apple tile. (A dark plate's bottom rim can match
+                    # the Dock behind it, so the bottom edge is not a reliable measure.)
+                    check('dock_size_'+option, abs(mine['width'] - apple['width']) <= 1 and abs(mine['top'] - apple['top']) <= 1, tile=tile)
+                    # Corner profile: the squircle's left-edge insets 2 ... 16 px below the top, each within 1.5 px.
+                    # Apple's own tiles spread 0.6 px at 2 px (Mail 12.4, Calculator 12.2, Safari 12.0, Finder 11.8);
+                    # the flat art's smaller circular corner measured 8.8.
+                    check('dock_corner_'+option, max(abs(a - b) for a, b in zip(mine['corner'][1:], apple['corner'][1:])) <= 1.5, tile=tile)
+                    # The system's light rim on the plate's top edge: Apple tiles measure about +30, flat art about 0.
+                    # A bright plate shows little of it (Safari about 0, Spectrum about +9), so only plates at or below
+                    # luminance 160 are judged: Original, Midnight and Graphite.
+                    if mine['plate'] <= 160:
+                        check('dock_rim_'+option, mine['rim'] >= 12, tile=tile)
             first = app.call('settings-icon', select='openDark')
             again = app.call('settings-icon', select='openDark')
             check('cached_alternate', first['imageObject'] == again['imageObject'])

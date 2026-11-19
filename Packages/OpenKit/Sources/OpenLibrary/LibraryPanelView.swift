@@ -184,7 +184,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         if !warmedRows {
             (searchField as? LibrarySearchField)?.warmEditor()
             FilePreviewCache.shared.warmPlaceholder()
-            for name in ["globe","folder","paintbrush.pointed","doc"] { _ = LibraryImages.value(symbol(name)) }
+            for name in ["globe","folder","paintbrush.pointed","doc"] { _ = LibraryImages.icon(symbol(name),foreground:foreground) }
             guard await LibraryListView.warmRowKinds(foreground:foreground,overlay:overlay),
                 !Task.isCancelled else { preparing = false; return }
             warmedRows = true
