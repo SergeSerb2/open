@@ -11,8 +11,10 @@ struct SpaceContentSelection: Equatable {
     let profile: ProfileID
 }
 
-/// Selection changes once, behind the incoming plate. A missing engine seam
-/// leaves that plate visible; it never creates a synthetic presentation receipt.
+/// Selection changes once, behind the incoming plate. The plate retires on the
+/// engine's presented-frame receipt for every visible engine pane. It never
+/// fabricates a receipt and no timer removes it: native panes are ready at
+/// once, and a request the engine refuses or ends shows the live page.
 @MainActor
 final class SpaceContentTransitionController {
     unowned let container: WebContentContainer
@@ -73,11 +75,14 @@ final class SpaceContentTransitionController {
         let newIndex = container.spaceOrder.firstIndex(of: selection.space) ?? oldIndex
         let direction: CGFloat = newIndex == oldIndex ? 0 : newIndex < oldIndex ? -1 : 1
         let themeFrame = container.convert(parent.bounds, from: parent)
-        // Source remains attached and visible throughout the slide. Capture it
-        // once for a later return, without waiting to begin the layer motion.
-        if let source, source.space != selection.space { captureSource(source) }
+        // Capture the source for a later return once the incoming plate covers
+        // it, just before the selection changes behind the plate. On the input
+        // turn this work (theme field plus every pane, 14–25 ms at 1280 × 800)
+        // delayed the slide's first frame; here nothing visible waits for it.
+        let captureFrom = source.flatMap { $0.space != selection.space ? $0 : nil }
         let apply = { [weak self] in
             guard let self, self.generation == token else { return }
+            if let captureFrom, self.nativeSelection == captureFrom { self.captureSource(captureFrom) }
             self.applying = true
             self.nativeSelection = selection; self.nativeStyle = style
             self.container.applySpaceSelection(selection, animateSlots: false)
@@ -208,10 +213,13 @@ final class SpaceContentTransitionController {
             plate.presented(receipt); container.finishEmptySpaceSelection(); return
         }
         let token = frameGeneration
-        let visibleTabs = visibleTabs(selection)
+        // A pane showing native content (sad tab, placeholder) has no engine
+        // frame to wait for; only panes showing their engine view do.
+        let visibleTabs = visibleTabs(selection).filter { !container.paneShowsNativeContent($0) }
         let hosts = visibleTabs.compactMap { container.host(for: $0) }.filter { !$0.view.isHiddenOrHasHiddenAncestor }
         lastPresentationViewports = viewports ?? presentationViewports(selection)
         guard hosts.count == visibleTabs.count else { presentationUnavailable = true; return }
+        if hosts.isEmpty { plate.presented(receipt); return }
         // Loading may finish before pixels are presented, so this is only a
         // prerequisite. Its callback re-arms the actual presentation request.
         guard hosts.allSatisfy({ !$0.isLoading }) else { return }
@@ -221,7 +229,9 @@ final class SpaceContentTransitionController {
         guard specifications.count == hosts.count else { presentationUnavailable = true; return }
         waiting = Set(specifications.map { $0.1 })
         for (host, id, viewport, revision) in specifications {
-            guard let presenter = host.framePresentation else { presentationUnavailable = true; continue }
+            // A native host (Welcome, Notes, Easels) has no engine frame to wait
+            // for: its content is drawn natively and is ready now.
+            guard let presenter = host.framePresentation else { waiting.remove(id); continue }
             let request = presenter.firstFramePresented(at: viewport, requestID: id,
                 retainingSurfaceForResize: retainingSurfaceForResize) { [weak self, weak host] frame in
                 guard let self, let host, self.frameGeneration == token,
@@ -232,14 +242,28 @@ final class SpaceContentTransitionController {
                 self.requests[id] = nil
                 guard let frame, frame.requestID == id, frame.viewport == viewport,
                       frame.presentedAt.isFinite, frame.presentedAt > 0 else {
-                    self.presentationUnavailable = true; return
+                    // The engine ended this request for good (navigation
+                    // replacement, renderer loss). Show the live page now,
+                    // never a stuck cover; no timer is involved.
+                    self.presentationUnavailable = true; self.revealLivePage(); return
                 }
                 self.waiting.remove(id)
                 if self.waiting.isEmpty, let currentReceipt = self.receipt { self.plate.presented(currentReceipt) }
             }
             if let request, waiting.contains(id) { requests[id] = request }
-            else if request == nil, waiting.contains(id) { presentationUnavailable = true }
+            else if request == nil, waiting.contains(id) {
+                // The engine refused the request: no receipt will come.
+                presentationUnavailable = true; revealLivePage(); return
+            }
         }
+        if waiting.isEmpty { plate.presented(receipt) }
+    }
+
+    /// The presentation fallback: retire the cover over the live page. Our own
+    /// superseded requests never come here (their generation no longer matches).
+    private func revealLivePage() {
+        cancelRequests()
+        if let receipt, plate.phase == .awaitingPresentation { plate.presented(receipt) }
     }
 
     func cancel(clearCache: Bool = false, preservingCapture: Bool = false) {

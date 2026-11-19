@@ -11,6 +11,7 @@ extension AutomationController {
     case "state": allowed = ["action", "window"]
     case "insert": allowed = ["action"]
     case "replay", "reveal": allowed = ["action", "card"]
+    case "replay-all": allowed = ["action"]
     case "hover": allowed = ["action", "card", "phase"]
     case "link": allowed = ["action", "link"]
     default: throw Failure(message: "unknown welcome action")
@@ -32,11 +33,16 @@ extension AutomationController {
       let id = WelcomeTab.insert(into: factory.model, spaceID: space.id)
       factory.selectTabForCommand(id, spaceID: space.id); factory.scheduleSave()
     case "link":
-      guard let link = args["link"] as? String, ["shortcuts", "settings"].contains(link),
+      guard let link = args["link"] as? String, ["shortcuts", "help"].contains(link),
         let id = factory.selectedTab?.id, let page = factory.welcomeHosts[id]?.page, page.visible else {
         throw Failure(message: "unknown link or Welcome page is not visible")
       }
       page.activateFooter(link)
+    case "replay-all":
+      guard let id = factory.selectedTab?.id, let page = factory.welcomeHosts[id]?.page, page.visible else {
+        throw Failure(message: "Welcome page is not visible")
+      }
+      page.clipPanel.replayAll.performClick(nil)
     case "reveal":
       guard let number = args["card"] as? Int, (1...4).contains(number),
         let id = factory.selectedTab?.id, let page = factory.welcomeHosts[id]?.page, page.visible else {
@@ -66,14 +72,19 @@ extension AutomationController {
     return ["appCPUSeconds": Double(cpu.tv_sec) + Double(cpu.tv_nsec) / 1_000_000_000,
       "visible": page?.visible == true, "activeCard": page?.activeCard.map { $0 + 1 } as Any? ?? NSNull(),
       "playlist": page?.playlistPlaying == true ? "playing" : "stopped", "animating": page?.animating == true,
+      "revealed": page?.revealed == true, "ended": page?.ended == true, "paused": page?.isPaused == true,
       "reduceMotion": page?.reduceMotion == true, "playedCards": page?.playedCards ?? [],
       "focusedCard": page.flatMap { page in page.cards.firstIndex { $0 === page.window?.firstResponder } }.map { $0 + 1 } as Any? ?? NSNull(),
       "cardDurations": WelcomePageView.cardDurations,
       "playlistElapsed": page?.playlistElapsed ?? 0, "appearanceElapsed": page?.appearanceElapsed ?? 0,
       "completionCount": page?.completionCount ?? 0,
       "pendingCompletion": page?.hasCompletion == true,
-      "animationCount": all.reduce(0) { $0 + $1.cards.reduce(0) { $0 + $1.illustration.animationCount } },
-      "pendingDisplayUpdates": all.reduce(0) { $0 + $1.cards.reduce(0) { $0 + $1.illustration.pendingDisplayUpdates } },
+      "animationCount": all.reduce(0) { $0 + $1.animationCount },
+      "decoders": all.reduce(0) { $0 + ($1.clipPanel.hasDecoder ? 1 : 0) },
+      "clip": page.map { page in ["loaded": page.clipPanel.loadedClip.map { $0 + 1 } as Any? ?? NSNull(),
+        "decoder": page.clipPanel.hasDecoder, "playing": page.clipPanel.isPlaying, "end": page.clipPanel.showsEnd,
+        "replayAllVisible": !page.clipPanel.replayAll.isHidden && page.clipPanel.replayAll.alphaValue > 0.99,
+        "movies": (0..<4).map { WelcomeClips.movie($0) != nil }] as [String: Any] } as Any? ?? NSNull(),
       "hostCount": all.count, "engineContentCreationCount": factory.contentCreationCount,
       "windowState": ["id": factory.windowState.id.description,
         "appActive": NSApp.isActive, "appAppearance": NSApp.effectiveAppearance.name.rawValue,
@@ -86,14 +97,14 @@ extension AutomationController {
       "urlField": factory.controller?.sidebar.displayedURLText ?? "",
       "layout": page.map { welcomeLayout($0) } as Any? ?? NSNull(),
       "cards": page?.cards.map { ["label": $0.accessibilityLabel() ?? "", "role": $0.accessibilityRole()?.rawValue ?? "",
-        "hovered": $0.isHovered,
-        // AppKit adds its own tooltip tracking area lazily; count only the card's own.
+        "hovered": $0.isHovered, "active": $0.isActive,
         "trackingAreas": $0.ownTrackingAreaCount,
         "allTrackingAreas": $0.trackingAreas.count,
         "actions": $0.accessibilityCustomActions()?.map(\.name) ?? []] as [String: Any] } ?? [],
       "engineInternalPages": OEEngine.shared.allWebContents.filter { $0.url.map(WelcomeTab.isInternal) == true }.count,
       "hosts": factory.welcomeHosts.map { id, host in ["tab": id.description, "visible": host.page.visible,
-        "animating": host.page.animating, "playlist": host.page.playlistPlaying ? "playing" : "stopped"] as [String: Any] }
+        "animating": host.page.animating, "playlist": host.page.playlistPlaying ? "playing" : "stopped",
+        "decoder": host.page.clipPanel.hasDecoder] as [String: Any] }
     ]
   }
 
@@ -119,29 +130,18 @@ extension AutomationController {
       ["frame": inWindow(label), "color": label.textColor.map(components) ?? []]
     }
     let cards: [[String: Any]] = page.cards.map { card in
-      let copy = NSAttributedString(string: card.detail.stringValue,
-        attributes: [.font: card.detail.font ?? NSFont.systemFont(ofSize: 14)])
-      let required = copy.boundingRect(with: NSSize(width: max(0, card.detail.bounds.width - 4), height: 10_000),
-        options: [.usesLineFragmentOrigin, .usesFontLeading])
-      return ["frame": rect(card.frame), "illustration": rect(card.illustration.frame),
-        "detail": rect(card.detail.frame), "requiredTextHeight": Double(ceil(required.height)),
-        "title": rect(card.heading.frame), "requiredTitleWidth": Double(ceil(card.heading.attributedStringValue.size().width)),
-        "textPixels": ["title": text(card.heading), "body": text(card.detail)],
-        "surface": card.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) }.map(components) ?? [],
-        "windowFrame": inWindow(card),
-        "miniature": card.illustration.miniatureState as Any? ?? NSNull(),
-        "labels": card.illustration.drawnLabels, "paints": card.illustration.paintColors.mapValues(components),
-        "labelPixels": card.illustration.drawnLabelFrames.map { label, frame in
-          ["label": label, "frame": inWindow(frame, of: card.illustration)] as [String: Any]
-        },
-        "scale": card.illustration.sceneScale]
+      ["frame": rect(card.frame), "windowFrame": inWindow(card), "active": card.isActive,
+       "detail": rect(card.detail.frame),
+       "surface": card.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) }.map(components) ?? []]
     }
     return ["viewport": [Double(page.contentSize.width), Double(page.contentSize.height)],
       "document": rect(page.canvas.frame), "scrollOrigin": [Double(page.contentView.bounds.minX), Double(page.contentView.bounds.minY)],
-      "headerTop": Double(page.heading.frame.minY), "headerBottom": Double(page.subheading.frame.maxY),
-      "gridTop": Double(page.cards[0].frame.minY), "columnWidth": Double(page.cards[0].bounds.width * 2 + 16),
-      "footer": rect(page.footerFrame), "footerGap": Double(page.footerFrame.minY - (page.cards.map { $0.frame.maxY }.max() ?? 0)),
-      "background": components(page.backgroundColor),
+      "heading": rect(page.heading.frame), "subheading": rect(page.subheading.frame),
+      "column": rect(page.metrics.column), "clip": rect(page.clipPanel.frame), "clipShown": rect(page.metrics.clipShown),
+      "clipWindowFrame": inWindow(page.clipPanel),
+      "replayAll": inWindow(page.clipPanel.replayAll),
+      "footer": rect(page.footerFrame),
+      "background": components(page.backgroundTop),
       "linkPixels": page.footerLinks.map { button in
         ["label": button.title, "frame": inWindow(page.footerLabelFrame(button), of: button)] as [String: Any]
       },

@@ -179,6 +179,10 @@ final class SpacePageSnapshotTransition: NSView {
             let progress = Motion.springProgress(token, at: spring.duration)
             spring.fromValue = from
             spring.toValue = progress.isFinite && abs(progress) > 0.001 ? from - from / CGFloat(progress) : 0
+            // Start at input time, like the sidebar pager's slide: both reach
+            // the screen at the same commit, and the plate is already moving
+            // in that first frame instead of starting from rest there.
+            spring.beginTime = target.convertTime(CACurrentMediaTime(), from: nil)
             let hz = Float(window?.screen?.maximumFramesPerSecond ?? 60)
             spring.preferredFrameRateRange = CAFrameRateRange(minimum: hz, maximum: hz, preferred: hz)
             CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {

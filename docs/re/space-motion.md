@@ -205,3 +205,56 @@ likewise committed after the synchronous `switchSpace` in the `ended` turn.
 Nothing is delayed; the slide only starts earlier. M5 timing set
 `timing-102256` (pacing_gate.py, 9 trials per action per side): every Space
 action PASS, with p99 16.7 ms against main's 20.8–50.0 ms.
+
+## Space cover on the seam engine (2026-11-18, basics lane, #616)
+
+The Spaces clip on the basics page showed main's Space switch: the outgoing
+page vanished (one frame of its background color, then two white frames)
+before the incoming page painted, also for a warm tab, and after a hidden
+resize the incoming page drew one stale-size frame (about 15 pt off). Engine
+591b21a6 (#602) supplies the presentation seam, so the cover can hold the
+page area until the destination's presented frame at its current size.
+
+Changes in `SpaceContentTransitionController` / `SpacePageSnapshotTransition`:
+
+- A pane that shows native content (Welcome, Notes, Easels, Open's sad-tab
+  page, the placeholder of a tab without a page) is ready at once. Before,
+  such a pane left the cover up forever (Welcome destination; a crashed
+  renderer on the M1).
+- When the engine refuses a request (nil) or ends it for good (a failed
+  receipt), the cover retires over the live page. Our own superseded requests
+  never do this. No timer is involved.
+- The outgoing source capture (theme field plus every pane, 14–25 ms at
+  1280 × 800) ran on the input turn before the slide and delayed the plate's
+  first frame by about 20 ms. It now runs when the incoming plate covers the
+  unchanged source, just before the selection changes.
+- The plate spring begins at input time, like the sidebar pager's.
+- `FramePresentationConsumer.isEnabled` reads launch arguments ("NO"/"YES"
+  strings); before, `-OpenSeamSpaceCover NO` was ignored by a Bool cast.
+
+Frame rows (`tools/e2e/space_cover_frames.py`, welcome `W40_*`; per-frame page
+statistics from `tools/e2e/space-frames.swift`, numbers only):
+
+| Case | Cover on (M5 1x / M1 2x) | Cover off (kill switch) |
+|---|---|---|
+| Warm tab | no empty frame; destination at ~0.27–0.30 s (end of the slide) | 2–4 empty frames at 7–42 ms: FAIL |
+| After a hidden resize | no empty frame, no jump; destination theme field 0.18–0.33 s | empty frames: FAIL |
+| Destination loading (1.2 s) | theme field until the load ends (~1.26 s); one blank first-paint frame of the new document, then text at ~1.36 s | empty frames before the load: FAIL |
+| Split (two panes) | both panes present; no empty frame | empty frames: FAIL |
+| Welcome (native) | retires with the slide, `presentationUnavailable` false | empty frames: FAIL |
+| Crashed renderer (M1) | sad-tab page with the slide (after the native-pane fix) | empty frames: FAIL |
+
+Lead ruling 2026-11-18 21:25: off's first page change is the blank swap (the
+defect), so it is no baseline for latency. The latency rule for the cover is:
+in the same session, the page's first visible change comes no later than the
+sidebar pager's own first change plus one display frame. The off value is kept
+only as evidence of the defect. `.spaceCover` is on by default.
+
+Timing set (`tools/basics/space_cover_pacing.py` at c9665af5, one session on
+the M5 at 240 Hz, off and on alternating, 3 launches per side; evidence in
+`.re/basics/cover-pacing6`):
+
+| Row | Cover on | Cover off (defect evidence) |
+|---|---|---|
+| Pacing (`pacing_gate.py --no-latency`, 18 switches) | PASS: p99 16.7 ms, no trial with more than 1 late frame; one 25 ms interval at the start of one launch's first switch (START 1/18) | p99 33.3 ms, START 3/5 (the swap through empty frames) |
+| Latency rule (one stream reports sidebar and page per frame, 12 switches) | PASS: page minus sidebar first change = 0.0 ms on every switch (limit 4.17 ms); both at median 35.4 ms | page 9.2 ms, sidebar 35.4 ms: the page goes blank ~27 ms before the sidebar moves |

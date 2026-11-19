@@ -930,16 +930,26 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      willBeginAt screenPoint: NSPoint, forItems draggedItems: [Any]) {
-        outline.dragWasStarted = true
-        context.suppressPreviews(.drag, true)
-        TooltipController.shared.cancel(for: nil)
-        draggingIDs = Set(draggedItems.compactMap { itemID(of: $0) })
-        context.tabDragChanged?(Array(draggingIDs))
-        updateRowStates(animated: false)
+        dragBegan(ids: Set(draggedItems.compactMap { itemID(of: $0) }))
     }
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        dragEnded()
+    }
+
+    /// Drag-source state, shared by a system drag session and the product
+    /// demonstration recorder (which drives the same destinations).
+    func dragBegan(ids: Set<ItemID>) {
+        outline.dragWasStarted = true
+        context.suppressPreviews(.drag, true)
+        TooltipController.shared.cancel(for: nil)
+        draggingIDs = ids
+        context.tabDragChanged?(Array(draggingIDs))
+        updateRowStates(animated: false)
+    }
+
+    func dragEnded() {
         draggingIDs = []
         context.tabDragChanged?(nil)
         clearDropIndicator()

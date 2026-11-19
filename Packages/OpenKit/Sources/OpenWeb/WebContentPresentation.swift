@@ -48,8 +48,20 @@ public enum FramePresentationConsumer: String, CaseIterable, Sendable {
     /// Split: the START pane resize holds the old surface until presentation.
     case splitResize = "OpenSeamSplitResize"
 
-    /// Off unless the user defaults (or a launch argument) turn it on.
-    public var isEnabled: Bool { UserDefaults.standard.bool(forKey: rawValue) }
+    /// The default when no user default or launch argument is set. Each
+    /// consumer turns on after the lead accepts its proof (ruling 2026-11-17
+    /// 08:45). The Space cover is on (welcome W40 rows and its timing set on
+    /// 591b21a6, ruling 2026-11-18 21:25); the others stay off until proven.
+    public var isOnByDefault: Bool { self == .spaceCover }
+
+    /// A user default or launch argument (`-OpenSeamSpaceCover NO`) overrides
+    /// the default in either direction.
+    public var isEnabled: Bool {
+        // A launch argument arrives as the string "NO"/"YES"; bool(forKey:)
+        // reads both forms. Only a missing value takes the default.
+        let defaults = UserDefaults.standard
+        return defaults.object(forKey: rawValue) == nil ? isOnByDefault : defaults.bool(forKey: rawValue)
+    }
 }
 
 @MainActor

@@ -21,122 +21,84 @@ same model tab. The native URL is never added to engine history. Back starts at
 the first web destination; use Help ▸ Open Basics to return. This is a deliberate
 limit of the small content-host hook, rather than an extra history implementation.
 
-The page uses native AppKit cards with real miniature Open views and original room artwork. Four
-finite demonstrations (4.2, 4.0, 6.8 and 4.0 seconds) play once in order and stop.
-The whole pass has a 20-second budget; its planned length is 19 seconds. Only
-holds are shortened; native travel durations and easing stay the same. One one-shot timer
-advances the playlist. It is invalidated while hidden and after completion. A
-hidden playlist stays stopped when the page becomes visible again. Hover,
-click, Return, Space, and the VoiceOver Replay action play one card and end the
-playlist. No display link, polling task, video, audio, or repeating animation is used.
-Favicons use the bounded existing fetch/store path. Other windows create no Welcome page or notification observers.
-Window occlusion, minimization, application hiding, and removal from the selected
-content pane stop animations. Interrupted frames are copied from the presentation
-layers before removing the animations.
+## The basics page
 
-Reduce Motion uses the final drawing for each card and schedules no playlist or
-completion timer. Automation builds also accept `OPEN_E2E_REDUCE_MOTION=1`; this
-local hook can be unified with the intro's launch option by the Section 17 lead.
-Cards form one keyboard and accessibility element each. Footer buttons open the
-existing Essential Shortcuts and Settings windows. Text can wrap within a card so
-all of the lead's exact copy remains readable in narrow windows.
+The page follows the reference layout, copy structure and timing measured in a
+capture session ([re/onboarding.md §6](re/onboarding.md)). Open's own words, mark
+and background art are used; no reference asset is copied.
 
-The room lights the header from a small doorway at the upper right. The hero
-stays at the upper left. A centered, capped column holds four cards and two
-32-point native footer buttons. Card art has a common 12-point top/side inset and
-an eight-point radius. Miniatures fill that area; short viewports scroll.
+- **Layout.** Open's doorway mark, then "You're all set." / "Here are the basics."
+  (32 pt heavy), then a four-step accordion in a 336 pt column 31 pt from the page
+  edge. A collapsed step is 72 pt high (number and title); steps are 8 pt apart.
+  The active step is white, shows its icon, body copy and a 3 pt progress bar along
+  its lower edge; step 4 also shows ⌘ T keycaps. One 16:10 clip panel sits 32 pt to
+  the right of the column, from 19.6 % of the page height down to 4.5 % above the
+  bottom, and runs past the right edge. "Learn Essential Shortcuts" and
+  "Help & Resources" sit at the top right (23.5 pt insets). Narrow pages put the
+  clip under the steps and scroll.
+- **Reveal.** On first show the parts fade in (0.28 s, ease-in-out) at +0.28 s
+  (mark), +1.2 s (heading), +2.26 s (steps), +2.9 s (clip panel, which starts the
+  first clip) and +3.85 s (links). The fades are layer animations with begin times;
+  nothing lays out per frame.
+- **Playlist.** Pin → Spaces → Split → New tab. Each clip is 8.5 s; the next step
+  starts 0.5 s after a clip ends, so the playlist ends at 38.8 s. A step change is
+  a critically damped spring (stiffness 1600, damping 80; about 0.25 s) on the
+  step layers' position and bounds, and the body fades with the same spring.
+  The progress bar is one linear `transform.scale.x` animation per clip.
+- **End.** The last frame blurs and dims (a bundled blurred poster, 0.28 s fade)
+  and "Replay All" appears over the clip. Replay All restarts the playlist.
+- **Input.** Hover changes only the step surface; it never plays. A click,
+  Return, Space or the VoiceOver Replay action expands that step and plays only
+  its clip, with a 0.28 s crossfade; the clip then ends in the end state.
+- **Hidden.** Hiding the tab, minimizing, covering the window or hiding the app
+  pauses the clip and releases the player and its decoder. A paused frame is
+  copied once (off the main thread) into the poster layer. Showing the page again
+  resumes the same step from the same time.
+- **Reduce Motion.** No reveal and no autoplay: step 1 is expanded and its poster
+  (the clip's last frame) shows. A click still plays that step's clip.
 
-`OnboardingMiniature` shares the real sidebar, Favorite grid, tab rows, command
-bar, pager and split divider. Each card has a different Space palette and
-composition: a command bar opens over New tab; Pin lifts a native row over the
-divider; Spaces swipes two real windows; Split divides the content. Spaces settles
-to one full window. The second window exists only for finite playback. Every
-miniature uses a throwaway model with no engine contents. The editorial page has
-an original landscape, a title, and at most two short text lines per block.
+Clips are bundled in `App/Resources/Basics/` (HEVC Main `hvc1`, 1920 × 1200,
+60 fps, hardware decoded by AVFoundation), with a last-frame poster and a blurred
+poster each; 3.3 MB in all. They are recorded from the real app with
+`tools/basics` ([README](../tools/basics/README.md));
+`tools/basics/clips-manifest.json` records the source commit and file hashes.
+Re-record them when the sidebar, command bar or split chrome changes.
 
-All resting card borders are identical. Only hover or keyboard focus adds the
-one-point warm outline. Active playlist state alone does not change the border.
-The native demo rows use a local font/color override for readability at small
-scale; normal browser rows retain their own typography and theme. Descendants
-of a miniature stay out of the keyboard/VoiceOver loop: each card is one Replay
-action. At rest all native layer animations are removed, including sidebar
-material/row transitions.
+`WelcomeContentHost` opens the existing Essential Shortcuts window and the
+`help-center` command (Open's help page in a new tab).
+
+## Automation and tests
 
 The Debug/automation socket command `welcome` returns `visible`, `activeCard`
-(1–4 or null), `playlist` (`playing`/`stopped`), `animating`, actual card AX labels
-and actions, animation and pending-completion counts, played card order, native
-host count, engine content creation count, and count of engine pages with internal
-URLs. Its `layout` field reports actual viewport, document, card, text, and footer
-frames, measured text size, rendered layer colors/labels, and scene scale. The
-suite checks compact layout, contrast, permitted labels, and dark/light captures
-at 1280×800 and 1000×700, plus the 640 pt content boundary. Actions:
-`insert`, `replay card=N`, `hover card=N`, `reveal card=N`, and
-`link link=shortcuts|settings`. Replay invokes the real accessibility action;
-hover delivers an App-local tracking event. Invalid cards and hidden replay fail.
-Each card keeps one tracking area. Repeated entered events beneath a stationary
-pointer do not replay it; an exit or hiding the page resets the hover transition.
-Automation can send `hover card=N phase=exit` before the next entered transition.
+(1–4), `playlist` (`playing`/`stopped`), `animating`, `revealed`, `ended`,
+`paused`, `reduceMotion`, `playedCards`, `completionCount`, `pendingCompletion`,
+`animationCount`, `decoders` and a `clip` object (`loaded`, `decoder`, `playing`,
+`end`, `replayAllVisible`, bundled `movies`), the step AX labels and actions, and
+`layout` (viewport, document, column, steps, clip, links and text frames).
+Actions: `insert`, `replay card=N`, `replay-all`, `hover card=N [phase=exit]`,
+`reveal card=N`, `link link=shortcuts|help`. Invalid cards and hidden replay fail.
 
-`welcome window=<window UUID>` reads an existing window without focusing it.
-`windowState` includes the raw AppKit occlusion state, key/main state, visibility,
-and minimization. The suite hides a playing window and verifies that restoring it
-leaves the page stopped until an explicit replay. The miniaturized page has no
-pending animation, completion timer, or theme display update within one second,
-and stays below 1% App CPU over five seconds in Release. The suite also covers
-Welcome with a second owned Open window. If that cover does not change AppKit's
-occlusion state, the row records INFO with the observed state. The harness moves only its own window
-away from the read-only hardware pointer position before starting the playlist.
+`tools/e2e/engine_e2e.py --only welcome` checks the reveal schedule, the playlist
+order and end time, the decoder lifecycle, hover without replay, click and keyboard
+replay, Replay All, pause/resume on tab switch, minimize and cover, links, session
+restore, archive and reopen, refusal of external `open://welcome`, the layout at
+1280 × 800, 1000 × 700 and a tall window (dark and light app appearance), heading
+contrast on real window pixels (at least 7:1), and Reduce Motion.
+`OPEN_E2E_WELCOME_IDLE_ONLY=1` runs the idle contract (complete playlist, then
+below 1 % App CPU in Release). Evidence goes to `.re/welcome-e2e/`.
 
-Run the real-App suite as:
+`W40_space_switch_*` (tools/e2e/space_cover_frames.py) check the Space switch
+the Spaces clip shows, frame by frame: no empty page frame and no position jump
+for a warm tab, after a hidden resize, for a loading destination, for Split
+Spaces, for a Welcome (native) destination and, on the M1, after a renderer
+crash. `OPEN_E2E_WELCOME_COVER_ONLY=1` runs only these rows;
+`OPEN_E2E_SPACE_COVER_OFF=1` runs them with the cover's kill switch (they fail
+on main's path). See [re/space-motion.md](re/space-motion.md).
+
+`tools/basics/pacing.py` records stock frame-detector ledgers for the step change,
+Replay All and the steps' reveal fade; score them with `tools/perf/pacing_gate.py`.
 
 ```sh
-export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Debug
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --only welcome
 ```
-
-Check the shared screen-priority flag before running. Screenshots and detailed
-receipts go to `.re/handoff/sections/s17/c4/`. The suite uses temporary data and
-cache roots, a local file page, and owned-process cleanup. It saves, resets,
-and restores `open.settings.lastPane`, `open.library.lastSection`, and
-`open.import.lastArcDir` in a `finally` path. The common runner preserves its
-startup preference keys. It changes no Welcome preference keys.
-
-Welcome text uses each actual, opaque content surface. Theme foreground tokens
-are seeds, not guaranteed content text colors. `WelcomeTextColors` composites
-alpha in sRGB, computes WCAG relative luminance with the sRGB transfer function,
-and keeps a seed that passes. A failing seed changes only OKLab lightness toward
-black or white, with a 0.2 contrast margin where the surface allows it. Header
-text is measured on the page background; card text is measured on the card fill.
-Secondary text meets 4.5:1 and primary text has stronger contrast. The small card
-titles also use 4.5:1, above the requested 3:1 heading minimum. Colors update on
-theme, app/view appearance, and key-state changes. Cached inputs prevent layout
-or animation frames from repeating the color math. Welcome adds no inactive tint.
-
-The `W36_contrast_*` rows cover light/dark Space themes × Light/Dark app appearance
-× active/inactive windows. The existing `appearance` command overrides only
-`NSApp.appearance`; the user's macOS setting stays unchanged. An owned second
-Open process establishes the inactive case without touching a user's app. Each
-row requires the expected theme, appearance, app activation, and native key state,
-plus a real window-server capture. The capture's ICC profile is converted to sRGB
-before sampling. Each label's modal background is its surface; the median of 12
-strongest glyph-core pixels is its ink. The gate checks both headers, all four
-card titles and bodies, and the illustration labels. Its three summary ratios
-are the lowest header, title, and body ratios, not a selected best card. Glyph
-sample coordinates and RGB values are retained in `.re/welcome-contrast/` with
-all eight PNGs. Run just this matrix with
-`OPEN_E2E_WELCOME_CONTRAST_ONLY=1 tools/e2e/engine_e2e.py --only welcome` under the
-same screen lock and priority rules. The temporary old-palette build patch and
-negative receipt also stay in `.re/`; no mutation switch ships in the App.
-
-Footer button labels and native miniature row labels are mandatory pixel
-assertions in every contrast case. The checker samples their real glyph-core
-pixels after ICC-to-sRGB conversion. Title contrast correction stays local to
-the miniature: it does not change the user's real sidebar palette. The New tab
-command bar, Pin row, Space title and split-row labels all remain real components.
-
-See [the eight-case contrast evidence](welcome-contrast.md) for the captured
-ratios, the original-color failure control, and two representative App images.
-
-[Room Welcome before/after, Light and Dark](images/welcome-room-before-after.png).
-These M3 window captures use synthetic Example data on the M1 built-in 2x panel.

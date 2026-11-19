@@ -232,6 +232,37 @@ Arc101 has steps `pinTabs`, `spaces`, `splitView`, and `newTab`. Declaration ord
 
 Copy includes **“Here are the basics.”**, **“Learn Essential Shortcuts”**, and **“Help & Resources”**. Four bundled videos cover new tab, pinning, Space swiping, and Split View. Each is **8.5 s**, HEVC **1920 × 1200**, **60 fps**, with no audio stream. This is resource duration, not a proved auto-advance interval. Evidence: X, `welcome-region.txt`; M, `ARC_WelcomeToArcFeature.bundle` entries in `media-metadata.json`.
 
+### Basics page capture (2026-11-17, M1)
+
+A capture session on the M1 (Arc 1.170.0, window 1280 × 800 pt at 2x, light
+appearance) settled the Arc101 layout and behavior. Arc opened the page from the
+sidebar item of type `welcomeToArc` (tab type `legacy`, title "Getting Started")
+in its default Space. Method: `tools/capture/session.py --host m1 --backend arc`
+blocks b01 (probe), b02 (59 s still series, about 0.85 s apart) and b03 (60 fps
+ScreenCaptureKit movie bursts). Raw frames and AX dumps stay in `.re/basics/arc/`.
+
+| Fact | Value | Evidence |
+|---|---|---|
+| Layout | Heading and four steps in a left column, one clip panel to the right that runs past the page edge; two buttons at the top right | b02 stills; AX frames in b02 `b02-page-ax` |
+| Heading | Two lines, 322.5 × 70 pt | AXStaticText "Let's settle in!\nHere are the basics." `[414, 299, 322.5, 70]` |
+| Steps | Collapsed titles 80 pt apart; numbers at +20 pt, titles at +47 pt from the step edge | AXStaticText "1"…"4" and titles, y 417/497/577/657 |
+| Active step | White, icon instead of number, body text, a progress bar along its lower edge; step 4 adds ⌘ T keycaps (42 × 44 pt) | b03 `step2` and `end` frames; AXStaticText "⌘" `[471.5, 751.4, 22, 28]` |
+| Buttons | "Learn Essential Shortcuts" 230.5 × 42, "Help & Resources" 175 × 42, 9 pt apart, 23.5 pt from the top and right | AXButton frames `[852, 93.5, …]`, `[1091.5, 93.5, …]` |
+| Reveal | Separate 0.28 s fades: logo +0.28 s, heading +1.2 s, steps +2.26 s, clip +2.9 s, buttons +3.85 s after the background | b03 `open` burst, region progress per frame |
+| Playlist | Order Pin → Spaces → Split View → New tab; one step per 9.0 s; ends about 38.8 s after the page opens | b02 still series; b03 `end` burst |
+| Step change | Spring-like move that settles in about 0.25 s | b03 `step2`, tracked title offset per frame |
+| End | Last frame blurs and dims, a "Replay All" button appears centered over the visible clip | b03 `end`; AXButton "Replay All" |
+| Hover | No visible change after the playlist ends | b03 `hover2` (no new frames for 4 s) |
+| Click | The clicked step expands and only its clip plays, with a short crossfade | b03 `click3` |
+
+The four bundled clips (`ARC_WelcomeToArcFeature.bundle`, `ffprobe`) are window
+recordings with the system pointer. In `space_swiping.mp4` a click on a Space
+button slides only the Space pager band (about 390 clip px in about 0.28 s,
+settling like a spring); the toolbar, URL field and Favorites stay still
+(frame-offset tracking of decoded frames 2.2–3.0 s). `new_tab.mp4` clicks the
+"New Tab" row, which shows a ⌘T hint on hover, then types into the command bar.
+Clip frames were decoded only into `.re/basics/clips/`.
+
 ## §7. Returning users and launch guards
 
 The preference enum includes **`hasLaunchedBefore`** (ordinal 2), **`shouldSkipUnboxingVideo`** (90), and **`playUserInterfaceSoundsDisabled`** (98). Only the intro-skip gate was traced through construction (§3). The exact read/write points for `hasLaunchedBefore`, interrupted first-run resume, and fully signed-in launch remain unresolved. Evidence: T, `103de34ec`; D, skip-intro and wizard-constructor receipts.

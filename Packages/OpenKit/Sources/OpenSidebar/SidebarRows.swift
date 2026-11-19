@@ -1165,6 +1165,9 @@ final class NewTabCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("newTab")
     let plus = GlyphView()
     let title = TextLabel()
+    /// "⌘T" at the trailing edge while the pointer is over the row (reference
+    /// New Tab row on hover; docs/re/onboarding.md §6, new_tab clip).
+    let shortcutHint = TextLabel()
 
     required init(frame: NSRect) {
         super.init(frame: frame)
@@ -1175,8 +1178,13 @@ final class NewTabCellView: SidebarCellView {
         title.inset = SpaceListMetrics.textInset
         title.trailingInset = SpaceListMetrics.textTrailingInset
         title.text = { "New Tab" }
+        shortcutHint.font = Typography.newTab.font
+        shortcutHint.baseline = SpaceListMetrics.titleBaselineOffset
+        shortcutHint.alignment = .right
+        shortcutHint.text = { "⌘T" }
+        shortcutHint.isHidden = true
         rowStateChanged()
-        addSubview(plus); addSubview(title)
+        addSubview(plus); addSubview(title); addSubview(shortcutHint)
     }
 
     /// While the Cmd+T command bar is open the row is current and its label and
@@ -1184,13 +1192,18 @@ final class NewTabCellView: SidebarCellView {
     override func rowStateChanged() {
         let current = rowView?.isCurrent ?? false
         plus.tint = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : SidebarRole.newTabGlyph.nsColor }
-        title.color = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : (self?.page?.roles.newTabLabel.nsColor ?? SidebarRole.secondaryText.nsColor) }
+        let label: @MainActor () -> NSColor = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : (self?.page?.roles.newTabLabel.nsColor ?? SidebarRole.secondaryText.nsColor) }
+        title.color = label
+        shortcutHint.color = label
+        shortcutHint.isHidden = !(rowView?.isHovered ?? false) || current
     }
 
     override func layout() {
         super.layout()
         let m = SpaceListMetrics.self
         plus.frame = CGRect(x: m.faviconX, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
+        let hintWidth: CGFloat = 40
+        shortcutHint.frame = CGRect(x: bounds.width - 12 - hintWidth, y: 0, width: hintWidth, height: m.rowHeight)
         title.frame = CGRect(x: m.titleX, y: 0, width: bounds.width - m.titleX - m.titleTrailingInset, height: m.rowHeight)
     }
 }
