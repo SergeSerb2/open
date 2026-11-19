@@ -642,3 +642,4 @@ cannot be observed. Open keeps its current behaviour and builds no guessed surfa
 - Cmd-Tab and Launchpad (Apps) are not verified: both need keyboard input, which tests of Open never send.
 - The runtime correction (scale 1.015, lift 5 px of 1024) was measured on the M1 Dock at its default tile size. Other tile sizes and magnification are not measured.
 - The `dock_*` rows of `app-icons` run only where the Dock stays visible (the M1). Where it auto-hides (the M5) they print `SKIP real Dock rows` and do not run.
+- The reference tile is the first usable of Calculator, Photos, Notes, Contacts and Maps: an Apple system app in the Dock that is not running, has no badge and measures as a centred squircle (post-merge fix, LEAD 22:15, 2026-11-18). A wallpaper boundary behind Open's own tile can still mislead one edge; the M1 wallpaper is fixed, so the rows stay deterministic there.

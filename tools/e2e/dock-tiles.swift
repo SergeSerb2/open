@@ -1,12 +1,14 @@
 // Read-only Dock probe for tools/e2e/app_icons.py. No input events, no Dock settings.
-//   dock-tiles frames               -> JSON {trusted, scale, tiles: [{title, url, x, y, w, h}]} (points, top-left origin)
+//   dock-tiles frames               -> JSON {trusted, scale, tiles: [{title, url, running, badge, x, y, w, h}]} (points, top-left origin)
 //   dock-tiles measure PNG X Y W H  -> JSON plate geometry of one tile in a screen capture (pixel rect)
-// Measurement (pixels of the capture): each edge is the first clear colour step from outside (sum |dRGB| between
-// neighbours >= 45 % of the window's largest step, or >= 24, then up to its local peak, parabolic sub-pixel fit). The plate's
-// top is searched below the Dock's own glass border (18 % of the tile width), its sides on the plate's middle row.
+// Measurement (pixels of the capture): each edge is the outermost clear colour step (sum |dRGB| between neighbours;
+// see `edges`). The plate's top is searched below the Dock's own glass border (18 % of the tile width), its sides on
+// the plate's middle row. A tile over a one-sided wallpaper boundary can still mislead a side edge, so callers check
+// that a reference tile's own geometry is consistent before they use it.
 // `corner`: the left edge's inset from the plate's left side, 1 ... 16 px below its top (the corner profile).
-// `rim`: the brightest of the rows at the plate's top edge (-1, 0, +1; any sub-pixel phase) minus the plate 3-5 px in (middle 40 % of the top
-// edge); `plate` is that inner luminance. macOS draws a light rim on every system-rendered icon; flat art has none.
+// `rim`: the brightest of the rows at the plate's top edge (-1, 0, +1; any sub-pixel phase) minus the plate 3-5 px
+// in (middle 40 % of the top edge); `plate` is that inner luminance. macOS draws a light rim on every
+// system-rendered icon; flat art has none.
 // A bright plate shows little or no lighter rim (Safari about 0), so callers judge the rim on darker plates only.
 import AppKit
 import ApplicationServices
@@ -30,7 +32,11 @@ if arguments.count == 2 && arguments[1] == "frames" {
       if let value = attribute(item, kAXPositionAttribute) { AXValueGetValue(value as! AXValue, .cgPoint, &point) }
       if let value = attribute(item, kAXSizeAttribute) { AXValueGetValue(value as! AXValue, .cgSize, &size) }
       let url = (attribute(item, kAXURLAttribute) as? URL)?.standardizedFileURL.path ?? ""
+      // Running state and badge text, so a caller can pick a reference tile that neither shows.
+      let running = (attribute(item, "AXIsApplicationRunning") as? Bool) ?? false
+      let badge = (attribute(item, "AXStatusLabel") as? String) ?? ""
       tiles.append(["title": (attribute(item, kAXTitleAttribute) as? String) ?? "", "url": url,
+                    "running": running, "badge": badge,
                     "x": point.x, "y": point.y, "w": size.width, "h": size.height])
     }
   }
@@ -57,20 +63,31 @@ func pixel(_ x: Int, _ y: Int) -> RGB {
 }
 func luminance(_ p: RGB) -> Double { 0.2126 * p.0 + 0.7152 * p.1 + 0.0722 * p.2 }
 func step(_ a: RGB, _ b: RGB) -> Double { abs(a.0 - b.0) + abs(a.1 - b.1) + abs(a.2 - b.2) }
-/// Sub-pixel position of the first clear colour step in `line` (walking from outside in).
-func edge(_ line: [RGB], _ window: Int) -> Double {
+/// Sub-pixel positions of the clear colour steps in `line` (walking from outside in), outermost first. A step counts
+/// when it is >= 45 % of the window's largest step (or >= 24: a dark plate on the dark Dock steps by about 40 per px,
+/// the Dock's backdrop by under 10) and >= 45 % of the largest step within 3 px: a wallpaper gradient seen through the
+/// Dock's glass (about 25 per px) just outside a plate's much stronger edge is not the edge (M1, 48 pt tiles, Mail).
+/// Each step moves up to its local peak, then a parabolic fit gives the sub-pixel position.
+func edges(_ line: [RGB], _ window: Int) -> [Double] {
   let g = (0..<min(window, line.count - 1)).map { step(line[$0], line[$0 + 1]) }
-  // A dark plate on the dark Dock steps by about 40 per px, the Dock's backdrop by under 10.
   let big = min(0.45 * (g.max() ?? 0), 24)
-  var i = g.firstIndex { $0 >= big } ?? 0
-  while i + 1 < g.count && g[i + 1] > g[i] { i += 1 }
-  var offset = 0.0
-  if i > 0 && i < g.count - 1 {
-    let denominator = g[i - 1] - 2 * g[i] + g[i + 1]
-    if denominator != 0 { offset = 0.5 * (g[i - 1] - g[i + 1]) / denominator }
+  func dominant(_ j: Int) -> Bool { g[j] >= 0.45 * (g[max(0, j - 3)...min(g.count - 1, j + 3)].max() ?? 0) }
+  var found: [Double] = [], j = 0
+  while j < g.count {
+    guard g[j] >= big && dominant(j) else { j += 1; continue }
+    var i = j
+    while i + 1 < g.count && g[i + 1] > g[i] { i += 1 }
+    var offset = 0.0
+    if i > 0 && i < g.count - 1 {
+      let denominator = g[i - 1] - 2 * g[i] + g[i + 1]
+      if denominator != 0 { offset = 0.5 * (g[i - 1] - g[i + 1]) / denominator }
+    }
+    found.append(Double(i) + 0.5 + offset)
+    j = i + 2
   }
-  return Double(i) + 0.5 + offset
+  return found.isEmpty ? [0.5] : found
 }
+func edge(_ line: [RGB], _ window: Int) -> Double { edges(line, window)[0] }
 let cx = w / 2
 let column = (0..<h).map { pixel(cx, $0) }
 let t0 = Int((Double(w) * 0.18).rounded())
