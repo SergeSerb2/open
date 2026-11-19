@@ -14,7 +14,31 @@ from engine_e2e import Open
 from library_overlay import capture_window
 
 
-DOCK_REFERENCES = ['Mail', 'Calculator', 'Finder']  # Apple icons; Finder is always in the Dock.
+# Fixed Apple apps for the reference tile, in order. None of them badges or changes its icon (Mail, Messages, Calendar,
+# App Store and System Settings can), and the first usable one that is in the Dock is taken.
+DOCK_REFERENCES = ['Calculator', 'Photos', 'Notes', 'Contacts', 'Maps']
+
+
+def reference_problem(tile, geometry=None):
+    """Why an Apple tile cannot be the reference, or None. Before measuring: it must be one of Apple's own apps, not
+    running and without a badge. After: its geometry must be self-consistent (an Apple squircle centred in its tile).
+    A wallpaper boundary behind a tile can mislead an edge (M1, 48 pt tiles: Mail top 25.4, corners -5.7, rim -68)."""
+    if not tile['url'].startswith('/System/Applications/'):
+        return 'not an Apple system app: ' + tile['url']
+    if tile.get('running'):
+        return 'running'
+    if tile.get('badge'):
+        return 'badge ' + repr(tile['badge'])
+    if geometry is None:
+        return None
+    corner, side = geometry['corner'], geometry['rect'][2]
+    if min(corner) < 0 or any(b > a + 0.5 for a, b in zip(corner, corner[1:])):
+        return 'corner profile not a squircle: ' + repr(corner)
+    if abs(geometry['width'] - geometry['height']) > 1.5:
+        return f"plate not square: {geometry['width']} x {geometry['height']}"
+    if not 0.70 <= geometry['width'] / side <= 0.80:
+        return f"plate {geometry['width']} px in a {side} px tile"
+    return None
 
 
 class RealDock:
@@ -46,14 +70,16 @@ class RealDock:
         return subprocess.run(command, timeout=15).returncode == 0 and path.is_file()
 
     def measure(self, bundle, name):
-        """Plate geometry (2x px) of Open's tile and the first Apple reference tile in one Dock capture."""
+        """Plate geometry (2x px) of Open's tile and of the first usable Apple reference tile in one Dock capture."""
         frames = self.frames()
         target = os.path.realpath(bundle)
         tiles = frames['tiles']
         mine = [t for t in tiles if t['url'] and os.path.realpath(t['url']) == target]
-        reference = next((t for title in DOCK_REFERENCES for t in tiles if t['title'] == title), None)
-        if len(mine) != 1 or reference is None:
-            return dict(error='Dock tiles not found', open=len(mine), reference=reference)
+        candidates = [t for title in DOCK_REFERENCES for t in tiles if t['title'] == title]
+        skipped = {t['title']: reference_problem(t) for t in candidates if reference_problem(t)}
+        candidates = [t for t in candidates if t['title'] not in skipped]
+        if len(mine) != 1 or not candidates:
+            return dict(error='Dock tiles not found', open=len(mine), skipped=skipped)
         x0 = math.floor(min(t['x'] for t in tiles)); y0 = math.floor(min(t['y'] for t in tiles))
         x1 = math.ceil(max(t['x'] + t['w'] for t in tiles)); y1 = math.ceil(max(t['y'] + t['h'] for t in tiles))
         path = self.output/('dock-' + name + '.png')
@@ -63,7 +89,13 @@ class RealDock:
             rect = [round((tile['x'] - x0) * 2), round((tile['y'] - y0) * 2), round(tile['w'] * 2), round(tile['h'] * 2)]
             out = subprocess.run([str(self.helper), 'measure', str(path), *map(str, rect)], capture_output=True, text=True, check=True)
             return dict(json.loads(out.stdout), rect=rect)
-        return dict(open=geometry(mine[0]), reference=dict(geometry(reference), title=reference['title']), capture=path.name)
+        for tile in candidates:
+            measured = dict(geometry(tile), title=tile['title'])
+            problem = reference_problem(tile, measured)
+            if problem is None:
+                return dict(open=geometry(mine[0]), reference=measured, skipped=skipped, capture=path.name)
+            skipped[tile['title']] = problem
+        return dict(error='no usable Apple reference tile', skipped=skipped, capture=path.name)
 
 
 def run(output, config, factory=None):
