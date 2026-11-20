@@ -572,6 +572,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return browser
   }
   func tabID(for content: OEWebContent) -> ItemID? { hosts.first { $0.value.content === content }?.key }
+  private func keepingSelection(_ removal: () -> Void) {
+    if let controller { controller.keepingSelection(removal) } else { removal() }
+  }
   private func withoutUndo(_ body: () -> Void) {
     let undo = model.undoManager; undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }; body()
   }
@@ -889,10 +892,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
            .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState, .newEasel, .exportEasel, .deleteEasel, .exportNote, .deleteNote: return false
-      case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
+      // Same removal rules as before; keepingSelection selects the neighbour when the
+      // removal took the current item, as in a normal window (no blank page).
+      case .archiveNodes(let ids):
+        var count = 0
+        keepingSelection { count = model.archiveNodes(ids: ids) }
+        return count > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
-        model.closeTab(id: id); return true
+        keepingSelection { model.closeTab(id: id) }; return true
       case .move(_, let parent, _), .moveNodes(_, let parent, _), .openURL(_, let parent, _):
         guard case .spaceToday(let id) = parent, id == focusedSpace?.id else { return false }
       default: break
@@ -1062,8 +1070,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     var isFavorite = false
     if case .favorites? = model.parent(of: id) { isFavorite = true }
     let isPinned = model.isPinned(tabID: id)
-    var inSplit = false
-    if case .splitPane? = model.parent(of: id) { inSplit = true }
+    var inSplit = false, splitSelected = false
+    if case .splitPane(let splitID)? = model.parent(of: id) { inSplit = true; splitSelected = selectedNodeID == splitID }
     if isPinned || isFavorite {
       controller?.container.closeHost(for: id); hosts[id]?.close()
       returnToPinnedURL(id)
@@ -1074,10 +1082,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // or show no tab (Arc 1.172.2, docs/re/pinned-favorites-close.md P5).
       let shown = Set(orderedTabs.map { model.sidebarSelectionID(for: $0.id) })
       select(nodeID: selectionHistory[space.id]?.last { $0 != id && shown.contains($0) })
-    } else if wasSelected, inSplit, !isPinned {
+    } else if wasSelected, splitSelected, !isPinned, selectedNodeID != nil {
       // An archived pane of the selected split needs no new selection: the model keeps the
       // split selected (focus on its first pane) or hands it to the last pane, as Close This Pane
       // does. Show that pane: title, page focus, extensions and menus follow the new focused tab.
+      // A selection that held the pane's own ID (a session saved by an older build) is not
+      // retargeted by the model, so it takes the neighbour path below.
       showSelection(); scheduleSave()
     } else if wasSelected {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
@@ -1366,17 +1376,29 @@ extension EngineWebContentHostFactory {
       // item is back in the sidebar, so a window that closed meanwhile loses nothing.
       guard let record = await store.recent(limit: 1).first,
         !self.isClosing, !self.app.terminationRequested else { return }
+      // Staged like the Library's Restore: the snapshot holding the item is written first, and
+      // only then is the Archive row deleted. A failed write rolls the item back and keeps the row.
+      let app = self.app, model = self.model
+      let save: () throws -> Void = {
+        guard !app.isFirstRun || app.firstRunSaved else { return }
+        try app.snapshotStore.saveNow(model: model)
+      }
       // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
       // blank tab and drop its children.
       if record.kind == .folder {
-        if let folder = self.model.restoreArchivedFolder(record) { self.controller?.sidebar.reveal(nodeID: folder.id) }
+        guard let folder = try? model.restoreArchivedFolder(record, saving: save) else { return }
+        store.discardArchived(ids: [folder.id])
+        self.controller?.sidebar.reveal(nodeID: folder.id)
         return
       }
-      if self.model.tab(id: record.id) != nil { store.discardArchived(ids: [record.id]) }
-      let tab = self.model.restoreArchivedTab(record)
+      let existed = model.tab(id: record.id) != nil
+      if existed { store.discardArchived(ids: [record.id]) }
+      guard let tab = try? model.restoreArchivedTab(record, saving: save), model.parentByID[tab.id] != nil else { return }
+      if !existed { store.discardArchived(ids: [tab.id]) }
       // The tab returns to its original place, which can be in another Space. Selecting it in
       // the focused Space would leave that Space with a selection it cannot show (a blank page).
-      if self.model.parentByID[tab.id] != nil { self.selectTabForCommand(tab.id) }
+      // Expanding its folders only reveals it: no Undo step, so one Cmd+Z undoes the restore.
+      self.withoutUndo { self.selectTabForCommand(tab.id) }
     }
   }
 
