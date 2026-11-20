@@ -272,6 +272,50 @@ def checks(factory, results, tmp, config, harness):
         check('trash', wait(lambda: not item(fast)) and not Path(paths[0]).exists())
         dismiss_library()
 
+        for kind in ('directory', 'symlink'):
+            path = first / ('replaced-' + kind + '.txt')
+            key = start('/fast?name=' + path.name)
+            downloaded = wait(lambda: item(key) if item(key).get('fileExists') else None)
+            stored = Path(downloaded['path']) if downloaded else None
+            # Even an unfixed App may run the trash action. Both the row's
+            # exact destination and the replacement must belong to this fixture.
+            if (not stored or stored.name != path.name or stored.parent.resolve() != first.resolve()
+                    or path.is_symlink() or not path.is_file()):
+                raise RuntimeError('download replacement fixture did not use its expected path')
+            library()
+            if not wait(lambda: 'Move to Trash' in row(key).get('buttons', [])):
+                raise RuntimeError('regular fixture download did not offer Move to Trash')
+
+            actions_before = state()['fileActions']
+            path.unlink()
+            if kind == 'directory':
+                path.mkdir()
+                canary = path / 'keep.txt'
+            else:
+                canary = first / 'replacement-link-target.txt'
+            canary.write_text('keep this fixture')
+            if kind == 'symlink':
+                path.symlink_to(canary)
+
+            # Invoke the action while the row still has its cached regular-file status.
+            attempted = menu(key, 'Move to Trash')
+            wait(lambda: row(key).get('subtitle') == 'File moved or deleted.' or not item(key), 5)
+            retained = item(key)
+            current_row = row(key)
+            current_menu = menu(key) if current_row else []
+            enabled = {v['title'] for v in current_menu if v['enabled'] and v['title'] != 'separator'}
+            intact = (path.is_dir() and not path.is_symlink() if kind == 'directory'
+                      else path.is_symlink() and path.readlink() == canary)
+            no_file_action = state()['fileActions'] == actions_before
+            check('file_replaced_with_' + kind, current_row.get('subtitle') == 'File moved or deleted.'
+                  and retained.get('state') == 'completed' and retained.get('fileExists') is False
+                  and any(v['title'] == 'Move to Trash' and v['enabled'] for v in attempted)
+                  and enabled == {'Hide from Open'} and no_file_action
+                  and intact and canary.is_file() and canary.read_text() == 'keep this fixture',
+                  item=retained, row=current_row, attempted=attempted, menu=current_menu,
+                  replacementIntact=intact, noFileAction=no_file_action)
+            dismiss_library()
+
 
     def captured_kinds_flow():
         for ext, expected in [('zip', 'Zip Archive'), ('dmg', 'Disk Image'), ('png', 'Image'),
@@ -689,6 +733,49 @@ def checks(factory, results, tmp, config, harness):
         seed_download = start('/fast?history=limits'); wait(lambda: item(seed_download).get('fileExists'))
         profile_row = next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile)
         path = Path(app.user_data) / 'Profiles' / profile_row['directory'] / 'State/downloads.sqlite3'
+
+        # Age zero writes the completed row with startedAt == endedAt. Repeat
+        # that exact write while the pane is open so no changed row can redraw it.
+        app.call('download-start-age', id=seed_download, seconds=0)
+        app.call('download-history-flush')
+        library()
+
+        def loaded_pane():
+            panel = app.call('library-state')
+            provider = panel.get('providers', {}).get('downloads', {})
+            if (panel.get('open') and panel.get('section') == 'downloads' and provider.get('loaded')
+                    and not provider.get('running') and any(r['id'] == seed_download for r in panel['rows'])):
+                return panel
+
+        panel = wait(loaded_pane)
+        before = item(seed_download)
+        if (not panel or state()['historyError'] or before.get('state') != 'completed'
+                or before['startedAt'] != before['endedAt']):
+            raise RuntimeError('Downloads pane did not settle before the history write fault')
+        draw_key = 'wake.nativeFieldDraw.library.status'
+        draws_before = panel['performance'].get(draw_key, 0)
+
+        with contextlib.closing(sqlite3.connect(path)) as db, db:
+            # SQLite permits reads but rejects the App's next BEGIN IMMEDIATE.
+            db.execute('BEGIN IMMEDIATE')
+            app.call('download-start-age', id=seed_download, seconds=0)
+            error = wait(lambda: state()['historyError'], 5)
+
+            def visible_error():
+                current = app.call('library-state')
+                if (not current.get('open') or current.get('section') != 'downloads'
+                        or current['windowID'] != panel['windowID'] or current['panelGeneration'] != panel['panelGeneration']):
+                    return None
+                draws = current['performance'].get(draw_key, 0)
+                if draws <= draws_before:
+                    return None
+                native = app.call('library-captures-state')
+                if native['visible'] and native['section'] == 'downloads' and error in native['text']:
+                    return draws
+
+            draws_after = wait(visible_error, 5) if error else None
+        check('history_late_write_error_visible', draws_after and item(seed_download) == before,
+              error=error, statusDrawsBefore=draws_before, statusDrawsAfter=draws_after)
 
         def stop():
             dismiss_library(); app.call('download-history-flush'); app.call('download-policy', quit='close')

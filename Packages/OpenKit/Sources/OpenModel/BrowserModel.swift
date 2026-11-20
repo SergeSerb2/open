@@ -249,6 +249,16 @@ public final class BrowserModel {
     public func tab(id: ItemID) -> Tab? { index[id]?.tab }
     public func parent(of id: ItemID) -> NodeParent? { parentByID[id] }
 
+    /// A remembered selection is visible only while it belongs to this Space or its Favorites.
+    public func selectedNode(in space: Space, window: BrowserWindowState) -> SidebarNode? {
+        guard let id = window.selectedNodeBySpace[space.id], let parent = parentByID[id] else { return nil }
+        switch section(of: parent) {
+        case .spacePinned(let owner)?, .spaceToday(let owner)?: return owner == space.id ? index[id] : nil
+        case .favorites(let profile)?: return profile == space.profileID ? index[id] : nil
+        default: return nil
+        }
+    }
+
     /// Resolve a flattened tab traversal result to its selectable sidebar node.
     /// Selecting a split pane as a plain tab would hide the other panes.
     public func sidebarSelectionID(for id: ItemID?) -> ItemID? {
@@ -1915,13 +1925,24 @@ public final class BrowserModel {
 
     private func fill(_ folder: Folder, in parent: NodeParent, at position: Int?, with nodeIDs: [ItemID]) -> Revert? {
         guard attach(.folder(folder), to: parent, at: position) != nil else { return nil }
-        var moves: [Revert] = []
-        for id in topLevelSelection(nodeIDs) where canMoveNode(id: id, to: .folder(folder.id)) {
-            if let revert = relocate(id, to: .folder(folder.id), at: nil) { moves.append(revert) }
+        let destination = NodeParent.folder(folder.id)
+        var moves: [(id: ItemID, source: NodeParent, revert: Revert)] = []
+        for id in topLevelSelection(nodeIDs) where canMoveNode(id: id, to: destination) {
+            if let source = parentByID[id], let revert = relocate(id, to: destination, at: nil) {
+                moves.append((id, source, revert))
+            }
         }
         let reverts = moves
+        let movedIDs = Set(reverts.map { $0.id })
         return { model in
-            for revert in reverts.reversed() { _ = revert(model) }
+            guard model.parentByID[folder.id] == parent else { return false }
+            // Auto-archive can replace a Today split with its surviving pane.
+            // Check the whole group before moving anything out or removing the folder.
+            guard folder.children.allSatisfy({ movedIDs.contains($0.id) }) else { return false }
+            let remaining = reverts.filter { model.parentByID[$0.id] == destination }
+            guard remaining.allSatisfy({ model.parentExists($0.source) }) else { return false }
+            for move in remaining.reversed() { guard move.revert(model) else { return false } }
+            guard folder.children.isEmpty else { return false }
             return model.detach(folder.id) != nil
         }
     }
@@ -2757,16 +2778,7 @@ public final class BrowserModel {
         var shown: [ItemID: Tab] = [:]
         for window in windows where window.isShowingContent {
             guard let space = space(id: window.focusedSpaceID),
-                  let id = window.selectedNodeBySpace[space.id], let node = index[id],
-                  let parent = parentByID[id] else { continue }
-            // A remembered ID moved to another Space/Profile is no longer shown
-            // here. Resolve only this selected node's indexed ancestor chain;
-            // never flatten the Space's tabs or a selected folder's children.
-            switch section(of: parent) {
-            case .spacePinned(let owner)?, .spaceToday(let owner)?: guard owner == space.id else { continue }
-            case .favorites(let profile)?: guard profile == space.profileID else { continue }
-            default: continue
-            }
+                  let node = selectedNode(in: space, window: window) else { continue }
             for tab in node.split?.panes ?? node.tab.map({ [$0] }) ?? [] { shown[tab.id] = tab }
         }
         return shown

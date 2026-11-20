@@ -199,7 +199,9 @@ extension LibraryPanelView {
             let historyProfile = (target == .history || target == .boosts) ? viewModel.historyProfileID : nil
             withObservationTracking {
                 switch target {
-                case .downloads: _ = viewModel.downloads.downloads; _ = viewModel.downloadProfileFilter; _ = context.downloadBadge?.completedAt
+                case .downloads:
+                    _ = viewModel.downloads.downloads; _ = viewModel.downloadProfileFilter; _ = context.downloadBadge?.completedAt
+                    _ = viewModel.downloads.downloadHistoryError
                 case .archive: _ = viewModel.archiveRows; _ = viewModel.archives.values.map(\.contentVersion)
                 case .history: _ = viewModel.historyRows; _ = viewModel.historyProfileID
                 case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages

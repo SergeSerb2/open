@@ -440,6 +440,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
     wait = h['wait_until']
     app = None
     passed = set()
+    chooser_only = row_ids == ['P-21-chooser']
     fixture_root = Path(h['ROOT']) / 'tools/e2e/fixtures/passwords'
 
     def row(name, flow, requires=()):
@@ -570,7 +571,11 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
 
         def launch(fresh=False, allow=True):
             nonlocal app
-            app = factory(urls=('about:blank',), fresh=fresh, extra_args=switches if allow else [s for s in switches if s != '--open-allow-mock-keychain-secrets'])
+            # LaunchServices makes Open responsible for Bluetooth. Keep the
+            # default suite on the strict direct-child path.
+            launch_env = {'OPEN_E2E_NO_LAUNCH_WAIT': '1'} if chooser_only else None
+            args = switches if allow else [s for s in switches if s != '--open-allow-mock-keychain-secrets']
+            app = factory(urls=('about:blank',), fresh=fresh, extra_args=args, extra_env=launch_env)
             assert wait(lambda: app.call('tabs'), timeout=15, step=.1)
             app.call('policy', savePrompt='hold')
             return app
@@ -980,18 +985,27 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
             row('P-20', virtual_authenticator)
 
             def native_webauthn():
-                tab = load(urls['webauthn']); before = {w['number'] for w in children()}
-                app.call('click', tab=tab, selector='#create')
-                child = wait(lambda: next((w for w in children() if w['number'] not in before), None), timeout=3, step=.05)
-                if not child:
-                    raise AssertionError('H-7 WebAuthn native dialog did not appear')
+                tab = load(urls['webauthn'])
                 try:
+                    before = {w['number'] for w in children()}
+                    app.call('click', tab=tab, selector='#create')
+                    child = wait(lambda: next((w for w in children() if w['number'] not in before), None), timeout=3, step=.05)
+                    assert child, 'WebAuthn native dialog did not appear'
                     labels = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == child['number'])
-                    import re
-                    assert any(re.search(r'passkey|security key|another device', text, re.I) for text in labels), 'new child was not a WebAuthn dialog'
+                    assert not any('qr code' in text.casefold() for text in labels), 'WebAuthn opened the phone QR code before the chooser'
+                    # Direct launches can lose hybrid discovery on macOS if the
+                    # responsible process has no Bluetooth usage description.
+                    chooser = {'USB security key', 'Use a phone or tablet'} <= set(labels)
+                    usb_prompt = ('Insert your security key and touch it' in labels
+                                  or 'Enter the PIN for your security key' in labels)
+                    if chooser_only:
+                        assert chooser, 'WebAuthn did not offer separate USB and phone choices'
+                    else:
+                        assert chooser or usb_prompt, 'WebAuthn did not offer a USB security key'
                     app.call('snapshot', window=child['number'], path=os.path.join(tmp, 'P-21-webauthn.png'))
                     key('escape', window=child['number'])
                     assert wait(lambda: app.eval(tab, 'document.querySelector("#result").textContent') == 'NotAllowedError', timeout=5, step=.05)
+                    assert wait(lambda: all(w['number'] != child['number'] for w in children()), timeout=5, step=.05), 'WebAuthn dialog stayed open after Escape'
                     assert wait(lambda: any(w['number'] == child['parent'] and w.get('visible')
                                             for w in app.call('windows')), timeout=5, step=.05), 'WebAuthn cancellation closed its parent'
                 finally:
@@ -999,8 +1013,9 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                     # Dispose only this row's page, rather than closing every
                     # visible Chromium window through broad dialog cleanup.
                     app.call('close', tab=tab)
-                return {'childWindowVisible': True, 'rejection': 'NotAllowedError', 'parentWindowStillVisible': True}
-            row('P-21', native_webauthn)
+                return {'childWindowVisible': True, 'authenticatorUI': 'chooser' if chooser else 'usb',
+                        'rejection': 'NotAllowedError', 'parentWindowStillVisible': True}
+            row('P-21-chooser' if chooser_only else 'P-21', native_webauthn)
 
             def credential_manager():
                 app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])

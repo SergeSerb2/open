@@ -1,0 +1,113 @@
+diff --git a/chrome/browser/webauthn/authenticator_request_dialog_controller.cc b/chrome/browser/webauthn/authenticator_request_dialog_controller.cc
+index 0d4be67e115b2f4b4ebb7f05b17d6322d5c032ba..f201c9fefd7469211f0f1d2525d24d2c817279a1 100644
+--- a/chrome/browser/webauthn/authenticator_request_dialog_controller.cc
++++ b/chrome/browser/webauthn/authenticator_request_dialog_controller.cc
+@@ -101,6 +101,8 @@
+ #if BUILDFLAG(IS_MAC)
+ #include "base/mac/mac_util.h"
+ #include "device/fido/mac/util.h"
++#include "open/browser/autofill/open_autofill_hooks.h"
++#include "ui/views/widget/widget.h"
+ #endif
+ 
+ namespace {
+@@ -210,6 +212,21 @@
+   return features::IsRoundedIconsEnabled() ? vector_icons::kPasskeyIcon
+                                            : vector_icons::kPasskeyOldIcon;
+ }
++
++#if BUILDFLAG(IS_MAC)
++bool IsOpenAppKitModalRequest(UIPresentation presentation,
++                             content::RenderFrameHost* render_frame_host) {
++  if (presentation != UIPresentation::kModal) {
++    return false;
++  }
++  auto* contents = content::WebContents::FromRenderFrameHost(render_frame_host);
++  const auto is_open = open_engine::GetAutofillHooks().is_open;
++  return contents && is_open && is_open(contents) &&
++         contents->GetTopLevelNativeWindow() &&
++         !views::Widget::GetTopLevelWidgetForNativeView(
++             contents->GetNativeView());
++}
++#endif
+ 
+ int GetHybridButtonLabel(bool has_security_key) {
+   return has_security_key
+@@ -2075,22 +2092,27 @@
+     AddWindowsButton(windows_button_label->first, windows_button_label->second);
+   }
+ 
+-  // If the new UI is enabled, only show USB as an option if the QR code is
+-  // not available, if tapping it would trigger a prompt to enable BLE, or if
+-  // hints suggest that hybrid and USB should be separate options.
++  const bool usb_available =
++      transport_availability_.available_transports.contains(
++          AuthenticatorTransport::kUsbHumanInterfaceDevice);
++  bool offer_usb_before_hybrid = false;
++#if BUILDFLAG(IS_MAC)
++  offer_usb_before_hybrid =
++      usb_available && include_add_phone_option &&
++      IsOpenAppKitModalRequest(ui_presentation(), MaybeGetRenderFrameHost());
++#endif
++  // Ordinarily the QR sheet also handles USB when BLE is on and the RP has
++  // no hint for either transport. Open's AppKit modal offers separate rows.
+   const bool include_usb_option =
+-      transport_availability_.available_transports.contains(
+-          AuthenticatorTransport::kUsbHumanInterfaceDevice) &&
+-      (!include_add_phone_option ||
++      usb_available &&
++      (offer_usb_before_hybrid || !include_add_phone_option ||
+        transport_availability_.ble_status != BleStatus::kOn ||
+        hints_.transport == AuthenticatorTransport::kUsbHumanInterfaceDevice ||
+        hints_.transport == AuthenticatorTransport::kHybrid);
+ 
+-  if (include_add_phone_option) {
++  const auto add_hybrid_option = [this, usb_available, include_usb_option] {
+     model_->show_security_key_on_qr_sheet =
+-        transport_availability_.available_transports.contains(
+-            AuthenticatorTransport::kUsbHumanInterfaceDevice) &&
+-        !include_usb_option;
++        usb_available && !include_usb_option;
+     std::u16string label = l10n_util::GetStringUTF16(
+         GetHybridButtonLabel(model_->show_security_key_on_qr_sheet));
+     Mechanism::Type mechanism_type = Mechanism::Hybrid();
+@@ -2100,7 +2122,11 @@
+         base::BindRepeating(
+             &AuthenticatorRequestDialogController::StartHybridFlow,
+             base::Unretained(this)));
+-  }
++  };
++  if (include_add_phone_option && !offer_usb_before_hybrid) {
++    add_hybrid_option();
++  }
++
+   if (include_usb_option) {
+     transports_to_list_if_active.push_back(
+         AuthenticatorTransport::kUsbHumanInterfaceDevice);
+@@ -2118,6 +2144,9 @@
+         base::BindRepeating(
+             &AuthenticatorRequestDialogController::StartGuidedFlowForTransport,
+             base::Unretained(this), transport));
++  }
++  if (offer_usb_before_hybrid) {
++    add_hybrid_option();
+   }
+   // Add the Windows native API button last if it does not do Windows Hello.
+   if (windows_button_label &&
+@@ -2330,6 +2359,16 @@
+   }
+ 
+   for (const auto& priority_mechanism : priority_list) {
++#if BUILDFLAG(IS_MAC)
++    // A matching RP hint and platform defaults still take priority. With USB
++    // available, leave the generic hybrid fallback for the user to select.
++    if (std::holds_alternative<Mechanism::Hybrid>(priority_mechanism) &&
++        transport_availability_.available_transports.contains(
++            AuthenticatorTransport::kUsbHumanInterfaceDevice) &&
++        IsOpenAppKitModalRequest(ui_presentation(), MaybeGetRenderFrameHost())) {
++      continue;
++    }
++#endif
+     std::optional<int> index =
+         FindIndexOfFirstMechanismOfType(model_->mechanisms, priority_mechanism);
+     if (index.has_value()) {

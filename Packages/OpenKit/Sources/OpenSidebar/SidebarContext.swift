@@ -253,7 +253,10 @@ public final class SidebarContext {
     public var sidebarWidthOverride: CGFloat?
     public var sidebarWidth: CGFloat { sidebarWidthOverride ?? CGFloat(window?.sidebarWidth ?? Double(WindowMetrics.defaultSidebarWidth)) }
 
-    public func selectedID(in space: SpaceID) -> ItemID? { window?.selectedNodeBySpace[space] }
+    public func selectedID(in spaceID: SpaceID) -> ItemID? {
+        guard let window, let space = model.space(id: spaceID) else { return nil }
+        return model.selectedNode(in: space, window: window)?.id
+    }
 
     public func isPinnedFolder(_ id: ItemID) -> Bool {
         var parent = model.parent(of: id)

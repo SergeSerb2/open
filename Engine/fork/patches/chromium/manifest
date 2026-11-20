@@ -72,6 +72,13 @@ paths: chrome/browser/ssl/https_only_mode_tab_helper.cc, chrome/browser/ssl/http
 
 # 0810-open-modal-unblock-during-tab-teardown.patch
 paths: chrome/browser/ui/tabs/tab_strip_model.cc
+
+# 0811-open-webauthn-native-window.patch
+paths: chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+
+# 0812-open-webauthn-usb-choice.patch
+paths: chrome/browser/webauthn/authenticator_request_dialog_controller.cc
+
 # 0601-open-script-world.patch
 paths: chrome/common/chrome_isolated_world_ids.h
 
