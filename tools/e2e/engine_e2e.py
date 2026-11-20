@@ -9993,7 +9993,9 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
     # Action keycaps follow the user's key bindings, as the menus do (SuggestAdapter).
     bindings = Path(app.user_data, 'State/keybindings.json')
     def new_tab_row():
-        bar('t', 'window')
+        # The menu command, not Cmd+T: an override can move or clear New Tab's key.
+        app.call('menu-perform', id='new-tab')
+        assert wait_until(lambda: state().get('presented'), timeout=3, step=.05), state()
         typed = type_query('New Tab')
         row = next((r for r in (typed or {}).get('rows', []) if r['action'] == 'new-tab'), None)
         press('escape'); time.sleep(.25)
