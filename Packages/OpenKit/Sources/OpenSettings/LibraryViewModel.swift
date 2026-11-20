@@ -217,6 +217,9 @@ import OpenStore
     }
 
     public func restore(id: ItemID, to spaceID: SpaceID? = nil) async {
+        // The panel closes when this is set. A failed restore must not reuse the
+        // Space of an earlier success (the section, and so this value, survive a reopen).
+        restoredSpaceID = nil
         guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
         guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return }
         if let spaceID { record.spaceID = spaceID; record.originalLocation = "today:\(spaceID)" }
