@@ -460,6 +460,10 @@ def context_menu_checks(factory, results, tmp, h):
         run('cm_go_url', lambda: search('#url', origin + '/target.html', 'Go to ' + origin + '/target.html', origin + '/target.html'))
         long_text = 'x' * 40
         run('cm_search_truncation', lambda: search('#selection', long_text, 'Search Local Search for “' + 'x' * 32 + '…”', origin + '/target.html?q=' + long_text))
+        # A selected URL longer than the 1 KiB menu-title cap still shows the menu (it was refused
+        # whole, Copy included); the row shows 50 characters and opens the full URL.
+        long_url = origin + '/target.html?q=' + 'y' * 2000
+        run('cm_go_url_long', lambda: search('#url', long_url, 'Go to ' + long_url[:50] + '…', long_url))
 
         def cancellation():
             focus()

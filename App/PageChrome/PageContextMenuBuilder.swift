@@ -226,7 +226,11 @@ final class PageContextMenuBuilder {
     let engine = SearchEngines.resolve(profile: owner.focusedProfile)
     let url = Self.selectionURL(text)
     let display = String(text.prefix(32)) + (text.count > 32 ? "…" : "")
-    let title = url.map { _ in "Go to \(text)" } ?? "Search \(engine.name) for “\(display)”"
+    // A selected URL can be up to the 16 KiB selection bound. Its full text in the row title
+    // would exceed the final menu's 1 KiB title cap and refuse the whole menu, Copy included.
+    // Show at most 50 characters, Chromium's printable-selection length; the action opens the full URL.
+    let urlDisplay = String(text.prefix(50)) + (text.count > 50 ? "…" : "")
+    let title = url.map { _ in "Go to \(urlDisplay)" } ?? "Search \(engine.name) for “\(display)”"
     guard let target = url ?? engine.searchURL(for: text) else { return }
     let index = menu.items.firstIndex { chromeModel ? engineItem($0, in: [ChromeCommand.copy]) : $0.title == "Copy" }.map { $0 + 1 } ?? menu.items.count
     menu.insertItem(openItem("selection-search", title) { [weak owner] in _ = owner?.openNewTab(url: target, background: false) }, at: index)
