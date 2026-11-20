@@ -11333,6 +11333,79 @@ def sidebar_favicon_checks(app, require, tmp, launch):
 
 
 
+def sidebar_sweep_r1_checks(app, require, tmp):
+    """Bug sweep round 1 (PR #629): split selection, archive reselection, outline focus and
+    Restore Last Closed Tab. Real menu commands, sidebar keys and row menus only."""
+    def split(): return app.call('split', op='state')
+    def command(cid): return app.call('command', id=cid)
+    def settle(): time.sleep(.5)
+    def opened(name):
+        path = Path(tmp) / ('r1-' + name.lower() + '.html')
+        path.write_text('<title>R1 %s</title><h1>%s</h1>' % (name, name))
+        node = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=node); return node
+    def shown(state): return [pane['id'] for pane in state['panes']]
+    def title(tab): return app.call('tab-state', tab=tab)['title']
+    space = app.call('space-create', title='R1 Sweep'); app.call('space', space=space)
+    a, b, c, d = (opened(n) for n in 'ABCD')   # Today: D C B A
+    app.call('select', tab=c); settle()
+    app.call('split'); settle()
+    made = split(); split_id, panes = made['id'], shown(made)
+    require('R1_split_fixture', split_id and made['selected'] == split_id and len(panes) == 2, split=made)
+    # Cmd+W on the focused pane of a three-pane split keeps the split selected and shown.
+    app.call('split', op='menu', item='Add Pane'); settle()
+    three = split(); closing = three['focused']
+    app.call('close'); settle()
+    after = split()
+    require('R1_cmd_w_pane_keeps_split', len(shown(three)) == 3 and after['id'] == split_id and after['selected'] == split_id
+            and len(shown(after)) == 2 and closing not in shown(after) and after['title'] == title(after['focused']),
+            before=three, after=after)
+    # Next/Previous Tab stop once on the split and show both panes.
+    panes = shown(after)
+    outside = next(t['id'] for t in app.call('tabs') if t['id'] not in panes)
+    app.call('select', tab=outside); settle()
+    seen = []
+    for _ in range(len(app.call('tabs')) + 2):
+        command('next-tab'); settle(); state = split(); seen.append(state['selected'])
+        if state['id']: break
+    require('R1_next_tab_selects_whole_split', state['id'] == split_id and sorted(shown(state)) == sorted(panes), seen=seen, state=state)
+    command('next-tab'); settle(); left = split()
+    require('R1_next_tab_leaves_split', not left['id'] and left['focused'] not in panes, state=left)
+    command('previous-tab'); settle(); back = split()
+    require('R1_previous_tab_selects_whole_split', back['id'] == split_id and sorted(shown(back)) == sorted(panes), state=back)
+    # Archive Item on the selected split selects its neighbour instead of a blank page.
+    app.call('sidebar-menu', node=split_id, item='Archive Item'); settle()
+    archived = split()
+    require('R1_archive_split_selects_neighbour', archived['focused'] and archived['focused'] not in panes and len(shown(archived)) == 1,
+            state=archived)
+    # Delete on an outline selection that holds the current tab: neighbour selected, keyboard stays in the outline.
+    e, f, g = (opened(n) for n in 'EFG')   # Today: G F E B A
+    app.call('select', tab=f); settle()
+    app.call('sidebar-click', node=f, modifiers=['cmd']); picked = app.call('sidebar-click', node=e, modifiers=['cmd'])
+    app.call('sidebar-key', key='delete'); settle()
+    gone = split()
+    time.sleep(.2)  # One more main-queue turn: the engine may take page focus late.
+    responder = app.call('window-state')['firstResponder']
+    require('R1_delete_selection_selects_neighbour_keeps_outline', set(picked.get('selection', [])) >= {e, f}
+            and gone['focused'] not in ('', e, f) and responder == 'SidebarOutlineView',
+            picked=picked, state=gone, firstResponder=responder)
+    # Restore Last Closed Tab from another Space shows the tab; one Cmd+Z undoes it (folders only reveal it).
+    h_tab = opened('H')
+    folder = app.call('folder', tabs=[h_tab], title='R1 Folder')
+    app.call('close', tab=h_tab); settle()
+    toggled = app.call('folder-toggle', folder=folder)
+    if toggled['expanded']: app.call('folder-toggle', folder=folder)
+    other = app.call('space-create', title='R1 Other'); app.call('space', space=other); settle()
+    command('restore-last-closed-tab')
+    restored = wait_until(lambda: (lambda s: s if s['focused'] == h_tab else None)(split()), timeout=5, step=.1) or split()
+    focused_space = next(s['id'] for s in app.call('spaces') if s['focused'])
+    require('R1_restore_other_space_shows_tab', restored['focused'] == h_tab and focused_space == space
+            and shown(restored) == [h_tab], state=restored, focusedSpace=focused_space)
+    app.call('sidebar-key', key='z', modifiers=['cmd']); settle()
+    archive_ids = [r['id'] for r in app.call('archive')]
+    in_sidebar = [t['id'] for t in app.call('tabs')]
+    require('R1_restore_single_undo', h_tab in archive_ids and h_tab not in in_sidebar, archive=archive_ids[:3], tabs=in_sidebar)
+
+
 def sidebar_tab_switcher_checks(app, require, tmp):
     """TS keys enter OEApplication.sendEvent. No desktop input or direct dispatch."""
     def state(): return app.call('window-state')
@@ -12333,6 +12406,7 @@ def space_manager_checks(results, tmp, config, style):
                 keys=key_states, closeFixture=close_fixture, selectedBeforeClose=selected_before_close, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
         app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
         sidebar_tab_switcher_checks(app, require, tmp)
+        sidebar_sweep_r1_checks(app, require, tmp)
 
         app = sidebar_favicon_checks(app, require, tmp, launch)
         sidebar_intents_menu_checks(app, results, require, tmp)

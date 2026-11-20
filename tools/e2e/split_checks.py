@@ -425,8 +425,8 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for i in range(12):
             opened('slot-cache-'+str(i)); retained.append(state()['retainedSlots'])
         row('slot_cache_bounded', max(retained) <= 9, retainedSlots=retained, hiddenLimit=8)
-        # Tab-order paths can name a split pane (Next Tab, the tab Cmd+W selects next). The split
-        # shows with that pane focused; before the fix the pane showed alone and the split vanished.
+        # Tab-order paths reach a split (Next Tab as one stop, the tab Cmd+W selects next by pane ID).
+        # The whole split shows; before #628/#629 the pane showed alone and the split vanished.
         order_a = opened('order-a'); order_b = opened('order-b'); select(order_b)
         x, y, w, height = state()['container']
         assert app.call('split', op='drop', node=order_a, point=[x+w-12, y+height/2])['accepted']; order_split = settled(2)
@@ -436,24 +436,33 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         above = opened('order-above')  # a new tab opens at the top of Today, right above the split
         app.call('menu-perform', id='next-tab'); after_next = split_shown() or state()
         order_panes = [p['id'] for p in order_split['panes']]
+        # Lead ruling (#628/#629): Next Tab treats the split as one stop and arrives with the split's
+        # remembered focused pane, as a click on its sidebar row does.
+        remembered = order_split['focused']
         row('next_tab_into_split_shows_split', after_next['id'] == order_split['id'] and after_next['selected'] == order_split['id']
-            and after_next['focused'] == order_panes[0] and order_panes[0] in shown() and len(shown()) == 2,
-            state={k: after_next[k] for k in ('id', 'selected', 'focused')}, shown=shown(), panes=order_panes)
+            and after_next['focused'] == remembered and remembered in shown() and len(shown()) == 2,
+            state={k: after_next[k] for k in ('id', 'selected', 'focused')}, shown=shown(), remembered=remembered)
         select(above); h.wait_until(lambda: len(shown()) == 1, timeout=5, step=.05)
         app.call('close'); after_close = split_shown() or state()
         row('close_above_split_selects_split', after_close['id'] == order_split['id'] and after_close['selected'] == order_split['id']
             and after_close['focused'] == order_panes[0] and order_panes[0] in shown() and len(shown()) == 2
             and above not in [t['id'] for t in app.call('tabs')],
             state={k: after_close[k] for k in ('id', 'selected', 'focused')}, shown=shown(), panes=order_panes)
-        # Next Tab from an expanded (maximized) pane focuses the next pane: it must also be shown,
-        # never a model focus on a pane the container hides.
+        # Next Tab from an expanded (maximized) pane leaves the split for the next sidebar node and
+        # ends the expansion; Previous Tab comes back to the whole split with its remembered pane
+        # focused and shown (lead ruling #628/#629, Arc capture pending).
         menu('Expand Current Pane')
         expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] == order_panes[0] else None)(state()), timeout=5, step=.05) or state()
         app.call('menu-perform', id='next-tab')
-        after_max = h.wait_until(lambda: (lambda s: s if s['focused'] == order_panes[1] and not s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        left = h.wait_until(lambda: (lambda s: s if s['selected'] != order_split['id'] else None)(state()), timeout=5, step=.05) or state()
+        app.call('menu-perform', id='previous-tab')
+        back = split_shown() or state()
         row('next_tab_from_expanded_pane_shows_target', expanded['maximized'] == order_panes[0]
-            and after_max['focused'] == order_panes[1] and not after_max['maximized'] and order_panes[1] in shown(),
-            expanded=expanded['maximized'], state={k: after_max[k] for k in ('id', 'focused', 'maximized')}, shown=shown(), panes=order_panes)
+            and left['selected'] != order_split['id'] and not left['id'] and not left['maximized']
+            and back['selected'] == order_split['id'] and not back['maximized'] and back['focused'] == order_panes[0]
+            and order_panes[0] in shown() and len(shown()) == 2,
+            expanded=expanded['maximized'], left={k: left[k] for k in ('id', 'selected', 'maximized')},
+            back={k: back[k] for k in ('id', 'selected', 'focused', 'maximized')}, shown=shown(), panes=order_panes)
         unsplit()
         # LEAD 11:50: Close This Pane keeps the closed page drawn while its box collapses,
         # so chrome.tabs reports onRemoved after the strip change. onRemoved must arrive

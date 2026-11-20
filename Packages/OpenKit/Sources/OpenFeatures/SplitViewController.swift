@@ -71,9 +71,9 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         else if let made = model.makeSplit(tabIDs: [id, current.id]) { select(made.id); model.focusSplitPane(splitID: made.id, tabID: id) }
         refresh(); onChange?()
     }
-    /// A selection that focuses another pane ends Expand Current Pane, as `focus(_:)` does.
-    /// Otherwise the model focuses a pane the container does not show.
-    public func clearMaximizedPane(unless id: ItemID) {
+    /// A selection that focuses another pane, or leaves the split (nil), ends Expand Current Pane,
+    /// as `focus(_:)` does. Otherwise the model focuses a pane the container does not show.
+    public func clearMaximizedPane(unless id: ItemID?) {
         guard let maximizedPaneID, maximizedPaneID != id else { return }
         self.maximizedPaneID = nil; container.maximizedTabID = nil
     }

@@ -891,7 +891,7 @@ public final class BrowserModel {
         if case .splitPane(let splitID) = parent, (node(id: splitID)?.split?.panes.count ?? 4) >= 4 { return nil }
         func copyTab(_ tab: Tab) -> Tab {
             Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
-                customIcon: tab.customIcon, isMuted: tab.isMuted)
+                customIcon: tab.customIcon, iconOverride: tab.iconOverride, isMuted: tab.isMuted)
         }
         func copyNode(_ node: SidebarNode) -> SidebarNode {
             switch node {
