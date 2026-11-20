@@ -356,20 +356,22 @@ tools/release.sh --preflight-only
 
 ## U-9: iCloud Keychain passkey entitlement
 
-This unlocks iCloud Keychain passkeys in Open (the system passkey sheet). Open
-ships without it: security keys and phone passkeys (hybrid) already work through
-Chromium's WebAuthn dialog. The source is `docs/plans/passwords-autofill.md`
-(D-8, §12 Q-3, and the line that names this item U-9).
+This unlocks the macOS passkey sheet for Apple Passwords and enabled macOS
+credential providers. Chromium handles USB security keys and phone passkeys
+through separate transports. Real completion with those devices remains a
+separate acceptance check.
 
-Chromium checks the managed entitlement
+Chromium's `device/fido/mac/icloud_keychain_sys.mm` checks the managed entitlement
 `com.apple.developer.web-browser.public-key-credential` at runtime. Apple must
 approve it for the Team, and the signed build then needs a matching provisioning
-profile. It needs U-1 and U-2 first.
+profile. Chromium's `device/fido/fido_discovery_factory.cc` also requires the
+requesting tab's native window. It needs U-1 and U-2 first.
 
 User steps:
 
-1. In the Apple Developer portal, request the managed capability for web-browser
-   public-key credentials for the App ID `io.github.sergeserb2.open`.
+1. The Apple Developer Account Holder submits the [macOS Browsers Passkeys
+   request](https://developer.apple.com/contact/request/macos-browsers-passkeys/)
+   for the App ID `io.github.sergeserb2.open`.
 2. When Apple approves it, create a Developer ID provisioning profile for that
    App ID with the capability, and download it.
 3. Tell the agent the local path of the downloaded profile. Do not commit it.
@@ -388,8 +390,10 @@ security cms -D -i build/release/<marketing>-<build>/Open.app/Contents/embedded.
   | grep -F com.apple.developer.web-browser.public-key-credential
 ```
 
-Then the passwords P-20 passkey run without the virtual authenticator
-(passwords-autofill plan §9.5) must pass on that signed build.
+On that signed build, use a test account to create a passkey and sign in again
+through the macOS sheet. Check Apple Passwords and an enabled third-party macOS
+credential provider. The P-20 virtual authenticator does not exercise either
+provider. Verify registration and sign-in with a physical USB key separately.
 
 After the source work, user setup, and review gates pass, the production command is:
 

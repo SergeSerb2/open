@@ -989,6 +989,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                     labels = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == child['number'])
                     import re
                     assert any(re.search(r'passkey|security key|another device', text, re.I) for text in labels), 'new child was not a WebAuthn dialog'
+                    assert 'USB security key' in labels and 'Use a phone or tablet' in labels, 'WebAuthn did not offer separate USB and phone choices'
+                    assert not any('Scan this QR code' in text for text in labels), 'WebAuthn opened the phone QR code before the chooser'
                     app.call('snapshot', window=child['number'], path=os.path.join(tmp, 'P-21-webauthn.png'))
                     key('escape', window=child['number'])
                     assert wait(lambda: app.eval(tab, 'document.querySelector("#result").textContent') == 'NotAllowedError', timeout=5, step=.05)
@@ -999,7 +1001,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                     # Dispose only this row's page, rather than closing every
                     # visible Chromium window through broad dialog cleanup.
                     app.call('close', tab=tab)
-                return {'childWindowVisible': True, 'rejection': 'NotAllowedError', 'parentWindowStillVisible': True}
+                return {'childWindowVisible': True, 'separateUSBAndPhoneChoices': True,
+                        'rejection': 'NotAllowedError', 'parentWindowStillVisible': True}
             row('P-21', native_webauthn)
 
             def credential_manager():

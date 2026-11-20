@@ -159,7 +159,9 @@ final class AppCommandBarSession: CommandBarDelegate {
          .search(_, let url, _, let destination, let modifiers):
       // Option+Return: beside the current page in Split View (plan D3 §2.3).
       if modifiers.contains(.option), !modifiers.contains(.command), factory.openFromCommandBarInSplit(url) { break }
-      factory.navigateFromCommandBar(url, current: destination == .currentTab, background: modifiers.contains(.command))
+      // Cmd+Return opens a background tab even when the address editor is open.
+      let current = destination == .currentTab && modifiers.intersection([.command, .option]) != .command
+      factory.navigateFromCommandBar(url, current: current, background: modifiers.contains(.command))
     case .switchToTab(let id, let space): factory.selectTabForCommand(id, spaceID: space)
     case .runAction(let id, let space):
       if let url = NewDocumentActions.url(for: id) {

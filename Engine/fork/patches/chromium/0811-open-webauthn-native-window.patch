@@ -1,0 +1,26 @@
+diff --git a/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc b/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+index 64cc5836faf6101cf19f4b65b72de3770638019a..b4af7accce48968e199766a6e7734e15d9e1f66b 100644
+--- a/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
++++ b/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+@@ -107,6 +107,7 @@
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/webauthn/chrome_authenticator_request_delegate_mac.h"
+ #include "device/fido/mac/credential_metadata.h"
++#include "open/browser/autofill/open_autofill_hooks.h"
+ #include "ui/views/widget/widget.h"
+ #endif
+ 
+@@ -1256,6 +1257,13 @@
+     if (window) {
+       discovery_factory->set_nswindow(window);
+     }
++  } else if (const auto is_open = open_engine::GetAutofillHooks().is_open;
++             is_open && is_open(web_contents)) {
++    // Open can host this WebContents in an AppKit window with no Views widget.
++    if (const gfx::NativeWindow window = web_contents->GetTopLevelNativeWindow();
++        window) {
++      discovery_factory->set_nswindow(window);
++    }
+   }
+ }
+ void ChromeAuthenticatorRequestDelegate::ConfigureICloudKeychain(

@@ -21,7 +21,10 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
     public private(set) var maximizedPaneID: ItemID?
     public var state: BrowserWindowState? { model.windows.first { $0.id == windowID } }
     public var space: Space? { state.flatMap { model.space(id: $0.focusedSpaceID) } }
-    public var selected: SidebarNode? { guard let state, let id = state.selectedNodeBySpace[state.focusedSpaceID] else { return nil }; return model.node(id: id) }
+    public var selected: SidebarNode? {
+        guard let state, let space = model.space(id: state.focusedSpaceID) else { return nil }
+        return model.selectedNode(in: space, window: state)
+    }
     public var split: Split? { selected?.split }
     public var focusedTab: Tab? { selected?.tab ?? split.flatMap { s in s.panes.first { $0.id == s.focusedPaneID } ?? s.panes.first } }
     public init(model: BrowserModel, windowID: WindowID, container: WebContentContainer) {

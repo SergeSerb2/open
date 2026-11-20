@@ -1143,14 +1143,24 @@
           "Input.insertText", parameters: ["text": a["text"] as? String ?? ""])
         return true
       case "focus":
-        let page = try content(a, w)
-        if let target = page.view.window { try await activateForInput(target) }
-        page.focusPage()
+        _ = try content(a, w)
+        var attempted: (page: OEWebContent, window: NSWindow)?
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while ContinuousClock.now < deadline {
-          let responder = page.view.window?.firstResponder as? NSView
-          let nativeFocus = responder.map { $0 === page.view || $0.isDescendant(of: page.view) } == true
-          if nativeFocus, try await page.evaluateJavaScript("document.hasFocus()") as? Bool == true { return true }
+          // A Space change can replace the page for a tab when its native view attaches.
+          if let page = try? content(a, w), let target = page.view.window, !page.view.isHiddenOrHasHiddenAncestor {
+            if attempted?.page !== page || attempted?.window !== target {
+              try await activateForInput(target)
+              page.focusPage()
+              attempted = (page, target)
+            }
+            let responder = target.firstResponder as? NSView
+            let nativeFocus = responder.map { $0 === page.view || $0.isDescendant(of: page.view) } == true
+            if nativeFocus, (try? await page.evaluateJavaScript("document.hasFocus()")) as? Bool == true,
+               page === (try? content(a, w)) { return true }
+          } else {
+            attempted = nil
+          }
           try await Task.sleep(for: .milliseconds(10))
         }
         throw Failure(message: "page focus not ready")

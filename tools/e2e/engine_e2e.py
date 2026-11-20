@@ -9646,6 +9646,22 @@ def commandbar_checks(factory, results, tmp, config):
             and app.eval(background['id'], 'document.title') == 'Shell C /background' and bool(kept), 'bar': kept_state, 'beforeReturn': before_return}
         results['command_return_twice'] = {'ok': bool(second) and twice_state['presented'] and app.call('window-state')['selected'] == selected_before
             and app.call('host-counts')['created'] == counts + 2, 'bar': twice_state}
+        # The address editor's default destination is the current tab, but Cmd+Return opens a background tab.
+        tabs_before = len(app.call('tabs'))
+        address_target = origin + '/address-background'
+        bar('l'); type_query(address_target); press('return', modifiers=['cmd'])
+        address_background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == address_target
+                                                       and t['id'] != selected_before), None), timeout=3, step=.05)
+        address_bar = state()
+        results['address_command_return_background'] = {
+            'ok': bool(address_background) and address_background['unread'] and len(app.call('tabs')) == tabs_before + 1
+            and app.call('window-state')['selected'] == selected_before and app.tab(selected_before)['url'] == origin + '/edited'
+            and address_bar['presented'] and address_bar['range'] == [0, len(address_target)],
+            'backgroundTabCreated': bool(address_background), 'bar': address_bar,
+        }
+        press('escape'); wait_until(lambda: not state()['presented'], timeout=3, step=.05)
+        if address_background:
+            app.call('close', tab=address_background['id'])
         # A second Cmd+T closes the New Tab bar; a second Cmd+L closes the address editor (Arc 06-keys, 12c).
         bar('t', 'window'); press('t', modifiers=['cmd'], route='window')
         closed_t = wait_until(lambda: not state()['presented'], timeout=3, step=.05)
@@ -10853,6 +10869,8 @@ def sidebar_completion_archive_checks(app, launch, results, require, evidence, t
 def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     """Real sidebar/menu/event flows for Part B. E16 belongs to the sweeper lane.
     sidebar-drop covers the shared production intent, not an OS drag session."""
+    import datetime
+
     def state(): return app.call('window-state')
     def tree(): return app.call('sidebar-tree')
     def roots(section): return [n['id'] for n in tree()[section]]
@@ -10992,6 +11010,33 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     require('A3_move_new_space_atomic', len(app.call('spaces')) == spaces_before + 1 and roots('today') == abc and roots('pinned') == [] and selection() == [], tree=tree(), selection=selection())
     undo(); app.call('space', space=space)
     require('A3_move_new_space_one_undo', len(app.call('spaces')) == spaces_before and roots('today') == abc + [control])
+    # Move a single active Today row through its own context menu.
+    active_move_dest = fresh('Selected Move Destination')
+    active_move_source = fresh('Selected Move Source')
+    moving_tab = opened('Selected Move Page')
+    before_move = state()
+    before_profile = app.tab(moving_tab)['profile']
+    app.call('sidebar-menu', node=moving_tab, item='Move to/A3 Selected Move Destination')
+    wait_until(lambda: not state()['paneBackgrounds'], timeout=3, step=.05)
+    source_after_move = state()
+    sidebar_after_move = app.call('tabs', sidebar=True)['selectedNode']
+    moved_tab = app.call('tab-state', tab=moving_tab)
+    source_rows = roots('today')
+    app.call('space', space=active_move_dest)
+    dest_rows = roots('today')
+    click(moving_tab); app.call('wait', tab=moving_tab)
+    destination_after_select = state()
+    app.call('space', space=active_move_source); undo()
+    require('A3_move_selected_tab_clears_source_content', before_move['selected'] == moving_tab
+            and before_move['engineURL'] == moved_tab['url'] and source_after_move['space'] == active_move_source
+            and source_after_move['selected'] == sidebar_after_move == source_after_move['engineURL'] == ''
+            and source_after_move['paneBackgrounds'] == [] and source_rows == []
+            and moved_tab['space'] == active_move_dest and moved_tab['profile'] == before_profile
+            and not moved_tab['selected'] and not moved_tab['visible'] and dest_rows == [moving_tab]
+            and destination_after_select['selected'] == moving_tab and destination_after_select['engineURL'] == moved_tab['url']
+            and roots('today') == [moving_tab], selected=moving_tab, sourceAfterMove=source_after_move,
+            sidebarSelectedAfterMove=sidebar_after_move, movedTab=moved_tab, destinationAfterSelect=destination_after_select,
+            sourceAfterUndo=tree())
     # E4: noncontiguous move, same-parent pre-removal index, invalid descendant.
     move_space = fresh('Drop')
     for i in range(6): opened('Drop %d' % i)
@@ -11008,6 +11053,61 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     invalid_before = tree(); accepted = drop([target], 'folder', nested, 0)
     invalid_unchanged = tree() == invalid_before; undo()
     require('E4_invalid_drop_no_mutation', not accepted and invalid_unchanged and any(n['id'] == nested for n in tree()['pinned']), tree=tree())
+    # The selection menu can form a split from two background tabs without
+    # stamping both panes with the same activity time.
+    archive_space = app.call('space-create', title='A3 Grouped Split Archive', profile='A3 Grouped Split Archive')
+    archive_profile = next(row['profile'] for row in app.call('spaces') if row['id'] == archive_space)
+    banner_key = 'open.sidebar.autoArchiveBannerEligible'
+    old_banner = app.call('defaults', key=banner_key, persistent=True)
+    try:
+        app.call('defaults', key=banner_key, value=False)
+        app.call('profile-archive-setting', profile=archive_profile, interval='oneHour', scope='profile')
+        expired_pane = app.call('open', url=page('Grouped Split Expired Pane'), background=True)['id']
+        companion = opened('Grouped Split Companion')
+        # Leave time to reset the fake clock before the surviving pane's timer can fire.
+        time.sleep(3)
+        survivor = app.call('open', url=page('Grouped Split Surviving Pane'), background=True)['id']
+        click(companion)
+        for node in (expired_pane, survivor, companion): click(node, ['cmd'])
+        assert set(selection()) == {expired_pane, survivor}, 'split fixture must select only the background panes'
+        app.call('sidebar-menu', node=survivor, item='Open in Split View')
+        split_node = next(n for n in tree()['today'] if n['kind'] == 'split')
+        split_id = split_node['id']
+        assert {n['id'] for n in split_node['children']} == {expired_pane, survivor}, 'unexpected split panes'
+        select([companion, split_id])
+        app.call('sidebar-menu', node=split_id, item='New Folder with 2 Items'); finish_rename()
+        grouped = tree()['today']
+        folder = next(n for n in grouped if n['kind'] == 'folder')
+        grouped_ids = [n['id'] for n in folder['children']]
+        assert len(grouped) == 1 and set(grouped_ids) == {split_id, companion}, 'expected one Today group with both rows'
+        expires_at = app.tab(expired_pane)['lastActiveAt'] + 3600
+        assert app.tab(survivor)['lastActiveAt'] + 3600 > expires_at + 2, 'background panes must have separate archive deadlines'
+        sweep_at = datetime.datetime.fromtimestamp(expires_at + .1, datetime.timezone.utc).isoformat(timespec='milliseconds')
+        try:
+            sweep = app.call('archive-sweep', now=sweep_at)
+        finally:
+            app.call('archive-clock', reset=True)
+        archived = app.call('archive-list', profile=archive_profile)['rows']
+        collapsed_group = shape(tree()['today'])
+        expected_children = [(survivor if node == split_id else node, 'tab', []) for node in grouped_ids]
+        require('A3_grouped_split_sweep_preserves_surviving_pane', sweep['archivedCount'] == 1
+                and sweep['affectedSpaces'] == [archive_space] and state()['selected'] == companion
+                and collapsed_group == [(folder['id'], 'folder', expected_children)] and len(archived) == 1
+                and archived[0]['id'] == expired_pane and archived[0]['reason'] == 'autoArchived'
+                and archived[0]['profile'] == archive_profile and archived[0]['space'] == archive_space
+                and archived[0]['originalLocation'] == 'split:' + split_id,
+                sweep=sweep, archived=archived, tree=collapsed_group)
+        undo_before = app.call('space-manager-state')['modelUndoCount']
+        undo_route = undo()
+        undo_after = app.call('space-manager-state')['modelUndoCount']
+        after_group_undo = shape(tree()['today'])
+        require('A3_group_undo_after_pane_archive_preserves_folder', undo_after == undo_before + 1
+                and after_group_undo == collapsed_group
+                and app.call('archive-list', profile=archive_profile)['rows'] == archived,
+                before=collapsed_group, after=after_group_undo, route=undo_route, undoBefore=undo_before, undoAfter=undo_after)
+    finally:
+        app.call('profile-archive-setting', profile=archive_profile, interval='twelveHours', scope='profile')
+        app.call('defaults', key=banner_key, value=old_banner)
     # E9: recursive folder state and host/path reset, including a split pane.
     reset_space = fresh('Reset')
     base = opened('Reset Base', True); partner = opened('Reset Partner', True)
@@ -13721,7 +13821,7 @@ def main():
     ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
     ap.add_argument('--passwords-probe-dialog-free', action='store_true', help='observe safe Step 0 rows; report card, WebAuthn and HTTP Basic as BLOCKED')
-    ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
+    ap.add_argument('--passwords-rows', help='run only named WebAuthn or HTTPS-First lifetime rows; omit for full password acceptance')
     ap.add_argument('--passwords-m-only', action='store_true', help='run only the real-App save-sheet M rows')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -13798,11 +13898,11 @@ def main():
     if opts.only in ('passwords-probe', 'passwords', 'secrets-import') and opts.style != 'chrome':
         ap.error('passwords suites and secrets-import require --style chrome')
     if opts.passwords_rows is not None:
-        allowed = {'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
+        allowed = {'P-20', 'P-21', 'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
                    'PW-HF4-window-close', 'PW-HF5-navigate', 'PW-HF6-space', 'PW-HF7-quit'}
         selected = opts.passwords_rows.split(',')
         if opts.only != 'passwords' or not set(selected) <= allowed or len(set(selected)) != len(selected):
-            ap.error('--passwords-rows requires passwords and unique HTTPS-First lifetime row ids')
+            ap.error('--passwords-rows requires passwords and unique WebAuthn or HTTPS-First lifetime row ids')
     if opts.passwords_m_only and (opts.only != 'passwords' or opts.passwords_rows is not None):
         ap.error('--passwords-m-only requires passwords without --passwords-rows')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or

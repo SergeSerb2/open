@@ -432,7 +432,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   var focusedSpace: Space? { model.space(id: windowState.focusedSpaceID) ?? model.spaces.first }
   var focusedProfile: Profile? { littleOpenController.flatMap { model.profile(id: $0.session.profileID) } ?? focusedSpace.flatMap { model.profile(id: $0.profileID) } }
-  var selectedNodeID: ItemID? { focusedSpace.flatMap { windowState.selectedNodeBySpace[$0.id] } }
+  var selectedNodeID: ItemID? { focusedSpace.flatMap { model.selectedNode(in: $0, window: windowState)?.id } }
   var selectedTab: Tab? { controller?.splitController.focusedTab ?? littleOpenController?.session.tab }
   var visibleTabs: [Tab] { controller?.splitController.split?.panes ?? selectedTab.map { [$0] } ?? [] }
   var selectedContent: OEWebContent? {
@@ -787,7 +787,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     for (id, host) in hosts where modelHostIDs.contains(id) && (model.tab(id: id) == nil || !tabs(in: host.profileID).contains(where: { $0.id == id })) {
       controller?.container.closeHost(for: id); host.close()
     }
-    if let id = selectedNodeID, model.node(id: id) == nil, let space = focusedSpace {
+    if let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id], model.node(id: id) == nil {
       withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nil) }
     }
     if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }

@@ -42,19 +42,27 @@ actor DownloadFiles {
     }
     throw CocoaError(.fileWriteFileExists)
   }
-  func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
+  func isRegularFile(atPath path: String) -> Bool {
+    var info = stat()
+    return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
+  }
   struct FileCheck: Sendable { let id: String; let path: String? }
   struct Availability: Sendable { let check: FileCheck; let exists: Bool }
   func availability(for checks: [FileCheck]) throws -> [Availability] {
     var results: [Availability] = []
     for check in checks {
       try Task.checkCancellation()
-      let exists = check.path.map { FileManager.default.fileExists(atPath: $0) } ?? false
+      let exists = check.path.map { isRegularFile(atPath: $0) } ?? false
       results.append(Availability(check: check, exists: exists))
     }
     return results
   }
-  func trash(_ url: URL) throws { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+  func trash(_ url: URL) throws -> Bool {
+    // The path can change while the Library menu is open or after its check.
+    guard isRegularFile(atPath: url.path) else { return false }
+    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    return true
+  }
   func release(_ url: URL) { claims.remove(url) }
 }
 
@@ -505,7 +513,8 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     let url = URL(fileURLWithPath: path)
     Task { [weak self] in
       guard let self else { return }
-      guard await files.exists(url) else { refreshFiles(); return }
+      guard await files.isRegularFile(atPath: path) else { refreshFiles(); return }
+      guard let current = visibleItem(key), current.state == .completed, current.filePath == path else { return }
       #if OPEN_AUTOMATION
       if recordFileActions {
         if fileActions.count >= 256 { fileActions.removeFirst() }
@@ -515,8 +524,13 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       switch action {
       case "copy": NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([url as NSURL])
       case "trash":
-        do { try await files.trash(url); remove(key) }
-        catch { lastFileError = error.localizedDescription }
+        do {
+          if try await files.trash(url) { remove(key) }
+          else { refreshFiles() }
+        } catch {
+          lastFileError = error.localizedDescription
+          refreshFiles()
+        }
       case "reveal":
         #if OPEN_AUTOMATION
         if recordFileActions { return }
