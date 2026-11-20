@@ -2863,7 +2863,16 @@ public final class BrowserModel {
                 let live = split.panes.filter { sweep.shownTabIDs.contains($0.id) || $0.lastActiveAt >= cutoff }
                 guard live.count < split.panes.count else { kept.append(node); continue }
                 for tab in split.panes where !sweep.shownTabIDs.contains(tab.id) && tab.lastActiveAt < cutoff { expire(tab, from: .splitPane(split.id), &sweep) }
+                // Same rule as closing one pane: the survivors keep their relative widths.
+                // A stale count would make the layout fall back to equal widths.
+                let survivors = Set(live.map(\.id))
+                var shares = split.fractions.count == split.panes.count && split.fractions.allSatisfy({ $0.isFinite && $0 >= 0 })
+                    ? zip(split.panes, split.fractions).filter { survivors.contains($0.0.id) }.map(\.1) : []
+                let total = shares.reduce(0, +)
+                shares = total.isFinite && total > 0 ? shares.map { $0 / total }
+                    : Array(repeating: 1 / Double(max(1, live.count)), count: live.count)
                 split.panes = live
+                split.fractions = shares
                 if let focused = split.focusedPaneID, !live.contains(where: { $0.id == focused }) { split.focusedPaneID = live.first?.id }
                 if live.count >= 2 {
                     kept.append(node)
@@ -2875,6 +2884,8 @@ public final class BrowserModel {
                     if let survivor = live.first {
                         parentByID[survivor.id] = parent
                         kept.append(.tab(survivor))
+                        // As when a pane closes: a window that selected the split keeps its page.
+                        _ = retargetSelection(from: split.id, to: survivor.id)
                     }
                     listChanged = true
                 }

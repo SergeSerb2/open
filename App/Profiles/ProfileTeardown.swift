@@ -75,6 +75,13 @@ final class ProfileTeardown {
     // recoverable. Errors preserve all folders until a later safe launch.
     stage = "enqueue"
     try Self.enqueue(directory, directories: app.directories)
+    // A Blank Window keeps its own stand-in copy of the Profile, which the model delete
+    // does not reach. Left open, its next page would load the Profile's engine context
+    // again and recreate the folder this wipe removes. Close it, as for private windows.
+    for controller in app.windowControllers where app.hostFactories[controller.windowID].map({
+      $0.isBlankWindow && $0.model.profile(id: profileID) != nil }) == true {
+      controller.window?.close()
+    }
     // Registered App stores stop and drop dirty state before any folder goes.
     stage = "retireOwners"
     await retireOwners(profileID: profileID, directory: directory)
