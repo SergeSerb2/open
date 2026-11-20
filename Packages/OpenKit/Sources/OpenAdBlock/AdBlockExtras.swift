@@ -113,15 +113,16 @@ public struct AdBlockExtraRules: Sendable, Equatable {
     }
 
     /// `name, arg1, 'arg, 2'` → name and arguments (commas escape with `\,`; one level of
-    /// matching quotes is removed).
+    /// matching quotes is removed). Every other backslash is kept: `/ad\d+/` stays a regex.
     static func scriptlet(_ body: String) -> Scriptlet? {
         var parts: [String] = [], current = "", escaped = false
         for ch in body {
-            if escaped { current.append(ch); escaped = false; continue }
+            if escaped { if ch != "," { current.append("\\") }; current.append(ch); escaped = false; continue }
             if ch == "\\" { escaped = true; continue }
             if ch == "," { parts.append(current); current = ""; continue }
             current.append(ch)
         }
+        if escaped { current.append("\\") }
         parts.append(current)
         let cleaned = parts.map { p -> String in
             let t = p.trimmingCharacters(in: .whitespaces)

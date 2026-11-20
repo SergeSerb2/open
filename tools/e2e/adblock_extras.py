@@ -7,6 +7,7 @@ host open-adblock.test. No request reaches a public host. Rows (AX_*):
   style_refused   a `:style(url(...))` rule is refused (no background, counted as skipped)
   set_constant    `+js(set-constant, …)` holds before the first page script runs
   nostif          `+js(nostif, adTimer)` stops only the matching timer
+  nostif_regex    `+js(nostif, /ad\\d+Timer/)` keeps the regex backslash: only ad7Timer stops
   has_hides       plain `:has()` hiding comes from the engine (no extras script needed)
   other_domain    a rule for another domain does not run here (other_domain_own_page: it runs there)
   exception       `#@#+js(set-constant, openExceptedProbe, true)` stops that one call
@@ -30,6 +31,7 @@ open-adblock.test##+js(set-constant, openScriptletProbe, true)
 open-adblock.test##+js(set-constant, openExceptedProbe, true)
 open-adblock.test#@#+js(set-constant, openExceptedProbe, true)
 open-adblock.test##+js(nostif, adTimer)
+open-adblock.test##+js(nostif, /ad\\d+Timer/)
 open-adblock.test##div.has-parent:has(> .has-child)
 other-domain.test##+js(set-constant, openOtherProbe, true)
 '''
@@ -42,6 +44,9 @@ window.__probeAfterWrite = window.openScriptletProbe;
 window.__timerFired = false; window.__keptTimer = false;
 setTimeout(function adTimer() { window.__timerFired = true; }, 20);
 setTimeout(function keepTimer() { window.__keptTimer = true; }, 20);
+window.__regexFired = false; window.__regexControl = false;
+setTimeout(function ad7Timer() { window.__regexFired = true; }, 20);
+setTimeout(function addTimer() { window.__regexControl = true; }, 20);
 </script>
 <div class="style-target">styled</div>
 <div class="evil-target">refused</div>
@@ -58,6 +63,7 @@ STATE = '''new Promise(r => setTimeout(() => { const cs = s => getComputedStyle(
   excepted: typeof window.openExceptedProbe,
   other: typeof window.openOtherProbe,
   timerFired: window.__timerFired, keptTimer: window.__keptTimer,
+  regexFired: window.__regexFired, regexControl: window.__regexControl,
   hasHit: cs('#has-hit').display, hasControl: cs('#has-control').display,
 }); }, 400))'''
 
@@ -155,6 +161,7 @@ def run(factory, results, wait):
         row('style_refused', s['evilBackground'] == 'none' and not any(p.startswith('/evil.png') for p in requests), state=s)
         row('set_constant', s['probeAtParse'] is True and s['probeAfterWrite'] is True, state=s)
         row('nostif', s['timerFired'] is False and s['keptTimer'] is True, state=s)
+        row('nostif_regex', s['regexFired'] is False and s['regexControl'] is True, state=s)
         row('has_hides', s['hasHit'] == 'none' and s['hasControl'] != 'none', state=s)
         row('other_domain', s['other'] == 'undefined', state=s)
         row('exception', s['excepted'] == 'undefined', state=s)
