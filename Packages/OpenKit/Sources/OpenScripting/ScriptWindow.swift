@@ -78,7 +78,7 @@ public final class ScriptWindow: NSObject {
     }
     @objc public dynamic var activeTab: ScriptTab? {
         guard let state = liveState(), let model = ScriptHost.shared.model,
-              let selected = state.selectedNodeBySpace[state.focusedSpaceID], let node = model.node(id: selected),
+              let space = model.space(id: state.focusedSpaceID), let node = model.selectedNode(in: space, window: state),
               let tab = ScriptRead.selectedTab(in: node) else { return nil }
         return ScriptHost.shared.tabWrapper(for: tab)
     }

@@ -81,10 +81,10 @@ public struct SleepVisibilitySnapshot: Sendable {
     public func visibleTabIDs(in model: BrowserModel) -> Set<ItemID> {
         var ids = peek.union(littleOpen).union(splitPanes).union(pictureInPicture).union(mediaControls)
         for window in model.windows where windows[window.id] == .visible {
-            guard let id = window.selectedNodeBySpace[window.focusedSpaceID],
-                  let node = model.index[id] else { continue }
+            guard let space = model.space(id: window.focusedSpaceID),
+                  let node = model.selectedNode(in: space, window: window) else { continue }
             if let split = node.split { ids.formUnion(split.panes.map(\.id)) }
-            else if node.tab != nil { ids.insert(id) }
+            else if let tab = node.tab { ids.insert(tab.id) }
         }
         return ids
     }
