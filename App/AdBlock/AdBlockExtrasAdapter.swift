@@ -111,9 +111,9 @@ final class AdBlockExtrasAdapter {
     for (key, entry) in installed where entry.profile == profile {
       guard let context = entry.context, context.state == .live else { installed[key] = nil; continue }
       guard entry.scripts != wanted else { continue }
-      let web = EngineWebProfile(context)
-      for script in entry.scripts { web.removeUserScript(id: script.id) }
-      for script in wanted { web.addUserScript(script) }
+      // One snapshot for the whole change. Removing and adding one script at a time
+      // publishes each step, so a document that starts in between misses some extras.
+      EngineWebProfile(context).replaceUserScripts(removing: entry.scripts.map(\.id), adding: wanted)
       installed[key]?.scripts = wanted
     }
   }
