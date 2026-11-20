@@ -131,11 +131,14 @@ private func makeHistory(at root: URL) async -> HistoryStore {
 // MARK: - Local suggest server
 
 /// Minimal HTTP/1.1 server on 127.0.0.1 that answers OpenSearch JSON: `[q, [q+" one", q+" two", q+" three"]]`.
-/// A query that starts with "slow" waits 800 ms first. Every query it receives is logged.
+/// A query that starts with "slow" waits 800 ms first. The first request for a query that starts with
+/// "flaky" gets HTTP 503 (a busy or rate-limited server); later requests for it get 200. Every query it
+/// receives is logged.
 private final class LocalSuggestServer: Sendable {
     let port: UInt16
     private let listener: Int32
     private let log = Mutex<[String]>([])
+    private let failedOnce = Mutex<Set<String>>([])
 
     init?() {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
@@ -189,6 +192,11 @@ private final class LocalSuggestServer: Sendable {
         let q = components.queryItems?.first(where: { $0.name == "q" })?.value ?? ""
         log.withLock { $0.append(q) }
         if q.hasPrefix("slow") { usleep(800_000) }
+        if q.hasPrefix("flaky"), failedOnce.withLock({ $0.insert(q).inserted }) {
+            let busy = Data("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".utf8)
+            _ = busy.withUnsafeBytes { write(client, $0.baseAddress, busy.count) }
+            return
+        }
         let body = (try? JSONSerialization.data(withJSONObject: [q, [q + " one", q + " two", q + " three"]])) ?? Data()
         let response = Data("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8) + body
         _ = response.withUnsafeBytes { write(client, $0.baseAddress, response.count) }
@@ -539,6 +547,22 @@ private func remoteChecks(log: CheckLog, fx: Fixture) async {
               carried.first?.suggestions.contains { $0.title == "remote alpha one" } == true
                 && carried.last?.suggestions.contains { $0.title == "remote alpha o one" } == true,
               "snapshot0=\(carried.first?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) ?? []) final=\(carried.last?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) ?? [])")
+
+    // Server errors: a 503 answer is a failed request, not an empty answer. It must not be cached for
+    // the query (the next try asks again) and must not wipe the previous answer's carry-over rows.
+    let busy = await snapshots(engine, "flaky gamma", ctx)
+    let busyRequests = server.requests.count
+    let retried = await snapshots(engine, "flaky gamma", ctx)
+    log.check("remote: a 503 reply is not cached; the same query asks again and gets rows",
+              busy.last?.isFinal == true && !(busy.last?.suggestions.contains { $0.kind == .searchSuggestion } ?? true)
+                && server.requests.count == busyRequests + 1
+                && retried.last?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) == ["flaky gamma one", "flaky gamma two", "flaky gamma three"],
+              "requests +\(server.requests.count - busyRequests) retry rows=\(retried.last?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) ?? [])")
+    let busyNext = await snapshots(engine, "flaky gamma o", ctx)
+    log.check("remote: a 503 on the next keystroke keeps the carried-over rows",
+              busyNext.last?.isFinal == true && server.requests.last == "flaky gamma o"
+                && busyNext.last?.suggestions.contains { $0.title == "flaky gamma one" } == true,
+              "final=\(busyNext.last?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) ?? [])")
 
     // Port: the test server binds port 0, so concurrent runs get distinct ephemeral ports.
     let secondServer = LocalSuggestServer()

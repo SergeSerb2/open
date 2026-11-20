@@ -9952,6 +9952,7 @@ def commandbar_checks(factory, results, tmp, config):
             and editing['range'] == [0, len(origin + '/pinned')] and bool(changed) and bool(moved) and not state().get('pinnedEdit'),
             'editing': {k: (editing or {}).get(k) for k in ('mode', 'text', 'range', 'pinnedEdit')}, 'pinnedURL': (changed or {}).get('pinnedURL')}
         commandbar_pb1_checks(app, results, bar, press, type_query, state, origin)
+        commandbar_sweep_checks(app, results, bar, press, type_query, state, origin)
         time.sleep(.25)
         app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
         app.call('settings-toggle', name='external'); app.call('save'); app.quit()
@@ -9968,6 +9969,48 @@ def commandbar_checks(factory, results, tmp, config):
     import settings_live
     settings_live.dock_tile(factory, results, tmp, wait_until)
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
+
+
+def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin):
+    """Bug sweep round 1 (CMDBAR): flows that once went wrong in the real App."""
+    # Cmd+L shows at most 2,048 characters (docs/commandbar.md "Typing"). Return on that unedited text
+    # must reload the whole address, not load the cut one.
+    long_url = origin + '/long?q=' + 'a' * 2100 + '&tail=zz9'
+    long_tab = new_tab(app, long_url)
+    app.call('select', tab=long_tab); app.call('focus', tab=long_tab)
+    wait_until(lambda: (app.eval(long_tab, 'location.href') or '') == long_url, timeout=10, step=.1)
+    app.eval(long_tab, 'window.cutMarker = 1; 1')
+    edited = bar('l', 'window')
+    press('return')
+    reloaded = wait_until(lambda: app.eval(long_tab, 'window.cutMarker === undefined && document.readyState === "complete"'), timeout=10, step=.1)
+    href = app.eval(long_tab, 'location.href') or ''
+    results['cmd_l_long_url_return_keeps_whole_address'] = {
+        'ok': edited['mode'] == 'editCurrentURL' and edited['text'] == long_url[:2048] and bool(reloaded) and href == long_url,
+        'fieldLength': len(edited.get('text', '')), 'urlLength': len(long_url), 'loadedLength': len(href), 'loadedTail': href[-12:]}
+    app.call('close', tab=long_tab)
+
+    # Action keycaps follow the user's key bindings, as the menus do (SuggestAdapter).
+    bindings = Path(app.user_data, 'State/keybindings.json')
+    def new_tab_row():
+        bar('t', 'window')
+        typed = type_query('New Tab')
+        row = next((r for r in (typed or {}).get('rows', []) if r['action'] == 'new-tab'), None)
+        press('escape'); time.sleep(.25)
+        keys = [n['key'] for n in app.call('menu-state') if n['id'] == 'new-tab']
+        return {'row': row and {k: row[k] for k in ('title', 'subtitle')}, 'menuKey': keys[0] if len(keys) == 1 else keys}
+    try:
+        bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': [{'key': 'o', 'modifiers': ['command', 'option', 'control']}]}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        custom = new_tab_row()
+        results['action_keycaps_follow_override'] = {'ok': custom['menuKey'] == 'o' and bool(custom['row']) and custom['row']['subtitle'] == '\u2303\u2325\u2318O', **custom}
+        bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': []}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        cleared = new_tab_row()
+        results['action_keycaps_cleared_override'] = {'ok': not cleared['menuKey'] and bool(cleared['row']) and cleared['row']['subtitle'] == '', **cleared}
+    finally:
+        bindings.unlink(missing_ok=True); app.call('reload-keybindings'); time.sleep(.1)
+    restored = new_tab_row()
+    results['action_keycaps_default_after_reset'] = {'ok': restored['menuKey'] == 't' and bool(restored['row']) and restored['row']['subtitle'] == '\u2318T', **restored}
 
 
 def commandbar_pb1_checks(app, results, bar, press, type_query, state, origin):
