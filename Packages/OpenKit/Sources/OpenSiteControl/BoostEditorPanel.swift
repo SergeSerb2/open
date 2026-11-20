@@ -33,8 +33,12 @@ public final class BoostEditorController: NSObject {
     @discardableResult public func present(parent: NSWindow,contentRect: CGRect,context: SiteControlContext,boostID: BoostID? = nil) -> Bool {
         guard !context.isIncognito else { return false }
         let store = host.store(for: context.profileID),existing = boostID.flatMap { store.boost(id: $0) }
-        let point = CGPoint(x: parent.frame.maxX-1,y: parent.frame.midY)
-        guard boostID == nil || existing != nil,let screen = screens().first(where: { $0.frame.contains(point) }) else { return false }
+        let point = CGPoint(x: parent.frame.maxX-1,y: parent.frame.midY),all = screens()
+        // A window dragged partly past a display edge has no screen at its right
+        // edge; use the screen that shows most of it instead of refusing to open.
+        func overlap(_ s: BoostEditorScreen) -> CGFloat { let r = s.frame.intersection(parent.frame);return r.isNull ? 0 : r.width*r.height }
+        let screen = all.first(where: { $0.frame.contains(point) }) ?? all.filter { overlap($0) > 0 }.max { overlap($0) < overlap($1) }
+        guard boostID == nil || existing != nil,let screen else { return false }
         // Resolve the request before finishing the previous editor.
         close();generation += 1;self.parent = parent;chosenScreen = screen.visibleFrame
         let boost: Boost
