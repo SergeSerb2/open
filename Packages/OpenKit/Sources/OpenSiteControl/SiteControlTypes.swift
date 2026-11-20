@@ -29,10 +29,12 @@ public struct SiteSettingTile: Sendable, Equatable, Identifiable {
     public var symbol: String
     public var inUse: Bool
     public var help: String?
+    /// False when the row shows a true state that this site cannot change (the App also refuses the action).
+    public var isEnabled: Bool
     public init(id: String, kind: SiteSettingKind, title: String, subtitle: String, state: SiteSettingState,
-                symbol: String = "gearshape.fill", inUse: Bool = false, help: String? = nil) {
+                symbol: String = "gearshape.fill", inUse: Bool = false, help: String? = nil, isEnabled: Bool = true) {
         self.id = id; self.kind = kind; self.title = title; self.subtitle = subtitle
-        self.state = state; self.symbol = symbol; self.inUse = inUse; self.help = help
+        self.state = state; self.symbol = symbol; self.inUse = inUse; self.help = help; self.isEnabled = isEnabled
     }
 }
 

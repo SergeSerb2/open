@@ -56,13 +56,13 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         view.onKey = { [weak self] in self?.handleKey($0) ?? false }
         view.panel.onAction = { [weak self] action, rect in self?.performAction(action, rect: rect) }
         view.panel.onMore = { [weak self] button in self?.showMenu(from: button) }
-        view.panel.onToggle = { [weak self] tile in
-            guard let self, let tabID = self.tabID else { return }
+        view.panel.onToggle = { [weak self] tile, displayed in
+            guard let self, let tabID = self.tabID, displayed.tabID == tabID else { return }
             if tile.state == .unavailable {
                 self.actions.openAdBlockSettings(tabID: tabID)
             } else {
                 let generation = self.presentationGeneration
-                self.actions.toggle(tile, tabID: tabID)
+                self.actions.toggle(tile, displayed: displayed)
                 guard self.isPresented,self.tabID == tabID,self.presentationGeneration == generation else { return }
                 self.view.panel.showsReload = true; self.refreshView(animated: true)
             }
@@ -303,7 +303,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         guard let snapshot = view.panel.snapshot else { return menu }
         func item(_ title: String, _ id: String, enabled: Bool = true) {
             let item = NSMenuItem(title: title, action: #selector(menuAction(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = SiteControlMenuCommand(id: id,tabID: snapshot.context.tabID,generation: presentationGeneration); item.isEnabled = enabled; menu.addItem(item)
+            item.target = self; item.representedObject = SiteControlMenuCommand(id: id,context: snapshot.context,generation: presentationGeneration); item.isEnabled = enabled; menu.addItem(item)
         }
         func separator() { if menu.items.last?.isSeparatorItem == false { menu.addItem(.separator()) } }
         if snapshot.context.isWebsite {
@@ -318,12 +318,12 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
     }
     @objc private func menuAction(_ sender: NSMenuItem) {
         guard isPresented,sender.isEnabled,let request = sender.representedObject as? SiteControlMenuCommand,
-              let tabID,request.tabID == tabID,request.generation == presentationGeneration else { return }
+              let tabID,request.context.tabID == tabID,request.generation == presentationGeneration else { return }
         let id = request.id
         menuActionInvoked = true
         switch id {
         case "clearCache", "clearCookies":
-            actions.clearSiteData(id == "clearCache" ? .cache : .cookies, tabID: tabID)
+            actions.clearSiteData(id == "clearCache" ? .cache : .cookies, displayed: request.context)
             guard isPresented,self.tabID == tabID,presentationGeneration == request.generation else { return }
             view.panel.showsReload = true; refreshView(animated: true)
         case "newBoost":
@@ -378,6 +378,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
 /// A retained native menu cannot act on a later panel/tab generation.
 private struct SiteControlMenuCommand {
     let id: String
-    let tabID: ItemID
+    /// The snapshot context that built the menu: its actions apply to that origin only.
+    let context: SiteControlContext
     let generation: Int
 }

@@ -68,12 +68,23 @@ extension AutomationController {
         "privateSessionReady": !factory.isIncognito || session.map { store?.isPrivateSessionOpen($0, profile: profile) == true } == true,
         "enabled": store?.isEnabled ?? false,
         "shouldBlock": (try? store?.siteSnapshot(for: profile, privateSession: session).shouldBlock(host: context.url.host() ?? "")) == true]
-    case "capture-content-blocking":
+    case "capture-content-blocking", "capture-tile":
+      // Retain a drawn tile with the snapshot context that displayed it.
+      let id = args["action"] as? String == "capture-tile" ? args["id"] as? String ?? "" : "row.contentBlocking"
       guard scc.isPresented, let snapshot = scc.view.panel.snapshot,
-            let tile = snapshot.tiles.first(where: { $0.kind == .contentBlocking }), tile.state != .unavailable else {
-        throw Failure(message: "no available ad-block tile")
+            let tile = snapshot.tiles.first(where: { "row." + $0.id == id }), tile.state != .unavailable else {
+        throw Failure(message: "no available tile \(id)")
       }
-      factory.siteControlSource.capturedContentBlockingTile = (tile, snapshot.context.tabID)
+      factory.siteControlSource.capturedTile = (tile, snapshot.context)
+    case "capture-menu":
+      guard scc.isPresented else { throw Failure(message: "site controls closed") }
+      factory.siteControlSource.capturedMenu = scc.makeMenu()
+    case "perform-captured-menu":
+      guard scc.isPresented, let menu = factory.siteControlSource.capturedMenu, let title = args["item"] as? String,
+            let index = menu.items.firstIndex(where: { $0.title == title && $0.isEnabled }) else { throw Failure(message: "no captured menu item") }
+      factory.siteControlSource.capturedMenu = nil
+      // The real NSMenu target/action path, with the command the menu was built with.
+      menu.performActionForItem(at: index)
     case "set-adblock-excluded":
       guard scc.isPresented, let context = scc.view.panel.snapshot?.context,
             context.isWebsite, !context.isIncognito, let host = context.url.host(),
@@ -81,13 +92,14 @@ extension AutomationController {
             let store = app.stores.existingAdBlock, store.onEngineEvent != nil,
             store.isEnabled, store.isProfileOpen(context.profileID) else { throw Failure(message: "no available ad-block store") }
       try store.setExcluded(host, excluded: excluded, profile: context.profileID)
-    case "toggle-captured-content-blocking":
-      guard scc.isPresented, let captured = factory.siteControlSource.capturedContentBlockingTile,
-            scc.tabID == captured.tabID else { throw Failure(message: "no captured tile for this panel") }
-      factory.siteControlSource.capturedContentBlockingTile = nil
+    case "toggle-captured-content-blocking", "toggle-captured":
+      guard scc.isPresented, let captured = factory.siteControlSource.capturedTile,
+            scc.tabID == captured.context.tabID else { throw Failure(message: "no captured tile for this panel") }
+      factory.siteControlSource.capturedTile = nil
       // Deliver the retained value through the real panel callback. Settings
-      // can change the store between drawing a tile and receiving its action.
-      scc.view.panel.onToggle?(captured.tile)
+      // can change the store, and a redirect the origin, between drawing a
+      // tile and receiving its action.
+      scc.view.panel.onToggle?(captured.tile, captured.context)
     case "open":
       guard let tab = owner.splitController.focusedTab,
             factory.siteControlSource.snapshot(for: tab.id) != nil,
@@ -185,7 +197,7 @@ extension AutomationController {
     let rows = (snapshot?.tiles ?? []).map { tile -> [String: Any] in
       ["id": "row." + tile.id, "title": tile.title, "subtitle": tile.subtitle,
        "state": tile.state == .on ? "on" : tile.state == .off ? "off" : "unavailable",
-       "visible": scc.isPresented, "inUse": tile.inUse, "help": tile.help ?? ""]
+       "visible": scc.isPresented, "inUse": tile.inUse, "help": tile.help ?? "", "enabled": tile.isEnabled]
     }
     let menu = scc.isPresented ? scc.makeMenu().items.map { ["title": $0.title, "enabled": $0.isEnabled, "separator": $0.isSeparatorItem] as [String: Any] } : []
     let tip = scc.view.visibleArrowTip
@@ -221,6 +233,7 @@ extension AutomationController {
         "buttons": (try? window.siteControlSource.buttonReadCount) ?? 0,
         "changeDeliveries": (try? window.siteControlSource.changeDeliveryCount) ?? 0],
       "sourceActions": ["toggle": (try? window.siteControlSource.toggleCallCount) ?? 0,
+        "toggledContentTabs": (try? window.siteControlSource.toggledContentTabCount) ?? 0,
         "openAdBlockSettings": (try? window.siteControlSource.openAdBlockSettingsCallCount) ?? 0],
       "extensionItems": panel.hasExtensionItems ? panel.extensionsBody.items.map { ["id": $0.item.id, "title": $0.item.name, "visible": scc.isPresented && !$0.isHiddenOrHasHiddenAncestor] as [String: Any] } : controls.filter { $0["id"] as? String == "extension.add" },
       "extensionsFocusedID": panel.extensionsBody.focusedID ?? ""] as [String: Any]

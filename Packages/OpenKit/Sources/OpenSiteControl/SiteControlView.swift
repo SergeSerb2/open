@@ -95,7 +95,8 @@ public final class SiteControlPanelView: NSView {
     public var onAction: ((String,NSRect) -> Void)?
     public var onMore: ((SiteControlButton) -> Void)?
     public var onSecurity: (() -> Void)?
-    public var onToggle: ((SiteSettingTile) -> Void)?
+    /// The tile and the context of the snapshot that displayed it.
+    public var onToggle: ((SiteSettingTile, SiteControlContext) -> Void)?
     public var onBoostEnabled: ((BoostID,Bool) -> Void)?
     public var onEdit: ((BoostID) -> Void)?
     public var onSection: ((String) -> Void)?
@@ -343,7 +344,9 @@ extension SiteControlPanelView {
                 else { row = SiteControlRow(tile) }
                 row.accentDisc = accent.darkAccent
                 row.frame = CGRect(x: 0,y: y,width: m.width,height: m.rowIcon)
-                row.invoke = { [weak self,weak row] in guard let row else { return }; self?.onToggle?(row.tile) }
+                row.invoke = { [weak self,weak row] in
+                    guard let self,let row,let context = self.snapshot?.context else { return }; self.onToggle?(row.tile,context)
+                }
                 body.addSubview(row); controls.append(row); nextRows[tile.id] = row; y += m.rowIcon
             }
             if showsReload {
