@@ -13898,11 +13898,13 @@ def main():
     if opts.only in ('passwords-probe', 'passwords', 'secrets-import') and opts.style != 'chrome':
         ap.error('passwords suites and secrets-import require --style chrome')
     if opts.passwords_rows is not None:
-        allowed = {'P-20', 'P-21', 'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
+        allowed = {'P-20', 'P-21', 'P-21-chooser', 'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
                    'PW-HF4-window-close', 'PW-HF5-navigate', 'PW-HF6-space', 'PW-HF7-quit'}
         selected = opts.passwords_rows.split(',')
         if opts.only != 'passwords' or not set(selected) <= allowed or len(set(selected)) != len(selected):
             ap.error('--passwords-rows requires passwords and unique WebAuthn or HTTPS-First lifetime row ids')
+        if 'P-21-chooser' in selected and len(selected) != 1:
+            ap.error('P-21-chooser uses LaunchServices and must run by itself')
     if opts.passwords_m_only and (opts.only != 'passwords' or opts.passwords_rows is not None):
         ap.error('--passwords-m-only requires passwords without --passwords-rows')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or

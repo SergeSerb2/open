@@ -1,12 +1,12 @@
 {
- "status": "adopted with #602: frame-presentation seam (Chromium 0510); framework link unchanged (--lto-O0)",
- "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-591b21a6-official_minimal",
- "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-591b21a6-official_minimal",
+ "status": "WebAuthn candidate with Chromium patches 0811 and 0812; framework link uses --lto-O0",
+ "distribution_name": "webauthn-0811-0812_minimal",
+ "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/webauthn-0811-0812_minimal",
  "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",
- "framework_sha256": "591b21a6f2b6f53f2a99582385d1b8d8cf3615293ea8b2a1484e5f90363be868",
- "framework_uuid": "4C4C44DF-5555-3144-A1F7-40AE6E460D18",
+ "framework_sha256": "f6e6c984fff9a7364164406befd5e0edb9dc3e813fbf7ae58913560bf67e5105",
+ "framework_uuid": "4C4C44C8-5555-3144-A196-093A08915D0D",
  "framework_bytes": 241211200,
- "framework_bytes_delta_vs_61709cc0": 16688,
+ "framework_bytes_delta_vs_591b21a6": 0,
  "chromium_version": "156.0.8078.48",
  "cef_version": "156.0.14+g4fa4ab5",
  "chromium_head": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
@@ -18,16 +18,21 @@
  "args_delta_vs_release_args_gn": "use_remoteexec = true",
  "pgo_profile": "chrome-mac-arm-8078-1791925243-b77c87a12380c6212a5d36737d1c76576eaaa85d-8bf8e95f3aaaafc23171beddc0ee3f397abd1e12.profdata",
  "pgo_profile_sha256": "15fbc265a780b68bd943e5a2f2c89b58a006c45e28435257e4d927f1c7ee0c20",
- "open_patches": "all 52 active (Engine/fork/patches/*/series: chromium 33, cef 18, rust 1): the 51 of 61709cc0 plus Chromium 0510 frame presentation (WidgetBase arms on painted_device_scale_factor; three VLOG(1) lines, silent unless --vmodule); 152 overlay files incl. open/browser/page/open_frame_presentation.mm and the CEF_OPEN_HAS_FRAME_PRESENTATION header marker. CEF 0002 (--lto-O2) is NOT included (rejected for size, ruling 2026-11-17 08:45)",
- "built_at": "2026-11-17 08:47:43-08:51:42 local; OFFLINE incremental relink in out/Release_Official_arm64, 5 steps, 0 compiles, framework SOLINK 3m36s, 4 local jobs, ThinLTO 6, nice 10, OPEN_HEAVY_EXCLUSIVE; min available memory 10.8 GiB, no pause",
- "symbols": "matching arm64 dSYM at chromium_git/chromium/src/cef/binary_distrib/e3-presentation-20261117-seam_symbols/Chromium Embedded Framework.dSYM; UUID 4C4C44DF-5555-3144-A1F7-40AE6E460D18",
+ "open_patches": "All 54 active: the 52 applied to 591b21a6 with Chromium 0811 (macOS WebAuthn window) and 0812 (USB and phone choices). Existing headers and resources retained; CEF 0002 (--lto-O2) remains excluded.",
+ "built_at": "2026-11-19 18:53–18:57 local; OFFLINE incremental build in out/Release_Official_arm64, two C++ compiles and the framework link; 3m32s in Siso under the exclusive build slot",
+ "symbols": "Matching arm64 dSYM retained alongside the private build; UUID 4C4C44C8-5555-3144-A196-093A08915D0D",
  "known_limits": [
   "CEF framework links with --lto-O0 (thinlto_optimize_default); no link-time optimization",
   "HTTP authentication request/answer/cancel is in OpenEngine; it does not provide Chromium password-manager save/fill or every network-side withdrawal. The shell owns its sheet lifetime."
  ],
  "widevine": "enable_widevine=true, bundle_widevine_cdm=false (release.args.gn); CDM component registers only with --open-enable-widevine (Advanced setting \"Play DRM-protected video\", off by default)",
- "proof": "engine-presentation 13/13 PASS on the M5 (1x) and the M1 (2x, through OpenCapture.app) with this framework; fix1 (same seam + --lto-O2) also 13/13 at both scales; the 61709cc0-era private engine b1d662f5 FAILS the static row at 2x. Receipts: .re/handoff/plans/RESUME-E3-2026-11-16.md (08:05 and 08:45 rounds)",
+ "proof": "The offline incremental build passed. A normal M5 Debug launch displayed separate USB and phone choices and cancelled without closing the parent window. M1 Debug passed virtual create and get. Physical USB completion and the signed macOS credential provider flow are pending.",
  "superseded": [
+  {
+   "framework_sha256": "591b21a6f2b6f53f2a99582385d1b8d8cf3615293ea8b2a1484e5f90363be868",
+   "framework_uuid": "4C4C44DF-5555-3144-A1F7-40AE6E460D18",
+   "reason": "#602 frame-presentation engine before the WebAuthn changes. Presentation passed 13/13 on M5 at 1x and M1 at 2x. Retained as rollback and WebAuthn comparison."
+  },
   {
    "framework_sha256": "61709cc0c07de5a6c489ef692c0491bc6a303cc08fcdecf94ea9d8c06abf8121",
    "framework_uuid": "4C4C44D5-5555-3144-A137-FBAB1476EFFE",

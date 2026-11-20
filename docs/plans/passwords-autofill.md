@@ -841,7 +841,8 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | P-18 | Gracefully close Open, inspect a synthetic `Login Data` copy, then relaunch | Every saved `password_value` starts with `v10`; fixture password bytes are absent; profile directory mode is 0700 |
 | P-19 | Private window with the focused Space's Profile as parent, sign in | The context is off the record and has that parent; no sheet, no private save, and both private and parent stores stay unchanged |
 | P-20 | `webauthn.html` with a DevTools virtual authenticator (`WebAuthn.enable`, `WebAuthn.addVirtualAuthenticator`, ctap2, usb) | `create` and `get` resolve |
-| P-21 | `webauthn.html` without a virtual authenticator | Chromium's WebAuthn dialog shows as a child window (`windows`, `snapshot`); Esc closes it; the promise rejects with `NotAllowedError` |
+| P-21 | `webauthn.html` without a virtual authenticator | The chooser or USB prompt appears in a child window. Esc closes it with `NotAllowedError` and leaves the browser window open. |
+| P-21-chooser | `--only passwords --passwords-rows P-21-chooser` on a Mac with Bluetooth available to Open and no security key already responding | The real LaunchServices launch offers separate USB and phone choices before any QR code. |
 | P-22 | Relaunch without `--open-allow-mock-keychain-secrets` (mock-key build); sign in on a new fixture site in an empty Profile | No sheet, no `savePrompt` event; zero logins in that Profile and unchanged parent store; `canEnablePasswordSaving` is false |
 | P-23 | On `login.html` with a saved login, `eval` `navigator.credentials.get({password: true})` | Resolves to `null` within 2 s; no dialog window |
 
