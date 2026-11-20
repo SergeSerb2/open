@@ -25,7 +25,8 @@ extension AppImportRunner {
     // "Imported from Safari" folder next to a live-files import (lead 01:25, as in Arc).
     let key = plan.source.importKey + (plan.safariFiles.exportArchive != nil ? ":export" : "")
     let model: BrowserModel = app.model
-    guard let space = app.frontWindowController?.context.focusedSpace ?? model.spaces.first,
+    // Never an Incognito or Blank Window's private model (as in the Chromium path).
+    guard let space = app.frontMainModelWindowController?.context.focusedSpace ?? model.spaces.first,
           let target = model.profile(id: space.profileID) else {
       result.errorText = "Open has no Space to import into."; return result
     }
@@ -47,10 +48,11 @@ extension AppImportRunner {
       let sourceModel = BrowserBookmarksImport.sourceModel(roots: read.roots, browserName: source.name, sourceKey: key,
                                                            profileID: target.id, settings: target.settings, spaceID: space.id)
       do {
+        let before = mergeFingerprint()
         let merged = try undo.captureModel(app.model) {
           try app.model.mergeImportedSidebar(sourceModel, profileMapping: [:], spaces: false, tabs: true, favorites: false,
             folders: true, searchSettings: false, importedAt: Date(), saving: {
-              try app.snapshotStore.saveNow(model: app.model)
+              try saveBrowserImport(since: before)
             })
         }
         result.counts["Bookmarks"] = merged.tabs
@@ -130,9 +132,10 @@ extension AppImportRunner {
     let model = BrowserModel(profiles: [Profile(id: target.id, settings: target.settings)],
                              spaces: [Space(id: space.id, profileID: target.id, pinned: pinned, today: today)])
     do {
+      let before = mergeFingerprint()
       let merged = try undo.captureModel(app.model) {
         try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: true, favorites: false,
-          folders: false, searchSettings: false, importedAt: Date(), saving: { try app.snapshotStore.saveNow(model: app.model) })
+          folders: false, searchSettings: false, importedAt: Date(), saving: { try saveBrowserImport(since: before) })
       }
       result.counts["Open tabs"] = merged.tabs
       result.counts["Open tab duplicates"] = merged.duplicates

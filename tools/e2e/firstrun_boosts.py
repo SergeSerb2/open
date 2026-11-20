@@ -1,6 +1,7 @@
 """Arc Boost import through first run, Settings, the sole store and live pages."""
 import os
 import json
+import math
 import http.server
 import threading
 import time
@@ -199,9 +200,11 @@ def run(factory, results, tmp, h):
                     "border:getComputedStyle(document.body).borderTopWidth,documentID:window.exampleDocumentID,"
                     "boostStyle:document.getElementById('open-boosts-style')?.textContent??null})")
             def width_matches(value, expected):
-                # Imported 125% zoom quantizes widths to device pixels: CSSOM reports
-                # a 3px outline as 2.8px on the M1's 2x display.
-                return value.endswith('px') and abs(float(value[:-2]) - expected) <= 0.25
+                # Imported 125% zoom snaps widths down to whole device pixels: CSSOM reports
+                # a 3px outline as 2.8px on the M1's 2x display and 2.4px on the M5's 1x display.
+                scale = 1.25 * float(app.eval(tab, 'window.devicePixelRatio'))
+                snapped = max(1, math.floor(expected * scale)) / scale
+                return value.endswith('px') and abs(float(value[:-2]) - snapped) <= 0.05
             def boosted(value):
                 return value['outline'] == 'rgb(1, 2, 3)' and float(value['zoom']) == 1.25 \
                     and width_matches(value['outlineWidth'], 3)

@@ -39,15 +39,21 @@ extension AppImportRunner {
     (try? SecretsImportLedger(dataRoot: app.directories.root).unfinished) != nil
   }
 
-  /// Resolve through the normal factory even when a Profile has no live tab.
+  /// The regular engine context of a main-model Profile, through the same creation path a page
+  /// uses. It needs no window of that Profile: a Blank Window's model holds only its own stand-in
+  /// Profile, and a Profile that an Undo removed no longer resolves. Never Incognito.
+  func importContext(for profileID: ProfileID) -> OEBrowserContext? {
+    guard let profile = app.model.profile(id: profileID) else { return nil }
+    return EngineWebContentHostFactory.createRegularContext(profileID: profile.id, directory: profile.dataDirectoryName, app: app)
+  }
+
+  /// Resolve through the normal context path even when a Profile has no live tab.
   /// No fallback to Default, and never use an incognito factory for a writer.
   func secretsSink(for profile: Profile) throws -> AppSecretsImportSink {
     guard !retiredSecretsProfiles.contains(profile.id),
       !retiredSecretsDirectories.contains(profile.dataDirectoryName.lowercased()),
       app.model.profile(id: profile.id) === profile else { throw CancellationError() }
-    guard let factory = app.frontStandardWindowController.flatMap({ app.hostFactories[$0.windowID] })
-      ?? app.hostFactories.values.first(where: { !$0.isIncognito }),
-      !factory.isIncognito, let context = factory.context(for: profile.id), !context.isEphemeral
+    guard let context = importContext(for: profile.id), !context.isEphemeral
     else { throw ArcSecretsImportError.invalidSinkResult }
     let sink = AppSecretsImportSink(profileID: profile.id, context: context) { [weak app] in
       guard let app else { return }

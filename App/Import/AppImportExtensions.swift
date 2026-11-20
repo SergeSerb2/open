@@ -32,8 +32,8 @@ extension AppImportRunner {
       candidate.extensionID.utf8.allSatisfy({ (97...112).contains($0) }) else { return .failed("Invalid extension ID.") }
     if app.firstRunWindowController?.window === window,
       !app.hostFactories.values.contains(where: { !$0.isIncognito }) { app.showFirstRunBrowser() }
-    guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito }),
-      let context = factory.context(for: candidate.profileID) else { return .failed("The Profile is no longer available.") }
+    // The candidate Profile must still exist in the main model (an Undo can remove it).
+    guard let context = importContext(for: candidate.profileID) else { return .failed("The Profile is no longer available.") }
     let manager = context.extensions
     // Readiness has no deadline either: elapsed time is not an install error.
     while !manager.isReady && !app.terminationRequested && window.isVisible {

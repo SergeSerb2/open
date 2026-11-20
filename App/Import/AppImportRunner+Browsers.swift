@@ -22,9 +22,10 @@ extension AppImportRunner {
       return await importOtherBrowser(source: source, profile: sourceProfile, plan: plan, undo: undo, wizard: wizard, progress: progress)
     }
     let key = plan.source.importKey
-    // Destination: the focused Space of the front window, else the first Space.
+    // Destination: the focused Space of the front main-model window, else the first Space.
+    // An Incognito or Blank Window keeps its Spaces in its own model; it is never the destination.
     let model: BrowserModel = self.app.model
-    let front = self.app.frontWindowController
+    let front = self.app.frontMainModelWindowController
     guard let space = front?.context.focusedSpace ?? model.spaces.first,
           let target = model.profile(id: space.profileID) else {
       result.errorText = "Open has no Space to import into."; return result
@@ -64,10 +65,11 @@ extension AppImportRunner {
       let openIDs = Set(read.tabs.map { BrowserBookmarksImport.openTabID(sourceKey: key, url: $0.url) })
       let openBefore = Set(openIDs.filter { self.app.model.node(id: $0) != nil })
       do {
+        let before = mergeFingerprint()
         let merged = try undo.captureModel(app.model) {
           try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: plan.bookmarks || plan.openTabs, favorites: false,
             folders: plan.bookmarks, searchSettings: plan.searchSettings && read.search != nil, importedAt: Date(), saving: {
-              try app.snapshotStore.saveNow(model: app.model)
+              try saveBrowserImport(since: before)
             })
         }
         let openAdded = openIDs.subtracting(openBefore).filter { self.app.model.node(id: $0) != nil }.count
@@ -175,6 +177,34 @@ extension AppImportRunner {
     } catch {
       return ImportOutcome(failures: ["Passwords and cookies": "Passwords and cookies could not be imported. You can try again from Settings."])
     }
+  }
+
+  /// What a browser import's sidebar merge can change: sidebar rows and Profile settings.
+  struct MergeFingerprint: Equatable { var rows: [Int]; var settings: [ProfileSettings] }
+  func mergeFingerprint() -> MergeFingerprint {
+    func count(_ nodes: [SidebarNode]) -> Int {
+      nodes.reduce(0) { total, node in
+        switch node {
+        case .tab: total + 1
+        case .folder(let folder): total + 1 + count(folder.children)
+        case .split(let split): total + 1 + split.panes.count
+        }
+      }
+    }
+    let model = app.model!
+    return MergeFingerprint(rows: model.spaces.flatMap { [count($0.pinned), count($0.today)] } + model.profiles.map { $0.favorites.count },
+                            settings: model.profiles.map(\.settings))
+  }
+
+  /// The merge's durable, transactional commit. During first run a merge that changed nothing
+  /// does not write the snapshot: browser.json marks setup as done, so a quit before Get Started
+  /// would skip setup at the next launch. The Arc path keeps the same rule. A merge that landed
+  /// data still commits before history starts.
+  func saveBrowserImport(since before: MergeFingerprint) throws {
+    let firstRun = app.isFirstRun && !app.firstRunSaved
+    if firstRun && mergeFingerprint() == before { return }
+    try app.snapshotStore.saveNow(model: app.model)
+    if firstRun { firstRunMergeSaved = true }
   }
 
   private func finish(_ input: BrowserImportResult) -> BrowserImportResult {
