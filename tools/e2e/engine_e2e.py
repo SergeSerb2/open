@@ -7180,15 +7180,18 @@ def media_checks(factory, results, tmp):
             app.call("media-action", tab=pm, action="pip")
             pm_open = wait_until(lambda: (lambda p: p if p["state"] == "active" and p.get("tab") == pm
                                           and (p.get("openWindow") or {}).get("visible") else None)(pip()), timeout=3, step=.02)
+            # The engine's PiP mute state does not include the page's own mute, so the window offers "Mute" first.
             pm_items = app.call("pip-action", action="menu") if pm_open else []
-            if "Unmute" in pm_items: app.call("pip-action", action="menu", item="Unmute")
+            if "Mute" in pm_items: app.call("pip-action", action="menu", item="Mute")
+            pm_muted_items = wait_until(lambda: (lambda i: i if "Unmute" in i else None)(app.call("pip-action", action="menu")), timeout=3, step=.05) or []
+            if "Unmute" in pm_muted_items: app.call("pip-action", action="menu", item="Unmute")
             pm_heard = wait_until(lambda: app.eval(pm, "document.getElementById('main').muted") is False, timeout=3, step=.05)
             pm_after = app.call("pip-action", action="menu") if pm_open else []
             pm_tab_muted = m(pm)["modelMuted"]
-            results["media_pip_unmute_page_muted"] = {"ok": bool(pm_open) and "Unmute" in pm_items and bool(pm_heard)
+            results["media_pip_unmute_page_muted"] = {"ok": bool(pm_open) and "Unmute" in pm_muted_items and bool(pm_heard)
                 and "Mute" in pm_after and pm_tab_muted is False,
-                "itemsBefore": pm_items, "itemsAfter": pm_after, "elementMuted": app.eval(pm, "document.getElementById('main').muted"),
-                "tabMuted": pm_tab_muted}
+                "itemsBefore": pm_items, "itemsMuted": pm_muted_items, "itemsAfter": pm_after,
+                "elementMuted": app.eval(pm, "document.getElementById('main').muted"), "tabMuted": pm_tab_muted}
             if pm_open: app.call("pip-action", action="close"); wait_pip("closed")
             close_tab(pm)
         else:

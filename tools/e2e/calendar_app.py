@@ -161,7 +161,7 @@ def run(factory, results, tmp, harness):
         arc_preferences_checks(app, results, wait_until, tmp, harness)
 
         # 9. Bug sweep R2: per-Profile reminder intervals (adds a second Profile, so it runs last).
-        per_profile_reminder_checks(app, results, wait_until, new_tab, cal, fav0)
+        per_profile_reminder_checks(app, results, wait_until, new_tab, cal)
     finally:
         try:
             app.call('defaults', key='open.general.previewsCalendar', value=None)
@@ -177,7 +177,7 @@ def run(factory, results, tmp, harness):
 
 
 
-def per_profile_reminder_checks(app, results, wait_until, new_tab, cal, fav):
+def per_profile_reminder_checks(app, results, wait_until, new_tab, cal):
     """Bug sweep R2 (seed-livedata #10): the reminder interval belongs to each Profile. A second window shows
     another Profile's calendar Favorite set to Never. While that window is in front, each window's menu
     still shows its own Profile's interval, and the first Profile reminds at its two minutes, in its window.
@@ -190,6 +190,10 @@ def per_profile_reminder_checks(app, results, wait_until, new_tab, cal, fav):
         front(window)
         return app.call('sidebar-menu-state', node=node, item='Meeting Reminder/' + title).get('checked')
     first_window = app.call('window-state')['id']
+    # Earlier rows unfavorite and disable their calendar Favorites: start from a fresh one, Live Calendar on.
+    app.call('defaults', key='open.favorites.liveCalendarDisabled', value=None)
+    fav = new_tab(app, 'https://calendar.google.com/calendar/u/0/r/month')
+    app.call('favorite', tab=fav)
     app.call('menu-perform', id='new-window')
     second_window = wait_until(lambda: (lambda w: w['id'] if w['id'] != first_window else None)(app.call('window-state')), timeout=5, step=.05)
     profile_b = None
