@@ -220,15 +220,20 @@ def run(factory, results, wait):
         assert loaded('opener')
         # DevTools mouse input with JSON null / string modifiers (NSNull has no
         # -unsignedIntegerValue: an Objective-C exception ended the App).
+        # DevTools itself may refuse the value ("Invalid parameters"); the
+        # App must answer, not die.
         sent = []
         for modifiers in (None, '4'):
             for kind in ('mousePressed', 'mouseReleased'):
-                call('devtools', page='opener', method='Input.dispatchMouseEvent', params={
-                    'type': kind, 'x': 5, 'y': 5, 'button': 'left', 'clickCount': 1,
-                    'modifiers': modifiers})
-                sent.append(kind)
+                try:
+                    call('devtools', page='opener', method='Input.dispatchMouseEvent', params={
+                        'type': kind, 'x': 5, 'y': 5, 'button': 'left', 'clickCount': 1,
+                        'modifiers': modifiers})
+                    sent.append('ok')
+                except RuntimeError as error:
+                    sent.append(str(error)[-80:])
         row('devtools_mouse_null_modifiers', len(sent) == 4 and call()['pages']['opener']['live'],
-            sent=sent)
+            replies=sent)
         # A popup nobody adopts keeps Chromium's window and its own client:
         # its address and title must not replace the opener's.
         opener_before = call()['pages']['opener']
