@@ -112,6 +112,37 @@ def run(factory, results, tmp, h):
             and 'Archive Tabs' in mixed['items'] and 'Remove Notes from Sidebar' not in mixed['items'] and 'Copy Links' not in mixed['disabled']
             and bool(removed) and all(os.path.exists(f) for f in files),
             notesOnly=notes_only, mixed=mixed['items'], removed=bool(removed))
+
+        # Two rows of one Note (Duplicate keeps the address): an edit in one row's editor shows in the
+        # other's, and typing there keeps both edits (an older editor copy must not overwrite the file).
+        def shown(tab):
+            return h.wait_until(lambda: (lambda v: v if v['tab'] == tab and v['shown'] else None)(app.call('note')), timeout=5, step=.05) or {}
+        app.call('note', action='create'); app.call('key', text='Delta'); key('return'); app.call('key', text='one')
+        d = app.call('note')['tab']
+        d_url = app.call('note', tab=d)['url']
+        app.call('note', action='flush')
+        app.call('menu-perform', id='duplicate-tab')
+        twins = h.wait_until(lambda: (lambda r: r if len(r) == 2 else None)([t['id'] for t in app.call('tabs') if t['url'] == d_url]), timeout=5, step=.1) or []
+        e = next((t for t in twins if t != d), None)
+        seen, stored, hosts = {}, {}, 0
+        if e:
+            app.call('select', tab=e); shown(e)
+            app.call('select', tab=d); shown(d)
+            app.call('note', action='select', start=3, length=0)
+            app.call('note', action='type', text=' two')
+            app.call('select', tab=e); seen = shown(e)
+            hosts = seen.get('noteHostCount', 0)
+            app.call('note', action='select', start=len(seen.get('body', '')), length=0)
+            app.call('note', action='type', text=' three')
+            # A title typed in one row's editor becomes the title of both rows.
+            app.call('note', action='focus', field='title')
+            app.call('note', action='type', text=' Two')
+            app.call('note', action='flush')
+            stored = app.call('note', tab=d).get('stored') or {}
+        titles = sorted(t['title'] for t in app.call('tabs') if t['url'] == d_url)
+        row('duplicate_rows_share_edits', seen.get('body') == 'one two' and stored.get('text') == 'one two three'
+            and bool(stored.get('title')) and titles == [stored.get('title')] * 2,
+            twins=twins, seen=seen.get('body'), stored=stored.get('text'), storedTitle=stored.get('title'), titles=titles, noteHosts=hosts)
     finally:
         app.quit()
         server.shutdown()

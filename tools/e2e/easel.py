@@ -286,6 +286,10 @@ def run(factory, results, tmp, api):
             '<meta content="A synthetic page for link cards." property="og:description">'
             '<meta property="og:image" content="/og.png"></head>'
             '<body style="margin:0;background:#3a7"><h1>Easel fixture</h1></body></html>')
+        # A page over the 1 MiB read limit that says so in Content-Length: its head is still read.
+        (site / 'long.html').write_text(
+            '<!doctype html><html><head><meta property="og:title" content="Long Fixture Page"></head><body>'
+            + '<p>' + 'x' * (1 << 20) + '</p></body></html>')
         server = fixture_server(site)
         origin = 'http://127.0.0.1:%d' % server.server_address[1]
         try:
@@ -328,6 +332,12 @@ def run(factory, results, tmp, api):
             app.call('appearance', name='dark'); time.sleep(.5)
             snapshot('e24-link-image-dark')
             app.call('appearance', name='light')
+            # E24b: a page longer than the read limit (Content-Length over 1 MiB) still gives its title from the head.
+            app.call('easel', action='pasteboard', url=origin + '/long.html')
+            easel(action='edit', op='paste', tab=e2)
+            done = api.wait_until(lambda: (lambda x: x if x['pendingLinks'] == 0 else None)(easel(tab=e2)), timeout=15, step=.2)
+            long_link = [x for x in objects(done) if x['kind'] == 'link' and x['url'] == origin + '/long.html'] if done else []
+            record('E24b_long_page_link_title', len(long_link) == 1 and long_link[0]['title'] == 'Long Fixture Page', link=long_link)
             # E25: alignment guides snap a moved shape to another's edge; the canvas menu turns them off.
             menu = easel(action='menu', at=[960, 150], tab=e2)
             easel(action='edit', op='selectAll', tab=e2); easel(action='key', key='delete', tab=e2)
@@ -464,6 +474,81 @@ def run(factory, results, tmp, api):
             record('E38_delete_easel', alert and 'Are you sure you want to delete this Easel?' in alert['texts']
                    and 'Doing so will delete the Easel permanently.' in alert['texts'] and sorted(alert['buttons']) == ['Cancel', 'Delete']
                    and gone and not folder.exists(), alert=alert, folderExists=folder.exists())
+
+            # E38c: Duplicate keeps an Easel row's address, so two rows show one Easel. Delete Easel on one row
+            # deletes the Easel: every row of it goes (as Delete Note does), none is left on a trashed folder.
+            twin = easel(action='create')['tab']
+            twin_url = easel(tab=twin)['url']
+            twin_folder = Path(app.call('easel', action='store', document=easel(tab=twin)['document'])['path']).parent
+            app.call('select', tab=twin)
+            app.call('menu-perform', id='duplicate-tab')
+            pair_rows = api.wait_until(lambda: (lambda r: r if len(r) == 2 else None)(
+                [t['id'] for t in app.call('tabs') if t['url'] == twin_url]), timeout=5, step=.1) or []
+            app.call('sidebar-menu', node=twin, item='Delete Easel')
+            api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', press='Delete')
+            api.wait_until(lambda: all(t['id'] != twin for t in app.call('tabs')) or None, timeout=5, step=.1)
+            time.sleep(.3)
+            left = [t['id'] for t in app.call('tabs') if t['url'] == twin_url]
+            record('E38c_delete_easel_every_row', len(pair_rows) == 2 and not left and not twin_folder.exists(),
+                   rows=pair_rows, left=left, folderExists=twin_folder.exists())
+
+            # E38d: a title over the stored limit (1,000 UTF-16 units) is cut when it is saved, so the Easel opens
+            # again with its objects. Before, the next open refused the file, set it aside and showed an empty Easel.
+            long_tab = easel(action='create')['tab']
+            easel(action='tool', tool='rectangle'); easel(action='click', at=[300, 400])
+            easel(action='title', text='T' * 1200)
+            easel(action='flush')
+            long_doc = easel(tab=long_tab)['document']
+            long_url = easel(tab=long_tab)['url']
+            long_folder = Path(app.call('easel', action='store', document=long_doc)['path']).parent
+            app.call('close', tab=long_tab)
+            api.wait_until(lambda: all(t['url'] != long_url for t in app.call('tabs')) or None, timeout=5, step=.1)
+            app.call('key', key='t', modifiers=['command', 'shift'], route='app')
+            back = api.wait_until(lambda: next((t['id'] for t in app.call('tabs') if t['url'] == long_url), None), timeout=5, step=.1)
+            reopened = {}
+            if back:
+                app.call('select', tab=back)
+                reopened = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=back)), timeout=5, step=.1) or {}
+            stored = app.call('easel', action='store', document=long_doc)
+            refused = sorted(p.name for p in long_folder.glob('document.refused-*')) if long_folder.exists() else []
+            stored_title = (stored.get('json') or {}).get('title') or ''
+            record('E38d_long_title_reopens', bool(reopened) and len(objects(reopened)) == 1 and not reopened.get('recreated')
+                   and stored.get('exists') and len(stored_title) == 1000 and not refused,
+                   back=back, objects=len(objects(reopened)) if reopened else None, recreated=reopened.get('recreated'),
+                   storedTitle=len(stored_title), refused=refused)
+            if back:
+                app.call('close', tab=back)
+
+            # E38e: two rows of one Easel (Duplicate keeps the address) each have a canvas. A shape added on one
+            # shows on the other, and a shape added there keeps both (an older canvas copy must not overwrite the file).
+            t1 = easel(action='create')['tab']
+            t_url, t_doc = easel(tab=t1)['url'], easel(tab=t1)['document']
+            app.call('select', tab=t1)
+            app.call('menu-perform', id='duplicate-tab')
+            t_rows = api.wait_until(lambda: (lambda r: r if len(r) == 2 else None)(
+                [t['id'] for t in app.call('tabs') if t['url'] == t_url]), timeout=5, step=.1) or []
+            t2 = next((t for t in t_rows if t != t1), None)
+            def shown_easel(tab):
+                return api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=tab)), timeout=5, step=.1) or {}
+            seen, twin_hosts, stored_count, twin_titles = None, 0, None, []
+            if t2:
+                app.call('select', tab=t2); shown_easel(t2)
+                app.call('select', tab=t1); shown_easel(t1)
+                easel(action='tool', tool='rectangle'); easel(action='click', at=[300, 400])
+                app.call('select', tab=t2); s2 = shown_easel(t2)
+                seen, twin_hosts = len(objects(s2)) if s2 else None, s2.get('hostCount', 0)
+                easel(action='tool', tool='ellipse'); easel(action='click', at=[700, 400])
+                # A title typed on one canvas becomes the title of both rows.
+                easel(action='title', text='Twin board')
+                easel(action='flush')
+                stored = app.call('easel', action='store', document=t_doc)
+                stored_count = len((stored.get('json') or {}).get('objects', []))
+                twin_titles = sorted(t['title'] for t in app.call('tabs') if t['url'] == t_url)
+                for t in t_rows:
+                    app.call('close', tab=t)
+            record('E38e_twin_canvases_share_edits', seen == 1 and stored_count == 2 and twin_titles == ['Twin board'] * 2,
+                   rows=t_rows, seenOnTwin=seen, stored=stored_count, hostCount=twin_hosts, titles=twin_titles)
 
             # E38b: a selection of only Easels ends with Arc's plural "Remove Easels from Sidebar" (STR, easels-notes.md
             # §3.2); Copy Links stays (an Easel has an address). A web tab in the selection keeps "Archive Tabs".
@@ -615,6 +700,33 @@ def run(factory, results, tmp, api):
                    and not a_folder.exists() and all(t['url'] != 'open://easel/' + a_row for t in app.call('tabs')),
                    before=before, after=(after or {}).get('easels'))
             library(action='close')
+
+            # L04b: an Easel kept in Favorites. Library › Open selects that Favorite (no second row in Today), and
+            # Library › Delete removes the Favorite too.
+            fav = easel(action='create')['tab']
+            fav_url = easel(tab=fav)['url']
+            fav_doc = fav_url.rsplit('/', 1)[1]
+            fav_folder = Path(app.call('easel', action='store', document=fav_doc)['path']).parent
+            app.call('favorite', tab=fav)
+            app.call('select', tab=blank)
+            library(action='open', section='easels')
+            api.wait_until(lambda: (lambda x: x if any(r['id'] == fav_doc for r in x.get('rows', [])) else None)(library()), timeout=8, step=.2)
+            library(action='row-action', id=fav_doc, name='open')
+            api.wait_until(lambda: not library().get('open') or None, timeout=5, step=.1)
+            time.sleep(.3)
+            opened_rows = [t['id'] for t in app.call('tabs') if t['url'] == fav_url]
+            selected = (api._try(lambda: easel()) or {}).get('tab')
+            library(action='open', section='easels')
+            api.wait_until(lambda: (lambda x: x if any(r['id'] == fav_doc for r in x.get('rows', [])) else None)(library()), timeout=8, step=.2)
+            library(action='row-menu', id=fav_doc, select='Delete')
+            api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', press='Delete')
+            api.wait_until(lambda: all(r['id'] != fav_doc for r in library().get('rows', [])) or None, timeout=8, step=.2)
+            time.sleep(.3)
+            fav_left = [t['id'] for t in app.call('tabs') if t['url'] == fav_url]
+            record('L04b_library_favorite_easel', opened_rows == [fav] and selected == fav and not fav_left and not fav_folder.exists(),
+                   opened=opened_rows, selected=selected, left=fav_left, folderExists=fav_folder.exists())
+            library(action='close')
         finally:
             server.shutdown()
         # L05: a profile with no Easels shows the empty state (docs/re/easels.md copy).
@@ -668,13 +780,17 @@ def run(factory, results, tmp, api):
         a_tab = next((t for t in imported_tabs if t['url'] == a_url), None)
         a_objects = []
         if a_tab:
+            # Board A comes from the second Arc Space: show that Space first (`select` acts in the focused one).
+            app.call('space', space=a_tab['space'])
             app.call('select', tab=a_tab['tab'])
             shown = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=a_tab['tab'])), timeout=8, step=.1)
             a_objects = objects(shown) if shown else []
         record('W01_wizard_easels', before_pick.get('count') == 1 and chosen.get('count') == 3 and chosen.get('selected') is True
                and report.get('settingsOutcome', {}).get('Easels') == 3 and a_tab and a_tab['title'] == 'Board A'
                and len(a_objects) == 7 and len(imported_tabs) == 3, beforePick=before_pick, chosen=chosen,
-               outcome=report.get('settingsOutcome'), tabs=[t['title'] for t in imported_tabs])
+               outcome=report.get('settingsOutcome'), tabs=[t['title'] for t in imported_tabs], spaces=[t['space'] for t in imported_tabs],
+               focusedTab=(api._try(lambda: app.call('tabs')) or [{}])[0].get('id'), aTab=(a_tab or {}).get('tab'), aObjects=[k['kind'] for k in a_objects],
+               aShown=bool(a_tab) and bool(a_objects))
         # W01b: `SidebarEasel.customInfo.iconType` (easels-notes.md §3.2) becomes the Easel row's custom icon.
         # `easel rows` covers every Space (the imported row sits in an imported Space).
         a_icon = (a_tab or {}).get('iconEmoji')
