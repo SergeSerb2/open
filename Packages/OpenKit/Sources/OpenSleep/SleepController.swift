@@ -310,6 +310,9 @@ public final class SleepController {
         state.lastAudibleAt = nil; state.lastCommitAt = nil; state.sleptAt = nil
         state.unload = nil; wakeStartedAt[tabID] = nil; downloading.remove(tabID)
         tabUserInteracted(tabID)
+        // A page of a tab that already left the model can close after the last entry rebuild:
+        // drop its record now (a running save or wake keeps it until the next rebuild).
+        if model.tab(id: tabID) == nil, !state.busy, !waking.contains(tabID) { states[tabID] = nil }
         setNeedsPass()
     }
 
