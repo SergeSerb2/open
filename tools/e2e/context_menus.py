@@ -463,7 +463,13 @@ def context_menu_checks(factory, results, tmp, h):
         # A selected URL longer than the 1 KiB menu-title cap still shows the menu (it was refused
         # whole, Copy included); the row shows 50 characters and opens the full URL.
         long_url = origin + '/target.html?q=' + 'y' * 2000
-        run('cm_go_url_long', lambda: search('#url', long_url, 'Go to ' + long_url[:50] + '…', long_url))
+        def go_url_long():
+            try:
+                return search('#url', long_url, 'Go to ' + long_url[:50] + '…', long_url)
+            finally:
+                # Later rows must not lay out around a 2,000-character unbroken line.
+                app.eval(tab, "document.querySelector('#url').textContent=" + json.dumps(origin + '/target.html'))
+        run('cm_go_url_long', go_url_long)
 
         def cancellation():
             focus()
