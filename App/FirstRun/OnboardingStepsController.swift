@@ -426,7 +426,9 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   /// Called by the existing D3 finish path. Retry adds each selected Favorite once.
   func applyChoices() throws {
     guard !replay, let space = focusedSpace else { return }
-    if let profile = app.model.defaultProfile {
+    // Favorites belong to the Space's Profile: after a multi-Profile import the
+    // first window can show a named Profile, whose sidebar must show the choices.
+    if let profile = app.model.profile(id: space.profileID) ?? app.model.defaultProfile {
       for index in selectedFavorites.sorted() where !addedFavorites.contains(index) {
         let site = Self.sites[index]; let tab = app.model.newTab(in: space.id, url: site.url, title: site.name)
         _ = app.model.addFavorite(tabID: tab.id, to: profile.id); addedFavorites.insert(index)
