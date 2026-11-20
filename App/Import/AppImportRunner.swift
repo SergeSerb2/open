@@ -513,7 +513,9 @@ final class AppImportRunner: ProfileDataOwner {
       secretsReportLines = secrets.secretsReportLines
     }
     if failures["History"] != nil {
-      return result("Your Spaces and tabs are in. \(counts["History failed", default: 0].formatted()) history visits could not be read. You can import history later from Settings.")
+      // A history-only import (Settings) brought no Spaces or tabs; do not say it did.
+      let landed = plan.spaces || plan.tabs ? "Your Spaces and tabs are in. " : ""
+      return result(landed + "\(counts["History failed", default: 0].formatted()) history visits could not be read. You can import history later from Settings.")
     }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
   }
