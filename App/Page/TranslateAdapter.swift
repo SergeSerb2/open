@@ -18,7 +18,8 @@ import OpenTranslate
 final class TranslateAdapter {
   unowned let factory: EngineWebContentHostFactory
   let backend: any TranslationBackend
-  let preferences = TranslatePreferences()
+  /// An Incognito window's "Never Translate This Site" stays in its session (memory only).
+  let preferences: TranslatePreferences
   private struct Document { var count = 0; var status = 0; var url: URL? }
   private var sessions: [ObjectIdentifier: PageTranslationSession] = [:]
   private var documents: [ObjectIdentifier: Document] = [:]
@@ -35,6 +36,7 @@ final class TranslateAdapter {
 
   init(factory: EngineWebContentHostFactory) {
     self.factory = factory
+    preferences = TranslatePreferences(session: factory.incognitoSession?.translateHosts)
     #if OPEN_AUTOMATION
     // e2e on a Mac without Apple's language assets (page-platform §8.4 U-X1): a fixed French →
     // English word list that never touches the network. Real builds always use Apple's backend.

@@ -18,7 +18,7 @@ final class DeveloperModePanel {
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
 
   func attach(_ container: WebContentContainer) {
-    container.developerModeHosts = DeveloperMode.hosts
+    container.developerModeHosts = DeveloperMode.hosts(session: factory.incognitoSession?.developerModeHosts)
     container.developerActivePanel = { [weak self] in self?.activePanel($0) }
     container.onDeveloperAction = { [weak self] id, action, view in self?.perform(id, action, view) }
     container.onDeveloperHover = { [weak self] _, action, view in
@@ -26,7 +26,9 @@ final class DeveloperModePanel {
     }
   }
 
-  func hostsChanged() { factory.controller?.container.developerModeHosts = DeveloperMode.hosts }
+  func hostsChanged() {
+    factory.controller?.container.developerModeHosts = DeveloperMode.hosts(session: factory.incognitoSession?.developerModeHosts)
+  }
 
   /// The pressed toggle of a tab: the panel this bar opened, while the page's DevTools is still open.
   func activePanel(_ id: ItemID) -> DeveloperPanelAction? {

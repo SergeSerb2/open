@@ -1,6 +1,8 @@
 import AppKit
 import OpenEngine
+import OpenMedia
 import OpenModel
+import OpenTranslate
 
 /// Creates the chosen regular Profile's primary OTR without copying its data.
 @MainActor
@@ -31,14 +33,26 @@ final class IncognitoSession {
   private(set) var context: OEBrowserContext?
   private var ended = false
   var windows = 0
+  /// Site choices made in this session's windows. Memory only: they end with the session and never
+  /// reach the regular preferences (PiP "Turn off", "Never Translate This Site", Developer Mode).
+  let pipHosts = MediaSettings.PrivateHosts()
+  let translateHosts = TranslatePreferences.SessionHosts()
+  let developerModeHosts = DeveloperMode.SessionHosts()
   init(parent: Profile, app: AppDelegate) {
     self.parent = parent
     self.app = app
+    start()
+  }
+  private var starting = false
+  private func start() {
+    guard let app else { return }
+    starting = true
     IncognitoContextProvider.makeContext(parent: parent, app: app) { [weak self, weak app] context, error in
       guard let self, !self.ended else {
         if let context { OEEngine.shared.releaseContext(context, completion: nil) }
         return
       }
+      self.starting = false
       guard let context, error == nil else {
         // Fail closed. Never create a page on a different Profile.
         for controller in app?.windowControllers ?? [] where
@@ -49,12 +63,28 @@ final class IncognitoSession {
       }
       self.context = context
       if let app {
-        app.adBlockEngineAdapter.contextCreated(context, profileID: parent.id)
+        app.adBlockEngineAdapter.contextCreated(context, profileID: self.parent.id)
         for factory in app.hostFactories.values where factory.incognitoSession === self {
           factory.engineDidBecomeReady()
         }
       }
     }
+  }
+  /// The session's context for a new page. The engine closes a private session when its last
+  /// private Browser closes, that is when every tab of the session is gone (OEEngine.h), while
+  /// Open's Incognito windows stay open. A new page then starts a fresh session (no cookies or
+  /// storage carry over): nil now, and the windows' pages are made when it is ready.
+  func liveContext() -> OEBrowserContext? {
+    guard let context, context.state == .closed else { return context }
+    guard !ended, !starting else { return nil }
+    context.delegate = nil
+    if let app {
+      app.adBlockEngineAdapter.contextClosed(context)
+      app.extensionPrompts.unregister(context.extensions)
+    }
+    self.context = nil
+    start()
+    return nil
   }
   func end() {
     guard !ended else { return }

@@ -125,9 +125,11 @@ final class LiveCalendarCoordinator {
       if controller.context.liveCalendarTiles != tiles { controller.context.liveCalendarTiles = tiles }
     }
     guard anyTile else { stop(); return }
-    if let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded), state.remind {
+    // A reminder counts as shown only when a window could show it (none while only Incognito
+    // or Blank Windows are open), so it is not lost.
+    if let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded), state.remind,
+       remind(state) {
       reminded.insert(state.event.id)
-      remind(state)
     }
     // Next wake: the next visible change or the next fetch, whichever is first.
     var next = lastFetch.map { $0.addingTimeInterval(LiveCalendar.minFetchInterval) } ?? now.addingTimeInterval(LiveCalendar.minFetchInterval)
@@ -147,17 +149,20 @@ final class LiveCalendarCoordinator {
   }
 
   private func join(_ state: LiveCalendar.TileState) {
-    guard let controller = app.frontWindowController, let factory = app.hostFactories[controller.windowID] else { return }
+    // The calendar Favorites live in the main model: an Incognito or Blank Window never takes the call.
+    guard let controller = app.frontMainModelWindowController, let factory = app.hostFactories[controller.windowID] else { return }
     factory.openMeetingLink(state.link, from: "liveCalendar", event: state.event)
   }
 
   /// The reminder: a toast in the front window with Join. GUESS — capture pending (F2 item 7): Arc shows a
   /// reminder card at the Favorite tile with Join, Dismiss and the interval picker.
-  private func remind(_ state: LiveCalendar.TileState) {
+  /// The meeting title never shows in an Incognito window: the toast goes to the front window of the
+  /// main model. Returns false when there is none.
+  private func remind(_ state: LiveCalendar.TileState) -> Bool {
+    guard let controller = app.frontMainModelWindowController else { return false }
     #if OPEN_AUTOMATION
     reminders.append(["event": state.event.id, "subtitle": state.subtitle, "at": app.calendar.now.timeIntervalSince1970])
     #endif
-    guard let controller = app.frontWindowController else { return }
     let start = state.event.start.timeIntervalSince(app.calendar.now)
     let when = start >= 60 ? "Starts in \(Int((start / 60).rounded(.up)))m" : (start > -60 ? "Starting now" : "Started \(Int(-start / 60))m ago")
     let content = ToastContent(title: state.event.displayTitle, subtitle: "\(when) · \(state.link.serviceName)", symbol: "video",
@@ -166,5 +171,6 @@ final class LiveCalendarCoordinator {
       handle.dismiss()
       self?.join(state)
     }
+    return true
   }
 }

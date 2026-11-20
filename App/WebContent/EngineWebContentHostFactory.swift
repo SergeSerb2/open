@@ -363,12 +363,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onMenuState = { [weak self] in self?.pageMenuState(for: $0) }  // checkmarks, Cast hidden, Developer Mode title (page-platform §7.1)
     // Developer Mode sites show their full URL in the URL field (§4.10.3).
     controller.context.canCustomizePage = { [weak self] in self?.canCustomizePage($0) == true }
-    controller.context.developerModeHosts = DeveloperMode.hosts
+    controller.context.developerModeHosts = DeveloperMode.hosts(session: incognitoSession?.developerModeHosts)
     developerPanel.attach(controller.container)
     developerModeObserver = NotificationCenter.default.addObserver(forName: DeveloperMode.didChange, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated {
         guard let self, let controller = self.controller else { return }
-        controller.context.developerModeHosts = DeveloperMode.hosts
+        controller.context.developerModeHosts = DeveloperMode.hosts(session: self.incognitoSession?.developerModeHosts)
         self.developerPanel.hostsChanged()
         self.app.scheduleMenuRebuild()
       }
@@ -498,7 +498,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func context(for profileID: ProfileID, create: Bool = true) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
     if isIncognito {
-      guard let context = incognitoSession?.context else { return nil }
+      guard let context = incognitoSession?.liveContext() else { return nil }
       app.extensionPrompts.register(context.extensions)
       return WebsiteAppearance.prepare(context)
     }

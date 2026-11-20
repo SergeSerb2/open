@@ -14,8 +14,19 @@ public struct TranslatePreferences: @unchecked Sendable {
     public static let maxHosts = 1_000
     public static let maxHostLength = 253
 
+    /// An Incognito session's own "Never Translate This Site" hosts. Memory only: they end with the
+    /// session. The session still honors the regular list; its own choices never reach `defaults`.
+    public final class SessionHosts: @unchecked Sendable {
+        public fileprivate(set) var hosts: [String] = []
+        public init() {}
+    }
+
     public let defaults: UserDefaults
-    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    /// Set for an Incognito window: "Never Translate This Site" writes here, not to `defaults`.
+    public let session: SessionHosts?
+    public init(defaults: UserDefaults = .standard, session: SessionHosts? = nil) {
+        self.defaults = defaults; self.session = session
+    }
 
     public var isEnabled: Bool { defaults.object(forKey: Self.enabledKey) as? Bool ?? true }
 
@@ -26,9 +37,13 @@ public struct TranslatePreferences: @unchecked Sendable {
         return h.isEmpty ? nil : h
     }
 
+    /// The regular list, then the session's own hosts (Incognito).
     public var neverTranslateHosts: [String] {
         let raw = defaults.array(forKey: Self.neverTranslateHostsKey) as? [String] ?? []
-        return raw.suffix(Self.maxHosts).filter { !$0.isEmpty && $0.utf8.count <= Self.maxHostLength }
+        let regular = raw.suffix(Self.maxHosts).filter { !$0.isEmpty && $0.utf8.count <= Self.maxHostLength }
+        guard let session, !session.hosts.isEmpty else { return regular }
+        let seen = Set(regular)
+        return regular + session.hosts.filter { !seen.contains($0) }
     }
 
     public func neverTranslates(host: String?) -> Bool {
@@ -39,6 +54,10 @@ public struct TranslatePreferences: @unchecked Sendable {
     /// Appends the host once; the oldest entries drop past `maxHosts`.
     public func addNeverTranslate(host: String?) {
         guard let h = Self.normalizedHost(host) else { return }
+        if let session {
+            session.hosts = Array((session.hosts.filter { $0 != h } + [h]).suffix(Self.maxHosts))
+            return
+        }
         var list = neverTranslateHosts.filter { $0 != h }
         list.append(h)
         defaults.set(Array(list.suffix(Self.maxHosts)), forKey: Self.neverTranslateHostsKey)

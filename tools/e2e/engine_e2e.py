@@ -14533,8 +14533,13 @@ def main():
             downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
         elif opts.only == "incognito":
             import incognito
+            import incognito_privacy
             results["incognito"] = CheckedResults(tracker)
-            incognito.checks(factory, results["incognito"], tmp, sys.modules[__name__])
+            # OPEN_INCOGNITO_PRIVACY_ONLY=1 runs only the privacy rows (bug sweep round 2).
+            if os.environ.get("OPEN_INCOGNITO_PRIVACY_ONLY") != "1":
+                incognito.checks(factory, results["incognito"], tmp, sys.modules[__name__])
+            if os.environ.get("OPEN_BOOST_PRIVATE_ONLY") != "1":
+                incognito_privacy.checks(factory, results["incognito"], tmp, sys.modules[__name__])
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](

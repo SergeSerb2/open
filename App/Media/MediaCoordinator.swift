@@ -361,8 +361,10 @@ final class MediaCoordinator {
         guard let self, let tab = self.app.model.tab(id: tabID), tab.isMuted != muted else { return }
         _ = self.perform(.toggleMute(tabID))
       })
+    // An Incognito page's "Turn off" / "Open automatically" stay in its session (memory only).
     guard let window = PictureInPictureWindowController(
-      host: host, sourceURL: content.url, settings: settings, rules: rules, sourceWindow: factory.window) else { return }
+      host: host, sourceURL: content.url, settings: settings, rules: rules,
+      privateSession: factory.incognitoSession?.pipHosts, sourceWindow: factory.window) else { return }
     pipHost = host; pipWindow = window
     window.onBackToTab = { [weak self] in self?.selectForBackToTab(tabID) }
     window.onClosed = { [weak self, weak window] reason in

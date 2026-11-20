@@ -150,12 +150,14 @@ final class LiveFolderService {
     if !manual, let last = lastRefresh[folderID], Date().timeIntervalSince(last) < Self.minimumInterval { throttledCount += 1; return nil }
     running.insert(folderID); defer { running.remove(folderID) }
     lastRefresh[folderID] = Date(); refreshCount += 1
+    // Every search runs in this Profile's session. Read once: the Space can move while the fetch runs.
+    let profileID = space.profileID
     var lists: [[PRSnapshot]] = []
     var outcome = LiveFolderConfig.Outcome.success
     var ssoURL: URL?
     search: for kind in LiveFolderConfig.Kind.allCases where config.kinds.contains(kind) {
       do {
-        let value = try await app.liveFetch.fetch(profileID: space.profileID,
+        let value = try await app.liveFetch.fetch(profileID: profileID,
           url: GitHubQuery.url(kind, teamReviews: config.teamReviews, origin: origin), script: GitHubQuery.extractionScript)
         let (state, items) = GitHubQuery.decode(value, kind: kind)
         switch state {
@@ -172,6 +174,9 @@ final class LiveFolderService {
     }
     // The folder may be gone (toggled off, undone) while the fetch ran.
     guard let current = app.model.node(id: folderID)?.folder, let live = current.live else { return nil }
+    // The Space moved to another Profile while the fetch ran: these rows (and a sign-in state) belong
+    // to the old Profile's account. Keep the folder as it is; the next refresh fetches for the new owner.
+    guard self.space(of: folderID)?.profileID == profileID else { return nil }
     if outcome == .success || outcome == .needsSSO {
       let fresh = GitHubQuery.merge(lists, config: live)
       let diff = LiveFolderDiff.make(folder: current, fresh: fresh)

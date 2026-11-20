@@ -22,7 +22,11 @@ final class TabStripMirror {
   }
 
   func browser(for profileID: ProfileID, create: Bool = true, loadContext: Bool = true) -> OEBrowser? {
-    if let browser = browsers[profileID] { return browser }
+    if let browser = browsers[profileID] {
+      // A private session the engine closed (its last tab went) leaves an inert browser behind.
+      guard browser.context.state == .closed else { return browser }
+      browsers[profileID] = nil; browser.close()
+    }
     guard create else { return nil }
     guard let context = owner.context(for: profileID, create: loadContext) else { return nil }
     let browser = OEBrowser(context: context)
