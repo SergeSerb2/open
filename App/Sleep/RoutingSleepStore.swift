@@ -9,7 +9,7 @@ import OpenStore
 /// The App's data-root lock (taken in `prepareData`) covers every store for the whole run.
 @MainActor
 final class RoutingSleepStore: SleepHistoryStoring {
-  let model: BrowserModel
+  private let model: BrowserModel
   private let directories: ProfileDirectories
   private var stores: [String: SleepStore] = [:]
   /// The Profile folder each tab last saved into, so a purge after the tab left the model
@@ -78,50 +78,6 @@ final class RoutingSleepStore: SleepHistoryStoring {
     store(named: directoryName(for: tabID)).delete(tabID: tabID)
     savedIn[tabID] = nil
     knownStored.remove(tabID)
-  }
-
-  /// Launch cleanup: deletes the stored back/forward lists of tabs that were already gone
-  /// when this run started: not in the sidebar model and not in their Profile's Archive
-  /// (Library Delete or Clear in an earlier run, a tab that left for another window).
-  /// docs/sleep.md: permanent delete and archive purge remove the row. An archived tab,
-  /// also one inside an archived folder, keeps its row: Restore brings it back with its ID.
-  /// Tabs in `present` (the model when the controller started) are never touched, so a tab
-  /// that left later and that Undo can still bring back keeps its row.
-  @discardableResult
-  func removeOrphanedRows(present: Set<ItemID>, archive: (ProfileID) -> ArchiveStore) async -> Int {
-    var removed = 0
-    for profile in model.profiles {
-      let store = store(named: profile.dataDirectoryName)
-      let missing = Set(await store.allTabIDs()).subtracting(present).filter { model.tab(id: $0) == nil }
-      // A Profile deleted during a query has its folder removed; never touch it again.
-      guard !missing.isEmpty, model.profile(id: profile.id) === profile,
-        let archived = try? await archive(profile.id).archivedIDs(in: missing),
-        model.profile(id: profile.id) === profile else { continue }
-      // An Archive restore can bring a tab back while the queries run.
-      let orphans = missing.subtracting(archived).filter { model.tab(id: $0) == nil }
-      guard !orphans.isEmpty else { continue }
-      forget(orphans.sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }, in: store)
-      removed += orphans.count
-    }
-    return removed
-  }
-
-  /// The Archive of the Profile in `directoryName` deleted these rows for good (Library
-  /// Delete or Clear). Their tabs' stored lists go too, unless a tab is in the sidebar.
-  /// Returns how many of them had a known stored row.
-  @discardableResult
-  func removeRows(of ids: [ItemID], directoryName: String) -> Int {
-    guard model.profiles.contains(where: { $0.dataDirectoryName == directoryName }) else { return 0 }
-    let gone = ids.filter { model.tab(id: $0) == nil }
-    guard !gone.isEmpty else { return 0 }
-    let known = gone.filter { knownStored.contains($0) }.count
-    forget(gone, in: store(named: directoryName))
-    return known
-  }
-
-  private func forget(_ ids: [ItemID], in store: SleepStore) {
-    store.delete(tabIDs: ids)
-    for id in ids { savedIn[id] = nil; knownStored.remove(id) }
   }
 
   /// Every stored row of every Profile's store (automation evidence).

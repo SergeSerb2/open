@@ -85,13 +85,7 @@ final class AppSleepCoordinator {
     controller.onLog = { [weak self] in self?.record($0) }
     adapter.controller = controller
     self.adapter = adapter; self.store = store; self.controller = controller
-    // The Library's Archive Delete and Clear remove tabs for good; their stored lists go too.
-    app.archiveSink.onRowsDeleted = { [weak self] directory, ids in self?.archiveRowsDeleted(ids, directoryName: directory) }
-    let present = Set(model.index.values.compactMap { $0.tab?.id })
-    Task { [weak self] in
-      await store.loadKnownStored()
-      await self?.removeOrphanedHistory(present: present)
-    }
+    Task { await store.loadKnownStored() }
     // Pages made before the controller existed (selected tabs at T4, automation pages).
     for factory in app.hostFactories.values {
       for (id, host) in factory.hosts where !host.closed && model.tab(id: id) != nil {
@@ -281,25 +275,6 @@ final class AppSleepCoordinator {
 
   /// Settings or another input changed a Profile's sleep mode.
   func modeChanged() { controller?.setNeedsPass() }
-
-  /// Stored rows the orphan cleanup removed since launch (automation evidence).
-  private(set) var orphanRowsRemoved = 0
-
-  /// Launch cleanup of stored back/forward lists whose tabs were gone before this run.
-  private func removeOrphanedHistory(present: Set<ItemID>) async {
-    guard let store, !quitting, store.model === app.model else { return }
-    let removed = await store.removeOrphanedRows(present: present) { self.app.archiveSink.store(for: $0) }
-    orphanRowsRemoved += removed
-    if removed > 0 { record("sleep-history-orphans launch removed=\(removed)") }
-  }
-
-  /// The Library deleted Archive rows for good: their tabs' stored lists go too.
-  private func archiveRowsDeleted(_ ids: [ItemID], directoryName: String) {
-    guard let store, !quitting, store.model === app.model else { return }
-    let removed = store.removeRows(of: ids, directoryName: directoryName)
-    orphanRowsRemoved += removed
-    if removed > 0 { record("sleep-history-orphans archive removed=\(removed)") }
-  }
 
   /// The hidden-host cache keeps pages the sleep gates protect.
   func protects(_ id: ItemID) -> Bool {

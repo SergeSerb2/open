@@ -7,9 +7,6 @@ public final class ProfileArchiveSink: ArchiveSink {
     private let directories: ProfileDirectories
     private let directoryNameFor: @MainActor (ProfileID?) -> String
     private var stores: [String: ArchiveStore] = [:]
-    /// Main actor, after a Profile's archive committed a permanent delete (`delete(ids:)`,
-    /// `deleteAll()`): that archive's Profile folder name and the deleted row IDs.
-    public var onRowsDeleted: (@MainActor (_ directoryName: String, _ ids: [ItemID]) -> Void)?
 
     public init(directories: ProfileDirectories, directoryNameFor: @escaping @MainActor (ProfileID?) -> String) {
         self.directories = directories
@@ -20,7 +17,6 @@ public final class ProfileArchiveSink: ArchiveSink {
         let name = directoryNameFor(profileID)
         if let store = stores[name] { return store }
         let store = ArchiveStore(fileURL: directories.archiveFileURL(dataDirectoryName: name))
-        store.onRowsDeleted = { [weak self] ids in self?.onRowsDeleted?(name, ids) }
         stores[name] = store
         return store
     }
