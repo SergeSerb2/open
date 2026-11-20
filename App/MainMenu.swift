@@ -234,6 +234,10 @@ extension EngineWebContentHostFactory {
       return window === NSApp.keyWindow && windowState.style == .standard && controller?.canExitModal == true
     }
     if let context = selectionCommandContext(for: id) { return context.isSelectionCommandEnabled(id) }
+    // A selected split has no Pin action (its row menu has none; Arc parity is an open question).
+    // Its focused pane cannot move alone, so Pin/Unpin and Cmd+D are disabled, not enabled no-ops.
+    if ["pin-unpin-tab", "pin-tab", "unpin-tab"].contains(id), let tab = selectedTab,
+      case .splitPane? = model.parent(of: tab.id) { return false }
     if let enabled = isPageToolEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
