@@ -605,9 +605,13 @@ public final class CommandBarController: NSObject {
         }
         let destination: CommandBarDestination = r.mode == .editCurrentURL || r.mode == .littleOpen ? .currentTab : .newTab
         let intent: CommandBarIntent?
+        // The typed row of an unedited, cut Cmd+L address (a URL or, cut inside an escape, a search) opens it whole.
+        let uncut = s.isWhatYouTyped && (s.kind == .navigate || s.kind == .search) ? uncutAddress(r) : nil
         switch s.kind {
         case .navigate, .history:
-            intent = s.url.map { .open($0, destination, modifiers) }
+            intent = (uncut ?? s.url).map { .open($0, destination, modifiers) }
+        case .search where uncut != nil:
+            intent = uncut.map { .open($0, destination, modifiers) }
         case .search, .searchSuggestion, .siteSearch:
             let query = s.kind == .siteSearch ? text.trimmingCharacters(in: .whitespaces) : s.title
             intent = s.url.map { .search(query: query, url: $0, siteSearchID: s.siteSearchID, destination, modifiers) }
@@ -652,6 +656,15 @@ public final class CommandBarController: NSObject {
         if s.kind == .extensionSuggestion { endExtensionSession(cancel: false) }
         dismiss(reason: .selection)
         delegate?.commandBar(self, perform: intent)
+    }
+
+    /// Cmd+L shows at most 2,048 characters of a longer address (docs/commandbar.md "Typing"). Return on that
+    /// unedited text opens the whole address, never the cut one.
+    private func uncutAddress(_ r: CommandBarRequest) -> URL? {
+        guard r.mode == .editCurrentURL, let full = r.currentTabURL else { return nil }
+        let address = full.absoluteString
+        let shown = CommandBarFieldEditor.normalized(address)
+        return shown != address && fieldText == shown ? full : nil
     }
 
     // MARK: Keys
