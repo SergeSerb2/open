@@ -47,6 +47,9 @@ public extension CapturesProvider { var loadFailed: Bool { false } }
     func copyCapture(id: UUID)
     func saveCapture(id: UUID, to: URL) -> String?
     func openHistoryItem(url: URL)
+    /// Media "Open Source URL": a capture has no Profile of its own, so it opens in the
+    /// browser window's current Space and Profile (not the History filter's Profile).
+    func openCaptureSource(url: URL)
     func flushHistoryWrites() async
     func viewSpace(id: SpaceID)
 }

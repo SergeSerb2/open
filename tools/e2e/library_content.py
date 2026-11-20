@@ -175,6 +175,16 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             first_selected=rows()[0]['id'];state(action='row-select',id=first_selected);key('down')
             check('down_moves_row_focus',wait(lambda:any(r['selected'] and r['id']!=first_selected for r in rows())),state=state())
             key('up');check('up_moves_row_focus',rows()[0]['selected'])
+            # A search keeps the selected row but moves its index. The next selection change
+            # must leave exactly one row drawn as selected (no stale highlight).
+            kept=next(r['id'] for r in rows() if r['title']=='Library history 005');state(action='row-select',id=kept)
+            state(action='search',text='history 00')
+            assert wait(lambda:len(rows())==10 and bool(row(kept)) and row(kept)['selected']),rows()
+            key('down');below=next(r['id'] for r in rows() if r['title']=='Library history 006')
+            check('search_shift_single_drawn_selection',wait(lambda:[r['id'] for r in rows() if r['drawnSelected']]==[below] and row(below)['selected']),
+                  drawn=[r['title'] for r in rows() if r['drawnSelected']],selected=[r['title'] for r in rows() if r['selected']])
+            state(action='search',text='');assert wait(lambda:len(rows())==100)
+            state(action='row-select',id=rows()[0]['id'])
             state(action='row-select',id=rows()[-1]['id']);check('history_paginates',wait(lambda:len(rows())>100),count=len(rows()))
             state(action='row-select',id=history['id']);key('return');check('return_opens_history',wait(lambda:not state()['open']) and len(app.call('tabs'))>1)
             state(action='open',section='history');assert wait(lambda:bool(rows()))
@@ -204,6 +214,18 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='chip',id='reason:manual');state(action='chip',id='space:little');check('archive_location_empty',wait(lambda:not rows()))
             state(action='chip',id='space:little');check('archive_location_reset',wait(lambda:bool(row(archived['id']))))
             state(action='filter',open=False);state(action='row-select',id=archived['id']);key('return');check('archive_restore_closes',wait(lambda:not state()['open']))
+            # A row whose record went away after the list loaded: Restore keeps the Library open and
+            # the real status label (not only the model's statusText) says why.
+            stale_tab=new_tab(app,base+'/arm?stale');app.call('select',tab=stale_tab);app.call('command',id='archive-tab')
+            state(action='open',section='archive');assert wait(lambda:any('arm?stale' in r['subtitle'] for r in rows())),rows()
+            stale=next(r['id'] for r in rows() if 'arm?stale' in r['subtitle']);removed=0
+            for archive_file in Path(data).rglob('archive.sqlite3'):
+                with sqlite3.connect(archive_file) as db:removed+=db.execute('DELETE FROM archived_tabs WHERE upper(id)=upper(?)',(stale,)).rowcount
+            assert removed==1,removed
+            state(action='row-select',id=stale);key('return')
+            check('archive_stale_restore_shows_status',wait(lambda:state()['statusLabel']=='This archived tab is no longer available.') and state()['open'],
+                  label=state()['statusLabel'],status=state()['status'],open=state()['open'])
+            state(action='close')
             # Use the real capture pipeline and persisted index.
             capture_source=base+'/arm?capture=library#source'
             capture_tab=new_tab(app,capture_source);app.call('focus',tab=capture_tab)
@@ -283,6 +305,32 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             target=next(r for r in original_column['rows'] if r['id']==tab)
             app.call('mouse',action='click',window=state()['window'],x=target['point'][0],y=target['point'][1],delivery='queued')
             check('space_tab_click_closes',wait(lambda:not state()['open']))
+            # A History row opens in the window's current Space when that Space has the row's
+            # Profile (as other new-tab routes do), not in the Profile's first Space.
+            same_profile=app.call('space-create',title='Library Same Profile')
+            state(action='open',section='history');assert wait(lambda:row(history['id']))
+            state(action='row-action',id=history['id'],name='open')
+            focused_after=lambda:next((s for s in app.call('spaces') if s['focused']),{})
+            check('history_open_keeps_current_space',wait(lambda:not state()['open']) and wait(lambda:focused_after().get('id')==same_profile)
+                and focused_after().get('profile')==profile and focused_after().get('today',0)>=1,focused=focused_after(),spaces=app.call('spaces'))
+            app.call('space',space=space['id'])
+            # Media "Open Source URL" opens in the window's current Space and Profile, not in the
+            # Profile that the History filter last showed (here "Library Work").
+            work=next(s['profile'] for s in app.call('spaces') if s['id']==second_space)
+            app.call('select',tab=capture_tab);app.call('focus',tab=capture_tab)
+            assert wait(lambda:next(m['enabled'] for m in app.call('menu-state') if m['id']=='capture-page'))
+            app.call('capture',mode='area',rect=[30,30,240,150]);app.call('capture-action',action='cancel')
+            state(action='open',section='boosts');app.call('boost-gallery-ui',action='profile',name='Library Work')
+            assert wait(lambda:state()['profiles']['history']==work),state()['profiles']
+            state(action='select',section='media');assert wait(lambda:len(rows())==1),rows()
+            source_row=rows()[0]['id'];tabs_before={t['id'] for t in app.call('tabs')};menu(source_row,'Open Source URL')
+            focused_now=lambda:next((s for s in app.call('spaces') if s['focused']),{})
+            check('capture_source_opens_in_current_profile',wait(lambda:any(t['id'] not in tabs_before and t['url']==capture_source for t in app.call('tabs')))
+                  and focused_now().get('id')==space['id'] and focused_now().get('profile')==profile,focused=focused_now(),work=work)
+            app.call('space',space=space['id']);state(action='open',section='media');assert wait(lambda:bool(row(source_row)))
+            state(action='row-select',id=source_row);key('delete',['cmd']);app.call('alert',window='library',button='Delete');assert wait(lambda:not rows())
+            state(action='select',section='boosts');app.call('boost-gallery-ui',action='profile',name=profile_name)
+            assert wait(lambda:state()['profiles']['history']==profile),state()['profiles'];state(action='close')
             if frames:
                 # Review both populated and empty Media, and a populated Archive,
                 # using the same real engine and capture paths as the flow above.

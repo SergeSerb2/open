@@ -43,6 +43,7 @@ import OpenStore
         do { try Data(contentsOf: captures.directory.appendingPathComponent(item.fileName)).write(to: url, options: .atomic); return nil } catch { return "Could not save capture." }
     }
     func openHistoryItem(url: URL) { record("openHistoryItem"); if let space = model.spaces.first(where: { $0.profileID == selectedHistoryProfile?() }) ?? model.spaces.first { _ = model.newTab(in: space.id, url: url); try? snapshot.saveNow(model: model) } }
+    func openCaptureSource(url: URL) { record("openCaptureSource"); if let space = model.spaces.first { _ = model.newTab(in: space.id, url: url); try? snapshot.saveNow(model: model) } }
     func viewSpace(id: SpaceID) { record("viewSpace \(id)") }
 }
 

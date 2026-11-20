@@ -528,9 +528,13 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   /// Settings ▸ Advanced "Reset Translated-site Prompts" (page-platform §4.7.7): app scope, every profile.
   func resetTranslatePrompts(profileID: ProfileID) -> String? { TranslatePreferences().reset(); return nil }
-  func openURL(_ url: URL, profileID: ProfileID) {
+  func openURL(_ url: URL, profileID: ProfileID) { openURL(url, profileID: profileID, preferringFocusedSpace: false) }
+  /// `preferringFocusedSpace`: Library rows open in the browser window's current Space when it
+  /// belongs to the Profile, as other new-tab routes do; otherwise the Profile's first Space.
+  func openURL(_ url: URL, profileID: ProfileID, preferringFocusedSpace: Bool) {
     guard app.model.profile(id:profileID) != nil else { return }
-    guard let space = app.model.spaces.first(where: { $0.profileID == profileID }) else {
+    let focused = preferringFocusedSpace ? app.frontMainModelWindowController?.context.focusedSpace.flatMap { $0.profileID == profileID ? $0 : nil } : nil
+    guard let space = focused ?? app.model.spaces.first(where: { $0.profileID == profileID }) else {
       // guess S10: Arc's destination for a Profile with no Space is unverified.
       app.openProfilePage(url,profileID:profileID); return
     }
@@ -538,7 +542,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       // A window of the main model: a Blank Window front window does not hold this Space.
       let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: space.id),
       let factory = app.hostFactories[controller.windowID] else { return }
-    app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
+    app.focusWindow(controller.windowID, activate: true)
+    // Focusing the Space the window already shows would only start a Live Folder refresh.
+    if controller.context.focusedSpace?.id != space.id { factory.focus(space: space) }
     if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
       let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
       // Settings uses the same focused-Space singleton rule as the Extensions menu.
@@ -592,7 +598,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func copyCapture(id: UUID) { if let url = captureURL(id), let image = NSImage(contentsOf: url) { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image]) } }
   func saveCapture(id: UUID, to: URL) -> String? { guard let url = captureURL(id) else { return "This capture is no longer available." }; do { try FileManager.default.copyItem(at: url, to: to); return nil } catch { return "The capture could not be saved. \(error.localizedDescription)" } }
-  func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID) } }
+  func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID, preferringFocusedSpace: true) } }
+  func openCaptureSource(url: URL) {
+    guard let profileID = app.frontMainModelWindowController?.context.focusedSpace?.profileID ?? app.model.defaultProfile?.id else { return }
+    openURL(url, profileID: profileID, preferringFocusedSpace: true)
+  }
   func flushHistoryWrites() async { await app.stores.flushHistory() }
   func viewSpace(id: SpaceID) {
     guard let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
