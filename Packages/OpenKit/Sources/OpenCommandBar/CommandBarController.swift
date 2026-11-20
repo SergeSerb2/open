@@ -605,13 +605,12 @@ public final class CommandBarController: NSObject {
         }
         let destination: CommandBarDestination = r.mode == .editCurrentURL || r.mode == .littleOpen ? .currentTab : .newTab
         let intent: CommandBarIntent?
-        // The typed row of an unedited, cut Cmd+L address (a URL or, cut inside an escape, a search) opens it whole.
-        let uncut = s.isWhatYouTyped && (s.kind == .navigate || s.kind == .search) ? uncutAddress(r) : nil
+        // The typed URL row of an unedited, cut Cmd+L address opens it whole. The cut text is always a URL:
+        // a cut inside a "%xx" escape still parses (InputClassifier retries with encodingInvalidCharacters).
+        let uncut = s.isWhatYouTyped && s.kind == .navigate ? uncutAddress(r) : nil
         switch s.kind {
         case .navigate, .history:
             intent = (uncut ?? s.url).map { .open($0, destination, modifiers) }
-        case .search where uncut != nil:
-            intent = uncut.map { .open($0, destination, modifiers) }
         case .search, .searchSuggestion, .siteSearch:
             let query = s.kind == .siteSearch ? text.trimmingCharacters(in: .whitespaces) : s.title
             intent = s.url.map { .search(query: query, url: $0, siteSearchID: s.siteSearchID, destination, modifiers) }

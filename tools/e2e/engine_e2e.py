@@ -9974,8 +9974,10 @@ def commandbar_checks(factory, results, tmp, config):
 def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin, home):
     """Bug sweep round 1 (CMDBAR): flows that once went wrong in the real App."""
     # Cmd+L shows at most 2,048 characters (docs/commandbar.md "Typing"). Return on that unedited text
-    # must reload the whole address, not load the cut one.
-    long_url = origin + '/long?q=' + 'a' * 2100 + '&tail=zz9'
+    # must reload the whole address, not load the cut one. The cut falls inside a "%2F" escape.
+    head = origin + '/long?q='
+    long_url = head + 'a' * (2046 - len(head)) + '%2F' + 'b' * 80 + '&tail=zz9'
+    assert long_url[2046:2049] == '%2F'
     long_tab = new_tab(app, long_url)
     app.call('select', tab=long_tab); app.call('focus', tab=long_tab)
     wait_until(lambda: (app.eval(long_tab, 'location.href') or '') == long_url, timeout=10, step=.1)
@@ -9986,7 +9988,7 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
     href = app.eval(long_tab, 'location.href') or ''
     results['cmd_l_long_url_return_keeps_whole_address'] = {
         'ok': edited['mode'] == 'editCurrentURL' and edited['text'] == long_url[:2048] and bool(reloaded) and href == long_url,
-        'fieldLength': len(edited.get('text', '')), 'urlLength': len(long_url), 'loadedLength': len(href), 'loadedTail': href[-12:]}
+        'fieldTail': edited.get('text', '')[-6:], 'fieldLength': len(edited.get('text', '')), 'urlLength': len(long_url), 'loadedLength': len(href), 'loadedTail': href[-12:]}
     app.call('close', tab=long_tab)
     app.call('select', tab=home)
 
