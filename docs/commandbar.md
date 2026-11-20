@@ -174,7 +174,7 @@ Measured on S2 18/0044 (window 1728×1084, panel `[481, 373, 766, 329]`, 5 rows)
 | Second Cmd+T / Cmd+L | Closes the bar opened by the same key (the bar's field editor handles it; the key router gives the open bar these keys) | Arc 1.172 s2 06-keys, 12c |
 | `.searchTabs` | Tab rows only; placeholder "Search Tabs…" | placeholder guess |
 | Typing (inline completion) | Row 1's host or URL completes in the field; the completed part is selected. Rules, keys, and evidence: §4.1. | CC-1…CC-7, CC-40 |
-| Typing | One query per committed text change. Marked IME text does not query; composition end submits exactly one query. Paste replaces CR/LF with spaces and caps visible input at 2,048 characters before querying that same text. | implementation; flows 36–44, 64–65 |
+| Typing | One query per committed text change. Marked IME text does not query; composition end submits exactly one query. Paste replaces CR/LF with spaces and caps visible input at 2,048 characters before querying that same text. An edit stays where it was made: the caret follows the new text, and the cap cuts only from the end of the field (for example, typing inside a cut long address). | implementation; flows 36–44, 64–65; e2e `commandbar/cmd_l_long_url_edit_keeps_caret` |
 | Later snapshots | Before the user moves the selection it stays on row 1, so it changes only when the top hit changes. After a move it stays on the same suggestion id. | features-core §4.3 rule 8 (guess there); our rule |
 | Up / Down | Move the selection; stop at the ends; the list scrolls by whole rows | menus-and-hotkeys "normal list rules" (guess) |
 | Return | Acts on what is highlighted on screen at the key press (what you see is what you get). Only if NO snapshot exists yet for the current text does Return wait for that text's first snapshot, then open its top row. It never waits for history or remote providers. An empty first snapshot consumes the pending Return without opening anything. | lead rule; flows 30, 52–57; F0041 shows selection |
@@ -411,7 +411,7 @@ Real key events go through the window and the bar's field editor; mouse events g
 | 5. Boundary arrows | Set `userMovedSelection` only when the index changes. | PASS, 58–59 |
 | 6. Favicons | Keep every waiter per origin; notify all with their own page URL; bound misses and images with one FIFO. | PASS, 60–61 |
 | 7. Selected suggestion | Check `suggestions.indices.contains` before indexing. | PASS, 62–63 |
-| 8. Paste and long input | Normalize CR/LF and cap at 2,048 characters in the editor's should-change path; query exactly the visible text. | PASS, 64–65 |
+| 8. Paste and long input | Normalize CR/LF and cap at 2,048 characters in the editor's should-change path; the caret stays after the edit; query exactly the visible text. | PASS, 64–65 |
 | 9. Undo | Use a private editor undo manager; unmark and clear it on present/dismiss. | PASS, 66–67 |
 | 10. Delayed focus | Focus the field in `viewDidMoveToWindow` while presented, preserving Cmd+L selection. | PASS, 68 |
 

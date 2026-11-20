@@ -11576,7 +11576,8 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
     def settle(): time.sleep(.5)
     def opened(name):
         path = Path(tmp) / ('r2-' + name.lower().replace(' ', '-') + '.html')
-        path.write_text('<title>R2 %s</title><h1>%s</h1>' % (name, name))
+        path.write_text('<title>R2 %s</title><h1>%s</h1><script>window.keys=[];document.addEventListener("keydown",'
+                        'e=>window.keys.push((e.metaKey?"Meta+":"")+e.key))</script>' % (name, name))
         node = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=node); return node
     def focused_space(): return next(s['id'] for s in app.call('spaces') if s['focused'])
     def sidebar_ids():
@@ -11604,10 +11605,15 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
     split_state = app.call('split', op='state')
     def tree(): t = app.call('sidebar-tree'); return [(n['kind'], n['id']) for n in t['pinned']], [(n['kind'], n['id']) for n in t['today']]
     before = tree(); split_menu = pin_menu()
+    focused = split_state['focused']; app.call('focus', tab=focused); app.eval(focused, 'window.keys=[]; 1')
     app.call('key', key='d', modifiers=['cmd'], route='app'); settle()
+    # The disabled key changes nothing. Like every disabled Open command, its key then goes to the
+    # page (BrowserWindowController.handleKeyDown); pageKeys records that (Arc parity open).
+    page_keys = app.eval(focused, 'window.keys')
     split_rows = pin_rows()
     require('R2_split_selected_pin_disabled', split_state['id'] and split_state['selected'] == split_state['id'] and split_menu.get('enabled') is False
-            and tree() == before and split_rows == [], menu=split_menu, rows=split_rows, split=split_state['id'], unchanged=tree() == before)
+            and tree() == before and split_rows == [], menu=split_menu, rows=split_rows, split=split_state['id'],
+            unchanged=tree() == before, pageKeys=page_keys)
     app.call('select', tab=lone); settle()
     tab_menu = pin_menu(); tab_rows = pin_rows()
     require('R2_tab_selected_pin_enabled', tab_menu.get('enabled') is True and tab_rows == ['pin-tab'], menu=tab_menu, rows=tab_rows)
@@ -11625,6 +11631,7 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
             archive=archive_ids()[:3], inSidebar=folder in sidebar_ids())
     # A stale folder row at the top of the Archive (the folder is already in the sidebar: the App
     # stopped after the snapshot save, before the Archive delete) must not stop later presses.
+    app.call('space', space=space); settle()
     kept = opened('Kept Closed')
     app.call('close', tab=kept); settle()
     stale_child = opened('Stale Child')
