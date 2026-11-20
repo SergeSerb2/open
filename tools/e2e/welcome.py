@@ -82,6 +82,10 @@ def run_idle_contract(factory, results, tmp, api):
         results['playlist_settles'] = dict(ok=bool(settled and final['playedCards'] == [1, 2, 3, 4]
             and final['completionCount'] == 4 and final.get('playlistElapsed', elapsed) <= PLAYLIST_END + 1.5),
             elapsedSeconds=elapsed, limitSeconds=PLAYLIST_END + 1.5, state=final)
+        # The reveal prepares clip 0 under the fade; the playlist must start that player, not decode
+        # clip 0 a second time: one player per clip.
+        players = ((final.get('clip') or {}).get('playersCreated'))
+        results['playlist_reuses_prepared_clip'] = dict(ok=bool(settled and players == 4), playersCreated=players)
         before = process_cpu_seconds(app.pid); start = time.monotonic(); time.sleep(5)
         cpu_delta = process_cpu_seconds(app.pid)-before; seconds = time.monotonic()-start
         cpu = cpu_delta/seconds*100; after = app.call('welcome')

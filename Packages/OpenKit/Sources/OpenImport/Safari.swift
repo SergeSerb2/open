@@ -45,8 +45,9 @@ public struct PasswordsCSVReport: Sendable, Equatable {
 /// Safari/Passwords-app CSV (Title, URL, Username, Password, Notes, OTPAuth) and the Chrome-style
 /// CSV (name, url, username, password, note). Columns are found by header name.
 public enum PasswordsCSVReader {
+    public static let maxFileBytes = 32 << 20
     public static func read(_ data: Data) throws -> (logins: [ImportedLoginRecord], report: PasswordsCSVReport) {
-        guard data.count <= 32 << 20 else { throw SafariImportError.notPasswordsFile }
+        guard data.count <= maxFileBytes else { throw SafariImportError.notPasswordsFile }
         var rows = parseCSV(data)
         defer { for i in rows.indices { for j in rows[i].indices { rows[i][j] = "" } } }
         guard let header = rows.first?.map({ $0.trimmingCharacters(in: .whitespaces).lowercased() }),
@@ -78,9 +79,12 @@ public enum PasswordsCSVReader {
         return (logins, report)
     }
 
-    /// RFC 4180: quoted fields, doubled quotes, CRLF or LF.
+    /// RFC 4180: quoted fields, doubled quotes, CRLF or LF. A quote opens a quoted field only at the
+    /// start of a field; inside an unquoted field it is a literal character, as in Chromium's
+    /// password CSV parser (`csv_field_parser.cc`, state kPlain). Otherwise one `"` in a password
+    /// would swallow every later row.
     static func parseCSV(_ data: Data) -> [[String]] {
-        var rows: [[String]] = [], row: [String] = [], field = "", quoted = false
+        var rows: [[String]] = [], row: [String] = [], field = "", quoted = false, fieldWasQuoted = false
         var iterator = String(decoding: data, as: UTF8.self).unicodeScalars.makeIterator()
         var pending: Unicode.Scalar? = iterator.next()
         if pending == "\u{FEFF}" { pending = iterator.next() }
@@ -89,11 +93,11 @@ public enum PasswordsCSVReader {
             if quoted {
                 if c == "\"" { if pending == "\"" { field.unicodeScalars.append("\""); pending = iterator.next() } else { quoted = false } }
                 else { field.unicodeScalars.append(c) }
-            } else if c == "\"" { quoted = true }
-            else if c == "," { row.append(field); field = "" }
+            } else if c == "\"", field.isEmpty, !fieldWasQuoted { quoted = true; fieldWasQuoted = true }
+            else if c == "," { row.append(field); field = ""; fieldWasQuoted = false }
             else if c == "\n" || c == "\r" {
                 if c == "\r", pending == "\n" { pending = iterator.next() }
-                row.append(field); rows.append(row); row = []; field = ""
+                row.append(field); rows.append(row); row = []; field = ""; fieldWasQuoted = false
             } else { field.unicodeScalars.append(c) }
         }
         if !field.isEmpty || !row.isEmpty { row.append(field); rows.append(row) }

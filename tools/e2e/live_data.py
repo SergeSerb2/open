@@ -495,6 +495,7 @@ def live_folder_import_checks(app, results, wait_until, tmp, harness):
         plistlib.dump({'hasTurnedOffGithubLiveFolder': True, 'hasSeenGithubLiveFolderEducation': True}, f, fmt=plistlib.FMT_BINARY)
     keys = ('open.liveFolders.githubAutoCreate', 'open.liveFolders.introSeen')
     for key in keys: app.call('defaults', key=key, value=None)
+    before_prefs = {k: app.call('defaults', key=k) for k in keys}
     state = lambda: app.call('first-run')
     app.call('first-run', action='settings-import', directory=str(arc))
     app.call('first-run', action='settings-next')
@@ -509,14 +510,41 @@ def live_folder_import_checks(app, results, wait_until, tmp, harness):
     results['live_folder_arc_import'] = {'ok': bool(beta) and folder.get('exists') and folder.get('title') == 'Pull Requests'
         and rows == {'https://github.com/acme/app/pull/12': 'https://github.com/acme/app/pull/12', 'https://github.com/acme/web/pull/7': 'https://github.com/acme/web/pull/7'}
         and folder.get('hiddenItems') == ['https://github.com/acme/app/pull/3'] and folder.get('hiddenRepositories') == ['acme/old']
-        and prefs == {'open.liveFolders.githubAutoCreate': False, 'open.liveFolders.introSeen': True},
-        'folder': folder, 'prefs': prefs, 'report': {k: report.get(k) for k in ('lastOutcome', 'lastFailures', 'arcPreferences')}}
+        # Lead ruling (round 2): a Settings re-import keeps Open's own settings; first run maps them (below).
+        and prefs == before_prefs and 'Arc settings' not in (report.get('lastOutcome') or {}),
+        'folder': folder, 'prefs': prefs, 'prefsBefore': before_prefs,
+        'report': {k: report.get(k) for k in ('lastOutcome', 'lastFailures', 'arcPreferences')}}
     # Undo the import: the folder and the two settings go back.
     app.call('sidebar-key', key='z', modifiers=['command'])
     wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
     undone = wait_until(lambda: (lambda v: v if v == {k: None for k in keys} else None)({k: app.call('defaults', key=k, persistent=True) for k in keys}), timeout=10, step=.1)
     results['live_folder_arc_import_undo'] = {'ok': undone is not None and not any(s['title'] == 'Beta' and app.call('live-folder-state', space=s['id']).get('exists') for s in app.call('spaces')),
         'prefs': {k: app.call('defaults', key=k, persistent=True) for k in keys}}
+
+
+def live_folder_first_run_checks(factory, results, wait_until, tmp, harness):
+    """L7 first run: Arc's two Live Folder preferences land with the Live Folder (own launch)."""
+    import runpy
+    from pathlib import Path
+    arc = Path(tmp) / 'arc-live-home' / 'Library' / 'Application Support' / 'Arc'
+    helper = runpy.run_path(str(Path(harness['ROOT']) / 'tools' / 'e2e' / 'firstrun.py'))
+    keys = ('open.liveFolders.githubAutoCreate', 'open.liveFolders.introSeen')
+    app, saved = None, {}
+    try:
+        app, report, saved = helper['first_run_arc_import'](factory, arc, wait_until, reset_keys=keys, history=False)
+        prefs = {k: app.call('defaults', key=k) for k in keys}
+        beta = next((s for s in app.call('spaces') if s['title'] == 'Beta'), None)
+        folder = app.call('live-folder-state', space=beta['id']) if beta else {}
+        results['live_folder_arc_prefs_first_run'] = {'ok': report.get('step') == 'report' and bool(beta)
+            and folder.get('exists') and folder.get('title') == 'Pull Requests'
+            and prefs == {'open.liveFolders.githubAutoCreate': False, 'open.liveFolders.introSeen': True},
+            'prefs': prefs, 'folder': {k: folder.get(k) for k in ('exists', 'title')},
+            'outcome': report.get('outcome'), 'failures': report.get('failures')}
+    finally:
+        if app is not None:
+            harness['_restore_defaults'](app, saved)
+            for key in keys: app.call('defaults', key=key, value=None)
+            app.quit()
 
 
 def run(factory, results, tmp, harness):
@@ -648,3 +676,5 @@ def run(factory, results, tmp, harness):
         finally:
             app.quit()
             server.shutdown()
+    # The Arc fixture of live_folder_import_checks, now through first run (Arc settings apply there only).
+    live_folder_first_run_checks(factory, results, wait_until, tmp, harness)

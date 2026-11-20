@@ -55,6 +55,114 @@ def fixture(root, h, negative=False):
     return ids
 
 
+def shapes_fixture(root, h):
+    """Arc shapes found in corrupt or hand-made files (bug sweep round 2), on top of the two-Profile fixture:
+    a Profile whose UUID a Space names in another letter case; routing rules naming a Profile by its
+    directory or by the "Default" string; splits with one, zero and five panes, a skipped first child
+    and negative width factors."""
+    ids = fixture(root, h)
+    data = json.loads((root/'StorableSidebar.json').read_text())
+    graph = data['sidebar']['containers'][1]
+    def key(name): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/shapes/' + name)).upper()
+    case_id = key('case-profile')
+    (root/'StorableProfiles.json').write_text(json.dumps({'profiles': [case_id, {
+        'id': case_id, 'name': 'Example Case', 'directoryBasename': 'Profile 2'}]}))
+    def tab(name):
+        ids[name] = key(name)
+        graph['items'] += [ids[name], {'id': ids[name], 'childrenIds': [], 'title': 'Example ' + name,
+            'data': {'tab': {'savedURL': 'https://example.com/shapes/' + name, 'savedTitle': 'Example ' + name}}}]
+        return ids[name]
+    def split(name, children, **extra):
+        ids[name] = key(name)
+        graph['items'] += [ids[name], {'id': ids[name], 'childrenIds': children, 'data': {'splitView': dict(layoutOrientation='horizontal', **extra)}}]
+        return ids[name]
+    one = split('split-one', [tab('one-a')])
+    empty = split('split-empty', [key('missing-0')])
+    five = split('split-five', [tab('five-%d' % i) for i in range(5)])
+    focus = split('split-focus', [key('missing-1'), tab('focus-a'), tab('focus-b')], focusItemID=key('focus-a'),
+                  itemWidthFactors=[0.2, 0.3, 0.5])
+    negative = split('split-negative', [tab('negative-a'), tab('negative-b')], itemWidthFactors=[-1, 2])
+    pinned, today = key('gamma-pinned'), key('gamma-today')
+    graph['items'] += [pinned, {'id': pinned, 'childrenIds': [tab('gamma-tab')], 'data': {'itemContainer': {}}},
+                       today, {'id': today, 'childrenIds': [one, empty, five, focus, negative], 'data': {'itemContainer': {}}}]
+    ids['gamma'] = key('gamma')
+    graph['spaces'] += [ids['gamma'], {'id': ids['gamma'], 'title': 'Gamma', 'profile': case_id.lower(),
+                                       'containerIDs': ['pinned', pinned, 'unpinned', today]}]
+    (root/'StorableSidebar.json').write_text(json.dumps(data))
+    routing = json.loads((root/'StorableLinkRouting.json').read_text())
+    for host, target in (('route-directory.example.com', {'custom': {'_0': {'directoryBasename': 'Profile 2', 'machineID': 'synthetic'}}}),
+                         ('route-default-string.example.com', 'Default')):
+        routing['rules'].append({'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/shapes-route/' + host)),
+            'sourceComponents': [{'componentType': {'urlMatch': {'_0': {'contains': {}}, '_1': host}}}],
+            'destination': {'space': {'_0': {'profile': {'_0': target}}}}})
+    (root/'StorableLinkRouting.json').write_text(json.dumps(routing))
+    ids['case'] = case_id
+    return ids
+
+
+def no_space_fixture(root, h):
+    """A sidebar with no Space and one unreached tab: the orphan needs the fallback Space."""
+    runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](root)
+    orphan = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/shapes/orphan')).upper()
+    (root/'StorableSidebar.json').write_text(json.dumps({'sidebar': {'containers': [{'global': {}}, {'spaces': [], 'items': [
+        orphan, {'id': orphan, 'childrenIds': [], 'data': {'tab': {'savedURL': 'https://example.com/shapes/orphan', 'savedTitle': 'Example orphan'}}}]}]}}))
+    for name in ('StorableArchiveItems.json', 'StorableLinkRouting.json', 'StorableSessionRestorationData.json'):
+        if (root/name).exists(): (root/name).unlink()
+
+
+def shapes_rows(factory, results, tmp, h):
+    source, lonely = Path(tmp)/'arc-shapes', Path(tmp)/'arc-no-space'
+    for folder in (source, lonely): shutil.rmtree(folder, ignore_errors=True)
+    ids = shapes_fixture(source, h); no_space_fixture(lonely, h)
+    helper = runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))
+    app, saved = None, {}
+    try:
+        app, report, saved = helper['first_run_arc_import'](factory, source, h.wait_until, history=False)
+        data = json.loads(Path(app.call('save')).read_text())
+        by_id = {p['id']: p for p in data['profiles']}
+        gamma = next((sp for sp in data['spaces'] if sp['id'] == ids['gamma']), None)
+        owner = by_id.get(gamma['profileID']) if gamma else None
+        results['MP_shapes_profile_case'] = dict(ok=report.get('step') == 'report' and bool(owner) and owner['name'] == 'Example Case'
+            and len(data['profiles']) == 3 and sum(1 for p in data['profiles'] if p['name'] == 'Example Case') == 1,
+            step=report.get('step'), error=report.get('error'), profiles=[p['name'] for p in data['profiles']])
+        def rule(host): return next((r['destination'] for r in data.get('routingRules', []) if host in json.dumps(r)), None)
+        personal = next((p for p in data['profiles'] if p['dataDirectoryName'] == 'Default'), {})
+        results['MP_shapes_routing_refs'] = dict(ok=bool(owner) and rule('route-directory.example.com') == {'mostRecentSpace': {'profile': owner['id']}}
+            and rule('route-default-string.example.com') == {'mostRecentSpace': {'profile': personal.get('id')}},
+            directory=rule('route-directory.example.com'), defaultString=rule('route-default-string.example.com'),
+            case=owner and owner['id'], personal=personal.get('id'))
+        today = (gamma or {}).get('today', [])
+        splits = {sp['split']['_0']['id']: sp['split']['_0'] for sp in today if 'split' in sp}
+        tabs = [n['tab']['_0']['id'] for n in today if 'tab' in n]
+        five = splits.get(ids['split-five'], {})
+        everywhere = json.dumps(data)
+        focus = splits.get(ids['split-focus'], {})
+        negative = splits.get(ids['split-negative'], {})
+        def pane_ids(split): return [p['id'] for p in split.get('panes', [])]
+        results['MP_shapes_split_normalized'] = dict(ok=ids['split-one'] not in splits and ids['one-a'] in tabs and ids['split-empty'] not in splits
+            and ids['split-empty'] not in everywhere and pane_ids(five) == [ids['five-%d' % i] for i in range(4)]
+            and 'https://example.com/shapes/five-4' in everywhere
+            and pane_ids(focus) == [ids['focus-a'], ids['focus-b']] and focus.get('focusedPaneID') == ids['focus-a']
+            and [round(f, 3) for f in focus.get('fractions', [])] == [0.375, 0.625]
+            and pane_ids(negative) == [ids['negative-a'], ids['negative-b']] and negative.get('fractions', []) == [],
+            today=[list(n)[0] for n in today], five=pane_ids(five), fifthKept='https://example.com/shapes/five-4' in everywhere,
+            focus={k: focus.get(k) for k in ('focusedPaneID', 'fractions')}, negative=negative.get('fractions'))
+        # A Settings import of a sidebar without Spaces keeps its unreached tab in a new Space.
+        app.call('first-run', action='settings-import', directory=str(lonely))
+        app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+        h.wait_until(lambda: app.call('first-run').get('settingsStep') == 'Report', timeout=45, step=.05)
+        lonely_report = app.call('first-run')
+        app.call('first-run', action='settings-done')
+        after = json.loads(Path(app.call('save')).read_text())
+        holder = [sp.get('title') for sp in after['spaces'] if 'https://example.com/shapes/orphan' in json.dumps(sp)]
+        results['MP_shapes_orphan_without_space'] = dict(ok=len(holder) == 1, spaces=holder,
+            outcome=lonely_report.get('settingsOutcome'), failures=lonely_report.get('settingsFailures'))
+    finally:
+        if app is not None:
+            h._restore_defaults(app, saved)
+            app.quit()
+
+
 def run(factory, results, tmp, h):
     source = Path(tmp)/'arc-multiprofile'
     shutil.rmtree(source, ignore_errors=True)
@@ -216,6 +324,8 @@ def run(factory, results, tmp, h):
             app.quit(); app = None
         for name in ('profiles','defaultRole','spaceProfiles','favorites','archive','history','routing','collision','session','noRepairs','reimport','undoModel'):
             results['MP_'+name] = dict(ok=all(d['checks'].get(name,True) for d in details.values()), modes=details, negative=negative, load=os.getloadavg())
+        if not negative:
+            shapes_rows(factory, results, tmp, h)
     finally:
         h._restore_defaults(app, saved)
         if app is not None: app.quit()

@@ -292,6 +292,25 @@ def run(factory, results, tmp, h):
         app.call('open', url='about:blank'); app.call('save')
         changed = dict(same=snapshot.read_bytes()==prior, firstRun=app.call('first-run')['active'])
         gate('replay_does_not_write', lambda s: s['same'] and not s['firstRun'], unchanged, changed)
+        # Closing the replay window (its title bar button: windowShouldClose) ends the replay only.
+        # A real first run quits there; a replay plays over the running browser, which must stay.
+        app.call('onboarding', action='replay-intro')
+        assert until(lambda: state().get('active')), state()
+        app.call('onboarding', action='close')
+        ended = bool(until(lambda: not state().get('active')))
+        time.sleep(3.5)  # longer than the first-run close path's 2.5 s fade before it quits
+        def pid_alive(pid):
+            try: os.kill(pid, 0); return True
+            except OSError: return False
+        browsers, again = 0, False
+        if pid_alive(app.pid):
+            browsers = len(app.call('shell-windows'))
+            app.call('onboarding', action='replay-intro')
+            again = bool(until(lambda: state().get('active')))
+            app.call('onboarding', action='close'); until(lambda: not state().get('active'))
+        closed = dict(ended=ended, alive=pid_alive(app.pid), browserWindows=browsers, replayAgain=again)
+        gate('replay_close_keeps_app', lambda s: s['ended'] and s['alive'] and s['browserWindows'] >= 1 and s['replayAgain'],
+             closed, dict(closed, alive=False, browserWindows=0))
         # A denied replay exits before root preparation. It opens no window,
         # writes no default-root snapshot and reports a concrete refusal.
         denied = h.subprocess.run([app.executable, '--replay-onboarding', '--intro-sound=off'], capture_output=True, text=True, timeout=15)

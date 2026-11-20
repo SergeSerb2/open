@@ -71,6 +71,30 @@ def fixture(root):
     return ids
 
 
+FIRST_RUN_KEYS = ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane', 'open.advanced.tabSleepMode')
+
+
+def first_run_arc_import(factory, arc, wait_until, reset_keys=(), **select):
+    """A fresh first-run launch on the synthetic Arc folder `arc`, imported through the real first-run
+    flow, then setup finished. `reset_keys` are cleared before the import. Returns (app, report state,
+    saved persistent defaults); the caller restores them with `_restore_defaults(app, saved)`."""
+    app = factory(urls=(), fresh=True, first_run=True, extra_args=['--arc-dir=' + str(arc), '--intro-sound=silent',
+                                                                   '--host-resolver-rules=MAP * ~NOTFOUND'])
+    saved = {key: app.call('defaults', key=key, persistent=True) for key in FIRST_RUN_KEYS}
+    for key in tuple(saved) + tuple(reset_keys): app.call('defaults', key=key, value=None)
+    if app.call('onboarding').get('active'):
+        app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+    assert wait_until(lambda: app.call('first-run').get('active'), timeout=15, step=.05), app.call('first-run')
+    app.call('first-run', action='import')
+    app.call('first-run', action='select', **select)
+    app.call('first-run', action='continue')
+    assert wait_until(lambda: app.call('first-run').get('step') in ('report', 'failed'), timeout=120, step=.05), app.call('first-run')
+    report = app.call('first-run')
+    app.call('first-run', action='continue'); app.call('first-run', action='finish')
+    assert wait_until(lambda: not app.call('first-run').get('active'), timeout=15, step=.05), app.call('first-run')
+    return app, report, saved
+
+
 def run(factory, results, tmp, h):
     if os.environ.get('OPEN_E2E_FIRSTRUN_MULTIPROFILE_ONLY') == '1':
         return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['run'](factory, results, tmp, h)

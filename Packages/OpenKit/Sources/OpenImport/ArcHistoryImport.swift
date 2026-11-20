@@ -93,6 +93,8 @@ final class ArcSQLiteCopy {
             if let connection { sqlite3_close(connection) }
             connection = nil
             try? fm.removeItem(at: directory)
+            // A cancelled import is not a broken source.
+            if error is CancellationError { throw error }
             throw ArcHistoryImportError.copyFailed
         }
     }
@@ -260,8 +262,10 @@ func copyPrivateSQLiteFile(from source: String, to destination: String) throws {
     }
 }
 
-/// CLI startup cleanup. Only old, user-owned directories with our prefix qualify.
-/// lstat excludes symlinks. Active copies younger than one hour are left alone.
+/// CLI and App startup cleanup: private source copies (history, and the secret stores `Login Data`,
+/// `Cookies`, `Web Data`) and Boost cache copies that a crash or kill left behind. Only old,
+/// user-owned directories with our prefixes qualify. lstat excludes symlinks. Active copies younger
+/// than one hour are left alone.
 @discardableResult
 public func sweepStaleImportCopies() -> Int {
     let fm = FileManager.default
@@ -269,7 +273,7 @@ public func sweepStaleImportCopies() -> Int {
     guard let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return 0 }
     let cutoff = Date().timeIntervalSince1970 - 3600
     var removed = 0
-    for entry in entries where entry.lastPathComponent.hasPrefix("open-history-import-") {
+    for entry in entries where entry.lastPathComponent.hasPrefix("open-history-import-") || entry.lastPathComponent.hasPrefix("open-boost-cache-") {
         var info = stat()
         guard lstat(entry.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR,
               info.st_uid == getuid(), Double(info.st_mtimespec.tv_sec) < cutoff else { continue }

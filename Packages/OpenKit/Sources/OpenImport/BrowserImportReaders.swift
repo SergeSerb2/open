@@ -39,14 +39,19 @@ public struct BrowserImportReader: Sendable {
             let places = FirefoxPlacesReader(profileDirectory: profile.directory)
             do { c.bookmarks = try places.readBookmarks().report.urls } catch { mark(&c, "Bookmarks", error) }
             do { c.historyVisits = try places.visitCount() } catch { mark(&c, "History", error) }
+            // A file that exists but cannot be read shows "Could not be read", not "Not found".
             let logins = FirefoxLoginsReader(profileDirectory: profile.directory)
-            if let count = try? logins.countOnly(), count > 0 {
-                c.passwords = count
-                c.needsPrimaryPassword = (try? logins.needsPrimaryPassword()) ?? false
-            }
-            if let session = try? FirefoxSessionReader(profileDirectory: profile.directory).read(), session.report.kept > 0 {
-                c.openTabs = session.report.kept
-            }
+            do {
+                let count = try logins.countOnly()
+                if count > 0 {
+                    c.passwords = count
+                    c.needsPrimaryPassword = (try? logins.needsPrimaryPassword()) ?? false
+                }
+            } catch { mark(&c, "Passwords", error) }
+            do {
+                let session = try FirefoxSessionReader(profileDirectory: profile.directory).read()
+                if session.report.kept > 0 { c.openTabs = session.report.kept }
+            } catch { mark(&c, "Open tabs", error) }
         case .safari:
             if let archive = safari.exportArchive {
                 guard let reader = try? SafariExportReader(url: archive) else {
@@ -63,7 +68,7 @@ public struct BrowserImportReader: Sendable {
             // `passwords()` imports the archive's member and the CSV together, so the count is their sum.
             // A readable CSV must not clear the archive's unreadable mark: the import would still fail on it.
             if let csv = safari.passwordsCSV {
-                var data = (try? Data(contentsOf: csv)) ?? Data()
+                var data = (try? readBoundedFile(csv, maxBytes: PasswordsCSVReader.maxFileBytes)) ?? Data()
                 defer { data.resetBytes(in: 0..<data.count) }
                 if !data.isEmpty, let read = try? PasswordsCSVReader.read(data) {
                     var logins = read.logins
@@ -123,7 +128,10 @@ public struct BrowserImportReader: Sendable {
                 logins += read.logins; skipped += read.report.sourceRows - read.report.kept
             }
             if let csv = safari.passwordsCSV {
-                guard var data = try? Data(contentsOf: csv) else { throw SafariImportError.unreadable("passwords") }
+                var data: Data
+                do { data = try readBoundedFile(csv, maxBytes: PasswordsCSVReader.maxFileBytes) }
+                catch BoundedFileReadError.tooLarge { throw SafariImportError.notPasswordsFile }
+                catch { throw SafariImportError.unreadable("passwords") }
                 defer { data.resetBytes(in: 0..<data.count) }
                 let read = try PasswordsCSVReader.read(data)
                 logins += read.logins; skipped += read.report.sourceRows - read.report.kept

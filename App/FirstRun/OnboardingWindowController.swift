@@ -287,6 +287,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     closingForHandoff = true
     onHandoff = nil
     finish()
+    // A replay plays over the running browser (Help ▸ Troubleshooting ▸ Replay Intro): closing it
+    // only ends the replay. Only a real first run, with no browser yet, quits.
+    if replay { return false }
     #if OPEN_AUTOMATION
     (NSApp.delegate as? AppDelegate)?.recordShutdownPhase("onboarding.fadeStarted")
     #endif

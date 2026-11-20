@@ -22,9 +22,11 @@ public struct ImportZipArchive: Sendable {
     }
 
     public init(data: Data) throws {
+        // Read the directory in place: a full byte copy would hold the whole archive (up to 512 MiB,
+        // stored Passwords.csv members included) a second time. Offsets are relative to `startIndex`.
         self.data = data
-        let bytes = [UInt8](data)
-        func u16(_ o: Int) -> UInt16 { UInt16(bytes[o]) | UInt16(bytes[o + 1]) << 8 }
+        let bytes = data, base = data.startIndex
+        func u16(_ o: Int) -> UInt16 { UInt16(bytes[base + o]) | UInt16(bytes[base + o + 1]) << 8 }
         func u32(_ o: Int) -> UInt32 { UInt32(u16(o)) | UInt32(u16(o + 2)) << 16 }
         guard bytes.count >= 22 else { throw ZipError.notZip }
         // End of central directory: last 22 bytes plus up to 64 KiB of comment.
@@ -46,7 +48,7 @@ public struct ImportZipArchive: Sendable {
             let nameLength = Int(u16(p + 28)), extraLength = Int(u16(p + 30)), commentLength = Int(u16(p + 32))
             let local = Int(u32(p + 42))
             guard p + 46 + nameLength <= bytes.count else { throw ZipError.corrupt }
-            let name = String(decoding: bytes[(p + 46)..<(p + 46 + nameLength)], as: UTF8.self)
+            let name = String(decoding: bytes[(base + p + 46)..<(base + p + 46 + nameLength)], as: UTF8.self)
             p += 46 + nameLength + extraLength + commentLength
             guard flags & 1 == 0 else { throw ZipError.unsupported }
             if name.hasSuffix("/") { continue }
@@ -65,13 +67,16 @@ public struct ImportZipArchive: Sendable {
 
     public func extract(_ member: Member) throws -> Data {
         guard member.size <= Self.maxMemberBytes, member.compressedSize <= Self.maxArchiveBytes else { throw ZipError.tooLarge }
-        let o = member.localOffset
+        // Deflate expands at most about 1032:1, so a larger size claim is corrupt; refuse it before
+        // the output buffer is allocated.
+        guard member.method != 8 || member.size <= member.compressedSize * 1032 + 1024 else { throw ZipError.corrupt }
+        let o = member.localOffset, base = data.startIndex
         guard o + 30 <= data.count else { throw ZipError.corrupt }
-        let header = [UInt8](data[o..<(o + 30)])
+        let header = [UInt8](data[(base + o)..<(base + o + 30)])
         guard header[0] == 0x50, header[1] == 0x4B, header[2] == 3, header[3] == 4 else { throw ZipError.corrupt }
         let start = o + 30 + (Int(header[26]) | Int(header[27]) << 8) + (Int(header[28]) | Int(header[29]) << 8)
         guard start + member.compressedSize <= data.count else { throw ZipError.corrupt }
-        let body = data[start..<(start + member.compressedSize)]
+        let body = data[(base + start)..<(base + start + member.compressedSize)]
         let out: Data
         switch member.method {
         case 0: out = Data(body)
@@ -84,6 +89,8 @@ public struct ImportZipArchive: Sendable {
             let written = body.withUnsafeBytes { source in
                 compression_decode_buffer(&buffer, member.size, source.bindMemory(to: UInt8.self).baseAddress!, body.count, nil, COMPRESSION_ZLIB)
             }
+            // The member can be a plaintext Passwords.csv: zero the work buffer after the copy.
+            defer { zeroSecretBytes(&buffer) }
             guard written == member.size else { throw ZipError.corrupt }
             out = Data(buffer)
         default: throw ZipError.unsupported

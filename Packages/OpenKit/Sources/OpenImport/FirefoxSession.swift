@@ -43,8 +43,11 @@ public struct FirefoxSessionReader: Sendable {
 
     public func read() throws -> (tabs: [ImportedOpenTab], report: ImportedOpenTabsReport) {
         guard let file = sessionFile else { throw FirefoxImportError.missingFile("sessionstore") }
-        guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber,
-              size.intValue <= Self.maxCompressedBytes, let data = try? Data(contentsOf: file) else { throw FirefoxImportError.unreadable("sessionstore") }
+        // The size is checked on the opened file, so a symlink cannot pass a larger target.
+        let data: Data
+        do { data = try readBoundedFile(file, maxBytes: Self.maxCompressedBytes) }
+        catch BoundedFileReadError.missing { throw FirefoxImportError.missingFile("sessionstore") }
+        catch { throw FirefoxImportError.unreadable("sessionstore") }
         guard let json = Self.decodeMozLz4(data),
               let root = try? JSONSerialization.jsonObject(with: json) as? [String: Any] else { throw FirefoxImportError.schemaMismatch("sessionstore") }
         return Self.tabs(from: root)
@@ -58,8 +61,11 @@ public struct FirefoxSessionReader: Sendable {
             for tab in (window["tabs"] as? [[String: Any]]) ?? [] {
                 report.sourceTabs += 1
                 let entries = (tab["entries"] as? [[String: Any]]) ?? []
-                let index = ((tab["index"] as? NSNumber)?.intValue ?? entries.count) - 1
-                guard entries.indices.contains(index), let raw = entries[index]["url"] as? String else { report.skippedEmpty += 1; continue }
+                // `index` is 1-based. Check it before the subtraction: `Int.min - 1` traps.
+                let oneBased = (tab["index"] as? NSNumber)?.intValue ?? entries.count
+                guard oneBased >= 1, oneBased <= entries.count else { report.skippedEmpty += 1; continue }
+                let index = oneBased - 1
+                guard let raw = entries[index]["url"] as? String else { report.skippedEmpty += 1; continue }
                 guard let url = URL(string: raw), ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else {
                     report.skippedUnsupportedURL += 1; continue
                 }
@@ -85,7 +91,9 @@ public struct FirefoxSessionReader: Sendable {
 
     /// LZ4 block format (public spec): sequences of literals + (offset, match length).
     static func lz4Block(_ input: [UInt8], decodedSize: Int) -> [UInt8]? {
-        var out = [UInt8](); out.reserveCapacity(decodedSize)
+        // The header's size claim is untrusted: reserve at most what this input can decode to
+        // (one LZ4 byte yields at most 255 output bytes); the array grows if needed.
+        var out = [UInt8](); out.reserveCapacity(min(decodedSize, input.count * 255))
         var i = 0
         while i < input.count {
             let token = Int(input[i]); i += 1
