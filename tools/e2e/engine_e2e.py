@@ -10012,6 +10012,22 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
     results['cmd_l_long_url_pasted_prefix_loads_as_entered'] = {
         'ok': bool(cleared) and bool(pasted) and bool(reloaded) and href != long_url and href.startswith(long_url[:2046]) and 'zz9' not in href,
         'cleared': bool(cleared), 'pasted': bool(pasted), 'loadedLength': len(href), 'loadedTail': href[-12:]}
+    # The same, with no clear: Cmd+L selects the whole cut text and the paste writes identical text over it.
+    # Nothing in the field changes, but it is still an edit (shouldChangeText), so Return loads the paste.
+    app.call('navigate', tab=long_tab, url=long_url); app.call('wait', tab=long_tab)
+    wait_until(lambda: (app.eval(long_tab, 'location.href') or '') == long_url, timeout=10, step=.1)
+    app.eval(long_tab, 'window.cutMarker = 1; 1')
+    selected = bar('l', 'window')
+    press('v', modifiers=['cmd'], route='app')
+    time.sleep(.3)
+    after = state()
+    press('return')
+    reloaded = wait_until(lambda: app.eval(long_tab, 'window.cutMarker === undefined && document.readyState === "complete"'), timeout=10, step=.1)
+    href = app.eval(long_tab, 'location.href') or ''
+    results['cmd_l_long_url_same_text_paste_loads_as_entered'] = {
+        'ok': selected['range'] == [0, 2048] and after.get('fieldText') == long_url[:2048] and bool(reloaded)
+            and href != long_url and href.startswith(long_url[:2046]) and 'zz9' not in href,
+        'selectedRange': selected.get('range'), 'reloaded': bool(reloaded), 'loadedLength': len(href), 'loadedTail': href[-12:]}
     app.call('close', tab=long_tab)
     app.call('select', tab=home)
 
