@@ -329,6 +329,29 @@ def run(factory, results, tmp, harness):
         results['peek_expand_page_state']={'ok':bool(preserved) and abs(preserved['y']-y)<=1 and preserved['path']=='/c.html'
             and app.page(promoted)['canGoBack'] and (same and app.eval(promoted,'window.peekPromotion')==73 if alloy else not same),
             'sameHost':same,'savedHistory':history,'restored':preserved,'scrollBefore':y,'style':'alloy' if alloy else 'chrome'}
+        # A Peek page that closes itself (window.close() with one history entry) closes the Peek.
+        # Before the fix the page went away and the Peek stayed open on a closed page.
+        clear(); select_source()
+        app.call('peek-open',tab=source,url=url('b.localhost','a.html')); opened(); page=top(); app.call('wait',tab=page)
+        app.eval(page,'window.close(); true')
+        closed=wait_until(lambda: (lambda s: s if not s['stack'] and not s['shown'] else None)(state()),timeout=5,step=.05)
+        results['peek_page_window_close_dismisses']={'ok':bool(closed),'state':state()}
+        clear()
+        # A target=_blank link in a Favorite opens in the Space the window shows. Before the fix it
+        # used the Space focused when the Favorite's page was made, and switched the window there.
+        fav=new_tab(app,url('a.localhost','a.html')); app.call('favorite',tab=fav)
+        home=app.call('window-state')['space']
+        other=app.call('space-create',title='Peek other',profile='Default'); app.call('space',space=other)
+        app.call('select',tab=fav); app.call('wait',tab=fav)
+        before={t['id'] for t in app.call('tabs')}
+        app.eval(fav,"(()=>{const a=document.createElement('a');a.id='blankFav';a.href='b.html?blank';a.target='_blank';a.textContent='blank';document.body.append(a);return true})()")
+        app.call('click',tab=app.page(fav)['identifier'],selector='#blankFav')
+        child=wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in before),None),timeout=8,step=.05) or {}
+        space_now=app.call('window-state')['space']
+        counts={s['id']:s['today'] for s in app.call('spaces')}
+        results['favorite_blank_link_stays_in_space']={'ok':bool(child) and space_now==other and counts.get(other)==1
+            and child.get('section')=='today','child':child,'space':space_now,'other':other,'home':home,'today':counts}
+        app.call('space',space=home)
     finally:
         try:
             for key,value in saved.items(): app.call('defaults',key=key,value=value)

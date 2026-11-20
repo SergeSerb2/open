@@ -1671,6 +1671,12 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     // again, or destroy its host from inside the engine delegate callback.
     DispatchQueue.main.async { [weak self, weak webContent] in
       guard let self, let webContent else { return }
+      // A Peek page is not a model tab: finishClosingTab ignored it and the Peek stayed open
+      // on a closed page. Close the Peek that shows it.
+      if let id = self.tabID(for: webContent), self.model.tab(id: id) == nil, let controller = self.controller,
+         controller.hasPeekController, let peek = controller.peekController.stack.last, peek.host?.tabID == id {
+        controller.peekController.dismissTop(); return
+      }
       if let id = self.tabID(for: webContent) { self.finishClosingTab(id: id) }
       else { self.close(page: webContent) }
     }
