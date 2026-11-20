@@ -8,20 +8,22 @@ import OpenSuggest
 public extension CommandRegistry {
     /// Browser actions for the command bar. Commands with no command-bar value
     /// (text editing, spelling, window chrome) stay out, as in `docs/suggest.md`.
-    static func makeSuggestActions() -> [BrowserAction] {
+    /// Keycaps show `overrides`' effective shortcut, the same key the menus show.
+    static func makeSuggestActions(overrides: KeyBindingStore = .empty) -> [BrowserAction] {
         var actions: [BrowserAction] = []
         for command in active where command.menuPath != nil || suggestOnlyIDs.contains(command.id) {
             guard !suggestExcludedIDs.contains(command.id) else { continue }
+            let shortcut = overrides.effectiveShortcuts(for: command).first?.symbolDisplay
             // Pin/Unpin is one menu command and two command-bar actions.
             if command.id == "pin-unpin-tab" {
                 actions.append(BrowserAction(
                     id: "pin-tab", title: "Pin Tab", aliases: ["Pin", "Pin/Unpin Tab"],
-                    shortcut: command.defaultShortcuts.first?.symbolDisplay,
+                    shortcut: shortcut,
                     symbol: "pin", requirement: .currentTabInToday
                 ))
                 actions.append(BrowserAction(
                     id: "unpin-tab", title: "Unpin Tab", aliases: ["Unpin", "Pin", "Pin/Unpin Tab"],
-                    shortcut: command.defaultShortcuts.first?.symbolDisplay,
+                    shortcut: shortcut,
                     symbol: "pin.slash", requirement: .currentTabPinned
                 ))
                 continue
@@ -29,7 +31,6 @@ public extension CommandRegistry {
             // Join Meeting is two command-bar actions in Arc (docs/re/live-data.md §5, `S:129097–129192`):
             // "Join next meeting" and "Join next video conference"; the app maps both ids to `join-meeting`.
             if command.id == "join-meeting" {
-                let shortcut = command.defaultShortcuts.first?.symbolDisplay
                 actions.append(BrowserAction(
                     id: "join-next-meeting", title: "Join next meeting",
                     aliases: ["Join Meeting", "Meeting", "Join Call", "Calendar"],
@@ -45,15 +46,15 @@ public extension CommandRegistry {
             // Numbered go-to commands are menu carriers; the command bar uses
             // the dynamic focus-space action instead.
             if command.id.hasPrefix("go-to-") || command.id.hasPrefix("focus-split-pane") { continue }
-            actions.append(browserAction(for: command))
+            actions.append(browserAction(for: command, overrides: overrides))
         }
         // Command-bar only: "New Google Doc" and siblings (no menu item in Arc either).
         actions.append(contentsOf: NewDocumentActions.actions)
         return actions
     }
 
-    static func makeSuggestRegistry() -> ActionRegistry {
-        ActionRegistry(makeSuggestActions())
+    static func makeSuggestRegistry(overrides: KeyBindingStore = .empty) -> ActionRegistry {
+        ActionRegistry(makeSuggestActions(overrides: overrides))
     }
 
     /// Ids kept equal to the `OpenSuggest` seed, so the adapter is a drop-in feed.
@@ -63,12 +64,12 @@ public extension CommandRegistry {
     ]
 
     /// One command as one command-bar action.
-    static func browserAction(for command: CommandDefinition) -> BrowserAction {
+    static func browserAction(for command: CommandDefinition, overrides: KeyBindingStore = .empty) -> BrowserAction {
         BrowserAction(
             id: suggestIDOverrides[command.id] ?? command.id,
             title: displayTitle(for: command),
             aliases: command.aliases,
-            shortcut: command.defaultShortcuts.first?.symbolDisplay,
+            shortcut: overrides.effectiveShortcuts(for: command).first?.symbolDisplay,
             symbol: symbolName(for: command),
             requirement: requirement(for: command)
         )

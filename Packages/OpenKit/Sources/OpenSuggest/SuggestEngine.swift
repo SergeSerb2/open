@@ -149,6 +149,13 @@ public final class SuggestEngine {
         return stream
     }
 
+    /// Replaces the registry behind the action rows, for example when the user changed a shortcut
+    /// and the keycaps must follow. Stops the running query.
+    public func setActions(_ registry: ActionRegistry) {
+        cancel()
+        providers = providers.map { $0.id == "actions" ? ActionsProvider(registry: registry) : $0 }
+    }
+
     /// Stops the running query (for example when the command bar closes).
     public func cancel() {
         activeTask?.cancel()
