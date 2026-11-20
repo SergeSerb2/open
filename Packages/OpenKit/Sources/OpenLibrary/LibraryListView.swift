@@ -294,6 +294,9 @@ final class LibraryListView: NSView, NSMenuDelegate {
             case .item(let index): return LibraryTableRow(key:"item:"+sources[index].id,height:gallery ? 118 : 56,version:ObjectIdentifier(sources[index]))
             }
         })
+        // setRows keeps the selected row by key, so its index can move (a search, a new
+        // heading). A stale index would leave the old cell drawn as selected on the next change.
+        lastSelectedRow = table.selectedRow
     }
     func selectionChanged() {
         for row in Set([lastSelectedRow,table.selectedRow]) where entries.indices.contains(row) && row < table.numberOfRows {
@@ -437,7 +440,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
             guard let item = item(at: row) else { return nil }
             let frame = root.convert(table.rect(ofRow: row),from: table)
             return ["id":item.id,"frame":[frame.minX,frame.minY,frame.width,frame.height],"title":item.title,"subtitle":item.subtitle,
-              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),"contextMenu":item.contextMenu,"toolTip":item.toolTip ?? "",
+              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,
+              "drawnSelected":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.selected ?? false,"actions":item.hoverActions.map(\.title),"contextMenu":item.contextMenu,"toolTip":item.toolTip ?? "",
               "buttonToolTips":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonToolTips ?? [],
               "buttons":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonState(in:root) ?? []]
         }
