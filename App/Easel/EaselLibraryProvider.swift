@@ -41,15 +41,7 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
 
   func deleteEasel(id: String) {
     guard let documentID = UUID(uuidString: id) else { return }
-    for factory in app.hostFactories.values {
-      while let tab = factory.easelRow(documentID: documentID) {
-        factory.deleteEasel(tabID: tab.id)
-        if factory.easelRow(documentID: documentID)?.id == tab.id { break }
-      }
-    }
-    let folder = app.easels.fileURL(for: documentID).deletingLastPathComponent()
-    app.easels.flush()
-    if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
+    app.deleteEaselEverywhere(documentID)
   }
 
   /// "Export All Easels →": a save sheet for an archive "Open Easels - yyyy-MM-dd HH.mm"

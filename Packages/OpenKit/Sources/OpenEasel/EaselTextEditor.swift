@@ -59,14 +59,17 @@ final class EaselTextEditor: NSView, NSTextViewDelegate {
     }
 
     /// Text height in document points for the current width.
-    var neededDocHeight: CGFloat {
+    var neededDocHeight: CGFloat { neededDocHeight(for: textView.string) }
+    /// The box height `string` needs. Commit measures the stored (clipped) text, never more than
+    /// the load limit allows (`EaselDocument.isValid`: a frame under 10,000,000 points tall).
+    func neededDocHeight(for string: String) -> CGFloat {
         guard let canvas, let object = canvas.document.object(objectID) else { return 0 }
         let width = object.frame.width * scale - 2 * EaselTextMetrics.inset * scale
-        let s = NSAttributedString(string: textView.string.isEmpty ? " " : textView.string,
+        let s = NSAttributedString(string: string.isEmpty ? " " : string,
                                    attributes: EaselTextMetrics.attributes(style, scale: scale, dark: false))
         let h = s.boundingRect(with: CGSize(width: max(1, width), height: .greatestFiniteMagnitude),
                                options: [.usesLineFragmentOrigin, .usesFontLeading]).height
-        return ceil(h / scale) + 4
+        return min(ceil(h / scale) + 4, 1_000_000)
     }
 
     func layoutIn(canvas: EaselCanvasView) {

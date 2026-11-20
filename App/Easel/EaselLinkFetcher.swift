@@ -25,9 +25,10 @@ enum EaselLinkFetcher {
   }
 
   private static func read(_ url: URL, session: URLSession, limit: Int) async -> Data? {
+    // A long page is still read (its head holds the metadata); only a picture over the limit is refused.
     guard let (bytes, response) = try? await session.bytes(from: url),
           let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-          http.expectedContentLength <= Int64(limit) else { return nil }
+          limit == maxPageBytes || http.expectedContentLength <= Int64(limit) else { return nil }
     var data = Data()
     do {
       for try await byte in bytes {

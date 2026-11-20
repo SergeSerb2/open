@@ -9,7 +9,7 @@ extension EngineWebContentHostFactory {
   /// Inline row rename sets the Easel's title (the canvas title field shows it too).
   func renameEasel(tabID: ItemID, title: String) -> Bool {
     guard let tab = model.tab(id: tabID), let documentID = EaselTab.documentID(tab.url) else { return false }
-    let trimmed = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(EaselDocument.maxTitleLength))
+    let trimmed = EaselDocument.clipped(title.trimmingCharacters(in: .whitespacesAndNewlines), utf16: EaselDocument.maxTitleLength)
     if let host = easelHosts[tabID], !host.closed {
       host.canvas.setTitle(trimmed)
     } else {
@@ -17,6 +17,8 @@ extension EngineWebContentHostFactory {
       doc.title = trimmed.isEmpty ? nil : trimmed
       doc.modifiedAt = Date()
       app.easels.save(doc)
+      // An open canvas of another row of this Easel shows the new title too.
+      app.easelDidChange(doc, from: nil, titleChanged: true)
     }
     tab.customTitle = nil
     tab.title = trimmed.isEmpty ? EaselDocument.untitled : trimmed
@@ -37,13 +39,26 @@ extension EngineWebContentHostFactory {
   /// Today in the focused Space for an Easel that has none. False for an unknown document.
   @discardableResult
   func showEasel(documentID: UUID) -> Bool {
-    if let tab = easelRow(documentID: documentID) { selectTabForCommand(tab.id); return true }
+    if let tab = easelRow(documentID: documentID), selectDocumentRow(tab) { return true }
     guard !isIncognito, let space = focusedSpace, app.easels.exists(documentID) else { return false }
     let title = app.easels.load(documentID)?.displayTitle ?? EaselDocument.untitled
     let tab = model.newTab(in: space.id, url: EaselTab.url(for: documentID), title: title, at: 0)
     tab.live.faviconPNG = EaselIcon.faviconPNG
     select(nodeID: tab.id)
     scheduleSave()
+    return true
+  }
+
+  /// Shows an Easel or Note row. A Favorite of another Profile shows in a Space of that Profile
+  /// (a Favorite is visible only with its own Profile). False when that Profile has no Space:
+  /// the caller then adds a row in the focused Space.
+  func selectDocumentRow(_ tab: Tab) -> Bool {
+    guard case .favorites(let profileID)? = model.parent(of: tab.id), focusedSpace?.profileID != profileID else {
+      selectTabForCommand(tab.id); return true
+    }
+    guard let space = model.mostRecentlyFocusedSpace(profileID: profileID) ?? model.spaces.first(where: { $0.profileID == profileID })
+    else { return false }
+    selectTabForCommand(tab.id, spaceID: space.id)
     return true
   }
 
@@ -101,18 +116,60 @@ extension EngineWebContentHostFactory {
     return true
   }
 
+  /// The Easel goes, with every row of it (a duplicate row or a Favorite shows the same Easel),
+  /// like Delete Note.
   func deleteEasel(tabID: ItemID) {
     guard let tab = model.tab(id: tabID), let documentID = EaselTab.documentID(tab.url) else { return }
-    if let host = easelHosts[tabID] { controller?.container.closeHost(for: tabID); host.close() }
-    // Removal is not an Archive entry: the content is gone.
-    let undo = model.undoManager; undo?.disableUndoRegistration()
-    model.closeTab(id: tabID)
-    undo?.enableUndoRegistration()
-    model.archiveSink?.discardArchived(ids: [tabID])
-    app.easels.flush()
-    let folder = app.easels.fileURL(for: documentID).deletingLastPathComponent()
+    app.deleteEaselEverywhere(documentID)
+  }
+}
+
+extension AppDelegate {
+  /// Closes every open canvas of an Easel in every window. Several rows can show one Easel (a
+  /// duplicate row, a Favorite), each with its own canvas; one left open would later write its
+  /// older copy over the file. Closing commits pending edits and queues their write.
+  func closeEaselHosts(documentID: UUID) {
+    for factory in hostFactories.values {
+      for (rowID, host) in factory.easelHosts where host.documentID == documentID {
+        factory.controller?.container.closeHost(for: rowID); host.close()
+      }
+    }
+  }
+
+  /// A canvas saved `doc`: every other open canvas of the Easel shows it. With `titleChanged`,
+  /// every row of the Easel takes its title (also rows whose canvas is not open).
+  func easelDidChange(_ doc: EaselDocument, from source: EaselContentHost?, titleChanged: Bool) {
+    for factory in hostFactories.values {
+      for host in factory.easelHosts.values where host !== source && host.documentID == doc.id { host.showSaved(doc) }
+    }
+    guard titleChanged else { return }
+    var models = Set<ObjectIdentifier>(), changed = false
+    for factory in hostFactories.values where models.insert(ObjectIdentifier(factory.model)).inserted {
+      for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == doc.id && tab.title != doc.displayTitle {
+        tab.title = doc.displayTitle; changed = true
+      }
+    }
+    guard changed else { return }
+    for factory in hostFactories.values { factory.controller?.refresh(); factory.scheduleSave() }
+  }
+
+  /// Removes every row of an Easel in every window (no Archive entry) and moves its folder to the
+  /// Trash once, after every canvas of it has closed and written.
+  func deleteEaselEverywhere(_ documentID: UUID) {
+    closeEaselHosts(documentID: documentID)
+    for factory in hostFactories.values {
+      for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == documentID {
+        // Removal is not an Archive entry: the content is gone.
+        let undo = factory.model.undoManager; undo?.disableUndoRegistration()
+        factory.model.closeTab(id: tab.id)
+        undo?.enableUndoRegistration()
+        factory.model.archiveSink?.discardArchived(ids: [tab.id])
+      }
+      factory.controller?.refresh(); factory.scheduleSave()  // the tree change syncs the tab mirror
+    }
+    easels.flush()
+    let folder = easels.fileURL(for: documentID).deletingLastPathComponent()
     if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
-    controller?.refresh(); scheduleSave()  // the tree change syncs the tab mirror
   }
 }
 

@@ -15,6 +15,8 @@ extension EngineWebContentHostFactory {
       var note = app.notes.document(noteID)
       note.title = trimmed; note.importPlaceholder = nil
       app.notes.update(note); app.notes.flush()
+      // An open editor of another row of this Note shows the new title too.
+      NoteContentHost.noteDidChange(noteID, store: app.notes, titleChanged: true)
     }
     app.notes.flush()   // a rename is one discrete action: write it now
     tab.customTitle = nil

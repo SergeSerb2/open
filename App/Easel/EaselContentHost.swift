@@ -45,12 +45,14 @@ final class EaselContentHost: WebContentHost {
     }
     canvas = EaselCanvasView(document: document!)
     canvas.onChange = { [weak self] doc in
-      guard let self, let owner = self.owner else { return }
+      guard let self, !self.showingSaved, let owner = self.owner else { return }
       owner.app.easels.save(doc)
-      if let tab = owner.model.tab(id: self.tabID), tab.title != doc.displayTitle {
+      let titleChanged = owner.model.tab(id: self.tabID).map { $0.title != doc.displayTitle } ?? false
+      if titleChanged {
         self.onTitleChange?(doc.displayTitle)
         owner.scheduleSave()
       }
+      owner.app.easelDidChange(doc, from: self, titleChanged: titleChanged)
     }
     let id = documentID
     canvas.imageURL = { [weak store] file in store?.imageURL(document: id, file: file) }
@@ -64,6 +66,19 @@ final class EaselContentHost: WebContentHost {
       guard let self, let owner = self.owner else { return }
       owner.controller?.splitController.addEmptyPane()
     }
+  }
+
+  private var showingSaved = false
+  /// Another canvas of this Easel saved `doc`: show it, so this canvas's next edit starts from it
+  /// and does not write an older copy over the file. Not saved again.
+  func showSaved(_ doc: EaselDocument) {
+    guard !closed, doc.id == documentID else { return }
+    showingSaved = true; defer { showingSaved = false }
+    // Compare with this canvas's own title: the same row in another window may have set the shared
+    // row title already, and this window's title must still follow.
+    let previousTitle = canvas.document.displayTitle
+    canvas.showSaved(doc)
+    if previousTitle != doc.displayTitle { onTitleChange?(doc.displayTitle) }
   }
 
   /// The Image tool: an open panel sheet for pictures (several allowed).
