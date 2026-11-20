@@ -9,7 +9,6 @@
 #include "include/views/cef_window_delegate.h"
 
 @interface OEWebContent (ChromeHost)
-- (nullable OEWebContent*)oe_takePendingChromePopup;
 - (void)oe_chromeWindowReady:(NSWindow*)window;
 @end
 
@@ -48,7 +47,12 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
       const CefBrowserSettings& settings,
       CefRefPtr<CefClient> client,
       bool is_devtools) override {
-    return new OEChromeBrowserViewDelegate(nil, false);
+    // CEF asks after OnBeforePopup, before OnPopupBrowserViewCreated: the
+    // page adopting this popup is still pending. It must own the popup's
+    // delegate, or a popup opened by that popup found no page here and got
+    // CEF's default window with an empty shell page.
+    return new OEChromeBrowserViewDelegate(
+        is_devtools ? nil : [view_ oe_pendingChromePopup], false);
   }
 
   bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,

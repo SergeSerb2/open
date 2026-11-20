@@ -97,6 +97,11 @@ void OERemoveAutofillHandler();
 - (nullable OEBrowserContext*)oe_contextForRequestContext:
     (CefRefPtr<CefRequestContext>)requestContext;
 - (CefRefPtr<CefClient>)oe_defaultClient;
+/// A popup no OEWebContent adopts: tracked like Chromium's own browsers (quit,
+/// context release), with no shell redirect and none of the opener's state.
+/// Null after shutdown.
+- (CefRefPtr<CefClient>)oe_unownedPopupClientForContext:
+    (nullable OEBrowserContext*)context;
 @property(nonatomic, readonly) BOOL oe_isTerminating;
 @end
 
@@ -178,6 +183,13 @@ class OEDevToolsClient;
                            settings:(CefBrowserSettings&)settings
                           extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo
                              opener:(OEWebContent*)opener;
+/// Chromium aborted the popup this page adopted: drop the creation state
+/// and ask the shell to close the page (it never gets a browser).
+- (void)oe_popupAborted;
+/// Views-hosted opener: the page adopting this page's pending popup, until
+/// OnPopupBrowserViewCreated takes it.
+- (nullable OEWebContent*)oe_pendingChromePopup;
+- (nullable OEWebContent*)oe_takePendingChromePopup;
 /// Chrome style: adopt a popup CefBrowserView created by Chromium.
 - (void)oe_adoptPopupBrowserView:(CefRefPtr<CefBrowserView>)browserView;
 - (void)oe_browserCreated:(CefRefPtr<CefBrowser>)browser;
@@ -307,6 +319,9 @@ class OEDevToolsClient;
                          origin:(nullable NSURL*)origin
                        isReload:(BOOL)isReload
                        callback:(CefRefPtr<CefJSDialogCallback>)callback;
+/// The delegate declined the dialog: CEF's default dialog takes the callback.
+/// Afterwards completion and dealloc no longer answer it.
+- (void)oe_releaseCallback;
 @end
 
 @interface OEAuthenticationRequest ()

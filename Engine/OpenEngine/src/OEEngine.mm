@@ -191,8 +191,12 @@ class OEDefaultClient : public CefClient,
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
-    browsers_.push_back(browser);
+    Track(browser);
   }
+
+  // Also used by OEUnownedPopupClient: a popup that no OEWebContent adopted
+  // still counts for quit and context release, but keeps Chromium's window.
+  void Track(CefRefPtr<CefBrowser> browser) { browsers_.push_back(browser); }
 
   bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                       CefRefPtr<CefFrame> frame,
@@ -243,6 +247,10 @@ class OEDefaultClient : public CefClient,
   }
 
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
+    Untrack(browser);
+  }
+
+  void Untrack(CefRefPtr<CefBrowser> browser) {
     redirected_.erase(browser->GetIdentifier());
     for (auto it = browsers_.begin(); it != browsers_.end(); ++it) {
       if ((*it)->IsSame(browser)) {
@@ -288,6 +296,67 @@ class OEDefaultClient : public CefClient,
   std::vector<CefRefPtr<CefBrowser>> browsers_;
   std::set<int> redirected_;
   IMPLEMENT_REFCOUNTING(OEDefaultClient);
+};
+
+// The client of a popup whose opener's delegate does not create web content
+// for open requests (OnBeforePopup returned false). CEF would otherwise give
+// the popup its opener's client: the popup's address, title, loading, and
+// dialogs would reach the opener's OEWebContent, and quit and context release
+// would not wait for or close it. Chromium keeps its own popup window; the
+// popup's downloads keep the opener's Profile attribution.
+class OEUnownedPopupClient : public CefClient,
+                             public CefLifeSpanHandler,
+                             public CefDownloadHandler {
+ public:
+  OEUnownedPopupClient(CefRefPtr<OEDefaultClient> owner,
+                       OEBrowserContext* context)
+      : owner_(owner), context_(context) {}
+
+  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
+
+  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
+    owner_->Track(browser);
+  }
+  void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
+    owner_->Untrack(browser);
+  }
+
+  bool CanDownload(CefRefPtr<CefBrowser> browser,
+                   const CefString& url,
+                   const CefString& request_method) override {
+    return true;
+  }
+  bool OnBeforeDownload(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefDownloadItem> item,
+                        const CefString& suggested_name,
+                        CefRefPtr<CefBeforeDownloadCallback> callback) override {
+    OEBrowserContext* context = context_;
+    if (context && !context.oe_closing &&
+        context.state != OEBrowserContextStateClosed) {
+      [context oe_handleBeforeDownload:item
+                         suggestedName:OEString(suggested_name)
+                            webContent:nil
+                              callback:callback];
+    }
+    return true;  // Not executing the callback cancels the download.
+  }
+  void OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
+                         CefRefPtr<CefDownloadItem> item,
+                         CefRefPtr<CefDownloadItemCallback> callback) override {
+    OEBrowserContext* context = context_;
+    if (!context || context.oe_closing ||
+        context.state == OEBrowserContextStateClosed) {
+      if (callback && item->IsInProgress()) callback->Cancel();
+      return;
+    }
+    [context oe_handleDownloadUpdated:item webContent:nil callback:callback];
+  }
+
+ private:
+  CefRefPtr<OEDefaultClient> owner_;
+  __weak OEBrowserContext* context_;
+  IMPLEMENT_REFCOUNTING(OEUnownedPopupClient);
 };
 
 // Calls `done` with the path CEF wrote (main thread).
@@ -354,6 +423,8 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   NSMutableDictionary<NSString*, OEBrowserContext*>* _contexts;
   NSPointerArray* _allContexts;  // weak, includes retired and private wrappers
   NSMutableDictionary<NSString*, OEBrowserContext*>* _privateContexts;
+  // When each original's last private context closed (system uptime).
+  NSMutableDictionary<NSString*, NSNumber*>* _privateContextClosedAt;
   NSMutableSet<NSString*>* _closingDirectories;
   NSMutableDictionary<NSString*, NSMutableArray*>* _deletionCompletions;
   OEBrowserContext* _defaultContext;
@@ -384,6 +455,7 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     _contexts = [NSMutableDictionary dictionary];
     _allContexts = [NSPointerArray weakObjectsPointerArray];
     _privateContexts = [NSMutableDictionary dictionary];
+    _privateContextClosedAt = [NSMutableDictionary dictionary];
     _closingDirectories = [NSMutableSet set];
     _deletionCompletions = [NSMutableDictionary dictionary];
   }
@@ -648,6 +720,12 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   return _defaultClient.get();
 }
 
+- (CefRefPtr<CefClient>)oe_unownedPopupClientForContext:
+    (nullable OEBrowserContext*)context {
+  if (!_defaultClient) return nullptr;
+  return new OEUnownedPopupClient(_defaultClient, context);
+}
+
 #pragma mark Browser contexts
 
 - (OEBrowserContext*)defaultContext {
@@ -775,18 +853,47 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
       ![[self oe_allContexts] containsObject:original]) { fail(); return; }
   [original oe_whenReady:^{
     if (!original.oe_isReady || self->_terminating) { fail(); return; }
-    OEBrowserContext* context = self->_privateContexts[original.identifier];
-    if (context.state == OEBrowserContextStateClosed) context = nil;
-    if (!context) {
-      NSString* identifier = [NSString stringWithFormat:@"Private-%lu", (unsigned long)++self->_ephemeralCount];
-      context = [[OEBrowserContext alloc] initOEIncognitoWithIdentifier:identifier original:original];
-      if (!context) { fail(); return; }
-      self->_privateContexts[original.identifier] = context;
+    [self oe_makeIncognitoContextForContext:original
+                                   deadline:NSProcessInfo.processInfo.systemUptime + 5
+                                       fail:fail
+                                 completion:completion];
+  }];
+}
+
+// The last private window of `original` may have just closed: its session is
+// still closing. A new window gets a new session, never the closing one (its
+// pages would close at once), and Chromium makes the new off-the-record
+// profile only after it destroyed the old one (CefCreateIncognitoContext
+// returns null until then). Wait for both, up to `deadline`.
+- (void)oe_makeIncognitoContextForContext:(OEBrowserContext*)original
+                                 deadline:(NSTimeInterval)deadline
+                                     fail:(dispatch_block_t)fail
+                               completion:(void (^)(OEBrowserContext*, NSError*))completion {
+  if (!_running || _terminating || !original.oe_isReady) { fail(); return; }
+  OEBrowserContext* context = _privateContexts[original.identifier];
+  if (context.state == OEBrowserContextStateClosed) context = nil;
+  BOOL wait = context.oe_closing;
+  if (!context) {
+    NSString* identifier = [NSString stringWithFormat:@"Private-%lu", (unsigned long)++_ephemeralCount];
+    context = [[OEBrowserContext alloc] initOEIncognitoWithIdentifier:identifier original:original];
+    if (context) {
+      _privateContexts[original.identifier] = context;
+    } else {
+      NSNumber* closed = _privateContextClosedAt[original.identifier];
+      wait = closed && NSProcessInfo.processInfo.systemUptime - closed.doubleValue < 10;
     }
-    [context oe_whenReady:^{
-      if (context.oe_isReady && original.oe_isReady) completion(context, nil);
-      else fail();
-    }];
+  }
+  if (wait) {
+    if (NSProcessInfo.processInfo.systemUptime >= deadline) { fail(); return; }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 10), dispatch_get_main_queue(), ^{
+      [self oe_makeIncognitoContextForContext:original deadline:deadline fail:fail completion:completion];
+    });
+    return;
+  }
+  if (!context) { fail(); return; }
+  [context oe_whenReady:^{
+    if (context.oe_isReady && original.oe_isReady) completion(context, nil);
+    else fail();
   }];
 }
 
@@ -936,8 +1043,11 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
 }
 
 - (void)oe_contextClosed:(OEBrowserContext*)context {
-  if (context.originalContext && _privateContexts[context.originalContext.identifier] == context)
+  if (context.originalContext && _privateContexts[context.originalContext.identifier] == context) {
     [_privateContexts removeObjectForKey:context.originalContext.identifier];
+    _privateContextClosedAt[context.originalContext.identifier] =
+        @(NSProcessInfo.processInfo.systemUptime);
+  }
 }
 
 - (void)oe_extensionsChangedInContext:(OEBrowserContext*)context {

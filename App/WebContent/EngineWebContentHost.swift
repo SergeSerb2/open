@@ -348,7 +348,12 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     !closed && (additionalKeyHandler?(event) == true || owner?.controller?.handleKeyDown(event, unconsumed: true) == true)
   }
   func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
-    !closed && owner?.webContent(page, runJavaScriptDialog: dialog) == true
+    if !closed, owner?.webContent(page, runJavaScriptDialog: dialog) == true { return true }
+    // No UI for a closed host. Returning false now means the engine's default
+    // dialog, which a hosted tab would show in its hidden Chrome window and
+    // leave the page blocked. Cancel it here, as the engine used to.
+    dialog.complete(accepted: false, text: nil)
+    return true
   }
   func webContent(_ page: OEWebContent, decidePermissionRequest request: OEPermissionRequest) -> Bool {
     !closed && owner?.webContent(page, decidePermissionRequest: request) == true

@@ -28,6 +28,8 @@ class OEClient : public CefClient,
   bool IsClosing() const { return closing_ || close_requested_; }
   void CancelAuthenticationRequests();
   void Detach() { CancelAuthenticationRequests(); view_ = nil; }
+  // A page that adopted a popup of this page, whose creation Chromium aborted.
+  void AbortPendingPopup(OEWebContent* target);
 
   // CefClient
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -69,6 +71,8 @@ class OEClient : public CefClient,
                      CefBrowserSettings& settings,
                      CefRefPtr<CefDictionaryValue>& extra_info,
                      bool* no_javascript_access) override;
+  void OnBeforePopupAborted(CefRefPtr<CefBrowser> browser,
+                            int popup_id) override;
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
@@ -224,6 +228,10 @@ class OEClient : public CefClient,
       [NSHashTable weakObjectsHashTable];
   std::atomic<uint64_t> auth_epoch_{0};
   __weak OEWebContent* view_;
+  // Pages that adopted a popup of this page, by CEF popup id, until the popup
+  // is created (pruned on the next popup) or aborted (OnBeforePopupAborted).
+  NSMapTable<NSNumber*, OEWebContent*>* pending_popups_ =
+      [NSMapTable strongToWeakObjectsMapTable];
   // CEF patch 1001 can deliver a download update after this page is gone.
   // Keep its original Profile attribution without retaining the page or Profile.
   __weak OEBrowserContext* download_context_;
