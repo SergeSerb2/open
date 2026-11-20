@@ -225,11 +225,11 @@ final class PageContextMenuBuilder {
     guard !text.isEmpty else { return }
     let engine = SearchEngines.resolve(profile: owner.focusedProfile)
     let url = Self.selectionURL(text)
-    let display = String(text.prefix(32)) + (text.count > 32 ? "…" : "")
+    let display = Self.displayPrefix(text, characters: 32)
     // A selected URL can be up to the 16 KiB selection bound. Its full text in the row title
     // would exceed the final menu's 1 KiB title cap and refuse the whole menu, Copy included.
     // Show at most 50 characters, Chromium's printable-selection length; the action opens the full URL.
-    let urlDisplay = String(text.prefix(50)) + (text.count > 50 ? "…" : "")
+    let urlDisplay = Self.displayPrefix(text, characters: 50)
     let title = url.map { _ in "Go to \(urlDisplay)" } ?? "Search \(engine.name) for “\(display)”"
     guard let target = url ?? engine.searchURL(for: text) else { return }
     let index = menu.items.firstIndex { chromeModel ? engineItem($0, in: [ChromeCommand.copy]) : $0.title == "Copy" }.map { $0 + 1 } ?? menu.items.count
@@ -241,6 +241,20 @@ final class PageContextMenuBuilder {
         owner?.translate.selection.translate(text, at: location, in: page)
       }, at: index + 1)
     }
+  }
+
+  /// At most `characters` grapheme clusters and 512 UTF-8 bytes, with "…" when cut. One grapheme
+  /// can carry hundreds of combining marks, so a character count alone does not bound the bytes
+  /// that the final menu's 1 KiB title cap checks.
+  private static func displayPrefix(_ text: String, characters: Int) -> String {
+    var shown = String(text.prefix(characters))
+    var cut = shown.count < text.count
+    if shown.utf8.count > 512 {
+      var bytes = 0
+      shown = String(String.UnicodeScalarView(shown.unicodeScalars.prefix { bytes += $0.utf8.count; return bytes <= 512 }))
+      cut = true
+    }
+    return cut ? shown + "…" : shown
   }
 
   private static func selectionURL(_ text: String) -> URL? {

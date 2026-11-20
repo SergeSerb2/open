@@ -337,6 +337,19 @@ def run(factory, results, tmp, harness):
         closed=wait_until(lambda: (lambda s: s if not s['stack'] and not s['shown'] else None)(state()),timeout=5,step=.05)
         results['peek_page_window_close_dismisses']={'ok':bool(closed),'state':state()}
         clear()
+        # A lower Peek page that closes itself leaves the stack at once; closing the top Peek
+        # later must not reveal the closed page.
+        select_source()
+        app.call('peek-open',tab=source,url=url('b.localhost','a.html')); opened(); lower=top(); app.call('wait',tab=lower)
+        app.eval(lower,'setTimeout(()=>window.close(),700); true')
+        app.call('peek-open',tab=source,url=url('b.localhost','b.html'))
+        upper=wait_until(lambda: (lambda s: s['stack'][-1]['content'] if len(s['stack'])==2 and s['stack'][-1]['content'] else None)(state()),timeout=5,step=.05)
+        removed=wait_until(lambda: (lambda s: s if len(s['stack'])==1 and s['stack'][0]['content']==upper else None)(state()),timeout=5,step=.05)
+        app.call('peek-button',id='confirmCloseModal')
+        emptied=wait_until(lambda: (lambda s: s if not s['stack'] and not s['shown'] else None)(state()),timeout=5,step=.05)
+        results['peek_lower_page_window_close_leaves_stack']={'ok':bool(upper) and bool(removed) and bool(emptied),
+            'upper':upper,'lower':lower,'state':state()}
+        clear()
         # A target=_blank link in a Favorite opens in the Space the window shows. Before the fix it
         # used the Space focused when the Favorite's page was made, and switched the window there.
         fav=new_tab(app,url('a.localhost','a.html')); app.call('favorite',tab=fav)
@@ -349,8 +362,11 @@ def run(factory, results, tmp, harness):
         child=wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in before),None),timeout=8,step=.05) or {}
         space_now=app.call('window-state')['space']
         counts={s['id']:s['today'] for s in app.call('spaces')}
+        child_url=wait_until(lambda: (lambda t: t['url'] if t and t['url'].endswith('/b.html?blank') else None)(
+            next((t for t in app.call('tabs') if t['id']==child.get('id')),None)),timeout=8,step=.05) if child else None
         results['favorite_blank_link_stays_in_space']={'ok':bool(child) and space_now==other and counts.get(other)==1
-            and child.get('section')=='today','child':child,'space':space_now,'other':other,'home':home,'today':counts}
+            and child.get('section')=='today' and bool(child_url),'child':child,'childURL':child_url,
+            'space':space_now,'other':other,'home':home,'today':counts}
         app.call('space',space=home)
     finally:
         try:

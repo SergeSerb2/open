@@ -48,20 +48,27 @@ final class NotificationClickRouter {
   private static func defaultPort(_ url: URL) -> Int? { url.scheme?.lowercased() == "https" ? 443 : url.scheme?.lowercased() == "http" ? 80 : nil }
 
   /// The most recently active tab with the origin, in a window that shows its profile's Spaces.
+  /// A Profile with no Space (its Favorites can outlive its last Space) has no destination. When
+  /// several windows can show the tab, prefer the one that hosts its page, then one that already
+  /// shows its Profile; never dictionary order.
   private static func fallbackTab(app: AppDelegate, context: OEBrowserContext, origin: URL) -> (EngineWebContentHostFactory, Tab)? {
-    var best: (EngineWebContentHostFactory, Tab)?
+    var best: (factory: EngineWebContentHostFactory, tab: Tab, rank: Int)?
     // Only windows of the main model hold its Spaces (a Blank Window has a model of its own).
     for factory in app.hostFactories.values where factory.model === app.model {
       guard let profile = factory.profile(for: context) else { continue }
+      let spaces = app.model.spaces.filter { $0.profileID == profile.id }
+      guard !spaces.isEmpty else { continue }
       // Favorites belong to the Profile, not to a Space: a webmail or chat Favorite is the usual
       // source of these notifications.
-      let spaces = app.model.spaces.filter { $0.profileID == profile.id }
       let tabs = profile.favorites + spaces.flatMap { factory.flattened($0.pinned) + factory.flattened($0.today) }
       for tab in tabs where sameOrigin(tab.url, origin) {
-        if best == nil || tab.lastActiveAt > best!.1.lastActiveAt { best = (factory, tab) }
+        let rank = factory.hosts[tab.id] != nil ? 2 : factory.focusedSpace?.profileID == profile.id ? 1 : 0
+        if let current = best, tab.lastActiveAt < current.tab.lastActiveAt
+          || (tab.lastActiveAt == current.tab.lastActiveAt && rank <= current.rank) { continue }
+        best = (factory, tab, rank)
       }
     }
-    return best
+    return best.map { ($0.factory, $0.tab) }
   }
 }
 

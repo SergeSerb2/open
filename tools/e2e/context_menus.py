@@ -471,6 +471,21 @@ def context_menu_checks(factory, results, tmp, h):
                 app.eval(tab, "document.querySelector('#url').textContent=" + json.dumps(origin + '/target.html'))
         run('cm_go_url_long', go_url_long)
 
+        def selection_title_bytes():
+            # One grapheme with 600 combining marks: 50 (or 32) characters can be far over the
+            # 1 KiB title cap. The row title gets a byte budget; the menu must still show.
+            focus()
+            text = origin + '/target.html?q=a' + '\u0301' * 600
+            try:
+                select('#url', text)
+                event, _ = menu('#url', clear=False)
+                rows = [t for t in (event or {}).get('shown', []) if t.startswith('Go to ') or t.startswith('Search ')]
+                return {'ok': bool(event) and len(rows) == 1 and len(rows[0].encode()) <= 1024 and rows[0].endswith(('…', '…”')),
+                        'rows': [len(r.encode()) for r in rows], 'shown': len((event or {}).get('shown', []))}
+            finally:
+                app.eval(tab, "document.querySelector('#url').textContent=" + json.dumps(origin + '/target.html'))
+        run('cm_selection_title_byte_budget', selection_title_bytes)
+
         def cancellation():
             focus()
             event, events = menu()
@@ -586,8 +601,8 @@ def context_menu_checks(factory, results, tmp, h):
                 refused = observed()
                 titles = [c['title'] for e in (accepted, refused) for c in e.get('commands', []) if c['id'] >= 49000 and c['title'].startswith('x')]
                 if len(titles) == 2 and all(len(t.encode()) < 1024 for t in titles):
-                    # These labels are bounded upstream; exercise the App's own title limit
-                    # below through a real selection whose combining marks stay in 32 characters.
+                    # These labels are bounded upstream; exercise the App's selection-row byte
+                    # budget below through a real selection whose combining marks stay in 32 characters.
                     checks['title'] = {'upstreamElision': True, 'deliveredBytes': [len(t.encode()) for t in titles]}
                 else:
                     checks['title'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
@@ -620,8 +635,11 @@ def context_menu_checks(factory, results, tmp, h):
                     own = next((r for r in event.get('rows', []) if r['key'] == 'selection-search'), None)
                     title_events.append({'type': event.get('type'), 'reason': event.get('reason'),
                                          'requestedBytes': size, 'shownBytes': len(own['title'].encode()) if own else None})
-                results['cm_title_boundary'] = {'ok': title_events[0]['type'] == 'contextMenu'
-                    and title_events[0]['shownBytes'] == 1024 and title_events[1]['type'] == 'contextMenuRefused',
+                # Review round 1 (#628): the selection row has its own 512-byte display budget, so a
+                # selection at or over the final 1 KiB title cap no longer refuses the whole menu. Both
+                # sizes show the menu with a cut row (prefix + "…") under the cap.
+                results['cm_title_boundary'] = {'ok': all(e['type'] == 'contextMenu' and e['shownBytes'] is not None
+                    and e['shownBytes'] <= 1024 for e in title_events),
                     'events': title_events, 'engineExtensionTitleBytes': [len(t.encode()) for t in titles]}
                 configure(count=1, title='Go to fixture')
                 select('#selection', 'Extension collision selection')

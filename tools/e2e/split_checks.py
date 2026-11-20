@@ -435,13 +435,25 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             return h.wait_until(lambda: (lambda s: s if s['id'] == order_split['id'] and len([p for p in s['panes'] if not p['hidden']]) == 2 else None)(state()), timeout=5, step=.05)
         above = opened('order-above')  # a new tab opens at the top of Today, right above the split
         app.call('menu-perform', id='next-tab'); after_next = split_shown() or state()
+        order_panes = [p['id'] for p in order_split['panes']]
         row('next_tab_into_split_shows_split', after_next['id'] == order_split['id'] and after_next['selected'] == order_split['id']
-            and len(shown()) == 2, state={k: after_next[k] for k in ('id', 'selected', 'focused')}, shown=shown())
+            and after_next['focused'] == order_panes[0] and order_panes[0] in shown() and len(shown()) == 2,
+            state={k: after_next[k] for k in ('id', 'selected', 'focused')}, shown=shown(), panes=order_panes)
         select(above); h.wait_until(lambda: len(shown()) == 1, timeout=5, step=.05)
         app.call('close'); after_close = split_shown() or state()
         row('close_above_split_selects_split', after_close['id'] == order_split['id'] and after_close['selected'] == order_split['id']
-            and len(shown()) == 2 and above not in [t['id'] for t in app.call('tabs')],
-            state={k: after_close[k] for k in ('id', 'selected', 'focused')}, shown=shown())
+            and after_close['focused'] == order_panes[0] and order_panes[0] in shown() and len(shown()) == 2
+            and above not in [t['id'] for t in app.call('tabs')],
+            state={k: after_close[k] for k in ('id', 'selected', 'focused')}, shown=shown(), panes=order_panes)
+        # Next Tab from an expanded (maximized) pane focuses the next pane: it must also be shown,
+        # never a model focus on a pane the container hides.
+        menu('Expand Current Pane')
+        expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] == order_panes[0] else None)(state()), timeout=5, step=.05) or state()
+        app.call('menu-perform', id='next-tab')
+        after_max = h.wait_until(lambda: (lambda s: s if s['focused'] == order_panes[1] and not s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        row('next_tab_from_expanded_pane_shows_target', expanded['maximized'] == order_panes[0]
+            and after_max['focused'] == order_panes[1] and not after_max['maximized'] and order_panes[1] in shown(),
+            expanded=expanded['maximized'], state={k: after_max[k] for k in ('id', 'focused', 'maximized')}, shown=shown(), panes=order_panes)
         unsplit()
         # LEAD 11:50: Close This Pane keeps the closed page drawn while its box collapses,
         # so chrome.tabs reports onRemoved after the strip change. onRemoved must arrive
