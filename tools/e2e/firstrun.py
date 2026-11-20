@@ -74,15 +74,18 @@ def fixture(root):
 FIRST_RUN_KEYS = ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane', 'open.advanced.tabSleepMode')
 
 
-def first_run_arc_import(factory, arc, wait_until, reset_keys=(), **select):
+def first_run_arc_import(factory, arc, wait_until, reset_keys=(), inspect=None, **select):
     """A fresh first-run launch on the synthetic Arc folder `arc`, imported through the real first-run
-    flow, then setup finished. `reset_keys` are cleared before the import. Returns (app, report state,
+    flow, then setup finished. `reset_keys` are cleared and `inspect(app)` runs before the import. Returns (app, report state,
     saved persistent defaults); the caller restores them with `_restore_defaults(app, saved)`."""
     app = factory(urls=(), fresh=True, first_run=True, extra_args=['--arc-dir=' + str(arc), '--intro-sound=silent',
                                                                    '--host-resolver-rules=MAP * ~NOTFOUND'])
     saved = {key: app.call('defaults', key=key, persistent=True) for key in FIRST_RUN_KEYS}
     for key in tuple(saved) + tuple(reset_keys): app.call('defaults', key=key, value=None)
-    if app.call('onboarding').get('active'):
+    if inspect: inspect(app)  # the caller's reading of the state before the import
+    # Some suite factories already skip the intro; skip it here only while it still shows.
+    onboarding = app.call('onboarding')
+    if onboarding.get('active') and onboarding.get('screen') == 'intro':
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
     assert wait_until(lambda: app.call('first-run').get('active'), timeout=15, step=.05), app.call('first-run')
     app.call('first-run', action='import')

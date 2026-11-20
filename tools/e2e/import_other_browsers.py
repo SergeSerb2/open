@@ -309,15 +309,20 @@ def run(factory, results, tmp, h):
     # A '"' inside an unquoted CSV field is a literal character (Chromium's CSV rule). Before, it opened
     # a quoted field and swallowed every later row.
     quoted_csv = files/'Passwords-quote.csv'
-    quoted_csv.write_text('Title,URL,Username,Password\nQuote,https://quote.example.test/,example-quote,pa"ss\n'
-                          'After,https://after.example.test/,example-after,fixture-after\n')
+    quoted_csv.write_text('Title,URL,Username,Password\nQuote,https://quote.example.com/,example-quote,pa"ss\n'
+                          'After,https://after.example.com/,example-after,fixture-after\n')
     before_logins = logins()
     open_sources(); call('settings-source', id='safari'); settle()
     call('settings-passwords-file', path=str(quoted_csv)); settle()
     call('settings-browser-select', bookmarks=False, history=False, passwords=True)
-    quoted = finish_import().get('settingsOutcome', {})
+    quoted_chosen = settle()
+    quoted_report = finish_import()
+    quoted = quoted_report.get('settingsOutcome', {})
     row('safari_csv_inner_quote', quoted.get('Passwords') == 2 and logins() - before_logins == 2,
-        outcome={k: quoted.get(k) for k in ('Passwords', 'Skipped passwords', 'Password duplicates')}, logins=logins() - before_logins)
+        outcome={k: quoted.get(k) for k in ('Passwords', 'Skipped passwords', 'Password duplicates')}, logins=logins() - before_logins,
+        label=quoted_chosen.get('settingsBrowserLabels', {}).get('Passwords'), plan=quoted_chosen.get('settingsPlan'),
+        failures=quoted_report.get('settingsFailures'), error=quoted_report.get('settingsError'),
+        appLog=[l for l in app.log_text().splitlines() if 'browser passwords import failed' in l][-3:])
 
     # A fresh Safari profile has no Bookmarks.plist: Bookmarks shows "Not found", is unticked and disabled, and the
     # Report has no "could not be imported" line (hand check, IMF 20:15). The file returns for later rows.

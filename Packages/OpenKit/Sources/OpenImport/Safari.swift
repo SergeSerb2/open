@@ -46,6 +46,13 @@ public struct PasswordsCSVReport: Sendable, Equatable {
 /// CSV (name, url, username, password, note). Columns are found by header name.
 public enum PasswordsCSVReader {
     public static let maxFileBytes = 32 << 20
+
+    /// Reads a user-picked passwords file, size-checked before the read. Callers zero the result.
+    public static func readFile(_ url: URL) throws -> Data {
+        do { return try readBoundedFile(url, maxBytes: maxFileBytes) }
+        catch BoundedFileReadError.tooLarge { throw SafariImportError.notPasswordsFile }
+        catch { throw SafariImportError.unreadable("passwords") }
+    }
     public static func read(_ data: Data) throws -> (logins: [ImportedLoginRecord], report: PasswordsCSVReport) {
         guard data.count <= maxFileBytes else { throw SafariImportError.notPasswordsFile }
         var rows = parseCSV(data)

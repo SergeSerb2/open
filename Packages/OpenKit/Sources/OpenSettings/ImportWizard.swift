@@ -182,7 +182,10 @@ import OpenImport
     /// A Passwords.csv exported from Safari or the Passwords app.
     public func usePasswordsFile(_ url: URL) async {
         guard !busy, case .browser(let source, _) = plan.source, source.family == .safari else { return }
-        guard let data = try? Data(contentsOf: url), var read = try? PasswordsCSVReader.read(data) else {
+        // Size-checked before the read; the plaintext buffer is zeroed after the check parse.
+        var data = (try? PasswordsCSVReader.readFile(url)) ?? Data()
+        defer { data.resetBytes(in: 0..<data.count) }
+        guard !data.isEmpty, var read = try? PasswordsCSVReader.read(data) else {
             errorText = "The file you chose doesn't look like a passwords file. Export it from Safari or the Passwords app (File ▸ Export All Passwords)."
             return
         }

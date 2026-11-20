@@ -568,11 +568,11 @@ def arc_preferences_checks(app, results, wait_until, tmp, harness):
     app.call('first-run', action='settings-import', directory=str(arc))
     app.call('first-run', action='settings-next')
     app.call('first-run', action='settings-run')
-    report = wait_until(lambda: (lambda s: s if s.get('settingsStep') == 'report' else None)(state()), timeout=60, step=.05) or state()
+    report = wait_until(lambda: (lambda s: s if s.get('settingsStep') == 'Report' else None)(state()), timeout=60, step=.05) or state()
     kept = {k: d(k) for k in keys}
     outcome = report.get('lastOutcome') or {}
     results['cal_arc_prefs_settings_kept'] = {
-        'ok': bool(default_profile) and report.get('settingsStep') == 'report' and kept == before
+        'ok': bool(default_profile) and report.get('settingsStep') == 'Report' and kept == before
             and outcome.get('Imported Spaces', 0) > 0 and 'Arc settings' not in outcome and 'Live Calendar reminders' not in outcome
             and not (report.get('lastFailures') or {}).get('Arc settings'),
         'before': before, 'after': kept, 'outcome': outcome, 'failures': report.get('lastFailures')}
@@ -590,7 +590,9 @@ def arc_preferences_first_run(factory, results, wait_until, tmp, harness):
     keys = ARC_PREF_KEYS + ('open.links.didSetDefaultMeetRoute',) + FAVORITE_KEYS
     app, saved = None, {}
     try:
-        app, report, saved = helper['first_run_arc_import'](factory, arc, wait_until, reset_keys=keys, history=False)
+        registered = {}
+        def inspect(first): registered.update({k: first.call('defaults', key=k) for k in keys})
+        app, report, saved = helper['first_run_arc_import'](factory, arc, wait_until, reset_keys=keys, inspect=inspect, history=False)
         def d(key): return app.call('defaults', key=key)
         with open(app.call('save')) as stream: snapshot = json.load(stream)
         default_profile = next((p['id'] for p in snapshot.get('profiles', []) if p.get('dataDirectoryName') == 'Default'), '')
@@ -612,14 +614,16 @@ def arc_preferences_first_run(factory, results, wait_until, tmp, harness):
                 and not (report.get('failures') or {}).get('Arc settings'),
             'written': written, 'mapped': app.call('first-run').get('arcPreferences', {}), 'outcome': outcome,
             'failures': report.get('failures')}
-        # Undo the import: Arc's settings go back to Open's previous (registered default) values.
+        # Undo the import: Arc's settings go back to the values Open had before it (registered defaults;
+        # the new Profile's reminder key had none).
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         app.call('sidebar-key', key='z', modifiers=['command'])
         wait_until(lambda: not app.call('first-run').get('importUndoInProgress', False), timeout=30, step=.05)
-        def stored(): return {k: app.call('defaults', key=k, persistent=True) for k in keys + (reminder_key,)}
-        undone = wait_until(lambda: (lambda w: w if all(v is None for v in w.values()) else None)(stored()), timeout=10, step=.1) or stored()
-        results['cal_arc_prefs_undo'] = {'ok': all(v is None for v in undone.values()) and written != undone,
-                                         'written': written, 'afterUndo': undone}
+        expected_undo = dict(registered, **{reminder_key: None})
+        def current(): return {k: d(k) for k in keys + (reminder_key,)}
+        undone = wait_until(lambda: (lambda w: w if w == expected_undo else None)(current()), timeout=10, step=.1) or current()
+        results['cal_arc_prefs_undo'] = {'ok': bool(registered) and undone == expected_undo and written != undone,
+                                         'written': written, 'afterUndo': undone, 'beforeImport': expected_undo}
     finally:
         if app is not None:
             harness['_restore_defaults'](app, saved)

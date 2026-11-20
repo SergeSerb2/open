@@ -77,7 +77,7 @@ public struct ImportZipArchive: Sendable {
         let start = o + 30 + (Int(header[26]) | Int(header[27]) << 8) + (Int(header[28]) | Int(header[29]) << 8)
         guard start + member.compressedSize <= data.count else { throw ZipError.corrupt }
         let body = data[(base + start)..<(base + start + member.compressedSize)]
-        let out: Data
+        var out: Data
         switch member.method {
         case 0: out = Data(body)
         case 8:
@@ -95,7 +95,7 @@ public struct ImportZipArchive: Sendable {
             out = Data(buffer)
         default: throw ZipError.unsupported
         }
-        guard out.count == member.size, Self.crc32(out) == member.crc else { throw ZipError.corrupt }
+        guard out.count == member.size, Self.crc32(out) == member.crc else { out.resetBytes(in: 0..<out.count); throw ZipError.corrupt }
         return out
     }
 

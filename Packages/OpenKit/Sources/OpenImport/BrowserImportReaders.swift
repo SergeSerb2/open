@@ -68,7 +68,7 @@ public struct BrowserImportReader: Sendable {
             // `passwords()` imports the archive's member and the CSV together, so the count is their sum.
             // A readable CSV must not clear the archive's unreadable mark: the import would still fail on it.
             if let csv = safari.passwordsCSV {
-                var data = (try? readBoundedFile(csv, maxBytes: PasswordsCSVReader.maxFileBytes)) ?? Data()
+                var data = (try? PasswordsCSVReader.readFile(csv)) ?? Data()
                 defer { data.resetBytes(in: 0..<data.count) }
                 if !data.isEmpty, let read = try? PasswordsCSVReader.read(data) {
                     var logins = read.logins
@@ -128,10 +128,7 @@ public struct BrowserImportReader: Sendable {
                 logins += read.logins; skipped += read.report.sourceRows - read.report.kept
             }
             if let csv = safari.passwordsCSV {
-                var data: Data
-                do { data = try readBoundedFile(csv, maxBytes: PasswordsCSVReader.maxFileBytes) }
-                catch BoundedFileReadError.tooLarge { throw SafariImportError.notPasswordsFile }
-                catch { throw SafariImportError.unreadable("passwords") }
+                var data = try PasswordsCSVReader.readFile(csv)
                 defer { data.resetBytes(in: 0..<data.count) }
                 let read = try PasswordsCSVReader.read(data)
                 logins += read.logins; skipped += read.report.sourceRows - read.report.kept

@@ -500,7 +500,7 @@ def live_folder_import_checks(app, results, wait_until, tmp, harness):
     app.call('first-run', action='settings-import', directory=str(arc))
     app.call('first-run', action='settings-next')
     app.call('first-run', action='settings-run')
-    report = wait_until(lambda: (lambda s: s if s.get('settingsStep') == 'report' else None)(state()), timeout=60, step=.05) or state()
+    report = wait_until(lambda: (lambda s: s if s.get('settingsStep') == 'Report' else None)(state()), timeout=60, step=.05) or state()
     try: app.call('first-run', action='settings-done')
     except RuntimeError: pass
     beta = next((s for s in app.call('spaces') if s['title'] == 'Beta'), None)
