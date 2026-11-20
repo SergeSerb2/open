@@ -65,10 +65,11 @@ extension AppImportRunner {
       let openIDs = Set(read.tabs.map { BrowserBookmarksImport.openTabID(sourceKey: key, url: $0.url) })
       let openBefore = Set(openIDs.filter { self.app.model.node(id: $0) != nil })
       do {
+        let before = mergeFingerprint()
         let merged = try undo.captureModel(app.model) {
           try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: plan.bookmarks || plan.openTabs, favorites: false,
             folders: plan.bookmarks, searchSettings: plan.searchSettings && read.search != nil, importedAt: Date(), saving: {
-              try saveBrowserImport()
+              try saveBrowserImport(since: before)
             })
         }
         let openAdded = openIDs.subtracting(openBefore).filter { self.app.model.node(id: $0) != nil }.count
@@ -178,11 +179,29 @@ extension AppImportRunner {
     }
   }
 
-  /// The merge's durable commit. During first run the runner owns the landing checkpoint
-  /// (`run(plan:firstRun:)`). An import that lands nothing must not write the snapshot: the
-  /// next launch would then skip setup. The Arc path keeps the same rule.
-  func saveBrowserImport() throws {
-    guard !app.isFirstRun || app.firstRunSaved else { return }
+  /// What a browser import's sidebar merge can change: sidebar rows and Profile settings.
+  struct MergeFingerprint: Equatable { var rows: [Int]; var settings: [ProfileSettings] }
+  func mergeFingerprint() -> MergeFingerprint {
+    func count(_ nodes: [SidebarNode]) -> Int {
+      nodes.reduce(0) { total, node in
+        switch node {
+        case .tab: total + 1
+        case .folder(let folder): total + 1 + count(folder.children)
+        case .split(let split): total + 1 + split.panes.count
+        }
+      }
+    }
+    let model = app.model!
+    return MergeFingerprint(rows: model.spaces.flatMap { [count($0.pinned), count($0.today)] } + model.profiles.map { count($0.favorites) },
+                            settings: model.profiles.map(\.settings))
+  }
+
+  /// The merge's durable, transactional commit. During first run a merge that changed nothing
+  /// does not write the snapshot: browser.json marks setup as done, so a quit before Get Started
+  /// would skip setup at the next launch. The Arc path keeps the same rule. A merge that landed
+  /// data still commits before history starts.
+  func saveBrowserImport(since before: MergeFingerprint) throws {
+    if app.isFirstRun && !app.firstRunSaved && mergeFingerprint() == before { return }
     try app.snapshotStore.saveNow(model: app.model)
   }
 
