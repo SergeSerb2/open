@@ -33,6 +33,7 @@ public final class SleepStore {
     public var onError: ((String) -> Void)?
     private let queue = DispatchQueue(label: "open.sleep", qos: .utility)
     nonisolated(unsafe) private var db: SQLiteDB?
+    nonisolated(unsafe) private var retired = false
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
@@ -42,13 +43,14 @@ public final class SleepStore {
         queue.async { withExtendedLifetime(connection) {} }
     }
 
-    private enum Failure: Error { case sqlite, tooLarge }
+    private enum Failure: Error { case sqlite, tooLarge, retired }
 
     nonisolated private func report(_ message: String) {
         DispatchQueue.main.async { [weak self] in self?.onError?(message) }
     }
 
     nonisolated private func openOnQueue() throws -> SQLiteDB {
+        guard !retired else { throw Failure.retired }
         if let db { return db }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let opened = try SQLiteDB(path: fileURL.path)
@@ -190,4 +192,8 @@ public final class SleepStore {
 
     /// Drains queued disk work. Error callbacks run on the main actor afterward.
     public func flushQueue() { queue.sync {} }
+
+    /// Profile deletion: finish queued work, close the database and never open it again, so
+    /// the Profile folder can be removed without a file coming back.
+    public func retire() { queue.sync { retired = true; db = nil } }
 }

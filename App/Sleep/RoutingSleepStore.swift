@@ -8,10 +8,12 @@ import OpenStore
 /// of the tab's owning Profile; a tab with no known Profile uses the default Profile's store.
 /// The App's data-root lock (taken in `prepareData`) covers every store for the whole run.
 @MainActor
-final class RoutingSleepStore: SleepHistoryStoring {
+final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   private let model: BrowserModel
   private let directories: ProfileDirectories
   private var stores: [String: SleepStore] = [:]
+  /// Folders of deleted Profiles (lowercased): never opened, written or read again this run.
+  private var retired: Set<String> = []
   /// The Profile folder each tab last saved into, so a purge after the tab left the model
   /// still deletes from the right store.
   private var savedIn: [ItemID: String] = [:]
@@ -40,7 +42,8 @@ final class RoutingSleepStore: SleepHistoryStoring {
     return savedIn[tabID] ?? model.defaultProfile?.dataDirectoryName ?? "Default"
   }
 
-  private func store(named name: String) -> SleepStore {
+  private func store(named name: String) -> SleepStore? {
+    guard !retired.contains(name.lowercased()) else { return nil }
     if let store = stores[name] { return store }
     let store = SleepStore(fileURL: directories.sleepFileURL(dataDirectoryName: name))
     store.onError = { [weak self] in self?.onError?($0) }
@@ -53,11 +56,14 @@ final class RoutingSleepStore: SleepHistoryStoring {
 
   func save(tabID: ItemID, envelope e: SleepHistoryEnvelope) async throws {
     let name = directoryName(for: tabID)
-    try await store(named: name).save(SleepHistoryRecord(
+    guard let store = store(named: name) else { throw CancellationError() }
+    try await store.save(SleepHistoryRecord(
       tabID: tabID, container: e.container, currentIndex: e.currentIndex, entryCount: e.entryCount,
       currentURL: e.currentURL, currentTitle: e.currentTitle, faviconURL: e.faviconURL,
       hasPageState: e.hasPageState, containerVersion: e.containerVersion, chromiumTag: e.chromiumTag,
       capturedAt: e.capturedAt))
+    // The Profile may have been deleted while the save ran.
+    guard !retired.contains(name.lowercased()) else { return }
     savedIn[tabID] = name
     knownStored.insert(tabID)
   }
@@ -67,7 +73,7 @@ final class RoutingSleepStore: SleepHistoryStoring {
   }
 
   func sleepHistory(tabID: ItemID) async -> SleepHistoryEnvelope? {
-    guard let r = await store(named: directoryName(for: tabID)).load(tabID: tabID) else { return nil }
+    guard let r = await store(named: directoryName(for: tabID))?.load(tabID: tabID) else { return nil }
     return SleepHistoryEnvelope(
       container: r.container, currentIndex: r.currentIndex, entryCount: r.entryCount, currentURL: r.currentURL,
       currentTitle: r.currentTitle, faviconURL: r.faviconURL, hasPageState: r.hasPageState,
@@ -75,7 +81,7 @@ final class RoutingSleepStore: SleepHistoryStoring {
   }
 
   func deleteSleepHistory(tabID: ItemID) {
-    store(named: directoryName(for: tabID)).delete(tabID: tabID)
+    store(named: directoryName(for: tabID))?.delete(tabID: tabID)
     savedIn[tabID] = nil
     knownStored.remove(tabID)
   }
@@ -83,7 +89,23 @@ final class RoutingSleepStore: SleepHistoryStoring {
   /// Every stored row of every Profile's store (automation evidence).
   func storedTabIDs() async -> [ItemID] {
     var ids: [ItemID] = []
-    for profile in model.profiles { ids += await store(named: profile.dataDirectoryName).allTabIDs() }
+    for profile in model.profiles { ids += await store(named: profile.dataDirectoryName)?.allTabIDs() ?? [] }
     return ids
   }
+
+  /// ProfileDataOwner: close the deleted Profile's sleep database before its folder goes, and
+  /// never open, write or read it again (a late save, purge or lookup routed to it is dropped).
+  func retireProfile(_ profileID: ProfileID, directory: String) async {
+    retired.insert(directory.lowercased())
+    for (name, store) in stores where name.lowercased() == directory.lowercased() {
+      stores[name] = nil
+      store.retire()
+    }
+    for (id, name) in savedIn where name.lowercased() == directory.lowercased() {
+      savedIn[id] = nil; knownStored.remove(id)
+    }
+  }
+
+  /// Open sleep databases (automation evidence: a deleted Profile's store is closed).
+  var openDirectoryNames: [String] { stores.keys.sorted() }
 }
