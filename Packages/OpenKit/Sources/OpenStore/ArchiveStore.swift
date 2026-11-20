@@ -47,6 +47,9 @@ public final class ArchiveStore: ArchiveSink {
     private let queue = DispatchQueue(label: "open.archive", qos: .utility)
     @ObservationIgnored nonisolated(unsafe) private var db: SQLiteDB?
     @ObservationIgnored nonisolated(unsafe) private var retired = false
+    /// Main actor, after `delete(ids:)` or `deleteAll()` committed (the Library's Delete and
+    /// Clear), with the IDs of the deleted rows.
+    @ObservationIgnored public var onRowsDeleted: (@MainActor ([ItemID]) -> Void)?
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
@@ -201,6 +204,34 @@ public final class ArchiveStore: ArchiveSink {
                             let id = ItemID(rawValue: uuid)
                             if candidates.contains(id) { found.insert(id) }
                         }
+                    }
+                    continuation.resume(returning: found)
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
+    /// The candidates that are archived: a row of their own, or a tab inside an archived
+    /// folder (Restore brings folder children back with their IDs). Folder payloads are
+    /// matched by their UUID text, not decoded.
+    public func archivedIDs(in candidates: Set<ItemID>) async throws -> Set<ItemID> {
+        let own = try await existingIDs(in: candidates)
+        let rest = candidates.subtracting(own)
+        guard !rest.isEmpty else { return own }
+        let keys = rest.map { ($0, $0.rawValue.uuidString) }
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async { [self] in
+                do {
+                    try openOnQueue()
+                    guard let db, let statement = db.prepare(
+                        "SELECT 1 FROM archived_tabs WHERE kind = 'folder' AND instr(payload, ?) > 0 LIMIT 1") else { throw archiveFailure() }
+                    defer { sqlite3_finalize(statement) }
+                    var found = own
+                    for (id, key) in keys {
+                        db.bindText(statement, 1, key)
+                        let status = sqlite3_step(statement)
+                        sqlite3_reset(statement)
+                        if status == SQLITE_ROW { found.insert(id) } else if status != SQLITE_DONE { throw archiveFailure() }
                     }
                     continuation.resume(returning: found)
                 } catch { continuation.resume(throwing: error) }
@@ -378,20 +409,31 @@ public final class ArchiveStore: ArchiveSink {
                 } catch { continuation.resume(throwing: error) }
             }
         }
+        onRowsDeleted?(ids)
     }
     public func deleteAll() async throws {
         contentVersion &+= 1
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+        let deleted = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[ItemID], any Error>) in
             queue.async { [weak self] in
-                guard let self else { continuation.resume(); return }
+                guard let self else { continuation.resume(returning: []); return }
                 do {
                     try self.openOnQueue(); guard let db = self.db else { throw self.archiveFailure() }
                     guard db.exec("BEGIN IMMEDIATE") else { throw self.archiveFailure() }
-                    guard db.exec("DELETE FROM archived_tabs"), db.exec("COMMIT") else { db.exec("ROLLBACK"); throw self.archiveFailure() }
-                    continuation.resume()
+                    var committed = false; defer { if !committed { db.exec("ROLLBACK") } }
+                    // The IDs this transaction deletes, read inside it.
+                    guard let select = db.prepare("SELECT id FROM archived_tabs") else { throw self.archiveFailure() }
+                    var ids: [ItemID] = []
+                    while sqlite3_step(select) == SQLITE_ROW {
+                        if let key = db.columnText(select, 0), let uuid = UUID(uuidString: key) { ids.append(ItemID(rawValue: uuid)) }
+                    }
+                    sqlite3_finalize(select)
+                    guard db.exec("DELETE FROM archived_tabs"), db.exec("COMMIT") else { throw self.archiveFailure() }
+                    committed = true
+                    continuation.resume(returning: ids)
                 } catch { continuation.resume(throwing: error) }
             }
         }
+        onRowsDeleted?(deleted)
     }
 
     public func recent(limit: Int = 100) async -> [ArchivedTabRecord] {
