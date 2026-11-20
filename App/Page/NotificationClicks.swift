@@ -53,10 +53,12 @@ final class NotificationClickRouter {
     // Only windows of the main model hold its Spaces (a Blank Window has a model of its own).
     for factory in app.hostFactories.values where factory.model === app.model {
       guard let profile = factory.profile(for: context) else { continue }
-      for space in app.model.spaces where space.profileID == profile.id {
-        for tab in factory.flattened(space.pinned) + factory.flattened(space.today) where sameOrigin(tab.url, origin) {
-          if best == nil || tab.lastActiveAt > best!.1.lastActiveAt { best = (factory, tab) }
-        }
+      // Favorites belong to the Profile, not to a Space: a webmail or chat Favorite is the usual
+      // source of these notifications.
+      let spaces = app.model.spaces.filter { $0.profileID == profile.id }
+      let tabs = profile.favorites + spaces.flatMap { factory.flattened($0.pinned) + factory.flattened($0.today) }
+      for tab in tabs where sameOrigin(tab.url, origin) {
+        if best == nil || tab.lastActiveAt > best!.1.lastActiveAt { best = (factory, tab) }
       }
     }
     return best
