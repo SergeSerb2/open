@@ -25,7 +25,8 @@ extension AppImportRunner {
     // "Imported from Safari" folder next to a live-files import (lead 01:25, as in Arc).
     let key = plan.source.importKey + (plan.safariFiles.exportArchive != nil ? ":export" : "")
     let model: BrowserModel = app.model
-    guard let space = app.frontWindowController?.context.focusedSpace ?? model.spaces.first,
+    // Never an Incognito or Blank Window's private model (as in the Chromium path).
+    guard let space = app.frontMainModelWindowController?.context.focusedSpace ?? model.spaces.first,
           let target = model.profile(id: space.profileID) else {
       result.errorText = "Open has no Space to import into."; return result
     }

@@ -22,9 +22,10 @@ extension AppImportRunner {
       return await importOtherBrowser(source: source, profile: sourceProfile, plan: plan, undo: undo, wizard: wizard, progress: progress)
     }
     let key = plan.source.importKey
-    // Destination: the focused Space of the front window, else the first Space.
+    // Destination: the focused Space of the front main-model window, else the first Space.
+    // An Incognito or Blank Window keeps its Spaces in its own model; it is never the destination.
     let model: BrowserModel = self.app.model
-    let front = self.app.frontWindowController
+    let front = self.app.frontMainModelWindowController
     guard let space = front?.context.focusedSpace ?? model.spaces.first,
           let target = model.profile(id: space.profileID) else {
       result.errorText = "Open has no Space to import into."; return result
