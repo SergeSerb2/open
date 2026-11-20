@@ -332,9 +332,13 @@ def run(factory, results, tmp, env):
                         pages=[p for p in app.call("pages") if p["identifier"] in handles]
                         return dict(live=sum(p["live"] for p in pages),background=sum(p["hidden"] for p in pages),
                                     matching=sum(p["url"].startswith(origin+"/") for p in pages))
-                    counts=page_counts()
+                    # The peer window's Space switch hides its page asynchronously
+                    # (window occlusion reaches the renderer later): wait for it.
+                    expected={"live":10,"background":9,"matching":10}
+                    counts=wait_until(lambda: (lambda c: c if c == expected else None)(page_counts()),timeout=5,step=.05) or page_counts()
                     discarded=sum(app.call("engine-sleep",tab=h)["discarded"] for h in handles)
-                    assert counts == {"live":10,"background":9,"matching":10} and discarded == 0, counts
+                    shown=[p["identifier"] for p in app.call("pages") if p["identifier"] in handles and not p["hidden"]]
+                    assert counts == expected and discarded == 0, dict(counts=counts,shown=shown,foreground=handles[0],peer=handles[-1])
                     before=call()["refreshCount"]
                     tap("font.Avenir")
                     wait_until(lambda: call()["completedRefreshCount"] > before and all(probe(t)["font"].startswith("Avenir") for t in handles),timeout=5,step=.02)
@@ -458,6 +462,11 @@ def run(factory, results, tmp, env):
                 return dict(positive=accepted and atLimit and len(refused) == 5,negative=unchanged,acceptedCounts=[2,512],refusedCounts=[1,513],acceptedTextBytes=16_384,refusedTextBytes=16_385)
             row("B17_automation_limits",b17)
             def b18():
+                # Do not depend on B12's font step: give the open Boost Avenir here.
+                # Little Open takes key focus and closes the editor, so do it first.
+                if not call()["boost"].get("fontFamily","").startswith("Avenir"):
+                    before=call()["completedRefreshCount"];tap("font.Avenir")
+                    wait_until(lambda: call()["completedRefreshCount"] > before,timeout=5,step=.02)
                 panel=call()["window"]
                 previous={s["id"] for s in app.call("little-open-state")["sessions"]}
                 app.call("menu-perform",id="new-little-open-window")
@@ -470,6 +479,7 @@ def run(factory, results, tmp, env):
                 # B17's center drag leaves the saved font component intact.
                 def heading():
                     return app.call("little-open-eval",id=sid,js="getComputedStyle(document.querySelector('h1')).fontFamily")
+                wait_until(lambda: heading().startswith("Avenir"),timeout=5,step=.02)
                 initial=heading()
                 app.call("defaults",key="open.advanced.enableBoosts",value=False)
                 negative=bool(wait_until(lambda: not heading().startswith("Avenir"),timeout=5,step=.02))
@@ -484,6 +494,9 @@ def run(factory, results, tmp, env):
                 close()
                 # Use the broad match only; the earlier /docs Boost must not
                 # override the component whose change this row observes.
+                # B16 left the window in a newer Space. A selection is valid only
+                # inside its own Space, so show the measured tab's Space first.
+                app.call("space",space=app.call("tab-state",tab=tab)["space"])
                 app.call("select",tab=tab);app.call("navigate",tab=tab,url=origin+"/boost.html");app.call("wait",tab=tab)
                 sleeper=new_tab(app,origin+"/boost.html?discard-wake=1")
                 app.call("select",tab=tab);app.call("wait",tab=tab)
