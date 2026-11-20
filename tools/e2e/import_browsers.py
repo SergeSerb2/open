@@ -313,39 +313,45 @@ def run(factory, results, tmp, h):
         and 'imported-ex' in engines and any(e['id'] == 'imported-ex' and e['searchURLTemplate'] == 'https://search.example.com/find?q=%s&ie=UTF-8' for e in custom),
         outcome=outcome, engines=sorted(engines), custom=[e['id'] for e in custom])
 
-    # Bug sweep r1: an Incognito window in front is not the destination. Its Space lives in a private
-    # in-memory model; bookmarks land in the front Space of the main model and are saved.
+    # Bug sweep r1: an Incognito or Blank Window in front is not the destination. Their Spaces live in private
+    # models. The regular window shows "Work", a later Space of a second Profile, so the destination cannot be
+    # the first Space by accident. The snapshot is read as the import saved it (no forced save).
+    work_space = app.call('space-create', title='Work', profile='Work')
+    def saved_folders(title):
+        spaces = json.loads((Path(app.user_data)/'State/browser.json').read_text())['spaces']
+        return {s['id']: sum(1 for n in s.get('pinned', []) if 'folder' in n and n['folder']['_0']['title'] == title)
+                for s in spaces}
     def private_ids(): return {w['id'] for w in app.call('incognito-state')['windows'] if w['private']}
     before_private = private_ids()
-    _, before_private_nodes = sidebar(app)
-    chrome_folders = lambda nodes: len([n for n in nodes if n[0] == 'folder' and n[1][1:] == ['Imported from Chrome']])
+    chrome_before = saved_folders('Imported from Chrome')
     app.call('menu-perform', id='new-incognito-window')
     opened = h.wait_until(lambda: private_ids() - before_private, timeout=10, step=.05)
     if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
     _, private_report = run_import(history=False)
     private_outcome = private_report.get('settingsOutcome', {})
-    _, private_nodes = sidebar(app)
-    # The Default profile's folder (undone above) is back next to Profile 1's folder, in the saved main model.
-    folders_added = chrome_folders(private_nodes) - chrome_folders(before_private_nodes)
-    row('incognito_front_window_destination', bool(opened) and private_outcome.get('Bookmarks') == 4
-        and not private_report.get('settingsError') and folders_added == 1,
-        opened=bool(opened), outcome=private_outcome, error=private_report.get('settingsError'), foldersAdded=folders_added)
+    chrome_after = saved_folders('Imported from Chrome')
+    chrome_added = {k: v - chrome_before.get(k, 0) for k, v in chrome_after.items() if v != chrome_before.get(k, 0)}
+    row('incognito_front_window_destination', bool(opened)
+        and list(chrome_after)[0] != work_space and private_outcome.get('Bookmarks') == 4
+        and not private_report.get('settingsError') and chrome_added == {work_space: 1},
+        opened=bool(opened), outcome=private_outcome, error=private_report.get('settingsError'), added=chrome_added, work=work_space)
 
-    # The same rule for a Blank Window in front: its Space is not in the main model either.
+    # A Blank Window opened from the Work window (its stand-in Profile is Work), then put in front.
     app.call('menu-perform', id='blank-window')
     blank = h.wait_until(lambda: app.call('blank-window').get('isBlankWindow'), timeout=10, step=.05)
     if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
+    edge_before = saved_folders('Imported from Edge')
     open_sources(); app.call('first-run', action='settings-source', id='edge'); settle()
     app.call('first-run', action='settings-browser-select', history=False)
     app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
     assert h.wait_until(lambda: state().get('settingsStep') == 'Report' and not state().get('settingsBusy'), timeout=120, step=.05), state()
     blank_report = state(); app.call('first-run', action='settings-done')
     blank_outcome = blank_report.get('settingsOutcome', {})
-    _, blank_nodes = sidebar(app)
-    edge_folders = len([n for n in blank_nodes if n[0] == 'folder' and n[1][1:] == ['Imported from Edge']])
+    edge_after = saved_folders('Imported from Edge')
+    edge_added = {k: v - edge_before.get(k, 0) for k, v in edge_after.items() if v != edge_before.get(k, 0)}
     row('blank_front_window_destination', bool(blank) and blank_outcome.get('Bookmarks') == 1
-        and not blank_report.get('settingsError') and edge_folders == 1,
-        blank=bool(blank), outcome=blank_outcome, error=blank_report.get('settingsError'), folders=edge_folders)
+        and not blank_report.get('settingsError') and edge_added == {work_space: 1},
+        blank=bool(blank), outcome=blank_outcome, error=blank_report.get('settingsError'), added=edge_added, work=work_space)
 
     # I-2: one chosen profile only. The synthetic secrets fixture (generated key, no Keychain) runs through the
     # real engine sinks with the same restriction the Chromium import uses.
