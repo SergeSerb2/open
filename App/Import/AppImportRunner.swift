@@ -22,6 +22,10 @@ final class AppImportRunner: ProfileDataOwner {
   var secretsSinks: [ProfileID: AppSecretsImportSink] = [:]
   var secretsTask: Task<ArcSecretsImportReport, any Error>?
   var secretsTaskProfiles = Set<ProfileID>()
+  /// First run, browser import: the transactional sidebar commit already wrote this run's snapshot.
+  var firstRunMergeSaved = false
+  /// First run, browser import: landed data still needs the landing checkpoint (kept across a failed save).
+  var firstRunCheckpointPending = false
   private(set) var undoReceipt: AppImportUndo?
   var undoTask: Task<Void, Never>?
   var undoOperations = 0
@@ -128,18 +132,28 @@ final class AppImportRunner: ProfileDataOwner {
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if case .browser(let source, let profile) = plan.source {
+      firstRunMergeSaved = false
       let browser = await importBrowser(source: source, profile: profile, plan: plan, undo: undo, wizard: wizard,
                                         progress: { progress($0, $1, landed: $2) })
-      // An import that landed nothing keeps D3 intact, as on the Arc path: Continue/Start Fresh
-      // owns the first save of the default model.
-      if firstRun, ImportOutcome(counts: browser.counts).didImportAnything {
-        // I-5: the import merged into the first-run model. Land the browser behind onboarding, as Arc does.
-        app.showFirstRunBrowser()
-        do { try app.snapshotStore.saveNow(model: app.model) } catch { return result(FirstRunViewModel.importedSaveError) }
-      }
       counts = browser.counts; failures = browser.failures
       extensions = browser.extensions; extensionProfileCount = 1
       secretsReportLines = browser.secretsReportLines
+      if firstRun {
+        // An import that landed nothing keeps D3 intact, as on the Arc path: Continue/Start Fresh
+        // owns the first save of the default model. Data that landed without a sidebar commit
+        // (history only) needs the checkpoint; it stays pending across a failed save, because a
+        // retry then finds only duplicates.
+        if ImportOutcome(counts: browser.counts).didImportAnything && !firstRunMergeSaved { firstRunCheckpointPending = true }
+        if firstRunMergeSaved { firstRunCheckpointPending = false }
+        if firstRunMergeSaved || firstRunCheckpointPending {
+          // I-5: the import merged into the first-run model. Land the browser behind onboarding, as Arc does.
+          app.showFirstRunBrowser()
+        }
+        if firstRunCheckpointPending {
+          do { try app.snapshotStore.saveNow(model: app.model); firstRunCheckpointPending = false }
+          catch { return result(FirstRunViewModel.importedSaveError) }
+        }
+      }
       return result(browser.errorText)
     }
     var imported: ArcImportResult
@@ -513,9 +527,9 @@ final class AppImportRunner: ProfileDataOwner {
       secretsReportLines = secrets.secretsReportLines
     }
     if failures["History"] != nil {
-      // Say that Spaces and tabs are in only when this run added some (not for history alone or a re-import).
-      let added = counts[ImportOutcomeKeys.spaces, default: 0] + counts[ImportOutcomeKeys.tabs, default: 0]
-      let landed = added > 0 ? "Your Spaces and tabs are in. " : ""
+      // Name only what this run added (nothing for history alone or a re-import).
+      let spaces = counts[ImportOutcomeKeys.spaces, default: 0] > 0, tabs = counts[ImportOutcomeKeys.tabs, default: 0] > 0
+      let landed = spaces && tabs ? "Your Spaces and tabs are in. " : spaces ? "Your Spaces are in. " : tabs ? "Your tabs are in. " : ""
       return result(landed + "\(counts["History failed", default: 0].formatted()) history visits could not be read. You can import history later from Settings.")
     }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")

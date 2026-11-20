@@ -32,12 +32,8 @@ extension AppImportRunner {
       candidate.extensionID.utf8.allSatisfy({ (97...112).contains($0) }) else { return .failed("Invalid extension ID.") }
     if app.firstRunWindowController?.window === window,
       !app.hostFactories.values.contains(where: { !$0.isIncognito }) { app.showFirstRunBrowser() }
-    // Prefer the main model: a Blank Window's model holds only its own stand-in Profile.
-    // With no main-model window open, a Blank Window can still serve its own Profile.
-    let regular = app.hostFactories.values.filter { !$0.isIncognito }
-    guard let factory = regular.first(where: { $0.model === app.model && $0.context(for: candidate.profileID) != nil })
-      ?? regular.first(where: { $0.context(for: candidate.profileID) != nil }),
-      let context = factory.context(for: candidate.profileID) else { return .failed("The Profile is no longer available.") }
+    // The candidate Profile must still exist in the main model (an Undo can remove it).
+    guard let context = importContext(for: candidate.profileID) else { return .failed("The Profile is no longer available.") }
     let manager = context.extensions
     // Readiness has no deadline either: elapsed time is not an install error.
     while !manager.isReady && !app.terminationRequested && window.isVisible {

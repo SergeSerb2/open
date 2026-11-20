@@ -201,8 +201,10 @@ extension AppImportRunner {
   /// would skip setup at the next launch. The Arc path keeps the same rule. A merge that landed
   /// data still commits before history starts.
   func saveBrowserImport(since before: MergeFingerprint) throws {
-    if app.isFirstRun && !app.firstRunSaved && mergeFingerprint() == before { return }
+    let firstRun = app.isFirstRun && !app.firstRunSaved
+    if firstRun && mergeFingerprint() == before { return }
     try app.snapshotStore.saveNow(model: app.model)
+    if firstRun { firstRunMergeSaved = true }
   }
 
   private func finish(_ input: BrowserImportResult) -> BrowserImportResult {
