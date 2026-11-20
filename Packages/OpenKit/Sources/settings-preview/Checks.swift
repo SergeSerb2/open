@@ -497,6 +497,15 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(cli.terminationStatus == 0 && routeText.contains("Office"), "openkit route disagreed: \(routeText)")
                 vm.links.drafts[0].pattern = ""; vm.commitLinks(); disk = try env.diskModel()
                 try require(vm.links.drafts[0].pattern.isEmpty && disk.routingRules.first?.match == .hostEquals("example.com"), "invalid draft reached disk or disappeared")
+                // Saving trims the pattern, so a trailing space is no error; an inner space still is.
+                vm.links.drafts[0].pattern = "example.org "
+                try require(!vm.links.issues().contains(.patternHasSpaces(ruleID: vm.links.drafts[0].id)), "trailing space reported as an error")
+                vm.commitLinks(); disk = try env.diskModel()
+                try require(disk.routingRules.first?.match == .hostEquals("example.org"), "trimmed pattern not saved: \(String(describing: disk.routingRules.first?.match))")
+                vm.links.drafts[0].pattern = "exa mple.org"
+                try require(vm.links.issues().contains(.patternHasSpaces(ruleID: vm.links.drafts[0].id)), "inner space is no error")
+                vm.links.drafts[0].pattern = "example.com"; vm.commitLinks(); disk = try env.diskModel()
+                try require(disk.routingRules.first?.match == .hostEquals("example.com"), "pattern restore did not save")
                 vm.links.drafts[0].pattern = "example.com"; vm.links.spaces.removeAll { $0.id == vm.model.spaces[2].id }; vm.links.runTest()
                 try require(vm.links.testDecision?.resolved == .space(spaceID: vm.model.spaces[0].id, profileID: vm.model.profiles[0].id), "stale target did not fall through")
             case "links-destination-picker":
