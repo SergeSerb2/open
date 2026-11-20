@@ -192,7 +192,7 @@ extension AppImportRunner {
       }
     }
     let model = app.model!
-    return MergeFingerprint(rows: model.spaces.flatMap { [count($0.pinned), count($0.today)] } + model.profiles.map { count($0.favorites) },
+    return MergeFingerprint(rows: model.spaces.flatMap { [count($0.pinned), count($0.today)] } + model.profiles.map { $0.favorites.count },
                             settings: model.profiles.map(\.settings))
   }
 
