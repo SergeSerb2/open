@@ -10,8 +10,8 @@ import OpenAdBlock
 final class AppStores: ProfileDataOwner {
   unowned let app: AppDelegate
   private var histories: [ProfileID: HistoryStore] = [:]
-  private var currentProfile: ProfileID?
-  private var currentSuggest: SuggestEngine?
+  /// One engine per Profile, so moving focus between Profiles reuses each one (and its bar).
+  private var suggestEngines: [ProfileID: SuggestEngine] = [:]
   lazy var boosts = AppBoosts(app: app)
   private var adBlockStorage: AdBlockStore?
   private var attemptedAdBlock = false
@@ -82,7 +82,7 @@ final class AppStores: ProfileDataOwner {
     // Close the history database before its folder is removed. Queued visits
     // for this Profile then find no database instead of reopening the file.
     if let store = histories.removeValue(forKey: profileID) { await store.close() }
-    if currentProfile == profileID { currentSuggest?.cancel(); currentSuggest = nil; currentProfile = nil }
+    suggestEngines.removeValue(forKey: profileID)?.cancel()
     app.archiveSink.retire(directoryName: directory)
   }
 
@@ -95,13 +95,12 @@ final class AppStores: ProfileDataOwner {
     return store
   }
   func suggest(for profileID: ProfileID) -> SuggestEngine {
-    if currentProfile == profileID, let currentSuggest { return currentSuggest }
-    currentSuggest?.cancel()
+    if let engine = suggestEngines[profileID] { return engine }
     let engine = SuggestEngine(model: app.model, historyStore: { [weak self] in self?.history(for: $0) },
       actions: CommandRegistry.makeSuggestRegistry())
     engine.providers.append(SettingsSuggestionsProvider())
     engine.providers.append(EaselsProvider(catalog: app.easelSearch.catalog))
-    currentProfile = profileID; currentSuggest = engine
+    suggestEngines[profileID] = engine
     return engine
   }
   func prewarm(profileID: ProfileID) { suggest(for: profileID).prewarm() }

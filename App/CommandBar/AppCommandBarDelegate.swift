@@ -236,6 +236,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "resultsLayouts": bar.view.debugResultsLayoutCount, "rowUpdates": bar.view.debugRowUpdateCount, "snapshotSequence": bar.appliedSequence,
       "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
+      "engineID": String(describing: ObjectIdentifier(bar.engine)),
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",
