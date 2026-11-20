@@ -425,6 +425,24 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for i in range(12):
             opened('slot-cache-'+str(i)); retained.append(state()['retainedSlots'])
         row('slot_cache_bounded', max(retained) <= 9, retainedSlots=retained, hiddenLimit=8)
+        # Tab-order paths can name a split pane (Next Tab, the tab Cmd+W selects next). The split
+        # shows with that pane focused; before the fix the pane showed alone and the split vanished.
+        order_a = opened('order-a'); order_b = opened('order-b'); select(order_b)
+        x, y, w, height = state()['container']
+        assert app.call('split', op='drop', node=order_a, point=[x+w-12, y+height/2])['accepted']; order_split = settled(2)
+        def shown(): return [p['id'] for p in state()['panes'] if not p['hidden']]
+        def split_shown():
+            return h.wait_until(lambda: (lambda s: s if s['id'] == order_split['id'] and len([p for p in s['panes'] if not p['hidden']]) == 2 else None)(state()), timeout=5, step=.05)
+        above = opened('order-above')  # a new tab opens at the top of Today, right above the split
+        app.call('menu-perform', id='next-tab'); after_next = split_shown() or state()
+        row('next_tab_into_split_shows_split', after_next['id'] == order_split['id'] and after_next['selected'] == order_split['id']
+            and len(shown()) == 2, state={k: after_next[k] for k in ('id', 'selected', 'focused')}, shown=shown())
+        select(above); h.wait_until(lambda: len(shown()) == 1, timeout=5, step=.05)
+        app.call('close'); after_close = split_shown() or state()
+        row('close_above_split_selects_split', after_close['id'] == order_split['id'] and after_close['selected'] == order_split['id']
+            and len(shown()) == 2 and above not in [t['id'] for t in app.call('tabs')],
+            state={k: after_close[k] for k in ('id', 'selected', 'focused')}, shown=shown())
+        unsplit()
         # LEAD 11:50: Close This Pane keeps the closed page drawn while its box collapses,
         # so chrome.tabs reports onRemoved after the strip change. onRemoved must arrive
         # <= 400 ms after the command, and tabs.get must answer for the tab until then.

@@ -830,6 +830,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func select(nodeID: ItemID?, focus: Bool = true) {
     controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
+    var nodeID = nodeID
+    // A split pane is not a sidebar node: selecting it as a plain tab shows that pane alone and
+    // hides the split. Tab-order paths (Cmd+W's next tab, Next Tab, page activation) can name a
+    // pane; select its split with that pane focused, as selectTabForCommand does.
+    if let id = nodeID, case .splitPane(let splitID)? = model.parent(of: id) {
+      withoutUndo { model.focusSplitPane(splitID: splitID, tabID: id) }
+      nodeID = splitID
+    }
     if let nodeID {
       var history = selectionHistory[space.id, default: []]
       // The outgoing node counts too: a selection restored at launch or by a Space switch never
