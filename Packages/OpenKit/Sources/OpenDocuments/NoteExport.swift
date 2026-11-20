@@ -132,7 +132,9 @@ public enum NoteExport {
                 if let last = openLists.last, last.1 == level, last.0 == tag { out += "</li>\n<li>" + body }
                 else if let last = openLists.last, last.1 < level { openLists.append((tag, level)); out += "\n<\(tag)><li>" + body }
                 else {
-                    closeLists(downTo: level)
+                    // Close only the deeper lists: the list at this level continues
+                    // (an ordered list keeps counting after a nested list).
+                    closeLists(downTo: level + 1)
                     if let last = openLists.last, last.1 == level, last.0 == tag { out += "</li>\n<li>" + body }
                     else {
                         if let last = openLists.last, last.1 == level { out += "</li></\(last.0)>\n"; openLists.removeLast() }
