@@ -10000,20 +10000,20 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
         row = next((r for r in (typed or {}).get('rows', []) if r['action'] == 'new-tab'), None)
         press('escape'); time.sleep(.25)
         keys = [n['key'] for n in app.call('menu-state') if n['id'] == 'new-tab']
-        return {'row': row and {k: row[k] for k in ('title', 'subtitle')}, 'menuKey': keys[0] if len(keys) == 1 else keys}
+        return {'row': row and {k: row[k] for k in ('title', 'subtitle')}, 'menuKeys': sorted(set(keys))}
     try:
         bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': [{'key': 'o', 'modifiers': ['command', 'option', 'control']}]}}}))
         app.call('reload-keybindings'); time.sleep(.1)
         custom = new_tab_row()
-        results['action_keycaps_follow_override'] = {'ok': custom['menuKey'] == 'o' and bool(custom['row']) and custom['row']['subtitle'] == '\u2303\u2325\u2318O', **custom}
+        results['action_keycaps_follow_override'] = {'ok': custom['menuKeys'] == ['o'] and bool(custom['row']) and custom['row']['subtitle'] == '\u2303\u2325\u2318O', **custom}
         bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': []}}}))
         app.call('reload-keybindings'); time.sleep(.1)
         cleared = new_tab_row()
-        results['action_keycaps_cleared_override'] = {'ok': not cleared['menuKey'] and bool(cleared['row']) and cleared['row']['subtitle'] == '', **cleared}
+        results['action_keycaps_cleared_override'] = {'ok': cleared['menuKeys'] == [''] and bool(cleared['row']) and cleared['row']['subtitle'] == '', **cleared}
     finally:
         bindings.unlink(missing_ok=True); app.call('reload-keybindings'); time.sleep(.1)
     restored = new_tab_row()
-    results['action_keycaps_default_after_reset'] = {'ok': restored['menuKey'] == 't' and bool(restored['row']) and restored['row']['subtitle'] == '\u2318T', **restored}
+    results['action_keycaps_default_after_reset'] = {'ok': restored['menuKeys'] == ['t'] and bool(restored['row']) and restored['row']['subtitle'] == '\u2318T', **restored}
     app.call('select', tab=home)
 
 
