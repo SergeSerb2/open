@@ -9997,8 +9997,11 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
         'fieldTail': edited.get('text', '')[-6:], 'fieldLength': len(edited.get('text', '')), 'urlLength': len(long_url), 'loadedLength': len(href), 'loadedTail': href[-12:]}
     # An edit drops the hidden whole address, even one that ends on the same text: select-all + paste of
     # the visible prefix loads the pasted text, never the tail the user removed (review round 1, finding 1).
+    # Clear first, so the paste really writes the prefix (pasting over the same text proves nothing).
     app.eval(long_tab, 'window.cutMarker = 1; 1')
     bar('l', 'window')
+    press('delete')
+    cleared = wait_until(lambda: (lambda st: st if st.get('fieldText') == '' and st.get('final') else None)(state()), timeout=5, step=.05)
     app.call('pasteboard-write', text=long_url[:2048])
     press('v', modifiers=['cmd'], route='window')
     pasted = wait_until(lambda: (lambda st: st if st.get('fieldText') == long_url[:2048] and st.get('final') else None)(state()), timeout=5, step=.05)
@@ -10006,8 +10009,8 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
     reloaded = wait_until(lambda: app.eval(long_tab, 'window.cutMarker === undefined && document.readyState === "complete"'), timeout=10, step=.1)
     href = app.eval(long_tab, 'location.href') or ''
     results['cmd_l_long_url_pasted_prefix_loads_as_entered'] = {
-        'ok': bool(pasted) and bool(reloaded) and href != long_url and href.startswith(long_url[:2046]) and 'zz9' not in href,
-        'loadedLength': len(href), 'loadedTail': href[-12:]}
+        'ok': bool(cleared) and bool(pasted) and bool(reloaded) and href != long_url and href.startswith(long_url[:2046]) and 'zz9' not in href,
+        'cleared': bool(cleared), 'pasted': bool(pasted), 'loadedLength': len(href), 'loadedTail': href[-12:]}
     app.call('close', tab=long_tab)
     app.call('select', tab=home)
 
