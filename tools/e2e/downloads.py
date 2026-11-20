@@ -1149,7 +1149,7 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "profiles": profiles_flow, "names": names_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
+                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "names": names_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
