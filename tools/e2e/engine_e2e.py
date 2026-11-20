@@ -13981,7 +13981,11 @@ def page_translate_checks(factory, results, tmp):
         # holds the installed (inactive) runtime the script drives.
         app.call('navigate', tab=spa_tab, url=origin + '/fr.html?r2=8')
         app.call('wait', tab=spa_tab)
-        state_is('offered')
+        # Without the #7 fix the host is still sticky (X7 could not revert): the page translates by itself.
+        wait_until(lambda: st()['state'] in ('offered', 'translated') or None, timeout=15, step=.1)
+        if st()['state'] == 'translated':
+            app.call('translate', action='revert')
+            state_is('offered')
         app.call('translate', action='translate')
         state_is('translated')
         wait_until(lambda: (lambda v: v if v['send'] == 'Send' else None)(texts(spa_tab)), timeout=15, step=.2)
