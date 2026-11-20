@@ -2,6 +2,7 @@ import AppKit
 import OpenDocuments
 import OpenFeatures
 import OpenModel
+import OpenStore
 
 /// Note row actions (sidebar row menu): rename (row and Note title stay one value),
 /// export one Note, delete it permanently. Mirrors the Easel row (EaselRowActions).
@@ -84,6 +85,19 @@ extension EngineWebContentHostFactory {
 
 extension AppDelegate {
   /// Removes every row of a Note in every window (no Archive entry) and trashes its files.
+  /// The store refused a save because the Note's file would be over its read limit; the file
+  /// keeps the last text that fits. Each window that shows the Note says so (a longer toast: the
+  /// user has to shorten the Note to keep new changes).
+  func noteTooLargeToSave(_ noteID: UUID) {
+    let content = ToastContent(title: "This note is too large to save", subtitle: "Make it shorter to keep your changes.", lifetime: 10)
+    var shown = Set<ObjectIdentifier>()
+    for host in NoteContentHost.open(noteID: noteID) {
+      guard let controller = host.owner?.controller, shown.insert(ObjectIdentifier(controller)).inserted else { continue }
+      controller.toasts.show(content)
+    }
+    if shown.isEmpty { frontWindowController?.toasts.show(content) }
+  }
+
   func deleteNoteEverywhere(_ noteID: UUID) {
     for factory in hostFactories.values {
       for tab in factory.model.allTabsForNotes() where NoteLink.id(from: tab.url) == noteID {
@@ -96,5 +110,24 @@ extension AppDelegate {
       factory.controller?.refresh(); factory.scheduleSave()
     }
     notes.delete(noteID)
+    discardArchivedRows(of: noteID) { NoteLink.id(from: $0) }
+  }
+
+  /// A Note or Easel was deleted: Archive entries of its rows that left the sidebar earlier
+  /// ("Remove … from Sidebar", Close Tab: other row IDs than the rows delete removes) go too, so a
+  /// restore never brings back a row whose file is in the Trash (an empty Note or a recreated,
+  /// empty Easel). Every Profile's Archive is searched for the document ID. An archived folder
+  /// keeps such a row inside it (its payload is not searched); restoring that folder still shows
+  /// an empty document.
+  func discardArchivedRows(of documentID: UUID, documentIn: @escaping @MainActor (URL) -> UUID?) {
+    guard let sink = archiveSink else { return }
+    let stores = model.profiles.map { sink.store(for: $0.id) }
+    let key = documentID.uuidString.lowercased()
+    Task { @MainActor in
+      for store in stores {
+        let ids = await store.search(key, limit: 1_000).filter { $0.kind == .tab && documentIn($0.url) == documentID }.map(\.id)
+        if !ids.isEmpty { try? await store.delete(ids: ids) }
+      }
+    }
   }
 }

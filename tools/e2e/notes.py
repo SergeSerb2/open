@@ -15,6 +15,9 @@ def run(factory, results, tmp, h):
         results[name] = dict(ok=bool(ok), **evidence)
         print('notes %-36s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
 
+    if os.environ.get('OPEN_E2E_NOTES_SIZE_ONLY') == '1':
+        size_limit_rows(factory, row, h)
+        return
     server, origin = h._fixture_server('Notes')
     app = factory(urls=(origin + '/page-a',), fresh=True)
     try:
@@ -163,3 +166,53 @@ def run(factory, results, tmp, h):
     finally:
         app.quit()
         server.shutdown()
+    size_limit_rows(factory, row, h)
+
+
+def size_limit_rows(factory, row, h):
+    """Bug sweep r2 #5: a Note whose file would be over the store's 32 MiB read limit is not written.
+    The file keeps the last saved text, the window says so, and the Note opens again after a relaunch.
+    Before, the save wrote the large file and every later open refused it ("Can't load this note").
+
+    The body is '/' lines: JSON stores '/' as two bytes, so about 17 M characters make a file over
+    the limit, in two pastes under the socket's 16 MiB request limit.
+    """
+    limit = 32 << 20
+    app = factory(urls=(), fresh=True)
+    try:
+        app.call('note', action='create')
+        h.wait_until(lambda: (lambda v: v if v['isNote'] and v['shown'] else None)(app.call('note')), timeout=5, step=.05)
+        app.call('note', action='focus', field='title')
+        app.call('note', action='type', text='Big note')
+        app.call('note', action='focus', field='body')
+        app.call('note', action='type', text='Short body')
+        app.call('note', action='flush')
+        small = app.call('note')
+        file = small['file']
+        line = '/' * 99 + '\n'
+        chunk = line * 84000
+        started = time.time()
+        for _ in range(2):
+            app.call('note', action='paste', text=chunk, timeout=300)
+        paste_seconds = round(time.time() - started, 1)
+        app.call('note', action='flush', timeout=300)
+        toasts = [t['title'] for t in app.call('toasts')['toasts']]
+        big = app.call('note', timeout=300)
+        size = os.path.getsize(file) if os.path.exists(file) else 0
+        row('oversized_note_not_written', small['stored'] and small['stored']['text'] == 'Short body'
+            and size < limit and big['stored'] and big['stored']['text'] == 'Short body'
+            and 'limit' in big['storeError'] and any('too large' in t for t in toasts),
+            fileBytes=size, limit=limit, storeError=big['storeError'][:200], toasts=toasts,
+            bodyCharacters=len(big['body']), pasteSeconds=paste_seconds)
+        note_tab = big['tab']
+    finally:
+        app.quit()
+    app = factory(urls=())
+    try:
+        app.call('select', tab=note_tab)
+        back = h.wait_until(lambda: (lambda v: v if v['tab'] == note_tab and v['shown'] else None)(app.call('note')), timeout=10, step=.1)
+        back = back or app.call('note')
+        row('oversized_note_reopens_last_save', not back['unreadable'] and back['editable'] and back['title'] == 'Big note'
+            and back['body'] == 'Short body', unreadable=back['unreadable'], title=back['title'][:40], bodyCharacters=len(back['body']))
+    finally:
+        app.quit()

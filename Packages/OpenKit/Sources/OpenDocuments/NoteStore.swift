@@ -16,6 +16,11 @@ public final class NoteStore {
     public nonisolated static let maxFileBytes = 32 << 20
     public private(set) var writeCount = 0
     public private(set) var lastError: String?
+    /// Notes whose last save was refused because its file would be over `maxFileBytes`.
+    public private(set) var oversized: Set<UUID> = []
+    /// A save was refused for size (once per Note until a save of it succeeds again). The file
+    /// keeps the last text that fits; the App tells the user.
+    public var onTooLarge: ((UUID) -> Void)?
 
     public init(root: URL) {
         directory = root.appendingPathComponent("Notes", isDirectory: true)
@@ -71,12 +76,13 @@ public final class NoteStore {
     public func importIfAbsent(_ note: NoteDocument) -> Bool {
         guard !FileManager.default.fileExists(atPath: fileURL(for: note.id).path), cache[note.id] == nil else { return false }
         cache[note.id] = note; dirty.insert(note.id); flush()
+        if oversized.contains(note.id) { cache[note.id] = nil; oversized.remove(note.id); return false }
         return !dirty.contains(note.id)
     }
 
     /// Deletes a Note: its file and image folder move to the Trash (removed when no Trash exists).
     public func delete(_ id: UUID) {
-        cache[id] = nil; dirty.remove(id)
+        cache[id] = nil; dirty.remove(id); oversized.remove(id)
         for url in [fileURL(for: id), assetDirectory(for: id)] where FileManager.default.fileExists(atPath: url.path) {
             if (try? FileManager.default.trashItem(at: url, resultingItemURL: nil)) == nil { try? FileManager.default.removeItem(at: url) }
         }
@@ -128,8 +134,17 @@ public final class NoteStore {
         for id in ids {
             guard let note = cache[id] else { continue }
             do {
-                try Self.encoder.encode(note).write(to: fileURL(for: id), options: .atomic)
+                let data = try Self.encoder.encode(note)
+                // `load` refuses a file over the limit, so writing it would lose the whole Note at the
+                // next open. Keep the last file that fits; the editor still holds the text.
+                guard data.count <= Self.maxFileBytes else {
+                    lastError = "\(id): \(data.count) bytes is over the \(Self.maxFileBytes)-byte limit; the last save is kept"
+                    if oversized.insert(id).inserted { onTooLarge?(id) }
+                    continue
+                }
+                try data.write(to: fileURL(for: id), options: .atomic)
                 writeCount += 1
+                if oversized.remove(id) != nil { lastError = nil }
             } catch {
                 lastError = "\(id): \(error)"; dirty.insert(id)
             }

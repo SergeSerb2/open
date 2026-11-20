@@ -55,7 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let store = EaselStore(root: directories.root); easelStore = store; return store
   }
   /// Notes (`<data root>/Notes`). Nothing is read until a Note shows.
-  private(set) lazy var notes = NoteStore(root: directories.root)
+  private(set) lazy var notes: NoteStore = {
+    let store = NoteStore(root: directories.root)
+    store.onTooLarge = { [weak self] id in self?.noteTooLargeToSave(id) }
+    return store
+  }()
   /// The engine layout step's outcome (and the data root lock).
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]

@@ -250,7 +250,7 @@ extension AutomationController {
       "favicon": tab.live.faviconPNG != nil, "hostCount": factory.easelHosts.count,
       "engineContentCreationCount": factory.contentCreationCount,
       "fileExists": FileManager.default.fileExists(atPath: app.easels.fileURL(for: documentID).path),
-      "storeWrites": app.easels.writeCount, "livePages": factory.easelHosts[tab.id]?.livePages.count ?? 0,
+      "storeWrites": app.easels.writeCount, "storeError": app.easels.lastError ?? "", "livePages": factory.easelHosts[tab.id]?.livePages.count ?? 0,
       "livePagesMade": factory.easelHosts[tab.id]?.livePagesMade ?? 0, "pendingLinks": factory.easelHosts[tab.id]?.pendingLinks ?? 0,
       "imageFiles": (try? FileManager.default.contentsOfDirectory(atPath: app.easels.imagesDirectory(for: documentID).path))?.sorted() ?? []]
     if let host = factory.easelHosts[tab.id], !host.closed {
