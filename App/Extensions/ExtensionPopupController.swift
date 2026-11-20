@@ -73,9 +73,15 @@ final class ExtensionPopupController {
         strip?.forcedVisibility.insert(.popup); factory.controller?.sidebar.refreshExtensionsLayout()
         if let button = strip?.buttons.first(where: { $0.action.id == id && !$0.isHiddenOrHasHiddenAncestor }) {
           setAnchor(button, kind: .urlField)
-        } else if let view = factory.controller?.sidebar.siteControlsAnchor {
-          ui.context.forcedVisibility.insert(.popup); factory.controller?.sidebar.refreshExtensionsLayout()
-          setAnchor(view, kind: .siteControls)
+        } else {
+          // Not anchored in this strip: detach() only clears the anchor strip's
+          // flag, so remove this one now or the strip stays forced visible.
+          strip?.forcedVisibility.remove(.popup)
+          if let view = factory.controller?.sidebar.siteControlsAnchor {
+            ui.context.forcedVisibility.insert(.popup)
+            setAnchor(view, kind: .siteControls)
+          }
+          factory.controller?.sidebar.refreshExtensionsLayout()
         }
       }
     }

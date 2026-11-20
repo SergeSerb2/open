@@ -115,6 +115,13 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         case "\u{F703}": return "Right"
         case "\u{F700}": return "Up"
         case "\u{F701}": return "Down"
+        // AppKit function-key characters that have no printable glyph.
+        case "\u{F727}": return "Insert"
+        case "\u{F728}": return "Delete"
+        case "\u{F729}": return "Home"
+        case "\u{F72B}": return "End"
+        case "\u{F72C}": return "Page Up"
+        case "\u{F72D}": return "Page Down"
         default:
             if key.count == 1 { return key.uppercased() }
             // Capitalize tokens such as "space", "f12".

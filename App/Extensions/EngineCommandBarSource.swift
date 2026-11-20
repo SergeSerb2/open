@@ -18,7 +18,7 @@ final class EngineCommandBarSource: ExtensionCommandBarSource {
   var actions: [ExtensionCommandBarAction] {
     (factory.focusedBrowser?.extensionActions ?? []).filter(\.isEnabled).map {
       ExtensionCommandBarAction(id: $0.extensionIdentifier, name: $0.extensionName,
-        shortcutKeys: Self.keycaps($0.shortcutKeyEquivalent, flags: $0.shortcutModifierFlags))
+        shortcutKeys: ExtensionShortcutTable.keycaps($0.shortcutKeyEquivalent, flags: $0.shortcutModifierFlags))
     }
   }
   var keywords: [ExtensionKeyword] {
@@ -90,13 +90,6 @@ final class EngineCommandBarSource: ExtensionCommandBarSource {
     ExtensionOmniboxRow(content: value.content, title: value.descriptionText,
       boldRanges: value.matchRanges.map { let r = $0.rangeValue; return r.location..<(r.location + r.length) },
       deletable: value.isDeletable)
-  }
-  private static func keycaps(_ key: String?, flags: NSEvent.ModifierFlags) -> [String] {
-    guard let key, !key.isEmpty else { return [] }
-    // Cocoa encodes Shift in an uppercase letter as well as in modifierFlags.
-    let shifted = flags.contains(.shift) || (key != key.lowercased() && key == key.uppercased())
-    return (flags.contains(.control) ? ["⌃"] : []) + (flags.contains(.option) ? ["⌥"] : [])
-      + (shifted ? ["⇧"] : []) + (flags.contains(.command) ? ["⌘"] : []) + [key.uppercased()]
   }
 }
 
