@@ -331,6 +331,22 @@ def run(factory, results, tmp, h):
         and not private_report.get('settingsError') and folders_added == 1,
         opened=bool(opened), outcome=private_outcome, error=private_report.get('settingsError'), foldersAdded=folders_added)
 
+    # The same rule for a Blank Window in front: its Space is not in the main model either.
+    app.call('menu-perform', id='blank-window')
+    blank = h.wait_until(lambda: app.call('blank-window').get('isBlankWindow'), timeout=10, step=.05)
+    if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
+    open_sources(); app.call('first-run', action='settings-source', id='edge'); settle()
+    app.call('first-run', action='settings-browser-select', history=False)
+    app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+    assert h.wait_until(lambda: state().get('settingsStep') == 'Report' and not state().get('settingsBusy'), timeout=120, step=.05), state()
+    blank_report = state(); app.call('first-run', action='settings-done')
+    blank_outcome = blank_report.get('settingsOutcome', {})
+    _, blank_nodes = sidebar(app)
+    edge_folders = len([n for n in blank_nodes if n[0] == 'folder' and n[1][1:] == ['Imported from Edge']])
+    row('blank_front_window_destination', bool(blank) and blank_outcome.get('Bookmarks') == 1
+        and not blank_report.get('settingsError') and edge_folders == 1,
+        blank=bool(blank), outcome=blank_outcome, error=blank_report.get('settingsError'), folders=edge_folders)
+
     # I-2: one chosen profile only. The synthetic secrets fixture (generated key, no Keychain) runs through the
     # real engine sinks with the same restriction the Chromium import uses.
     app.quit()
@@ -486,6 +502,9 @@ def run(factory, results, tmp, h):
     windows_file.write_text(json.dumps(windows_data))
     app = factory(urls=(), fresh=True, first_run=True, extra_args=['--arc-dir=' + str(arc_work),
                   '--host-resolver-rules=MAP * ~NOTFOUND', '--intro-sound=silent'])
+    setup_keys = ('open.firstRun.completed', 'open.onboarding.name', 'open.import.lastArcDir')
+    setup_saved = {key: app.call('defaults', key=key, persistent=True) for key in setup_keys}
+    for key in setup_keys: app.call('defaults', key=key, value=None)
     def onboarding(): return app.call('onboarding')
     if onboarding().get('active'):
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
@@ -505,8 +524,9 @@ def run(factory, results, tmp, h):
     app.call('onboarding', action='choose-default', yes=False); app.call('onboarding', action='next')
     assert h.wait_until(lambda: onboarding().get('screen') == 'ready', timeout=20, step=.1), onboarding()
     app.call('onboarding', action='get-started')
-    assert h.wait_until(lambda: app.call('first-run').get('completed'), timeout=30, step=.1), app.call('first-run')
+    assert h.wait_until(lambda: app.call('welcome')['visible'], timeout=30, step=.1), 'Welcome did not appear after setup'
     saved = json.loads(Path(app.call('save')).read_text())
+    h._restore_defaults(app, setup_saved)
     def favorite_urls(profile): return sorted(f['tab']['_0'].get('url', '') for f in profile.get('favorites', []) if 'tab' in f)
     by_name = {p.get('name'): favorite_urls(p) for p in saved['profiles']}
     focused_profile = next((s['profileID'] for s in saved['spaces'] if s['id'] in {w['focusedSpaceID'] for w in saved['windows']}), None)
