@@ -83,10 +83,14 @@ def checks(factory, results, tmp, harness):
             private_window('menu'); quick_tab = open_page('/quick-session')
             app.eval(quick_tab, "document.cookie='closingSession=%d; path=/'; true" % attempt)
             quick_context = state()['context']
-            app.call('window-close')
+            # Reopen in the same main-thread turn as the close: the old
+            # session is certainly still closing (an RPC round trip is not).
+            before = {w['id'] for w in windows(True)}
             reopened, error = None, None
             try:
-                reopened = private_window('menu')
+                app.call('window-close', thenMenu='new-incognito-window')
+                reopened = wait(lambda: next((w for w in windows(True) if w['id'] not in before), None),
+                                timeout=5, step=.05)
             except Exception as failure:
                 error = str(failure)[-200:]
             time.sleep(2)

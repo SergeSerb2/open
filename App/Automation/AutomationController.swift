@@ -1637,6 +1637,13 @@
       case "window-close":
         let released = a["releaseBrowsers"] as? Bool == true ? w.releaseBrowsersForAutomation() : [:]
         w.window?.performClose(nil)
+        // A menu command in the same main-thread turn as the close (for example
+        // New Incognito Window while the last private window's session closes).
+        if let id = a["thenMenu"] as? String {
+          guard let (menu, index) = findMenuItem(id, in: NSApp.mainMenu) else { throw Failure(message: "unknown menu item") }
+          guard menuEnabled(menu.item(at: index)!) else { throw Failure(message: "disabled menu item") }
+          menu.performActionForItem(at: index)
+        }
         return released.isEmpty ? true : released as Any
       case "window-fullscreen":
         guard a["observeReadiness"] as? Bool == true else {

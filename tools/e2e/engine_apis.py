@@ -218,22 +218,6 @@ def run(factory, results, wait):
         # dialog UI: it returns false, which means the engine's own behavior.
         call('add', page='opener', browser='d', url=base + '/opener')
         assert loaded('opener')
-        # DevTools mouse input with JSON null / string modifiers (NSNull has no
-        # -unsignedIntegerValue: an Objective-C exception ended the App).
-        # DevTools itself may refuse the value ("Invalid parameters"); the
-        # App must answer, not die.
-        sent = []
-        for modifiers in (None, '4'):
-            for kind in ('mousePressed', 'mouseReleased'):
-                try:
-                    call('devtools', page='opener', method='Input.dispatchMouseEvent', params={
-                        'type': kind, 'x': 5, 'y': 5, 'button': 'left', 'clickCount': 1,
-                        'modifiers': modifiers})
-                    sent.append('ok')
-                except RuntimeError as error:
-                    sent.append(str(error)[-80:])
-        row('devtools_mouse_null_modifiers', len(sent) == 4 and call()['pages']['opener']['live'],
-            replies=sent)
         # A popup nobody adopts keeps Chromium's window and its own client:
         # its address and title must not replace the opener's.
         opener_before = call()['pages']['opener']
@@ -262,6 +246,22 @@ def run(factory, results, wait):
                       timeout=10)
         row('declined_dialog_engine_default', bool(declined) and handled == 'handled' and answer is True,
             declined=call()['dialogsDeclined'], handled=handled, answer=answer)
+        # Last: on old code this ended the App. DevTools mouse input with JSON null / string modifiers (NSNull has no
+        # -unsignedIntegerValue: an Objective-C exception ended the App).
+        # DevTools itself may refuse the value ("Invalid parameters"); the
+        # App must answer, not die.
+        sent = []
+        for modifiers in (None, '4'):
+            for kind in ('mousePressed', 'mouseReleased'):
+                try:
+                    call('devtools', page='opener', method='Input.dispatchMouseEvent', params={
+                        'type': kind, 'x': 5, 'y': 5, 'button': 'left', 'clickCount': 1,
+                        'modifiers': modifiers})
+                    sent.append('ok')
+                except RuntimeError as error:
+                    sent.append(str(error)[-80:])
+        row('devtools_mouse_null_modifiers', len(sent) == 4 and call()['pages']['opener']['live'],
+            replies=sent)
         call('cleanup'); app.quit()
         # The unowned popup counts for quit now: it must close, not hold quit
         # until the three-second deadline.
