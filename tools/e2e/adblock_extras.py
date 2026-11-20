@@ -8,6 +8,9 @@ host open-adblock.test. No request reaches a public host. Rows (AX_*):
   set_constant    `+js(set-constant, …)` holds before the first page script runs
   nostif          `+js(nostif, adTimer)` stops only the matching timer
   nostif_regex    `+js(nostif, /ad\\d+Timer/)` keeps the regex backslash: only ad7Timer stops
+  quoted_arg      `+js(nostif, "log(\\"ad\\")")` decodes the escaped quotes: only the log("ad") timer stops
+  excluded_descendant  with the PSL site site.dnsalias.com excluded, `dnsalias.com` extras skip it
+                  (scriptlet and :style()) and still run on other.dnsalias.com
   has_hides       plain `:has()` hiding comes from the engine (no extras script needed)
   other_domain    a rule for another domain does not run here (other_domain_own_page: it runs there)
   exception       `#@#+js(set-constant, openExceptedProbe, true)` stops that one call
@@ -32,6 +35,9 @@ open-adblock.test##+js(set-constant, openExceptedProbe, true)
 open-adblock.test#@#+js(set-constant, openExceptedProbe, true)
 open-adblock.test##+js(nostif, adTimer)
 open-adblock.test##+js(nostif, /ad\\d+Timer/)
+open-adblock.test##+js(nostif, "log(\\"ad\\")")
+dnsalias.com##+js(set-constant, openPslProbe, true)
+dnsalias.com##.psl-target:style(color: rgb(0, 0, 255))
 open-adblock.test##div.has-parent:has(> .has-child)
 other-domain.test##+js(set-constant, openOtherProbe, true)
 '''
@@ -47,8 +53,13 @@ setTimeout(function keepTimer() { window.__keptTimer = true; }, 20);
 window.__regexFired = false; window.__regexControl = false;
 setTimeout(function ad7Timer() { window.__regexFired = true; }, 20);
 setTimeout(function addTimer() { window.__regexControl = true; }, 20);
+window.log = function () {}; window.__quotedFired = false; window.__quotedControl = false;
+setTimeout(function quotedTimer() { log("ad"); window.__quotedFired = true; }, 20);
+setTimeout(function quotedControlTimer() { log('ad'); window.__quotedControl = true; }, 20);
+window.__pslAtParse = window.openPslProbe === true;
 </script>
 <div class="style-target">styled</div>
+<div class="psl-target">psl</div>
 <div class="evil-target">refused</div>
 <div class="has-parent" id="has-hit"><span class="has-child">x</span></div>
 <div class="has-parent" id="has-control"><span>y</span></div>
@@ -64,6 +75,8 @@ STATE = '''new Promise(r => setTimeout(() => { const cs = s => getComputedStyle(
   other: typeof window.openOtherProbe,
   timerFired: window.__timerFired, keptTimer: window.__keptTimer,
   regexFired: window.__regexFired, regexControl: window.__regexControl,
+  quotedFired: window.__quotedFired, quotedControl: window.__quotedControl,
+  psl: window.__pslAtParse, pslColor: cs('.psl-target').color,
   hasHit: cs('#has-hit').display, hasControl: cs('#has-control').display,
 }); }, 400))'''
 
@@ -102,7 +115,10 @@ def run(factory, results, wait):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     port = server.server_port
     origin = 'http://open-adblock.test'
-    args = ['--host-resolver-rules=MAP open-adblock.test 127.0.0.1:%d, MAP other-domain.test 127.0.0.1:%d' % (port, port),
+    # dnsalias.com is a public-suffix (PSL private) domain with no HSTS preload: site.dnsalias.com
+    # is its own site for exclusions. Every name maps to this loopback server.
+    args = ['--host-resolver-rules=MAP open-adblock.test 127.0.0.1:%d, MAP other-domain.test 127.0.0.1:%d, '
+            'MAP *.dnsalias.com 127.0.0.1:%d' % (port, port, port),
             '--no-proxy-server']
     keys = {'open.settings.lastPane': 'general', 'open.general.searchSuggestNoticeDismissed': True,
             'open.links.littleOpenNUXSeen': True}
@@ -125,8 +141,8 @@ def run(factory, results, wait):
             return e if have == present else None
         return wait(check, timeout=60)
 
-    def load(tab, path='/extras'):
-        app.call('navigate', tab=tab, url=origin + path)
+    def load(tab, path='/extras', base=None):
+        app.call('navigate', tab=tab, url=(base or origin) + path)
         app.call('wait', tab=tab)
         return app.call('eval', tab=tab, js=STATE)
 
@@ -162,6 +178,7 @@ def run(factory, results, wait):
         row('set_constant', s['probeAtParse'] is True and s['probeAfterWrite'] is True, state=s)
         row('nostif', s['timerFired'] is False and s['keptTimer'] is True, state=s)
         row('nostif_regex', s['regexFired'] is False and s['regexControl'] is True, state=s)
+        row('quoted_arg', s['quotedFired'] is False and s['quotedControl'] is True, state=s)
         row('has_hides', s['hasHit'] == 'none' and s['hasControl'] != 'none', state=s)
         row('other_domain', s['other'] == 'undefined', state=s)
         row('exception', s['excepted'] == 'undefined', state=s)
@@ -170,6 +187,20 @@ def run(factory, results, wait):
         app.call('wait', tab=tab)
         own = app.call('eval', tab=tab, js='typeof window.openOtherProbe === "boolean" && window.openOtherProbe')
         row('other_domain_own_page', own is True, own=own)
+
+        # A user-excluded site below the rule's domain (PSL: site.dnsalias.com under dnsalias.com).
+        blue = 'rgb(0, 0, 255)'
+        site_before = load(tab, base='http://site.dnsalias.com')
+        builds = extras(profile['id'])['builds']
+        app.call('settings-adblock', host='site.dnsalias.com', excluded=True)
+        rebuilt = wait(lambda: (lambda e: e if e['builds'] > builds and not e['pending'] else None)(extras(profile['id'])), timeout=60)
+        site_off = load(tab, base='http://site.dnsalias.com')
+        other_on = load(tab, base='http://other.dnsalias.com')
+        row('excluded_descendant', bool(rebuilt) and site_before['psl'] is True and site_before['pslColor'] == blue
+            and site_off['psl'] is False and site_off['pslColor'] != blue
+            and other_on['psl'] is True and other_on['pslColor'] == blue,
+            before=site_before, excluded=site_off, other=other_on)
+        app.call('settings-adblock', host='site.dnsalias.com', excluded=False)
 
         app.call('settings-adblock', host='open-adblock.test', excluded=True)
         gone = scripts_ready(profile['id'], False)

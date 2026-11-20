@@ -38,7 +38,8 @@ public enum AdBlockScriptlets {
 
     /// Main-world source: the host gate, the exceptions, the library and the calls.
     static func source(calls: [(domains: AdBlockExtraRules.Domains, scriptlet: AdBlockExtraRules.Scriptlet)],
-                       exceptions: [(domains: AdBlockExtraRules.Domains, key: String)]) -> String {
+                       exceptions: [(domains: AdBlockExtraRules.Domains, key: String)],
+                       excludedSites: [String] = []) -> String {
         var seen = Set<String>()
         let callJSON: [[String: Any]] = calls.compactMap { c in
             guard let name = canonical(c.scriptlet.name), seen.insert(c.scriptlet.key + "\u{2}\(c.domains)").inserted else { return nil }
@@ -61,6 +62,7 @@ public enum AdBlockScriptlets {
         const host = location.hostname.toLowerCase().replace(/\\.$/, '');
         const hit = d => host === d || host.endsWith('.' + d);
         const applies = r => r.i.some(hit) && !r.x.some(hit);
+        if (\(json(excludedSites)).some(hit)) return;
         let all = false; const off = new Set();
         for (const e of \(json(exJSON))) if (applies(e)) { if (e.k === '') all = true; else off.add(e.k); }
         if (all) return;
@@ -73,12 +75,14 @@ public enum AdBlockScriptlets {
     }
 
     /// Open-world source for the `:style()` rules of one domain.
-    static func styleSource(_ rules: [(domains: AdBlockExtraRules.Domains, rule: AdBlockExtraRules.StyleRule)]) -> String {
+    static func styleSource(_ rules: [(domains: AdBlockExtraRules.Domains, rule: AdBlockExtraRules.StyleRule)],
+                            excludedSites: [String] = []) -> String {
         let r: [[String: Any]] = rules.map { ["i": $0.domains.include, "x": $0.domains.exclude, "c": $0.rule.css] }
         return """
         (() => {
         const host = location.hostname.toLowerCase().replace(/\\.$/, '');
         const hit = d => host === d || host.endsWith('.' + d);
+        if (\(json(excludedSites)).some(hit)) return;
         const css = \(json(r)).filter(r => r.i.some(hit) && !r.x.some(hit)).map(r => r.c).join('\\n');
         if (!css) return;
         try {

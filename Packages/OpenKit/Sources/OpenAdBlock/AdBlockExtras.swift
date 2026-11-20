@@ -112,25 +112,44 @@ public struct AdBlockExtraRules: Sendable, Equatable {
         return include.isEmpty ? nil : Domains(include: include, exclude: exclude)
     }
 
-    /// `name, arg1, 'arg, 2'` → name and arguments (commas escape with `\,`; one level of
-    /// matching quotes is removed). Every other backslash is kept: `/ad\d+/` stays a regex.
+    /// `name, arg1, 'arg, 2'` → name and arguments. An argument that starts with `'`, `"` or a
+    /// backtick and closes before the next comma is quoted: commas inside it are text, and an
+    /// escaped quote of that kind (`\"` in `"…"`) becomes the quote. Outside quotes only `\,`
+    /// is an escape. Every other backslash is kept, so `/ad\d+/` stays a regex.
     static func scriptlet(_ body: String) -> Scriptlet? {
-        var parts: [String] = [], current = "", escaped = false
-        for ch in body {
-            if escaped { if ch != "," { current.append("\\") }; current.append(ch); escaped = false; continue }
-            if ch == "\\" { escaped = true; continue }
-            if ch == "," { parts.append(current); current = ""; continue }
-            current.append(ch)
+        let chars = Array(body)
+        var parts: [String] = [], i = 0
+        func isSpace(_ c: Character) -> Bool { c == " " || c == "\t" }
+        while true {
+            while i < chars.count, isSpace(chars[i]) { i += 1 }
+            var value: String?
+            if i < chars.count, "'\"`".contains(chars[i]) {
+                let quote = chars[i]
+                var j = i + 1, text = "", closed = false
+                while j < chars.count {
+                    if chars[j] == "\\", j + 1 < chars.count, chars[j + 1] == quote { text.append(quote); j += 2; continue }
+                    if chars[j] == quote { closed = true; j += 1; break }
+                    text.append(chars[j]); j += 1
+                }
+                var k = j
+                while k < chars.count, isSpace(chars[k]) { k += 1 }
+                if closed, k == chars.count || chars[k] == "," { value = text; i = k }
+            }
+            if value == nil {
+                var text = ""
+                while i < chars.count, chars[i] != "," {
+                    if chars[i] == "\\", i + 1 < chars.count, chars[i + 1] == "," { text.append(","); i += 2; continue }
+                    text.append(chars[i]); i += 1
+                }
+                while let last = text.last, isSpace(last) { text.removeLast() }
+                value = text
+            }
+            parts.append(value ?? "")
+            guard i < chars.count, chars[i] == "," else { break }
+            i += 1
         }
-        if escaped { current.append("\\") }
-        parts.append(current)
-        let cleaned = parts.map { p -> String in
-            let t = p.trimmingCharacters(in: .whitespaces)
-            if t.count >= 2, let f = t.first, f == t.last, f == "'" || f == "\"" { return String(t.dropFirst().dropLast()) }
-            return t
-        }
-        guard let name = cleaned.first, !name.isEmpty, cleaned.count <= 17, cleaned.allSatisfy({ $0.utf8.count <= 1_024 }) else { return nil }
-        return Scriptlet(name: name, args: Array(cleaned.dropFirst()))
+        guard let name = parts.first, !name.isEmpty, parts.count <= 17, parts.allSatisfy({ $0.utf8.count <= 1_024 }) else { return nil }
+        return Scriptlet(name: name, args: Array(parts.dropFirst()))
     }
 
     /// A selector that cannot leave its rule: no braces, `<`, `@`, comments, newlines, unbalanced
@@ -197,14 +216,18 @@ public struct AdBlockExtraRules: Sendable, Equatable {
         for domain in Set(calls.keys).union(sheets.keys).sorted() where !excluded(domain) {
             guard out.count < 5_000, bytes < 8 << 20 else { break }
             var plan = Plan(domain: domain, patterns: ["*://*.\(domain)/*"])
+            // An excluded site can sit below the rule's domain (`user.github.io` under `github.io`):
+            // the page then checks its own host against those sites, and no plain stylesheet is used.
+            let off = excludedSites.filter { $0.hasSuffix("." + domain) }.sorted()
             if let c = calls[domain] {
                 let ex = exceptions.filter { $0.domains.include.contains { related($0, domain) } }
-                plan.scriptletSource = AdBlockScriptlets.source(calls: c, exceptions: ex)
+                plan.scriptletSource = AdBlockScriptlets.source(calls: c, exceptions: ex, excludedSites: off)
             }
             if let sheet = sheets[domain] {
-                let plain = sheet.filter { $0.domains.exclude.isEmpty }, gated = sheet.filter { !$0.domains.exclude.isEmpty }
+                let plain = sheet.filter { $0.domains.exclude.isEmpty && off.isEmpty }
+                let gated = sheet.filter { !$0.domains.exclude.isEmpty || !off.isEmpty }
                 if !plain.isEmpty { plan.styleSheet = plain.map { $0.rule.css }.joined(separator: "\n") }
-                if !gated.isEmpty { plan.styleSource = AdBlockScriptlets.styleSource(gated) }
+                if !gated.isEmpty { plan.styleSource = AdBlockScriptlets.styleSource(gated, excludedSites: off) }
             }
             bytes += (plan.scriptletSource?.utf8.count ?? 0) + (plan.styleSource?.utf8.count ?? 0) + (plan.styleSheet?.utf8.count ?? 0)
             out.append(plan)
