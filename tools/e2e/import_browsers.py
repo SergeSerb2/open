@@ -313,6 +313,24 @@ def run(factory, results, tmp, h):
         and 'imported-ex' in engines and any(e['id'] == 'imported-ex' and e['searchURLTemplate'] == 'https://search.example.com/find?q=%s&ie=UTF-8' for e in custom),
         outcome=outcome, engines=sorted(engines), custom=[e['id'] for e in custom])
 
+    # Bug sweep r1: an Incognito window in front is not the destination. Its Space lives in a private
+    # in-memory model; bookmarks land in the front Space of the main model and are saved.
+    def private_ids(): return {w['id'] for w in app.call('incognito-state')['windows'] if w['private']}
+    before_private = private_ids()
+    _, before_private_nodes = sidebar(app)
+    chrome_folders = lambda nodes: len([n for n in nodes if n[0] == 'folder' and n[1][1:] == ['Imported from Chrome']])
+    app.call('menu-perform', id='new-incognito-window')
+    opened = h.wait_until(lambda: private_ids() - before_private, timeout=10, step=.05)
+    if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
+    _, private_report = run_import(history=False)
+    private_outcome = private_report.get('settingsOutcome', {})
+    _, private_nodes = sidebar(app)
+    # The Default profile's folder (undone above) is back next to Profile 1's folder, in the saved main model.
+    folders_added = chrome_folders(private_nodes) - chrome_folders(before_private_nodes)
+    row('incognito_front_window_destination', bool(opened) and private_outcome.get('Bookmarks') == 4
+        and not private_report.get('settingsError') and folders_added == 1,
+        opened=bool(opened), outcome=private_outcome, error=private_report.get('settingsError'), foldersAdded=folders_added)
+
     # I-2: one chosen profile only. The synthetic secrets fixture (generated key, no Keychain) runs through the
     # real engine sinks with the same restriction the Chromium import uses.
     app.quit()
@@ -451,3 +469,48 @@ def run(factory, results, tmp, h):
         and all(not v['profile'] and not v['engine'] for v in after.values())
         and (user_data/'Profiles'/'Default').is_dir() and state().get('importOrphans') == [] and not (set(created) & dirs()),
         created=created, undone=undone, redone=redone, undoneAgain=undone_again, after=after, journal=state().get('importOrphans'))
+
+    # Bug sweep r1: onboarding Favorites go to the Profile of the Space the first window shows. The Arc source has
+    # no Favorites and its front window shows Beta, a Space of the named "Example Work" Profile.
+    app.quit()
+    arc_work = Path(tmp)/'import-browsers'/'ArcWorkFront'
+    if arc_work.exists(): shutil.rmtree(arc_work)
+    work_ids = _runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['fixture'](arc_work, h)
+    sidebar_file = arc_work/'StorableSidebar.json'
+    graph_data = json.loads(sidebar_file.read_text())
+    graph_data['sidebar']['containers'][1]['topAppsContainerIDs'] = []
+    sidebar_file.write_text(json.dumps(graph_data))
+    windows_file = arc_work/'StorableWindows.json'
+    windows_data = json.loads(windows_file.read_text())
+    for window in windows_data['windows']: window['focusedSpaceID'] = work_ids['beta']
+    windows_file.write_text(json.dumps(windows_data))
+    app = factory(urls=(), fresh=True, first_run=True, extra_args=['--arc-dir=' + str(arc_work),
+                  '--host-resolver-rules=MAP * ~NOTFOUND', '--intro-sound=silent'])
+    def onboarding(): return app.call('onboarding')
+    if onboarding().get('active'):
+        app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+    assert h.wait_until(lambda: onboarding().get('screen') == 'name', timeout=20, step=.1), onboarding()
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: onboarding().get('screen') == 'import' and app.call('first-run').get('step') == 'importChoices',
+                        timeout=30, step=.1), onboarding()
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: app.call('first-run').get('step') in ('report', 'failed'), timeout=120, step=.1), app.call('first-run')
+    imported_favorites = app.call('first-run').get('outcome', {}).get('Favorites')
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: onboarding().get('screen') == 'favorites', timeout=20, step=.1), onboarding()
+    app.call('onboarding', action='toggle-favorite', index=6)  # GitHub
+    for verb, screen in (('next', 'theme'), ('skip', 'blocker'), ('skip', 'defaultBrowser')):
+        app.call('onboarding', action=verb)
+        assert h.wait_until(lambda: onboarding().get('screen') == screen, timeout=20, step=.1), onboarding()
+    app.call('onboarding', action='choose-default', yes=False); app.call('onboarding', action='next')
+    assert h.wait_until(lambda: onboarding().get('screen') == 'ready', timeout=20, step=.1), onboarding()
+    app.call('onboarding', action='get-started')
+    assert h.wait_until(lambda: app.call('first-run').get('completed'), timeout=30, step=.1), app.call('first-run')
+    saved = json.loads(Path(app.call('save')).read_text())
+    def favorite_urls(profile): return sorted(f['tab']['_0'].get('url', '') for f in profile.get('favorites', []) if 'tab' in f)
+    by_name = {p.get('name'): favorite_urls(p) for p in saved['profiles']}
+    focused_profile = next((s['profileID'] for s in saved['spaces'] if s['id'] in {w['focusedSpaceID'] for w in saved['windows']}), None)
+    work_profile = next((p for p in saved['profiles'] if p.get('name') == 'Example Work'), {})
+    row('onboarding_favorites_focused_profile', imported_favorites == 0 and focused_profile == work_profile.get('id')
+        and by_name.get('Example Work') == ['https://github.com/'] and 'https://github.com/' not in by_name.get('Example Personal', []),
+        importedFavorites=imported_favorites, favorites=by_name, focusedIsWork=focused_profile == work_profile.get('id'))
