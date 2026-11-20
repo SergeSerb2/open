@@ -66,7 +66,7 @@ public enum NoteExport {
                 if let link = style.link { piece = "[\(piece)](\(link))" }
                 body += piece
             }
-            let level = paragraph.block?.level ?? 0
+            let level = listLevel(paragraph.block?.level)
             switch paragraph.block?.type {
             case "h1": counters.removeAll(); lines.append("## " + body)       // the title is the document's #
             case "h2": counters.removeAll(); lines.append("### " + body)
@@ -97,6 +97,11 @@ public enum NoteExport {
 
     // MARK: HTML
 
+    /// The editor's list depth range (`NoteRichText.maxListLevel` in the App). A saved file is
+    /// decoded without clamping, so export clamps too: a level out of range must not trap.
+    static let maxListLevel = 5
+    static func listLevel(_ level: Int?) -> Int { min(max(level ?? 0, 0), maxListLevel) }
+
     /// One self-contained page. `image` returns the bytes and MIME type of an asset, or nil to drop it.
     public static func html(_ note: NoteDocument, image: (String) -> (Data, String)?) -> String {
         var out = "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>\(escapeHTML(note.title.isEmpty ? "Untitled" : note.title))</title>\n"
@@ -107,6 +112,9 @@ public enum NoteExport {
         var openLists: [(String, Int)] = []   // (tag, level)
         func closeLists(downTo level: Int) {
             while let last = openLists.last, last.1 >= level { out += "</li></\(last.0)>\n"; openLists.removeLast() }
+        }
+        func closeLists(deeperThan level: Int) {
+            while let last = openLists.last, last.1 > level { out += "</li></\(last.0)>\n"; openLists.removeLast() }
         }
         for paragraph in paragraphs(note) {
             var body = ""
@@ -128,13 +136,13 @@ public enum NoteExport {
             switch paragraph.block?.type {
             case "bulletList", "numberedList":
                 let tag = paragraph.block?.type == "bulletList" ? "ul" : "ol"
-                let level = paragraph.block?.level ?? 0
+                let level = listLevel(paragraph.block?.level)
                 if let last = openLists.last, last.1 == level, last.0 == tag { out += "</li>\n<li>" + body }
                 else if let last = openLists.last, last.1 < level { openLists.append((tag, level)); out += "\n<\(tag)><li>" + body }
                 else {
                     // Close only the deeper lists: the list at this level continues
                     // (an ordered list keeps counting after a nested list).
-                    closeLists(downTo: level + 1)
+                    closeLists(deeperThan: level)
                     if let last = openLists.last, last.1 == level, last.0 == tag { out += "</li>\n<li>" + body }
                     else {
                         if let last = openLists.last, last.1 == level { out += "</li></\(last.0)>\n"; openLists.removeLast() }
