@@ -74,8 +74,10 @@ extension EngineWebContentHostFactory {
     #endif
     // Peek hosts retain their source Space even though they are not model tabs.
     let host = hosts.values.first { $0.content === page }
-    let source = host?.spaceID.flatMap { model.space(id: $0) }
-      ?? tabID(for: page).flatMap { space(for: $0) }
+    // A model tab's Space comes from the model now (a Favorite's spaceID is the Space focused when
+    // its host was made); only a Peek host, which is not a model tab, uses its recorded Space.
+    let source = tabID(for: page).flatMap { space(containing: $0) }
+      ?? host?.spaceID.flatMap { model.space(id: $0) }
       ?? host.flatMap { model.mostRecentlyFocusedSpace(profileID: $0.profileID) }
     guard let source else { return }
     // Focusing a Space can close a Peek. Leave the engine delegate callback

@@ -1600,7 +1600,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       record("open", popup, ["disposition": "popup", "url": request.url?.absoluteString ?? ""])
       return popup
     case .newWindow:
-      let sourceSpace = tabID(for: webContent).flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      // space(containing:) resolves a Favorite to the window's Space of its Profile; a Peek host
+      // (no model tab) keeps the Space it opened from.
+      let sourceSpace = tabID(for: webContent).flatMap { space(containing: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let controller = isIncognito ? app.makeIncognitoWindow(parent: incognitoSession?.parent) : app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
       if webContent.runtimeStyle == .chrome, let url = request.url {
         // The engine would make the page a tab of the opener window's hidden
@@ -1626,7 +1628,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         record("open", webContent, ["disposition": request.disposition.rawValue, "url": url.absoluteString, "fromPeek": true])
         return nil
       }
-      let source = opener.flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      // A Favorite is shown in this window's Space of its Profile. Its host's spaceID is the Space
+      // that was focused when the host was made, so after a Space switch it named the old Space.
+      let source = opener.flatMap { space(containing: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
                              unread: request.disposition == .newBackgroundTab)
