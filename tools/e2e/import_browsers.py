@@ -534,3 +534,27 @@ def run(factory, results, tmp, h):
     row('onboarding_favorites_focused_profile', imported_favorites == 0 and focused_profile == work_profile.get('id')
         and by_name.get('Example Work') == ['https://github.com/'] and 'https://github.com/' not in by_name.get('Example Personal', []),
         importedFavorites=imported_favorites, favorites=by_name, focusedIsWork=focused_profile == work_profile.get('id'))
+
+    # Bug sweep r1: a first-run import from another browser that lands nothing keeps setup unfinished on disk, as
+    # the Arc path does. No snapshot is written, so a quit before Get Started brings setup back at the next launch.
+    app.quit()
+    broken_library = Path(tmp)/'import-browsers'/'BrokenLibrary'
+    shutil.rmtree(broken_library, ignore_errors=True)
+    broken_profile = broken_library/'Application Support/Google/Chrome/Default'; broken_profile.mkdir(parents=True)
+    (broken_profile/'Bookmarks').write_text('{ not json')
+    app = factory(urls=(), fresh=True, first_run=True, extra_args=['--browser-import-library=' + str(broken_library),
+                  '--arc-dir=' + str(empty_arc), '--host-resolver-rules=MAP * ~NOTFOUND', '--intro-sound=silent'])
+    if onboarding().get('active'):
+        app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+    assert h.wait_until(lambda: onboarding().get('screen') == 'name', timeout=20, step=.1), onboarding()
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: onboarding().get('screen') == 'import' and app.call('first-run').get('step') == 'importChoices'
+                        and app.call('first-run').get('browserSource') == 'chrome', timeout=30, step=.1), app.call('first-run')
+    app.call('onboarding', action='next')
+    assert h.wait_until(lambda: app.call('first-run').get('step') in ('report', 'failed'), timeout=120, step=.1), app.call('first-run')
+    empty_run = app.call('first-run')
+    snapshot_written = (Path(app.user_data)/'State/browser.json').exists()
+    row('onboarding_empty_browser_import_keeps_setup', empty_run.get('failures', {}).get('Bookmarks') == 'Could not be read'
+        and not any(v for k, v in empty_run.get('outcome', {}).items() if k in ('Bookmarks', 'Open tabs', 'History', 'Search settings'))
+        and not snapshot_written,
+        step=empty_run.get('step'), failures=empty_run.get('failures'), outcome=empty_run.get('outcome'), snapshotWritten=snapshot_written)
