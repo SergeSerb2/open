@@ -31,7 +31,11 @@ public struct HTTPSuggestionFetcher: SuggestionFetcher {
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return [] }
+        // A server error (429, 503…) is a failed request, not an empty answer: throwing keeps it out of the
+        // cache and keeps the carry-over rows (the provider's `try?` path).
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
         return SuggestResponseParser.parse(data, format: engine.suggestFormat)
     }
 }
