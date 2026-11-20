@@ -616,30 +616,16 @@ public final class EaselCanvasView: NSView {
 
     /// Shows a newer copy of this Easel that another canvas of it saved (a second row of the same
     /// Easel). Not an edit: the host must not save what `onChange` reports meanwhile. This canvas's
-    /// undo steps were made on the older copy, so they go.
+    /// undo steps were made on the older copy, so they go. An open text box here ends without
+    /// commit: committing it would write its older copy over the newer save. Its typed text is lost
+    /// (known gap: concurrent text editing of one Easel in two canvases is not merged).
     public func showSaved(_ next: EaselDocument) {
         guard next != document else { return }
-        var incoming = next
-        // An open text box keeps its typed text (another canvas can save while this one has focus,
-        // for example when a link card's metadata arrives).
-        if let editor = textEditor {
-            let id = editor.objectID
-            if editor.undoBase != nil, let draft = document.object(id) {
-                // A new box: it now starts from the incoming document, so committing it keeps both edits.
-                incoming.objects.removeAll { $0.id == id }
-                editor.undoBase = incoming
-                incoming.objects.append(draft)
-            } else if case .text? = incoming.object(id)?.content {
-                // An existing box that is still there stays open.
-            } else {
-                endTextEditing(commit: false)  // the other canvas deleted the box
-            }
-        }
+        endTextEditing(commit: false)
         canvasUndoManager.removeAllActions()
-        document = incoming
-        if titleField.currentEditor() == nil { titleField.stringValue = incoming.title ?? "" }
+        document = next
+        if titleField.currentEditor() == nil { titleField.stringValue = next.title ?? "" }
         syncObjects()
-        textEditor?.layoutIn(canvas: self)
         updateSelectionChrome()
     }
 

@@ -34,11 +34,6 @@ def fixture_server(root):
             super().__init__(*a, directory=str(root), **kw)
         def log_message(self, *a):
             pass
-        def do_GET(self):
-            # `/slow.html` answers after 2 s, so a test can act while a link card waits for it.
-            if self.path.startswith('/slow'):
-                time.sleep(2)
-            super().do_GET()
     server = LoopbackHTTPServer(Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
@@ -295,8 +290,6 @@ def run(factory, results, tmp, api):
         (site / 'long.html').write_text(
             '<!doctype html><html><head><meta property="og:title" content="Long Fixture Page"></head><body>'
             + '<p>' + 'x' * (1 << 20) + '</p></body></html>')
-        (site / 'slow.html').write_text(
-            '<!doctype html><html><head><meta property="og:title" content="Slow Fixture"></head><body>slow</body></html>')
         server = fixture_server(site)
         origin = 'http://127.0.0.1:%d' % server.server_address[1]
         try:
@@ -559,39 +552,6 @@ def run(factory, results, tmp, api):
                     app.call('close', tab=t)
             record('E38e_twin_canvases_share_edits', seen == 1 and stored_count == 2 and twin_titles == ['Twin board'] * 2,
                    rows=t_rows, seenOnTwin=seen, stored=stored_count, hostCount=twin_hosts, titles=twin_titles)
-
-            # E38f: a text box open on one canvas stays open, with its text, when the other canvas of the
-            # Easel saves (here: a link card's metadata arrives); committing it keeps both edits.
-            f1 = easel(action='create')['tab']
-            f_url = easel(tab=f1)['url']
-            app.call('select', tab=f1)
-            app.call('menu-perform', id='duplicate-tab')
-            f_rows = api.wait_until(lambda: (lambda r: r if len(r) == 2 else None)(
-                [t['id'] for t in app.call('tabs') if t['url'] == f_url]), timeout=5, step=.1) or []
-            f2 = next((t for t in f_rows if t != f1), None)
-            kept, kinds, link_title, draft_text = None, [], None, None
-            if f2:
-                app.call('select', tab=f2); shown_easel(f2)
-                app.call('select', tab=f1); shown_easel(f1)
-                app.call('easel', action='pasteboard', url=origin + '/slow.html')
-                easel(action='edit', op='paste', tab=f1)
-                app.call('select', tab=f2); shown_easel(f2)
-                easel(action='tool', tool='text'); easel(action='click', at=[300, 600])
-                easel(action='type', text='draft')
-                api.wait_until(lambda: (lambda x: x if x['pendingLinks'] == 0 else None)(easel(tab=f1)), timeout=15, step=.2)
-                time.sleep(.3)
-                live = canvas(easel(tab=f2))
-                kept = live['editingText'] is not None and live['editorText'] == 'draft'
-                easel(action='click', at=[960, 150])
-                easel(action='flush')
-                done = objects(easel(tab=f1))
-                kinds = sorted(o['kind'] for o in done)
-                link_title = next((o.get('title') for o in done if o['kind'] == 'link'), None)
-                draft_text = next((o.get('text') for o in done if o['kind'] == 'text'), None)
-                for t in f_rows:
-                    app.call('close', tab=t)
-            record('E38f_twin_keeps_open_text_box', kept and kinds == ['link', 'text'] and link_title == 'Slow Fixture'
-                   and draft_text == 'draft', kept=kept, kinds=kinds, linkTitle=link_title, text=draft_text)
 
             # E38b: a selection of only Easels ends with Arc's plural "Remove Easels from Sidebar" (STR, easels-notes.md
             # §3.2); Copy Links stays (an Easel has an address). A web tab in the selection keeps "Archive Tabs".
