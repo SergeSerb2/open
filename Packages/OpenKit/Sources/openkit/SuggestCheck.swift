@@ -133,7 +133,7 @@ private func makeHistory(at root: URL) async -> HistoryStore {
 /// Minimal HTTP/1.1 server on 127.0.0.1 that answers OpenSearch JSON: `[q, [q+" one", q+" two", q+" three"]]`.
 /// A query that starts with "slow" waits 800 ms first. The first request for a query that starts with
 /// "flaky" gets HTTP 503 (a busy or rate-limited server); later requests for it get 200. Every query it
-/// receives is logged.
+/// receives is logged. A query that starts with "navtypes" gets a `client=chrome` reply with page rows.
 private final class LocalSuggestServer: Sendable {
     let port: UInt16
     private let listener: Int32
@@ -197,7 +197,12 @@ private final class LocalSuggestServer: Sendable {
             _ = busy.withUnsafeBytes { write(client, $0.baseAddress, busy.count) }
             return
         }
-        let body = (try? JSONSerialization.data(withJSONObject: [q, [q + " one", q + " two", q + " three"]])) ?? Data()
+        // "navtypes": a client=chrome reply whose page rows use a web, a file and a chrome URL.
+        let object: [Any] = q.hasPrefix("navtypes")
+            ? [q, ["https://nav.example/", "file:///etc/hosts", "chrome://settings/"], ["Web", "File", "Chrome"], [],
+               ["google:suggesttype": ["NAVIGATION", "NAVIGATION", "NAVIGATION"]]]
+            : [q, [q + " one", q + " two", q + " three"]]
+        let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
         let response = Data("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8) + body
         _ = response.withUnsafeBytes { write(client, $0.baseAddress, response.count) }
     }
@@ -563,6 +568,16 @@ private func remoteChecks(log: CheckLog, fx: Fixture) async {
               busyNext.last?.isFinal == true && server.requests.last == "flaky gamma o"
                 && busyNext.last?.suggestions.contains { $0.title == "flaky gamma one" } == true,
               "final=\(busyNext.last?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) ?? [])")
+
+    // Page rows from the network open web pages only: file: and chrome: rows are dropped.
+    let chromeEngine = SearchEngine(id: "local-chrome", name: "Local Chrome", searchURLTemplate: "https://search.invalid/?q=%s",
+                                    suggestURLTemplate: "http://127.0.0.1:\(server.port)/suggest?q=%s", suggestFormat: .googleChrome)
+    let navEngine = SuggestEngine(model: fx.model, historyStore: nil, fetcher: HTTPSuggestionFetcher(),
+                                  searchEngines: SearchEngines.all + [chromeEngine])
+    let nav = await snapshots(navEngine, "navtypes", fx.context(remote: true, engine: "local-chrome"))
+    let navURLs = nav.last?.suggestions.filter { $0.providers.contains("remote") && $0.kind == .navigate }.compactMap { $0.url?.absoluteString } ?? []
+    log.check("remote: page rows keep http(s) URLs only (file: and chrome: dropped)",
+              nav.last?.isFinal == true && navURLs == ["https://nav.example/"], "remote URLs=\(navURLs)")
 
     // Port: the test server binds port 0, so concurrent runs get distinct ephemeral ports.
     let secondServer = LocalSuggestServer()

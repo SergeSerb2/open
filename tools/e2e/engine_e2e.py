@@ -9579,6 +9579,7 @@ def commandbar_checks(factory, results, tmp, config):
         results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
         commandbar_footer_checks(app, results, tmp, bar, press, new['id'])
         commandbar_results_work_checks(app, results, bar, press, new['id'])
+        commandbar_sweep_checks(app, results, bar, press, type_query, state, origin, new['id'])
         app.call('focus', tab=new['id'])
         app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
         app.call('pasteboard-write', text='COPY NOT RUN')
@@ -9952,7 +9953,6 @@ def commandbar_checks(factory, results, tmp, config):
             and editing['range'] == [0, len(origin + '/pinned')] and bool(changed) and bool(moved) and not state().get('pinnedEdit'),
             'editing': {k: (editing or {}).get(k) for k in ('mode', 'text', 'range', 'pinnedEdit')}, 'pinnedURL': (changed or {}).get('pinnedURL')}
         commandbar_pb1_checks(app, results, bar, press, type_query, state, origin)
-        commandbar_sweep_checks(app, results, bar, press, type_query, state, origin)
         time.sleep(.25)
         app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
         app.call('settings-toggle', name='external'); app.call('save'); app.quit()
@@ -9971,7 +9971,7 @@ def commandbar_checks(factory, results, tmp, config):
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
-def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin):
+def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin, home):
     """Bug sweep round 1 (CMDBAR): flows that once went wrong in the real App."""
     # Cmd+L shows at most 2,048 characters (docs/commandbar.md "Typing"). Return on that unedited text
     # must reload the whole address, not load the cut one.
@@ -9988,6 +9988,7 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin)
         'ok': edited['mode'] == 'editCurrentURL' and edited['text'] == long_url[:2048] and bool(reloaded) and href == long_url,
         'fieldLength': len(edited.get('text', '')), 'urlLength': len(long_url), 'loadedLength': len(href), 'loadedTail': href[-12:]}
     app.call('close', tab=long_tab)
+    app.call('select', tab=home)
 
     # Action keycaps follow the user's key bindings, as the menus do (SuggestAdapter).
     bindings = Path(app.user_data, 'State/keybindings.json')
@@ -10011,6 +10012,7 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin)
         bindings.unlink(missing_ok=True); app.call('reload-keybindings'); time.sleep(.1)
     restored = new_tab_row()
     results['action_keycaps_default_after_reset'] = {'ok': restored['menuKey'] == 't' and bool(restored['row']) and restored['row']['subtitle'] == '\u2318T', **restored}
+    app.call('select', tab=home)
 
 
 def commandbar_pb1_checks(app, results, bar, press, type_query, state, origin):
