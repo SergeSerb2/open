@@ -3036,6 +3036,9 @@ def _window_flow_checks(factory, results, tmp):
             and debounced["captures"] == counts["captures"] + 1
             and immediate["treeChanges"] == counts["treeChanges"] and immediate["mirrorSyncs"] == counts["mirrorSyncs"] and bool(saved),
             "before": counts, "immediate": immediate, "debounced": debounced}
+        # STATE2: a debounced save with the same Profiles repeats no data-root folder work.
+        results["snapshot_save_skips_unchanged_prepare"] = {"ok": counts.get("prepares", 0) >= 1 and debounced.get("prepares") == counts.get("prepares"),
+            "before": counts.get("prepares"), "after": debounced.get("prepares")}
         app.call("window-frame", frame=[80, base_y, 1000, 700])
         a = new_tab(app, fixture("Window A"))
         b = app.call("open", url=fixture("Window B"), background=True)["id"]
@@ -7412,6 +7415,19 @@ def sleep_checks(factory, results, tmp, style):
         results["sleep_idle_parked"] = {"ok": bool(parked) and after["passes"] == before and not after["scheduled"],
                                         "passesBefore": before, "passesAfter": after["passes"], "scheduled": after["scheduled"],
                                         "load": os.getloadavg()}
+
+        # STATE2: a closed tab leaves no runtime record in the controller (SleepController.states).
+        closed_tabs = [open_live(site(40 + i)) for i in range(4)]
+        tracked_open = state()["trackedTabs"]
+        for t in closed_tabs: app.call("close", tab=t)
+        def records_settled():
+            s = tick()
+            ids = [x["id"] for x in s["tabs"]]
+            return s if not any(t in ids for t in closed_tabs) and s["trackedTabs"] <= len(ids) else None
+        after_close = wait_until(records_settled, timeout=8, step=.1) or state()
+        results["sleep_closed_tabs_dropped"] = {"ok": tracked_open >= len(closed_tabs) and after_close["trackedTabs"] <= len(after_close["tabs"])
+                                                      and not any(t in [x["id"] for x in after_close["tabs"]] for t in closed_tabs),
+                                                "trackedOpen": tracked_open, "trackedAfter": after_close["trackedTabs"], "modelTabs": len(after_close["tabs"])}
 
         # F0 (memory-fork §10): the browser runs with Open's feature switches (chrome://version
         # shows the command line every process inherits).
