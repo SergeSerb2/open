@@ -7,10 +7,10 @@ import OpenModel
 /// choosing one opens that Easel with the capture as a card). Arc opens it in a Peek-style
 /// overlay; Open selects the Easel tab (lead review: LOOK E2).
 extension EngineWebContentHostFactory {
-  /// Easel tabs of the focused Profile, most recently active first (at most 12).
+  /// Easel tabs of the focused Profile (its Spaces and Favorites), most recently active first (at most 12).
   var easelTabs: [Tab] {
     guard let profile = focusedProfile else { return [] }
-    var tabs: [Tab] = []
+    var tabs = profile.favorites.filter { EaselTab.matches($0.url) }
     for space in model.spaces where space.profileID == profile.id {
       for tab in flattened(space.pinned + space.today) where EaselTab.matches(tab.url) { tabs.append(tab) }
     }

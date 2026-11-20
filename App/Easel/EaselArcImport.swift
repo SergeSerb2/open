@@ -35,9 +35,7 @@ extension EngineWebContentHostFactory {
       report.droppedObjects += dropped
       guard doc.isValid else { report.skipped.append("\(doc.displayTitle): limits"); continue }
       let row = easelRow(documentID: id)
-      if let row, let host = easelHosts[row.id], !host.closed {
-        controller?.container.closeHost(for: row.id); host.close()
-      }
+      app.closeEaselHosts(documentID: id)
       store.save(doc)
       if let row {
         row.title = doc.displayTitle
@@ -54,11 +52,11 @@ extension EngineWebContentHostFactory {
     return report
   }
 
-  /// The sidebar row of an Easel document, in any Space.
+  /// The first row of an Easel: in any Space, or in Favorites.
   func easelRow(documentID: UUID) -> Tab? {
     for space in model.spaces {
       if let tab = flattened(space.pinned + space.today).first(where: { EaselTab.documentID($0.url) == documentID }) { return tab }
     }
-    return nil
+    return model.profiles.lazy.flatMap(\.favorites).first { EaselTab.documentID($0.url) == documentID }
   }
 }

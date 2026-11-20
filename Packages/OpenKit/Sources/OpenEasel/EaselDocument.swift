@@ -37,6 +37,14 @@ public struct EaselDocument: Codable, Equatable, Sendable {
     public static let maxTitleLength = 1_000
     public static let maxURLLength = 8_192
     public static let maxZIndex = 1 << 52
+    /// `text` cut to at most `limit` UTF-16 units (the unit the limits above count), never inside
+    /// a character. Edits pass titles and text boxes through it, so a saved Easel always loads.
+    public static func clipped(_ text: String, utf16 limit: Int) -> String {
+        guard text.utf16.count > limit else { return text }
+        var used = 0
+        let end = text.firstIndex { used += $0.utf16.count; return used > limit } ?? text.endIndex
+        return String(text[..<end])
+    }
     /// Image file names are `<64 hex>.<png|jpg|gif|webp|heic|tiff>`: no paths, no traversal.
     public static func isImageFileName(_ name: String) -> Bool {
         let parts = name.split(separator: ".")

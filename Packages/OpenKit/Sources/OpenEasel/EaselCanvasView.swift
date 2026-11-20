@@ -250,7 +250,8 @@ public final class EaselCanvasView: NSView {
     // MARK: Edits (public: the automation socket drives the same paths)
 
     public func setTitle(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Over the stored limit, the next load would refuse the whole Easel: keep the first part.
+        let trimmed = EaselDocument.clipped(text.trimmingCharacters(in: .whitespacesAndNewlines), utf16: EaselDocument.maxTitleLength)
         mutate("Rename Easel") { $0.title = trimmed.isEmpty ? nil : trimmed }
     }
 
@@ -502,7 +503,8 @@ public final class EaselCanvasView: NSView {
         objectViews[id]?.editing = false
         defer { if window?.firstResponder === editor.textView { window?.makeFirstResponder(docView) }; updateSelectionChrome() }
         guard let object = document.object(id), case .text(var text) = object.content else { return }
-        let typed = editor.textView.string
+        // Typed or pasted text over the stored limit would make the next load refuse the Easel.
+        let typed = EaselDocument.clipped(editor.textView.string, utf16: EaselDocument.maxTextLength)
         let empty = typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if let base = editor.undoBase {
             // A new box: one "Add Text" step from the document before the box, or nothing.
@@ -611,6 +613,19 @@ public final class EaselCanvasView: NSView {
     }
     public var editorTextView: NSTextView? { textEditor?.textView }
     public func editorSizeButton(_ which: String) -> NSView? { textEditor?.sizeControl.button(which) }
+
+    /// Shows a newer copy of this Easel that another canvas of it saved (a second row of the same
+    /// Easel). Not an edit: the host must not save what `onChange` reports meanwhile. This canvas's
+    /// undo steps were made on the older copy, so they go.
+    public func showSaved(_ next: EaselDocument) {
+        guard next != document else { return }
+        endTextEditing(commit: false)
+        canvasUndoManager.removeAllActions()
+        document = next
+        if titleField.currentEditor() == nil { titleField.stringValue = next.title ?? "" }
+        syncObjects()
+        updateSelectionChrome()
+    }
 
     /// Writes the title field's pending text now (the host flushes before quit).
     public func commitPendingEdits() {

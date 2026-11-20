@@ -106,11 +106,7 @@ extension AppDelegate {
       let id = item.document.id
       let (doc, _) = EaselImporter.resolvePictures(item) { data in store.addImage(data, document: id) }
       guard doc.isValid, let encoded = try? EaselStore.encoder.encode(doc) else { continue }
-      for factory in hostFactories.values {
-        if let row = factory.easelRow(documentID: id), let host = factory.easelHosts[row.id] {
-          factory.controller?.container.closeHost(for: row.id); host.close()
-        }
-      }
+      closeEaselHosts(documentID: id)
       // Closing commits the canvas, and saves wait 500 ms: write them now, so Undo
       // restores the Easel as it was, not the file from before the last edits.
       store.flush()
@@ -183,13 +179,7 @@ extension AppDelegate {
   private func writeEaselFiles(_ files: [UUID: Data?]) {
     // Close the canvases first: a close commits open edits and queues their write, which
     // would land after (and overwrite) the file put back below.
-    for id in files.keys {
-      for factory in hostFactories.values {
-        if let row = factory.easelRow(documentID: id), let host = factory.easelHosts[row.id] {
-          factory.controller?.container.closeHost(for: row.id); host.close()
-        }
-      }
-    }
+    for id in files.keys { closeEaselHosts(documentID: id) }
     easels.flush()
     for (id, data) in files {
       let url = easels.fileURL(for: id)

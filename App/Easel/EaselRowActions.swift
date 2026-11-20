@@ -9,7 +9,7 @@ extension EngineWebContentHostFactory {
   /// Inline row rename sets the Easel's title (the canvas title field shows it too).
   func renameEasel(tabID: ItemID, title: String) -> Bool {
     guard let tab = model.tab(id: tabID), let documentID = EaselTab.documentID(tab.url) else { return false }
-    let trimmed = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(EaselDocument.maxTitleLength))
+    let trimmed = EaselDocument.clipped(title.trimmingCharacters(in: .whitespacesAndNewlines), utf16: EaselDocument.maxTitleLength)
     if let host = easelHosts[tabID], !host.closed {
       host.canvas.setTitle(trimmed)
     } else {
@@ -17,6 +17,8 @@ extension EngineWebContentHostFactory {
       doc.title = trimmed.isEmpty ? nil : trimmed
       doc.modifiedAt = Date()
       app.easels.save(doc)
+      // An open canvas of another row of this Easel shows the new title too.
+      app.easelDidChange(doc, from: nil, titleChanged: true)
     }
     tab.customTitle = nil
     tab.title = trimmed.isEmpty ? EaselDocument.untitled : trimmed
@@ -101,18 +103,60 @@ extension EngineWebContentHostFactory {
     return true
   }
 
+  /// The Easel goes, with every row of it (a duplicate row or a Favorite shows the same Easel),
+  /// like Delete Note.
   func deleteEasel(tabID: ItemID) {
     guard let tab = model.tab(id: tabID), let documentID = EaselTab.documentID(tab.url) else { return }
-    if let host = easelHosts[tabID] { controller?.container.closeHost(for: tabID); host.close() }
-    // Removal is not an Archive entry: the content is gone.
-    let undo = model.undoManager; undo?.disableUndoRegistration()
-    model.closeTab(id: tabID)
-    undo?.enableUndoRegistration()
-    model.archiveSink?.discardArchived(ids: [tabID])
-    app.easels.flush()
-    let folder = app.easels.fileURL(for: documentID).deletingLastPathComponent()
+    app.deleteEaselEverywhere(documentID)
+  }
+}
+
+extension AppDelegate {
+  /// Closes every open canvas of an Easel in every window. Several rows can show one Easel (a
+  /// duplicate row, a Favorite), each with its own canvas; one left open would later write its
+  /// older copy over the file. Closing commits pending edits and queues their write.
+  func closeEaselHosts(documentID: UUID) {
+    for factory in hostFactories.values {
+      for (rowID, host) in factory.easelHosts where host.documentID == documentID {
+        factory.controller?.container.closeHost(for: rowID); host.close()
+      }
+    }
+  }
+
+  /// A canvas saved `doc`: every other open canvas of the Easel shows it. With `titleChanged`,
+  /// every row of the Easel takes its title (also rows whose canvas is not open).
+  func easelDidChange(_ doc: EaselDocument, from source: EaselContentHost?, titleChanged: Bool) {
+    for factory in hostFactories.values {
+      for host in factory.easelHosts.values where host !== source && host.documentID == doc.id { host.showSaved(doc) }
+    }
+    guard titleChanged else { return }
+    var models = Set<ObjectIdentifier>(), changed = false
+    for factory in hostFactories.values where models.insert(ObjectIdentifier(factory.model)).inserted {
+      for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == doc.id && tab.title != doc.displayTitle {
+        tab.title = doc.displayTitle; changed = true
+      }
+    }
+    guard changed else { return }
+    for factory in hostFactories.values { factory.controller?.refresh(); factory.scheduleSave() }
+  }
+
+  /// Removes every row of an Easel in every window (no Archive entry) and moves its folder to the
+  /// Trash once, after every canvas of it has closed and written.
+  func deleteEaselEverywhere(_ documentID: UUID) {
+    closeEaselHosts(documentID: documentID)
+    for factory in hostFactories.values {
+      for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == documentID {
+        // Removal is not an Archive entry: the content is gone.
+        let undo = factory.model.undoManager; undo?.disableUndoRegistration()
+        factory.model.closeTab(id: tab.id)
+        undo?.enableUndoRegistration()
+        factory.model.archiveSink?.discardArchived(ids: [tab.id])
+      }
+      factory.controller?.refresh(); factory.scheduleSave()  // the tree change syncs the tab mirror
+    }
+    easels.flush()
+    let folder = easels.fileURL(for: documentID).deletingLastPathComponent()
     if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
-    controller?.refresh(); scheduleSave()  // the tree change syncs the tab mirror
   }
 }
 

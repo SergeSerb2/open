@@ -218,7 +218,13 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
             let pad: CGFloat = 4
             let minX = pts.map(\.x).min()!, maxX = pts.map(\.x).max()!, minY = pts.map(\.y).min()!, maxY = pts.map(\.y).max()!
             let r = CGRect(x: minX - pad, y: minY - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2)
-            let simplified = simplify(pts, tolerance: 0.6)
+            var simplified = simplify(pts, tolerance: 0.6)
+            // A stroke over the stored limit would make the next load refuse the Easel: keep every
+            // n-th point (and the end), which still draws the same line.
+            if simplified.count > EaselDocument.maxPoints, let end = simplified.last {
+                let step = (simplified.count + EaselDocument.maxPoints - 2) / (EaselDocument.maxPoints - 1)
+                simplified = Array(stride(from: 0, to: simplified.count - 1, by: step).map { simplified[$0] }) + [end]
+            }
             return EaselObject(frame: r, zIndex: 0, content: .shape(kind: .freehand, color: color, arrow: nil,
                 points: simplified.map { EaselPoint(x: ($0.x - r.minX) / r.width, y: ($0.y - r.minY) / r.height) }))
         }
