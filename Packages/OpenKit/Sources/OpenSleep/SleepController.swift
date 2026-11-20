@@ -84,6 +84,8 @@ public final class SleepController {
         var keepAlive = false
     }
     private var states: [ItemID: State] = [:]
+    /// Tabs with a runtime record (automation evidence: closed tabs do not accumulate).
+    public var trackedTabCount: Int { states.count }
     private func state(_ id: ItemID) -> State {
         if let value = states[id] { return value }
         let value = State(); states[id] = value; return value
@@ -365,6 +367,12 @@ public final class SleepController {
         entries = model.index.values.compactMap { node in
             guard let tab = node.tab else { return nil }
             return Entry(tab: tab, state: state(tab.id), owner: owner(tab.id))
+        }
+        // Records of tabs that left the model (closed, archived, purged, moved away) go once no
+        // work for them is in flight; a tab that comes back (Undo, Restore) starts a fresh one.
+        let present = Set(entries.lazy.map(\.tab.id))
+        for (id, state) in states where !present.contains(id) && !state.busy && !liveContent.contains(id) && !waking.contains(id) {
+            states[id] = nil; purged.remove(id); wakeStartedAt[id] = nil
         }
         // The cached order stays fixed until a structural change; no per-tick sort.
         groups = Dictionary(grouping: entries, by: \.owner)
