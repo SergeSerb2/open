@@ -184,8 +184,6 @@ public final class CommandBarController: NSObject {
             _ = self.removeCompletionForEdit()
         }
         editor.onSelectionChange = { [weak self] in self?.selectionChanged() }
-        // Any edit, even a paste of the same text, means the field text is what Return opens.
-        editor.onUserEdit = { [weak self] in self?.cutAddress = nil }
         panel.results.onHover = { [weak self] i in self?.hover(i) }
         panel.results.onClick = { [weak self] i, flags in self?.choose(i, modifiers: CommandBarModifiers(flags)) }
     }
@@ -830,6 +828,7 @@ public final class CommandBarController: NSObject {
     fileprivate func textChanged() {
         panel.input.textDidChange()
         let editor = panel.input.editor
+        cutAddress = nil // a user edit: the field text, not the hidden whole address, is what Return opens
         guard isPresented, !editor.hasMarkedText(), !editor.isUpdatingComposition else { return }
         // A text-system edit (cut, for example) while a completion showed: the field text is the typed text.
         if completion.shown != nil { completion.accept() }
