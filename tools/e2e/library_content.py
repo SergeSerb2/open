@@ -175,6 +175,16 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             first_selected=rows()[0]['id'];state(action='row-select',id=first_selected);key('down')
             check('down_moves_row_focus',wait(lambda:any(r['selected'] and r['id']!=first_selected for r in rows())),state=state())
             key('up');check('up_moves_row_focus',rows()[0]['selected'])
+            # A search keeps the selected row but moves its index. The next selection change
+            # must leave exactly one row drawn as selected (no stale highlight).
+            kept=next(r['id'] for r in rows() if r['title']=='Library history 005');state(action='row-select',id=kept)
+            state(action='search',text='history 00')
+            assert wait(lambda:len(rows())==10 and bool(row(kept)) and row(kept)['selected']),rows()
+            key('down');below=next(r['id'] for r in rows() if r['title']=='Library history 006')
+            check('search_shift_single_drawn_selection',wait(lambda:[r['id'] for r in rows() if r['drawnSelected']]==[below] and row(below)['selected']),
+                  drawn=[r['title'] for r in rows() if r['drawnSelected']],selected=[r['title'] for r in rows() if r['selected']])
+            state(action='search',text='');assert wait(lambda:len(rows())==100)
+            state(action='row-select',id=rows()[0]['id'])
             state(action='row-select',id=rows()[-1]['id']);check('history_paginates',wait(lambda:len(rows())>100),count=len(rows()))
             state(action='row-select',id=history['id']);key('return');check('return_opens_history',wait(lambda:not state()['open']) and len(app.call('tabs'))>1)
             state(action='open',section='history');assert wait(lambda:bool(rows()))
@@ -283,6 +293,15 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             target=next(r for r in original_column['rows'] if r['id']==tab)
             app.call('mouse',action='click',window=state()['window'],x=target['point'][0],y=target['point'][1],delivery='queued')
             check('space_tab_click_closes',wait(lambda:not state()['open']))
+            # A History row opens in the window's current Space when that Space has the row's
+            # Profile (as other new-tab routes do), not in the Profile's first Space.
+            same_profile=app.call('space-create',title='Library Same Profile')
+            state(action='open',section='history');assert wait(lambda:row(history['id']))
+            state(action='row-action',id=history['id'],name='open')
+            focused_after=lambda:next((s for s in app.call('spaces') if s['focused']),{})
+            check('history_open_keeps_current_space',wait(lambda:not state()['open']) and wait(lambda:focused_after().get('id')==same_profile)
+                and focused_after().get('profile')==profile and focused_after().get('today',0)>=1,focused=focused_after(),spaces=app.call('spaces'))
+            app.call('space',space=space['id'])
             if frames:
                 # Review both populated and empty Media, and a populated Archive,
                 # using the same real engine and capture paths as the flow above.

@@ -83,6 +83,32 @@ def run(factory, results, tmp, h):
             and 'second copy' in md2 and not any(n.startswith('__MACOSX') for n in names),
             state=done, names=names, html=html[-900:], md=md)
 
+        # 2b. A numbered list around a nested list: the HTML list at level 0 continues after
+        # the nested one (one <ol>, so "two" is item 2), as the Markdown numbering does.
+        app.call('note', action='create')
+        app.call('key', text='Nested list'); key('return')
+        app.call('key', text='1. one\r'); key('tab')
+        app.call('key', text='sub\r')
+        # Shift-Tab carries the back-tab character on real hardware; AppKit maps it to insertBacktab.
+        app.call('key', key='tab', modifiers=['shift'], characters='\x19', route='app')
+        app.call('key', text='two')
+        nested_formats = app.call('note')['formats']
+        app.call('note', action='flush')
+        out2 = os.path.join(tmp, 'notes-nested.zip')
+        app.call('note', action='export', path=out2)
+        done2 = h.wait_until(lambda: (lambda s: s if s['last'] == 'exported' and not s['running'] and os.path.exists(out2) else None)(app.call('note', action='export-state')), timeout=20, step=.1)
+        nested_html, nested_md = '', ''
+        if done2:
+            with zipfile.ZipFile(out2) as z:
+                for n in z.namelist():
+                    if n.endswith('/Nested list.html'): nested_html = z.read(n).decode()
+                    if n.endswith('/Nested list.md'): nested_md = z.read(n).decode()
+        body_html = nested_html.split('<h1 class="title">Nested list</h1>\n', 1)[-1]
+        row('export_html_list_continues_after_nested_list', bool(done2)
+            and body_html.startswith('<ol><li>one\n<') and '</li>\n<li>two</li></ol>' in body_html
+            and body_html.count('<ol>') + body_html.count('<ul>') == 2 and '\n2. two' in nested_md,
+            html=body_html, md=nested_md, formats=nested_formats)
+
         # 3. Settings ▸ Profiles ▸ New documents (the real popup) changes what ⌃⇧N creates.
         app.call('settings-ui', action='open', section='profiles')
         app.call('settings-ui', action='link', url='open://settings/profiles/new-documents')
