@@ -57,6 +57,17 @@ public extension CommandRegistry {
         ActionRegistry(makeSuggestActions(overrides: overrides))
     }
 
+    /// `registry`'s own actions with the keycaps of `overrides`, the keys the menus show.
+    /// An action with no command of the same id keeps its keycap.
+    static func rekeyed(_ registry: ActionRegistry, overrides: KeyBindingStore) -> ActionRegistry {
+        let keys = Dictionary(makeSuggestActions(overrides: overrides).map { ($0.id, $0.shortcut) }, uniquingKeysWith: { first, _ in first })
+        return ActionRegistry(registry.actions.map { action in
+            var action = action
+            if let key = keys[action.id] { action.shortcut = key }
+            return action
+        })
+    }
+
     /// Ids kept equal to the `OpenSuggest` seed, so the adapter is a drop-in feed.
     private static let suggestIDOverrides: [String: String] = [
         "reveal-current-tab": "reveal-tab-in-sidebar",

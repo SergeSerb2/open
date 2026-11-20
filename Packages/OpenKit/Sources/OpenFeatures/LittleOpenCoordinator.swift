@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import OpenModel
 import OpenRouting
+import OpenCommands
 import OpenDesign
 
 /// AppKit coordinates. Injection makes the window placement independent of the desktop.
@@ -45,6 +46,8 @@ public final class LittleOpenCoordinator {
     @ObservationIgnored public var onSwitchToTab: ((ItemID, SpaceID?) -> Void)?
     @ObservationIgnored public var performCommand: ((String, SpaceID?) -> Void)?
     @ObservationIgnored public var isActionEnabled: ((String, SpaceID?) -> Bool)?
+    /// The user's key bindings, for the command bar's keycaps.
+    @ObservationIgnored public var keyBindings: (() -> KeyBindingStore)?
     @ObservationIgnored public var presentWindows = true
     @ObservationIgnored public var onChange: (() -> Void)?
     /// Return true while the App's page-close preflight owns the request.

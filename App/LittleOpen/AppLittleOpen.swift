@@ -43,6 +43,7 @@ extension AppDelegate {
     coordinator.isActionEnabled = { [weak self] id, _ in
       self?.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) ?? false
     }
+    coordinator.keyBindings = { [weak self] in self?.keyBindings ?? .empty }
     coordinator.confirmProfileSwitch = { [weak self] profile, completion in self?.confirmLittleOpenProfileSwitch(profile, completion: completion) }
     // Fan out to the shared visibility feed, deadline and menus.
     coordinator.onChange = { [weak self, weak coordinator] in

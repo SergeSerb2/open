@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import OpenModel
 import OpenSuggest
+import OpenCommands
 import OpenDesign
 import OpenCommandBar
 import OpenExtensionsUI
@@ -73,6 +74,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private var hasPresented = false
     private var opening = true
     private var placingTrafficLights = false
+    private var actionBindings: KeyBindingStore?
     private var systemAppearanceObservation: NSKeyValueObservation?
     public var currentURL: URL? { container.host(for: session.tab.id)?.currentURL }
     public var showsIntro: Bool { !banner.isHidden }
@@ -250,6 +252,12 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     }
     public func focusURL() { presentCommandBar() }
     private func presentCommandBar() {
+        // Keycaps show the user's bindings, as in the main window's bar and the menus.
+        let bindings = coordinator?.keyBindings?() ?? .empty
+        if bindings != actionBindings {
+            commandBar.engine.setActions(CommandRegistry.rekeyed(.arcDefaults, overrides: bindings))
+            actionBindings = bindings
+        }
         commandBar.present(CommandBarRequest(mode: state == .bar ? .littleOpen : .editCurrentURL,
             profileID: session.profileID, spaceID: pillSpaceID, currentTabID: session.tab.id,
             currentTabURL: currentURL ?? session.tab.url, currentTabTitle: session.tab.title,
