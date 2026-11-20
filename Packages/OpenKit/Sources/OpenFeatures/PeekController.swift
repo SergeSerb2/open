@@ -308,6 +308,22 @@ public final class PeekController {
         refresh(); if stack.isEmpty { removeKeys(); splitController.container.host(for: item.sourceTabID)?.focus() }
         onChange?()
     }
+    /// A Peek page closed itself (window.close()). Its entry goes wherever it is in the stack,
+    /// so dismissing a later Peek never reveals the closed page. A top page that closes during
+    /// expansion cancels the expansion; one already closing finishes its own dismissal.
+    public func pageClosed(hostTabID: ItemID) {
+        guard let index = stack.firstIndex(where: { $0.host?.tabID == hostTabID }) else { return }
+        guard index == stack.count - 1 else {
+            let item = stack.remove(at: index); item.host?.close(); refresh(); onChange?(); return
+        }
+        if isDismissing { return }
+        if !isExpanding { dismissTop(); return }
+        motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
+        isPreparingOpening = false; isPromotionHandoff = false
+        expandingGeneration += 1; isExpanding = false
+        overlay.clearExpansionCard(); overlay.restoreExpansionViewport(); overlay.endHostSnapshot()
+        finishDismiss(); overlay.resetMotion()
+    }
     public func undoDismiss() {
         // Live while its toast shows (a hovered toast outlasts the 5 s window), else for 5 s.
         guard let item = undoItem, item.expiry > Date() || undoToast?.isVisible == true else { return }; undoItem = nil; undoTask?.cancel()

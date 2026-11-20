@@ -83,6 +83,14 @@ def run(output, config='Release'):
                 live = wait_until(lambda: (lambda p: p if p and p == themed else None)(page()), timeout=5, step=.1)
                 check('themed_space_palette_live', bool(themed) and len(themed) == 26 and bool(live)
                       and themed.get('--arc-background-simple-color') == themed.get('--arc-palette-foregroundPrimary'), expected=themed, page=page())
+                # A Favorite belongs to the Profile and shows in its focused Space: it reads that Space's values
+                # too (before the fix its pages had none, because only pinned and Today tabs had a Space).
+                app.call('favorite', tab=tab)
+                app.call('navigate', tab=tab, url=origin + '/favorite'); app.call('wait', tab=tab)
+                favorite = wait_until(lambda: (lambda p: p if p and p == themed else None)(page()), timeout=5, step=.1)
+                check('favorite_reads_space_variables', bool(themed) and bool(favorite)
+                      and app.call('theme-data-state', tab=tab)['variables'] == themed, page=page(),
+                      state=app.call('theme-data-state', tab=tab))
             finally:
                 app.call('defaults', key=KEY, value=saved)
                 app.call('theme-set', style=None)

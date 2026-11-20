@@ -107,7 +107,9 @@ enum ThemeData {
 
   /// The variables for one tab of a window (nil: setting off, or no Space theme for the tab).
   static func variables(tabID: ItemID, factory: EngineWebContentHostFactory) -> [(String, String)]? {
-    guard enabled, let controller = factory.controller, let space = factory.space(for: tabID) else { return nil }
+    // space(containing:) also resolves a Favorite, which belongs to the Profile: it shows in the
+    // focused Space of its Profile. space(for:) knows only pinned and Today tabs.
+    guard enabled, let controller = factory.controller, let space = factory.space(containing: tabID) else { return nil }
     return variables(style: controller.context.style(for: space))
   }
 

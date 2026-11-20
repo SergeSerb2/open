@@ -833,11 +833,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func select(nodeID requested: ItemID?, focus: Bool = true) {
     controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
-    // A split pane shows through its split. Selecting the pane's tab ID alone would show that
-    // pane by itself and hide the other panes (Next Tab, a close's neighbour, a restored pane).
+    // A split pane is not a sidebar node: selecting it as a plain tab shows that pane alone and
+    // hides the split. Tab-order paths (Cmd+W's next tab, page activation, a restored pane) can
+    // name a pane; select its split with that pane focused, as selectTabForCommand does.
     var nodeID = requested
     if let id = requested, case .splitPane(let splitID)? = model.parent(of: id) {
-      model.focusSplitPane(splitID: splitID, tabID: id); nodeID = splitID
+      withoutUndo { model.focusSplitPane(splitID: splitID, tabID: id) }
+      controller?.splitController.clearMaximizedPane(unless: id)
+      nodeID = splitID
+    } else if let maximized = controller?.splitController.maximizedPaneID, model.sidebarSelectionID(for: maximized) != nodeID {
+      // Leaving a split (Next Tab, a click on another row) ends Expand Current Pane, so coming
+      // back shows the whole split (lead ruling for #628/#629; Arc capture pending).
+      controller?.splitController.clearMaximizedPane(unless: nil)
     }
     if let nodeID {
       var history = selectionHistory[space.id, default: []]
@@ -1328,7 +1335,9 @@ extension EngineWebContentHostFactory {
     while let container = parent {
       switch container {
       case .folder(let folder): model.setExpanded(folderID: folder, expanded: true); parent = model.parent(of: folder)
-      case .splitPane(let split): model.focusSplitPane(splitID: split, tabID: tab.id); nodeID = split; parent = model.parent(of: split)
+      case .splitPane(let split):
+        model.focusSplitPane(splitID: split, tabID: tab.id); controller?.splitController.clearMaximizedPane(unless: tab.id)
+        nodeID = split; parent = model.parent(of: split)
       default: parent = nil
       }
     }
@@ -1632,7 +1641,14 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       record("open", popup, ["disposition": "popup", "url": request.url?.absoluteString ?? ""])
       return popup
     case .newWindow:
-      let sourceSpace = tabID(for: webContent).flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      // space(containing:) resolves a Favorite to the window's Space of its Profile; a Peek host
+      // (no model tab) keeps the Space it opened from.
+      var sourceSpace = tabID(for: webContent).flatMap { space(containing: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      // A Blank Window's Space lives in its own model; makeWindow takes a main-model Space. Use
+      // the main model's Space of the same Profile, or the request was dropped.
+      if model !== app.model, let profileID = sourceSpace?.profileID {
+        sourceSpace = app.model.mostRecentlyFocusedSpace(profileID: profileID) ?? app.model.spaces.first { $0.profileID == profileID }
+      }
       guard let controller = isIncognito ? app.makeIncognitoWindow(parent: incognitoSession?.parent) : app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
       if webContent.runtimeStyle == .chrome, let url = request.url {
         // The engine would make the page a tab of the opener window's hidden
@@ -1658,7 +1674,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         record("open", webContent, ["disposition": request.disposition.rawValue, "url": url.absoluteString, "fromPeek": true])
         return nil
       }
-      let source = opener.flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      // A Favorite is shown in this window's Space of its Profile. Its host's spaceID is the Space
+      // that was focused when the host was made, so after a Space switch it named the old Space.
+      let source = opener.flatMap { space(containing: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
                              unread: request.disposition == .newBackgroundTab)
@@ -1699,6 +1717,12 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     // again, or destroy its host from inside the engine delegate callback.
     DispatchQueue.main.async { [weak self, weak webContent] in
       guard let self, let webContent else { return }
+      // A Peek page is not a model tab: finishClosingTab ignored it and the Peek stayed open
+      // on a closed page. Remove its Peek entry, at any depth of the stack.
+      if let id = self.tabID(for: webContent), self.model.tab(id: id) == nil, let controller = self.controller,
+         controller.hasPeekController, controller.peekController.stack.contains(where: { $0.host?.tabID == id }) {
+        controller.peekController.pageClosed(hostTabID: id); return
+      }
       if let id = self.tabID(for: webContent) { self.finishClosingTab(id: id) }
       else { self.close(page: webContent) }
     }

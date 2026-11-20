@@ -74,8 +74,13 @@ extension EngineWebContentHostFactory {
     #endif
     // Peek hosts retain their source Space even though they are not model tabs.
     let host = hosts.values.first { $0.content === page }
-    let source = host?.spaceID.flatMap { model.space(id: $0) }
-      ?? tabID(for: page).flatMap { space(for: $0) }
+    // A model tab's Space comes from the model now (a Favorite's spaceID is the Space focused when
+    // its host was made); only a Peek host, which is not a model tab, uses its recorded Space.
+    // A Peek can preview another Profile's page (All Profiles Archive): its recorded Space then
+    // belongs to the wrong Profile. The footer opens settings of the page's own Profile.
+    let recorded = tabID(for: page).flatMap { space(containing: $0) }
+      ?? host?.spaceID.flatMap { model.space(id: $0) }
+    let source = recorded.flatMap { space in host.map { $0.profileID == space.profileID } == false ? nil : space }
       ?? host.flatMap { model.mostRecentlyFocusedSpace(profileID: $0.profileID) }
     guard let source else { return }
     // Focusing a Space can close a Peek. Leave the engine delegate callback
