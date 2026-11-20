@@ -96,6 +96,9 @@ public final class PageTranslationSession {
     /// Every answer of `nextBatch()` (also empty ones): proves the shell does not poll while idle.
     public private(set) var batchesPulled = 0
     public private(set) var unitsFallback = 0
+    /// Pulls made again after a pull that ended without an answer (the engine ends an Open-world
+    /// request after 10 s): one per idle 10 s on a translated page that does not change.
+    public private(set) var idleRepulls = 0
     private var closed = false
 
     public init(page: any WebContent, backend: any TranslationBackend, preferences: TranslatePreferences = .init(),
@@ -198,8 +201,14 @@ public final class PageTranslationSession {
             var announced = announced
             while let self, !Task.isCancelled, self.generation == token, !self.closed, let page = self.page {
                 let raw: Any
+                let pulled = ContinuousClock.now
                 do { raw = try await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.nextBatch() : null") }
                 catch {
+                    guard self.generation == token, !self.closed else { return }
+                    // The engine ends an Open-world request that has no answer after 10 s: a translated
+                    // page where nothing comes near the viewport for that long. That is not the end of
+                    // the translation: pull again while the runtime still runs.
+                    if await self.runtimeStillRuns(page, after: pulled, token: token) { self.idleRepulls += 1; continue }
                     // The document went away (a new page, a crash, or close): nothing to restore.
                     if self.generation == token, !self.closed { self.loop = nil; self.state = .idle }
                     return
@@ -229,6 +238,23 @@ public final class PageTranslationSession {
             }
         }
     }
+
+    /// After a failed pull: true when the failure was a request that waited and ended without an
+    /// answer (at least `waitedFailure`, far above any real answer time and under the engine's
+    /// 10 s), and the runtime still answers that it runs, or its answer also waited and ended (a
+    /// frozen page: try again later). A failure that comes at once (the page closed, a request
+    /// limit) ends the loop, so a retry can never spin.
+    private func runtimeStillRuns(_ page: any WebContent, after pulled: ContinuousClock.Instant, token: Int) async -> Bool {
+        guard ContinuousClock.now - pulled >= Self.waitedFailure else { return false }
+        let probed = ContinuousClock.now
+        do {
+            let active = try await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.state().active : false")
+            return generation == token && !closed && (active as? Bool) == true
+        } catch {
+            return generation == token && !closed && ContinuousClock.now - probed >= Self.waitedFailure
+        }
+    }
+    static let waitedFailure: Duration = .seconds(5)
 
     private func fail(_ offer: Offer, _ error: any Error) {
         let reason = TranslationFailure.reason(for: error)

@@ -331,6 +331,7 @@ final class TranslateAdapter {
     out["sessions"] = sessions.count
     out["batches"] = session?.batchesApplied ?? 0
     out["pulls"] = session?.batchesPulled ?? 0
+    out["idleRepulls"] = session?.idleRepulls ?? 0
     out["fallbackUnits"] = session?.unitsFallback ?? 0
     out["loopRunning"] = session?.isLoopRunning ?? false
     out["sticky"] = session?.stickyTarget?.host ?? ""

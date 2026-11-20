@@ -119,7 +119,10 @@
       const v = el.getAttribute(name);
       if (v && hasText(v) && v.length <= MAX_UNIT_CHARS) addUnit({ kind: 'attr', element: el, name, text: v.trim() }, el);
     }
-    if (el.tagName === 'INPUT' && BUTTON_TYPES.has((el.getAttribute('type') || '').toLowerCase())) {
+    // A button's value is its label. A named submit button also sends that value with its form,
+    // so the server would get the translation: its value stays as the page wrote it.
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (el.tagName === 'INPUT' && BUTTON_TYPES.has(type) && !(type === 'submit' && el.getAttribute('name'))) {
       const v = el.getAttribute('value');
       if (v && hasText(v) && v.length <= MAX_UNIT_CHARS) addUnit({ kind: 'attr', element: el, name: 'value', text: v.trim() }, el);
     }
@@ -263,7 +266,8 @@
     if (u.lead) { if (typeof top[0] === 'string') top[0] = ' ' + top[0].replace(/^\s+/, ''); else top.unshift(' '); }
     if (u.trail) { const i = top.length - 1; if (typeof top[i] === 'string') top[i] = top[i].replace(/\s+$/, '') + ' '; else top.push(' '); }
     for (const t of u.ctx.texts) rememberText(t);
-    const record = { kind: 'run', container: u.container, original: u.nodes.slice(), children: [], inserted: [], created: new Set(), texts: u.ctx.texts.slice() };
+    const record = { kind: 'run', container: u.container, original: u.nodes.slice(), children: [], inserted: [], created: new Set(),
+      texts: u.ctx.texts.slice(), written: new Map() };
     // Text segments reuse the original text nodes of their level, in order; extra segments get new nodes.
     const pools = new Map([[0, u.nodes.filter((n) => n.nodeType === 3)]]);
     for (const k in u.ctx.elements) if (!u.ctx.opaque[k]) pools.set(Number(k), Array.from(u.ctx.elements[k].childNodes).filter((n) => n.nodeType === 3));
@@ -273,6 +277,7 @@
       let node;
       if (pool && pool.length) node = pool.shift(); else { node = document.createTextNode(''); record.created.add(node); }
       node.data = seg;
+      record.written.set(node, seg);
       return node;
     });
     for (const key of Object.keys(levels).map(Number).sort((a, b) => a - b)) {
@@ -293,8 +298,8 @@
 
   function applyNode(u, translated) {
     rememberText(u.node);
-    applied.push({ kind: 'node', node: u.node });
     u.node.data = u.lead + translated.trim() + u.trail;
+    applied.push({ kind: 'node', node: u.node, written: u.node.data });
     return true;
   }
 
@@ -302,8 +307,8 @@
     let saved = originalAttrs.get(u.element);
     if (!saved) { saved = {}; originalAttrs.set(u.element, saved); }
     if (!(u.name in saved)) saved[u.name] = u.element.getAttribute(u.name);
-    applied.push({ kind: 'attr', element: u.element, name: u.name });
     u.element.setAttribute(u.name, translated.trim());
+    applied.push({ kind: 'attr', element: u.element, name: u.name, written: u.element.getAttribute(u.name) });
     return true;
   }
 
@@ -342,6 +347,10 @@
   }
 
   // ---- Restore -----------------------------------------------------------------------------
+  // Only a value that still reads as Open wrote it goes back to the original. A value the page wrote
+  // after the translation (a live update, also one the mutation debounce has not seen yet) is the
+  // page's: it stays. Every saved original is dropped either way, so a later translation never
+  // brings an old one back.
   const sameNodes = (list, nodes) => list.length === nodes.length && nodes.every((n, i) => list[i] === n);
 
   function restoreAll() {
@@ -352,11 +361,16 @@
         if (r.kind === 'attr') {
           const saved = originalAttrs.get(r.element);
           if (saved && r.name in saved) {
-            if (saved[r.name] === null) r.element.removeAttribute(r.name); else r.element.setAttribute(r.name, saved[r.name]);
+            if (r.element.getAttribute(r.name) === r.written) {
+              if (saved[r.name] === null) r.element.removeAttribute(r.name); else r.element.setAttribute(r.name, saved[r.name]);
+            }
             delete saved[r.name];
           }
         } else if (r.kind === 'node') {
-          if (originalText.has(r.node)) { r.node.data = originalText.get(r.node); originalText.delete(r.node); }
+          if (originalText.has(r.node)) {
+            if (r.node.data === r.written) r.node.data = originalText.get(r.node);
+            originalText.delete(r.node);
+          }
         } else {
           // Structure goes back only where it is still exactly what the run put there. Where the
           // page has since replaced or added children, the page owns that structure: only the
@@ -373,7 +387,12 @@
           } else {
             for (const n of r.inserted) if (r.created.has(n) && n.parentNode === r.container) r.container.removeChild(n);
           }
-          for (const t of r.texts) if (originalText.has(t)) { t.data = originalText.get(t); originalText.delete(t); }
+          for (const t of r.texts) {
+            if (!originalText.has(t)) continue;
+            // A text node this run did not reuse still holds its original (or the page's) text.
+            if (!r.written.has(t) || t.data === r.written.get(t)) t.data = originalText.get(t);
+            originalText.delete(t);
+          }
         }
       }
     } finally {
