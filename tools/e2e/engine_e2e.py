@@ -9096,6 +9096,7 @@ def littleopen_checks(factory, results, tmp):
         record('B6_auto_main_navigation_preserved', tagged_navigation and reached and state()['mainWindows'] == 1
                and app.call('shell-windows')[0]['id'] == tagged_navigation
                and any(t['id'] == navigated for t in app.call('tabs')), state=state())
+        littleopen_keycaps_checks(app, record, menu, sessions, session)
 
     finally:
         saved = {key: saved_domain.get(key) for key in keys}
@@ -9116,6 +9117,33 @@ def littleopen_checks(factory, results, tmp):
             if os.path.isfile(path): shutil.copyfile(path, os.path.join(evidence, os.path.basename(path)))
         server.shutdown(); server.server_close()
 
+
+
+def littleopen_keycaps_checks(app, record, menu, sessions, session):
+    """Bug sweep round 2: Little Open's command-bar keycaps follow the user's key bindings, as the
+    main window's bar and the menus do. The override is written to the real bindings file."""
+    bindings = Path(app.user_data, 'State/keybindings.json')
+    def new_tab_row():
+        before = {s['id'] for s in sessions()}
+        menu('new-little-open-window')
+        row = wait_until(lambda: next((s for s in sessions() if s['id'] not in before and s['barPresented']), None), timeout=5)
+        if not row: return {'opened': False, 'row': None}
+        app.call('key', window=row['window'], text='New Tab')
+        typed = wait_until(lambda: (lambda s: s if s and s['barInput'] == 'New Tab' and s['barFinal']
+                                    and any(r['action'] == 'new-tab' for r in s['barRows']) else None)(session(row['id'])), timeout=5)
+        found = next((r for r in (typed or {}).get('barRows', []) if r['action'] == 'new-tab'), None)
+        app.call('little-open-action', id=row['id'], action='close')
+        wait_until(lambda: session(row['id']) is None, timeout=4)
+        return {'opened': True, 'row': found and {k: found[k] for k in ('title', 'subtitle', 'keycaps')}}
+    try:
+        bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': [{'key': 'o', 'modifiers': ['command', 'option', 'control']}]}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        custom = new_tab_row()
+        record('R2_little_open_keycaps_follow_override', bool(custom['row']) and custom['row']['subtitle'] == '\u2303\u2325\u2318O', **custom)
+    finally:
+        bindings.unlink(missing_ok=True); app.call('reload-keybindings'); time.sleep(.1)
+    restored = new_tab_row()
+    record('R2_little_open_keycaps_default_after_reset', bool(restored['row']) and restored['row']['subtitle'] == '\u2318T', **restored)
 
 
 def routing_checks(factory, results, tmp):
@@ -9757,6 +9785,12 @@ def commandbar_checks(factory, results, tmp, config):
         menu = app.call('menu-state')
         results['dynamic_menus'] = {'ok': any(x['id'] == 'dynamic-space-' + second_space for x in menu) and any(x['id'] == 'dynamic-tab-' + target for x in menu), 'entries': len(menu)}
         results['incognito_available'] = {'ok': any(x['id'] == 'new-incognito-window' and x['enabled'] for x in menu)}
+        # Round 2: each Profile keeps its own suggest engine. Moving back to a Profile whose bar was
+        # already built reuses its engine; it does not rebuild the engine and the bar.
+        back = bar('t'); press('escape'); time.sleep(.25)
+        results['suggest_engine_reused_per_profile'] = {'ok': bool(opened.get('engineID')) and back.get('profile') == opened.get('profile')
+            and back.get('engineID') == opened.get('engineID') and isolated.get('engineID') != opened.get('engineID'),
+            'first': opened.get('engineID'), 'isolated': isolated.get('engineID'), 'back': back.get('engineID')}
         before = app.call('host-counts'); tree = app.call('sidebar-tree'); app.call('menu-perform', id='duplicate-tab')
         after = app.call('sidebar-tree'); copies = [x for x in after['today'] if x['id'] not in {n['id'] for n in tree['today']}]
         results['duplicate_tab_lazy'] = {'ok': len(copies) == 1 and copies[0]['url'] == origin + '/cross' and not copies[0]['loaded'] and before['created'] == app.call('host-counts')['created'], 'copies': copies}
@@ -10028,6 +10062,23 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
         'ok': selected['range'] == [0, 2048] and after.get('fieldText') == long_url[:2048] and bool(reloaded)
             and href != long_url and href.startswith(long_url[:2046]) and 'zz9' not in href,
         'selectedRange': selected.get('range'), 'reloaded': bool(reloaded), 'loadedLength': len(href), 'loadedTail': href[-12:]}
+    # Round 2: typing inside an address at the 2,048-character cap edits in place. The new text lands at
+    # the caret, the caret follows it, and the cap drops characters only from the end of the field.
+    app.call('navigate', tab=long_tab, url=long_url); app.call('wait', tab=long_tab)
+    wait_until(lambda: (app.eval(long_tab, 'location.href') or '') == long_url, timeout=10, step=.1)
+    bar('l', 'window')
+    press('left')
+    at_start = wait_until(lambda: (lambda st: st if st.get('range') == [0, 0] else None)(state()), timeout=3, step=.05) or state()
+    app.call('key', text='X')
+    first = wait_until(lambda: (lambda st: st if st.get('fieldText', '').startswith('X') else None)(state()), timeout=5, step=.05) or state()
+    app.call('key', text='Y')
+    second = wait_until(lambda: (lambda st: st if st.get('fieldText', '').startswith('XY') else None)(state()), timeout=5, step=.05) or state()
+    results['cmd_l_long_url_edit_keeps_caret'] = {
+        'ok': at_start.get('range') == [0, 0] and first.get('fieldText') == 'X' + long_url[:2047] and first.get('range') == [1, 0]
+            and second.get('fieldText') == 'XY' + long_url[:2046] and second.get('range') == [2, 0],
+        'firstRange': first.get('range'), 'firstHead': first.get('fieldText', '')[:4], 'firstLength': len(first.get('fieldText', '')),
+        'secondRange': second.get('range'), 'secondHead': second.get('fieldText', '')[:4], 'secondLength': len(second.get('fieldText', ''))}
+    press('escape'); time.sleep(.25)
     app.call('close', tab=long_tab)
     app.call('select', tab=home)
 
@@ -11518,6 +11569,84 @@ def sidebar_sweep_r1_checks(app, require, tmp):
     require('R1_restore_single_undo', h_tab in archive_ids and h_tab not in in_sidebar, archive=archive_ids[:3], tabs=in_sidebar)
 
 
+def sidebar_sweep_r2_checks(app, require, tmp, launch):
+    """Bug sweep round 2 (SURFACE2): Restore Last Closed Tab for folders. Real menu commands,
+    row menus and alerts only. Returns the relaunched App."""
+    def command(cid): return app.call('command', id=cid)
+    def settle(): time.sleep(.5)
+    def opened(name):
+        path = Path(tmp) / ('r2-' + name.lower().replace(' ', '-') + '.html')
+        path.write_text('<title>R2 %s</title><h1>%s</h1>' % (name, name))
+        node = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=node); return node
+    def focused_space(): return next(s['id'] for s in app.call('spaces') if s['focused'])
+    def sidebar_ids():
+        def flatten(nodes): return [n['id'] for n in nodes] + [i for n in nodes for i in flatten(n.get('children', []))]
+        tree = app.call('sidebar-tree'); return flatten(tree['pinned']) + flatten(tree['today'])
+    def archive_ids(): return [r['id'] for r in app.call('archive')]
+    def delete_folder(folder):
+        app.call('sidebar-menu', node=folder, item='Delete')
+        wait_until(lambda: app.call('window-state')['confirmation'], timeout=3)
+        app.call('alert', button='Delete Folder')
+        return wait_until(lambda: folder not in sidebar_ids() and folder in archive_ids(), timeout=5)
+    space = app.call('space-create', title='R2 Sweep'); app.call('space', space=space); settle()
+    # With a split selected, Pin/Unpin is disabled (menu, Cmd+D, command bar), not an enabled no-op.
+    def pin_menu(): return next((m for m in app.call('menu-state') if m['id'] == 'pin-unpin-tab'), {})
+    def pin_rows():
+        app.call('key', key='t', modifiers=['cmd'], route='app')
+        wait_until(lambda: app.call('commandbar-state').get('presented'), timeout=3, step=.05)
+        app.call('key', text='Pin Tab')
+        bar = wait_until(lambda: (lambda st: st if st.get('text') == 'Pin Tab' and st.get('final') else None)(app.call('commandbar-state')), timeout=5, step=.05) or {}
+        app.call('key', key='escape', route='app'); time.sleep(.3)
+        return [r['action'] for r in bar.get('rows', []) if r['action'] in ('pin-tab', 'unpin-tab')]
+    left = opened('Split Left'); opened('Split Right'); app.call('select', tab=left); settle()
+    app.call('split'); settle()
+    lone = opened('Split Lone'); app.call('select', tab=left); settle()
+    split_state = app.call('split', op='state')
+    def tree(): t = app.call('sidebar-tree'); return [(n['kind'], n['id']) for n in t['pinned']], [(n['kind'], n['id']) for n in t['today']]
+    before = tree(); split_menu = pin_menu()
+    app.call('key', key='d', modifiers=['cmd'], route='app'); settle()
+    split_rows = pin_rows()
+    require('R2_split_selected_pin_disabled', split_state['id'] and split_state['selected'] == split_state['id'] and split_menu.get('enabled') is False
+            and tree() == before and split_rows == [], menu=split_menu, rows=split_rows, split=split_state['id'], unchanged=tree() == before)
+    app.call('select', tab=lone); settle()
+    tab_menu = pin_menu(); tab_rows = pin_rows()
+    require('R2_tab_selected_pin_enabled', tab_menu.get('enabled') is True and tab_rows == ['pin-tab'], menu=tab_menu, rows=tab_rows)
+    # A folder restored into another Space is shown: its Space is focused, as for a tab.
+    child = opened('Folder Child')
+    folder = app.call('folder', tabs=[child], title='R2 Folder')
+    archived = delete_folder(folder)
+    other = app.call('space-create', title='R2 Other'); app.call('space', space=other); settle()
+    command('restore-last-closed-tab')
+    shown = wait_until(lambda: focused_space() == space and folder in sidebar_ids(), timeout=5)
+    require('R2_restore_folder_other_space_shows_it', archived and shown,
+            focusedSpace=focused_space(), expectedSpace=space, inSidebar=folder in sidebar_ids())
+    app.call('sidebar-key', key='z', modifiers=['cmd']); settle()
+    require('R2_restore_folder_single_undo', folder in archive_ids() and folder not in sidebar_ids(),
+            archive=archive_ids()[:3], inSidebar=folder in sidebar_ids())
+    # A stale folder row at the top of the Archive (the folder is already in the sidebar: the App
+    # stopped after the snapshot save, before the Archive delete) must not stop later presses.
+    kept = opened('Kept Closed')
+    app.call('close', tab=kept); settle()
+    stale_child = opened('Stale Child')
+    stale = app.call('folder', tabs=[stale_child], title='R2 Stale')
+    snapshot = app.call('save'); saved = Path(tmp) / 'r2-stale-browser.json'
+    shutil.copyfile(snapshot, saved)
+    stale_archived = delete_folder(stale)
+    app.call('save'); app.quit()
+    shutil.copyfile(saved, snapshot)
+    app = launch(); app.call('space', space=space); settle()
+    fixture = stale in sidebar_ids() and archive_ids()[:2] == [stale, kept]
+    fixture_detail = {'sidebar': stale in sidebar_ids(), 'archiveTop': archive_ids()[:2]}
+    command('restore-last-closed-tab')
+    dropped = wait_until(lambda: stale not in archive_ids(), timeout=5)
+    command('restore-last-closed-tab')
+    restored = wait_until(lambda: kept in sidebar_ids(), timeout=5)
+    require('R2_stale_folder_row_does_not_block_restore', stale_archived and fixture and dropped and restored and stale in sidebar_ids(),
+            fixture=fixture, fixtureDetail=fixture_detail, stale=stale, kept=kept, staleInSidebar=stale in sidebar_ids(), archive=archive_ids()[:3],
+            dropped=bool(dropped), restored=bool(restored))
+    return app
+
+
 def sidebar_tab_switcher_checks(app, require, tmp):
     """TS keys enter OEApplication.sendEvent. No desktop input or direct dispatch."""
     def state(): return app.call('window-state')
@@ -12519,6 +12648,7 @@ def space_manager_checks(results, tmp, config, style):
         app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
         sidebar_tab_switcher_checks(app, require, tmp)
         sidebar_sweep_r1_checks(app, require, tmp)
+        app = sidebar_sweep_r2_checks(app, require, tmp, launch)
 
         app = sidebar_favicon_checks(app, require, tmp, launch)
         sidebar_intents_menu_checks(app, results, require, tmp)
