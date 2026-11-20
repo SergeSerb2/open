@@ -1693,6 +1693,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
             if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
+        case .close, .archiveNodes:
+            // A split's or a multi-selection's archive can take the current item. As Cmd+W and
+            // folder Delete do, select the item now in its place instead of leaving a blank page.
+            var accepted = false
+            keepingSelection { accepted = ModelSidebarActions(context: context).perform(intent) }
+            guard accepted else { return false }
         case .goBack: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
         case .goForward: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }
