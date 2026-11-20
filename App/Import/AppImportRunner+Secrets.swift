@@ -45,9 +45,13 @@ extension AppImportRunner {
     guard !retiredSecretsProfiles.contains(profile.id),
       !retiredSecretsDirectories.contains(profile.dataDirectoryName.lowercased()),
       app.model.profile(id: profile.id) === profile else { throw CancellationError() }
-    // A Blank Window's model holds only its own stand-in Profile; resolve in the main model.
+    // Prefer the main model: a Blank Window's model holds only its own stand-in Profile.
+    // With no main-model window open, a Blank Window can still serve its own Profile.
+    let regular = app.hostFactories.values.filter { !$0.isIncognito }
     guard let factory = app.frontMainModelWindowController.flatMap({ app.hostFactories[$0.windowID] })
-      ?? app.hostFactories.values.first(where: { !$0.isIncognito && $0.model === app.model }),
+      .flatMap({ $0.context(for: profile.id) != nil ? $0 : nil })
+      ?? regular.first(where: { $0.model === app.model && $0.context(for: profile.id) != nil })
+      ?? regular.first(where: { $0.context(for: profile.id) != nil }),
       !factory.isIncognito, let context = factory.context(for: profile.id), !context.isEphemeral
     else { throw ArcSecretsImportError.invalidSinkResult }
     let sink = AppSecretsImportSink(profileID: profile.id, context: context) { [weak app] in
