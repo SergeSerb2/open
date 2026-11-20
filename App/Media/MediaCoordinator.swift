@@ -323,7 +323,8 @@ final class MediaCoordinator {
   func backToTab(_ id: ItemID) -> Bool {
     // space(containing:) also resolves a Favorite (to that window's Space of the Favorite's Profile);
     // space(for:) sees only pinned and Today rows.
-    guard let factory = app.hostFactories.values.first(where: { $0.hosts[id] != nil }) ?? app.hostFactories.values.first(where: { $0.space(containing: id) != nil }),
+    // The window of the page that plays (a tab can show in two windows), else any window that shows its Space.
+    guard let factory = host(id)?.owner ?? app.hostFactories.values.first(where: { $0.space(containing: id) != nil }),
           app.model.tab(id: id) != nil else { return false }
     store.noteInteraction(tabID: id)
     factory.selectTabForCommand(id, spaceID: factory.space(containing: id)?.id)
@@ -409,7 +410,9 @@ final class MediaCoordinator {
   }
 
   private func selectForBackToTab(_ id: ItemID) {
-    guard let factory = app.hostFactories.values.first(where: { $0.hosts[id] != nil }) else { return }
+    // The window whose page is in Open's PiP window (a tab can show in two windows).
+    let content = pipHost?.tabID == id ? pipHost?.pip.webContent : nil
+    guard let factory = content.flatMap({ c in app.hostFactories.values.first { $0.tabID(for: c) != nil } }) ?? host(id)?.owner else { return }
     store.noteInteraction(tabID: id)
     factory.selectTabForCommand(id, spaceID: factory.space(containing: id)?.id)
     factory.window?.makeKeyAndOrderFront(nil)
