@@ -827,9 +827,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// (docs/re/pinned-favorites-close.md P5). Favorites are shared by a Profile's Spaces, so a
   /// Favorite chosen in another Space does not count.
   private var selectionHistory: [SpaceID: [ItemID]] = [:]
-  func select(nodeID: ItemID?, focus: Bool = true) {
+  func select(nodeID requested: ItemID?, focus: Bool = true) {
     controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
+    // A split pane shows through its split. Selecting the pane's tab ID alone would show that
+    // pane by itself and hide the other panes (Next Tab, a close's neighbour, a restored pane).
+    var nodeID = requested
+    if let id = requested, case .splitPane(let splitID)? = model.parent(of: id) {
+      model.focusSplitPane(splitID: splitID, tabID: id); nodeID = splitID
+    }
     if let nodeID {
       var history = selectionHistory[space.id, default: []]
       // The outgoing node counts too: a selection restored at launch or by a Space switch never
@@ -1068,7 +1074,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // or show no tab (Arc 1.172.2, docs/re/pinned-favorites-close.md P5).
       let shown = Set(orderedTabs.map { model.sidebarSelectionID(for: $0.id) })
       select(nodeID: selectionHistory[space.id]?.last { $0 != id && shown.contains($0) })
-    } else if wasSelected {
+    } else if wasSelected, !(inSplit && !isPinned) {
+      // An archived pane of the selected split needs no new selection: the model keeps the
+      // split selected (focus on its first pane) or hands it to the last pane, as Close This Pane does.
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
     } else { controller?.refresh(); mirror.sync(); scheduleSave() }
@@ -1311,7 +1319,8 @@ extension EngineWebContentHostFactory {
       default: parent = nil
       }
     }
-    select(nodeID: nodeID); controller?.sidebar.reveal(nodeID: tab.id)
+    // A pane has no sidebar row of its own; reveal its split's row.
+    select(nodeID: nodeID); controller?.sidebar.reveal(nodeID: nodeID)
   }
 
   @objc func closeTab(_ sender: Any?) {
@@ -1362,7 +1371,9 @@ extension EngineWebContentHostFactory {
       }
       if self.model.tab(id: record.id) != nil { store.discardArchived(ids: [record.id]) }
       let tab = self.model.restoreArchivedTab(record)
-      if self.model.parentByID[tab.id] != nil { self.select(nodeID: tab.id) }
+      // The tab returns to its original place, which can be in another Space. Selecting it in
+      // the focused Space would leave that Space with a selection it cannot show (a blank page).
+      if self.model.parentByID[tab.id] != nil { self.selectTabForCommand(tab.id) }
     }
   }
 
@@ -1397,10 +1408,14 @@ extension EngineWebContentHostFactory {
   @objc func previousTab(_ sender: Any?) { cycleTab(by: -1) }
 
   func cycleTab(by delta: Int) {
-    let ids = orderedTabs.map(\.id)
+    // One stop per sidebar item: a split's panes share their split's stop, so Next Tab
+    // shows the whole split and the following step leaves it.
+    var seen = Set<ItemID>()
+    let ids = orderedTabs.compactMap { model.sidebarSelectionID(for: $0.id) }.filter { seen.insert($0).inserted }
     guard !ids.isEmpty else { return }
     // No selection: Next goes to the first tab, Previous to the last.
-    let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? (delta >= 0 ? -1 : 0)
+    let selected = selectedTab.flatMap { model.sidebarSelectionID(for: $0.id) }
+    let current = selected.flatMap { ids.firstIndex(of: $0) } ?? (delta >= 0 ? -1 : 0)
     select(nodeID: ids[((current + delta) % ids.count + ids.count) % ids.count])
   }
 
