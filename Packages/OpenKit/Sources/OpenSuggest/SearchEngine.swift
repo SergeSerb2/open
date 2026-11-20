@@ -79,6 +79,8 @@ public enum SuggestResponseParser {
             guard let text = value as? String, !text.isEmpty else { continue }
             let type = i < types.count ? types[i] as? String : nil
             if type == "NAVIGATION", let url = URL(string: text), url.host() != nil {
+                // A page row from the network is a web page only: never file:, chrome:, or another scheme.
+                guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { continue }
                 let title = i < descriptions.count ? (descriptions[i] as? String ?? "") : ""
                 items.append(.navigation(url, title: title))
             } else if type != "CALCULATOR" { // the local calculator answers arithmetic

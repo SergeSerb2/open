@@ -38,9 +38,11 @@ Scopes: `global` (system-wide, Little Open), `window`, `sidebar-focused`,
 `command-bar`, and `web-content` (text and page keys). A wider scope contains
 the narrower ones when the checker looks for collisions.
 
-The app feeds the command bar with `CommandRegistry.makeSuggestRegistry()`.
+The app feeds the command bar with `CommandRegistry.makeSuggestRegistry(overrides:)`.
 It returns an `OpenSuggest.ActionRegistry`, so menu titles, shortcuts, and
-command-bar rows cannot drift. Pin/Unpin is one menu command and two
+command-bar rows cannot drift. Action keycaps show the effective shortcut (the
+user's override when one exists, as the menus do); when the user's key bindings
+change, the bar rebuilds the action rows the next time it opens. Pin/Unpin is one menu command and two
 command-bar actions (`pin-tab` needs a Today tab, `unpin-tab` needs a pinned tab).
 Little Open commands keep "Little Arc" as a search alias. Display titles use
 "Little Open".

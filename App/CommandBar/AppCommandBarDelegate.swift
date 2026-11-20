@@ -1,5 +1,6 @@
 import AppKit
 import OpenCommandBar
+import OpenCommands
 import OpenFeatures
 import OpenDesign
 import OpenEasel
@@ -24,6 +25,15 @@ final class StoredCommandBarFavicons: CommandBarFaviconSource {
     }
     return image
   }
+}
+
+/// The key bindings each live suggest engine's action rows were built with. Engines start with the
+/// default keys (`CommandRegistry.makeSuggestRegistry()`); the bar rebuilds the rows when the user's
+/// bindings differ, so action keycaps show the same shortcut as the menus.
+@MainActor private let suggestActionBindings = NSMapTable<SuggestEngine, SuggestActionBindings>.weakToStrongObjects()
+private final class SuggestActionBindings {
+  let store: KeyBindingStore
+  init(_ store: KeyBindingStore) { self.store = store }
 }
 
 /// One lazy native command-bar controller for one standard window.
@@ -59,6 +69,11 @@ final class AppCommandBarSession: CommandBarDelegate {
     }
     windowController.dismissSidebarReveal()
     guard let engine = factory.suggestEngine() else { return }
+    let bindings = factory.app.keyBindings
+    if (suggestActionBindings.object(forKey: engine)?.store ?? .empty) != bindings {
+      engine.setActions(CommandRegistry.makeSuggestRegistry(overrides: bindings))
+      suggestActionBindings.setObject(SuggestActionBindings(bindings), forKey: engine)
+    }
     engine.extensionSource = extensionSource
     if controller?.engine !== engine {
       controller?.dismiss(reason: .programmatic)
@@ -72,6 +87,12 @@ final class AppCommandBarSession: CommandBarDelegate {
         self?.factory.focusedBrowser?.extensionActions.first { $0.extensionIdentifier == id }?.icon
       }
       bar.isActionEnabled = { [weak self] id, space in self?.factory.isAppCommandEnabled(id, payload: space?.description) ?? false }
+      // The key that closes the mode is the opening command's effective key (a rebound ⌘T no longer closes).
+      bar.isModeKey = { [weak self] event, mode in
+        guard let self, let shortcut = KeyboardShortcut.from(event: event),
+              let command = CommandRegistry.byID[mode == .newTab ? "new-tab" : "open-command-bar"] else { return false }
+        return self.factory.app.keyBindings.effectiveShortcuts(for: command).contains(shortcut)
+      }
       bar.onQueryStarted = { [weak self] _ in
         guard let self else { return }
         self.queryAt = LaunchTiming.shared.elapsedMilliseconds

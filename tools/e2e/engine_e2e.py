@@ -9579,6 +9579,7 @@ def commandbar_checks(factory, results, tmp, config):
         results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
         commandbar_footer_checks(app, results, tmp, bar, press, new['id'])
         commandbar_results_work_checks(app, results, bar, press, new['id'])
+        commandbar_sweep_checks(app, results, bar, press, type_query, state, origin, new['id'])
         app.call('focus', tab=new['id'])
         app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
         app.call('pasteboard-write', text='COPY NOT RUN')
@@ -9870,7 +9871,13 @@ def commandbar_checks(factory, results, tmp, config):
         custom = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == custom_url), None), step=.1)
         results['custom_search_engine_navigation'] = {'ok': bool(custom), 'expectedURL': custom_url}
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
-        app.call('select', tab=target); app.call('wait', tab=target); app.call('focus', tab=target)
+        # `select` uses the window's current Space: go back to the /cross tab's own Space first.
+        app.call('space', space=second_space)
+        back = wait_until(lambda: (lambda w: w if w['space'] == second_space else None)(app.call('window-state')), timeout=3, step=.05)
+        assert back, app.call('window-state')
+        app.call('select', tab=target); app.call('wait', tab=target)
+        assert app.call('window-state')['selected'] == target, app.call('window-state')
+        app.call('focus', tab=target)
         press('s', modifiers=['cmd','shift'])
         save = wait_until(lambda: app.call('save-page-state') if app.call('save-page-state')['visible'] else None, timeout=5, step=.1)
         results['save_page_sheet'] = {'ok': bool(save) and save['requests'] == 1, 'state': save, 'last': app.call('save-page-state')}
@@ -9968,6 +9975,111 @@ def commandbar_checks(factory, results, tmp, config):
     import settings_live
     settings_live.dock_tile(factory, results, tmp, wait_until)
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
+
+
+def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin, home):
+    """Bug sweep round 1 (CMDBAR): flows that once went wrong in the real App."""
+    # Cmd+L shows at most 2,048 characters (docs/commandbar.md "Typing"). Return on that unedited text
+    # must reload the whole address, not load the cut one. The cut falls inside a "%2F" escape.
+    head = origin + '/long?q='
+    long_url = head + 'a' * (2046 - len(head)) + '%2F' + 'b' * 80 + '&tail=zz9'
+    assert long_url[2046:2049] == '%2F'
+    long_tab = new_tab(app, long_url)
+    app.call('select', tab=long_tab); app.call('focus', tab=long_tab)
+    wait_until(lambda: (app.eval(long_tab, 'location.href') or '') == long_url, timeout=10, step=.1)
+    app.eval(long_tab, 'window.cutMarker = 1; 1')
+    edited = bar('l', 'window')
+    press('return')
+    reloaded = wait_until(lambda: app.eval(long_tab, 'window.cutMarker === undefined && document.readyState === "complete"'), timeout=10, step=.1)
+    href = app.eval(long_tab, 'location.href') or ''
+    results['cmd_l_long_url_return_keeps_whole_address'] = {
+        'ok': edited['mode'] == 'editCurrentURL' and edited['text'] == long_url[:2048] and bool(reloaded) and href == long_url,
+        'fieldTail': edited.get('text', '')[-6:], 'fieldLength': len(edited.get('text', '')), 'urlLength': len(long_url), 'loadedLength': len(href), 'loadedTail': href[-12:]}
+    # An edit drops the hidden whole address, even one that ends on the same text: select-all + paste of
+    # the visible prefix loads the pasted text, never the tail the user removed (review round 1, finding 1).
+    # Clear first, so the paste really writes the prefix (pasting over the same text proves nothing).
+    app.eval(long_tab, 'window.cutMarker = 1; 1')
+    bar('l', 'window')
+    press('delete')
+    cleared = wait_until(lambda: (lambda st: st if st.get('fieldText') == '' and st.get('final') else None)(state()), timeout=5, step=.05)
+    app.call('pasteboard-write', text=long_url[:2048])
+    # The app route: Edit ▸ Paste reaches the field editor through the menus (the window route skips them).
+    press('v', modifiers=['cmd'], route='app')
+    pasted = wait_until(lambda: (lambda st: st if st.get('fieldText') == long_url[:2048] and st.get('final') else None)(state()), timeout=5, step=.05)
+    press('return')
+    reloaded = wait_until(lambda: app.eval(long_tab, 'window.cutMarker === undefined && document.readyState === "complete"'), timeout=10, step=.1)
+    href = app.eval(long_tab, 'location.href') or ''
+    results['cmd_l_long_url_pasted_prefix_loads_as_entered'] = {
+        'ok': bool(cleared) and bool(pasted) and bool(reloaded) and href != long_url and href.startswith(long_url[:2046]) and 'zz9' not in href,
+        'cleared': bool(cleared), 'pasted': bool(pasted), 'loadedLength': len(href), 'loadedTail': href[-12:]}
+    # The same, with no clear: Cmd+L selects the whole cut text and the paste writes identical text over it.
+    # Nothing in the field changes, but it is still an edit (shouldChangeText), so Return loads the paste.
+    app.call('navigate', tab=long_tab, url=long_url); app.call('wait', tab=long_tab)
+    wait_until(lambda: (app.eval(long_tab, 'location.href') or '') == long_url, timeout=10, step=.1)
+    app.eval(long_tab, 'window.cutMarker = 1; 1')
+    selected = bar('l', 'window')
+    press('v', modifiers=['cmd'], route='app')
+    time.sleep(.3)
+    after = state()
+    press('return')
+    reloaded = wait_until(lambda: app.eval(long_tab, 'window.cutMarker === undefined && document.readyState === "complete"'), timeout=10, step=.1)
+    href = app.eval(long_tab, 'location.href') or ''
+    results['cmd_l_long_url_same_text_paste_loads_as_entered'] = {
+        'ok': selected['range'] == [0, 2048] and after.get('fieldText') == long_url[:2048] and bool(reloaded)
+            and href != long_url and href.startswith(long_url[:2046]) and 'zz9' not in href,
+        'selectedRange': selected.get('range'), 'reloaded': bool(reloaded), 'loadedLength': len(href), 'loadedTail': href[-12:]}
+    app.call('close', tab=long_tab)
+    app.call('select', tab=home)
+
+    # Action keycaps follow the user's key bindings, as the menus do (SuggestAdapter).
+    bindings = Path(app.user_data, 'State/keybindings.json')
+    def new_tab_row():
+        # The menu command, not Cmd+T: an override can move or clear New Tab's key.
+        app.call('menu-perform', id='new-tab')
+        assert wait_until(lambda: state().get('presented'), timeout=3, step=.05), state()
+        typed = type_query('New Tab')
+        row = next((r for r in (typed or {}).get('rows', []) if r['action'] == 'new-tab'), None)
+        press('escape'); time.sleep(.25)
+        # Key and modifier mask of every New Tab menu item (control 1<<18, option 1<<19, command 1<<20).
+        keys = [[n['key'], n['modifierMask']] for n in app.call('menu-state') if n['id'] == 'new-tab']
+        return {'row': row and {k: row[k] for k in ('title', 'subtitle')}, 'menuKeys': sorted(set(k for k, _ in keys)),
+                'menuShortcuts': sorted(set((k, m) for k, m in keys))}
+    try:
+        bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': [{'key': 'o', 'modifiers': ['command', 'option', 'control']}]}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        custom = new_tab_row()
+        results['action_keycaps_follow_override'] = {'ok': custom['menuShortcuts'] == [('o', (1 << 18) | (1 << 19) | (1 << 20))] and bool(custom['row']) and custom['row']['subtitle'] == '\u2303\u2325\u2318O', **custom}
+        bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': []}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        cleared = new_tab_row()
+        results['action_keycaps_cleared_override'] = {'ok': cleared['menuKeys'] == [''] and bool(cleared['row']) and cleared['row']['subtitle'] == '', **cleared}
+    finally:
+        bindings.unlink(missing_ok=True); app.call('reload-keybindings'); time.sleep(.1)
+    restored = new_tab_row()
+    results['action_keycaps_default_after_reset'] = {'ok': restored['menuShortcuts'] == [('t', 1 << 20)] and bool(restored['row']) and restored['row']['subtitle'] == '\u2318T', **restored}
+    app.call('select', tab=home)
+
+    # The key that closes a mode is the opening command's effective key (review round 1, finding 2): after
+    # Open Command Bar moves to ⌃⌥⌘O, the old ⌘L must leave the open address editor and its
+    # query alone, and the new key closes it.
+    app.call('focus', tab=home)
+    try:
+        bindings.write_text(json.dumps({'version': 1, 'bindings': {'open-command-bar': {'shortcuts': [{'key': 'o', 'modifiers': ['command', 'option', 'control']}]}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        press('o', modifiers=['cmd', 'opt', 'ctrl'], route='window')
+        opened = wait_until(lambda: (lambda st: st if st.get('presented') and st.get('mode') == 'editCurrentURL' else None)(state()), timeout=3, step=.05)
+        typed = type_query('keep this query')
+        press('l', modifiers=['cmd'], route='window'); time.sleep(.3)
+        kept = state()
+        press('o', modifiers=['cmd', 'opt', 'ctrl'], route='window')
+        closed = wait_until(lambda: not state().get('presented'), timeout=3, step=.05)
+        results['mode_key_follows_override'] = {
+            'ok': bool(opened) and bool(typed) and kept.get('presented') is True and kept.get('text') == 'keep this query' and bool(closed),
+            'opened': bool(opened), 'keptPresented': kept.get('presented'), 'keptText': kept.get('text'), 'closedByNewKey': bool(closed)}
+    finally:
+        press('escape'); time.sleep(.2)
+        bindings.unlink(missing_ok=True); app.call('reload-keybindings'); time.sleep(.1)
+    app.call('select', tab=home)
 
 
 def commandbar_pb1_checks(app, results, bar, press, type_query, state, origin):
