@@ -118,7 +118,12 @@ final class CommandBarFieldEditor: NSTextView {
             .replacingOccurrences(of: "\n", with: " ").prefix(2_048))
     }
 
+    /// Every text-system edit (typing, paste, delete, cut, undo), before it applies, even one that leaves the
+    /// same text. The bar's own writes (prefill, completion) do not come here.
+    var onUserEdit: (() -> Void)?
+
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        onUserEdit?()
         let length = (string as NSString).length
         if pasteDepth > 0 { lastEdit = .paste }
         else if editingUndoManager.isUndoing || editingUndoManager.isRedoing { lastEdit = .undo }
