@@ -1963,6 +1963,9 @@ extension BrowserWindowController {
         } ?? false
         removal()
         guard let selected, model.node(id: selected) == nil, let index else { return }
+        // The model can hand the selection on by itself (a split that collapses to its last
+        // pane selects that pane). Keep that choice; its Undo restores the split's selection.
+        if model.selectedNode(in: space, window: state) != nil { return }
         let remaining = Set(tabs())
         guard !remaining.isEmpty else { return }
         let next = before.suffix(from: index).first(where: remaining.contains) ?? before.prefix(index).last(where: remaining.contains)
