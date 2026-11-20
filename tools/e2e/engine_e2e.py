@@ -10003,7 +10003,8 @@ def commandbar_sweep_checks(app, results, bar, press, type_query, state, origin,
     press('delete')
     cleared = wait_until(lambda: (lambda st: st if st.get('fieldText') == '' and st.get('final') else None)(state()), timeout=5, step=.05)
     app.call('pasteboard-write', text=long_url[:2048])
-    press('v', modifiers=['cmd'], route='window')
+    # The app route: Edit ▸ Paste reaches the field editor through the menus (the window route skips them).
+    press('v', modifiers=['cmd'], route='app')
     pasted = wait_until(lambda: (lambda st: st if st.get('fieldText') == long_url[:2048] and st.get('final') else None)(state()), timeout=5, step=.05)
     press('return')
     reloaded = wait_until(lambda: app.eval(long_tab, 'window.cutMarker === undefined && document.readyState === "complete"'), timeout=10, step=.1)
