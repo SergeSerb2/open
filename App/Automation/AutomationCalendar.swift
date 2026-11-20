@@ -84,7 +84,7 @@ extension AutomationController {
         let deadline = Date().addingTimeInterval(3)
         while live.fetching, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
       }
-      return ["active": live.isActive, "fetches": live.fetches, "interval": live.interval().rawValue,
+      return ["active": live.isActive, "fetches": live.fetches, "interval": live.interval(profile: app.frontWindowController?.context.favoritesProfile?.id).rawValue,
         "nextFireIn": live.nextFire.map { $0.timeIntervalSince(service.now) } ?? NSNull(),
         "dismissed": live.dismissed.sorted(), "reminders": live.reminders,
         "tiles": app.windowControllers.flatMap { c in c.context.liveCalendarTiles.map { id, s in

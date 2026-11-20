@@ -58,7 +58,10 @@ final class LiveCalendarCoordinator {
     if isActive { update() } else if hasLiveFavorite() { tileAppeared() }
   }
 
-  func actions() -> LiveCalendarActions {
+  /// One window's actions. `profile` reads that window's Favorites Profile at call time: the reminder
+  /// interval is per Profile (Arc `didSetNotificationInterval(interval, profile)`), so a menu in one
+  /// window never reads or writes the front window's Profile.
+  func actions(profile: @escaping @MainActor () -> ProfileID?) -> LiveCalendarActions {
     LiveCalendarActions(
       tileAppeared: { [weak self] _ in self?.tileAppeared() },
       join: { [weak self] state in self?.join(state) },
@@ -66,20 +69,18 @@ final class LiveCalendarCoordinator {
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(state.link.url.absoluteString, forType: .string)
       },
       dismiss: { [weak self] state in self?.dismissed.insert(state.event.id); self?.update() },
-      interval: { [weak self] in self?.interval() ?? .default },
+      interval: { [weak self] in self?.interval(profile: profile()) ?? .default },
       setInterval: { [weak self] value in
-        UserDefaults.standard.set(value.rawValue, forKey: LiveCalendar.ReminderInterval.preferenceKey(profile: self?.profileKey() ?? "default"))
+        UserDefaults.standard.set(value.rawValue, forKey: LiveCalendar.ReminderInterval.preferenceKey(profile: Self.profileKey(profile())))
         self?.update()
       })
   }
 
-  /// Per Profile in Arc; Open keys it by the front window's Favorites Profile.
-  private func profileKey() -> String {
-    app.frontWindowController?.context.favoritesProfile?.id.description ?? "default"
-  }
+  /// Per Profile, as in Arc.
+  private static func profileKey(_ profile: ProfileID?) -> String { profile?.description ?? "default" }
 
-  func interval() -> LiveCalendar.ReminderInterval {
-    UserDefaults.standard.string(forKey: LiveCalendar.ReminderInterval.preferenceKey(profile: profileKey()))
+  func interval(profile: ProfileID?) -> LiveCalendar.ReminderInterval {
+    UserDefaults.standard.string(forKey: LiveCalendar.ReminderInterval.preferenceKey(profile: Self.profileKey(profile)))
       .flatMap(LiveCalendar.ReminderInterval.init(rawValue:)) ?? .default
   }
 
@@ -113,25 +114,32 @@ final class LiveCalendarCoordinator {
       return
     }
     let visible = events.filter { !dismissed.contains($0.id) }
-    let interval = interval()
     var anyTile = false
+    // Each window uses its own Profile's interval; the first window whose interval makes the reminder due shows it.
+    var due: (state: LiveCalendar.TileState, controller: BrowserWindowController)?
+    var intervals: [LiveCalendar.ReminderInterval] = []
     for controller in app.windowControllers where controller.context.liveCalendar != nil {
       let favorites = controller.context.favoritesProfile?.favorites ?? []
+      let interval = interval(profile: controller.context.favoritesProfile?.id)
       var tiles: [ItemID: LiveCalendar.TileState] = [:]
       for tab in favorites where CalendarProvider.match(url: tab.url) != nil && controller.context.liveCalendarEnabled(for: tab) {
-        anyTile = true
-        if let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded) { tiles[tab.id] = state }
+        anyTile = true; intervals.append(interval)
+        guard let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded) else { continue }
+        tiles[tab.id] = state
+        if state.remind, due == nil { due = (state, controller) }
       }
       if controller.context.liveCalendarTiles != tiles { controller.context.liveCalendarTiles = tiles }
     }
     guard anyTile else { stop(); return }
-    if let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded), state.remind {
-      reminded.insert(state.event.id)
-      remind(state)
+    if let due {
+      reminded.insert(due.state.event.id)
+      remind(due.state, in: due.controller)
     }
     // Next wake: the next visible change or the next fetch, whichever is first.
     var next = lastFetch.map { $0.addingTimeInterval(LiveCalendar.minFetchInterval) } ?? now.addingTimeInterval(LiveCalendar.minFetchInterval)
-    if let change = LiveCalendar.nextChange(events: visible, now: now, interval: interval) { next = min(next, change) }
+    for interval in Set(intervals) {
+      if let change = LiveCalendar.nextChange(events: visible, now: now, interval: interval) { next = min(next, change) }
+    }
     let delay = max(1, next.timeIntervalSince(now))
     nextFire = now.addingTimeInterval(delay)
     let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.update() } }
@@ -146,25 +154,26 @@ final class LiveCalendarCoordinator {
     for controller in app.windowControllers where !controller.context.liveCalendarTiles.isEmpty { controller.context.liveCalendarTiles = [:] }
   }
 
-  private func join(_ state: LiveCalendar.TileState) {
-    guard let controller = app.frontWindowController, let factory = app.hostFactories[controller.windowID] else { return }
+  private func join(_ state: LiveCalendar.TileState, in window: BrowserWindowController? = nil) {
+    guard let controller = window.flatMap({ app.hostFactories[$0.windowID] == nil ? nil : $0 }) ?? app.frontWindowController,
+          let factory = app.hostFactories[controller.windowID] else { return }
     factory.openMeetingLink(state.link, from: "liveCalendar", event: state.event)
   }
 
   /// The reminder: a toast in the front window with Join. GUESS — capture pending (F2 item 7): Arc shows a
   /// reminder card at the Favorite tile with Join, Dismiss and the interval picker.
-  private func remind(_ state: LiveCalendar.TileState) {
+  private func remind(_ state: LiveCalendar.TileState, in controller: BrowserWindowController) {
     #if OPEN_AUTOMATION
-    reminders.append(["event": state.event.id, "subtitle": state.subtitle, "at": app.calendar.now.timeIntervalSince1970])
+    reminders.append(["event": state.event.id, "subtitle": state.subtitle, "at": app.calendar.now.timeIntervalSince1970,
+                      "window": controller.windowID.description])
     #endif
-    guard let controller = app.frontWindowController else { return }
     let start = state.event.start.timeIntervalSince(app.calendar.now)
     let when = start >= 60 ? "Starts in \(Int((start / 60).rounded(.up)))m" : (start > -60 ? "Starting now" : "Started \(Int(-start / 60))m ago")
     let content = ToastContent(title: state.event.displayTitle, subtitle: "\(when) · \(state.link.serviceName)", symbol: "video",
       accessory: .button(symbol: "video.fill", accessibilityLabel: "Join"), lifetime: 60, coalescingKey: "live-calendar")
-    controller.toasts.show(content) { [weak self] handle in
+    controller.toasts.show(content) { [weak self, weak controller] handle in
       handle.dismiss()
-      self?.join(state)
+      self?.join(state, in: controller)
     }
   }
 }

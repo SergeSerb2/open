@@ -262,11 +262,34 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     updateWindow = window
     let installed = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     window.column.version.stringValue = "Version \(installed) (\(build))"
-    window.column.prompt.stringValue = "Your browser is up to date"
+    if let newer = Self.unsupportedUpdate(error) {
+      // Sparkle reports "no update" also when the newer release cannot run on this Mac: say so.
+      phase = "unsupported"
+      window.column.prompt.stringValue = newer
+    } else {
+      window.column.prompt.stringValue = "Your browser is up to date"
+    }
     window.column.primary.title = "Close"; window.column.primary.keyEquivalent = "\r"
     self.acknowledgement = acknowledgement
     let close: () -> Void = { [weak self] in self?.acknowledge() }
     window.onPrimary = close; window.onClose = close; window.show()
+  }
+  /// Sparkle's "no update" error with a reason that a newer release exists but this Mac cannot install
+  /// it (`SPUNoUpdateFoundReasonKey`): Open's sentence for the update window, else nil.
+  static func unsupportedUpdate(_ error: any Error) -> String? {
+    let info = (error as NSError).userInfo
+    guard let raw = (info[SPUNoUpdateFoundReasonKey] as? NSNumber)?.int32Value,
+          let reason = SPUNoUpdateFoundReason(rawValue: raw) else { return nil }
+    let item = info[SPULatestAppcastItemFoundKey] as? SUAppcastItem
+    let version = item.map { " v" + UpdateReleaseNotesView.boundedUTF8($0.displayVersionString, limit: 128) } ?? ""
+    switch reason {
+    case .systemIsTooOld:
+      let minimum = item?.minimumSystemVersion.map { UpdateReleaseNotesView.boundedUTF8($0, limit: 32) }
+      return "Open\(version) is available, but it needs " + (minimum.map { "macOS \($0) or later." } ?? "a newer version of macOS.")
+    case .systemIsTooNew: return "Open\(version) is available, but it does not support this version of macOS."
+    case .hardwareDoesNotSupportARM64: return "Open\(version) is available, but it does not support this Mac."
+    default: return nil
+    }
   }
   func showUpdaterError(_ error: any Error, acknowledgement: @escaping () -> Void) {
     installationRelaunchRequested = false

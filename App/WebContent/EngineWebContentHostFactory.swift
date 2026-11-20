@@ -1186,10 +1186,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     default: return nil
     }
   }
+  /// Automation evidence only (the socket's `events` command drains it). Builds without automation keep
+  /// nothing: page console messages and other page data never pile up in a shipping browser.
   func record(_ type: String, _ content: OEWebContent?, _ info: [String: Any]) {
+    #if OPEN_AUTOMATION
     var event = info; event["type"] = type; event["tab"] = content.flatMap { tabID(for: $0)?.description } ?? ""
     event["content"] = content?.identifier ?? 0; event["time"] = Date().timeIntervalSince1970
     events.append(event); if events.count > 2000 { events.removeFirst(events.count - 2000) }
+    #endif
   }
   func drainEvents() -> [[String: Any]] { defer { events.removeAll() }; return events }
   func completePendingDialog(accept: Bool, text: String?) -> Bool {

@@ -71,6 +71,16 @@ final class ProfileTeardown {
   }
 
   func wipe(profileID: ProfileID, directory: String) async throws {
+    // The snapshot without the Profile is on disk before the wipe is journaled. Otherwise a stop
+    // after the journal would wipe the folders at the next launch and then load a snapshot that
+    // still lists the Profile: it would come back, empty. Launch recovery keeps any folder that a
+    // loaded Profile still uses (`finishPendingWipes(inUse:)`).
+    stage = "commitModel"
+    guard app.model.profile(id: profileID) == nil,
+      !app.model.profiles.contains(where: { $0.dataDirectoryName.lowercased() == directory.lowercased() }) else {
+      throw Self.failure("The Profile is still in use.")
+    }
+    try app.snapshotStore.saveNow(model: app.model)
     // Journal before teardown so any engine or filesystem failure remains
     // recoverable. Errors preserve all folders until a later safe launch.
     stage = "enqueue"
@@ -223,14 +233,24 @@ final class ProfileTeardown {
     let names = try orphans(directories)
     guard !names.isEmpty else { return }
     for name in names where !inUse.contains(name.lowercased()) { try enqueue(name, directories: directories) }
-    try finishPendingWipes(directories: directories)
+    try finishPendingWipes(directories: directories, inUse: inUse)
     try writeOrphans([], directories: directories)
   }
 
-  /// Call only while the data-root lock is held, before OEEngine.start.
-  static func finishPendingWipes(directories: ProfileDirectories) throws {
-    let names = try pending(directories)
-    guard !names.isEmpty else { return }
+  /// Call only while the data-root lock is held, after the snapshot loaded and before OEEngine.start.
+  /// `inUse` (lowercased folder names of the loaded model's Profiles): a journaled folder that a loaded
+  /// Profile still uses is kept and leaves the journal. Its deletion never reached the snapshot, so the
+  /// Profile is back with its data rather than back and empty.
+  static func finishPendingWipes(directories: ProfileDirectories, inUse: Set<String>) throws {
+    let journaled = try pending(directories)
+    guard !journaled.isEmpty else { return }
+    let names = journaled.filter { !inUse.contains($0.lowercased()) }
+    if names.count != journaled.count {
+      let kept = journaled.filter { inUse.contains($0.lowercased()) }
+      FileHandle.standardError.write(Data("Open: kept \(kept.count) Profile folder(s) whose deletion was not saved\n".utf8))
+      if names.isEmpty { try removeIfPresent(pendingURL(directories)); return }
+      try writeAtomically(JSONEncoder().encode(names), to: pendingURL(directories))
+    }
     for name in names {
       // The process may have stopped between journaling and the immediate wipe.
       try removeIfPresent(directories.profileDirectory(dataDirectoryName:name))

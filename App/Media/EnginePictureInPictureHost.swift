@@ -64,6 +64,11 @@ final class EnginePictureInPictureHost: WebPictureInPictureHost {
   func previousSlide() { pip.previousSlide() }
   func seekTo(_ time: Double) { pip.seek(to: time) }
   func scrubTo(_ time: Double) { pip.seek(to: time) }
-  func setMuted(_ muted: Bool) { setTabMuted(muted) }
+  /// Mute goes to the tab. Unmute also clears the page's own mute: a `<video muted>` stays silent
+  /// after the tab unmutes, and `mediaMuted` would keep showing "Unmute".
+  func setMuted(_ muted: Bool) {
+    setTabMuted(muted)
+    if !muted, pip.mediaMuted { pip.setMuted(false) }
+  }
   func closePausingVideo(_ pause: Bool) { pip.close(pausingVideo: pause) }
 }
