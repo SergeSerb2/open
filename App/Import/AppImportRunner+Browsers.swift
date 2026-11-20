@@ -68,7 +68,7 @@ extension AppImportRunner {
         let merged = try undo.captureModel(app.model) {
           try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: plan.bookmarks || plan.openTabs, favorites: false,
             folders: plan.bookmarks, searchSettings: plan.searchSettings && read.search != nil, importedAt: Date(), saving: {
-              try app.snapshotStore.saveNow(model: app.model)
+              try saveBrowserImport()
             })
         }
         let openAdded = openIDs.subtracting(openBefore).filter { self.app.model.node(id: $0) != nil }.count
@@ -176,6 +176,14 @@ extension AppImportRunner {
     } catch {
       return ImportOutcome(failures: ["Passwords and cookies": "Passwords and cookies could not be imported. You can try again from Settings."])
     }
+  }
+
+  /// The merge's durable commit. During first run the runner owns the landing checkpoint
+  /// (`run(plan:firstRun:)`). An import that lands nothing must not write the snapshot: the
+  /// next launch would then skip setup. The Arc path keeps the same rule.
+  func saveBrowserImport() throws {
+    guard !app.isFirstRun || app.firstRunSaved else { return }
+    try app.snapshotStore.saveNow(model: app.model)
   }
 
   private func finish(_ input: BrowserImportResult) -> BrowserImportResult {

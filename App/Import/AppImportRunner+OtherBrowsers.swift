@@ -51,7 +51,7 @@ extension AppImportRunner {
         let merged = try undo.captureModel(app.model) {
           try app.model.mergeImportedSidebar(sourceModel, profileMapping: [:], spaces: false, tabs: true, favorites: false,
             folders: true, searchSettings: false, importedAt: Date(), saving: {
-              try app.snapshotStore.saveNow(model: app.model)
+              try saveBrowserImport()
             })
         }
         result.counts["Bookmarks"] = merged.tabs
@@ -133,7 +133,7 @@ extension AppImportRunner {
     do {
       let merged = try undo.captureModel(app.model) {
         try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: true, favorites: false,
-          folders: false, searchSettings: false, importedAt: Date(), saving: { try app.snapshotStore.saveNow(model: app.model) })
+          folders: false, searchSettings: false, importedAt: Date(), saving: { try saveBrowserImport() })
       }
       result.counts["Open tabs"] = merged.tabs
       result.counts["Open tab duplicates"] = merged.duplicates

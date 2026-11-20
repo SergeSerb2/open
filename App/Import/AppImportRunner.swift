@@ -130,7 +130,9 @@ final class AppImportRunner: ProfileDataOwner {
     if case .browser(let source, let profile) = plan.source {
       let browser = await importBrowser(source: source, profile: profile, plan: plan, undo: undo, wizard: wizard,
                                         progress: { progress($0, $1, landed: $2) })
-      if firstRun {
+      // An import that landed nothing keeps D3 intact, as on the Arc path: Continue/Start Fresh
+      // owns the first save of the default model.
+      if firstRun, ImportOutcome(counts: browser.counts).didImportAnything {
         // I-5: the import merged into the first-run model. Land the browser behind onboarding, as Arc does.
         app.showFirstRunBrowser()
         do { try app.snapshotStore.saveNow(model: app.model) } catch { return result(FirstRunViewModel.importedSaveError) }
