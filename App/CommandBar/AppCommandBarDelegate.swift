@@ -87,6 +87,12 @@ final class AppCommandBarSession: CommandBarDelegate {
         self?.factory.focusedBrowser?.extensionActions.first { $0.extensionIdentifier == id }?.icon
       }
       bar.isActionEnabled = { [weak self] id, space in self?.factory.isAppCommandEnabled(id, payload: space?.description) ?? false }
+      // The key that closes the mode is the opening command's effective key (a rebound ⌘T no longer closes).
+      bar.isModeKey = { [weak self] event, mode in
+        guard let self, let shortcut = KeyboardShortcut.from(event: event),
+              let command = CommandRegistry.byID[mode == .newTab ? "new-tab" : "open-command-bar"] else { return false }
+        return self.factory.app.keyBindings.effectiveShortcuts(for: command).contains(shortcut)
+      }
       bar.onQueryStarted = { [weak self] _ in
         guard let self else { return }
         self.queryAt = LaunchTiming.shared.elapsedMilliseconds

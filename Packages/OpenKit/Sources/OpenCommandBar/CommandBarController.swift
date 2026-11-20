@@ -81,6 +81,14 @@ public final class CommandBarController: NSObject {
     public var onQueryStarted: ((String) -> Void)?
     /// The App uses the same enabled-state validation as its menus.
     public var isActionEnabled: ((String, SpaceID?) -> Bool)?
+    /// True when `event` is the key of the command that opens `mode` (New Tab, or Open Command Bar for
+    /// Cmd+L) under the user's bindings. Nil uses the default keys, Cmd+T and Cmd+L.
+    public var isModeKey: ((NSEvent, CommandBarMode) -> Bool)?
+    static func isDefaultModeKey(_ event: NSEvent, _ mode: CommandBarMode) -> Bool {
+        guard event.modifierFlags.intersection([.command, .option, .shift, .control]) == .command,
+              let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+        return (key == "t" && mode == .newTab) || (key == "l" && mode == .editCurrentURL)
+    }
 
     private var panel: PanelView { view.panel }
     private var streamTask: Task<Void, Never>?
@@ -123,6 +131,8 @@ public final class CommandBarController: NSObject {
     private let completion = CompletionSession()
     /// The running query may carry an inline completion (§4.1.1 rule 2).
     private var queryAllowsCompletion = false
+    /// The whole current address while Cmd+L shows a cut copy of it and the user has not edited the field.
+    private var cutAddress: URL?
 
     public init(engine: SuggestEngine) {
         self.engine = engine
@@ -147,9 +157,11 @@ public final class CommandBarController: NSObject {
             return true
         }
         // A second Cmd+T closes the New Tab bar; a second Cmd+L closes the address editor (Arc 06-keys, 12c).
-        panel.input.editor.onModeKey = { [weak self] key in
-            guard let self, self.isPresented, self.closesOnModeKey, let mode = self.request?.mode else { return false }
-            guard (key == "t" && mode == .newTab) || (key == "l" && mode == .editCurrentURL) else { return false }
+        // The App matches the commands' effective keys, so a rebound key closes and the old one does not.
+        panel.input.editor.onModeKey = { [weak self] event in
+            guard let self, self.isPresented, self.closesOnModeKey, let mode = self.request?.mode,
+                  mode == .newTab || mode == .editCurrentURL else { return false }
+            guard self.isModeKey?(event, mode) ?? Self.isDefaultModeKey(event, mode) else { return false }
             self.dismiss(reason: .programmatic)
             return true
         }
@@ -200,6 +212,7 @@ public final class CommandBarController: NSObject {
         let initial = request.mode == .editCurrentURL ? address : ""
         completion.reset()
         field.stringValue = CommandBarFieldEditor.normalized(initial)
+        cutAddress = request.mode == .editCurrentURL && field.stringValue != initial ? request.currentTabURL : nil
         panel.input.textDidChange()
         isPresented = true
         view.isActive = true
@@ -229,6 +242,7 @@ public final class CommandBarController: NSObject {
         applyBackdrop()
         let field = panel.input.field
         completion.reset()
+        cutAddress = nil
         field.stringValue = CommandBarFieldEditor.normalized(preview.text)
         panel.input.textDidChange()
         suggestions = []
@@ -658,12 +672,11 @@ public final class CommandBarController: NSObject {
     }
 
     /// Cmd+L shows at most 2,048 characters of a longer address (docs/commandbar.md "Typing"). Return on that
-    /// unedited text opens the whole address, never the cut one.
+    /// unedited text opens the whole address, never the cut one. Any user edit (even one that ends on the same
+    /// text, such as pasting the visible prefix) drops it: then the field text is what opens.
     private func uncutAddress(_ r: CommandBarRequest) -> URL? {
-        guard r.mode == .editCurrentURL, let full = r.currentTabURL else { return nil }
-        let address = full.absoluteString
-        let shown = CommandBarFieldEditor.normalized(address)
-        return shown != address && fieldText == shown ? full : nil
+        guard r.mode == .editCurrentURL, let full = cutAddress else { return nil }
+        return fieldText == CommandBarFieldEditor.normalized(full.absoluteString) ? full : nil
     }
 
     // MARK: Keys
@@ -815,6 +828,7 @@ public final class CommandBarController: NSObject {
     fileprivate func textChanged() {
         panel.input.textDidChange()
         let editor = panel.input.editor
+        cutAddress = nil // a user edit: the field text, not the hidden whole address, is what Return opens
         guard isPresented, !editor.hasMarkedText(), !editor.isUpdatingComposition else { return }
         // A text-system edit (cut, for example) while a completion showed: the field text is the typed text.
         if completion.shown != nil { completion.accept() }
