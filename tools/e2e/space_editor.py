@@ -250,9 +250,26 @@ def run(factory, results, scratch, root, wait_until, read_image, delta_e):
         results['hidden_sidebar_anchor'] = dict(ok=abs(p['frame'][0] - wf[0] - 8) <= .5)
         app.call('editor-close'); app.call('command', id='toggle-sidebar')
         doomed = app.call('space-create', title='Editor deletion fixture')
-        app.call('space', space=doomed); p = open_editor()
+        app.call('space', space=doomed)
+        doomed_tab = app.call('open', url='data:text/html,<title>Deleted Space selection</title>')['id']
+        app.call('select', tab=doomed_tab); p = open_editor()
+        def saved_selections():
+            snapshot = json.loads(Path(app.call('save')).read_text())
+            return [w.get('selectedNodeBySpace', {}).get(doomed) for w in snapshot['windows']]
+        selected_before = saved_selections()
         app.call('sidebar-menu', item='Delete Space'); app.call('alert', button='Delete')
         results['E8_space_delete'] = dict(ok=bool(wait_until(closed, timeout=3, step=.02)) and doomed not in [s['id'] for s in app.call('spaces')])
+        # STATE2: a deleted Space's key leaves every window's remembered selection; Undo puts it back.
+        selected_after = saved_selections()
+        results['E8_space_delete_drops_selection_key'] = dict(ok=doomed_tab in selected_before and not any(selected_after),
+                                                              before=selected_before, after=selected_after)
+        app.call('menu-perform', id='undo')
+        undone = wait_until(lambda: doomed in [s['id'] for s in app.call('spaces')], timeout=3, step=.02)
+        selected_undo = saved_selections() if undone else []
+        results['E8_space_delete_undo_restores_selection'] = dict(ok=bool(undone) and doomed_tab in selected_undo, after=selected_undo)
+        if undone:
+            app.call('space', space=doomed); app.call('sidebar-menu', item='Delete Space'); app.call('alert', button='Delete')
+            wait_until(lambda: doomed not in [s['id'] for s in app.call('spaces')], timeout=3, step=.02)
         p = open_editor(); app.call('window-close')
         # editor-state now targets another surviving browser window.
         results['E8_owner_close'] = dict(ok=bool(wait_until(lambda: all(not (w['class'] == 'ThemeEditorPanel' and w['visible']) for w in app.call('windows')), timeout=3, step=.02)))

@@ -2378,6 +2378,8 @@ public final class BrowserModel {
             for node in doomed.today { entries += archiveEntries(for: node, in: .spaceToday(id), reason: .closed) }
         }
         let focusedWindows = windows.filter { $0.focusedSpaceID == id }
+        // Each window's remembered selection for the deleted Space goes with it (Undo puts it back).
+        let selections = windows.compactMap { window in window.selectedNodeBySpace.removeValue(forKey: id).map { (window, $0) } }
         removeSpace(id)
         emit(.reload(parent: .spaceToday(id)))
         archive(entries)
@@ -2386,6 +2388,7 @@ public final class BrowserModel {
             guard model.space(id: id) == nil else { return false }
             model.insertSpace(doomed, at: slot)
             for window in focusedWindows { window.focusedSpaceID = id }
+            for (window, node) in selections where window.selectedNodeBySpace[id] == nil { window.selectedNodeBySpace[id] = node }
             model.emit(.reload(parent: .spaceToday(id)))
             model.archiveSink?.discardArchived(ids: ids)
             return true
