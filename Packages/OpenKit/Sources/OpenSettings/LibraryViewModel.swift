@@ -216,18 +216,21 @@ import OpenStore
         actions.previewArchived(url: row.url, profileID: profile)
     }
 
-    public func restore(id: ItemID, to spaceID: SpaceID? = nil) async {
-        // The panel closes when this is set. A failed restore must not reuse the
-        // Space of an earlier success (the section, and so this value, survive a reopen).
+    /// Returns true when this call restored the row. The panel closes on that result, not on
+    /// `restoredSpaceID`: a second restore that starts while this one awaits clears the field.
+    @discardableResult
+    public func restore(id: ItemID, to spaceID: SpaceID? = nil) async -> Bool {
+        // A failed restore must not reuse the Space of an earlier success for "Click to view"
+        // (the section, and so this value, survive a reopen).
         restoredSpaceID = nil
-        guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
-        guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return }
+        guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return false }
+        guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return false }
         if let spaceID { record.spaceID = spaceID; record.originalLocation = "today:\(spaceID)" }
         let restoredID: ItemID
         do {
             if record.kind == .folder {
                 guard let folder = try model.restoreArchivedFolder(record, saving: { try snapshot.saveNow(model: model) }) else {
-                    statusText = "This archived folder cannot be restored."; return
+                    statusText = "This archived folder cannot be restored."; return false
                 }
                 restoredID = folder.id
             } else {
@@ -235,15 +238,16 @@ import OpenStore
             }
         } catch {
             statusText = "Saving failed. The Archive entry was kept. Try Restore again."
-            await reloadArchive(); return
+            await reloadArchive(); return false
         }
-        guard model.node(id: id) != nil else { statusText = "Choose a Space before restoring this tab."; return }
+        guard model.node(id: id) != nil else { statusText = "Choose a Space before restoring this tab."; return false }
         do { try await store.delete(id: id) }
-        catch { statusText = "\(record.kind == .folder ? "Folder" : "Tab") restored, but its Archive entry could not be removed. \(error.localizedDescription)"; await reloadArchive(); return }
+        catch { statusText = "\(record.kind == .folder ? "Folder" : "Tab") restored, but its Archive entry could not be removed. \(error.localizedDescription)"; await reloadArchive(); return false }
         actions.restoreArchived(id: id)
         restoredSpaceID = owningSpace(of: restoredID) ?? spaceID ?? record.spaceID
         let title = restoredSpaceID.flatMap { model.space(id: $0) }.map { model.displayTitle(for: $0) } ?? "Today"
         statusText = record.kind == .folder ? "Folder restored to \(title). Click to view." : "Restored to \(title)."; await reloadArchive()
+        return true
     }
     private func owningSpace(of id: ItemID) -> SpaceID? {
         var cursor = id, seen: Set<ItemID> = []

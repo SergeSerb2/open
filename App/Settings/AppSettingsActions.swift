@@ -542,7 +542,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       // A window of the main model: a Blank Window front window does not hold this Space.
       let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: space.id),
       let factory = app.hostFactories[controller.windowID] else { return }
-    app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
+    app.focusWindow(controller.windowID, activate: true)
+    // Focusing the Space the window already shows would only start a Live Folder refresh.
+    if controller.context.focusedSpace?.id != space.id { factory.focus(space: space) }
     if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
       let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
       // Settings uses the same focused-Space singleton rule as the Extensions menu.
@@ -597,6 +599,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func copyCapture(id: UUID) { if let url = captureURL(id), let image = NSImage(contentsOf: url) { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image]) } }
   func saveCapture(id: UUID, to: URL) -> String? { guard let url = captureURL(id) else { return "This capture is no longer available." }; do { try FileManager.default.copyItem(at: url, to: to); return nil } catch { return "The capture could not be saved. \(error.localizedDescription)" } }
   func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID, preferringFocusedSpace: true) } }
+  func openCaptureSource(url: URL) {
+    guard let profileID = app.frontMainModelWindowController?.context.focusedSpace?.profileID ?? app.model.defaultProfile?.id else { return }
+    openURL(url, profileID: profileID, preferringFocusedSpace: true)
+  }
   func flushHistoryWrites() async { await app.stores.flushHistory() }
   func viewSpace(id: SpaceID) {
     guard let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }

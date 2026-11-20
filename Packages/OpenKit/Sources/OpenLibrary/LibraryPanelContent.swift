@@ -424,8 +424,10 @@ extension LibraryPanelView {
             let restore: () -> Void = { [weak self] in
                 guard let self else { return }
                 Task { @MainActor [weak self] in
-                    guard let self else { return }; await self.viewModel.restore(id:id)
-                    if self.viewModel.restoredSpaceID != nil { self.onClose?() }
+                    guard let self else { return }
+                    // Close on this call's own result. A failure sets only statusText, which the
+                    // panel does not observe, so refresh the status label here.
+                    if await self.viewModel.restore(id:id) { self.onClose?() } else { self.updateContentChrome() }
                 }
             }
             let remove: () -> Void = { [weak self] in
@@ -514,7 +516,7 @@ extension LibraryPanelView {
                         let board = NSPasteboard.general; board.clearContents()
                         board.writeObjects([sourceURL as NSURL]); board.setString(sourceURL.absoluteString,forType:.string)
                     }),.init(title:"Open Source URL",enabled:sourceURL != nil,run:{
-                        guard let sourceURL else { return }; actions.openHistoryItem(url:sourceURL)
+                        guard let sourceURL else { return }; actions.openCaptureSource(url:sourceURL)
                     }),.init(title:"-",run:{})]
                     + Self.shareActions(viewModel.captureURL(item))
                     + [.init(title:"-",run:{}),.init(title:"Delete",run:{ [weak self] in self?.confirm("Delete this capture?",message:"This permanently deletes the file.") { [weak self] in
