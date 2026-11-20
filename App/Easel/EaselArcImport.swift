@@ -47,8 +47,8 @@ extension EngineWebContentHostFactory {
       report.imported += 1
     }
     store.flush()
-    controller?.refresh(); scheduleSave()
-    if let selected = selectedTab, EaselTab.matches(selected.url) { showSelection(focus: false) }
+    scheduleSave()
+    app.reshowEaselWindows()
     return report
   }
 

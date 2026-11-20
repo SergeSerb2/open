@@ -39,13 +39,26 @@ extension EngineWebContentHostFactory {
   /// Today in the focused Space for an Easel that has none. False for an unknown document.
   @discardableResult
   func showEasel(documentID: UUID) -> Bool {
-    if let tab = easelRow(documentID: documentID) { selectTabForCommand(tab.id); return true }
+    if let tab = easelRow(documentID: documentID), selectDocumentRow(tab) { return true }
     guard !isIncognito, let space = focusedSpace, app.easels.exists(documentID) else { return false }
     let title = app.easels.load(documentID)?.displayTitle ?? EaselDocument.untitled
     let tab = model.newTab(in: space.id, url: EaselTab.url(for: documentID), title: title, at: 0)
     tab.live.faviconPNG = EaselIcon.faviconPNG
     select(nodeID: tab.id)
     scheduleSave()
+    return true
+  }
+
+  /// Shows an Easel or Note row. A Favorite of another Profile shows in a Space of that Profile
+  /// (a Favorite is visible only with its own Profile). False when that Profile has no Space:
+  /// the caller then adds a row in the focused Space.
+  func selectDocumentRow(_ tab: Tab) -> Bool {
+    guard case .favorites(let profileID)? = model.parent(of: tab.id), focusedSpace?.profileID != profileID else {
+      selectTabForCommand(tab.id); return true
+    }
+    guard let space = model.mostRecentlyFocusedSpace(profileID: profileID) ?? model.spaces.first(where: { $0.profileID == profileID })
+    else { return false }
+    selectTabForCommand(tab.id, spaceID: space.id)
     return true
   }
 

@@ -74,8 +74,11 @@ final class EaselContentHost: WebContentHost {
   func showSaved(_ doc: EaselDocument) {
     guard !closed, doc.id == documentID else { return }
     showingSaved = true; defer { showingSaved = false }
+    // Compare with this canvas's own title: the same row in another window may have set the shared
+    // row title already, and this window's title must still follow.
+    let previousTitle = canvas.document.displayTitle
     canvas.showSaved(doc)
-    if let tab = owner?.model.tab(id: tabID), tab.title != doc.displayTitle { onTitleChange?(doc.displayTitle) }
+    if previousTitle != doc.displayTitle { onTitleChange?(doc.displayTitle) }
   }
 
   /// The Image tool: an open panel sheet for pictures (several allowed).

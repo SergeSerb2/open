@@ -124,12 +124,16 @@ def run(factory, results, tmp, h):
         app.call('menu-perform', id='duplicate-tab')
         twins = h.wait_until(lambda: (lambda r: r if len(r) == 2 else None)([t['id'] for t in app.call('tabs') if t['url'] == d_url]), timeout=5, step=.1) or []
         e = next((t for t in twins if t != d), None)
-        seen, stored, hosts = {}, {}, 0
+        seen, stored, hosts, seen_before = {}, {}, 0, None
         if e:
             app.call('select', tab=e); shown(e)
             app.call('select', tab=d); shown(d)
             app.call('note', action='select', start=3, length=0)
             app.call('note', action='type', text=' two')
+            # Read row B's editor by tab before showing it: an editor made again from the file
+            # would pass without the sync.
+            pre = app.call('note', tab=e)
+            seen_before = pre.get('body') if pre.get('hasHost') else None
             app.call('select', tab=e); seen = shown(e)
             hosts = seen.get('noteHostCount', 0)
             app.call('note', action='select', start=len(seen.get('body', '')), length=0)
@@ -140,9 +144,9 @@ def run(factory, results, tmp, h):
             app.call('note', action='flush')
             stored = app.call('note', tab=d).get('stored') or {}
         titles = sorted(t['title'] for t in app.call('tabs') if t['url'] == d_url)
-        row('duplicate_rows_share_edits', seen.get('body') == 'one two' and stored.get('text') == 'one two three'
+        row('duplicate_rows_share_edits', seen_before == 'one two' and seen.get('body') == 'one two' and stored.get('text') == 'one two three'
             and bool(stored.get('title')) and titles == [stored.get('title')] * 2,
-            twins=twins, seen=seen.get('body'), stored=stored.get('text'), storedTitle=stored.get('title'), titles=titles, noteHosts=hosts)
+            twins=twins, seenBefore=seen_before, seen=seen.get('body'), stored=stored.get('text'), storedTitle=stored.get('title'), titles=titles, noteHosts=hosts)
     finally:
         app.quit()
         server.shutdown()

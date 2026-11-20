@@ -512,7 +512,7 @@ public final class EaselCanvasView: NSView {
             if commit, !empty {
                 text.string = typed
                 text.paragraphStyle = editor.style.paragraphStyle; text.fontFamily = editor.style.fontFamily
-                var o = object; o.content = .text(text); o.frame.size.height = max(object.frame.height, editor.neededDocHeight)
+                var o = object; o.content = .text(text); o.frame.size.height = max(object.frame.height, editor.neededDocHeight(for: typed))
                 next.objects.append(o)
                 next.modifiedAt = Date()
                 apply(next)
@@ -528,7 +528,7 @@ public final class EaselCanvasView: NSView {
         if empty { setSelection([id]); deleteSelection(); return }
         text.string = typed
         text.paragraphStyle = editor.style.paragraphStyle; text.fontFamily = editor.style.fontFamily
-        let height = max(object.frame.height, editor.neededDocHeight)
+        let height = max(object.frame.height, editor.neededDocHeight(for: typed))
         mutate("Typing") { doc in
             if let i = doc.index(of: id) { doc.objects[i].content = .text(text); doc.objects[i].frame.size.height = height }
         }
@@ -619,11 +619,27 @@ public final class EaselCanvasView: NSView {
     /// undo steps were made on the older copy, so they go.
     public func showSaved(_ next: EaselDocument) {
         guard next != document else { return }
-        endTextEditing(commit: false)
+        var incoming = next
+        // An open text box keeps its typed text (another canvas can save while this one has focus,
+        // for example when a link card's metadata arrives).
+        if let editor = textEditor {
+            let id = editor.objectID
+            if editor.undoBase != nil, let draft = document.object(id) {
+                // A new box: it now starts from the incoming document, so committing it keeps both edits.
+                incoming.objects.removeAll { $0.id == id }
+                editor.undoBase = incoming
+                incoming.objects.append(draft)
+            } else if case .text? = incoming.object(id)?.content {
+                // An existing box that is still there stays open.
+            } else {
+                endTextEditing(commit: false)  // the other canvas deleted the box
+            }
+        }
         canvasUndoManager.removeAllActions()
-        document = next
-        if titleField.currentEditor() == nil { titleField.stringValue = next.title ?? "" }
+        document = incoming
+        if titleField.currentEditor() == nil { titleField.stringValue = incoming.title ?? "" }
         syncObjects()
+        textEditor?.layoutIn(canvas: self)
         updateSelectionChrome()
     }
 

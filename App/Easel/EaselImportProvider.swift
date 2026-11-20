@@ -127,10 +127,7 @@ extension AppDelegate {
       change.newRows += 1
     }
     store.flush()
-    for factory in hostFactories.values {
-      factory.controller?.refresh()
-      if let selected = factory.selectedTab, EaselTab.matches(selected.url) { factory.showSelection(focus: false) }
-    }
+    reshowEaselWindows()
     scheduleSave()
     return change
   }
@@ -190,9 +187,15 @@ extension AppDelegate {
         try? FileManager.default.removeItem(at: url)
       }
     }
+    reshowEaselWindows()
+  }
+
+  /// After canvases were closed for new content: every window that shows an Easel (also as an
+  /// unfocused split pane) shows it again; a closed pane would otherwise stay blank.
+  func reshowEaselWindows() {
     for factory in hostFactories.values {
       factory.controller?.refresh()
-      if let selected = factory.selectedTab, EaselTab.matches(selected.url) { factory.showSelection(focus: false) }
+      if factory.visibleTabs.contains(where: { EaselTab.matches($0.url) }) { factory.showSelection(focus: false) }
     }
   }
 }

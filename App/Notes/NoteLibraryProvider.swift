@@ -40,7 +40,13 @@ extension EngineWebContentHostFactory {
   /// Shows a Note: its row (any Space of this window's model), or a new row at the top of Today.
   @discardableResult
   func showNote(noteID: UUID) -> Bool {
-    if let tab = model.allTabsForNotes().first(where: { NoteLink.id(from: $0.url) == noteID }) { selectTabForCommand(tab.id); return true }
+    // Prefer a row this Profile shows; a Favorite of another Profile switches to that Profile's Space.
+    let rows = model.allTabsForNotes().filter { NoteLink.id(from: $0.url) == noteID }
+    let visible = rows.first { tab in
+      guard case .favorites(let profileID)? = model.parent(of: tab.id) else { return true }
+      return profileID == focusedSpace?.profileID
+    }
+    if let tab = visible ?? rows.first, selectDocumentRow(tab) { return true }
     guard !isIncognito, let space = focusedSpace, let note = app.notes.load(noteID) else { return false }
     let tab = model.newTab(in: space.id, url: NoteLink.url(for: noteID), title: note.title.isEmpty ? NoteTab.untitled : note.title, at: 0)
     tab.live.faviconPNG = NoteTab.faviconPNG
