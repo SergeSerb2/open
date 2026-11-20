@@ -1074,9 +1074,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // or show no tab (Arc 1.172.2, docs/re/pinned-favorites-close.md P5).
       let shown = Set(orderedTabs.map { model.sidebarSelectionID(for: $0.id) })
       select(nodeID: selectionHistory[space.id]?.last { $0 != id && shown.contains($0) })
-    } else if wasSelected, !(inSplit && !isPinned) {
+    } else if wasSelected, inSplit, !isPinned {
       // An archived pane of the selected split needs no new selection: the model keeps the
-      // split selected (focus on its first pane) or hands it to the last pane, as Close This Pane does.
+      // split selected (focus on its first pane) or hands it to the last pane, as Close This Pane
+      // does. Show that pane: title, page focus, extensions and menus follow the new focused tab.
+      showSelection(); scheduleSave()
+    } else if wasSelected {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
     } else { controller?.refresh(); mirror.sync(); scheduleSave() }
