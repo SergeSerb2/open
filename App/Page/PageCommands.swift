@@ -30,10 +30,12 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func copyURL() -> Bool {
     guard let url = pageURL else { return false }
+    copyURL(url); return true
+  }
+  private func copyURL(_ url: URL) {
     let (clean, removed) = URLCleaner.clean(url)
     writeLink(clean)
     showCopyToast(clean, removed: removed, offerQuote: true)
-    return true
   }
 
   // MARK: copy-url-markdown (Cmd+Opt+Shift+C)
@@ -100,7 +102,9 @@ extension EngineWebContentHostFactory {
       // or a child frame) and at most 300 characters: an exact `#:~:text=`. Else Copy URL.
       let link = engineLink.flatMap { Self.withFragment(of: $0, on: clean) }
         ?? (text.count <= Self.quoteTextLimit ? Self.quoteLink(clean, text: text) : nil)
-      guard !text.isEmpty, let link else { self.copyURL(); return }
+      // The page's own URL, read before the wait: a tab switch meanwhile must not copy the
+      // newly selected tab's URL (bug sweep r4 WC-15).
+      guard !text.isEmpty, let link else { self.copyURL(url); return }
       self.writeLink(link)
       self.controller?.toasts.show(ToastContent(title: Self.quoteLinkTitle, symbol: "quote.bubble.fill"))
     }

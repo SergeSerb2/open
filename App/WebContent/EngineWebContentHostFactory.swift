@@ -180,6 +180,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller?.refresh(); mirror.sync(); scheduleSave()
   }
   private var enteredWindowFullscreenForPage = false
+  /// The page in HTML fullscreen in this window. Its fullscreen ends with it: an exit, a close,
+  /// a crash, another selection, or the window leaving full screen (bug sweep r4 WC-01).
+  private weak var fullscreenPage: OEWebContent?
+  /// The page ended during the window's own enter transition: leave full screen after it.
+  private var exitWindowFullscreenAfterTransition = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
   var popupPanel: NSPanel? { extensions.popup.panel }
   private(set) lazy var extensions = WindowExtensions(factory: self)
@@ -300,7 +305,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self?.openDraftSpaceIconPicker(current: current, anchor: anchor, onPick: onPick)
     }
     controller.onExitPageFullscreen = { [weak self] in
-      guard let page = self?.selectedContent else { return false }
+      // The fullscreen page can be an unfocused Split pane.
+      guard let page = self?.fullscreenPage ?? self?.selectedContent else { return false }
       do { try page.exitFullscreen(); return true }
       catch { return false }
     }
@@ -385,6 +391,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
       if let id = self.iconPickerSpaceID, self.focusedSpace?.id != id { self.iconPicker?.close() }
       if self.app.engineReady { self.markVisibleTabsLive(); self.controller?.container.refreshPlaceholders() }
+      // Peek pushes, pane separation and archives hide pages without showSelection.
+      self.exitFullscreenIfHidden()
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.extensions.focusChanged(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
@@ -402,6 +410,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
     let previousVisibility = controller.onVisibilityChange
     controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange(); self?.pageChrome.visibilityChanged(); self?.extensions.sidebarVisibilityChanged(); self?.savePromptFocusChanged() }
+    controller.onFullScreenChange = { [weak self] entered in self?.windowFullScreenChanged(entered) }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
@@ -647,7 +656,22 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.tabSleep.contentCreated(tabID: tabID, host: host)
     return host
   }
+  /// A beforeunload sheet for a close of a page the user cannot see: show its tab first, in its
+  /// Space, so the sheet asks over the page it closes (bug sweep r4 WC-03).
+  func revealPageForClose(_ page: OEWebContent) {
+    if let window, window.isMiniaturized { window.deminiaturize(nil) }
+    guard let id = tabID(for: page), model.tab(id: id) != nil, let space = space(containing: id) else { return }
+    if focusedSpace?.id != space.id { focus(space: space) }
+    if selectedTab?.id != id { select(nodeID: id) }
+  }
+  /// A dead renderer answers nothing: its sheets and permission prompts close, and the window
+  /// leaves the fullscreen it started (bug sweep r4 WC-07, WC-01).
+  func pageDidCrash(_ page: OEWebContent) {
+    pageChrome.cancel(page)
+    if page === fullscreenPage { endPageFullscreen() }
+  }
   func hostDidClose(_ host: EngineWebContentHost) {
+    if host.content === fullscreenPage { endPageFullscreen() }
     app.stores.boosts.hostClosed(host)
     savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
     pageChrome.cancel(host.content)
@@ -719,6 +743,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       host.view.removeFromSuperview()
       source.savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
       source.pageChrome.cancel(host.content)
+      if host.content === source.fullscreenPage { try? host.content.exitFullscreen(); source.endPageFullscreen() }
       if source.pageContextMenu?.belongs(to: host.content) == true { source.pageContextMenu?.cancel(); source.pageContextMenu = nil }
       source.translate.contentDidClose(host.content); source.findController?.hostClosed(id)
       source.commandBarNavigationFocus.remove(id); source.typedNavigationTabs.remove(id)
@@ -812,6 +837,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
+    exitFullscreenIfHidden()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
     // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
     // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
@@ -865,12 +891,63 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   @discardableResult
   func openNewTab(url: URL, background: Bool, opener: ItemID? = nil, typed: Bool = false) -> Tab? {
+    if controller == nil, !isIncognito {
+      guard let profileID = focusedProfile?.id else { return nil }
+      return openNewTabInMainWindow(url: url, background: background, profileID: profileID)
+    }
     guard let space = focusedSpace else { return nil }
     // Lead Q11: a tab opened in the background is unread until it is selected.
     let tab = model.newTab(in: space.id, url: url, at: 0, unread: background); tab.openerID = opener
     if typed { typedNavigationTabs.insert(tab.id) }
     if !background { select(nodeID: tab.id) }
     scheduleSave(); return tab
+  }
+  /// The Space a page's new tab or window opens in: one of that page's own Profile.
+  func space(forProfile id: ProfileID) -> Space? {
+    app.model.mostRecentlyFocusedSpace(profileID: id) ?? app.model.spaces.first { $0.profileID == id }
+  }
+  /// Little Open has no sidebar. Its new tabs (target=_blank, window.open, the page menu's
+  /// new-tab and search rows) used to go into the shared model unselected, through this
+  /// window-less factory: nothing showed them (bug sweep r4 WC-04). They open in a main
+  /// window of the page's Profile instead (one that shows that Profile first); a foreground
+  /// tab brings that window forward. A Profile with no Space opens nothing.
+  private func openNewTabInMainWindow(url: URL, background: Bool, profileID: ProfileID) -> Tab? {
+    guard let fallback = space(forProfile: profileID) else { return nil }
+    let mains = app.windowControllers.filter { controller in
+      app.hostFactories[controller.windowID].map { !$0.isIncognito && $0.model === app.model && $0 !== self } ?? false
+    }
+    let ordered = NSApp.orderedWindows.compactMap { window in mains.first { $0.window === window } } + mains
+    let showing = ordered.first { app.hostFactories[$0.windowID]?.focusedSpace?.profileID == profileID }
+    guard let controller = showing ?? ordered.first ?? app.makeWindow(focusedSpaceID: fallback.id),
+      let target = app.hostFactories[controller.windowID], target !== self, target.controller != nil else { return nil }
+    let space = target.focusedSpace.flatMap { $0.profileID == profileID ? $0 : nil } ?? fallback
+    if background {
+      let tab = target.model.newTab(in: space.id, url: url, at: 0, unread: true)
+      target.scheduleSave(); return tab
+    }
+    if let window = controller.window, window.isMiniaturized { window.deminiaturize(nil) }
+    app.focusWindow(controller.windowID, activate: true)
+    if target.focusedSpace?.id != space.id { target.focus(space: space) }
+    return target.openNewTab(url: url, background: false)
+  }
+  /// A new tab for a page (a page request or its menu's rows) always opens in that page's own
+  /// Profile, never the focused one (bug sweep r4 WC-11): a popup panel of another Profile's
+  /// Space stays open after a Space switch, and Little Open shows any Profile. A Profile with
+  /// no Space opens nothing. An Incognito window keeps its own session.
+  @discardableResult
+  func openNewTab(url: URL, background: Bool, opener: ItemID?, in context: OEBrowserContext) -> Tab? {
+    if isIncognito { return openNewTab(url: url, background: background, opener: opener) }
+    guard let profile = profile(for: context) else { return nil }
+    if controller == nil { return openNewTabInMainWindow(url: url, background: background, profileID: profile.id) }
+    if profile.id == focusedProfile?.id { return openNewTab(url: url, background: background, opener: opener) }
+    guard let space = model === app.model ? space(forProfile: profile.id)
+      : model.spaces.first(where: { $0.profileID == profile.id }) else { return nil }
+    if background {
+      let tab = model.newTab(in: space.id, url: url, at: 0, unread: true); tab.openerID = opener
+      scheduleSave(); return tab
+    }
+    focus(space: space)
+    return openNewTab(url: url, background: false, opener: opener)
   }
   func adoptUnownedRequest(_ request: OEOpenRequest) -> OEWebContent? {
     guard app.engineReady else { return nil }
@@ -1070,6 +1147,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// chrome.tabs.remove: pinned tabs and favorites stay in the sidebar and
   /// unload; Today tabs close (archived).
   func closeTab(id: ItemID) {
+    // A page that asks beforeunload but shows a dialog cannot ask yet: the close used to skip
+    // beforeunload and lose its changes. Keep the tab and show it with its dialog.
+    if let page = hosts[id]?.content, pageChrome.closeBlockedByDialog(page) {
+      revealPageForClose(page); pageChrome.showDialogsOffscreen(page); return
+    }
     if let page = hosts[id]?.content, pageChrome.requestClose(page, completion: { [weak self] accepted in
       if accepted { self?.finishClosingTab(id: id) }
     }) { return }
@@ -1583,6 +1665,11 @@ extension EngineWebContentHostFactory {
   func closeAuxiliary(_ page: AuxiliaryPage) {
     pageChrome.cancel(page.content)
     guard auxiliaryPages.contains(where: { $0 === page }) else { return }
+    // As hostDidClose does for tabs: the popup's menu, Translate Selection panel and monitor,
+    // and its fullscreen go with it (bug sweep r4 #645 review).
+    if pageContextMenu?.belongs(to: page.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
+    translate.contentDidClose(page.content)
+    if page.content === fullscreenPage { endPageFullscreen() }
     auxiliaryPages.removeAll { $0 === page }
     if let observer = page.closeObserver { NotificationCenter.default.removeObserver(observer) }
     page.closeObserver = nil
@@ -1604,6 +1691,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       }
       return
     }
+    // Popup panels have this factory as delegate (no EngineWebContentHost): a dead renderer's
+    // sheets and prompts close here (WC-07 for popups).
+    if changes.contains(.crash), [.crashed, .killed, .outOfMemory].contains(webContent.crashState),
+       auxiliaryPages.contains(where: { $0.content === webContent }) { pageDidCrash(webContent) }
     if let popup = auxiliaryPages.first(where: { $0.content === webContent }) {
       if changes.contains(.loading), webContent.isLoading { popup.historyRecorder?.loadingChanged(true) }
       if changes.contains(.URL), let url = webContent.url {
@@ -1693,7 +1784,15 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       if model !== app.model, let profileID = sourceSpace?.profileID {
         sourceSpace = app.model.mostRecentlyFocusedSpace(profileID: profileID) ?? app.model.spaces.first { $0.profileID == profileID }
       }
+      // A page with no sidebar Space (Little Open, a popup panel) opens its window in a Space
+      // of its own Profile, never the front window's Profile; none: no window (WC-11).
+      if sourceSpace == nil, !isIncognito {
+        guard let profile = profile(for: request.context), let space = space(forProfile: profile.id) else { return nil }
+        sourceSpace = space
+      }
       guard let controller = isIncognito ? app.makeIncognitoWindow(parent: incognitoSession?.parent) : app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
+      // makeWindow reopens a closed last window as it was: show the source Space there too.
+      if !isIncognito, let sourceSpace, target.focusedSpace?.id != sourceSpace.id { target.focus(space: sourceSpace) }
       if webContent.runtimeStyle == .chrome, let url = request.url {
         // The engine would make the page a tab of the opener window's hidden
         // Chrome window (P1), which closes with that window. A new window
@@ -1714,13 +1813,20 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       if let opener, model.tab(id: opener) == nil, app.options.defaultStyle == .chrome, let url = request.url {
         // A Peek page (a host that is not a model tab) is Alloy, and so would
         // be the page it opens: not a chrome.tabs tab. Open the URL as a tab.
-        openNewTab(url: url, background: request.disposition == .newBackgroundTab)
+        openNewTab(url: url, background: request.disposition == .newBackgroundTab, opener: nil, in: request.context)
         record("open", webContent, ["disposition": request.disposition.rawValue, "url": url.absoluteString, "fromPeek": true])
         return nil
       }
       // A Favorite is shown in this window's Space of its Profile. Its host's spaceID is the Space
       // that was focused when the host was made, so after a Space switch it named the old Space.
       let source = opener.flatMap { space(containing: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      // A window without a sidebar (Little Open) cannot show a new tab's page: a URL opens as a
+      // main window's tab, and an empty window.open("") is refused, instead of making a page
+      // no window shows (WC-04).
+      guard controller != nil else {
+        if let url = request.url { openNewTab(url: url, background: request.disposition == .newBackgroundTab, opener: nil, in: request.context) }
+        return nil
+      }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
                              unread: request.disposition == .newBackgroundTab)
@@ -1796,14 +1902,54 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didRequestFullscreen fullscreen: Bool) {
     record("fullscreen", webContent, ["on": fullscreen])
     if fullscreenPolicy == "record" { return }
-    controller?.isPageFullscreen = fullscreen
-    if let window {
-      if fullscreen, !window.styleMask.contains(.fullScreen) {
-        enteredWindowFullscreenForPage = true; window.toggleFullScreen(nil)
-      } else if !fullscreen, enteredWindowFullscreenForPage {
-        enteredWindowFullscreenForPage = false
-        if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
-      }
+    guard fullscreen else {
+      // A late exit of a page that already ended must not end a newer page's fullscreen.
+      if fullscreenPage == nil || fullscreenPage === webContent { endPageFullscreen() }
+      return
+    }
+    // Only a page this window shows may fill it. A popup panel's page used to take the main
+    // window into full screen with no way back (WC-01).
+    guard showsInWindow(webContent) else { try? webContent.exitFullscreen(); return }
+    if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
+    fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
+    controller?.isPageFullscreen = true
+    if let window, !window.styleMask.contains(.fullScreen) {
+      enteredWindowFullscreenForPage = true; window.toggleFullScreen(nil)
+    }
+  }
+  /// A page in this window's content area: the selected tab, any Split pane, the Peek on top,
+  /// Little Open's page. Not a popup panel's or an extension popup's page (their own windows).
+  private func showsInWindow(_ page: OEWebContent) -> Bool {
+    guard !auxiliaryPages.contains(where: { $0.content === page }), page !== focusedBrowser?.extensionPopup else { return false }
+    // A shown Peek covers the tabs and panes under it: only the Peek on top is shown.
+    if let controller, controller.hasPeekController, controller.peekController.isShown { return page === selectedContent }
+    if page === selectedContent || page === standaloneSurface?.surfacePage { return true }
+    return visibleTabs.contains { hosts[$0.id]?.content === page }
+  }
+  /// A page leaves fullscreen when this window no longer shows it (Space or tab switch, a
+  /// Peek on top, a separated pane, an archive).
+  private func exitFullscreenIfHidden() {
+    if let page = fullscreenPage, !showsInWindow(page) { try? page.exitFullscreen(); endPageFullscreen() }
+  }
+  /// Clears page fullscreen and leaves the window full screen the page started. Idempotent.
+  func endPageFullscreen() {
+    fullscreenPage = nil
+    if controller?.isPageFullscreen == true { controller?.isPageFullscreen = false }
+    guard enteredWindowFullscreenForPage else { return }
+    // AppKit ignores a toggle during a transition: finish when the window has entered.
+    if controller?.isChangingFullScreen == true { exitWindowFullscreenAfterTransition = true; return }
+    enteredWindowFullscreenForPage = false
+    if let window, window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+  }
+  private func windowFullScreenChanged(_ entered: Bool) {
+    if entered {
+      guard exitWindowFullscreenAfterTransition else { return }
+      exitWindowFullscreenAfterTransition = false; endPageFullscreen()
+    } else {
+      // The window left full screen (green button, Ctrl-Cmd-F, or the page's own exit):
+      // the page leaves fullscreen too, or the sidebar stays hidden in a normal window.
+      enteredWindowFullscreenForPage = false; exitWindowFullscreenAfterTransition = false
+      if let page = fullscreenPage { try? page.exitFullscreen(); endPageFullscreen() }
     }
   }
 

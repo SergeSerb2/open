@@ -344,6 +344,9 @@ class OEDevToolsClient;
                    promptCallback:(CefRefPtr<CefPermissionPromptCallback>)prompt;
 - (void)oe_setProtocolHandlerScheme:(NSString*)scheme
                         urlTemplate:(NSString*)urlTemplate;
+/// The delegate declined the request: CEF's default handling takes the callback.
+/// Afterwards grant/deny/dismiss and dealloc no longer answer it.
+- (void)oe_releaseCallback;
 @end
 
 // DevTools docked in an embedder view (OEDevToolsDock.mm).
@@ -365,6 +368,9 @@ class OEDevToolsClient;
 - (instancetype)initOEWithParams:(CefRefPtr<CefContextMenuParams>)params
                             model:(CefRefPtr<CefMenuModel>)model
                          callback:(CefRefPtr<CefRunContextMenuCallback>)callback;
+/// The delegate declined the menu: CEF's default menu takes the callback.
+/// Afterwards -selectCommand:, -cancel and dealloc no longer answer it.
+- (void)oe_releaseCallback;
 @end
 
 @interface OEFindResult ()

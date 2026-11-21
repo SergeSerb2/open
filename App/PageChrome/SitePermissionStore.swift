@@ -50,8 +50,12 @@ final class SitePermissionStore {
     }
   }
   func state(origin: URL, kind: OEPermissionKind) -> OEPermissionState {
-    remember(origin)
-    return currentState(origin: origin, kind: kind)
+    // Index only an origin that has a decision. A prompt or a read of an undecided site
+    // filled the 2048-origin index, and later real decisions were no longer listed
+    // (bug sweep r4 WC-13).
+    let value = currentState(origin: origin, kind: kind)
+    if value != .ask { remember(origin) }
+    return value
   }
   /// Reads the engine without adding an origin to the on-disk decision index.
   func currentState(origin: URL, kind: OEPermissionKind) -> OEPermissionState {
@@ -59,7 +63,8 @@ final class SitePermissionStore {
   }
   func set(origin: URL, kind: OEPermissionKind, state: OEPermissionState, requestSystemAuthorization: Bool = true) {
     guard Self.canPersist(kind), let context else { return }
-    remember(origin)
+    // "Not Now" writes back .ask: no decision, so no index entry (an earlier one stays).
+    if state != .ask { remember(origin) }
     context.setPermissionState(state, for: kind, origin: origin)
     if requestSystemAuthorization, kind == .notifications, state == .allow { NotificationAuthorization.shared.userAllowedNotifications() }
     EngineWebProfile.onPermissionChange?(context)

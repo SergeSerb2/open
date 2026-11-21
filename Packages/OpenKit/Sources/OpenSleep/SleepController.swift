@@ -288,6 +288,9 @@ public final class SleepController {
         guard model.tab(id: tabID) === tab, !purged.contains(tabID) else { wakeStartedAt[tabID] = nil; return }
         var restored = await engine.createContent(tabID: tabID, url: history?.currentURL ?? tab.url, history: history)
         var usedHistory = history != nil
+        // The tab closed or unloaded during the wake: no fallback page (it brought an unloaded
+        // pinned tab back to life on its old URL; bug sweep r4 #645 review).
+        if !restored, engine.takeCreationCancelled(tabID: tabID) { wakeStartedAt[tabID] = nil; return }
         if !restored, let history {
             engine.destroyContent(tabID: tabID)
             onLog?("sleep-restore-fallback \(tabID.rawValue.uuidString.prefix(8))")

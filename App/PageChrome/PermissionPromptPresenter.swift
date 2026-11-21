@@ -79,10 +79,32 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       return "Allow \(site) to access your \(joined)?"
     }
   }
+  /// One rule for showing and for keeping a prompt (bug sweep r4 WC-08): the page is on screen
+  /// (the focused page, any Split pane, Little Open's page, a shown popup panel's page). An
+  /// unfocused pane's prompt used to show and then be dismissed by the next visibility update.
+  private func canShow(_ page: OEWebContent) -> Bool {
+    guard let owner, owner.pageChrome.isVisible(page) else { return false }
+    // A shown Peek covers the window's tabs and panes: only the Peek's page (or a popup, or
+    // Little Open's page) may prompt; a covered tab's prompt waits (it used to stay over the Peek).
+    if let controller = owner.controller, controller.hasPeekController, controller.peekController.isShown,
+       owner.selectedContent !== page, !isPopupPage(page), owner.standaloneSurface?.surfacePage !== page { return false }
+    return true
+  }
+  private func isPopupPage(_ page: OEWebContent) -> Bool { owner?.auxiliaryPages.contains { $0.content === page } == true }
   private func defaultAnchor(for page: OEWebContent) -> Anchor? {
-    guard let owner, owner.pageChrome.isVisible(page), let controller = owner.controller else { return nil }
+    guard let owner, owner.pageChrome.isVisible(page) else { return nil }
+    // A popup panel's prompt points into that panel, not at the browser window's address field.
+    // Before the controller check: Little Open's popups have no window controller.
+    if isPopupPage(page) {
+      let target = page.view
+      return Anchor(view: target, rect: CGRect(x: 24, y: target.isFlipped ? 0 : target.bounds.maxY - 1, width: 1, height: 1),
+                    edge: target.isFlipped ? .maxY : .minY, name: "popup-content-top-left")
+    }
+    guard let controller = owner.controller else { return nil }
     let sidebar = controller.sidebar
-    if owner.windowState.sidebarMode == .anchored, !sidebar.isHidden, sidebar.urlFieldVisible {
+    // The sidebar's address field shows the focused page: an unfocused Split pane's prompt
+    // points at its own toolbar or into the pane.
+    if owner.selectedContent === page, owner.windowState.sidebarMode == .anchored, !sidebar.isHidden, sidebar.urlFieldVisible {
       return Anchor(view: sidebar, rect: sidebar.chromeGeometry.urlField, name: "sidebar-url")
     }
     if let bar = controller.container.slots.first(where: { $0.tabID == owner.tabID(for: page) })?.paneChrome, bar.role == .toolbar {
@@ -95,7 +117,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   func presentPending() {
     guard !closed, !finishing, current == nil, let owner, !owner.isClosing,
           NSApp.isActive,
-          let index = entries.firstIndex(where: { owner.pageChrome.isVisible($0.page) }) else { return }
+          let index = entries.firstIndex(where: { canShow($0.page) }) else { return }
     let entry = entries[index]
     guard let targetWindow = entry.page.view.window ?? owner.window, targetWindow.attachedSheet == nil else { return }
     // A permission can arrive in the same turn that creates the toolbar.
@@ -141,9 +163,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   func visibilityChanged() {
     if let current {
-      let standalone = owner?.standaloneSurface?.surfacePage === current.page
-      let visible = standalone ? owner?.pageChrome.isVisible(current.page) == true : owner?.selectedContent === current.page
-      if !visible { finish(nil) }
+      if !canShow(current.page) { finish(nil) }
     }
     presentPending()
   }
@@ -151,7 +171,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   /// keys arriving at the page's native pre-key hook belong to the prompt.
   func handleKey(_ event: NSEvent) -> Bool {
     guard isShown, current != nil,
-          event.window === owner?.window || event.window === view.window,
+          event.window === owner?.window || event.window === view.window
+            || (current.map { isPopupPage($0.page) && event.window === $0.page.view.window } ?? false),
           event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
     switch event.keyCode {
     case 53: view.notNow.performClick(nil); return true

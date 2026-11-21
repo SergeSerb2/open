@@ -118,6 +118,8 @@ final class TranslateSelectionController {
     popover = nil
   }
   func close() { task?.cancel(); closePanel() }
+  /// The page it translates closed: a result still on its way must not show over another tab.
+  func pageDidClose(_ content: OEWebContent) { if page === content { page = nil; anchorView = nil; close() } }
 
   var state: [String: Any] {
     var out = last
