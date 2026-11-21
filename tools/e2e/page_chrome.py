@@ -453,6 +453,27 @@ def run(factory, results, tmp, h):
                          inWork=in_work, inHome=in_home, stray=stray)
         gate('menu_link_uses_page_profile', popup_menu_profile)
 
+        def find_behind_library_spaces():
+            # Round 5 (#646 leftover): Edit > Find, Cmd+G and Cmd+Shift+G open no Find on the page
+            # strip behind Library > Spaces (Cmd+F alone was guarded). Wide window, as #646's row.
+            page(); app.call('window-frame', frame=[40, 40, 2000, 820])
+            try:
+                app.call('library', action='open', section='spaces')
+                assert wait(lambda: app.call('library').get('section') == 'spaces', timeout=3, step=.1), app.call('library')
+                for key, mods in (('g', ['cmd']), ('g', ['cmd', 'shift'])): app.call('key', key=key, modifiers=mods, route='app')
+                try: menu = app.call('menu-perform', id='find')
+                except RuntimeError as error: menu = str(error)
+                time.sleep(.5)
+                panes = app.call('find-state').get('panes', [])
+                app.call('library', action='close'); time.sleep(.5)
+                app.call('focus', tab=tab); app.call('key', key='g', modifiers=['cmd'], route='app')
+                control = wait(lambda: any(p.get('visible') for p in app.call('find-state').get('panes', [])), timeout=3, step=.1)
+                app.call('key', key='escape', route='app')
+            finally:
+                h['_try'](lambda: app.call('library', action='close')); app.call('window-frame', frame=[80, 60, 1100, 760])
+            return check(not any(p.get('visible') for p in panes) and bool(control), panes=panes, menu=menu, control=bool(control))
+        gate('find_hidden_by_library_spaces', find_behind_library_spaces)
+
         # Fresh localhost origins avoid Chromium's repeated-denial embargo.
         port = server.server_address[1]
         def permission_page(host):
@@ -521,6 +542,20 @@ def run(factory, results, tmp, h):
             events=[e for e in app.call('events') if e['type']=='permissionAnswer']
             return check(closed and ps()['decisions']==before+1 and len(events)==1 and events[0]['decision']=='dismiss', events=events)
         gate('permission_tab_switch_once', switched)
+
+        def prompt_frame_removed():
+            # Round 5 (WC-07 engine half): when the engine dismisses a prompt (here: its requesting
+            # frame is removed, no navigation), the prompt goes; it stayed on screen.
+            url = 'http://framegone.localhost:%d' % port
+            page(url + '/permission'); app.call('permission', origin=url, kind=8, state=0)
+            app.eval(tab, 'const f=document.createElement("iframe");f.id="pf";f.src="/frame";document.body.append(f);true')
+            assert wait(lambda: app.eval(tab, 'document.querySelector("#pf").contentDocument?.readyState || ""') == 'complete', timeout=5, step=.05)
+            app.eval(tab, 'window.permissionResult="pending";document.querySelector("#pf").contentWindow.Notification.requestPermission().then(v=>window.permissionResult=v,()=>window.permissionResult="error");true')
+            state = visible(ps)
+            app.eval(tab, 'document.querySelector("#pf").remove();true')
+            gone = wait(lambda: not ps()['visible'], timeout=3, step=.05)
+            return check(bool(gone), state=state, after=ps())
+        gate('permission_engine_dismiss_frame_removed', prompt_frame_removed)
 
         for action in ['navigate','close']:
             def cancel_permission(action=action):

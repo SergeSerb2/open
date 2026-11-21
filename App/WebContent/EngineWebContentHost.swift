@@ -366,6 +366,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     // Dismiss, not deny: a page that is gone must not leave a stored block.
     request.dismiss(); return true
   }
+  func webContent(_ page: OEWebContent, didDismissPermissionRequest request: OEPermissionRequest) {
+    if !closed { owner?.pageChrome.engineDismissed(request) }
+  }
+  func webContentDidResetDialogState(_ page: OEWebContent) { if !closed { owner?.pageChrome.engineResetDialogs(page) } }
   func webContent(_ page: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
     if !closed, owner?.webContent(page, showContextMenu: menu) == true { return true }
     menu.cancel(); return true

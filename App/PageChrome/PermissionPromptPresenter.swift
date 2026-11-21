@@ -211,6 +211,15 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     }
     finishing = false; presentPending()
   }
+  /// The engine dismissed this request (navigation, a closed frame, the page closing): its
+  /// prompt goes, unanswered (bug sweep r5; it stayed on screen).
+  func engineDismissed(_ request: OEPermissionRequest) {
+    if let index = entries.firstIndex(where: { $0.request === request }) {
+      let entry = entries.remove(at: index); decisions += 1
+      owner?.record("permissionAnswer", entry.page, ["decision": "dismiss", "engine": true])
+    }
+    if current?.request === request { finish(nil) }
+  }
   func cancel(page: OEWebContent) {
     let removed = entries.filter { $0.page === page }; entries.removeAll { $0.page === page }
     for entry in removed {
