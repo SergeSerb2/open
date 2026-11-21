@@ -150,6 +150,14 @@ def run(factory, results, tmp, h):
         # panel reopens on another section first.
         def library_profile():
             app.call('space', space=space_a['id'])
+            page_a = origin + '/library-profile-a'
+            h.new_tab(app, page_a)
+            assert wait_until(lambda: page_a in history_urls(), timeout=8, step=.1)
+            app.call('space', space=space_b)
+            page_b = origin + '/library-profile-b'
+            h.new_tab(app, page_b)
+            assert wait_until(lambda: page_b in [r['url'] for r in app.call('history-state', profile=profile_b)['rows']], timeout=8, step=.1)
+            app.call('space', space=space_a['id'])
             app.call('library', action='open', section='downloads')
             app.call('library', action='close')
             time.sleep(.6)
@@ -166,8 +174,13 @@ def run(factory, results, tmp, h):
                         if found is not None: return found
                 return None
             profiles = find(state_b, 'profiles') or {}
-            row('nav4_library_reopen_follows_profile', profiles.get('history') == profile_b and profiles.get('downloads') == profile_b,
-                profiles=profiles, profileA=profile_a, profileB=profile_b)
+            # The History rows the panel shows are Profile B's: its page is listed, Profile A's is not.
+            shown = wait_until(lambda: (lambda r: r if page_b in [x['url'] for x in r['rows']] else None)(
+                app.call('library-history-state')), timeout=5, step=.1) or app.call('library-history-state')
+            urls = [x['url'] for x in shown['rows']]
+            row('nav4_library_reopen_follows_profile', profiles.get('history') == profile_b and profiles.get('downloads') == profile_b
+                and shown['profile'] == profile_b and page_b in urls and page_a not in urls,
+                profiles=profiles, historyRows=urls, profileA=profile_a, profileB=profile_b)
         guarded('nav4_library_reopen_follows_profile', library_profile,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
 
@@ -266,6 +279,48 @@ def run(factory, results, tmp, h):
                 app.call('window-close'); time.sleep(.5)
             app.call('space', space=space_a['id'])
         guarded('nav4_little_open_moves_to_recent_window', little_open_window, close_second_window)
+
+        # F-08: Cmd+L while a sleeping tab wakes from its stored history (the wake held after the history
+        # read) loads the typed address once the wake ends, over the restored back list: Back returns to
+        # the page the tab slept on, and the old address never replaces the typed one.
+        def sleep_tab(t): return app.call('sleep-state', tab=t)['tabs'][0]
+        def wake_navigation():
+            app.call('space', space=space_a['id'])
+            assert wait_until(lambda: app.call('sleep-state').get('started'), timeout=10, step=.1)
+            app.call('sleep-mode', mode='balanced')
+            first, second, typed = origin + '/wake-a', origin + '/wake-b', origin + '/wake-typed'
+            tab = h.new_tab(app, first)
+            app.call('navigate', tab=tab, url=second); app.call('wait', tab=tab)
+            app.call('select', tab=start)
+            assert wait_until(lambda: app.call('window-state')['selected'] == start, timeout=5, step=.05)
+            app.call('sleep-clock', advance=15.0); app.call('sleep-now', tab=tab)
+            app.call('sleep-clock', advance=86400.0); app.call('sleep-tick')
+            assert wait_until(lambda: (lambda t: not t['content'] and t['hosts'] == 0)(sleep_tab(tab)), timeout=8, step=.1), sleep_tab(tab)
+            stored = any(r['tab'] == tab and r['entries'] >= 2 for r in app.call('sleep-store'))
+            app.call('sleep-wake-hold', hold=True)
+            app.call('select', tab=tab)
+            held = wait_until(lambda: tab in app.call('sleep-wake-hold')['held'], timeout=8, step=.05)
+            bar('l')
+            type_query(typed)
+            app.call('key', key='return', route='app')
+            time.sleep(.3)
+            app.call('sleep-wake-hold', hold=False)
+            def current():
+                return next((t for t in app.call('tabs') if t['id'] == tab), {})
+            loaded = wait_until(lambda: (lambda t: t if t.get('url') == typed and t.get('hasWebContent') and t.get('loaded') else None)(current()), timeout=12, step=.1)
+            href = app.eval(tab, 'location.href') if loaded else ''
+            length = app.eval(tab, 'history.length') if loaded else 0
+            reported_back = current().get('canGoBack')
+            app.call('key', key='[', modifiers=['cmd'], route='app')
+            went_back = wait_until(lambda: app.eval(tab, 'location.href') == second, timeout=8, step=.1) if loaded else False
+            row('nav4_cmd_l_during_wake_keeps_typed_and_back', stored and bool(held) and bool(loaded) and href == typed
+                and length >= 3 and reported_back is True and bool(went_back),
+                stored=stored, held=bool(held), tab=current(), href=href, historyLength=length, reportedBack=reported_back)
+        def end_wake():
+            app.call('sleep-wake-hold', hold=False)
+            app.call('sleep-clock', reset=True)
+            app.call('select', tab=start)
+        guarded('nav4_cmd_l_during_wake_keeps_typed_and_back', wake_navigation, end_wake)
 
         # F-04: closing the last browser window stops Handoff advertising its page.
         def handoff_last_window():
