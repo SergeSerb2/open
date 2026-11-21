@@ -110,11 +110,14 @@ def checks(factory, results, tmp, harness):
                                cookie=cookie, later=later, error=error))
             if still_open: app.call('window-close')
             focus(normal)
-        check('reopen_while_closing_new_session', all(r['open'] and r['fresh'] not in (None, r['quick'])
+        waits = sorted(set(l.split('reason=')[-1].strip() for l in Path(app.launch_log_path).read_text(errors='replace').splitlines()
+                           if 'incognito-context-wait' in l))
+        # "invalidated" would mean a new private context was made on the old,
+        # still-open profile (the old session's cookies) before it closed.
+        check('reopen_while_closing_new_session', 'invalidated' not in waits and all(r['open'] and r['fresh'] not in (None, r['quick'])
               and r['ephemeral'] and r['cookie'] is not None and 'closingSession' not in r['cookie'] and r['later'] == '/reopened-later'
               for r in rounds), rounds=rounds,
-              engine_waits=sorted(set(l.split('reason=')[-1].strip() for l in Path(app.launch_log_path).read_text(errors='replace').splitlines()
-                                      if 'incognito-context-wait' in l)))
+              engine_waits=waits)
     def fingerprint():
         root = Path(app.user_data)
         tables = {}

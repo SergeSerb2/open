@@ -428,6 +428,22 @@ class OEProfileLifetimeHandler : public CefOpenProfileHandler {
   IMPLEMENT_REFCOUNTING(OEProfileLifetimeHandler);
 };
 
+// Watches a private context's native off-the-record profile after the
+// wrapper let go of it: Chromium destroys that profile only once its last
+// Browser and renderers are gone. Until it reports the profile closed, a new
+// private context of the same original would get this profile back (the old
+// session's cookies and storage), so the engine waits for this callback.
+class OEPrivateProfileWatch : public CefOpenProfileHandler {
+ public:
+  explicit OEPrivateProfileWatch(NSString* original) : original_([original copy]) {}
+  void OnContextClosed() override {
+    [OEEngine.shared oe_privateProfileClosedForOriginal:original_];
+  }
+ private:
+  NSString* original_;
+  IMPLEMENT_REFCOUNTING(OEPrivateProfileWatch);
+};
+
 class OEBrowsingDataCallback : public CefOpenProfileCallback {
  public:
   explicit OEBrowsingDataCallback(void (^done)(NSError*)) : done_([done copy]) {}
@@ -548,7 +564,10 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
     return;
   }
   _ready = YES;
-  CefSetOpenProfileHandler(_context, new OEProfileLifetimeHandler(self));
+  if (CefSetOpenProfileHandler(_context, new OEProfileLifetimeHandler(self)) &&
+      _originalContext) {
+    [OEEngine.shared oe_privateProfileOpenedForOriginal:_originalContext.identifier];
+  }
   // Notification clicks reach the delegate (page-platform EP-6).
   // Read the App-supplied configuration, not raw process arguments. Normal
   // Release Open never installs these switches in its configuration.
@@ -576,7 +595,15 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   _state = OEBrowserContextStateClosed;
   _ready = NO;
   _oe_closing = YES;
-  if (_context) CefSetOpenProfileHandler(_context, nullptr);
+  if (_context && _originalContext) {
+    // Private: keep watching the native profile until Chromium closes it. If
+    // it is gone already, the watch cannot register: report it closed now.
+    if (!CefSetOpenProfileHandler(_context, new OEPrivateProfileWatch(_originalContext.identifier))) {
+      [OEEngine.shared oe_privateProfileClosedForOriginal:_originalContext.identifier];
+    }
+  } else if (_context) {
+    CefSetOpenProfileHandler(_context, nullptr);
+  }
   [_extensions oe_contextClosed];
   for (OEDownload* download in _downloads.allValues) [download oe_invalidate];
   [_downloads removeAllObjects];
@@ -598,6 +625,9 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   _ready = NO;
   _oe_closing = YES;
   if (_handler) _handler->SetFilter(nil);
+  if (_originalContext) {
+    [OEEngine.shared oe_privateProfileClosedForOriginal:_originalContext.identifier];
+  }
   dispatch_async(dispatch_get_main_queue(), ^{ [self oe_invalidate]; });
   [OEEngine.shared oe_contextClosed:self];
 }

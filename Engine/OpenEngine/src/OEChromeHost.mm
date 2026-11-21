@@ -51,8 +51,12 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
     // page adopting this popup is still pending. It must own the popup's
     // delegate, or a popup opened by that popup found no page here and got
     // CEF's default window with an empty shell page.
+    // Only the popup that page adopted: its client is that page's client
+    // (an unadopted or stale popup of the same opener has another).
+    OEWebContent* pending = is_devtools ? nil : [view_ oe_pendingChromePopup];
+    CefClient* own = pending ? pending.oe_client.get() : nullptr;
     return new OEChromeBrowserViewDelegate(
-        is_devtools ? nil : [view_ oe_pendingChromePopup], false);
+        own && own == client.get() ? pending : nil, false);
   }
 
   bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,

@@ -262,9 +262,10 @@ def run(factory, results, wait):
                     sent.append(str(error)[-80:])
         row('devtools_mouse_null_modifiers', len(sent) == 4 and call()['pages']['opener']['live'],
             replies=sent)
-        call('cleanup'); app.quit()
-        # The unowned popup counts for quit now: it must close, not hold quit
-        # until the three-second deadline.
+        # Quit with the unowned popup still open (no cleanup first): it counts
+        # for quit now and must close, not hold quit until the three-second
+        # deadline. A guard row: old code also met the deadline here.
+        app.quit()
         log = Path(app.launch_log_path).read_text(errors='replace')
         receipt = re.findall(r'shutdown contexts=(\d+) inert=(\d+) deadline=(\d+) deadlineSeconds=3', log)
         row('quit_with_unowned_popup_no_deadline', bool(receipt) and receipt[-1][2] == '0'

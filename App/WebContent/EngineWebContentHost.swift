@@ -351,8 +351,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if !closed, owner?.webContent(page, runJavaScriptDialog: dialog) == true { return true }
     // No UI for a closed host. Returning false now means the engine's default
     // dialog, which a hosted tab would show in its hidden Chrome window and
-    // leave the page blocked. Cancel it here, as the engine used to.
-    dialog.complete(accepted: false, text: nil)
+    // leave the page blocked. Answer here: cancel a dialog, but let a
+    // beforeunload leave the page (as the engine does for a closing page).
+    dialog.complete(accepted: dialog.kind == .beforeUnload, text: nil)
     return true
   }
   func webContent(_ page: OEWebContent, decidePermissionRequest request: OEPermissionRequest) -> Bool {

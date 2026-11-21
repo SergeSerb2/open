@@ -102,6 +102,10 @@ void OERemoveAutofillHandler();
 /// Null after shutdown.
 - (CefRefPtr<CefClient>)oe_unownedPopupClientForContext:
     (nullable OEBrowserContext*)context;
+/// A private context of `identifier` (its original) registered with its
+/// native off-the-record profile / Chromium reported that profile closed.
+- (void)oe_privateProfileOpenedForOriginal:(nullable NSString*)identifier;
+- (void)oe_privateProfileClosedForOriginal:(nullable NSString*)identifier;
 @property(nonatomic, readonly) BOOL oe_isTerminating;
 @end
 

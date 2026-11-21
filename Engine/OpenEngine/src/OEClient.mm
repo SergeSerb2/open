@@ -104,10 +104,14 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
     // Chromium's default popup window, with its own client. With the
     // opener's (CEF's default) the popup's address, title and loading state
     // replaced the opener's, and quit tracking missed the popup.
+    // Not for a closing page (the shell cleared its delegate) or context,
+    // nor while the engine shuts down: nothing would close that popup.
     CefRefPtr<CefClient> unowned =
-        [[OEEngine shared] oe_unownedPopupClientForContext:source.context];
+        closing_ || close_requested_
+            ? nullptr
+            : [[OEEngine shared] oe_unownedPopupClientForContext:source.context];
     if (!unowned) {
-      return true;  // The engine shut down.
+      return true;
     }
     client = unowned;
     return false;
@@ -321,13 +325,9 @@ void OEClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     return;
   }
   CancelAuthenticationRequests();
-  // CEF reports popups aborted by this browser's destruction only while it
-  // can still find this browser: abort the pages still waiting here.
-  NSArray<OEWebContent*>* pending = [[pending_popups_ objectEnumerator] allObjects];
-  [pending_popups_ removeAllObjects];
-  for (OEWebContent* target in pending) {
-    AbortPendingPopup(target);
-  }
+  // Popups still pending here are not aborted: Chromium may have accepted one
+  // whose OnAfterCreated is still to come. CEF reports real aborts with
+  // OnBeforePopupAborted, also after this callback (cef_life_span_handler.h).
   if (!closing_ && !close_requested_ && view.oe_hostBrowser) {
     close_requested_ = true;
     [view oe_requestClose];

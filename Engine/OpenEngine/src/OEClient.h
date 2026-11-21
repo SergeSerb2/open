@@ -229,7 +229,8 @@ class OEClient : public CefClient,
   std::atomic<uint64_t> auth_epoch_{0};
   __weak OEWebContent* view_;
   // Pages that adopted a popup of this page, by CEF popup id, until the popup
-  // is created (pruned on the next popup) or aborted (OnBeforePopupAborted).
+  // is created (pruned on the next popup) or aborted (OnBeforePopupAborted,
+  // which CEF also sends after this page's OnBeforeClose).
   NSMapTable<NSNumber*, OEWebContent*>* pending_popups_ =
       [NSMapTable strongToWeakObjectsMapTable];
   // CEF patch 1001 can deliver a download update after this page is gone.
