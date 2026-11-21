@@ -164,23 +164,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public static var automationPointer: (window: Int, location: NSPoint)?
     /// Automation builds can turn this off to keep a capture-size frame on a smaller screen.
     public static var constrainsFramesToScreen = true
-    /// A saved or cascaded frame can lie on a display that is gone, or past a screen edge. Keep a frame
-    /// whose title bar is on a screen. Otherwise move it (smaller when it does not fit) into the visible
-    /// frame of the screen it overlaps most, else the main screen, so the window can always be reached.
-    public static func reachableFrame(_ frame: CGRect, minSize: CGSize, screens: [CGRect] = NSScreen.screens.map(\.visibleFrame),
-                                      main: CGRect? = NSScreen.main?.visibleFrame) -> CGRect {
-        guard constrainsFramesToScreen, let fallback = main ?? screens.first else { return frame }
-        let titleBar = CGRect(x: frame.minX, y: frame.maxY - 28, width: frame.width, height: 28)
-        if screens.contains(where: { let part = $0.intersection(titleBar); return part.width >= 80 && part.height >= 1 }) { return frame }
-        let target = screens.max { a, b in
-            let x = a.intersection(frame), y = b.intersection(frame)
-            return (x.isNull ? 0 : x.width * x.height) < (y.isNull ? 0 : y.width * y.height)
-        }.flatMap { $0.intersects(frame) ? $0 : nil } ?? fallback
-        let width = max(minSize.width, min(frame.width, target.width)), height = max(minSize.height, min(frame.height, target.height))
-        let x = min(max(frame.minX, target.minX), max(target.minX, target.maxX - width))
-        let y = min(max(frame.minY, target.minY), max(target.minY, target.maxY - height))
-        return CGRect(x: x, y: y, width: width, height: height)
-    }
     private var pointerMonitor: Any?
     private var captureMonitor: Any?
     private var captureStorage: CaptureController?
@@ -380,7 +363,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         window.onLayoutPass = { [weak self] in self?.placeTrafficLights() }
         window.onCloseRequest = { [weak self] in self?.onCloseRequested?() }
-        if let state { window.setFrame(Self.reachableFrame(CGRect(x: state.frameX, y: state.frameY, width: dimensions.width, height: dimensions.height), minSize: window.minSize), display: false) }
+        if let state { window.setFrame(CGRect(x: state.frameX, y: state.frameY, width: dimensions.width, height: dimensions.height), display: false) }
         systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
             // assumeIsolated requires every NSApp.appearance write to run on the main thread.
             MainActor.assumeIsolated {
