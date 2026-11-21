@@ -136,6 +136,20 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         keyed_native = wait(lambda: native_window(keyed["id"]), timeout=10)
         title = wait(lambda: (lambda w: w if w and w["title"] == "Action probe popup" else None)(native_window(keyed["id"])), timeout=10)
         app.call("focus", tab=keyed_native["page"])
+        # W2 review: a chrome.windows popup (no browser window owns it) gives the page its edit keys
+        # first; the main menu then pastes once.
+        saved = app.call("pasteboard-preserve")
+        try:
+            pid = keyed_native["page"]
+            app.eval(pid, "window.keys=[];document.body.insertAdjacentHTML('beforeend','<input id=w2 value=seed>');"
+                     "document.addEventListener('keydown',e=>keys.push(e.key),true);document.getElementById('w2').focus();true")
+            app.call("pasteboard-write", text="W2 WINDOW")
+            for k in ("a", "v"): app.call("key", key=k, modifiers=["cmd"], window=keyed_native["number"], route="app")
+            pasted = wait(lambda: app.eval(pid, "document.getElementById('w2').value") == "W2 WINDOW", timeout=3)
+            results["W2_extension_window_paste"] = {"ok": bool(pasted) and app.eval(pid, "window.keys") == ["a", "v"],
+                "value": app.eval(pid, "document.getElementById('w2').value"), "keys": app.eval(pid, "window.keys")}
+        finally:
+            app.call("pasteboard-restore")
         tabs_before = len(app.call("tabs"))
         app.call("key", key="w", modifiers=["cmd"], window=keyed_native["number"], route="app")
         key_closed = wait(lambda: native_window(keyed["id"]) is None, timeout=5)

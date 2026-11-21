@@ -9744,23 +9744,80 @@ def w2_page_edit_key_checks(app, results, press, tab):
         app.call('pasteboard-restore')
 
 
+W3_BLOCKED_KEYS = (('t', ['cmd']), ('n', ['cmd']), (',', ['cmd']), ('l', ['cmd']), ('n', ['cmd', 'option']),
+                   ('n', ['cmd', 'shift']), ('y', ['cmd']), ('f', ['cmd']), ('g', ['cmd']), ('w', ['cmd']), ('r', ['cmd']))
+
+
+def w3_blocked_keys(app, press, sheet):
+    """Sends every W3 browser shortcut to `sheet` through NSApp.sendEvent. Returns the browser
+    commands and the menu actions each key ran (both must stay empty)."""
+    routes = {}
+    for key, mods in W3_BLOCKED_KEYS:
+        r = press(key, modifiers=mods, window=sheet, route='app', observeCommands=True)
+        routes['+'.join(mods + [key])] = (r.get('commands') or []) + (r.get('menuActions') or [])
+        time.sleep(.3)
+    return routes
+
+
 def w3_sheet_shortcut_checks(app, results, press, sheet, bar_state):
     """W3: while a Save sheet is key, browser shortcuts must not act behind it. Keys go to the
     sheet window through NSApp.sendEvent."""
     def visible(): return sorted(w['number'] for w in app.call('windows') if w.get('visible') and w['number'] != sheet)
     windows = visible(); tabs = len(app.call('tabs'))
-    routes = {}
     def find_open(): return any(p.get('visible') for p in app.call('find-state').get('panes', []))
     find_before = find_open()
-    for key, mods in (('t', ['cmd']), ('n', ['cmd']), (',', ['cmd']), ('l', ['cmd']), ('n', ['cmd', 'option']),
-                      ('n', ['cmd', 'shift']), ('y', ['cmd']), ('f', ['cmd']), ('g', ['cmd'])):
-        routes['+'.join(mods + [key])] = press(key, modifiers=mods, window=sheet, route='app', observeCommands=True).get('commands')
-        time.sleep(.3)
+    routes = w3_blocked_keys(app, press, sheet)
     still = app.call('save-page-state')
+    menu = {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in ('new-tab', 'new-window', 'settings', 'copy', 'paste')}
     results['W3_save_sheet_blocks_browser_shortcuts'] = {
         'ok': still['visible'] and not bar_state().get('presented') and visible() == windows
               and len(app.call('tabs')) == tabs and not any(routes.values()) and not find_before and not find_open(),
-        'find': [find_before, find_open()], 'routes': routes, 'sheet': still, 'bar': bar_state().get('presented'), 'windows': [windows, visible()]}
+        'find': [find_before, find_open()], 'routes': routes,
+        'sheet': still, 'bar': bar_state().get('presented'), 'windows': [windows, visible()]}
+    # The menu bar agrees: browser items are off under the sheet; system edit items stay on.
+    results['W3_save_sheet_menu_validation'] = {'ok': menu.get('new-tab') is False and menu.get('new-window') is False
+        and menu.get('settings') is False and menu.get('paste') is True, 'menu': menu}
+
+
+def w3_in_process_sheet_checks(app, results, press, tab):
+    """W3 review: in-process sheets. A save prompt (SavePromptSheet) blocks every browser shortcut;
+    a page prompt() sheet keeps its text keys (Ctrl-D, Cmd-A, Cmd-V) and Cmd-. Cancel."""
+    def visible(): return sorted(w['number'] for w in app.call('windows') if w.get('visible'))
+    app.call('select', tab=tab); app.call('focus', tab=tab); time.sleep(.3)
+    app.call('save-prompt', mock={'kind': 'password', 'host': 'w3.example.com'})
+    prompt = wait_until(lambda: (lambda s: s if s.get('visible') else None)(app.call('save-prompt', state=True)), timeout=5, step=.05)
+    try:
+        windows = [w for w in visible() if not prompt or w != prompt['window']]; tabs = len(app.call('tabs'))
+        routes = w3_blocked_keys(app, press, prompt['window']) if prompt else {}
+        after = app.call('save-prompt', state=True)
+        results['W3_save_prompt_sheet_blocks_browser_shortcuts'] = {'ok': bool(prompt) and after.get('visible')
+            and not any(routes.values()) and [w for w in visible() if w != prompt['window']] == windows
+            and len(app.call('tabs')) == tabs, 'routes': routes, 'prompt': after, 'windows': [windows, visible()]}
+    finally:
+        if app.call('save-prompt', state=True).get('visible'): app.call('save-prompt', answer='dismiss')
+    def ds(): return app.call('dialog-state')
+    saved = app.call('pasteboard-preserve')
+    try:
+        app.eval(tab, 'window.outcome="pending";setTimeout(()=>{window.outcome=prompt("w3 prompt","seed")},50);true')
+        state = wait_until(lambda: (lambda s: s if s.get('visible') else None)(ds()), timeout=5, step=.05)
+        assert state, ds()
+        sheet = state['window']
+        app.call('key', text='abcd', window=sheet, route='app')
+        press('left', window=sheet, route='app'); press('left', window=sheet, route='app')
+        press('d', modifiers=['control'], window=sheet, route='app')
+        forward = wait_until(lambda: ds().get('text') == 'abd', timeout=3, step=.05)
+        app.call('pasteboard-write', text='W3 PASTE')
+        press('a', modifiers=['cmd'], window=sheet, route='app'); press('v', modifiers=['cmd'], window=sheet, route='app')
+        pasted = wait_until(lambda: ds().get('text') == 'W3 PASTE', timeout=3, step=.05)
+        text = ds().get('text')
+        press('.', modifiers=['cmd'], window=sheet, route='app')
+        cancelled = wait_until(lambda: ds()['pending'] == 0, timeout=3, step=.05)
+        outcome = app.eval(tab, 'window.outcome', timeout=3) if cancelled else 'dialog still open'
+        results['W3_prompt_sheet_keeps_text_keys'] = {'ok': bool(forward and pasted and cancelled) and outcome is None,
+            'ctrlD': bool(forward), 'paste': bool(pasted), 'text': text, 'cmdPeriodCancel': bool(cancelled), 'outcome': outcome}
+    finally:
+        if ds().get('pending'): app.call('dialog-button', accept=False)
+        app.call('pasteboard-restore')
 
 
 def commandbar_checks(factory, results, tmp, config):
@@ -10141,6 +10198,7 @@ def commandbar_checks(factory, results, tmp, config):
         if save: app.call('dismiss')  # AppKit sheet cancel; remote system key input is not covered
         assert wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
         app.call('dismiss')  # close any remaining owned native panel before the next flow
+        w3_in_process_sheet_checks(app, results, press, target)
         capture = os.path.join(tmp, 'saved-command-page.mhtml')
         # This is a separate native Save action. Re-establish its exact browser
         # key window; the completion deliberately never re-keys a window.

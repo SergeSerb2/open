@@ -116,27 +116,12 @@ enum MainMenu {
       if event.modifierFlags.contains(.command), ["t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       return false
     }
-    if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
-      if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
-      // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before
-      // the browser's reserved key router can consume them.
-      return false
-    }
     if (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
       .contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
-    // A modal panel or a sheet owns its keys. No browser command acts behind it (Cmd-T or Cmd-N
-    // under a Save sheet, Cmd-Q inside an app-modal alert); the main menu would run them if this
-    // returned false. System edit keys (Copy, Paste, Find) still go to AppKit and the panel.
-    if NSApp.modalWindow != nil || event.window?.sheetParent != nil || event.window?.attachedSheet != nil {
-      let responder = event.window?.firstResponder
-      let context = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: responder is NSTextView || responder is NSTextField)
-      guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
-        SystemCommandActions.selectors[id] == nil || id == "quit-open" else { return false }
-      // A panel button with the same key (a Save panel's New Folder) keeps it.
-      if let window = event.window, window === NSApp.modalWindow || window.sheetParent != nil { _ = window.performKeyEquivalent(with: event) }
-      return true
-    }
+    // A modal panel or a sheet owns every key: AppKit gives it to the panel first, then to the
+    // main menu, where MenuBuilder.blocksBrowserCommands disables Open's browser commands.
+    if MenuBuilder.blocksBrowserCommands(keyWindow: event.window ?? NSApp.keyWindow) { return false }
     // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
     // Pointer and programmatic menu actions call performCommand without a key stamp.
     let littleContext = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: false)
@@ -165,6 +150,9 @@ enum MainMenu {
       isTextFocused: NSApp.keyWindow?.firstResponder is NSTextView || NSApp.keyWindow?.firstResponder is NSTextField)
     guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
           app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
+    // Edit keys in a window no browser owns (a chrome.windows popup, a Little Open extension popup,
+    // Document PiP) go to the focused view first; the main menu then runs the same native action.
+    if SystemCommandActions.pageEditCommands.contains(id) { return false }
     app.performCommand(id, keyDownTimestamp: event.timestamp); return true
   }
 }

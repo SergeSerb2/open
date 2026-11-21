@@ -61,7 +61,7 @@ import OpenDesign
         do {
             let imported = try KeyBindingStore.load(from: url)
             guard imported.isSupported else { statusText = "This file has shortcuts Open cannot use. Your saved shortcuts were kept."; return }
-            store = imported; loadFailed = false; saveDraft()
+            store = imported; saveDraft(resolvingLoadError: true)
         } catch { statusText = "Could not read key bindings. Your saved shortcuts were kept." }
     }
     public func exportBindings(to url: URL) {
@@ -134,12 +134,14 @@ import OpenDesign
         store.setOverride(.init(shortcuts: store.effectiveShortcuts(for: command), priority: value), for: id); saveDraft()
     }
     public func revert() { store = saved; conflicts = ConflictChecker.check(overrides: store); statusText = "Reverted." }
-    public func resetAll(confirmed: Bool) { guard confirmed else { confirmsReset = true; return }; loadFailed = false; store = .empty; saveDraft() }
-    private func saveDraft() {
+    public func resetAll(confirmed: Bool) { guard confirmed else { confirmsReset = true; return }; store = .empty; saveDraft(resolvingLoadError: true) }
+    /// Import and Reset All replace an unreadable saved file; other edits never overwrite it.
+    /// The load error clears only after the replacement is on disk.
+    private func saveDraft(resolvingLoadError: Bool = false) {
         conflicts = ConflictChecker.check(overrides: store)
         guard unexpected.isEmpty else { statusText = "Fix the conflicts to save."; return }
-        guard !loadFailed else { return }
-        do { try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true); try store.save(to: fileURL); saved = store; root.actions.keyBindingsDidChange(store: store); statusText = "Saved." }
+        guard !loadFailed || resolvingLoadError else { return }
+        do { try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true); try store.save(to: fileURL); saved = store; loadFailed = false; root.actions.keyBindingsDidChange(store: store); statusText = "Saved." }
         catch { statusText = "Could not save key bindings. \(error.localizedDescription)" }
     }
 }

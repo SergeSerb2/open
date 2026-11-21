@@ -1564,16 +1564,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 now: Date(timeIntervalSinceReferenceDate: event.timestamp))
         }
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, false)
-        // The page sees its edit keys (Copy, Paste, Undo, Select All) first and may cancel them.
-        // Before the page, return false; an uncancelled key comes back here unconsumed (or the
-        // engine offers it to the main menu), which runs the native nil-target action once.
-        if case .system? = decision, webFocused, unconsumed, routing.isAppActive,
-           let shortcut = KeyboardShortcut.from(event: event),
-           let id = SystemCommandActions.command(for: shortcut, overrides: keyBindingOverrides),
-           SystemCommandActions.isEnabled(id), SystemCommandActions.perform(id) {
-            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
-            return true
-        }
+        // A focused page sees its edit keys (Copy, Paste, Undo, Select All) first and may cancel
+        // them. An uncancelled key goes to the main menu (OEClient::OnKeyEvent), which runs the
+        // native nil-target action once; this route never runs it before the page.
         // Extensions run after Open's reserved and non-page-first bindings, before the page.
         // The App drops conflicts with every Open default/user binding from this table.
         if !routing.isCommandBarOpen, onExtensionShortcut?(event) == true {
