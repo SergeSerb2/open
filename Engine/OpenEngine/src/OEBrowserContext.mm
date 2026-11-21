@@ -719,12 +719,16 @@ static CefRefPtr<CefListValue> OEUserScriptsValue(NSArray<OEUserScript*>* script
   [scripts enumerateObjectsUsingBlock:^(OEUserScript* script, NSUInteger index, BOOL* stop) {
     last[script.identifier] = @(index);
   }];
+  // Renderers get the same deduplicated list (review r1 of #649).
+  NSMutableArray<OEUserScript*>* added = [NSMutableArray arrayWithCapacity:last.count];
   [scripts enumerateObjectsUsingBlock:^(OEUserScript* script, NSUInteger index, BOOL* stop) {
     if (last[script.identifier].unsignedIntegerValue == index) {
-      [self->_scripts addObject:[script copy]];
+      OEUserScript* copy = [script copy];
+      [self->_scripts addObject:copy];
+      [added addObject:copy];
     }
   }];
-  [self oe_broadcastScriptsRemoving:replaced.allObjects adding:scripts];
+  [self oe_broadcastScriptsRemoving:replaced.allObjects adding:added];
 }
 
 - (void)removeUserScriptWithIdentifier:(NSString*)identifier {
