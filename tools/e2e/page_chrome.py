@@ -420,22 +420,22 @@ def run(factory, results, tmp, h):
             return check(closed and ps()['decisions']==before+1 and len(events)==1 and events[0]['decision']=='dismiss', events=events)
         gate('permission_tab_switch_once', switched)
 
-        def split_unfocused_pane():
-            # WC-08: a prompt for the unfocused pane of a Split stays while that pane is shown.
-            # It used to be dismissed by the next visibility update.
-            permission_page('splitpane'); target = tab; other = page()
-            panes = [t['id'] for t in app.call('split')]
+        def popup_panel_prompt():
+            # WC-08: a popup panel's prompt points into that panel and takes its keys. It used to
+            # point at the browser window's sidebar address field.
+            url = 'http://popupperm.localhost:%d' % port
+            page(); app.call('permission', origin=url, kind=8, state=0)
+            app.eval(tab, 'void window.open(%s, "perm", "popup,width=520,height=420")' % json.dumps(url + '/permission'))
+            popup = wait(lambda: next((x['identifier'] for x in app.call('pages') if x['kind'] == 'popup'), None), timeout=5, step=.05)
+            assert popup, app.call('pages')
             try:
-                assert sorted(panes) == sorted([target, other]), panes
-                app.call('select', tab=other)
-                perm(target=target); state = visible(ps)
-                app.call('select', tab=other); time.sleep(.5)
-                kept = ps()['visible'] and app.eval(target, 'permissionResult') == 'pending'
-                app.call('permission-prompt', answer='notnow')
+                assert wait(lambda: app.eval(popup, 'document.readyState') == 'complete', timeout=5, step=.05)
+                perm(target=popup); state = visible(ps)
+                pressed = app.call('permission-prompt', answer='notnow')
             finally:
-                app.call('split')
-            return check(kept and state['anchor']['name'] != 'sidebar-url', state=state, kept=kept)
-        gate('permission_split_unfocused_pane', split_unfocused_pane)
+                app.call('close', tab=popup)
+            return check(state['anchor']['name'] == 'popup-content-top-left' and pressed, state=state)
+        gate('permission_popup_panel_anchor', popup_panel_prompt)
 
         for action in ['navigate','close']:
             def cancel_permission(action=action):
