@@ -537,6 +537,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         directory: app.directories.engineDirectory(dataDirectoryName: directory))
     }
     guard let context, context.state == .live else { return nil }
+    // Downloads and notification clicks reach the App also before any window shows this Profile
+    // (Clear Browsing Data loads it with no window open; review r1 item 2).
+    context.delegate = app
     app.profileTeardown.didLoad(profileID: profileID, directory: directory)
     app.adBlockEngineAdapter.contextCreated(context, profileID: profileID)
     app.extensionPrompts.register(context.extensions)
