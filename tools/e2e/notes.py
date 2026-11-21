@@ -15,6 +15,9 @@ def run(factory, results, tmp, h):
         results[name] = dict(ok=bool(ok), **evidence)
         print('notes %-36s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
 
+    if os.environ.get('OPEN_E2E_NOTES_SIZE_ONLY') == '1':
+        size_limit_rows(factory, row, h)
+        return
     server, origin = h._fixture_server('Notes')
     app = factory(urls=(origin + '/page-a',), fresh=True)
     try:
@@ -163,3 +166,68 @@ def run(factory, results, tmp, h):
     finally:
         app.quit()
         server.shutdown()
+    size_limit_rows(factory, row, h)
+
+
+def size_limit_rows(factory, row, h):
+    """Bug sweep r2 #5: a Note whose file would be over the store's 32 MiB read limit is not written.
+    The file keeps the last saved text, the window says so, and the Note opens again after a relaunch.
+    Before, the save wrote the large file and every later open refused it ("Can't load this note").
+
+    The body is '/' lines: JSON stores '/' as two bytes, so about 17 M characters make a file over
+    the limit, in two pastes under the socket's 16 MiB request limit.
+    """
+    limit = 32 << 20
+    app = factory(urls=(), fresh=True)
+    try:
+        app.call('note', action='create')
+        h.wait_until(lambda: (lambda v: v if v['isNote'] and v['shown'] else None)(app.call('note')), timeout=5, step=.05)
+        app.call('note', action='focus', field='title')
+        app.call('note', action='type', text='Big note')
+        app.call('note', action='focus', field='body')
+        app.call('note', action='type', text='Short body')
+        app.call('note', action='flush')
+        small = app.call('note')
+        file = small['file']
+        line = '/' * 99 + '\n'
+        chunk = line * 84000
+        started = time.time()
+        # The first paste fits (about 16.8 MB on disk): it is saved. The second one would make the file
+        # over the limit: that save is refused, and the file keeps the first paste.
+        app.call('note', action='paste', text=chunk, timeout=300)
+        app.call('note', action='flush', timeout=300)
+        fits = os.path.getsize(file) if os.path.exists(file) else 0
+        shown_before = app.call('toasts')['shown']
+        app.call('note', action='paste', text=chunk, timeout=300)
+        paste_seconds = round(time.time() - started, 1)
+        # The debounced save runs right after the paste. Its toast lives 10 s, which a 34 MB reply can
+        # outlast on a loaded machine: read the window's toast count and last title instead.
+        after = h.wait_until(lambda: (lambda t: t if t['shown'] > shown_before else None)(app.call('toasts')), timeout=8, step=.1) \
+            or app.call('toasts')
+        shown_after, toasts = after['shown'], [after.get('lastTitle', '')]
+        # A later edit is refused too, and says so again (each refused save is an edit not on disk).
+        app.call('note', action='type', text='x', timeout=300)
+        app.call('note', action='flush', timeout=300)
+        again = app.call('toasts')
+        big = app.call('note', timeout=300)
+        size = os.path.getsize(file) if os.path.exists(file) else 0
+        row('oversized_note_not_written', small['stored'] and small['stored']['text'] == 'Short body'
+            and 0 < fits < limit and size == fits and len(big['body']) == 2 * len(chunk) + len('Short body') + 1
+            and 'limit' in big['storeError'] and shown_after == shown_before + 1 and 'too large' in toasts[0]
+            and again['shown'] == shown_after + 1 and 'too large' in again.get('lastTitle', ''),
+            fileBytes=size, savedFirstPaste=fits, limit=limit, storeError=big['storeError'][:200], toasts=toasts, toastsShown=[shown_before, shown_after, again['shown']],
+            bodyCharacters=len(big['body']), pasteSeconds=paste_seconds)
+        expected_body = len(chunk) + len('Short body')
+        note_tab = big['tab']
+    finally:
+        app.quit()
+    app = factory(urls=())
+    try:
+        app.call('select', tab=note_tab)
+        back = h.wait_until(lambda: (lambda v: v if v['tab'] == note_tab and v['shown'] else None)(app.call('note')), timeout=10, step=.1)
+        back = back or app.call('note')
+        row('oversized_note_reopens_last_save', not back['unreadable'] and back['editable'] and back['title'] == 'Big note'
+            and len(back['body']) == expected_body and back['body'].startswith('Short body'),
+            unreadable=back['unreadable'], title=back['title'][:40], bodyCharacters=len(back['body']), expected=expected_body)
+    finally:
+        app.quit()

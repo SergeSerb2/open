@@ -168,8 +168,11 @@ extension AppDelegate {
       factory.controller?.refresh(); factory.scheduleSave()  // the tree change syncs the tab mirror
     }
     easels.flush()
+    // A copy whose write failed is queued again; it must not bring the trashed folder back.
+    easels.discard(documentID)
     let folder = easels.fileURL(for: documentID).deletingLastPathComponent()
     if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
+    discardArchivedRows(url: EaselTab.url(for: documentID))
   }
 }
 

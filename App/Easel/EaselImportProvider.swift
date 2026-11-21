@@ -178,6 +178,8 @@ extension AppDelegate {
     // would land after (and overwrite) the file put back below.
     for id in files.keys { closeEaselHosts(documentID: id) }
     easels.flush()
+    // A copy whose write failed is queued again; it must not overwrite the files put back here.
+    for id in files.keys { easels.discard(id) }
     for (id, data) in files {
       let url = easels.fileURL(for: id)
       if let data {

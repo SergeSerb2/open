@@ -32,6 +32,8 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
     guard !isClosing, let split = model.node(id: id)?.split, let sidebar = controller?.sidebar,
           sidebar.window != nil, let rect = sidebar.rowFrame(nodeID: id) else { return false }
     sidebarSharePicker?.close()
+    // Closing a picker the copy toast opened releases that toast too (as `shareSidebarTab`).
+    shareToastHandle?.hold(false); shareToastHandle = nil
     let urls = split.panes.map { URLCleaner.clean($0.url).url }
     let picker = NSSharingServicePicker(items: urls)
     sidebarSharePicker = picker; picker.delegate = self
@@ -58,6 +60,8 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
     guard !isClosing, !links.isEmpty, let sidebar = controller?.sidebar, sidebar.window != nil,
           let rect = ids.lazy.compactMap({ sidebar.rowFrame(nodeID: $0) }).first else { return false }
     sidebarSharePicker?.close()
+    // Closing a picker the copy toast opened releases that toast too (as `shareSidebarTab`).
+    shareToastHandle?.hold(false); shareToastHandle = nil
     let picker = NSSharingServicePicker(items: links)
     sidebarSharePicker = picker; picker.delegate = self
     #if OPEN_AUTOMATION

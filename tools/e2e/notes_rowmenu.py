@@ -147,6 +147,57 @@ def run(factory, results, tmp, h):
         row('duplicate_rows_share_edits', seen_before == 'one two' and seen.get('body') == 'one two' and stored.get('text') == 'one two three'
             and bool(stored.get('title')) and titles == [stored.get('title')] * 2,
             twins=twins, seenBefore=seen_before, seen=seen.get('body'), stored=stored.get('text'), storedTitle=stored.get('title'), titles=titles, noteHosts=hosts)
+
+        # Bug sweep r2: Delete Note also removes Archive entries of the Note's rows that left the
+        # sidebar earlier (Remove Note from Sidebar on a twin row: another row ID). Before, restoring
+        # such an entry gave a row of a Note whose file is in the Trash (an empty Note).
+        app.call('note', action='create'); app.call('key', text='Zeta'); key('return'); app.call('key', text='zeta body')
+        z = app.call('note')['tab']
+        z_url = app.call('note', tab=z)['url']
+        app.call('note', action='flush')
+        app.call('menu-perform', id='duplicate-tab')
+        z_rows = h.wait_until(lambda: (lambda r: r if len(r) == 2 else None)([t['id'] for t in app.call('tabs') if t['url'] == z_url]), timeout=5, step=.1) or []
+        z2 = next((t for t in z_rows if t != z), None)
+        archived_before, left = [], None
+        if z2:
+            app.call('sidebar-menu', node=z2, item='Remove Note from Sidebar')
+            h.wait_until(lambda: all(t['id'] != z2 for t in app.call('tabs')) or None, timeout=5, step=.05)
+            archived_before = h.wait_until(lambda: [r['id'] for r in app.call('archive-list')['rows'] if r['url'] == z_url] or None, timeout=5, step=.1) or []
+            app.call('sidebar-menu', node=z, item='Delete Note')
+            sheet(); app.call('note', action='sheet', press='Delete')
+            h.wait_until(lambda: all(t['id'] != z for t in app.call('tabs')) or None, timeout=5, step=.05)
+            h.wait_until(lambda: not [r for r in app.call('archive-list')['rows'] if r['url'] == z_url] or None, timeout=5, step=.1)
+            left = [r['id'] for r in app.call('archive-list')['rows'] if r['url'] == z_url]
+        row('delete_note_drops_archived_twin', len(z_rows) == 2 and archived_before == [z2] and left == [],
+            rows=z_rows, archivedBefore=archived_before, archivedAfter=left)
+
+        # Bug sweep r2 seed #4: one Note row shown in two windows (each window has its own editor). An
+        # edit in window 2 shows in window 1's editor before it is shown again, and typing there keeps both.
+        app.call('note', action='create'); app.call('key', text='Eta'); key('return'); app.call('key', text='one')
+        w_tab = app.call('note')['tab']
+        app.call('note', action='flush')
+        first_window = app.call('window-state')['id']
+        app.call('command', id='new-window')
+        second_window = h.wait_until(lambda: next((v['id'] for v in app.call('shell-windows') if v['id'] != first_window), None), timeout=5, step=.1)
+        w_seen, w_stored = None, {}
+        if second_window:
+            app.call('window-focus', id=second_window, activate=True)
+            app.call('select', tab=w_tab); shown(w_tab)
+            app.call('note', action='select', start=3, length=0)
+            app.call('note', action='type', text=' two')
+            app.call('window-focus', id=first_window, activate=True)
+            pre = app.call('note', tab=w_tab)
+            w_seen = pre.get('body') if pre.get('hasHost') else None
+            app.call('select', tab=w_tab); after = shown(w_tab)
+            app.call('note', action='select', start=len(after.get('body', '')), length=0)
+            app.call('note', action='type', text=' three')
+            app.call('note', action='flush')
+            w_stored = app.call('note', tab=w_tab).get('stored') or {}
+            app.call('window-focus', id=second_window, activate=True)
+            app.call('window-close')
+            app.call('window-focus', id=first_window, activate=True)
+        row('two_windows_share_edits', w_seen == 'one two' and w_stored.get('text') == 'one two three',
+            windows=[first_window, second_window], seenInFirstWindow=w_seen, stored=w_stored.get('text'))
     finally:
         app.quit()
         server.shutdown()

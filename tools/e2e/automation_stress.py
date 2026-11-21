@@ -87,6 +87,21 @@ def run(factory, results, tmp, h):
     except Exception as error:
         row('half_lines_and_parallel_clients', False, error=str(error))
 
+    # Bug sweep r2: a client that pipelines requests on one connection gets the replies in request
+    # order, also when an earlier request suspends (a page promise) and a later one does not.
+    try:
+        tab = app.call('tabs')[0]['id']
+        s = connect(app.sock)
+        slow = {'id': 'slow', 'cmd': 'eval', 'args': {'tab': tab, 'js': 'new Promise((r) => setTimeout(() => r(7), 800))'}}
+        s.sendall(b''.join(json.dumps(r).encode() + b'\n' for r in (slow, {'id': 'fast-1', 'cmd': 'ping'}, {'id': 'fast-2', 'cmd': 'ping'})))
+        replies = read_lines(s, 3)
+        s.close()
+        ids = [r.get('id') for r in replies]
+        row('pipelined_replies_in_order', ids == ['slow', 'fast-1', 'fast-2'] and replies[0].get('result') == 7, ids=ids,
+            slow=replies[0] if replies else None)
+    except Exception as error:
+        row('pipelined_replies_in_order', False, error=str(error))
+
     time.sleep(1)
     try: alive = app.call('ping')['pid']
     except Exception as error: alive = str(error)

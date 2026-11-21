@@ -17,6 +17,10 @@
       let source: any DispatchSourceRead
       var buffer = Data()
       var isOpen = true
+      /// The reply task of the connection's last request. Each request waits for it, so a client
+      /// that sends several requests at once gets the replies in request order (a request that
+      /// suspends, such as a page promise, would otherwise reply after a later one).
+      var lastReply: Task<Void, Never>?
       init(fd: Int32, source: any DispatchSourceRead) { self.fd = fd; self.source = source }
     }
     let socketURL: URL
@@ -109,6 +113,7 @@
     private func close(_ connection: Connection) {
       guard connection.isOpen else { return }
       connection.isOpen = false
+      connection.lastReply = nil
       connections.removeValue(forKey: ObjectIdentifier(connection))
       connection.source.cancel()
     }
@@ -125,9 +130,12 @@
         connection.buffer = Data(connection.buffer[(newline + 1)...])
         guard !line.isEmpty else { continue }
         let controller = self.controller
-        Task { @MainActor in
+        let previous = connection.lastReply
+        connection.lastReply = Task { @MainActor in
+          await previous?.value
           let response = await controller.handle(line)
-          // The connection object keeps its identity; the fd number alone would not.
+          // The connection object keeps its identity; the fd number alone would not. The write is
+          // queued before this task ends, so the next reply's write is queued after it.
           self.queue.async { self.write(response, to: connection) }
         }
       }
