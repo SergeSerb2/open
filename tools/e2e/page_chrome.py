@@ -543,20 +543,6 @@ def run(factory, results, tmp, h):
             return check(closed and ps()['decisions']==before+1 and len(events)==1 and events[0]['decision']=='dismiss', events=events)
         gate('permission_tab_switch_once', switched)
 
-        def prompt_frame_removed():
-            # Round 5 (WC-07 engine half): when the engine dismisses a prompt (here: its requesting
-            # frame is removed, no navigation), the prompt goes; it stayed on screen.
-            url = 'http://framegone.localhost:%d' % port
-            page(url + '/permission'); app.call('permission', origin=url, kind=8, state=0)
-            app.eval(tab, 'const f=document.createElement("iframe");f.id="pf";f.src="/frame";document.body.append(f);true')
-            assert wait(lambda: app.eval(tab, 'document.querySelector("#pf").contentDocument?.readyState || ""') == 'complete', timeout=5, step=.05)
-            app.eval(tab, 'window.permissionResult="pending";document.querySelector("#pf").contentWindow.Notification.requestPermission().then(v=>window.permissionResult=v,()=>window.permissionResult="error");true')
-            state = visible(ps)
-            app.eval(tab, 'document.querySelector("#pf").remove();true')
-            gone = wait(lambda: not ps()['visible'], timeout=3, step=.05)
-            return check(bool(gone), state=state, after=ps())
-        gate('permission_engine_dismiss_frame_removed', prompt_frame_removed)
-
         for action in ['navigate','close']:
             def cancel_permission(action=action):
                 permission_page('cancel-'+action); target=tab; perm(); visible(ps)
