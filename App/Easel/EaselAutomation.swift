@@ -8,6 +8,30 @@ import OpenSidebar
 /// built as NSEvents and dispatched by the window (`sendEvent`), toolbar buttons are pressed,
 /// and typing uses the text view's own insertion path. Coordinates are document points.
 extension AutomationController {
+  /// Library ▸ Easels ▸ Export All Easels after its save sheet: the real archive path, with the
+  /// longest main-thread gap while it runs (a 2 ms main-run-loop timer).
+  func easelArchive(_ args: [String: Any]) async throws -> Any {
+    guard let path = args["path"] as? String, path.utf8.count <= 4096 else { throw Failure(message: "path needed") }
+    @MainActor final class Gaps { var last = ProcessInfo.processInfo.systemUptime; var maximum = 0.0 }
+    let gaps = Gaps()
+    let timer = Timer(timeInterval: 0.002, repeats: true) { _ in
+      MainActor.assumeIsolated {
+        let now = ProcessInfo.processInfo.systemUptime
+        gaps.maximum = max(gaps.maximum, now - gaps.last); gaps.last = now
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    try await Task.sleep(for: .milliseconds(50))
+    gaps.maximum = 0
+    let provider = EaselLibraryProvider(app: app)
+    let started = ProcessInfo.processInfo.systemUptime
+    let ok = provider.writeArchive(to: URL(fileURLWithPath: path))
+    let total = (ProcessInfo.processInfo.systemUptime - started) * 1000
+    try await Task.sleep(for: .milliseconds(20))
+    timer.invalidate()
+    return ["ok": ok, "mainMaxGapMs": gaps.maximum * 1000, "dittoMs": provider.lastDittoMilliseconds, "totalMs": total] as [String: Any]
+  }
+
   func easel(_ args: [String: Any]) throws -> Any {
     let action = args["action"] as? String ?? "state"
     let factory = try window

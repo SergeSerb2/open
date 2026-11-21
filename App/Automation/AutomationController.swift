@@ -332,6 +332,7 @@
       case "welcome": return try welcome(a)
       case "basics-demo": return try basicsDemo(a)
       case "easel": return try easel(a)
+      case "easel-archive": return try await easelArchive(a)
       case "note": return try note(a)
       case "blank-window":
         // action=move-to space=‹title›: the header's "Move to…" menu item (front window).

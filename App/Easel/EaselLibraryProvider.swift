@@ -63,6 +63,10 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
     }
   }
   private(set) var lastExport: String?
+  /// How long the last archive's `ditto` ran (automation read-back). `waitUntilExit()` runs the
+  /// main run loop while it waits, so the main thread keeps turning (e2e E37b measures it).
+  private(set) var lastDittoMilliseconds = 0.0
+
 
   /// Writes a folder of web pages into a temporary place, then zips it to `url`.
   func writeArchive(to url: URL) -> Bool {
@@ -76,7 +80,9 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
       let ditto = Process()
       ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
       ditto.arguments = ["-c", "-k", "--keepParent", folder.path, url.path]
+      let started = ProcessInfo.processInfo.systemUptime
       try ditto.run(); ditto.waitUntilExit()
+      lastDittoMilliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
       return ditto.terminationStatus == 0
     } catch { return false }
   }
