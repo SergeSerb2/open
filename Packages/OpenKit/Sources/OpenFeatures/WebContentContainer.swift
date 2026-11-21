@@ -780,6 +780,13 @@ public final class WebContentContainer: NSView {
     public func focus(tabID: ItemID) {
         guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); focusContent(tabID); metadataChanged(tabID)
     }
+    /// Gives keyboard focus back to the focused pane's content (after an overlay such as Library
+    /// closes). Returns false when no pane is shown.
+    @discardableResult
+    public func focusCurrentContent() -> Bool {
+        guard let focused, ids.contains(focused) else { return false }
+        focusContent(focused); return true
+    }
     private func focusContent(_ id: ItemID) {
         if let sad = slots.first(where: { $0.tabID == id })?.sadTabView { window?.makeFirstResponder(sad) }
         else { cache[id]?.focus() }

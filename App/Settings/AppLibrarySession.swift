@@ -89,7 +89,9 @@ final class AppLibrarySession {
     panel?.isPresented = false
     controller.dismissLibraryPanel()
     panel?.onIdleRefresh?()
-    controller.window?.makeFirstResponder(controller.container)
+    // The container itself does not accept first responder; without this the hidden Library
+    // search field kept keyboard focus, and keys went to it instead of the page.
+    if !controller.container.focusCurrentContent() { controller.window?.makeFirstResponder(nil) }
     releaseTask?.cancel()
     #if OPEN_AUTOMATION
     let delay = releaseDelay
