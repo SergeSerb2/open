@@ -1195,17 +1195,20 @@ def checks(factory, results, tmp, config, harness):
         private = None
         rows = {}
         try:
-            app.call('engine-api', action='add', page='a', browser='a', url=base + '/')
-            wait(lambda: app.call('engine-api', action='eval', page='a', js='document.readyState') == 'complete')
+            # One proof page per download: a second download from one engine-owned page crashes
+            # the engine (found in this review; reported for the engine agent, not this row).
+            for page in ('a', 'b'):
+                app.call('engine-api', action='add', page=page, browser=page, url=base + '/')
+                wait(lambda: app.call('engine-api', action='eval', page=page, js='document.readyState') == 'complete')
             app.call('menu-perform', id='new-incognito-window')
             private = wait(lambda: next((v for v in app.call('incognito-state')['windows'] if v['private']), None))
             for window in [w['id'] for w in app.call('incognito-state')['windows'] if not w['private']]:
                 app.call('window-focus', id=window, activate=True); app.call('window-close')
             private_number = next((w['number'] for w in app.call('shell-windows') if private and w['id'] == private['id']), -1)
-            def ask(label):
+            def ask(label, page):
                 before = {v['id'] for v in state()['items']}
                 name = 'unowned-ask-%s.txt' % label
-                app.call('engine-api', action='eval', page='a', js='(() => {let a=document.createElement("a"); a.href=%s; document.body.append(a); a.click(); return true})()'
+                app.call('engine-api', action='eval', page=page, js='(() => {let a=document.createElement("a"); a.href=%s; document.body.append(a); a.click(); return true})()'
                          % json.dumps(base + '/fast?name=' + name))
                 key = (wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None)) or {}).get('id')
                 sheet = key and wait(lambda: next((v for v in state()['sheets'] if v['id'] == key and v['visible']), None), 5)
@@ -1218,10 +1221,10 @@ def checks(factory, results, tmp, config, harness):
                 value = rows[label]['item']
                 return bool(sheet) and not sheet['sheet'] and sheet['parent'] != private_number and done and value.get('state') == 'completed' \
                     and Path(value.get('path') or '/') == ask_dir / name
-            only_private = ask('only-private')
+            only_private = ask('only-private', 'a')
             if private:
                 app.call('window-focus', id=private['id'], activate=True); app.call('window-close'); private = None
-            no_window = wait(lambda: not app.call('shell-windows')) and ask('no-window')
+            no_window = wait(lambda: not app.call('shell-windows')) and ask('no-window', 'b')
             check('unowned_ask_never_private_or_cancelled', only_private and no_window, rows=rows)
         finally:
             E._try(lambda: app.call('engine-api', action='cleanup'))
