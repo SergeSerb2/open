@@ -580,7 +580,7 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
     no_app_attributes = subprocess.check_output([str(opts.tools / 'sign_update'), '--ed-key-file',
         str(folder / 'throwaway.key'), str(no_app)], text=True).strip()
     no_app_enclosure = ET.fromstring('<enclosure xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" ' + no_app_attributes + '/>')
-    for variant in ('without-notes', 'critical', 'minimum', 'information-only', 'html', 'empty-html', 'notes-at-limit', 'notes-over-limit', 'up-to-date', 'background-up-to-date', 'bad-signature', 'background-error', 'background-install-error', 'ready', 'background-ready', 'summary', 'summary-dismiss'):
+    for variant in ('without-notes', 'critical', 'minimum', 'information-only', 'html', 'empty-html', 'notes-at-limit', 'notes-over-limit', 'up-to-date', 'system-too-old', 'background-up-to-date', 'bad-signature', 'background-error', 'background-install-error', 'ready', 'background-ready', 'summary', 'summary-dismiss'):
         tree = ET.fromstring(base)
         items = list(tree.find('channel').findall('item'))
         for item in items:
@@ -609,6 +609,8 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                 item.find('enclosure').set('url', origin + '/NoApp.zip')
             elif variant in ('up-to-date', 'background-up-to-date'):
                 item.find(sparkle + 'version').text = original['CFBundleVersion']
+            elif variant == 'system-too-old':
+                item.find(sparkle + 'minimumSystemVersion').text = '99.0'
             elif variant == 'background-error':
                 item.find('enclosure').set('url', origin + '/download-failure.zip')
             elif variant == 'bad-signature':
@@ -712,9 +714,20 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                     results['A5_background_error_toast'] = {'ok': state.get('alertWindow') == 0 and state.get('lastToast') == 'failedToDownloadUpdate'
                         and toast_matches(app, 'failedToDownloadUpdate'), 'ui': state}
                 continue
-            state = wait(lambda: ui(app), lambda s: s.get('phase') in ('found', 'upToDate'), 'no result window')
+            state = wait(lambda: ui(app), lambda s: s.get('phase') in ('found', 'upToDate', 'unsupported'), 'no result window')
             row = ax(app, state['updateWindow'])
-            if variant == 'up-to-date':
+            if variant == 'system-too-old':
+                # Bug sweep R2 (seed-media #8): Sparkle's "no update" for a newer release that needs a newer
+                # macOS. The window says so; it never claims "up to date", and Settings shows no "Up to date".
+                text = row.get('text', [])
+                app.call('key', key='return', window=state['updateWindow'], route='app')
+                done = wait(lambda: app.call('updater-state'), lambda s: not s.get('sessionInProgress') and s.get('completedChecks', 0) > 0,
+                            'Close did not acknowledge the unsupported update')
+                results['A4_system_too_old'] = {'ok': state.get('phase') == 'unsupported'
+                    and 'Open v99.0 is available, but it needs macOS 99.0 or later.' in text
+                    and 'Your browser is up to date' not in text and 'Close' in text and done.get('updateUnsupported') is True,
+                    'ax': row, 'phase': state.get('phase'), 'updateUnsupported': done.get('updateUnsupported')}
+            elif variant == 'up-to-date':
                 version = 'Version ' + original['CFBundleShortVersionString'] + ' (' + original['CFBundleVersion'] + ')'
                 results['A4_up_to_date'] = {'ok': version in row.get('text', []) and 'Your browser is up to date' in row.get('text', [])
                     and 'Close' in row.get('text', []), 'ax': row,

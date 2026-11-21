@@ -177,7 +177,10 @@ final class LiveFolderService {
       let diff = LiveFolderDiff.make(folder: current, fresh: fresh)
       // New rows after the first fill show the unread dot (Arc `showNewItemsAsUnread`).
       let unread = live.lastFetch?.outcome == .success
-      app.model.applyLiveRows(folderID: folderID, add: diff.add.map { ($0.url, $0.title) }, remove: diff.remove,
+      // An SSO banner means GitHub hid some organization's PRs from this result: a row missing from
+      // it may still be open. Only a complete result removes rows.
+      let remove = outcome == .success ? diff.remove : []
+      app.model.applyLiveRows(folderID: folderID, add: diff.add.map { ($0.url, $0.title) }, remove: remove,
                               retitle: diff.retitle, unread: unread,
                               info: Dictionary(fresh.map { ($0.url, $0.liveItemInfo) }, uniquingKeysWith: { first, _ in first }))
     }
