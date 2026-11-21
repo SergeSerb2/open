@@ -232,6 +232,13 @@ OE_EXPORT @interface OEBrowserContext : NSObject
 /// that arrive from outside a page.
 - (nullable NSURL*)protocolHandlerURLForURL:(NSURL*)url
     NS_SWIFT_NAME(protocolHandlerURL(for:));
+/// The same lookup once the context finished initializing: a context made a
+/// moment ago has no handlers yet. The completion runs on the main thread,
+/// at once for a ready context, with nil for a closed one.
+- (void)protocolHandlerURLWhenReadyForURL:(NSURL*)url
+                               completion:(void (^)(NSURL* _Nullable))completion
+    NS_SWIFT_NAME(protocolHandlerURLWhenReady(for:completion:))
+    NS_SWIFT_DISABLE_ASYNC;
 /// Removes one registered handler. Returns NO if it is not registered.
 - (BOOL)removeProtocolHandler:(OEProtocolHandler*)handler
     NS_SWIFT_NAME(removeProtocolHandler(_:));
