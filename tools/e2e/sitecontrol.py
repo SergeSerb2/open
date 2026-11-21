@@ -48,7 +48,13 @@ def run(factory, results, tmp, env, functional_only=False):
             from sitecontrol_performance import run as performance
             performance(factory, results, origin, tmp, env)
             return
-        app = factory(urls=('about:blank',))
+        # Own App and resolver rules (one --host-resolver-rules switch wins).
+        from sitecontrol_guards import run as guards
+        guards(original_factory, results, origin, tmp, env)
+        if os.environ.get('OPEN_SCC_GUARDS_ONLY') == '1':
+            return
+        # Fresh: start from the empty data root this flow had before the guard rows ran.
+        app = factory(urls=('about:blank',), fresh=True)
         saved = {}
         private = Path(env['ROOT']) / '.re/handoff/sections/s12/A-sitecontrol'
         private.mkdir(parents=True, exist_ok=True)

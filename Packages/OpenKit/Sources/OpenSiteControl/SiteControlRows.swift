@@ -73,6 +73,8 @@ class SiteControlRow: SiteControlButton {
         setAccessibilityLabel(tile.title); setAccessibilityRole(tile.state == .unavailable ? .button : .checkBox)
         setAccessibilityValue(tile.state == .on ? 1 : 0); setAccessibilityValueDescription(tile.subtitle)
         setAccessibilityHelp(tile.help); tooltipTitle = tile.help
+        isEnabled = tile.isEnabled; alphaValue = tile.isEnabled ? 1 : SiteControlMetrics.disabledAlpha
+        if !tile.isEnabled { cancelTracking() }
         needsDisplay = true
         previousDisc = animated && changed && bounds.intersects(visibleRect) ? previous : nil
 

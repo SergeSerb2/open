@@ -30,7 +30,13 @@ final class ExtensionPopupController {
   }
   func opened(browser: OEBrowser, page: OEWebContent, action: OEExtensionAction) {
     guard let parent = factory.window else { browser.closeExtensionPopup(); return }
-    if self.page != nil { detach() }
+    if self.page != nil {
+      // A popup of another browser is still open: detach it, then let its browser close it,
+      // or its page and host stay alive without a panel.
+      let previous = self.browser
+      detach()
+      if let previous, previous !== browser { previous.closeExtensionPopup() }
+    }
     self.browser = browser; self.page = page; page.delegate = factory
     openedAt = CACurrentMediaTime(); visibleAt = nil; readyToVisibleMilliseconds = nil
     invocationAt = requestedID == action.extensionIdentifier && browser.extensionPopupSource != .API ? requestedAt : nil

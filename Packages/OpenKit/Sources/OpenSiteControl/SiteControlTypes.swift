@@ -16,6 +16,12 @@ public struct SiteControlContext: Sendable, Equatable {
         self.isIncognito = isIncognito; self.security = security
     }
     public var isWebsite: Bool { ["http", "https"].contains(url.scheme?.lowercased() ?? "") && url.host != nil }
+    /// Same tab, Profile and window kind, on the same origin (scheme, host, port). An action drawn
+    /// for one context must not run after a redirect or a Profile rebind changed it.
+    public func showsSameSite(as other: SiteControlContext) -> Bool {
+        tabID == other.tabID && profileID == other.profileID && isIncognito == other.isIncognito
+            && url.scheme?.lowercased() == other.url.scheme?.lowercased() && url.host() == other.url.host() && url.port == other.url.port
+    }
 }
 
 public enum SiteSettingKind: Hashable, Sendable { case contentBlocking, permission(SitePermission), content(String) }
@@ -29,10 +35,12 @@ public struct SiteSettingTile: Sendable, Equatable, Identifiable {
     public var symbol: String
     public var inUse: Bool
     public var help: String?
+    /// False when the row shows a true state that this site cannot change (the App also refuses the action).
+    public var isEnabled: Bool
     public init(id: String, kind: SiteSettingKind, title: String, subtitle: String, state: SiteSettingState,
-                symbol: String = "gearshape.fill", inUse: Bool = false, help: String? = nil) {
+                symbol: String = "gearshape.fill", inUse: Bool = false, help: String? = nil, isEnabled: Bool = true) {
         self.id = id; self.kind = kind; self.title = title; self.subtitle = subtitle
-        self.state = state; self.symbol = symbol; self.inUse = inUse; self.help = help
+        self.state = state; self.symbol = symbol; self.inUse = inUse; self.help = help; self.isEnabled = isEnabled
     }
 }
 
