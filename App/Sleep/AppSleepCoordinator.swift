@@ -117,6 +117,7 @@ final class AppSleepCoordinator {
 
   func stop() {
     isStarted = false
+    navigationsAfterWake.removeAll()
     controller?.stop()
     if let powerObserver { NotificationCenter.default.removeObserver(powerObserver) }
     powerObserver = nil
@@ -279,19 +280,23 @@ final class AppSleepCoordinator {
 
   /// A wake of this tab is queued or in flight (stored history read, page restore).
   func isWaking(_ id: ItemID) -> Bool { wakeRequests.contains(id) || controller?.isWaking(id) == true }
-  private struct WakeNavigation { let url: URL; weak var factory: EngineWebContentHostFactory? }
+  private struct WakeNavigation { let url: URL; let profileID: ProfileID?; weak var factory: EngineWebContentHostFactory? }
   private var navigationsAfterWake: [ItemID: WakeNavigation] = [:]
   /// Cmd+L on a tab that is waking: the address loads once the wake ends, so the restored back list
   /// stays and the wake can neither replace the typed page nor reload the old address over it.
   /// False when no wake is in flight (the caller navigates at once).
   func navigateAfterWake(_ id: ItemID, to url: URL, in factory: EngineWebContentHostFactory) -> Bool {
     guard isWaking(id) else { return false }
-    navigationsAfterWake[id] = WakeNavigation(url: url, factory: factory)
+    navigationsAfterWake[id] = WakeNavigation(url: url, profileID: factory.profile(for: id)?.id, factory: factory)
     return true
+  }
+  /// The tab closed, unloaded, reset to its pinned address, or changed Profile: the held address is dropped.
+  func cancelNavigationAfterWake(_ ids: some Sequence<ItemID>) {
+    for id in ids { navigationsAfterWake.removeValue(forKey: id) }
   }
   private func finishWake(_ id: ItemID) {
     guard !isWaking(id), let next = navigationsAfterWake.removeValue(forKey: id) else { return }
-    next.factory?.navigateAfterWake(tabID: id, to: next.url)
+    next.factory?.navigateAfterWake(tabID: id, to: next.url, profileID: next.profileID)
   }
 
   /// Settings or another input changed a Profile's sleep mode.

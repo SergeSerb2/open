@@ -787,6 +787,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let id = iconPickerSpaceID, focusedSpace?.id != id || model.space(id: id) == nil { iconPicker?.close() }
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
+      app.tabSleep.cancelNavigationAfterWake(ids)
       // A closed Peek's Undo also ends: it would reopen the old Profile's page over the Space's new Profile.
       if let controller, controller.hasPeekController,
          controller.peekController.stack.contains(where: { ids.contains($0.sourceTabID) || ($0.host as? EngineWebContentHost)?.spaceID == spaceID })
@@ -955,7 +956,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .rename(let id, let title) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
       return renameEasel(tabID: id, title: title)
     case .close(let id), .unloadTab(let id):
-      guard model.tab(id: id) != nil else { return nil }; closeTab(id: id); return true
+      guard model.tab(id: id) != nil else { return nil }; app.tabSleep.cancelNavigationAfterWake([id]); closeTab(id: id); return true
     case .unloadFolder(let id):
       guard let folder = model.node(id: id)?.folder, controller?.context.isPinnedFolder(id) == true else { return false }
       func collect(_ nodes: [SidebarNode]) -> [ItemID] {
@@ -968,6 +969,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         }
       }
       let ids = Set(collect(folder.children))
+      app.tabSleep.cancelNavigationAfterWake(ids)
       let loaded = ids.filter { hosts[$0] != nil || controller?.container.host(for: $0) != nil }
       guard !loaded.isEmpty else { return true }
       for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
@@ -985,7 +987,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; scheduleSave(); return true
     case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
-      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
+      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }
+      app.tabSleep.cancelNavigationAfterWake([id]); model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
     case .renameSpace(let id, let title):
       guard let space = model.space(id: id) else { return false }
       let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1083,6 +1086,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private func finishClosingTab(id: ItemID) {
     guard model.tab(id: id) != nil else { return }
+    app.tabSleep.cancelNavigationAfterWake([id])
     findController?.forget(id)
     let order = orderedTabs.map(\.id), index = order.firstIndex(of: id) ?? 0
     let wasSelected = selectedTab?.id == id
@@ -1298,8 +1302,9 @@ extension EngineWebContentHostFactory {
   }
   /// The Cmd+L address held while its tab woke from sleep (AppSleepCoordinator.navigateAfterWake):
   /// it loads in the restored page, so the stored back list stays under the typed page.
-  func navigateAfterWake(tabID: ItemID, to url: URL) {
-    guard !isClosing, let tab = model.tab(id: tabID) else { return }
+  func navigateAfterWake(tabID: ItemID, to url: URL, profileID: ProfileID?) {
+    // The address was typed for this tab in this Profile; never load it in another Profile's context.
+    guard !isClosing, let tab = model.tab(id: tabID), profile(for: tabID)?.id == profileID else { return }
     let selected = selectedTab?.id == tabID
     if let host = hosts[tabID], !host.closed {
       if selected { commandBarNavigationFocus.insert(tabID) }
