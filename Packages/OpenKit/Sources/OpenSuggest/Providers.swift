@@ -511,7 +511,9 @@ public struct HistoryProvider: SuggestProvider {
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
         guard !input.context.mode.isScoped, !input.query.isEmpty else { return [] }
         let q = input.matchQuery
-        let matches = carry.matches(profile: input.profileID, extending: q.bytes)
+        // Deleted history never comes back from the cache: a deletion since the answer drops it.
+        guard let generation = store(input.profileID)?.deletionGeneration else { return [] }
+        let matches = carry.matches(profile: input.profileID, extending: q.bytes, generation: generation)
         guard !matches.isEmpty else { return [] }
         return matches.compactMap { m -> Suggestion? in
             let host = TextMatching.fold(TextMatching.displayHost(m.url)), url = TextMatching.fold(TextMatching.matchableURL(m.url))
@@ -528,9 +530,11 @@ public struct HistoryProvider: SuggestProvider {
         let limit = input.query.isEmpty ? emptyQueryRows : limit
         let provider = id, carry = carry, profile = input.profileID
         return {
+            // Read before the search: a deletion that lands during it makes the answer stale for carry-over.
+            let generation = store.deletionGeneration
             let matches = await store.search(text, limit: limit)
             if Task.isCancelled { return nil }
-            carry.store(profile: profile, query: query.bytes, matches: matches)
+            carry.store(profile: profile, query: query.bytes, matches: matches, generation: generation)
             return matches.compactMap { Self.row($0, query: query, now: now, site: site, provider: provider) }
         }
     }
@@ -568,17 +572,19 @@ public struct HistoryProvider: SuggestProvider {
 
 /// The last finished history answer, per engine instance: the source of history carry-over rows.
 final class HistoryCarryOver: Sendable {
-    private struct Last { var profile: ProfileID?; var query: [UInt8]; var matches: [HistoryMatch] }
+    private struct Last { var profile: ProfileID?; var query: [UInt8]; var matches: [HistoryMatch]; var generation: UInt64 }
     private let last = Mutex<Last?>(nil)
 
-    func store(profile: ProfileID?, query: [UInt8], matches: [HistoryMatch]) {
-        last.withLock { $0 = query.isEmpty ? nil : Last(profile: profile, query: query, matches: matches) }
+    /// `generation` is the store's `deletionGeneration` read before the search ran.
+    func store(profile: ProfileID?, query: [UInt8], matches: [HistoryMatch], generation: UInt64) {
+        last.withLock { $0 = query.isEmpty ? nil : Last(profile: profile, query: query, matches: matches, generation: generation) }
     }
 
-    /// Matches of the previous query when `query` extends it in the same Profile, else none.
-    func matches(profile: ProfileID?, extending query: [UInt8]) -> [HistoryMatch] {
+    /// Matches of the previous query when `query` extends it in the same Profile and no history
+    /// was deleted since, else none.
+    func matches(profile: ProfileID?, extending query: [UInt8], generation: UInt64) -> [HistoryMatch] {
         last.withLock { l in
-            guard let l, l.profile == profile, query.count > l.query.count, query.starts(with: l.query) else { return [] }
+            guard let l, l.profile == profile, l.generation == generation, query.count > l.query.count, query.starts(with: l.query) else { return [] }
             return l.matches
         }
     }

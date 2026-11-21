@@ -1,5 +1,6 @@
 import Foundation
 import SQLite3
+import Synchronization
 
 public struct HistoryMatch: Sendable {
     public var url: URL
@@ -18,6 +19,11 @@ public actor HistoryStore {
     private var observers: [UUID: AsyncStream<Void>.Continuation] = [:]
     /// Set by `close()`: the store never opens (or recreates) its file again.
     private var closed = false
+    private let deletions = Mutex<UInt64>(0)
+    /// Grows when visits are deleted or the store closes. A reader that cached search
+    /// results under an older value must drop them (the command bar's carry-over).
+    public nonisolated var deletionGeneration: UInt64 { deletions.withLock { $0 } }
+    func noteDeletion() { deletions.withLock { $0 &+= 1 } }
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
@@ -39,6 +45,7 @@ public actor HistoryStore {
     /// read nothing and write nothing, and never recreate the file.
     public func close() {
         closed = true
+        noteDeletion()
         db = nil
         for observer in observers.values { observer.finish() }
         observers.removeAll()
@@ -144,7 +151,8 @@ public actor HistoryStore {
         // Build a safe FTS query: split on non-alphanumerics so "site-123"
         // matches the FTS tokens `site` and `123`; each piece is a prefix term.
         let tokens = trimmed.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { !$0.isEmpty }
-        guard !tokens.isEmpty else { return top(limit: limit, db: db) }
+        // Punctuation only ("?", "..."): no FTS term, so match the text itself, never the top pages.
+        guard !tokens.isEmpty else { return substringSearch(trimmed, limit: limit, db: db, now: Date().timeIntervalSince1970) }
         let ftsQuery = tokens.map { "\"\($0)\"*" }.joined(separator: " ")
         let now = Date().timeIntervalSince1970
         let stmt = db.prepare("SELECT u.url, u.title, u.visit_count, u.typed_count, u.last_visit FROM history_fts f JOIN urls u ON u.id = f.rowid WHERE history_fts MATCH ? ORDER BY (u.visit_count + 3*u.typed_count) * (1.0 / (1.0 + (CAST(? AS REAL) - u.last_visit) / 86400.0)) DESC LIMIT ?")
