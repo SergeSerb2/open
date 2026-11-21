@@ -8,6 +8,8 @@ import OpenModel
 /// one cancellable 100 ms delay. A modifier monitor exists only during a session.
 @MainActor
 public final class TabSwitcherController {
+    /// The last title announced to VoiceOver while cycling (automation reads it).
+    public private(set) var lastAnnouncement: String?
     public struct Item {
         public let id: ItemID
         public let title: String
@@ -104,6 +106,11 @@ public final class TabSwitcherController {
         selectedIndex = (selectedIndex + delta % self.items.count + self.items.count) % self.items.count
         layout(); view?.needsDisplay = true
         view?.setAccessibilityValue(self.items[selectedIndex].title)
+        // The switcher is never focused (and hidden for its first moment): VoiceOver hears each step.
+        let title = self.items[selectedIndex].title
+        lastAnnouncement = title
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                             userInfo: [.announcement: title, .priority: NSAccessibilityPriorityLevel.high.rawValue])
         if isPresented { loadVisibleSnapshots() }
     }
     private func loadVisibleSnapshots() {

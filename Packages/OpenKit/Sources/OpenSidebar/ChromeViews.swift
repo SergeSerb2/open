@@ -406,6 +406,8 @@ final class URLFieldView: NSView {
     override func accessibilityPerformPress() -> Bool { context.send(.openCommandBar(.urlField)); return true }
     override func menu(for event: NSEvent) -> NSMenu? { SidebarMenus(context: context).urlField() }
     var displayedText: String { label.text() }
+    /// VoiceOver reads the current host (or the placeholder) as the field's value (A11Y-06).
+    override func accessibilityValue() -> Any? { context.pageHost }
     /// Diagnostics: the host label's frame, whether a long host is faded and right-aligned, and the first shown control's x.
     var hostState: (frame: CGRect, faded: Bool, rightAligned: Bool, firstControlX: CGFloat?) {
         let first = [copyLink, siteControls].filter { !$0.isHidden }.map(\.frame.minX).min()

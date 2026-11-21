@@ -5,6 +5,29 @@ import OpenDesign
 /// Rows come from `SidebarMenus.plus()`, so the menu stays the one list of items, titles, keys
 /// and enabled rules. Opens with the last row ("New Tab") highlighted; ↓ and ↑ move and wrap,
 /// Return runs the row, Esc or a click outside closes.
+/// One drawn row of the "+" popover as a VoiceOver menu item: its title, enabled state, frame and press.
+@MainActor
+final class PlusPopoverRowElement: NSAccessibilityElement {
+    weak var popover: PlusPopoverView?
+    let index: Int
+    init(popover: PlusPopoverView, index: Int) {
+        self.popover = popover; self.index = index; super.init()
+        setAccessibilityRole(.menuItem); setAccessibilityParent(popover)
+    }
+    private var row: PlusPopoverView.Row? { popover.flatMap { index < $0.rows.count ? $0.rows[index] : nil } }
+    override func accessibilityLabel() -> String? { row?.item.title }
+    override func isAccessibilityEnabled() -> Bool { row?.item.isEnabled ?? false }
+    override func isAccessibilitySelected() -> Bool { popover?.highlighted == index }
+    override func accessibilityFrame() -> NSRect {
+        guard let popover, let row, let window = popover.window else { return .zero }
+        return window.convertToScreen(popover.convert(row.frame, to: nil))
+    }
+    override func accessibilityPerformPress() -> Bool {
+        guard let popover, let row, row.item.isEnabled else { return false }
+        popover.onRun?(row.item); return true
+    }
+}
+
 @MainActor
 final class PlusPopoverView: NSView {
     struct Row { var item: NSMenuItem; var frame: CGRect; var symbol: String }
@@ -13,7 +36,11 @@ final class PlusPopoverView: NSView {
     let sourceMenu: NSMenu
     private var separators: [CGRect] = []
     var colors: PlusPopoverColors { didSet { needsDisplay = true } }
-    var highlighted: Int? { didSet { if highlighted != oldValue { needsDisplay = true } } }
+    var highlighted: Int? { didSet { if highlighted != oldValue { needsDisplay = true; NSAccessibility.post(element: self, notification: .selectedChildrenChanged) } } }
+    /// The rows are drawn, not views: VoiceOver reads one menu item element per row (A11Y-07).
+    private lazy var rowElements: [PlusPopoverRowElement] = rows.indices.map { PlusPopoverRowElement(popover: self, index: $0) }
+    override func accessibilityChildren() -> [Any]? { rowElements }
+    override func accessibilitySelectedChildren() -> [Any]? { highlighted.map { [rowElements[$0]] } ?? [] }
     var onRun: ((NSMenuItem) -> Void)?
     /// Arrow tip x in this view's coordinates.
     var arrowX: CGFloat = 0 { didSet { needsDisplay = true } }
