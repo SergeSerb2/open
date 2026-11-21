@@ -7,7 +7,8 @@ import OpenDesign
 /// Return runs the row, Esc or a click outside closes.
 /// One drawn row of the "+" popover as a VoiceOver menu item. The popover refreshes these values
 /// (on the main actor) each time VoiceOver asks for its children.
-final class PlusPopoverRowElement: NSAccessibilityElement {
+/// Sendable: its plain values are written only by the popover on the main actor.
+final class PlusPopoverRowElement: NSAccessibilityElement, @unchecked Sendable {
     nonisolated(unsafe) var title = "", enabled = false, selected = false, screenFrame = NSRect.zero
     nonisolated(unsafe) var press: (@MainActor () -> Bool)?
     override func accessibilityLabel() -> String? { title }
@@ -52,8 +53,12 @@ final class PlusPopoverView: NSView {
     override func accessibilityChildren() -> [Any]? { refreshRowElements(); return rowElements }
     /// The rows have no views: a pointer location (screen coordinates) resolves to its row element.
     override func accessibilityHitTest(_ point: NSPoint) -> Any? {
-        refreshRowElements()
-        return rowElements.first { $0.screenFrame.contains(point) } ?? self
+        // Nonisolated in AppKit; called on the main thread.
+        let row: PlusPopoverRowElement? = MainActor.assumeIsolated {
+            refreshRowElements()
+            return rowElements.first { $0.screenFrame.contains(point) }
+        }
+        return row ?? self
     }
     override func accessibilitySelectedChildren() -> [Any]? {
         guard let highlighted, let children = accessibilityChildren(), highlighted < children.count else { return [] }
