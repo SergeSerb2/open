@@ -263,7 +263,7 @@ def run(factory, results, scratch, root, wait_until, read_image, delta_e):
         selected_after = saved_selections()
         results['E8_space_delete_drops_selection_key'] = dict(ok=doomed_tab in selected_before and not any(selected_after),
                                                               before=selected_before, after=selected_after)
-        app.call('menu-perform', id='undo')
+        app.call('sidebar-key', key='z', modifiers=['cmd'])
         undone = wait_until(lambda: doomed in [s['id'] for s in app.call('spaces')], timeout=3, step=.02)
         selected_undo = saved_selections() if undone else []
         results['E8_space_delete_undo_restores_selection'] = dict(ok=bool(undone) and doomed_tab in selected_undo, after=selected_undo)
