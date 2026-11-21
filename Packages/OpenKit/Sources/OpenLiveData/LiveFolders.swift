@@ -76,7 +76,10 @@ public enum GitHubQuery {
       }
       const seen = new Set(), items = [];
       for (const link of document.querySelectorAll('a[href*="/pull/"]')) {
-        const href = new URL(link.getAttribute('href'), location.href);
+        // One malformed link must not fail the whole refresh; a link to another site is not a PR here.
+        let href;
+        try { href = new URL(link.getAttribute('href'), location.href); } catch { continue; }
+        if (href.origin !== location.origin) continue;
         const m = href.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/);
         if (!m || seen.has(href.pathname)) continue;
         const title = (link.textContent || '').trim();

@@ -19,8 +19,9 @@ final class LiveCalendarCoordinator {
   private var timer: Timer?
   /// Events dismissed from the tile ("Show Meeting Link" ▸ Dismiss). Memory only (F2 Q3: no events on disk).
   private(set) var dismissed: Set<String> = []
-  /// Events that already showed their reminder.
-  private(set) var reminded: Set<String> = []
+  /// Events that already showed their reminder, per Profile: each Profile has its own interval, so
+  /// one Profile's earlier reminder must not consume another's (bug sweep r3 L18). Memory only.
+  private(set) var reminded: [ProfileID?: Set<String>] = [:]
   private(set) var nextFire: Date?
   #if OPEN_AUTOMATION
   private(set) var fetches = 0
@@ -116,25 +117,28 @@ final class LiveCalendarCoordinator {
     }
     let visible = events.filter { !dismissed.contains($0.id) }
     var anyTile = false
-    // Each window uses its own Profile's interval. Of the windows whose interval makes the reminder due,
-    // the frontmost visible one shows it.
-    var due: [(state: LiveCalendar.TileState, controller: BrowserWindowController)] = []
+    // Each window uses its own Profile's interval. For each Profile whose interval makes the reminder due,
+    // that Profile's frontmost visible window shows it.
+    var due: [ProfileID?: [(state: LiveCalendar.TileState, controller: BrowserWindowController)]] = [:]
     var intervals: [LiveCalendar.ReminderInterval] = []
     for controller in app.windowControllers where controller.context.liveCalendar != nil {
       let favorites = controller.context.favoritesProfile?.favorites ?? []
-      let interval = interval(profile: controller.context.favoritesProfile?.id)
+      let profile = controller.context.favoritesProfile?.id
+      let interval = interval(profile: profile)
       var tiles: [ItemID: LiveCalendar.TileState] = [:]
       for tab in favorites where CalendarProvider.match(url: tab.url) != nil && controller.context.liveCalendarEnabled(for: tab) {
         anyTile = true; intervals.append(interval)
-        guard let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded) else { continue }
+        guard let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded[profile] ?? []) else { continue }
         tiles[tab.id] = state
-        if state.remind { due.append((state, controller)) }
+        if state.remind { due[profile, default: []].append((state, controller)) }
       }
       if controller.context.liveCalendarTiles != tiles { controller.context.liveCalendarTiles = tiles }
     }
     guard anyTile else { stop(); return }
-    if let due = frontmost(due) {
-      reminded.insert(due.state.event.id)
+    // Each Profile reminds once, in its frontmost window.
+    for (profile, candidates) in due {
+      guard let due = frontmost(candidates) else { continue }
+      reminded[profile, default: []].insert(due.state.event.id)
       remind(due.state, in: due.controller)
     }
     // Next wake: the next visible change or the next fetch, whichever is first.

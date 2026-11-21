@@ -1088,6 +1088,72 @@ def checks(factory, results, tmp, config, harness):
         check('generic_quit_harness_bypass', not app.quit_report['forced'] and generic_alerts() == 0,
               quit=app.quit_report, alerts=generic_alerts())
 
+    def unowned_flow():
+        # Bug sweep r3 W4: a download whose page no browser window owns. The engine-API
+        # proof page is a real engine page of the default Profile's context outside every
+        # window (like an engine-owned extension window). Its download used to be cancelled.
+        app.call('download-settings', profile=profile, directory=str(first), ask=False)
+        app.call('engine-api', action='start')
+        private = None
+        try:
+            app.call('engine-api', action='add', page='a', browser='a', url=base + '/')
+            wait(lambda: app.call('engine-api', action='eval', page='a', js='document.readyState') == 'complete')
+            before = {v['id'] for v in state()['items']}
+            app.call('engine-api', action='eval', page='a', js='(() => {let a=document.createElement("a"); a.href=%s; document.body.append(a); a.click(); return true})()'
+                     % json.dumps(base + '/fast?name=unowned-page.txt'))
+            key = (wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None)) or {}).get('id')
+            done = key and wait(lambda: item(key).get('state') in ('completed', 'cancelled', 'failed') and (item(key).get('state') != 'completed' or item(key).get('fileExists')))
+            value = item(key) if key else {}
+            check('unowned_page_download', done and value.get('state') == 'completed' and value.get('profile') == profile
+                  and Path(value.get('path') or '/').parent == first, item=value)
+            # The same page's popup has no OEWebContent at all (Chromium's own window): its download
+            # has no page. With an Incognito window in front it used to take that window's private
+            # destination (its folder), not the regular Profile's.
+            app.call('menu-perform', id='new-incognito-window')
+            private = wait(lambda: next((v for v in app.call('incognito-state')['windows'] if v['private']), None))
+            if not private: raise RuntimeError('unowned private window missing')
+            app.call('window-focus', id=private['id'], activate=True)
+            private_dir = root / 'unowned-private'; private_dir.mkdir(exist_ok=True)
+            app.call('download-dir', path=str(private_dir))
+            before = {v['id'] for v in state()['items']}
+            app.call('engine-api', action='eval', page='a', js='(window.open(%s), true)' % json.dumps(base + '/fast?name=unowned-popup.txt'))
+            key = (wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None)) or {}).get('id')
+            done = key and wait(lambda: item(key).get('state') in ('completed', 'cancelled', 'failed') and (item(key).get('state') != 'completed' or item(key).get('fileExists')))
+            value = item(key) if key else {}
+            check('unowned_popup_download_regular', done and value.get('state') == 'completed' and value.get('profile') == profile
+                  and Path(value.get('path') or '/').parent == first and not list(private_dir.iterdir()),
+                  item=value, privateFolder=sorted(p.name for p in private_dir.iterdir()))
+        finally:
+            E._try(lambda: app.call('engine-api', action='cleanup'))
+            if private:
+                E._try(lambda: app.call('window-focus', id=private['id'], activate=True))
+                E._try(lambda: app.call('window-close'))
+
+    def clear_unloaded_flow():
+        nonlocal tab
+        # Bug sweep r3 W11: Clear Browsing Data of a Profile whose engine context is not loaded
+        # in this run, while no regular window is open, used to fail "This profile is not open.".
+        original_space = next(s['id'] for s in app.call('spaces') if s['focused'])
+        contexts = app.call('engine-contexts')
+        app.call('space-create', profile='Clear unloaded', title='Clear unloaded')
+        unloaded = next(s['profile'] for s in app.call('spaces') if s['focused'])
+        app.call('space', space=original_space)
+        unloaded_before = app.call('engine-contexts') == contexts
+        window = app.call('shell-windows')[0]['id']
+        app.call('window-focus', id=window, activate=True); app.call('window-close')
+        closed = wait(lambda: not app.call('shell-windows'))
+        # History alone must still not load a native context.
+        history = app.call('settings-clear-data', profile=unloaded, kinds=1, range='All time')
+        history_unloaded = app.call('engine-contexts') == contexts
+        cookies = app.call('settings-clear-data', profile=unloaded, kinds=6, range='All time')
+        loaded = len(app.call('engine-contexts')) == len(contexts) + 1
+        check('clear_unloaded_profile_no_window', unloaded_before and bool(closed) and history['status'] == 'Done' and history_unloaded
+              and cookies['status'] == 'Done' and loaded, history=history, cookies=cookies, unloadedBefore=unloaded_before,
+              historyUnloaded=history_unloaded, contexts=app.call('engine-contexts'))
+        app.call('window-reopen')
+        wait(lambda: app.call('shell-windows'))
+        tab = E.new_tab(app, base + '/')
+
     def clear_flow():
         nonlocal tab
         original_space = next(s['id'] for s in app.call('spaces') if s['focused'])
@@ -1163,7 +1229,7 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "names": names_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
+                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "names": names_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow, "unowned": unowned_flow, "clear-unloaded": clear_unloaded_flow,
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
