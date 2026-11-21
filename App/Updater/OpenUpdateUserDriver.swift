@@ -307,16 +307,25 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   }
   func showDownloadInitiated(cancellation: @escaping () -> Void) {
     phase = "downloading"; cancel = cancellation; received = 0; expected = 0
-    showStatus("\(bytes(received)) of \(bytes(expected))", button: "Cancel", progress: 0)
+    // No length is known yet: no "Zero KB of Zero KB", and an indeterminate bar until it is.
+    showStatus(bytes(0), button: "Cancel", progress: nil)
   }
   private func bytes(_ value: UInt64) -> String { ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .file) }
   func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) { expected = expectedContentLength; downloadProgress() }
   func showDownloadDidReceiveData(ofLength length: UInt64) {
     let (sum, overflow) = received.addingReportingOverflow(length); received = overflow ? UInt64.max : sum; downloadProgress()
   }
+  /// Sparkle reports an unknown length (no Content-Length) as 0 or as UInt64.max (shown as
+  /// "9.22 EB"): show the received bytes and an indeterminate bar instead.
   private func downloadProgress() {
-    status?.column.prompt.stringValue = "\(bytes(received)) of \(bytes(expected))"
-    status?.column.progress.doubleValue = expected > 0 ? min(1, Double(received) / Double(expected)) : 0
+    guard let status else { return }
+    let known = expected > 0 && expected <= UInt64(Int64.max)
+    status.column.prompt.stringValue = known ? "\(bytes(received)) of \(bytes(expected))" : bytes(received)
+    if status.column.progress.isIndeterminate == known {
+      status.column.progress.isIndeterminate = !known
+      if known { status.column.progress.stopAnimation(nil) } else { status.column.progress.startAnimation(nil) }
+    }
+    if known { status.column.progress.doubleValue = min(1, Double(received) / Double(expected)) }
   }
   func showDownloadDidStartExtractingUpdate() {
     phase = "extracting"; cancel = nil

@@ -121,7 +121,11 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     self.browser = browser
     browser.context.delegate = app
     factory.standaloneBrowser = browser
-    let initialURL = pendingURL; pendingURL = nil
+    // Little Open shows web pages only. An internal URL (open://: a Note, an Easel, Welcome) would make
+    // a Note, Easel or Welcome host in this window's own factory: never shown, never closed, and the
+    // window would get no page. Start on a blank page instead (`load` refuses such URLs too).
+    var initialURL = pendingURL; pendingURL = nil
+    if let url = initialURL, WelcomeTab.isInternal(url) { initialURL = nil }
     guard let host = factory.makeHost(tabID: tabID, profileID: profileID, url: initialURL, history: nil, browser: browser) as? EngineWebContentHost else {
       pendingURL = initialURL
       browser.close(); self.browser = nil; factory.standaloneBrowser = nil; return

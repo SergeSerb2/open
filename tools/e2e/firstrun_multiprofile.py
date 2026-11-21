@@ -82,9 +82,33 @@ def shapes_fixture(root, h):
     focus = split('split-focus', [key('missing-1'), tab('focus-a'), tab('focus-b')], focusItemID=key('focus-a'),
                   itemWidthFactors=[0.2, 0.3, 0.5])
     negative = split('split-negative', [tab('negative-a'), tab('negative-b')], itemWidthFactors=[-1, 2])
+    # Bug sweep r3 L15: a split whose second child is a folder (its tab stays in the Space), and a
+    # tab whose ID is another tab's ID in lowercase (two items, two Open IDs).
+    ids['split-folder-dir'] = key('split-folder-dir')
+    graph['items'] += [ids['split-folder-dir'], {'id': ids['split-folder-dir'], 'childrenIds': [tab('folder-inner')],
+                                                'title': 'Example split folder', 'data': {'list': {}}}]
+    with_folder = split('split-with-folder', [tab('with-folder-a'), ids['split-folder-dir']])
+    twin_of = tab('case-twin-a')
+    ids['case-twin-b'] = twin_of.lower()
+    graph['items'] += [ids['case-twin-b'], {'id': ids['case-twin-b'], 'childrenIds': [], 'title': 'Example case-twin-b',
+        'data': {'tab': {'savedURL': 'https://example.com/shapes/case-twin-b', 'savedTitle': 'Example case-twin-b'}}}]
+    # Review round 1 (#643): five-pane splits outside a Space container (an orphan, and one in
+    # Favorites), and a split whose fifth child is a five-pane split. Each pane is placed once.
+    split('split-orphan', [tab('loose-%d' % i) for i in range(5)])
+    favorite_split = split('split-favorite', [tab('fav-split-%d' % i) for i in range(5)])
+    # Review round 2: a Favorites split whose only child is a folder (the split dissolves; the folder stays).
+    ids['fav-folder'] = key('fav-folder')
+    graph['items'] += [ids['fav-folder'], {'id': ids['fav-folder'], 'childrenIds': [tab('fav-folder-inner')],
+                                          'title': 'Example favorites folder', 'data': {'list': {}}}]
+    folder_split = split('split-fav-folder', [ids['fav-folder']])
+    for index in range(0, len(graph['items']), 2):
+        if graph['items'][index] == ids['top']: graph['items'][index + 1]['childrenIds'] += [favorite_split, folder_split]
+    inner = split('split-inner', [tab('inner-%d' % i) for i in range(5)])
+    outer = split('split-outer', [tab('outer-%d' % i) for i in range(4)] + [inner])
     pinned, today = key('gamma-pinned'), key('gamma-today')
     graph['items'] += [pinned, {'id': pinned, 'childrenIds': [tab('gamma-tab')], 'data': {'itemContainer': {}}},
-                       today, {'id': today, 'childrenIds': [one, empty, five, focus, negative], 'data': {'itemContainer': {}}}]
+                       today, {'id': today, 'childrenIds': [one, empty, five, focus, negative, with_folder, twin_of, ids['case-twin-b'], outer],
+                               'data': {'itemContainer': {}}}]
     ids['gamma'] = key('gamma')
     graph['spaces'] += [ids['gamma'], {'id': ids['gamma'], 'title': 'Gamma', 'profile': case_id.lower(),
                                        'containerIDs': ['pinned', pinned, 'unpinned', today]}]
@@ -148,6 +172,30 @@ def shapes_rows(factory, results, tmp, h):
             and pane_ids(negative) == [ids['negative-a'], ids['negative-b']] and negative.get('fractions', []) == [],
             today=[list(n)[0] for n in today], five=pane_ids(five), fifthInGamma=json.dumps(gamma).count(five_url), fifthAnywhere=everywhere.count(five_url),
             focus={k: focus.get(k) for k in ('focusedPaneID', 'fractions')}, negative=negative.get('fractions'))
+        # Bug sweep r3 L15. Before: the folder (and its tab) was dropped, and both case twins had one ID.
+        node_ids = []
+        def walk(value):
+            if isinstance(value, dict):
+                if 'id' in value and ('url' in value or 'children' in value or 'panes' in value): node_ids.append(value['id'])
+                for child in value.values(): walk(child)
+            elif isinstance(value, list):
+                for child in value: walk(child)
+        walk(data['spaces']); walk([p.get('favorites') for p in data['profiles']])
+        duplicates = sorted({i for i in node_ids if node_ids.count(i) > 1})
+        gamma_text = json.dumps(gamma)
+        # Review round 1: every pane of the orphan, Favorites and nested five-pane splits appears exactly
+        # once; the nested split's overflow stays in Gamma (its outer split's Space).
+        whole = json.dumps(data)
+        loose = ['loose-%d' % i for i in range(5)] + ['fav-split-%d' % i for i in range(5)] + ['inner-%d' % i for i in range(5)] + ['outer-%d' % i for i in range(4)] + ['fav-folder-inner']
+        counts = {name: whole.count('"https://example.com/shapes/%s"' % name) for name in loose}
+        inner_in_gamma = all('"https://example.com/shapes/inner-%d"' % i in gamma_text for i in range(5))
+        results['MP_shapes_overflow_placed_once'] = dict(ok=not duplicates and all(c == 1 for c in counts.values()) and inner_in_gamma,
+            duplicateIDs=duplicates, counts={k: v for k, v in counts.items() if v != 1}, innerInGamma=inner_in_gamma)
+        results['MP_shapes_split_folder_child_and_case_twins'] = dict(ok=not duplicates
+            and 'https://example.com/shapes/folder-inner' in gamma_text and 'Example split folder' in gamma_text
+            and 'https://example.com/shapes/case-twin-a' in gamma_text and 'https://example.com/shapes/case-twin-b' in gamma_text,
+            duplicateIDs=duplicates, folderChild='https://example.com/shapes/folder-inner' in gamma_text,
+            twins=[u for u in ('case-twin-a', 'case-twin-b') if 'https://example.com/shapes/' + u in gamma_text])
         # A Settings import of a sidebar without Spaces keeps its unreached tab in a new Space.
         app.call('first-run', action='settings-import', directory=str(lonely))
         app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')

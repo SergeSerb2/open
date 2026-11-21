@@ -128,7 +128,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
     owner?.pageChrome.cancel(content)
     content.delegate = nil
-    if keepsPageOnClose { content.isMuted = true } else { content.close(); content.view.removeFromSuperview() }
+    // A page kept drawn for a pane's collapse has no delegate now: the engine refuses its popups,
+    // dialogs and permission prompts (without this, they got the engine's defaults).
+    if keepsPageOnClose { content.isMuted = true; content.prepareForClose() } else { content.close(); content.view.removeFromSuperview() }
     owner?.hostDidClose(self)
   }
   /// Close This Pane (Split motion): close() leaves the page drawn until the pane's

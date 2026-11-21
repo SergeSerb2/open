@@ -41,7 +41,7 @@ Arc capture session 2 (2026-10-26, `re/interaction-states.md` §20, `re/capture-
 - Harness checks run in this audit (§6): `sidebar-render check` 125/125, `features-render check` 147/147, `commandbar-render check` 78/78, `commands-dump` OK, `settings-preview check`, and `tools/verify-all.sh`. Check IDs such as `features-render S3` come from the check output.
 - App wiring: **main** (the real window on `main`), **none**, or the open PR that adds it.
 - Harness checks named in the first audit (§6) stay as they were. This refresh ran no builds and no harness (§6). It read PR bodies, plans, `docs/followups.md`, and code on `main`. Check IDs such as `features-render S3` come from the first audit or from a PR body.
-- e2e suites: `tools/e2e/engine_e2e.py --only <suite>`. On `main` now: `shell`, `features`, `extensions`, `measure`, `window`, `sidebar`, `peek` (PR #52, merged), `tabstrip` and `profiles` (PR #53, #88, merged). Section 6 also uses `actions`, `extensions-p3`, `extensions-e2`, `extensions-ui`, and `find`; see §1.16. Results: `docs/engine-spike/results-*.json`.
+- e2e suites: `tools/e2e/engine_e2e.py --only <suite>`. On `main` now: `shell`, `features`, `extensions`, `measure`, `window`, `sidebar`, `peek` (PR #52, merged), `tabstrip` and `profiles` (PR #53, #88, merged). Section 6 also uses `actions`, `extensions-p3`, `extensions-e2`, `extensions-ui`, and `find`; see §1.16. Results: `docs/engine-spike/results-*.json` (direct runs: the printed `$TMPDIR/open-e2e-evidence/…` folder unless `--tracked-evidence`).
 
 ### 0.3 Work in flight that this file counts
 

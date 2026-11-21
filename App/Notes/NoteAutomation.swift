@@ -244,7 +244,7 @@ extension AutomationController {
       "assets": noteID.map { (try? FileManager.default.contentsOfDirectory(atPath: app.notes.assetDirectory(for: $0).path))?.count ?? 0 } ?? 0,
       "favicon": tab?.live.faviconPNG == NoteTab.faviconPNG && tab?.live.faviconPNG != nil,
       "file": file?.path ?? "", "stored": stored,
-      "pendingWrites": app.notes.hasPendingWrites, "writeCount": app.notes.writeCount,
+      "pendingWrites": app.notes.hasPendingWrites, "writeCount": app.notes.writeCount, "encodeCount": app.notes.encodeCount,
       "storeError": app.notes.lastError ?? "",
       "engineContentCreationCount": factory.contentCreationCount,
       "engineHostForTab": tab.map { factory.contents[$0.id] != nil } ?? false,
