@@ -831,8 +831,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
-    // A page leaves fullscreen when it is no longer the shown page (Space or tab switch).
-    if let page = fullscreenPage, page !== selectedContent { try? page.exitFullscreen(); endPageFullscreen() }
+    // A page leaves fullscreen when this window no longer shows it (Space or tab switch).
+    if let page = fullscreenPage, !showsInWindow(page) { try? page.exitFullscreen(); endPageFullscreen() }
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
     // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
     // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
@@ -1760,9 +1760,13 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       // A Favorite is shown in this window's Space of its Profile. Its host's spaceID is the Space
       // that was focused when the host was made, so after a Space switch it named the old Space.
       let source = opener.flatMap { space(containing: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
-      // A window without a sidebar (Little Open) cannot show a new tab's page: an opener-less
-      // request (window.open("")) is refused instead of making a page no window shows (WC-04).
-      guard controller != nil else { return nil }
+      // A window without a sidebar (Little Open) cannot show a new tab's page: a URL opens as a
+      // main window's tab, and an empty window.open("") is refused, instead of making a page
+      // no window shows (WC-04).
+      guard controller != nil else {
+        if let url = request.url { openNewTab(url: url, background: request.disposition == .newBackgroundTab) }
+        return nil
+      }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
                              unread: request.disposition == .newBackgroundTab)
@@ -1843,17 +1847,22 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       if fullscreenPage == nil || fullscreenPage === webContent { endPageFullscreen() }
       return
     }
-    // Only the page this window shows may fill it. A background tab or a popup panel's page
-    // used to take the main window into full screen with no way back (WC-01).
-    guard webContent === selectedContent || webContent === standaloneSurface?.surfacePage else {
-      try? webContent.exitFullscreen(); return
-    }
+    // Only a page this window shows may fill it. A popup panel's page used to take the main
+    // window into full screen with no way back (WC-01).
+    guard showsInWindow(webContent) else { try? webContent.exitFullscreen(); return }
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
     controller?.isPageFullscreen = true
     if let window, !window.styleMask.contains(.fullScreen) {
       enteredWindowFullscreenForPage = true; window.toggleFullScreen(nil)
     }
+  }
+  /// A page in this window's content area: the selected tab, any Split pane, the Peek on top,
+  /// Little Open's page. Not a popup panel's or an extension popup's page (their own windows).
+  private func showsInWindow(_ page: OEWebContent) -> Bool {
+    guard !auxiliaryPages.contains(where: { $0.content === page }), page !== focusedBrowser?.extensionPopup else { return false }
+    if page === selectedContent || page === standaloneSurface?.surfacePage { return true }
+    return visibleTabs.contains { hosts[$0.id]?.content === page }
   }
   /// Clears page fullscreen and leaves the window full screen the page started. Idempotent.
   func endPageFullscreen() {
