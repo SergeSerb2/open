@@ -157,9 +157,11 @@ def checks(factory, results, tmp, config, harness):
     def dismiss_library(): E._try(lambda: app.call('download-library-close'))
     def cancel_sheet_flow():
         app.call('download-settings', profile=profile, directory=str(first), ask=True)
+        # View Downloads is off while the save sheet is key (browser commands never act behind a
+        # sheet), so the Library opens first; the pending save then appears in it.
+        library()
         pending = start('/slow')
         sheet = wait(lambda: next((v for v in state()['sheets'] if v['visible']), None))
-        library()
         wait(lambda: bool(row(pending)))
         app.call('download-row', id=pending, action='Cancel')
         stopped = wait(lambda: item(pending).get('state') == 'cancelled' and not state()['sheets'] and not state()['running'])
