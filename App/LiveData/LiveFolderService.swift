@@ -150,13 +150,23 @@ final class LiveFolderService {
     if !manual, let last = lastRefresh[folderID], Date().timeIntervalSince(last) < Self.minimumInterval { throttledCount += 1; return nil }
     running.insert(folderID); defer { running.remove(folderID) }
     lastRefresh[folderID] = Date(); refreshCount += 1
+    // Every search runs in this Profile's session. Read once: the Space can move while the fetch runs.
+    let profileID = space.profileID
+    // The Space moved to another Profile (or the folder left it) while a search ran: stop. Those rows
+    // and a sign-in state belong to the old Profile's account. The new owner's next refresh is not throttled.
+    func moved() -> Bool {
+      guard self.space(of: folderID)?.profileID != profileID else { return false }
+      lastRefresh[folderID] = nil
+      return true
+    }
     var lists: [[PRSnapshot]] = []
     var outcome = LiveFolderConfig.Outcome.success
     var ssoURL: URL?
     search: for kind in LiveFolderConfig.Kind.allCases where config.kinds.contains(kind) {
       do {
-        let value = try await app.liveFetch.fetch(profileID: space.profileID,
+        let value = try await app.liveFetch.fetch(profileID: profileID,
           url: GitHubQuery.url(kind, teamReviews: config.teamReviews, origin: origin), script: GitHubQuery.extractionScript)
+        if moved() { return nil }
         let (state, items) = GitHubQuery.decode(value, kind: kind)
         switch state {
         case .ok: lists.append(items)
@@ -167,6 +177,7 @@ final class LiveFolderService {
         case .unexpected: outcome = .failed; break search
         }
       } catch {
+        if moved() { return nil }
         outcome = .failed; break search
       }
     }

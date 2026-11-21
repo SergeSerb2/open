@@ -1229,7 +1229,10 @@ extension AppDelegate: CommandDispatcher {
     if id == "view-library", frontStandardWindowController == nil { return CommandMenuState(title: "View Library") }
     // C-NT1 (C-report-s11): while the Library shows Easels, the item reads "Hide Easels" in Arc.
     if id == "view-easels-notes", libraryShowsEasels { return CommandMenuState(title: "Hide Easels & Notes") }
-    if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
+    if id == "toggle-developer-mode" {
+      let factory = frontWindowController.flatMap { hostFactories[$0.windowID] }
+      return DeveloperMode.menuState(for: factory?.selectedContent?.url, session: factory?.incognitoSession?.developerModeHosts)
+    }
     return PageTools.menuState(for: id)
   }
   private static let firstRunCommands: Set<String> = [

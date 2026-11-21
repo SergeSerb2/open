@@ -82,7 +82,39 @@ def checks(factory, results, tmp, harness):
                     for name, in db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")}
         snapshot = root / 'State/browser.json'
         thumbnails = sorted(str(p.relative_to(root)) for p in root.rglob('*') if p.is_file() and ('Captures' in p.parts or 'Thumbnails' in p.parts))
-        return dict(snapshot=hashlib.sha256(snapshot.read_bytes()).hexdigest(), tables=tables, thumbnails=thumbnails)
+        data = snapshot.read_bytes()
+        # Compared without `lastActiveAt`: the regular model stamps a regular tab when its own visibility
+        # changes (BrowserModel.commitMutation / stampVisibleTabs), and a late launch-time stamp can land
+        # after the drain (caught 2026-11-20: stamped 0.5 s after the forced save, before any private
+        # window existed). It never holds private data. Every other byte of the snapshot still counts.
+        def strip(value):
+            if isinstance(value, dict): return {k: strip(v) for k, v in value.items() if k != 'lastActiveAt'}
+            if isinstance(value, list): return [strip(v) for v in value]
+            return value
+        digest = hashlib.sha256(json.dumps(strip(json.loads(data)), sort_keys=True).encode()).hexdigest()
+        # Keep each snapshot (in this run's own directory) so a failed comparison can show what changed.
+        (Path(tmp) / ('browser-%s.json' % digest[:16])).write_bytes(data)
+        return dict(snapshot=digest, tables=tables, thumbnails=thumbnails)
+    def snapshot_diff(before, after, limit=40):
+        # The JSON paths whose values differ between two kept snapshots (at most `limit`).
+        if before['snapshot'] == after['snapshot']: return []
+        try:
+            old = json.loads((Path(tmp) / ('browser-%s.json' % before['snapshot'][:16])).read_bytes())
+            new = json.loads((Path(tmp) / ('browser-%s.json' % after['snapshot'][:16])).read_bytes())
+        except Exception as error: return ['unreadable: ' + repr(error)[:200]]
+        out = []
+        def walk(a, b, path):
+            if len(out) >= limit: return
+            if isinstance(a, dict) and isinstance(b, dict):
+                for k in sorted(set(a) | set(b)):
+                    if k not in a or k not in b: out.append({'path': path + '/' + k, 'before': a.get(k, '<absent>'), 'after': b.get(k, '<absent>')})
+                    else: walk(a[k], b[k], path + '/' + k)
+            elif isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
+                for i, (x, y) in enumerate(zip(a, b)): walk(x, y, path + '/%d' % i)
+            elif a != b:
+                out.append({'path': path, 'before': a, 'after': b})
+        walk(old, new, '')
+        return [{k: (json.dumps(v)[:300] if k != 'path' else v) for k, v in d.items()} for d in out]
     try:
         app = factory(urls=(base + '/normal',), fresh=True)
         saved = {k: app.call('defaults', key=k, persistent=True) for k in keys}
@@ -96,10 +128,10 @@ def checks(factory, results, tmp, harness):
         profile = app.call('history-state')['profile']
         app.eval(normal_tab, "document.cookie='normalOnly=1; path=/'; true")
         # Drain normal launch metadata and durable writes before the private session.
-        app.call('history-state', profile=profile); app.call('save'); time.sleep(1.2)
+        app.call('history-state', profile=profile); app.call('save'); saved_at = time.time(); time.sleep(1.2)
         recent_before = app.call('archive')
-        before = fingerprint(); counts = app.call('incognito-state')
-        one = private_window('menu')
+        app.call('save'); before = fingerprint(); before_at = time.time(); counts = app.call('incognito-state')
+        one = private_window('menu'); private_at = time.time()
         # Focused break-and-revert runs still create real windows/pages. The fault
         # is a temporary source edit, never an automation substitute for storage.
         negative = os.environ.get('OPEN_INCOGNITO_NEGATIVE')
@@ -107,7 +139,8 @@ def checks(factory, results, tmp, harness):
             app.call('open', url=base + '/private-model-fault')
             app.call('save'); time.sleep(.4)
             after = fingerprint()
-            check('no_snapshot_history_change', before == after and counts['normalTabs'] == app.call('incognito-state')['normalTabs'], before=before, after=after)
+            check('no_snapshot_history_change', before == after and counts['normalTabs'] == app.call('incognito-state')['normalTabs'], before=before, after=after,
+                  snapshotDiff=snapshot_diff(before, after))
             return
         if negative == 'disk':
             tab = open_page('/private-disk-fault')
@@ -147,7 +180,11 @@ def checks(factory, results, tmp, harness):
         app.call('history-state', profile=profile); time.sleep(1.2)
         after = fingerprint(); after_counts = app.call('incognito-state')
         check('no_snapshot_history_change', before == after and counts['normalTabs'] == after_counts['normalTabs']
-              and counts['historyWrites'] == after_counts['historyWrites'], before=before, after=after)
+              and counts['historyWrites'] == after_counts['historyWrites'], before=before, after=after, snapshotDiff=snapshot_diff(before, after),
+              times=dict(saved=saved_at, before=before_at, privateOpened=private_at))
+        if before != after: print('no_snapshot_history_change diff: ' + json.dumps(dict(diff=snapshot_diff(before, after),
+            times=dict(saved=saved_at, before=before_at, privateOpened=private_at))), flush=True)
+        if os.environ.get('OPEN_INCOGNITO_SNAPSHOT_ONLY') == '1': return  # the smallest subset that includes this row
         check('no_download_history', counts['downloads'] == after_counts['downloads'])
         check('no_recently_closed', app.call('archive') == recent_before)
         check('normal_model_dump_private_free', all('private.txt' not in json.dumps(v) and base + '/one' not in json.dumps(v)
