@@ -185,6 +185,10 @@ def run(factory, results, tmp, h):
     row('firefox_open_tabs', outcome.get('Open tabs') == 4 and pinned_open == ['https://pinned.session.example.test/s1']
         and sorted(new_today) == ['https://current.session.example.test/2', 'https://second.session.example.test/w2', 'https://third.session.example.test/w2'],
         outcome=outcome.get('Open tabs'), pinned=pinned_open, today=new_today)
+    # Bug sweep r4 F-10: the session file (up to 64 MiB LZ4, 256 MiB JSON) is read and parsed off the
+    # main thread, as bookmarks, history and passwords are. Before, the whole UI froze for its read.
+    row('firefox_open_tabs_read_off_main', report.get('openTabsReadOnMainThread') is False,
+        readOnMainThread=report.get('openTabsReadOnMainThread'))
     after_visits = visit_count(app)
     row('firefox_history', outcome.get('History') == 5600 and after_visits - before_visits == 5600,
         history=outcome.get('History'), visits=after_visits - before_visits)
