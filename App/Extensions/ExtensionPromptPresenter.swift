@@ -113,8 +113,15 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     if let window = prompt.browser?.window { return window }
     if let key = NSApp.keyWindow, let factory = app.factory(forKeyWindow: key), factory.focusedBrowser?.context === manager.context { return factory.window }
     let ordered = NSApp.orderedWindows.compactMap { app.factory(forKeyWindow: $0) }
-    return ordered.first(where: { $0.focusedBrowser?.context === manager.context })?.window
-      ?? ordered.first?.window ?? app.frontWindowController?.window
+    if let window = ordered.first(where: { $0.focusedBrowser?.context === manager.context })?.window { return window }
+    // A prompt without a page (install, repair, re-enable, permissions) belongs to its Profile:
+    // only a regular window that shows a Space of that Profile may host it. Never an Incognito
+    // window or another Profile's window; with none, the caller cancels the prompt.
+    guard let context = manager.context, !context.isEphemeral else { return nil }
+    return ordered.first(where: { factory in
+      !factory.isIncognito && factory.standaloneSurface == nil && factory.littleOpenController == nil
+        && factory.focusedProfile.map { $0.id == factory.profile(for: context)?.id } == true
+    })?.window
   }
   func extensionManagerDidChange(_ manager: OEExtensionManager) {
     app.settingsPresenter.refreshAdBlockWarning()

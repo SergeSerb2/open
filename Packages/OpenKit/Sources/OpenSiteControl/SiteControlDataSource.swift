@@ -23,14 +23,19 @@ extension SiteControlDataSource {
 /// itself alive during each call, binds the tab, and rechecks its presentation
 /// generation before applying any callback-dependent UI changes.
 @MainActor public protocol SiteControlActions: AnyObject {
-    func toggle(_ tile: SiteSettingTile, tabID: ItemID)
+    /// `displayed` is the context of the snapshot that showed the tile. Refuse when the
+    /// tab's live origin or Profile differs (a redirect can land before the panel refreshes).
+    /// Returns true only when a change was applied.
+    @discardableResult func toggle(_ tile: SiteSettingTile, displayed: SiteControlContext) -> Bool
     func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID)
     func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode)
     func perform(command: String, tabID: ItemID, anchor: NSRect?)
     func runExtension(_ id: String, tabID: ItemID, anchor: NSRect)
     func setExtensionPinned(_ id: String, pinned: Bool)
     func showSecurityDetails(tabID: ItemID)
-    func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID)
+    /// `displayed` is the context of the snapshot that built the menu; refuse as for `toggle`.
+    /// Returns true only when the clear was started.
+    @discardableResult func clearSiteData(_ kinds: SiteDataKinds, displayed: SiteControlContext) -> Bool
     func openURLInNewTab(_ url: URL, tabID: ItemID)
     func reload(tabID: ItemID)
     func openAdBlockSettings(tabID: ItemID)

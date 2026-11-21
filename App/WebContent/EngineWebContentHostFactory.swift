@@ -1852,6 +1852,14 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
     if extensions.host?.browser === browser { extensions.host?.didUpdate(action) }
   }
   func browser(_ browser: OEBrowser, didOpenExtensionPopup popup: OEWebContent, for action: OEExtensionAction) {
+    // Only the Profile this window shows may put a popup over it. Another Profile's browser of
+    // this window (chrome.action.openPopup after a Space switch) is refused; its keys (Cmd+W)
+    // would reach this window's tab.
+    guard browser === focusedBrowser else {
+      record("extensionPopup", popup, ["extension": action.extensionIdentifier, "refused": "unfocused-browser"])
+      browser.closeExtensionPopup()
+      return
+    }
     extensions.popup.opened(browser: browser, page: popup, action: action)
     record("extensionPopup", popup, ["extension": action.extensionIdentifier, "open": true])
     closePopupInCallbackForAutomation(browser, popup: popup, phase: "open")
@@ -1873,6 +1881,8 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
   }
   func browser(_ browser: OEBrowser, requestsContextMenuForExtensionAction extensionIdentifier: String) {
     record("extensionMenuRequest", nil, ["extension": extensionIdentifier])
+    // The strip shows the focused browser's actions; another Profile's request has no button here.
+    guard browser === extensions.host?.browser else { return }
     if let anchor = extensions.strips.flatMap(\.buttons).first(where: { $0.action.id == extensionIdentifier && !$0.isHiddenOrHasHiddenAncestor }) {
       extensions.showContextMenu(extensionIdentifier, anchor: anchor)
     }

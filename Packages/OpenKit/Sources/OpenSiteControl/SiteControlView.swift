@@ -95,7 +95,8 @@ public final class SiteControlPanelView: NSView {
     public var onAction: ((String,NSRect) -> Void)?
     public var onMore: ((SiteControlButton) -> Void)?
     public var onSecurity: (() -> Void)?
-    public var onToggle: ((SiteSettingTile) -> Void)?
+    /// The tile and the context of the snapshot that displayed it.
+    public var onToggle: ((SiteSettingTile, SiteControlContext) -> Void)?
     public var onBoostEnabled: ((BoostID,Bool) -> Void)?
     public var onEdit: ((BoostID) -> Void)?
     public var onSection: ((String) -> Void)?
@@ -207,6 +208,8 @@ public final class SiteControlPanelView: NSView {
         guard self.snapshot != snapshot || renderedReload != showsReload else { return }
         let animated = self.snapshot != nil
         renderedReload = showsReload
+        // A press that began on another site must not complete on this one: rows and buttons are reused.
+        if let previous = self.snapshot, !previous.context.showsSameSite(as: snapshot.context) { controls.forEach { $0.cancelTracking() } }
         self.snapshot = snapshot; setAccessibilityLabel(snapshot.context.displayHost)
         for b in actions {
             b.isHidden = false
@@ -343,7 +346,9 @@ extension SiteControlPanelView {
                 else { row = SiteControlRow(tile) }
                 row.accentDisc = accent.darkAccent
                 row.frame = CGRect(x: 0,y: y,width: m.width,height: m.rowIcon)
-                row.invoke = { [weak self,weak row] in guard let row else { return }; self?.onToggle?(row.tile) }
+                // The context of the snapshot that laid out this row, not the panel's later one.
+                let displayed = snapshot.context
+                row.invoke = { [weak self,weak row] in guard let self,let row else { return }; self.onToggle?(row.tile,displayed) }
                 body.addSubview(row); controls.append(row); nextRows[tile.id] = row; y += m.rowIcon
             }
             if showsReload {
@@ -517,6 +522,11 @@ public class SiteControlButton: NSButton {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     @objc private func pressed() { guard isEnabled else { return }; invoke?() }
+    /// Ends a mouse press in progress without acting (its mouse-up then does nothing).
+    public func cancelTracking() {
+        guard trackingPress || isHighlighted else { return }
+        trackingPress = false; isHighlighted = false; needsDisplay = true
+    }
     public override var intrinsicContentSize: NSSize {
         let m = SiteControlMetrics.self
         return CGSize(width: m.pillPadding*2+(symbolInk?.width ?? m.pillLockGlyph)+m.pillLockGap+(title as NSString).size(withAttributes: [.font: Typography.siteControlPill.font]).width,height: m.footerHeight)

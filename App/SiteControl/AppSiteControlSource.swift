@@ -44,7 +44,11 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   private(set) var changeDeliveryCount = 0
   private(set) var toggleCallCount = 0
   private(set) var openAdBlockSettingsCallCount = 0
-  var capturedContentBlockingTile: (tile: SiteSettingTile, tabID: ItemID)?
+  /// A tile with the context that displayed it, delivered later through the panel callback.
+  var capturedTile: (tile: SiteSettingTile, context: SiteControlContext)?
+  var toggledContentTabCount: Int { toggledContent.count }
+  /// A native menu built for one snapshot, performed later.
+  var capturedMenu: NSMenu?
   #endif
   private var adBlockStore: AdBlockStore? { factory?.app.stores.existingAdBlock }
   init(factory: EngineWebContentHostFactory) {
@@ -141,9 +145,14 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       let available = store?.onEngineEvent != nil && store?.isProfileOpen(adBlockProfileID) == true
         && store?.isEnabled == true && sessionAvailable
       let on = available && (try? store?.siteSnapshot(for: adBlockProfileID, privateSession: privateSession).shouldBlock(host: url.host() ?? "")) == true
+      // Exclusions are stored per registrable domain. A one-word host (localhost, an intranet
+      // name) or a public suffix has none, so the store cannot save a choice for it.
+      let changeable = !available || Self.canExcludeAdBlockSite(url.host() ?? "")
       tiles.append(SiteSettingTile(id: "contentBlocking", kind: .contentBlocking, title: "Block Ads & Trackers",
         subtitle: on ? "On" : "Off", state: available ? (on ? .on : .off) : .unavailable,
-        symbol: "hand.raised.fill", help: available ? (on ? "The built-in ad blocker is on for this site." : "The built-in ad blocker is off for this site.") : "The built-in ad blocker is off. You can turn it on in Settings."))
+        symbol: "hand.raised.fill", help: !changeable ? "Ad blocking can't be turned off for this site."
+          : available ? (on ? "The built-in ad blocker is on for this site." : "The built-in ad blocker is off for this site.") : "The built-in ad blocker is off. You can turn it on in Settings.",
+        isEnabled: changeable))
       if let engineContext = factory.hosts[tabID]?.content.context {
         let permissions = SitePermissionStore.forContext(engineContext)
         for row in Self.permissionRows {
@@ -177,33 +186,41 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       commandsEnabled: ["new-boost": boostProvider != nil && !context.isIncognito, "share-page": true,
         "capture-page": context.isWebsite, "capture-full-page": context.isWebsite])
   }
-  func toggle(_ tile: SiteSettingTile, tabID: ItemID) {
+  /// Refuses (false) when the tab no longer shows the displayed origin in the same Profile and
+  /// window kind: a redirect or Profile rebind can land between drawing the panel and receiving
+  /// its click. The pending panel refresh then shows the new origin.
+  @discardableResult func toggle(_ tile: SiteSettingTile, displayed: SiteControlContext) -> Bool {
     #if OPEN_AUTOMATION
     toggleCallCount += 1
     #endif
-    guard let factory, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite else { return }
+    let tabID = displayed.tabID
+    guard let factory, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
+          snapshot.context.showsSameSite(as: displayed), tile.isEnabled else { return false }
     switch tile.kind {
     case .contentBlocking:
       let adBlockProfileID = factory.incognitoSession?.parent.id ?? snapshot.context.profileID
       let privateSession = factory.isIncognito ? factory.incognitoSession?.context?.identifier : nil
       guard let store = adBlockStore, store.onEngineEvent != nil, store.isEnabled, store.isProfileOpen(adBlockProfileID),
             !factory.isIncognito || privateSession.map({ store.isPrivateSessionOpen($0, profile: adBlockProfileID) }) == true,
-            let host = snapshot.context.url.host() else { openAdBlockSettings(tabID: tabID); return }
+            let host = snapshot.context.url.host() else { openAdBlockSettings(tabID: tabID); return false }
+      guard Self.canExcludeAdBlockSite(host) else { return false }
       do {
         let currentlyBlocking = try store.siteSnapshot(for: adBlockProfileID, privateSession: privateSession).shouldBlock(host: host)
         try store.setExcluded(host, excluded: currentlyBlocking, profile: adBlockProfileID, privateSession: privateSession)
+        return true
       }
-      catch { factory.controller?.toasts.show(.init(title: "Ad blocking settings could not be saved.")) }
+      catch { factory.controller?.toasts.show(.init(title: "Ad blocking settings could not be saved.")); return false }
     case .permission(let permission):
       guard let row = Self.permissionRows.first(where: { $0.permission == permission }),
-            let context = factory.hosts[tabID]?.content.context else { return }
+            let context = factory.hosts[tabID]?.content.context else { return false }
       let store = SitePermissionStore.forContext(context)
       store.set(origin: snapshot.context.url, kind: row.engine,
         state: store.state(origin: snapshot.context.url, kind: row.engine) == .allow ? .block : .allow)
       factory.app.tabSleep.permissionsChanged(context: context)
+      return true
     case .content(let kind):
       guard Self.contentRows.contains(where: { $0.kind == kind }),
-            let context = factory.hosts[tabID]?.content.context else { return }
+            let context = factory.hosts[tabID]?.content.context else { return false }
       let profile = EngineWebProfile(context), origin = snapshot.context.url
       let current = profile.changedSiteSettings(origin: origin).first { $0.kind == kind }?.state
       let key = Self.originKey(origin)
@@ -216,7 +233,10 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
         // Guard kinds (USB, HID, …) refuse "allow": back to the default ("ask"); the row leaves.
         profile.setSiteSetting(.ask, kind: kind, origin: origin); entry.allowed[kind] = nil
       }
+      // Keep entries for this window's open tabs only; a closed tab's entry is never read again.
+      toggledContent = toggledContent.filter { factory.hosts[$0.key] != nil }
       toggledContent[tabID] = entry
+      return true
     }
   }
   func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) {
@@ -246,11 +266,13 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     SFCertificatePanel.shared().beginSheet(for: window, modalDelegate: nil, didEnd: nil, contextInfo: nil,
                                            certificates: chain, showGroup: true)
   }
-  func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID) {
+  @discardableResult func clearSiteData(_ kinds: SiteDataKinds, displayed: SiteControlContext) -> Bool {
+    let tabID = displayed.tabID
     guard kinds == .cookies || kinds == .cache,
-          let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
-          let page = factory?.hosts[tabID]?.content else { return }
+          let snapshot = snapshot(for: tabID), snapshot.context.isWebsite, snapshot.context.showsSameSite(as: displayed),
+          let page = factory?.hosts[tabID]?.content else { return false }
     PageSiteDataCommands.clearAndRefresh(page, kinds: kinds == .cache ? .cache : .cookies)
+    return true
   }
   func openURLInNewTab(_ url: URL, tabID: ItemID) {
     guard factory?.selectedTab?.id == tabID else { return }; _ = factory?.openNewTab(url: url, background: false)
@@ -263,6 +285,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     factory?.app.settingsPresenter.show(section: .adBlocking, row: "lists", profileID: factory?.focusedProfile?.id)
   }
 
+  private static func canExcludeAdBlockSite(_ host: String) -> Bool {
+    (try? AdBlockSites.shared.registrableDomain(host)) != nil
+  }
   private static func originKey(_ url: URL) -> String {
     "\(url.scheme ?? "")://\(url.host() ?? ""):\(url.port.map(String.init) ?? "")"
   }
