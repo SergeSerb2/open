@@ -199,6 +199,9 @@ final class PageQuitCoordinator {
       } else {
         self.running = false; self.remaining.removeAll(); self.selections.removeAll()
         self.app.quitWarning.resetApproval()
+        // The quit returned "cancel" only to wait for this reply; this is the real cancel.
+        self.app.updater?.userDriver.applicationTerminationCancelled()
+        self.app.updater?.userDriver.clearInstallationRelaunchRequest()
       }
     }
     if !waits { next() }

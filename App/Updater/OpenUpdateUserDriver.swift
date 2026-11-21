@@ -349,6 +349,9 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     showTerminationRetry()
   }
   private func showTerminationRetry() {
+    #if OPEN_AUTOMATION
+    AppDelegate.commandLog("updater-termination-retry-shown")
+    #endif
     showStatus("Ready to Install", button: "Install and Relaunch", progress: 1)
   }
   func showSendingTerminationSignal() { cancel = nil }
