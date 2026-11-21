@@ -287,6 +287,15 @@ def run(factory, results, tmp, h):
             url = 'http://%s.localhost:%d' % (host, port)
             page(url + '/permission'); app.call('permission', origin=url, kind=8, state=0)
             return url
+        def script_batch():
+            # Bug sweep r4 PERF-02: one replace of K user scripts rescanned the whole script list
+            # for every script (O(K^2) on the main thread; Ad Block installs up to ~15,000). The
+            # later of two scripts with one ID still wins and moves last.
+            batch = app.call('script-batch', count=20000, timeout=300)
+            return check(batch['count'] == 20000 and batch['last'] == '0' and batch['lastSource'] == 'void 1'
+                         and batch['remaining'] == 0 and batch['milliseconds'] < 1000, batch=batch)
+        gate('user_script_batch_linear', script_batch)
+
         def notnow():
             url = permission_page('notnow'); perm(); state = visible(ps)
             pressed = app.call('permission-prompt', answer='notnow')

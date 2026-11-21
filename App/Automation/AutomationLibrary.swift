@@ -37,7 +37,8 @@ extension AutomationController {
       return ["ready":adapter.activeLibrarySession?.panel?.prebuiltReady ?? false,
         "section":adapter.activeLibrarySession?.panel?.section.rawValue ?? "",
         "firstSidebarDraw":controller.flatMap { app.libraryFirstSidebarDraws[$0.windowID] } ?? 0,
-        "lastInput":app.libraryLastInput,"builtAt":app.libraryPrebuiltAt ?? 0]
+        "lastInput":app.libraryLastInput,"builtAt":app.libraryPrebuiltAt ?? 0,
+        "tasksCreated":app.libraryPrebuildTasksCreated,"pending":app.libraryPrebuildTask != nil] as [String:Any]
     case "sessions":
       return ["closedPanelAlive":adapter.lastClosedLibraryPanel != nil,"sessions":adapter.librarySessions.values.map { session in
         ["controllerAlive":session.controller != nil,"panelAlive":session.panel != nil] as [String:Any]

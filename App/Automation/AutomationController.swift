@@ -1737,6 +1737,24 @@
             matchPatterns: a["matches"] as? [String] ?? ["<all_urls>"],
             mainFrameOnly: !(a["allFrames"] as? Bool ?? false), world: try scriptWorld(a)))
         return profile.userScripts.map(\.id)
+      case "script-batch":
+        // One replace of `count` scripts whose last entry repeats the first ID (the later one must
+        // win and move last), timed; then the same IDs removed. Returns the batch's resulting IDs.
+        guard let count = a["count"] as? Int, (1...50_000).contains(count) else { throw Failure(message: "count must be 1...50000") }
+        let context = try focusedBrowser(w, create: a["create"] as? Bool ?? false).context
+        let prefix = "batch-\(UUID().uuidString)-"
+        func script(_ i: Int, _ source: String) -> OEUserScript {
+          OEUserScript(identifier: prefix + String(i), source: source, kind: .javaScript, injectionTime: .documentStart,
+            matchPatterns: ["http://batch.invalid/*"], mainFrameOnly: true)
+        }
+        let batch = (0..<count).map { script($0, "void 0") } + [script(0, "void 1")]
+        let started = ProcessInfo.processInfo.systemUptime
+        context.replaceUserScripts(removing: [], adding: batch)
+        let milliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
+        let added = context.userScripts.filter { $0.identifier.hasPrefix(prefix) }
+        context.replaceUserScripts(removing: (0..<count).map { prefix + String($0) }, adding: [])
+        return ["milliseconds": milliseconds, "count": added.count, "last": added.last.map { String($0.identifier.dropFirst(prefix.count)) } ?? "",
+          "lastSource": added.last?.source ?? "", "remaining": context.userScripts.filter { $0.identifier.hasPrefix(prefix) }.count] as [String: Any]
       case "script-remove":
         let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.removeUserScript(id: a["id"] as? String ?? "")

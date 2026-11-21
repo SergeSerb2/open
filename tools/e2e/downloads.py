@@ -1088,6 +1088,23 @@ def checks(factory, results, tmp, config, harness):
         check('generic_quit_harness_bypass', not app.quit_report['forced'] and generic_alerts() == 0,
               quit=app.quit_report, alerts=generic_alerts())
 
+    def library_input_flow():
+        # Bug sweep r4 PERF-01: every input event (pointer move, scroll, key) used to cancel and
+        # create a Library prebuild Task. The prebuild must still wait for 3 s without input.
+        prebuild = lambda: app.call('library', action='prebuild-state')
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        wait(lambda: prebuild()['builtAt'] > 0, 25)
+        before = prebuild()
+        frame = app.call('window-state')['frame']
+        for i in range(40):
+            app.call('mouse', action='move', x=frame[2] / 2 + (i % 8), y=frame[3] / 2 + (i % 5))
+        after = prebuild()
+        created = after['tasksCreated'] - before['tasksCreated']
+        built = wait(lambda: (lambda s: s if s['builtAt'] > after['lastInput'] else None)(prebuild()), 10) or prebuild()
+        waited = built['builtAt'] - after['lastInput']
+        check('library_input_one_prebuild_task', created <= 1 and after['lastInput'] > before['lastInput'] and waited >= 3,
+              created=created, waited=waited, before=before, after=after, built=built)
+
     def clear_flow():
         nonlocal tab
         original_space = next(s['id'] for s in app.call('spaces') if s['focused'])

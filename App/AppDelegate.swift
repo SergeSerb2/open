@@ -472,6 +472,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var libraryFirstSidebarDraws: [WindowID:Double] = [:]
   var libraryLastInput = 0.0
   var libraryPrebuiltAt: Double?
+  #if OPEN_AUTOMATION
+  /// Prebuild tasks created (automation read-back: input must not create one per event).
+  var libraryPrebuildTasksCreated = 0
+  #endif
   func scheduleLibraryPrebuildAfterFirstDraw() {
     guard libraryFirstSidebarDraw == nil else { return }
     libraryFirstSidebarDraw = ProcessInfo.processInfo.systemUptime
@@ -494,6 +498,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     libraryPrebuildGeneration += 1
     let generation = libraryPrebuildGeneration
     let deadline = max(first+3,libraryLastInput+3)
+    #if OPEN_AUTOMATION
+    libraryPrebuildTasksCreated += 1
+    #endif
     libraryPrebuildTask = Task { @MainActor [weak self,weak controller] in
       try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
       guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
