@@ -18,7 +18,8 @@ import OpenTranslate
 final class TranslateAdapter {
   unowned let factory: EngineWebContentHostFactory
   let backend: any TranslationBackend
-  let preferences = TranslatePreferences()
+  /// An Incognito window's "Never Translate This Site" stays in its session (memory only).
+  let preferences: TranslatePreferences
   private struct Document { var count = 0; var status = 0; var url: URL? }
   private var sessions: [ObjectIdentifier: PageTranslationSession] = [:]
   private var documents: [ObjectIdentifier: Document] = [:]
@@ -33,8 +34,13 @@ final class TranslateAdapter {
   /// Translate Selection (context menu, PB4 row 5).
   private(set) lazy var selection = TranslateSelectionController(adapter: self)
 
+  /// The window's own undo stack: an Incognito window's model has its own, so its "Translate" steps
+  /// never reach a regular window's Cmd+Z.
+  private var undoManager: UndoManager { factory.model.undoManager ?? factory.app.undoManager }
+
   init(factory: EngineWebContentHostFactory) {
     self.factory = factory
+    preferences = TranslatePreferences(session: factory.incognitoSession?.translateHosts)
     #if OPEN_AUTOMATION
     // e2e on a Mac without Apple's language assets (page-platform §8.4 U-X1): a fixed French →
     // English word list that never touches the network. Real builds always use Apple's backend.
@@ -89,7 +95,7 @@ final class TranslateAdapter {
   func contentDidClose(_ content: OEWebContent) {
     let id = ObjectIdentifier(content)
     if let session = sessions.removeValue(forKey: id) {
-      factory.app.undoManager.removeAllActions(withTarget: session)
+      undoManager.removeAllActions(withTarget: session)
       session.close()
     }
     documents[id] = nil
@@ -101,7 +107,7 @@ final class TranslateAdapter {
   }
 
   func closeAll() {
-    for content in sessions.keys { if let s = sessions[content] { factory.app.undoManager.removeAllActions(withTarget: s); s.close() } }
+    for content in sessions.keys { if let s = sessions[content] { undoManager.removeAllActions(withTarget: s); s.close() } }
     sessions.removeAll(); documents.removeAll(); lastTarget.removeAll(); undoDriven.removeAll()
     popover?.dismiss(); languagesTask?.cancel()
   }
@@ -268,7 +274,7 @@ final class TranslateAdapter {
   /// turns off grouping by event, so a user action opens its own group; an undo or redo registers
   /// its inverse inside the group the manager opened.
   private func registerUndo(_ session: PageTranslationSession, id: ObjectIdentifier, inverse: Inverse) {
-    let manager = factory.app.undoManager
+    let manager = undoManager
     let explicit = !manager.isUndoing && !manager.isRedoing
     if explicit { manager.beginUndoGrouping() }
     manager.registerUndo(withTarget: session) { [weak self] s in
@@ -352,7 +358,7 @@ final class TranslateAdapter {
     } else { out["popover"] = ["presented": false] }
     out["toasts"] = toastsShown
     out["neverTranslateHosts"] = preferences.neverTranslateHosts
-    out["undoTitle"] = factory.app.undoManager.canUndo ? factory.app.undoManager.undoActionName : ""
+    out["undoTitle"] = undoManager.canUndo ? undoManager.undoActionName : ""
     return out
   }
 }

@@ -165,8 +165,9 @@ final class LiveCalendarCoordinator {
   }
 
   private func join(_ state: LiveCalendar.TileState, in window: BrowserWindowController?) {
-    // The tile's or reminder's own window; never an Incognito front window.
-    guard let controller = window.flatMap({ app.hostFactories[$0.windowID] == nil ? nil : $0 }) ?? app.frontStandardWindowController,
+    // The tile's or reminder's own window; else the main model's front window, never an Incognito or
+    // Blank Window (the calendar Favorites live in the main model).
+    guard let controller = window.flatMap({ app.hostFactories[$0.windowID] == nil ? nil : $0 }) ?? app.frontMainModelWindowController,
           let factory = app.hostFactories[controller.windowID] else { return }
     factory.openMeetingLink(state.link, from: "liveCalendar", event: state.event)
   }

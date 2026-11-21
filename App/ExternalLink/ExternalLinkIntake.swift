@@ -34,7 +34,9 @@ final class ExternalLinkIntake {
     self.executor = executor; self.snapshot = snapshot
   }
 
-  func handle(urls: [URL], source: RoutingSource) {
+  /// `profile`: the Profile the URL belongs to (a mail compose page from that Profile's handler). When no
+  /// rule matches, it opens in that Profile's most recent Space, not another Profile's window.
+  func handle(urls: [URL], source: RoutingSource, profile: ProfileID? = nil) {
     let now = ProcessInfo.processInfo.systemUptime
     recent = recent.filter { now - $0.value < 2 }
     for url in urls {
@@ -48,7 +50,7 @@ final class ExternalLinkIntake {
       let key = HostNormalizer.canonicalURLString(url) + "|" + (source.bundleID ?? "?")
       if recent[key] != nil { duplicatesDropped += 1; continue }
       recent[key] = now
-      if ready { route(request) }
+      if ready { route(request, profile: profile) }
       else { pending.append(request); queuedCount += 1 }
     }
   }
@@ -60,21 +62,31 @@ final class ExternalLinkIntake {
     for request in queued { route(request); drainedCount += 1 }
   }
 
-  private func route(_ request: RoutingRequest, afterBootstrap: Bool = false) {
+  private func route(_ request: RoutingRequest, afterBootstrap: Bool = false, profile: ProfileID? = nil) {
     // Build inside the loop: executing one queued link changes window order
     // and the most recent Space used to resolve the next queued link.
     willRoute?(request.url)
     defer { didRoute?(request.url) }
-    let decision = evaluator.evaluate(request, in: snapshot())
+    let routing = snapshot()
+    let decision = evaluator.evaluate(request, in: routing)
     decisionLog.record(decision)
-    switch decision.resolved {
+    var resolved = decision.resolved
+    if let profile, case .space(_, let other)? = resolved, other != profile, !decision.via.isRule {
+      // The same order as the evaluator's most recent Space: front standard window, then any Space.
+      let spaces = routing.windows.filter { $0.kind == .standard }.compactMap { window in
+        routing.spaces.first { $0.id == window.focusedSpaceID } } + routing.spaces
+      if let space = spaces.first(where: { $0.profileID == profile }) { resolved = .space(spaceID: space.id, profileID: profile) }
+    } else if let profile, case .littleOpen? = resolved, !decision.via.isRule {
+      resolved = .littleOpen(profileHint: profile)
+    }
+    switch resolved {
     case .space(let id, _): executor.openInSpace(request.url, spaceID: id)
     case .littleOpen(let hint): executor.openInLittleOpen(request.url, profileHint: hint)
     case nil:
       guard case .noSpaces = decision.via else { return }
       // Routing plan §8.7: bootstrap the first Space, then evaluate once more
       // with a fresh snapshot. A second noSpaces opens Little Open with no hint.
-      if !afterBootstrap, executor.bootstrapFirstSpace() { route(request, afterBootstrap: true) }
+      if !afterBootstrap, executor.bootstrapFirstSpace() { route(request, afterBootstrap: true, profile: profile) }
       else {
         AppDelegate.commandLog("External link found no Space after bootstrap; opening Little Open.")
         executor.openInLittleOpen(request.url, profileHint: nil)
@@ -162,4 +174,8 @@ extension AppDelegate {
     guard let text, let url = URL(string: text), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
     linkIntake.handle(urls: [url], source: .unknown); accepted = true; return true
   }
+}
+
+private extension RoutingVia {
+  var isRule: Bool { if case .rule = self { return true }; return false }
 }
