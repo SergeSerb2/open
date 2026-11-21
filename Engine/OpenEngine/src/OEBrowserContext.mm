@@ -710,12 +710,25 @@ static CefRefPtr<CefListValue> OEUserScriptsValue(NSArray<OEUserScript*>* script
         return [replaced containsObject:script.identifier];
       }];
   [_scripts removeObjectsAtIndexes:old];
-  for (OEUserScript* script in scripts) {
-    // Match repeated addUserScript calls when a batch contains duplicate IDs.
-    [self removeUserScriptWithIdentifier:script.identifier broadcast:NO];
-    [_scripts addObject:[script copy]];
-  }
-  [self oe_broadcastScriptsRemoving:replaced.allObjects adding:scripts];
+  // Match repeated addUserScript calls when a batch contains duplicate IDs:
+  // the last script of each ID is kept, in the order of those last entries.
+  // One pass, not a rescan of _scripts per script (O(K^2) for Ad Block's
+  // thousands of cosmetic scripts; bug sweep r4 PERF-02).
+  NSMutableDictionary<NSString*, NSNumber*>* last =
+      [NSMutableDictionary dictionaryWithCapacity:scripts.count];
+  [scripts enumerateObjectsUsingBlock:^(OEUserScript* script, NSUInteger index, BOOL* stop) {
+    last[script.identifier] = @(index);
+  }];
+  // Renderers get the same deduplicated list (review r1 of #649).
+  NSMutableArray<OEUserScript*>* added = [NSMutableArray arrayWithCapacity:last.count];
+  [scripts enumerateObjectsUsingBlock:^(OEUserScript* script, NSUInteger index, BOOL* stop) {
+    if (last[script.identifier].unsignedIntegerValue == index) {
+      OEUserScript* copy = [script copy];
+      [self->_scripts addObject:copy];
+      [added addObject:copy];
+    }
+  }];
+  [self oe_broadcastScriptsRemoving:replaced.allObjects adding:added];
 }
 
 - (void)removeUserScriptWithIdentifier:(NSString*)identifier {

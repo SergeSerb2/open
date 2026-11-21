@@ -295,6 +295,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var liveFolderIntroMonitor: Any?
     public func showLiveFolderIntro(folderID: ItemID) {
         dismissLiveFolderIntro()
+        // A request queued before the window closed must not install the monitor afterwards.
+        guard visibilityOverride != .closed, window?.isVisible == true else { return }
         sidebar.layoutSubtreeIfNeeded()
         guard let row = sidebar.rowFrame(nodeID: folderID) else { return }
         let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
@@ -494,7 +496,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         WindowSpeedTrace.mark("controllerInitEnd")
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { if let siteControlToken { siteControlSource?.removeChangeObserver(siteControlToken) }; hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { if let siteControlToken { siteControlSource?.removeChangeObserver(siteControlToken) }; hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
     private func scheduleRefresh() {
         guard !refreshPending else { return }; refreshPending = true
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
@@ -1759,6 +1761,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
         cancelLibraryPageMotion()
+        // The intro's app-wide event monitor must not outlive the window (bug sweep r4 PERF-14).
+        dismissLiveFolderIntro()
         siteControl?.dismiss(reason: .sourceUnavailable, animated: false)
         // Tear down this controller's appearance observation once at window close.
         systemAppearanceObservation = nil

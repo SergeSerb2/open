@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <set>
 #include <mutex>
+#include <unordered_map>
 
 #include "include/cef_parser.h"
 #include "include/cef_sandbox_mac.h"
@@ -389,11 +390,16 @@ class OEApp : public CefApp,
     auto& current = scripts_[browser_id];
     current.erase(std::remove_if(current.begin(), current.end(),
         [&](const RendererScript& script) { return ids.count(script.identifier) != 0; }), current.end());
-    for (auto& script : additions) {
-      // Duplicate added IDs follow the same last-addition-wins order as native.
-      current.erase(std::remove_if(current.begin(), current.end(),
-          [&](const RendererScript& old) { return old.identifier == script.identifier; }), current.end());
-      current.push_back(std::move(script));
+    // Duplicate added IDs follow the same last-addition-wins order as native:
+    // the last script of each ID, in the order of those last entries. One
+    // pass; a rescan of `current` per script was O(K^2) on the renderer main
+    // thread (bug sweep r4 PERF-02, review r1 of #649).
+    std::unordered_map<std::string, size_t> last;
+    last.reserve(additions.size());
+    for (size_t i = 0; i < additions.size(); ++i) last[additions[i].identifier] = i;
+    current.reserve(current.size() + last.size());
+    for (size_t i = 0; i < additions.size(); ++i) {
+      if (last[additions[i].identifier] == i) current.push_back(std::move(additions[i]));
     }
   }
 

@@ -827,7 +827,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // Peek hosts are transient until expanded into the model. A sidebar
     // mutation must not close them merely because they have no model row.
     modelHostIDs.formUnion(hosts.keys.filter { model.tab(id: $0) != nil })
-    for (id, host) in hosts where modelHostIDs.contains(id) && (model.tab(id: id) == nil || !tabs(in: host.profileID).contains(where: { $0.id == id })) {
+    // One flattened tab-ID set per Profile for this change, not one flatten per live host
+    // (O(hosts x tabs) on every tree change in every window; bug sweep r4 PERF-03).
+    var profileTabIDs: [ProfileID: Set<ItemID>] = [:]
+    func inProfile(_ id: ItemID, _ profileID: ProfileID) -> Bool {
+      if let ids = profileTabIDs[profileID] { return ids.contains(id) }
+      let ids = Set(tabs(in: profileID).map(\.id)); profileTabIDs[profileID] = ids
+      return ids.contains(id)
+    }
+    for (id, host) in hosts where modelHostIDs.contains(id) && (model.tab(id: id) == nil || !inProfile(id, host.profileID)) {
       controller?.container.closeHost(for: id); host.close()
     }
     if let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id], model.node(id: id) == nil {
