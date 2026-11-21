@@ -100,7 +100,6 @@ extension AppDelegate {
     }
     if let width = sourceFactory?.windowState.sidebarWidth { state.sidebarWidth = width }
     let memory = BrowserModel(profiles: [profile], spaces: [space], windows: [state])
-    let undo = UndoManager(); undo.groupsByEvent = false; memory.undoManager = undo
     // Capture s11 1(b): a closed tab goes to the Profile's Archive; the last closes the window.
     memory.archiveSink = archiveSink
     if let saved {
@@ -110,6 +109,8 @@ extension AppDelegate {
         made.customTitle = tab.customTitle
       }
     }
+    // After the restore: restored tabs are not Undo steps (Cmd+Z would remove them).
+    let undo = UndoManager(); undo.groupsByEvent = false; memory.undoManager = undo
     let controller = createWindowController(state: state, privateModel: memory, blankWindow: true)
     controller.context.windowOnlyMoveSpaces = { [weak self] in
       guard let model = self?.model else { return [] }
@@ -152,9 +153,13 @@ extension AppDelegate {
         source.finishTabTransfer()
         continue
       }
+      // Like the live transfer, no Undo step: the source drops the tab and its Archive row
+      // without one, so undoing this insert would lose the tab.
+      let undo = factory.model.undoManager; undo?.disableUndoRegistration()
       let moved = factory.model.newTab(in: space.id, url: tab.url, title: tab.title, at: 0)
       moved.customTitle = tab.customTitle; moved.customIcon = tab.customIcon; moved.iconOverride = tab.iconOverride
       if parent != .spaceToday(space.id) || position != 0 { _ = factory.model.moveNode(id: moved.id, to: parent, at: position) }
+      undo?.enableUndoRegistration()
       position += 1; last = moved.id
       source.releaseTabToAnotherWindow(id)
     }
@@ -191,8 +196,11 @@ extension EngineWebContentHostFactory {
     }), destination.transferLiveTab(id, from: self, to: .spaceToday(spaceID), at: 0) {
       finishTabTransfer(); app.scheduleSave(); return true
     }
+    // No Undo step, as above: undoing the insert would lose the tab.
+    let undo = app.model.undoManager; undo?.disableUndoRegistration()
     let moved = app.model.newTab(in: spaceID, url: tab.url, title: tab.title, at: 0)
     moved.customTitle = tab.customTitle; moved.customIcon = tab.customIcon; moved.iconOverride = tab.iconOverride
+    undo?.enableUndoRegistration()
     releaseTabToAnotherWindow(id)
     app.scheduleSave()
     return true

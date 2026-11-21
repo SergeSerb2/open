@@ -601,6 +601,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return
         }
         let size = root.bounds.size, hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
+        // The card exists only over a hidden sidebar. A mode change that did not come through
+        // toggleSidebar (Cmd+Z of Hide Sidebar) drops it here, before the anchored layout.
+        if cardState != .off, !hidden { removeRevealCard(); return }
         let width = context.sidebarWidth
         let panelFrame = pageFrameOutsideLibrary()
         if background.frame != root.bounds { background.frame = root.bounds }
@@ -1458,6 +1461,16 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func trackSidebarPointer(_ point: CGPoint) { reveal.pointerMoved(to: point) }
     /// Hides the hover-reveal card (a tab selection, the command bar) with its slide.
     public func dismissSidebarReveal() { reveal.dismiss() }
+    /// Another window took the keyboard: no pointer events reach this one to hide its card. One
+    /// of this window's own panels (the theme editor, the icon picker of a card row) keeps it.
+    private func dismissRevealUnlessOwnPanelIsKey() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window, !window.isKeyWindow else { return }
+            if let key = NSApp.keyWindow, key.parent === window || key === self.themeEditor?.panel
+                || key === self.spaceCreationController?.themeEditor?.panel || self.ownsAdditionalKeyWindow?(key) == true { return }
+            self.dismissSidebarReveal()
+        }
+    }
     public func saveWindowState() {
         guard let window, !fullscreenTransition, !window.styleMask.contains(.fullScreen), let state = context.window else { return }
         let frame = window.frame
@@ -1592,7 +1605,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     private func handles(_ id: String) -> Bool { ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
-        if id == "edit-theme" { if let space = context.focusedSpace { _ = editSpaceTheme(space.id) }; return }
+        if id == "edit-theme" { if let space = context.focusedSpace, !context.isIncognito, !context.isWindowOnly { _ = editSpaceTheme(space.id) }; return }
         if id != "tab-switcher-forward", id != "tab-switcher-backward" { existingTabSwitcher?.cancel() }
         if onCommand?(id) == true { return }
         if id == "toggle-toolbar" { toggleToolbar(); return }
@@ -1621,7 +1634,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func menuState(for id: String) -> CommandMenuState? { onMenuState?(id) }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
-        if id == "edit-theme" { return context.focusedSpace != nil }
+        if id == "edit-theme" { return context.focusedSpace != nil && !context.isIncognito && !context.isWindowOnly }
         if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
         if id == "toggle-toolbar" { return context.window?.style == .standard }
         if id == "open-in-current-space" { return peekStorage?.isShown == true }
@@ -1794,8 +1807,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
         dimmedLights.syncWithPointer()
     }
-    public func windowWillBeginSheet(_ notification: Notification) { cancelSidebarResize() }
-    public func windowDidResignKey(_ notification: Notification) { cancelSidebarResize(); existingTabSwitcher?.cancel(); let active = (themeEditor != nil || spaceCreationController?.themeEditor != nil) && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
+    // Another Open window, or a sheet, takes the pointer: no pointer events reach this window to
+    // hide its hover-reveal card, as when another app becomes active.
+    public func windowWillBeginSheet(_ notification: Notification) { cancelSidebarResize(); dismissSidebarReveal() }
+    public func windowDidResignKey(_ notification: Notification) { cancelSidebarResize(); dismissRevealUnlessOwnPanelIsKey(); existingTabSwitcher?.cancel(); let active = (themeEditor != nil || spaceCreationController?.themeEditor != nil) && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { siteControl?.dismiss(reason: .sourceUnavailable, animated: false); context.isWindowActive = window?.isKeyWindow == true }
@@ -1907,6 +1922,10 @@ extension BrowserWindowController {
     /// Delete folder(s): alert, one undo step, then the toast. The captured normal mixed menu
     /// archives each contained tab separately; other callers retain folder records.
     func confirmDeleteFolders(_ ids: [ItemID], archiveFolderTabs: Bool = false) -> Bool {
+        // A Live Folder is never archived (keyboard Delete and a selection's Delete come here, not
+        // through its row menu): alone, it is Delete Live Folder; in a selection it is removed.
+        let live = ids.filter { model.node(id: $0)?.folder?.live != nil }
+        if ids.count == 1, let id = live.first { return confirmDeleteLiveFolder(id) }
         guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids, quoteTitle: archiveFolderTabs) else { return false }
         let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
         let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
@@ -1915,11 +1934,29 @@ extension BrowserWindowController {
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed else { return }
-            var archived = 0
-            self.keepingSelection { archived = self.model.archiveNodes(ids: ids, archiveFolderTabs: archiveFolderTabs) }
-            guard archived > 0 else { return }
+            // Read again: the sheet is asynchronous. Delete Live Folder has no Undo step (as from
+            // its row menu), so the rest is archived first (one Undo step, its own toast) and the
+            // Live Folders go after it. Rows inside a removed Live Folder go with it.
+            let live = ids.filter { self.model.node(id: $0)?.folder?.live != nil }
+            @MainActor func insideLive(_ id: ItemID) -> Bool {
+                var parent = self.model.parent(of: id)
+                while case .folder(let folder)? = parent {
+                    if live.contains(folder) { return true }
+                    parent = self.model.parent(of: folder)
+                }
+                return false
+            }
+            let rest = ids.filter { !live.contains($0) && !insideLive($0) }
+            var archived = 0, removed = 0
+            self.keepingSelection {
+                archived = rest.isEmpty ? 0 : self.model.archiveNodes(ids: rest, archiveFolderTabs: archiveFolderTabs)
+                for id in live where self.model.node(id: id)?.folder?.live != nil { self.model.removeLiveFolder(id: id); removed += 1 }
+            }
+            if removed > 0 { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
+            guard archived > 0 || removed > 0 else { return }
             self.refresh(); restoreKeyboardFocus(); self.changed()
-            self.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
+            // The toast's Undo covers only the archived rows; a lone Live Folder removal has none.
+            if archived > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: max(1, folders - removed))) }
         }
         if !shown { pendingConfirmation = nil }
         return shown

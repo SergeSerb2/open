@@ -2316,8 +2316,9 @@
     }
 
     private func sidebarPoint(_ args: [String: Any], controller: BrowserWindowController, favorite: Bool = false) throws -> NSPoint {
+      // A Blank Window's rows are in its own model, not the browser's.
       guard let text = args[favorite ? "favorite" : "node"] as? String, let uuid = UUID(uuidString: text),
-        app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+        (app.hostFactories[controller.windowID]?.model ?? app.model).node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
       let id = ItemID(rawValue: uuid)
       controller.contentView.layoutSubtreeIfNeeded()
       if !favorite { controller.sidebar.reveal(nodeID: id) }
@@ -2375,7 +2376,7 @@
       guard let target = controller.window, let factory = app.hostFactories[controller.windowID],
         let outline = controller.sidebar.focusedOutline,
         let id = (args["node"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }),
-        let node = app.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
+        let node = factory.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
       try await activateForInput(target)
       let capturesMotion = args["motion"] as? Bool == true
       let previousReduceMotion = Motion.reduceMotionOverride

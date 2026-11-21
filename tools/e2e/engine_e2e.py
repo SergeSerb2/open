@@ -3583,6 +3583,44 @@ def ensure_key(app, wid, timeout=15, *, activation_timeout=5):
         time.sleep(min(0.25, deadline - now))
 
 
+def reveal_card_window_checks(app, results, wid):
+    """Bug sweep round 4: the hover-reveal card over a hidden sidebar.
+    SB-06: Cmd+Z of Hide Sidebar while the card shows drops the card; the sidebar is anchored
+    again, not a floating card left over its slot. SB-07: the card goes when another Open
+    window becomes key (no pointer events reach this window to hide it)."""
+    def state(): return app.call("window-state", id=wid)
+    ensure_key(app, wid)
+    app.call("key", key="s", modifiers=["cmd"], route="app")
+    sidebar_hidden(app)
+    card = reveal_card_and_wait(app)
+    app.call("sidebar-key", key="z", modifiers=["cmd"])
+    undone = state_when(app, lambda st: st["sidebarMode"] == "anchored" and not st["revealed"], timeout=2) or state()
+    app.call("mouse", action="move", x=700, y=400); time.sleep(.6)
+    settled = state()
+    results["reveal_card_undo_hide_anchors"] = {
+        "ok": bool(card) and undone["sidebarMode"] == "anchored" and not undone["revealed"]
+              and settled["sidebarMode"] == "anchored" and settled["sidebarVisible"] and not settled["revealed"] and settled["panel"][0] > 10,
+        "undone": {k: undone.get(k) for k in ("sidebarMode", "revealed", "sidebarVisible", "panel")},
+        "settled": {k: settled.get(k) for k in ("sidebarMode", "revealed", "sidebarVisible", "panel")}}
+    if settled["sidebarMode"] != "anchored":
+        app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_anchored(app)
+    ensure_key(app, wid)
+    app.call("key", key="s", modifiers=["cmd"], route="app")
+    sidebar_hidden(app)
+    card = reveal_card_and_wait(app)
+    app.call("key", key="n", modifiers=["cmd"], route="app")
+    other = wait_until(lambda: (lambda st: st if st["id"] != wid else None)(app.call("window-state")), timeout=5)
+    away = wait_until(lambda: (lambda st: st if not st["revealed"] else None)(state()), timeout=3) or state()
+    results["reveal_card_dismissed_when_other_window_key"] = {
+        "ok": bool(card) and bool(other) and not away["revealed"],
+        "otherWindow": bool(other), "revealed": away["revealed"], "reveal": away.get("reveal")}
+    if other:
+        app.call("window-close"); state_when(app, lambda st: st["id"] == wid)
+    ensure_key(app, wid)
+    if state()["sidebarMode"] == "hidden":
+        app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_anchored(app)
+
+
 def traffic_light_look_checks(app, results, private, scale, wid):
     """The window buttons' rest look, hover, not-key look, card, AX, actions, and the hover
     state across full screen, minimize, and a sidebar hide."""
@@ -4394,6 +4432,7 @@ def window_chrome_checks(factory, results, tmp):
                                      "second_window_key": second_c, "first_window_not_key": background_c, "after_fullscreen_exit": exited_c}
 
         traffic_light_look_checks(app, results, private, scale, wid)
+        reveal_card_window_checks(app, results, wid)
 
         # URL field and Space header, at rest and hovered (this profile has no favorites).
         place_away_from_cursor(app, 1280, 800)
@@ -5226,6 +5265,21 @@ def sidebar_checks(factory, results, tmp):
                   and check_page(app, f1, "Favorite One")
                   and all(c["hitChain"][:2] == ["FavoriteTileView", "FavoritesCollectionView"] for c in clicks_after_panel),
             "clicks": clicks_after_panel}
+        # Bug sweep round 4 (SB-11): Duplicate (Cmd+D's menu command) on the selected Favorite puts
+        # the copy in Today, as the row menu's and a selection's Duplicate do. It added a Favorite,
+        # past the 12-Favorite limit.
+        def sections():
+            tabs = app.call("tabs")
+            return ([t["id"] for t in tabs if t["section"] == "favorites"],
+                    [t["id"] for t in tabs if t["section"] == "today" and "Favorite One" in (t.get("title") or "")])
+        favorites_before, today_before = sections()
+        duplicated = app.call("command", id="duplicate-tab")
+        time.sleep(.3)
+        favorites_after, today_after = sections()
+        results["favorite_duplicate_goes_to_today"] = {
+            "ok": f1 in favorites_before and favorites_after == favorites_before and len(today_after) == len(today_before) + 1,
+            "duplicated": duplicated, "favoritesBefore": len(favorites_before), "favoritesAfter": len(favorites_after),
+            "todayCopiesBefore": len(today_before), "todayCopiesAfter": len(today_after)}
     finally:
         _restore_defaults(app, saved)
         app.quit()
@@ -12990,6 +13044,19 @@ def space_manager_checks(results, tmp, config, style):
         landed = wait_until(lambda: (lambda tabs: tabs if any(t['url'].endswith('/manager-drop-target.html') and t['section'] == 'today' and t['selected'] for t in tabs) else None)(app.call('tabs')), timeout=5)
         focused = next((sp['id'] for sp in app.call('spaces') if sp['focused']), None)
         require('manager_url_drop_other_space', dropped and landed and focused == s2, focused=focused, expected=s2, tabs=app.call('tabs'))
+        # Bug sweep round 4 (SB-14): a URL dropped into Pinned is one Undo step. It was two (the new
+        # tab, then its move), so one Cmd+Z only moved the tab back to Today.
+        pinned_file = Path(tmp) / 'manager-pinned-drop.html'
+        pinned_file.write_text('<title>Manager Pinned Drop</title><h1>Manager Pinned Drop</h1>')
+        pinned_dropped = app.call('space-manager-intent', kind='openURL', space=s2, section='pinned', url=pinned_file.as_uri())
+        def pinned_drop_tabs(): return [t for t in app.call('tabs') if t['url'].endswith('/manager-pinned-drop.html')]
+        pinned_landed = wait_until(lambda: (lambda tabs: tabs if tabs and tabs[0]['section'] == 'pinned' else None)(pinned_drop_tabs()), timeout=5) or []
+        app.call('library-close'); app.call('window-focus', id=second, activate=True)
+        app.call('sidebar-key', key='z', modifiers=['cmd'])
+        wait_until(lambda: not pinned_drop_tabs(), timeout=3)
+        left = pinned_drop_tabs()
+        require('manager_url_drop_pinned_one_undo', pinned_dropped and bool(pinned_landed) and left == [],
+                landed=[t['section'] for t in pinned_landed], afterOneUndo=[t['section'] for t in left])
         # #124 review: Open in Split View from a column whose Space the browser is
         # not showing goes through the browser controller in that Space.
         split_partner = next(t['id'] for t in app.call('tabs') if t['url'].endswith('/manager-drop-target.html'))
