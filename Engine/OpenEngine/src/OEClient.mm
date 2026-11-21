@@ -55,6 +55,10 @@ bool OEClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
   auto name = message->GetName();
   if (source != PID_RENDERER || !frame->IsMain() ||
       (name != "oe.open.message" && name != "oe.open.reply")) return false;
+  // A browser that shares this client but is not the page's own (a Chrome-style
+  // page's Document PiP) never answers or posts as the page.
+  CefRefPtr<CefBrowser> own = view_.oe_browser;
+  if (own && !own->IsSame(browser)) return false;
   [view_ oe_openWorldMessage:message];
   return true;
 }
@@ -87,6 +91,11 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
     return true;
   }
   id<OEWebContentDelegate> delegate = source.delegate;
+  // A closing page, or one kept drawn for a pane's collapse (-prepareForClose),
+  // opens nothing: no Document PiP and no popup.
+  if (closing_ || close_requested_) {
+    return true;
+  }
   // Document PiP of a Chrome-style page: CEF uses Chromium's default creation,
   // where the fork's EM-7 hook (chromium/0403) shows it through the shell's
   // pictureInPictureDelegate, or Chromium's own window without one. It keeps
@@ -841,6 +850,10 @@ bool OEClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
                                 WindowOpenDisposition target_disposition,
                                 bool user_gesture) {
   OEWebContent* source = view_;
+  // A closing page (or one kept drawn for a collapse) opens no tab or window.
+  if (closing_ || close_requested_) {
+    return true;
+  }
   NSEventModifierFlags modifiers = OENavigationModifiers(source);
   if ((modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagOption)) ==
           (NSEventModifierFlagCommand | NSEventModifierFlagOption) &&
