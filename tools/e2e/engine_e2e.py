@@ -7428,6 +7428,28 @@ def sleep_checks(factory, results, tmp, style):
         results["sleep_closed_tabs_dropped"] = {"ok": tracked_open >= len(closed_tabs) and after_close["trackedTabs"] <= len(after_close["tabs"])
                                                       and not any(t in [x["id"] for x in after_close["tabs"]] for t in closed_tabs),
                                                 "trackedOpen": tracked_open, "trackedAfter": after_close["trackedTabs"], "modelTabs": len(after_close["tabs"])}
+        # Review r1: a visible Little Open page is outside the model; passes and its close add no record.
+        main_window = app.call("shell-windows")[0]["id"]
+        previous = {s["id"] for s in app.call("little-open-state")["sessions"]}
+        app.call("menu-perform", id="new-little-open-window")
+        little = wait_until(lambda: next((s for s in app.call("little-open-state")["sessions"] if s["id"] not in previous), None), timeout=5, step=.05)
+        if little:
+            app.call("key", window=little["window"], text=site(50) + "\r")
+            wait_until(lambda: any(s["id"] == little["id"] and s["state"] == "page" and s["content"] and not s["loading"]
+                                   for s in app.call("little-open-state")["sessions"]), timeout=10, step=.05)
+        for _ in range(3): tick()
+        shown_little = state()
+        outside = [i for i in shown_little["visible"] if i not in [x["id"] for x in shown_little["tabs"]]]
+        if little:
+            app.call("little-open-action", id=little["id"], action="close")
+            wait_until(lambda: all(s["id"] != little["id"] for s in app.call("little-open-state")["sessions"]), timeout=5, step=.05)
+        tick(); closed_little = state()
+        app.call("window-focus", id=main_window, activate=True)
+        results["sleep_little_open_no_record"] = {
+            "ok": bool(little) and bool(outside) and shown_little["trackedTabs"] <= len(shown_little["tabs"])
+                  and closed_little["trackedTabs"] <= len(closed_little["tabs"]),
+            "visibleOutsideModel": outside, "trackedShown": shown_little["trackedTabs"], "modelTabsShown": len(shown_little["tabs"]),
+            "trackedClosed": closed_little["trackedTabs"], "modelTabsClosed": len(closed_little["tabs"])}
 
         # F0 (memory-fork §10): the browser runs with Open's feature switches (chrome://version
         # shows the command line every process inherits).

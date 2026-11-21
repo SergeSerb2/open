@@ -90,6 +90,14 @@ public final class SleepController {
         if let value = states[id] { return value }
         let value = State(); states[id] = value; return value
     }
+    /// Drops the runtime record (and purge and wake marks) of a tab that left the model, once
+    /// no page, save (`busy`) or wake (`waking`) for it is in flight. A tab that comes back
+    /// (Undo, Restore) starts a fresh record. Called on close, after a save or wake ends, and
+    /// for every record at each entry rebuild.
+    private func dropStateIfGone(_ id: ItemID) {
+        guard model.tab(id: id) == nil, !liveContent.contains(id), !waking.contains(id), states[id]?.busy != true else { return }
+        states[id] = nil; purged.remove(id); wakeStartedAt[id] = nil
+    }
     private func stateValues<T>(_ path: KeyPath<State, T?>) -> [ItemID: T] {
         Dictionary(uniqueKeysWithValues: states.compactMap { id, state in state[keyPath: path].map { (id, $0) } })
     }
@@ -246,9 +254,11 @@ public final class SleepController {
 
     private func hide(_ id: ItemID, at date: Date) {
         knownVisible.remove(id)
+        if shown.remove(id) != nil { engine.setVisible(tabID: id, visible: false) }
+        // Little Open tabs and tabs that left the model get no record.
+        guard model.tab(id: id) != nil else { return }
         let state = state(id)
         if state.hiddenAt == nil { state.hiddenAt = date }
-        if shown.remove(id) != nil { engine.setVisible(tabID: id, visible: false) }
     }
 
     public func tabBecameVisible(_ tabID: ItemID) async {
@@ -272,7 +282,7 @@ public final class SleepController {
             return
         }
         waking.insert(tabID)
-        defer { waking.remove(tabID) }
+        defer { waking.remove(tabID); dropStateIfGone(tabID) }
         wakeStartedAt[tabID] = (now(), tab.live.sleepPhase == .placeholder ? "placeholder" : "destroyed")
         let history = await store.sleepHistory(tabID: tabID)
         guard model.tab(id: tabID) === tab, !purged.contains(tabID) else { wakeStartedAt[tabID] = nil; return }
@@ -310,9 +320,8 @@ public final class SleepController {
         state.lastAudibleAt = nil; state.lastCommitAt = nil; state.sleptAt = nil
         state.unload = nil; wakeStartedAt[tabID] = nil; downloading.remove(tabID)
         tabUserInteracted(tabID)
-        // A page of a tab that already left the model can close after the last entry rebuild:
-        // drop its record now (a running save or wake keeps it until the next rebuild).
-        if model.tab(id: tabID) == nil, !state.busy, !waking.contains(tabID) { states[tabID] = nil }
+        // A page of a tab that already left the model can close after the last entry rebuild.
+        dropStateIfGone(tabID)
         setNeedsPass()
     }
 
@@ -374,9 +383,7 @@ public final class SleepController {
         // Records of tabs that left the model (closed, archived, purged, moved away) go once no
         // work for them is in flight; a tab that comes back (Undo, Restore) starts a fresh one.
         let present = Set(entries.lazy.map(\.tab.id))
-        for (id, state) in states where !present.contains(id) && !state.busy && !liveContent.contains(id) && !waking.contains(id) {
-            states[id] = nil; purged.remove(id); wakeStartedAt[id] = nil
-        }
+        for id in states.keys where !present.contains(id) { dropStateIfGone(id) }
         // The cached order stays fixed until a structural change; no per-tick sort.
         groups = Dictionary(grouping: entries, by: \.owner)
         cachedRevision = model.treeRevision
@@ -467,7 +474,8 @@ public final class SleepController {
             for id in knownVisible.subtracting(visible) { hide(id, at: date) }
             var restoredContent = false
             for id in visible.subtracting(knownVisible) {
-                if !state(id).hasContent { restoredContent = true }
+                // Visible tabs outside the model (Little Open) never get a record here.
+                if model.tab(id: id) != nil, states[id]?.hasContent != true { restoredContent = true }
                 await makeVisible(id)
             }
             // Restoration can suspend while the app changes windows or surfaces.
@@ -578,7 +586,7 @@ public final class SleepController {
         let state = state(id)
         guard !state.busy, gate(tab, policy: policy, visible: visible, at: now(), discard: true, critical: critical) == nil else { return }
         state.busy = true
-        defer { state.busy = false }
+        defer { state.busy = false; dropStateIfGone(id) }
         guard var envelope = engine.captureHistory(tabID: id) else {
             onLog?("sleep-capture-failed \(id.rawValue.uuidString.prefix(8))"); failedDiscard(id); return
         }
