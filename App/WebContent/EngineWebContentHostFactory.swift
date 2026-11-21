@@ -83,9 +83,19 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     engine.providers.append(SettingsSuggestionsProvider())
     return engine
   }()
+  /// A Blank Window keeps its tabs in its own in-memory model: its bar indexes those tabs (Switch to
+  /// Tab, current-tab actions). History and Easels are the Profile's, as in the shared engine.
+  private lazy var blankSuggest: SuggestEngine = {
+    let engine = SuggestEngine(model: model, historyStore: { [weak app] in app?.stores.history(for: $0) },
+      actions: CommandRegistry.makeSuggestRegistry())
+    engine.providers.append(SettingsSuggestionsProvider())
+    engine.providers.append(EaselsProvider(catalog: app.easelSearch.catalog))
+    return engine
+  }()
   func suggestEngine() -> SuggestEngine? {
     guard let profile = focusedProfile else { return nil }
-    return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)
+    if isIncognito { return privateSuggest }
+    return isBlankWindow ? blankSuggest : app.stores.suggest(for: profile.id)
   }
   /// Nil for a Little Open factory (no browser window controller).
   var contentContainer: NSView? { controller?.container }
@@ -1250,12 +1260,14 @@ extension EngineWebContentHostFactory {
     // Welcome is created by the hand-off or Help only; arbitrary internal routes
     // typed in the command bar never reach a page or a system URL handler.
     guard !WelcomeTab.isInternal(url) else { return }
-    if current, let tab = selectedTab, WelcomeTab.matches(tab.url) {
+    // Cmd+L over a Peek edits the Peek's page (selectedContent), not the native tab behind it.
+    let peekShown = controller.map { $0.hasPeekController && $0.peekController.isShown } ?? false
+    if current, !peekShown, let tab = selectedTab, WelcomeTab.matches(tab.url) {
       leaveWelcome(tabID: tab.id, for: url); return
     }
-    if current, NoteTab.matches(selectedTab?.url) { navigateFromCommandBar(url, current: false, background: background); return }
+    if current, !peekShown, NoteTab.matches(selectedTab?.url) { navigateFromCommandBar(url, current: false, background: background); return }
     // An Easel tab is never replaced by a page: the address opens in a new tab.
-    if current, let tab = selectedTab, EaselTab.matches(tab.url) {
+    if current, !peekShown, let tab = selectedTab, EaselTab.matches(tab.url) {
       _ = openNewTab(url: url, background: background, typed: true); return
     }
     app.noteLaunchWindowNavigation(windowState.id)
@@ -1268,7 +1280,13 @@ extension EngineWebContentHostFactory {
       }
       if !app.engineReady, let tab = selectedTab {
         queuedNavigations[tab.id] = url; tab.url = url; scheduleSave()
-      } else { selectedContent?.load(url); selectedContent?.focusPage() }
+      } else if let page = selectedContent { page.load(url); page.focusPage() }
+      else if !peekShown, let tab = selectedTab {
+        // No page yet (a sleeping tab still waking from its stored history): make the page now with
+        // the typed address. The wake then finds this page and keeps it instead of the old URL.
+        tab.url = url; scheduleSave()
+        ensureContent(for: tab)?.focusPage()
+      }
     } else if let tab = openNewTab(url: url, background: background, typed: true) {
       if background { _ = ensureContent(for: tab) }
       else { commandBarNavigationFocus.insert(tab.id) }
