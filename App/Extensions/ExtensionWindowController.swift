@@ -55,11 +55,6 @@ final class ExtensionWindowController: NSWindowController, NSWindowDelegate, OEW
     return false
   }
   static func closeAll() { for controller in Array(windows.values) { controller.close() } }
-  /// The popups of one context. Incognito end and Profile deletion close them first: a popup's
-  /// Browser keeps its context open (the private session, or the deleted Profile's engine data).
-  static func closeAll(in context: OEBrowserContext) {
-    for controller in Array(windows.values) where controller.browser.context === context { controller.close() }
-  }
   /// window.open from the popup's page: the URL opens as a tab in a window of the same Profile.
   /// The engine's own popup would be an unshown tab of this window's hidden Chrome strip.
   func webContent(_ webContent: OEWebContent, createWebContentFor request: OEOpenRequest) -> OEWebContent? {
@@ -77,12 +72,6 @@ final class ExtensionWindowController: NSWindowController, NSWindowDelegate, OEW
 extension AppDelegate {
   func engine(_ engine: OEEngine, didOpenExtensionWindow browser: OEBrowser,
               content: OEWebContent, requestedFrame: NSRect, extension extensionID: String) {
-    // A popup that arrives after its regular Profile was deleted (or its context closed) is not shown:
-    // it would keep that context open again. An Incognito popup keeps the context checks of the engine.
-    let context = browser.context
-    if context.state != .live || (!context.isEphemeral && regularProfile(for: context) == nil) {
-      content.close(); browser.close(); return
-    }
     let parent = hostFactories.values.first { $0.focusedBrowser?.context === browser.context && $0.window?.isMainWindow == true }?.window
       ?? frontWindowController?.window
     _ = ExtensionWindowController(browser: browser, content: content, requestedFrame: requestedFrame,

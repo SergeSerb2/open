@@ -102,7 +102,6 @@ final class IncognitoSession {
     context?.delegate = nil
     if let context {
       app?.adBlockEngineAdapter.contextClosed(context)
-      ExtensionWindowController.closeAll(in: context)
       OEEngine.shared.releaseContext(context, completion: nil)
     }
     context = nil

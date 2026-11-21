@@ -81,6 +81,9 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         if focus == "tabs":
             tab_events(app, results, tabs, wait, new_tab)
             return
+        if focus == "e1":
+            profile_lifetime(app, results, wait, new_tab, action, popup=os.environ.get("OPEN_E2E_E1_POPUP", "1") == "1")
+            return
         if focus == "sweep3":
             app = sweep3(app, results, wait, new_tab, action, reporter)
             return
@@ -525,9 +528,10 @@ def sweep3(app, results, wait, new_tab, action, reporter):
     return app
 
 
-def profile_lifetime(app, results, wait, new_tab, action):
-    """E1: an extension popup window of a Profile closes when that Profile is deleted,
-    so the deletion does not wait for it."""
+def profile_lifetime(app, results, wait, new_tab, action, popup=True):
+    """E1 (rejected seed, regression guard): deleting a Profile with an extension popup window
+    open finishes at once and closes the popup (the engine's deleteContext closes the context's
+    Browsers, popups included). popup=False is the control run without a popup."""
     name = "R3 Popup Profile"
     evidence = {}
     try:
@@ -536,8 +540,8 @@ def profile_lifetime(app, results, wait, new_tab, action):
         page = new_tab(app, "chrome-extension://%s/popup.html" % action)
         app.call("wait", tab=page)
         context = app.page(page)["context"]
-        made = app.eval(page, "chrome.windows.create({type:'popup',url:'about:blank',focused:false})")
-        native = wait(lambda: next((w for w in app.call("ext-windows") if w["chromeWindowId"] == made["id"]), None), timeout=10)
+        made = app.eval(page, "chrome.windows.create({type:'popup',url:'about:blank',focused:false})") if popup else {"id": -1}
+        native = wait(lambda: next((w for w in app.call("ext-windows") if w["chromeWindowId"] == made["id"]), None), timeout=10) if popup else {"control": True}
         evidence["popup"] = native
         evidence["pageContext"] = context
         app.call("space", space=home)
@@ -553,15 +557,22 @@ def profile_lifetime(app, results, wait, new_tab, action):
         app.call("profiles-shell", action="type-delete", text=name)
         started = time.monotonic()
         app.call("profiles-shell", action="press", label="Delete")
-        finished = wait(lambda: not app.call("profiles-shell")["deleting"] and app.call("profiles-shell")["sheet"] == 0,
-                        timeout=40, step=.1)
+        timeline = []
+        def done():
+            shell = app.call("profiles-shell")
+            row = [round(time.monotonic() - started, 1), shell.get("teardownStage"), shell.get("deleting"), shell.get("sheet")]
+            if not timeline or timeline[-1][1:] != row[1:]: timeline.append(row)
+            # `sheet` is a window number, not a count: the wipe is over when its stage is done.
+            return not shell["deleting"] and shell.get("teardownStage") == "done"
+        finished = wait(done, timeout=40, step=.1)
+        evidence["timeline"] = timeline
         evidence["deleteSeconds"] = round(time.monotonic() - started, 2)
         shell = app.call("profiles-shell")
         evidence["stage"] = shell.get("teardownStage"); evidence["error"] = shell.get("errorText")
         evidence["popupsLeft"] = [w for w in app.call("ext-windows") if w["chromeWindowId"] == made["id"]]
         evidence["modelGone"] = not any(p["id"] == profile["id"] for p in shell["profiles"])
         results["R3_E1_profile_delete_closes_popup"] = dict(evidence, ok=bool(native)
-            and bool(finished) and evidence["deleteSeconds"] < 15 and not evidence["popupsLeft"] and evidence["modelGone"])
+            and bool(finished) and evidence["deleteSeconds"] < 10 and not evidence["popupsLeft"] and evidence["modelGone"])
     except Exception as error:
         results["R3_E1_profile_delete_closes_popup"] = dict(evidence, ok=False, error=str(error))
     finally:
