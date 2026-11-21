@@ -164,12 +164,27 @@ final class MediaCoordinator {
   }
 
   /// A tab's page closed: tab close, archive, unload (sleep), crash teardown, window close.
-  func hostClosed(tabID: ItemID) {
+  func hostClosed(_ closing: EngineWebContentHost) {
+    let tabID = closing.tabID
+    // The same tab can show in another window, with its own page: the media state moves to that page,
+    // and only a PiP that the closing page held goes.
+    if let survivor = host(tabID) {
+      sync(survivor)
+      if let window = pipWindow, pipHost?.pip.webContent === closing.content { window.dismiss(reason: .sourceGone) }
+      if let document = documentPiP, document.pip.webContent === closing.content { document.close() }
+      // Phase 1 (Chromium's window): the closing page held the PiP when the survivor is not in one.
+      if pipHost == nil, session.activeSource?.tabID == tabID, survivor.content.mediaSession?.isPictureInPicture != true {
+        session.close(.sourceGone); store.setPiP(tabID: tabID, .none)
+      }
+      feedSleep()
+      return
+    }
     #if OPEN_AUTOMATION
     cardTimings[tabID] = nil
     #endif
-    store.remove(tabID: tabID); pendingExit[tabID] = nil; decisions[tabID] = nil; pipTimes[tabID] = nil
+    pendingExit[tabID] = nil; decisions[tabID] = nil; pipTimes[tabID] = nil
     exitWaits.removeValue(forKey: tabID)?.cancel()
+    store.remove(tabID: tabID)
     var minimized = false
     if case .minimized(let other) = session.state { minimized = other == tabID }
     if session.activeSource?.tabID == tabID || minimized {
@@ -183,8 +198,11 @@ final class MediaCoordinator {
     feedSleep()
   }
 
-  private func sync(_ host: EngineWebContentHost) {
-    guard !host.closed, let factory = host.owner, app.model.tab(id: host.tabID) != nil else { return }
+  private func sync(_ reporter: EngineWebContentHost) {
+    guard !reporter.closed, reporter.owner != nil, app.model.tab(id: reporter.tabID) != nil else { return }
+    // A second window's page of the same tab must not overwrite the playing page's state.
+    let host = self.host(reporter.tabID) ?? reporter
+    guard let factory = host.owner else { return }
     let content = host.content, id = host.tabID
     let state = Self.state(content.mediaSession)
     store.update(tabID: id, windowID: factory.windowState.id, state: state, isMuted: content.isMuted,
@@ -313,10 +331,13 @@ final class MediaCoordinator {
   /// Selects the tab in its own window and Space and brings that window front (§4.2.3).
   @discardableResult
   func backToTab(_ id: ItemID) -> Bool {
-    guard let factory = app.hostFactories.values.first(where: { $0.hosts[id] != nil }) ?? app.hostFactories.values.first(where: { $0.space(for: id) != nil }),
+    // space(containing:) also resolves a Favorite (to that window's Space of the Favorite's Profile);
+    // space(for:) sees only pinned and Today rows.
+    // The window of the page that plays (a tab can show in two windows), else any window that shows its Space.
+    guard let factory = host(id)?.owner ?? app.hostFactories.values.first(where: { $0.space(containing: id) != nil }),
           app.model.tab(id: id) != nil else { return false }
     store.noteInteraction(tabID: id)
-    factory.selectTabForCommand(id, spaceID: factory.space(for: id)?.id)
+    factory.selectTabForCommand(id, spaceID: factory.space(containing: id)?.id)
     factory.window?.makeKeyAndOrderFront(nil)
     NSApp.activate()
     if let window = pipWindow, pipHost?.tabID == id { window.dismiss(reason: .backToTab); return true }
@@ -399,9 +420,11 @@ final class MediaCoordinator {
   }
 
   private func selectForBackToTab(_ id: ItemID) {
-    guard let factory = app.hostFactories.values.first(where: { $0.hosts[id] != nil }) else { return }
+    // The window whose page is in Open's PiP window (a tab can show in two windows).
+    let content = pipHost?.tabID == id ? pipHost?.pip.webContent : nil
+    guard let factory = content.flatMap({ c in app.hostFactories.values.first { $0.tabID(for: c) != nil } }) ?? host(id)?.owner else { return }
     store.noteInteraction(tabID: id)
-    factory.selectTabForCommand(id, spaceID: factory.space(for: id)?.id)
+    factory.selectTabForCommand(id, spaceID: factory.space(containing: id)?.id)
     factory.window?.makeKeyAndOrderFront(nil)
     NSApp.activate()
   }
@@ -429,9 +452,28 @@ final class MediaCoordinator {
 
   // MARK: Helpers
 
+  /// The tab's page that media state and controls follow. A tab shown in two windows has a page in
+  /// each: prefer the one in Picture in Picture, then one that plays or captures, then a paused one;
+  /// on a tie, the page in the window that holds the tab's card.
   private func host(_ id: ItemID) -> EngineWebContentHost? {
-    for factory in app.hostFactories.values { if let host = factory.hosts[id], !host.closed { return host } }
-    return nil
+    var best: EngineWebContentHost?, bestRank = -1
+    let cardWindow = store.sources[id]?.windowID
+    for factory in app.hostFactories.values {
+      guard let host = factory.hosts[id], !host.closed else { continue }
+      let inPiP = host.content.mediaSession?.isPictureInPicture == true || pipHost?.pip.webContent === host.content
+        || documentPiP?.pip.webContent === host.content
+      let rank = (inPiP ? 3 : Self.mediaRank(host.content)) * 2 + (factory.windowState.id == cardWindow ? 1 : 0)
+      if rank > bestRank { best = host; bestRank = rank }
+    }
+    return best
+  }
+  private static func mediaRank(_ content: OEWebContent) -> Int {
+    if content.isCapturingCamera || content.isCapturingMicrophone { return 2 }
+    switch content.mediaSession?.playbackState {
+    case .playing?: return 2
+    case .paused?: return 1
+    default: return 0
+    }
   }
   func page(_ id: ItemID) -> OEWebContent? { host(id)?.content }
 

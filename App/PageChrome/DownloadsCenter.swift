@@ -27,13 +27,27 @@ actor DownloadFiles {
     try FileManager.default.createDirectory(at: standard, withIntermediateDirectories: true)
     return Destination(url: standard, fellBack: requested != standard)
   }
+  /// `name` split before its extension as Chromium's FilePath does for " (1)": a common double
+  /// extension stays whole ("archive.tar.gz" → "archive" + ".tar.gz"; also .tar.bz2, .tar.xz, .user.js).
+  /// The stem is never empty and the extension never just "." (".tar.gz" → ".tar (1).gz", "report." → "report. (1)").
+  static func splitExtension(_ name: String) -> (stem: String, ext: String) {
+    guard let last = name.lastIndex(of: "."), last != name.startIndex, name.index(after: last) != name.endIndex else { return (name, "") }
+    let head = name[..<last]
+    if let penultimate = head.lastIndex(of: "."), penultimate != name.startIndex {
+      let double = name[name.index(after: penultimate)...].lowercased()
+      let final = name[name.index(after: last)...].lowercased()
+      let middle = name.distance(from: penultimate, to: last)
+      if double == "user.js" || (["gz", "xz", "bz2", "z", "bz"].contains(final) && middle > 1 && middle <= 5) {
+        return (String(name[..<penultimate]), String(name[penultimate...]))
+      }
+    }
+    return (String(head), String(name[last...]))
+  }
   func unique(in directory: URL, name: String) throws -> URL {
-    let file = URL(fileURLWithPath: name)
-    let ext = file.pathExtension
-    let stem = ext.isEmpty ? name : file.deletingPathExtension().lastPathComponent
+    let (stem, ext) = Self.splitExtension(name)
     // Bounded 10,000 filesystem operations, each name <= Int(NAME_MAX) bytes.
     for index in 0..<10_000 {
-      let candidate = index == 0 ? name : stem + " (\(index))" + (ext.isEmpty ? "" : "." + ext)
+      let candidate = index == 0 ? name : stem + " (\(index))" + ext
       guard candidate.utf8.count <= Int(NAME_MAX) else { throw CocoaError(.fileWriteInvalidFileName) }
       let url = directory.appendingPathComponent(candidate)
       if !claims.contains(url), !FileManager.default.fileExists(atPath: url.path) {

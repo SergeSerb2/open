@@ -376,6 +376,53 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         clean, clean_menu = app.call('live-folder-state'), sso_menu()
         results['live_folder_sso_clears_after_success'] = {'ok': cleared.get('outcome') == 'success' and clean.get('ssoURL') is None
             and not clean_menu.get('checked') and not clean_menu.get('enabled') and not press_sso(), 'state': clean, 'menu': clean_menu}
+        def refreshed(expect):
+            # A busy reply (another refresh in flight) is not a result.
+            return wait_until(lambda: (lambda r: r if r.get('outcome') == expect else None)(app.call('live-folder-refresh')),
+                              timeout=30, step=.1) or {}
+        def live_urls(): return {r['live'] for r in app.call('live-folder-state').get('rows', []) if r.get('live')}
+        # Bug sweep R2 (seed-livedata #3): an SSO banner means GitHub hid some organization's PRs. A row
+        # missing from that partial result stays; only a complete result removes it.
+        trio = [('acme/app', n, 'SSO row %d' % n, 'open') for n in (201, 202, 203)]
+        gh['prs'] = {'created': trio}
+        full = refreshed('success'); before_sso = live_urls()
+        gh['prs'] = {'created': trio[:1]}; gh['sso'] = ['/orgs/acme/sso']
+        partial = refreshed('needsSSO'); during_sso = live_urls()
+        gh['sso'] = None
+        complete = refreshed('success'); after_sso = live_urls()
+        results['live_folder_sso_keeps_missing_rows'] = {'ok': full.get('outcome') == 'success' and len(before_sso) == 3
+            and partial.get('outcome') == 'needsSSO' and during_sso == before_sso
+            and complete.get('outcome') == 'success' and len(after_sso) == 1 and after_sso < before_sso,
+            'before': sorted(before_sso), 'duringSSO': sorted(during_sso), 'after': sorted(after_sso)}
+        gh['prs'] = {'created': []}
+        refreshed('success')
+        # Bug sweep R2 (seed-livedata #12): the user drags the Live Folder into another Pinned folder. The Space
+        # still finds it: a refresh runs, the Space menu shows it on, and the toggle removes it (no second folder).
+        space = next(s for s in app.call('spaces') if s['focused'])['id']
+        holder_tab = new_tab(app, 'about:blank')
+        wrapper = app.call('folder', tabs=[holder_tab], title='LF wrapper', section='pinned')
+        lf = app.call('live-folder-state', space=space)
+        dropped = app.call('sidebar-drop', nodes=[lf['id']], parent={'kind': 'folder', 'id': wrapper}, index=0)
+        nested = app.call('live-folder-state', space=space)
+        gh['prs'] = {'created': trio[:2]}
+        try:
+            nested_refresh = refreshed('success') if nested.get('exists') else {}
+        finally:
+            gh['prs'] = {'created': []}
+        nested_rows = len(app.call('live-folder-state', space=space).get('rows', []))
+        menu_on = app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked')
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        after_toggle = app.call('live-folder-state', space=space)
+        menu_off = app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked')
+        results['live_folder_nested_refresh_and_toggle'] = {'ok': bool(dropped) and nested.get('exists') is True
+            and nested.get('id') == lf['id'] and nested.get('pinnedIndex') == -1 and nested_refresh.get('outcome') == 'success'
+            and nested_rows == 2 and menu_on is True and after_toggle.get('exists') is False and menu_off is False,
+            'dropped': dropped, 'nested': {k: nested.get(k) for k in ('exists', 'id', 'pinnedIndex')}, 'refresh': nested_refresh,
+            'rows': nested_rows, 'menuOn': menu_on, 'afterToggle': after_toggle.get('exists'), 'menuOff': menu_off}
+        app.call('close', tab=holder_tab)
+        # The checks below toggle the folder off: give them one at the top level again.
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        app.call('live-folder-state', wait=True)
         app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:
