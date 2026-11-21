@@ -372,6 +372,34 @@ def checks(factory, results, tmp, harness):
                   refresh=fresh, titles=after_move)
         guarded('privacy_live_folder_profile_move', row7)
 
+        # 8. (EXT3 E8) An external mailto: link with no window open still uses the default Profile's handler
+        # and opens the compose page in a new window. It used to be dropped without a toast.
+        def row8():
+            focus(windows(False)[0])
+            app.call('policy', permissions='grant')
+            mail_home = open_page(page_origin + '/en.html?nowindow-home')
+            template = page_origin + '/en.html?compose=%s'
+            app.eval(mail_home, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+            registered = wait(lambda: any(h['scheme'] == 'mailto' and h['default'] for h in app.call('protocol-handlers')['handlers']),
+                              timeout=8, step=.1)
+            for window in windows():
+                focus(window); app.call('window-close')
+            closed = wait(lambda: not windows(), timeout=5, step=.05)
+            handled = app.call('mailto-state')['handled']
+            sent = subprocess.run(['/usr/bin/open', '-a', app.bundle, 'mailto:nowindow@example.org'], capture_output=True, text=True, timeout=15)
+            mail = wait(lambda: (lambda s: s if s['handled'] > handled else None)(app.call('mailto-state')), timeout=8, step=.1) or {}
+            expected = page_origin + '/en.html?compose=mailto%3Anowindow%40example.org'
+            def landed():
+                try: return [t for t in app.call('tabs') if t['url'] == expected]
+                except RuntimeError: return None
+            tab = wait(landed, timeout=8, step=.05)
+            try: app.call('protocol-handlers', removeScheme='mailto', removeURLTemplate=template)
+            except RuntimeError: pass
+            check('privacy_mailto_no_window', bool(registered) and bool(closed) and sent.returncode == 0
+                  and mail.get('translated') == expected and bool(tab),
+                  mail=mail, tab=tab, windowsAfter=windows(), stderr=sent.stderr[-300:])
+        guarded('privacy_mailto_no_window', row8)
+
     finally:
         if saved: harness._restore_defaults(app, saved)
         if app: app.quit()
