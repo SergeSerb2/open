@@ -1,0 +1,352 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          79011,
+          79073,
+          79074,
+          79075,
+          79076,
+          79077,
+          79134,
+          79135,
+          79136,
+          79500,
+          79562
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 3
+      },
+      {
+        "direct_child": false,
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          79628,
+          79635,
+          79636,
+          79637,
+          79704,
+          79705,
+          79706,
+          79707,
+          79708,
+          79709,
+          79717,
+          79718,
+          79721
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 3
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "d5c37a48fe9d35d333ce959eb8e71281daf84b0150890b78b9c7cb4a9fb2ba56",
+    "distributionSHA256": "591b21a6f2b6f53f2a99582385d1b8d8cf3615293ea8b2a1484e5f90363be868",
+    "distributionUUID": "4C4C44DF-5555-3144-A1F7-40AE6E460D18",
+    "embeddedCodeSHA256": "d5c37a48fe9d35d333ce959eb8e71281daf84b0150890b78b9c7cb4a9fb2ba56",
+    "embeddedSHA256": "d4bb50fe91fa31e46187893faeb429beedd772f27ff8c7074c98bb290e1286dd",
+    "embeddedUUID": "4C4C44DF-5555-3144-A1F7-40AE6E460D18",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-591b21a6-official_minimal 1795019551"
+  },
+  "extensions-e2": {
+    "R3_E12_tab_into_popup_window": {
+      "load": [
+        5.11767578125,
+        4.8125,
+        4.9892578125
+      ],
+      "native": {
+        "autosave": "ExtensionPopupWindow",
+        "browser": 2,
+        "chromeWindowId": 599974288,
+        "context": "Default",
+        "contextClosed": false,
+        "controller": "ExtensionWindowController",
+        "ephemeral": false,
+        "extension": "jihnllejimhgcmfmcnchbekapeajboik",
+        "frame": [
+          120,
+          430,
+          430,
+          510
+        ],
+        "hasToolbar": false,
+        "number": 126257,
+        "page": 4,
+        "pageIsContentView": true,
+        "style": 15,
+        "title": "Action probe popup",
+        "visible": true
+      },
+      "ok": true,
+      "popupTabs": [
+        "chrome-extension://jihnllejimhgcmfmcnchbekapeajboik/popup.html"
+      ],
+      "sidebar": [
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1795243890.76938,
+          "favicon": false,
+          "faviconReportsCompleted": 1,
+          "faviconReportsRejected": 0,
+          "hasWebContent": true,
+          "iconOverride": null,
+          "id": "8AE1B3CF-C734-424B-8920-28F5F3FA79B0",
+          "lastActiveAt": 1795243890.7743502,
+          "loaded": true,
+          "loading": false,
+          "page": {
+            "audible": false,
+            "browser": 1,
+            "browserIndex": 0,
+            "browserPinned": false,
+            "canGoBack": false,
+            "chromeTabId": 599974290,
+            "chromeWindowId": 599974284,
+            "context": "Default",
+            "crash": 0,
+            "ephemeral": false,
+            "extension": "",
+            "favicon": false,
+            "fullscreen": false,
+            "hidden": false,
+            "hostTab": "8AE1B3CF-C734-424B-8920-28F5F3FA79B0",
+            "identifier": 5,
+            "kind": "tab",
+            "live": true,
+            "loading": false,
+            "muted": false,
+            "nativeViewIdentity": "ObjectIdentifier(0x0000013419594a40)",
+            "pageBackground": [
+              34,
+              34,
+              34,
+              255
+            ],
+            "popup": false,
+            "style": "chrome",
+            "title": "Example Domain",
+            "url": "https://example.com/?r3e12",
+            "zoom": 0
+          },
+          "pinnedURL": "",
+          "profile": "C3E2B27A-1596-43E9-8EBD-278E672C9730",
+          "progress": 1,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "today",
+          "selected": true,
+          "sleepPhase": "live",
+          "space": "D14C266F-858F-4F34-81B0-E19806E67233",
+          "title": "Example Domain",
+          "unread": false,
+          "url": "https://example.com/?r3e12",
+          "visible": true
+        }
+      ]
+    },
+    "R3_E1_private_session_closes_popup": {
+      "created": {
+        "id": 599974377,
+        "incognito": true
+      },
+      "grant": "ok",
+      "load": [
+        4.9580078125,
+        4.78564453125,
+        4.9775390625
+      ],
+      "ok": true,
+      "popup": {
+        "context": "Private-1",
+        "contextClosed": false,
+        "ephemeral": true
+      },
+      "popupClosedWithSession": true,
+      "session": {
+        "closed": false,
+        "context": "Private-1"
+      },
+      "sessionContextLeft": false
+    },
+    "R3_E1_profile_delete_closes_popup": {
+      "deleteSeconds": 0.67,
+      "error": "",
+      "load": [
+        4.86767578125,
+        4.765625,
+        4.9716796875
+      ],
+      "modelGone": true,
+      "ok": true,
+      "pageContext": "Profile-0130D1D2",
+      "popupAtPress": {
+        "autosave": "ExtensionPopupWindow",
+        "browser": 4,
+        "chromeWindowId": 599974302,
+        "context": "Profile-0130D1D2",
+        "contextClosed": false,
+        "controller": "ExtensionWindowController",
+        "ephemeral": false,
+        "extension": "jihnllejimhgcmfmcnchbekapeajboik",
+        "frame": [
+          120,
+          430,
+          430,
+          510
+        ],
+        "hasToolbar": false,
+        "number": 126259,
+        "page": 10,
+        "pageIsContentView": true,
+        "style": 15,
+        "title": "about:blank",
+        "visible": true
+      },
+      "popupsLeft": [],
+      "stage": "done",
+      "timeline": [
+        [
+          0.0,
+          "retireOwners:AppStores",
+          true,
+          126264
+        ],
+        [
+          0.7,
+          "done",
+          false,
+          126271
+        ]
+      ]
+    },
+    "R3_E4_long_title_keeps_toolbar": {
+      "after": [
+        "ajfcefhgbdgihmnmnjpbejdkclfopicb",
+        "ddkjiahejlhfcafbddmgiahcphecmpfh",
+        "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+        "gcnhfokfdkdjkoghgfnpbcglkpmdhcjl",
+        "jhhdbdmacflokghfffbcokdfkkpplpna",
+        "jihnllejimhgcmfmcnchbekapeajboik",
+        "phpfkaolknfmkbcglenldcdkmjpfejda"
+      ],
+      "before": [
+        "ajfcefhgbdgihmnmnjpbejdkclfopicb",
+        "ddkjiahejlhfcafbddmgiahcphecmpfh",
+        "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+        "gcnhfokfdkdjkoghgfnpbcglkpmdhcjl",
+        "jhhdbdmacflokghfffbcokdfkkpplpna",
+        "jihnllejimhgcmfmcnchbekapeajboik",
+        "phpfkaolknfmkbcglenldcdkmjpfejda"
+      ],
+      "engineTitleLength": 5000,
+      "load": [
+        5.11767578125,
+        4.8125,
+        4.9892578125
+      ],
+      "ok": true
+    },
+    "R3_L13_engine_refuses_offscreen_bounds": {
+      "create": "eval: Error: Invalid value for bounds. Bounds must be at least 50% within visible screen space.",
+      "frame": [
+        120,
+        430,
+        430,
+        510
+      ],
+      "load": [
+        5.11767578125,
+        4.8125,
+        4.9892578125
+      ],
+      "ok": true,
+      "screens": [
+        [
+          0,
+          0,
+          1920,
+          1050
+        ]
+      ],
+      "update": "eval: Error: Invalid value for bounds. Bounds must be at least 50% within visible screen space."
+    },
+    "R3_L26_window_open_from_popup": {
+      "found": {
+        "popup": 1,
+        "tab": 1
+      },
+      "load": [
+        4.86767578125,
+        4.765625,
+        4.9716796875
+      ],
+      "ok": true,
+      "popupTabs": [
+        "chrome-extension://jihnllejimhgcmfmcnchbekapeajboik/popup.html"
+      ],
+      "refusedLeaked": []
+    }
+  },
+  "interrupted_attempts": [],
+  "lane": "all",
+  "load": [
+    4.77978515625,
+    4.7421875,
+    4.9658203125
+  ],
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 79011,
+    "preferencesDomain": "io.github.sergeserb2.open.e2e.p78921-80e0d733",
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensio-chrome-78921-7c928c88",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensio-chrome-78921-7c928c88/Engine"
+  },
+  "preferences": {
+    "changedRealKeys": [],
+    "domain": "io.github.sergeserb2.open.e2e.p78921-80e0d733",
+    "ok": true,
+    "restoredSystemPanelKeys": []
+  },
+  "source": {
+    "clean": false,
+    "diffSHA256": "b3a6092d45b6abd98751ad82954e2b744d7f4dae5d8e4fd9503c7f2ae1fe273c",
+    "head": "88bdabb5b461ea4a4d2f594856ce4450a16d65f7"
+  },
+  "started": "2026-11-20 23:51:27",
+  "style": "chrome"
+}

@@ -85,7 +85,7 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
             profile_lifetime(app, results, wait, new_tab, action, popup=os.environ.get("OPEN_E2E_E1_POPUP", "1") == "1")
             return
         if focus == "sweep3":
-            app = sweep3(app, results, wait, new_tab, action, reporter)
+            app = sweep3(app, results, wait, new_tab, action, reporter, factory)
             return
         # X20: actual native controller, view ownership, type, bounds, update and remove.
         made = js("chrome.windows.create({type:'popup',url:chrome.runtime.getURL('popup.html'),"
@@ -236,7 +236,7 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         app = native_drag_safety(app, results, wait, action, factory)
         reporter = new_tab(app, "chrome-extension://%s/popup.html" % action)
         app.call("wait", tab=reporter)
-        app = sweep3(app, results, wait, new_tab, action, reporter)
+        app = sweep3(app, results, wait, new_tab, action, reporter, factory)
     finally:
         try:
             app.quit()
@@ -446,7 +446,7 @@ def on_screen(frame, screens):
     return any(x >= sx - .5 and y >= sy - .5 and x + w <= sx + sw + .5 and y + h <= sy + sh + .5 for sx, sy, sw, sh in screens)
 
 
-def sweep3(app, results, wait, new_tab, action, reporter):
+def sweep3(app, results, wait, new_tab, action, reporter, factory):
     """Bug sweep round 3 (EXT3): extension windows, popups and the toolbar snapshot."""
     def js(code, page=None):
         return app.eval(reporter if page is None else page, code)
@@ -533,11 +533,10 @@ def sweep3(app, results, wait, new_tab, action, reporter):
         "popupTabs": popup_tabs(cid), "refusedLeaked": leaked}
     remove(cid)
     profile_lifetime(app, results, wait, new_tab, action)
-    private_lifetime(app, results, wait, new_tab, action, reporter)
-    return app
+    return private_lifetime(app, results, wait, new_tab, action, factory)
 
 
-def private_lifetime(app, results, wait, new_tab, action, reporter):
+def private_lifetime(app, results, wait, new_tab, action, factory):
     """E1, Incognito half (rejected seed, regression guard): an extension allowed in Incognito opens
     a popup window in the private session; closing the last Incognito window ends the session, which
     closes the popup too (the engine's releaseContext closes the context's Browsers)."""
@@ -549,16 +548,24 @@ def private_lifetime(app, results, wait, new_tab, action, reporter):
                                      "{extensionId:%s,incognitoAccess:true},()=>done(chrome.runtime.lastError?"
                                      "chrome.runtime.lastError.message:'ok')))" % json.dumps(action))
         app.call("close", tab=management)
-        # The grant reloads the extension: open a fresh reporter page.
-        time.sleep(1)
-        reporter = new_tab(app, "chrome-extension://%s/popup.html" % action)
-        wait(lambda: app.eval(reporter, "typeof chrome.windows") == "object", timeout=20)
+        # The grant applies from the next launch (as in engine_e2e's extension_isolation row).
+        app.call("save"); app.quit()
+        app = factory(urls=())
+        wait(lambda: app.call("extensions")["ready"], timeout=30)
+        def allowed_reporter():
+            page = new_tab(app, "chrome-extension://%s/popup.html" % action)
+            try:
+                if app.eval(page, "chrome.extension.isAllowedIncognitoAccess()") is True: return page
+            except RuntimeError: pass
+            app.call("close", tab=page); time.sleep(.5)
+        reporter = wait(allowed_reporter, timeout=20)
+        assert reporter, "the Incognito grant did not reach the extension"
         normal = app.call("window-state")["id"]
         app.call("menu-perform", id="new-incognito-window")
         private = wait(lambda: (lambda w: w if w["id"] != normal else None)(app.call("window-state")), timeout=5)
-        private_tab = app.call("open", url="about:blank")["id"]
+        app.call("open", url="about:blank")
         session = wait(lambda: (lambda s: s if s.get("context") and not s.get("closed") else None)(
-            app.call("incognito-state").get("session", {})), timeout=10)
+            app.call("incognito-state", private=True).get("session", {})), timeout=10)
         evidence["session"] = session
         app.call("window-focus", id=normal, activate=True)
         made = app.eval(reporter, "chrome.windows.create({type:'popup',incognito:true,url:'about:blank',focused:false})"
@@ -577,6 +584,7 @@ def private_lifetime(app, results, wait, new_tab, action, reporter):
             and bool(gone) and not evidence["sessionContextLeft"])
     except Exception as error:
         results["R3_E1_private_session_closes_popup"] = dict(evidence, ok=False, error=repr(error)[:400])
+    return app
 
 
 def profile_lifetime(app, results, wait, new_tab, action, popup=True):
