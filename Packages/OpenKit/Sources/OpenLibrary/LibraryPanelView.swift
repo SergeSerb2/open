@@ -72,7 +72,12 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         if let host = hosts[section] { return host }
         let host = LibrarySectionHost(); hosts[section] = host
         host.list.foreground = foreground; host.list.overlay = overlay
-        host.list.onSelection = { [weak self] id in self?.viewModel.selectedIDs = id.map { [$0] } ?? [] }
+        // Only the shown section's list owns the model's selection: a hidden list can still apply a
+        // late page (and drop its selected row), and Easels is not a model section.
+        host.list.onSelection = { [weak self] id in
+            guard let self, self.section == section, section != .easels else { return }
+            self.viewModel.selectedIDs = id.map { [$0] } ?? []
+        }
         host.list.onEnd = { [weak self] in if self?.section == section { self?.loadNextPage() } }
         host.list.isHidden = true; addSubview(host.list)
         return host
@@ -141,7 +146,6 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         filterEditor.onToggle = { [weak self] id in self?.toggleChip(id) }
         filterEditor.onHeight = { [weak self] _ in self?.needsLayout = true }
         filterEditor.onClear = { [weak self] in self?.confirmClearHistory() }
-        listView.onSelection = { [weak self] id in self?.viewModel.selectedIDs = id.map { [$0] } ?? [] }
         boostDisabledText.font = .systemFont(ofSize:13)
         boostTurnOn.onPress = { [weak self] in self?.viewModel.defaults.set(true,forKey:"open.advanced.enableBoosts"); self?.renderRows() }
         addSubview(boostDisabledText); addSubview(boostTurnOn)
@@ -268,6 +272,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         let animationReady = ProcessInfo.processInfo.systemUptime
         section = next
         if pendingReveal?.section != next { pendingReveal = nil }
+        // A status line belongs to the section that set it (Easels does not change the model section).
+        if changed { viewModel.statusText = "" }
         if let mapped = next.modelSection { viewModel.section = mapped }
         filterOpen = false
         updateSection()
@@ -420,11 +426,15 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     /// Selects the row now when it is shown; otherwise after the section's next rows update.
     /// A section change drops the request.
     public func reveal(_ id: String, in target: LibraryPanelSection) {
+        // A search kept from an earlier visit can hide the row: show the whole section.
+        if section == target, !searchText.isEmpty { setSearch("") }
         pendingReveal = (target, id)
         if section == target, selectRow(id) { pendingReveal = nil }
     }
     var searchText: String { section == .easels ? easelsQuery : viewModel.query }
     public func setSearch(_ text: String) {
+        // The user's own search replaces a reveal that has not found its row yet.
+        pendingReveal = nil
         if section == .easels { easelsQuery = text } else { viewModel.query = text }
         if section == .archive || section == .history {
             let host = hosts[section]

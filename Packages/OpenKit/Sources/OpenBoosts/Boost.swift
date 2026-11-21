@@ -34,13 +34,15 @@ public struct SiteMatch: Codable, Hashable, Sendable {
         self.domain = host
         let parts = (pathPrefix ?? "").split(separator: "/", omittingEmptySubsequences: true)
         let path = "/" + parts.joined(separator: "/")
-        // Matching compares against the browser's percent-encoded path. The editor already
-        // stores that form; a raw space or non-ASCII letter (a hand-edited file) is encoded
-        // here. "%" is kept, so an encoded prefix is unchanged.
+        // Matching compares against Foundation's percent-encoded path (BoostMatcher uses
+        // URL.path(percentEncoded: true)). The editor already stores that form; a raw space,
+        // non-ASCII letter or "[" "]" (a hand-edited file) is encoded here. "%" is kept, so an
+        // encoded prefix is unchanged. The document-start gate encodes "[" "]" the same way.
         self.pathPrefix = host.isEmpty || parts.isEmpty ? nil : path.addingPercentEncoding(withAllowedCharacters: Self.pathCharacters) ?? path
     }
-    /// The characters Chromium keeps as they are in a URL path (url_canon_path.cc), plus "%".
-    private static let pathCharacters = CharacterSet(charactersIn: "!$%&'()*+,-./0123456789:;=@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz~")
+    /// The characters Chromium keeps as they are in a URL path (url_canon_path.cc), plus "%",
+    /// without "[" and "]": Foundation's URL(string:) encodes those two (checked on macOS 27.2).
+    private static let pathCharacters = CharacterSet(charactersIn: "!$%&'()*+,-./0123456789:;=@ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~")
 
     public static func normalized(domain: String, pathPrefix: String?) -> SiteMatch {
         SiteMatch(domain: domain, pathPrefix: pathPrefix)

@@ -57,7 +57,7 @@ public enum NoteExport {
         for paragraph in paragraphs(note) {
             var body = ""
             for (text, style) in runs(note, in: paragraph.range) {
-                if let image = style.image { body += "![](\(imagePath(image)))"; continue }
+                if let image = style.image { body += "![](\(markdownDestination(imagePath(image))))"; continue }
                 var piece = escapeMarkdown(text)
                 if style.strike { piece = "~~\(piece)~~" }
                 if style.underline { piece = "<u>\(piece)</u>" }
@@ -86,14 +86,15 @@ public enum NoteExport {
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
     }
 
-    /// A link destination ends at an unbalanced ")" or at white space, and "<" starts the
-    /// bracketed form. Percent-encode these: the URL stays the same.
+    /// A link destination ends at an unbalanced ")" or at white space, "<" starts the bracketed
+    /// form, and a backslash escapes the next character (a final one would escape the closing ")").
+    /// Percent-encode these: the URL stays the same.
     static func markdownDestination(_ url: String) -> String {
         var out = ""
         for scalar in url.unicodeScalars {
             if scalar == "(" { out += "%28" } else if scalar == ")" { out += "%29" }
             else if scalar == "<" { out += "%3C" } else if scalar == ">" { out += "%3E" }
-            else if scalar == " " { out += "%20" }
+            else if scalar == " " { out += "%20" } else if scalar == "\\" { out += "%5C" }
             else if CharacterSet.whitespacesAndNewlines.contains(scalar) || CharacterSet.controlCharacters.contains(scalar) {
                 out += String(scalar).utf8.map { String(format: "%%%02X", $0) }.joined()
             } else { out.unicodeScalars.append(scalar) }

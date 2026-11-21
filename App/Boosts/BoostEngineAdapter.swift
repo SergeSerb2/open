@@ -176,7 +176,7 @@ final class BoostEngineAdapter {
       // The gate runs in its own function: its names must not collide with the Boost's code.
       let gate = """
       if (!(() => {
-        const u = new URL(location.href), h = u.hostname.toLowerCase().replace(/\\.$/, '').replace(/^\\[|\\]$/g, ''), path = u.pathname || '/';
+        const u = new URL(location.href), h = u.hostname.toLowerCase().replace(/\\.$/, '').replace(/^\\[|\\]$/g, ''), path = (u.pathname || '/').replace(/\\[/g, '%5B').replace(/\\]/g, '%5D');
         if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
         const ids = \(Self.json(scopes)).filter(s => (h === s.domain || (!s.ip && h.endsWith('.' + s.domain))) && (!s.path || path === s.path || path.startsWith(s.path + '/'))).map(s => s.id).sort();
         return JSON.stringify(ids) === JSON.stringify(\(ids));

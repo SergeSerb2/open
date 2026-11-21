@@ -34,7 +34,7 @@ import OpenStore
     public var captureSort = "Newest"
     public var mediaKind = "All"
     public var historyProfileID: ProfileID { didSet {
-        if oldValue != historyProfileID { pendingHistoryDeletes = []; confirmsClearHistory = false; selectedIDs = [] }
+        if oldValue != historyProfileID { pendingHistoryDeletes = []; confirmsClearHistory = false; selectedIDs = []; statusText = "" }
     } }
     private var historyLoadRevision = 0
     private var historyLoadedIdentity = ""
@@ -96,7 +96,9 @@ import OpenStore
         if iconRequests[url] != nil { if iconRequests[url]!.count < 32 { iconRequests[url]!.append(completion) }; return }
         guard faviconStore != nil else { return }
         guard iconRequests.count < 16 else {
-            if waitingIcons[url] == nil { waitingIcons[url] = []; waitingIconOrder.append(url) }
+            // A request again (the row scrolled back into view) moves the URL to the newest end.
+            if waitingIcons[url] == nil { waitingIcons[url] = [] } else { waitingIconOrder.removeAll { $0 == url } }
+            waitingIconOrder.append(url)
             if waitingIcons[url]!.count < 32 { waitingIcons[url]!.append(completion) }
             if waitingIconOrder.count > 256 { waitingIcons[waitingIconOrder.removeFirst()] = nil }
             return

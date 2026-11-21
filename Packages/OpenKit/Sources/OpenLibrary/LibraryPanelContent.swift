@@ -557,7 +557,8 @@ extension LibraryPanelView {
             let id = item.id
             let edit: () -> Void = { [weak self] in
                 guard let self else { return }
-                if let reason = self.viewModel.actions.editBoost(id:id,profileID:profile) { self.viewModel.statusText = reason; self.updateContentChrome() }
+                // A successful edit clears an earlier reason.
+                self.viewModel.statusText = self.viewModel.actions.editBoost(id:id,profileID:profile) ?? ""; self.updateContentChrome()
             }
             // Arc's card: the Boost name over its host, no on/off text (capture session 8 item 14,
             // `v13/33-boost-menu-delete/i14-boosts.png`: "My Boost" over "127.0.0.1").
