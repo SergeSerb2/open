@@ -483,6 +483,15 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         row('W10_drop_ends_expanded_pane', bool(w10_expanded['maximized']) and w10_accepted and not w10_dropped['maximized']
             and w10_dropped['focused'] == w10_drop and w10_drop in w10_shown and len(w10_shown) == 4,
             expanded=w10_expanded['maximized'], accepted=w10_accepted, maximized=w10_dropped['maximized'], focused=w10_dropped['focused'], shown=w10_shown)
+        # The same for File > New Note in Split (it selected the split, which kept the expansion).
+        menu('Close This Pane'); settled(3); menu('Expand Current Pane')
+        w10_note_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        app.call('menu-perform', id='new-note-in-split'); w10_note = settled(4)
+        w10_shown = [p['id'] for p in w10_note['panes'] if not p['hidden']]
+        row('W10_note_in_split_ends_expanded_pane', bool(w10_note_expanded['maximized']) and not w10_note['maximized']
+            and w10_note['focused'] in w10_shown and w10_note['focused'] not in [p['id'] for p in w10_dropped['panes']]
+            and len(w10_shown) == 4,
+            expanded=w10_note_expanded['maximized'], maximized=w10_note['maximized'], focused=w10_note['focused'], shown=w10_shown)
         unsplit()
         # Bug sweep round 3 (W5): a tab of another Space (another window's sidebar drag, here
         # another Profile) dropped on this window's split zones is refused. Before, a left-edge

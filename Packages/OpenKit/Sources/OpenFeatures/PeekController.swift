@@ -400,6 +400,8 @@ public final class PeekController {
             let succeeded: Bool
             if let existing = splitController.split {
                 succeeded = model.addPane(splitID: existing.id, tabID: tab.id)
+                // The new pane takes focus; Expand Current Pane would keep it hidden.
+                if succeeded { splitController.clearMaximizedPane(unless: tab.id) }
             } else if let made = model.makeSplit(tabIDs: [item.sourceTabID, tab.id]) {
                 model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: made.id)
                 model.focusSplitPane(splitID: made.id, tabID: tab.id); succeeded = true
