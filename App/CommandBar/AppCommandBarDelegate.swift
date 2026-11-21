@@ -50,6 +50,8 @@ final class AppCommandBarSession: CommandBarDelegate {
   private var appliedRevision = -1
   private(set) var firstResultsMilliseconds: Double?
   private(set) var openFirstResultsMilliseconds: Double?
+  /// The URLs of the first snapshot applied for the current query (automation: carry-over rows).
+  private(set) var firstSnapshotURLs: [String] = []
   private var openingSelection: ItemID?
   private var openingProfile: ProfileID?
   /// The pinned tab whose pinned URL this presentation edits (Edit Pinned Page ▸ Edit…), else nil.
@@ -98,7 +100,10 @@ final class AppCommandBarSession: CommandBarDelegate {
         self.queryAt = LaunchTiming.shared.elapsedMilliseconds
         self.queryRevision += 1; self.firstResultsMilliseconds = nil
       }
-      bar.onSnapshotApplied = { [weak self] _ in
+      bar.onSnapshotApplied = { [weak self] snapshot in
+        #if OPEN_AUTOMATION
+        if snapshot.sequence == 0 { self?.firstSnapshotURLs = snapshot.suggestions.compactMap { $0.url?.absoluteString } }
+        #endif
         guard let self, self.appliedRevision != self.queryRevision else { return }
         self.appliedRevision = self.queryRevision
         self.firstResultsMilliseconds = LaunchTiming.shared.elapsedMilliseconds - self.queryAt
@@ -237,6 +242,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "engineID": String(describing: ObjectIdentifier(bar.engine)),
+      "firstSnapshotURLs": firstSnapshotURLs,
+      "drawn": bar.rows.map { ["id": $0.id, "title": $0.title, "subtitle": $0.subtitle] },
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",
