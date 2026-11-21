@@ -92,9 +92,17 @@ def shapes_fixture(root, h):
     ids['case-twin-b'] = twin_of.lower()
     graph['items'] += [ids['case-twin-b'], {'id': ids['case-twin-b'], 'childrenIds': [], 'title': 'Example case-twin-b',
         'data': {'tab': {'savedURL': 'https://example.com/shapes/case-twin-b', 'savedTitle': 'Example case-twin-b'}}}]
+    # Review round 1 (#643): five-pane splits outside a Space container (an orphan, and one in
+    # Favorites), and a split whose fifth child is a five-pane split. Each pane is placed once.
+    split('split-orphan', [tab('orphan-%d' % i) for i in range(5)])
+    favorite_split = split('split-favorite', [tab('fav-split-%d' % i) for i in range(5)])
+    for index in range(0, len(graph['items']), 2):
+        if graph['items'][index] == ids['top']: graph['items'][index + 1]['childrenIds'].append(favorite_split)
+    inner = split('split-inner', [tab('inner-%d' % i) for i in range(5)])
+    outer = split('split-outer', [tab('outer-%d' % i) for i in range(4)] + [inner])
     pinned, today = key('gamma-pinned'), key('gamma-today')
     graph['items'] += [pinned, {'id': pinned, 'childrenIds': [tab('gamma-tab')], 'data': {'itemContainer': {}}},
-                       today, {'id': today, 'childrenIds': [one, empty, five, focus, negative, with_folder, twin_of, ids['case-twin-b']],
+                       today, {'id': today, 'childrenIds': [one, empty, five, focus, negative, with_folder, twin_of, ids['case-twin-b'], outer],
                                'data': {'itemContainer': {}}}]
     ids['gamma'] = key('gamma')
     graph['spaces'] += [ids['gamma'], {'id': ids['gamma'], 'title': 'Gamma', 'profile': case_id.lower(),
@@ -170,6 +178,14 @@ def shapes_rows(factory, results, tmp, h):
         walk(data['spaces']); walk([p.get('favorites') for p in data['profiles']])
         duplicates = sorted({i for i in node_ids if node_ids.count(i) > 1})
         gamma_text = json.dumps(gamma)
+        # Review round 1: every pane of the orphan, Favorites and nested five-pane splits appears exactly
+        # once; the nested split's overflow stays in Gamma (its outer split's Space).
+        whole = json.dumps(data)
+        loose = ['orphan-%d' % i for i in range(5)] + ['fav-split-%d' % i for i in range(5)] + ['inner-%d' % i for i in range(5)] + ['outer-%d' % i for i in range(4)]
+        counts = {name: whole.count('"https://example.com/shapes/%s"' % name) for name in loose}
+        inner_in_gamma = all('"https://example.com/shapes/inner-%d"' % i in gamma_text for i in range(5))
+        results['MP_shapes_overflow_placed_once'] = dict(ok=not duplicates and all(c == 1 for c in counts.values()) and inner_in_gamma,
+            duplicateIDs=duplicates, counts={k: v for k, v in counts.items() if v != 1}, innerInGamma=inner_in_gamma)
         results['MP_shapes_split_folder_child_and_case_twins'] = dict(ok=not duplicates
             and 'https://example.com/shapes/folder-inner' in gamma_text and 'Example split folder' in gamma_text
             and 'https://example.com/shapes/case-twin-a' in gamma_text and 'https://example.com/shapes/case-twin-b' in gamma_text,
