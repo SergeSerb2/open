@@ -787,8 +787,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let id = iconPickerSpaceID, focusedSpace?.id != id || model.space(id: id) == nil { iconPicker?.close() }
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
+      // A closed Peek's Undo also ends: it would reopen the old Profile's page over the Space's new Profile.
       if let controller, controller.hasPeekController,
-         controller.peekController.stack.contains(where: { ids.contains($0.sourceTabID) || ($0.host as? EngineWebContentHost)?.spaceID == spaceID }) { controller.peekController.dismissAll() }
+         controller.peekController.stack.contains(where: { ids.contains($0.sourceTabID) || ($0.host as? EngineWebContentHost)?.spaceID == spaceID })
+           || controller.peekController.undoSource.map({ ids.contains($0.tabID) || $0.librarySpaceID == spaceID }) == true { controller.peekController.dismissAll() }
       for (id, host) in hosts where ids.contains(id) || (model.tab(id: id) == nil && host.spaceID == spaceID) {
         controller?.container.closeHost(for: id); host.close()
       }
@@ -1271,6 +1273,9 @@ extension EngineWebContentHostFactory {
       _ = openNewTab(url: url, background: background, typed: true); return
     }
     app.noteLaunchWindowNavigation(windowState.id)
+    // A tab still waking from sleep loads the typed address when the wake ends (navigateAfterWake).
+    if current, !peekShown, app.engineReady, let tab = selectedTab,
+       app.tabSleep.navigateAfterWake(tab.id, to: url, in: self) { return }
     if current, selectedContent != nil || selectedTab != nil {
       if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
         commandBarNavigationFocus.insert(host.tabID); host.historyRecorder.markTyped()
@@ -1282,14 +1287,30 @@ extension EngineWebContentHostFactory {
         queuedNavigations[tab.id] = url; tab.url = url; scheduleSave()
       } else if let page = selectedContent { page.load(url); page.focusPage() }
       else if !peekShown, let tab = selectedTab {
-        // No page yet (a sleeping tab still waking from its stored history): make the page now with
-        // the typed address. The wake then finds this page and keeps it instead of the old URL.
+        // No page and no wake in flight: make the page now with the typed address.
         tab.url = url; scheduleSave()
         ensureContent(for: tab)?.focusPage()
       }
     } else if let tab = openNewTab(url: url, background: background, typed: true) {
       if background { _ = ensureContent(for: tab) }
       else { commandBarNavigationFocus.insert(tab.id) }
+    }
+  }
+  /// The Cmd+L address held while its tab woke from sleep (AppSleepCoordinator.navigateAfterWake):
+  /// it loads in the restored page, so the stored back list stays under the typed page.
+  func navigateAfterWake(tabID: ItemID, to url: URL) {
+    guard !isClosing, let tab = model.tab(id: tabID) else { return }
+    let selected = selectedTab?.id == tabID
+    if let host = hosts[tabID], !host.closed {
+      if selected { commandBarNavigationFocus.insert(tabID) }
+      host.historyRecorder.markTyped(); host.content.load(url)
+      if selected { host.content.focusPage() }
+    } else {
+      // The wake made no page (it failed or the tab left view): make one with the typed address.
+      typedNavigationTabs.insert(tabID); if selected { commandBarNavigationFocus.insert(tabID) }
+      tab.url = url; scheduleSave()
+      let page = ensureContent(for: tab)
+      if selected { page?.focusPage() }
     }
   }
   /// Option+Return in the command bar: the page opens beside the current page in Split View (Arc 11-returns,

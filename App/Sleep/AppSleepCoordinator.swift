@@ -85,6 +85,7 @@ final class AppSleepCoordinator {
                                      chromiumTag: OEEngine.shared.chromiumVersion,
                                      now: { Date().addingTimeInterval(clock.offset) })
     controller.onLog = { [weak self] in self?.record($0) }
+    controller.onWakeFinished = { [weak self] in self?.finishWake($0) }
     adapter.controller = controller
     self.adapter = adapter; self.store = store; self.controller = controller
     Task { await store.loadKnownStored() }
@@ -270,10 +271,28 @@ final class AppSleepCoordinator {
       await controller.tabBecameVisible(id)
       guard let self else { return }
       self.wakeRequests.remove(id)
+      self.finishWake(id)
       for factory in self.app.hostFactories.values { factory.controller?.container.refreshPlaceholders() }
     }
   }
   private var wakeRequests: Set<ItemID> = []
+
+  /// A wake of this tab is queued or in flight (stored history read, page restore).
+  func isWaking(_ id: ItemID) -> Bool { wakeRequests.contains(id) || controller?.isWaking(id) == true }
+  private struct WakeNavigation { let url: URL; weak var factory: EngineWebContentHostFactory? }
+  private var navigationsAfterWake: [ItemID: WakeNavigation] = [:]
+  /// Cmd+L on a tab that is waking: the address loads once the wake ends, so the restored back list
+  /// stays and the wake can neither replace the typed page nor reload the old address over it.
+  /// False when no wake is in flight (the caller navigates at once).
+  func navigateAfterWake(_ id: ItemID, to url: URL, in factory: EngineWebContentHostFactory) -> Bool {
+    guard isWaking(id) else { return false }
+    navigationsAfterWake[id] = WakeNavigation(url: url, factory: factory)
+    return true
+  }
+  private func finishWake(_ id: ItemID) {
+    guard !isWaking(id), let next = navigationsAfterWake.removeValue(forKey: id) else { return }
+    next.factory?.navigateAfterWake(tabID: id, to: next.url)
+  }
 
   /// Settings or another input changed a Profile's sleep mode.
   func modeChanged() { controller?.setNeedsPass() }

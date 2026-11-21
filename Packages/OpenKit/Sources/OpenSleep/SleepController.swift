@@ -60,6 +60,12 @@ public final class SleepController {
     private var shown: Set<ItemID> = []
     private var knownVisible: Set<ItemID> = []
     private var waking: Set<ItemID> = []
+    /// A wake of this tab is in flight: its stored history is being read or its page restored.
+    public func isWaking(_ tabID: ItemID) -> Bool { waking.contains(tabID) }
+    /// Called after each wake ends (restored, failed, or given up), once `isWaking` is false.
+    public var onWakeFinished: ((ItemID) -> Void)?
+    /// Automation builds only: runs after a wake read the stored history, before it makes the page.
+    public var afterWakeHistoryReadForAutomation: (@MainActor (ItemID) async -> Void)?
     private var purged: Set<ItemID> = []
     private var wakeStartedAt: [ItemID: (Date, String)] = [:]
     private var runningPass = false
@@ -282,10 +288,17 @@ public final class SleepController {
             return
         }
         waking.insert(tabID)
-        defer { waking.remove(tabID); dropStateIfGone(tabID) }
+        defer { waking.remove(tabID); dropStateIfGone(tabID); onWakeFinished?(tabID) }
         wakeStartedAt[tabID] = (now(), tab.live.sleepPhase == .placeholder ? "placeholder" : "destroyed")
         let history = await store.sleepHistory(tabID: tabID)
+        if let hold = afterWakeHistoryReadForAutomation { await hold(tabID) }
         guard model.tab(id: tabID) === tab, !purged.contains(tabID) else { wakeStartedAt[tabID] = nil; return }
+        // The App made this tab's page while the history was read: keep that page. Its back list
+        // and flags are its own, never the stored ones.
+        if liveContent.contains(tabID) {
+            if visibleTabIDs().contains(tabID) { show(tabID) }
+            return
+        }
         var restored = await engine.createContent(tabID: tabID, url: history?.currentURL ?? tab.url, history: history)
         var usedHistory = history != nil
         if !restored, let history {
