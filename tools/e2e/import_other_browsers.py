@@ -137,6 +137,26 @@ def run(factory, results, tmp, h):
         cancel()
     row('firefox_unreadable_labels', unreadable == {'Passwords': 'Could not be read', 'Open tabs': 'Could not be read'},
         labels=unreadable)
+    # A FIFO in place of logins.json must not block the reader (open without O_NONBLOCK waits for a writer).
+    logins_file = default_profile/'logins.json'
+    shutil.move(str(logins_file), str(files/'logins.json.aside'))
+    os.mkfifo(logins_file)
+    fifo_label, fifo_settled = None, False
+    try:
+        open_sources(); call('settings-source', id='firefox')
+        fifo_settled = bool(h.wait_until(lambda: not state().get('settingsBusy'), timeout=20, step=.1))
+        fifo_label = state().get('settingsBrowserLabels', {}).get('Passwords') if fifo_settled else None
+    except Exception as error:
+        fifo_label = 'error: %s' % str(error)[:80]
+    finally:
+        try:  # release a reader blocked in open() (old code): a writer end that closes gives it EOF
+            os.close(os.open(logins_file, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+        logins_file.unlink()
+        shutil.move(str(files/'logins.json.aside'), str(logins_file))
+    if fifo_settled: cancel()
+    row('firefox_fifo_not_blocking', fifo_settled and fifo_label == 'Could not be read', settled=fifo_settled, label=fifo_label)
 
     # Firefox: counts on Choose, then the import.
     before_data, before_nodes = sidebar(app)

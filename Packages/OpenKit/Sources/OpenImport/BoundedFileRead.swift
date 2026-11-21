@@ -7,7 +7,9 @@ enum BoundedFileReadError: Error, Equatable { case missing, unreadable, tooLarge
 /// symlink is followed), before a byte is read, and the read stops one byte past the limit, so a
 /// file that grows after the check is refused too. The worst single allocation is `maxBytes + 1`.
 func readBoundedFile(_ url: URL, maxBytes: Int) throws -> Data {
-    let fd = Darwin.open(url.path, O_RDONLY | O_CLOEXEC)
+    // O_NONBLOCK: a FIFO (or a symlink to one) must not block the open before fstat refuses it.
+    // It has no effect on reads of the regular files that pass the check.
+    let fd = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NONBLOCK)
     guard fd >= 0 else { throw errno == ENOENT ? BoundedFileReadError.missing : .unreadable }
     let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
     var info = stat()

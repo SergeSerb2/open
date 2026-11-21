@@ -81,6 +81,18 @@ def first_run_arc_import(factory, arc, wait_until, reset_keys=(), inspect=None, 
     app = factory(urls=(), fresh=True, first_run=True, extra_args=['--arc-dir=' + str(arc), '--intro-sound=silent',
                                                                    '--host-resolver-rules=MAP * ~NOTFOUND'])
     saved = {key: app.call('defaults', key=key, persistent=True) for key in FIRST_RUN_KEYS}
+    try:
+        return _first_run_arc_import_steps(app, saved, wait_until, reset_keys, inspect, select)
+    except BaseException:
+        # The caller never receives this App: put its defaults back and quit it before re-raising.
+        try:
+            for key, value in saved.items(): app.call('defaults', key=key, value=value, timeout=3)
+        finally:
+            app.quit()
+        raise
+
+
+def _first_run_arc_import_steps(app, saved, wait_until, reset_keys, inspect, select):
     for key in tuple(saved) + tuple(reset_keys): app.call('defaults', key=key, value=None)
     if inspect: inspect(app)  # the caller's reading of the state before the import
     # Some suite factories already skip the intro; skip it here only while it still shows.

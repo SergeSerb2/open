@@ -352,6 +352,19 @@ def run(factory, results, tmp, h):
             gate('replay_launch_finishes_read_only', lambda s: s['same'] and s['browserVisible'] and not s['firstRun'],
                  replay_finished, replay_before_finish)
             app.quit()
+            # A `--replay-onboarding` launch has no browser window before Get Started: closing the intro
+            # there quits, as a first run does, instead of leaving an App with no window.
+            app = h.Open(app.config, 'chrome', root, ['--use-mock-keychain', '--intro-sound=silent',
+                '--replay-onboarding', '--arc-dir='+str(source)], str(evidence/'replay-temp-close.log'), urls=(), first_run=True)
+            app.focus_tracker = h._ACTIVE_FOCUS_TRACKER
+            h._ACTIVE_FOCUS_TRACKER.apps.append(app)
+            assert until(lambda: state().get('active')), state()
+            launch_pid = app.pid
+            app.call('onboarding', action='close')
+            exited = bool(until(lambda: not pid_alive(launch_pid), timeout=10))
+            app.quit()
+            gate('replay_launch_close_quits', lambda s: s['exited'] and s['same'],
+                 dict(exited=exited, same=Path(root,'State/browser.json').read_bytes()==prior), dict(exited=False, same=True))
         launch('--intro-sound=off')
         before_intro_close = state()
         app.call('key', key='w', modifiers=['command'])

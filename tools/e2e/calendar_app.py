@@ -600,7 +600,7 @@ def arc_preferences_first_run(factory, results, wait_until, tmp, harness):
         # Every key was cleared before the import; a new Profile ID has no reminder key before it.
         written = {k: d(k) for k in keys + (reminder_key,)}
         expected = {'open.general.previewsFolders': False, 'open.general.previewsRecents': False, 'open.general.previewsCalendar': True,
-                    'open.general.previewsGmail': False, 'open.general.previewsPages': written['open.general.previewsPages'],
+                    'open.general.previewsGmail': False, 'open.general.previewsPages': registered.get('open.general.previewsPages'),
                     'open.links.didSetDefaultMeetRoute': True, reminder_key: 'fiveMinutes',
                     'open.favorites.twitterBadgeEnabled': False, 'open.favorites.whatsAppBadgeEnabled': True,
                     'open.favorites.badgingDisabledHosts': ['mail.google.com'],

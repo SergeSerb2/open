@@ -590,6 +590,8 @@ public struct ArcImporter {
             apply()
         }
 
+        /// Split children past the fourth pane, waiting for the Space that holds the split.
+        var splitOverflow: [String] = []
         func buildNode(arcID: String) -> SidebarNode? {
             if let cached = nodeByArcID[arcID] { return cached }
             guard let item = itemsByID[arcID] else { return nil }
@@ -646,9 +648,10 @@ public struct ArcImporter {
                 let factors = ((sd["itemWidthFactors"] as? [Any]) ?? []).map { ($0 as? NSNumber)?.doubleValue ?? .nan }
                 let children = (item["childrenIds"] as? [String]) ?? []
                 var panes: [Tab] = [], keptChildren: [Int] = []
-                // Open's model holds at most 4 panes (as archive restore). Later children stay
-                // unreached, so the orphan pass below keeps them as Today tabs.
-                for (index, childID) in children.enumerated() where panes.count < 4 {
+                // Open's model holds at most 4 panes (as archive restore). Later children become
+                // Today tabs of the split's own Space (`splitOverflow`, placed by the Space loop).
+                for (index, childID) in children.enumerated() {
+                    guard panes.count < 4 else { splitOverflow.append(childID); continue }
                     if let child = buildNode(arcID: childID), let tab = child.tab { panes.append(tab); keptChildren.append(index) }
                 }
                 // A split needs two panes: one pane stays a plain tab; none leaves nothing to show.
@@ -787,6 +790,7 @@ public struct ArcImporter {
             if title == nil { report.untitledSpaces += 1 }
             let space = Space(id: Self.spaceID(forArcID: spaceArcID), title: title, icon: spaceIcon(from: info), theme: spaceTheme(from: info), profileID: pid)
             let (pinnedCID, todayCID) = containerIDs(for: obj)
+            var overflowTabs: [SidebarNode] = []
             func nodes(forContainer cid: String?) -> [SidebarNode] {
                 guard let cid, let container = itemsByID[cid] else { return [] }
                 reachedArcIDs.insert(cid)
@@ -794,11 +798,17 @@ public struct ArcImporter {
                 for childID in (container["childrenIds"] as? [String]) ?? [] {
                     reachedArcIDs.insert(childID)
                     if let node = buildNode(arcID: childID) { result.append(node) }
+                    // Panes past a split's fourth stay in this Space, as Today tabs.
+                    let overflow = splitOverflow; splitOverflow = []
+                    for paneID in overflow {
+                        reachedArcIDs.insert(paneID)
+                        if let node = buildNode(arcID: paneID) { overflowTabs.append(node) }
+                    }
                 }
                 return result
             }
             space.pinned = nodes(forContainer: pinnedCID)
-            space.today = nodes(forContainer: todayCID)
+            space.today = nodes(forContainer: todayCID) + overflowTabs
             spaces.append(space)
         }
         report.spaces = spaces.count

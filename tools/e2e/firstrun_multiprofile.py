@@ -135,17 +135,18 @@ def shapes_rows(factory, results, tmp, h):
         splits = {sp['split']['_0']['id']: sp['split']['_0'] for sp in today if 'split' in sp}
         tabs = [n['tab']['_0']['id'] for n in today if 'tab' in n]
         five = splits.get(ids['split-five'], {})
+        five_url = 'https://example.com/shapes/five-4'  # the fifth pane: a Today tab of the split's own Space (Gamma)
         everywhere = json.dumps(data)
         focus = splits.get(ids['split-focus'], {})
         negative = splits.get(ids['split-negative'], {})
         def pane_ids(split): return [p['id'] for p in split.get('panes', [])]
         results['MP_shapes_split_normalized'] = dict(ok=ids['split-one'] not in splits and ids['one-a'] in tabs and ids['split-empty'] not in splits
             and ids['split-empty'] not in everywhere and pane_ids(five) == [ids['five-%d' % i] for i in range(4)]
-            and 'https://example.com/shapes/five-4' in everywhere
+            and json.dumps(gamma).count(five_url) == 1 and everywhere.count(five_url) == 1 and ids['five-4'] in tabs
             and pane_ids(focus) == [ids['focus-a'], ids['focus-b']] and focus.get('focusedPaneID') == ids['focus-a']
             and [round(f, 3) for f in focus.get('fractions', [])] == [0.375, 0.625]
             and pane_ids(negative) == [ids['negative-a'], ids['negative-b']] and negative.get('fractions', []) == [],
-            today=[list(n)[0] for n in today], five=pane_ids(five), fifthKept='https://example.com/shapes/five-4' in everywhere,
+            today=[list(n)[0] for n in today], five=pane_ids(five), fifthInGamma=json.dumps(gamma).count(five_url), fifthAnywhere=everywhere.count(five_url),
             focus={k: focus.get(k) for k in ('focusedPaneID', 'fractions')}, negative=negative.get('fractions'))
         # A Settings import of a sidebar without Spaces keeps its unreached tab in a new Space.
         app.call('first-run', action='settings-import', directory=str(lonely))
