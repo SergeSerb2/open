@@ -352,19 +352,26 @@ def run(factory, results, tmp, h):
             gate('replay_launch_finishes_read_only', lambda s: s['same'] and s['browserVisible'] and not s['firstRun'],
                  replay_finished, replay_before_finish)
             app.quit()
-            # A `--replay-onboarding` launch has no browser window before Get Started: closing the intro
-            # there quits, as a first run does, instead of leaving an App with no window.
-            app = h.Open(app.config, 'chrome', root, ['--use-mock-keychain', '--intro-sound=silent',
-                '--replay-onboarding', '--arc-dir='+str(source)], str(evidence/'replay-temp-close.log'), urls=(), first_run=True)
+        # A `--replay-onboarding` launch on a fresh temporary data folder has no browser: closing the intro
+        # quits, as a first run does, instead of leaving an App with no window. (With saved tabs, quitting
+        # first asks "Quit Open?", so the row uses a fresh folder and no dialog is left.)
+        with tempfile.TemporaryDirectory(prefix='open-intro-replay-fresh-', dir='/tmp') as fresh:
+            app = h.Open(app.config, 'chrome', fresh, ['--use-mock-keychain', '--intro-sound=silent',
+                '--replay-onboarding', '--arc-dir='+str(source)], str(evidence/'replay-fresh-close.log'), urls=(), first_run=True)
             app.focus_tracker = h._ACTIVE_FOCUS_TRACKER
             h._ACTIVE_FOCUS_TRACKER.apps.append(app)
             assert until(lambda: state().get('active')), state()
+            # "Warn before quitting" would hold the quit at its alert; this row checks that the close
+            # quits at all, so the setting is off here and restored after.
+            warn = app.call('defaults', key='open.general.warnBeforeQuitting', persistent=True)
+            app.call('defaults', key='open.general.warnBeforeQuitting', value=False)
             launch_pid = app.pid
             app.call('onboarding', action='close')
             exited = bool(until(lambda: not pid_alive(launch_pid), timeout=10))
             app.quit()
-            gate('replay_launch_close_quits', lambda s: s['exited'] and s['same'],
-                 dict(exited=exited, same=Path(root,'State/browser.json').read_bytes()==prior), dict(exited=False, same=True))
+            h._restore_defaults(None, {'open.general.warnBeforeQuitting': warn})
+            gate('replay_launch_close_quits', lambda s: s['exited'] and not s['snapshot'],
+                 dict(exited=exited, snapshot=Path(fresh, 'State/browser.json').exists()), dict(exited=False, snapshot=False))
         launch('--intro-sound=off')
         before_intro_close = state()
         app.call('key', key='w', modifiers=['command'])
