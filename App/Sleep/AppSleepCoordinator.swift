@@ -76,6 +76,8 @@ final class AppSleepCoordinator {
     let adapter = EngineSleepAdapter(app: app)
     let store = RoutingSleepStore(model: model, directories: directories)
     store.onError = { [weak self] in self?.record("store-error \($0)") }
+    // A deleted Profile's sleep.sqlite3 closes before its folder is removed.
+    app.profileTeardown.register(store)
     let visibility = app.media.visibility
     visibility.browserWindowControllers = app.windowControllers
     let clock = clock

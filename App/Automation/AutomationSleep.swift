@@ -123,12 +123,14 @@ extension AutomationController {
       "prepared": true, "started": sleep.isStarted, "scheduled": controller.isPassScheduled,
       "scheduledDelay": controller.scheduledPassDelay ?? NSNull(), "nextPassDelay": controller.nextPassDelay() ?? NSNull(),
       "passes": controller.passCount, "lowPowerMode": controller.lowPowerMode, "clockOffset": sleep.clock.offset,
+      "trackedTabs": controller.trackedTabCount,
       "visible": controller.visibleTabIDs().map(\.description).sorted(),
       "pictureInPicture": visibility.pictureInPicture.map(\.description).sorted(),
       "mediaControls": visibility.mediaControls.map(\.description).sorted(),
       "criticalCloses": sleep.adapter?.criticalCloses ?? 0,
       "tabs": tabs.map { describeSleep($0, controller) }, "log": Array(sleep.log.suffix(200)),
       "batteryToasts": sleep.batteryToasts, "quitCapture": sleep.quitCapture,
+      "openStores": sleep.store?.openDirectoryNames ?? [],
     ]
   }
 }

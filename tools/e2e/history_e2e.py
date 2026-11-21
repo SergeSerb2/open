@@ -399,6 +399,15 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         peek = wait_until(lambda: page('/peek'), timeout=5, step=.05)
         check('history_peek_profile_guess', bool(link) and bool(peek) and peek[0]['transition'] == 'link', rows=peek, guess=True)
         app.call('peek-close')
+        # The substring fallback runs when FTS finds nothing (a mid-word query). `%` and `_`
+        # typed there are literal text, not LIKE wildcards ('qz_qv' must not match 'qzaqv').
+        app.call('navigate', tab=sample_tab, url=base + '/like-qzaqv'); loaded(sample_tab, '/like-qzaqv'); settle()
+        def history_search(query):
+            return [r['url'] for owner in (profile1, profile2) for r in app.call('history-state', profile=owner, query=query)['rows']]
+        like_target = base + '/like-qzaqv'
+        like_control, like_underscore, like_percent = history_search('zaqv'), history_search('qz_qv'), history_search('qz%v')
+        check('history_substring_wildcards_literal', like_target in like_control and like_target not in like_underscore
+              and like_target not in like_percent, control=like_control, underscore=like_underscore, percent=like_percent)
         internal_before = len(dbrows())
         app.call('navigate', tab=sample_tab, url='data:text/html,<title>Internal history exclusion</title>')
         app.call('wait', tab=sample_tab); settle()

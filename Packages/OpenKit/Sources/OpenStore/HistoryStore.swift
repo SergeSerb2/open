@@ -193,8 +193,9 @@ public actor HistoryStore {
     }
 
     private func substringSearch(_ text: String, limit: Int, db: SQLiteDB, now: Double) -> [HistoryMatch] {
-        let like = "%\(text)%"
-        let stmt = db.prepare("SELECT url,title,visit_count,typed_count,last_visit FROM urls WHERE title LIKE ? OR url LIKE ? ORDER BY visit_count + 3*typed_count DESC LIMIT ?")
+        // `%`, `_` and `\` in the typed text match themselves, not any characters.
+        let like = ArchiveStore.likePattern(text)
+        let stmt = db.prepare("SELECT url,title,visit_count,typed_count,last_visit FROM urls WHERE title LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\' ORDER BY visit_count + 3*typed_count DESC LIMIT ?")
         defer { sqlite3_finalize(stmt) }
         db.bindText(stmt, 1, like); db.bindText(stmt, 2, like); db.bindInt(stmt, 3, Int64(limit))
         var rows: [HistoryMatch] = []

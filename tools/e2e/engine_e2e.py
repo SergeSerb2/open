@@ -3036,6 +3036,9 @@ def _window_flow_checks(factory, results, tmp):
             and debounced["captures"] == counts["captures"] + 1
             and immediate["treeChanges"] == counts["treeChanges"] and immediate["mirrorSyncs"] == counts["mirrorSyncs"] and bool(saved),
             "before": counts, "immediate": immediate, "debounced": debounced}
+        # STATE2: a debounced save with the same Profiles repeats no data-root folder work.
+        results["snapshot_save_skips_unchanged_prepare"] = {"ok": counts.get("prepares", 0) >= 1 and debounced.get("prepares") == counts.get("prepares"),
+            "before": counts.get("prepares"), "after": debounced.get("prepares")}
         app.call("window-frame", frame=[80, base_y, 1000, 700])
         a = new_tab(app, fixture("Window A"))
         b = app.call("open", url=fixture("Window B"), background=True)["id"]
@@ -7412,6 +7415,41 @@ def sleep_checks(factory, results, tmp, style):
         results["sleep_idle_parked"] = {"ok": bool(parked) and after["passes"] == before and not after["scheduled"],
                                         "passesBefore": before, "passesAfter": after["passes"], "scheduled": after["scheduled"],
                                         "load": os.getloadavg()}
+
+        # STATE2: a closed tab leaves no runtime record in the controller (SleepController.states).
+        closed_tabs = [open_live(site(40 + i)) for i in range(4)]
+        tracked_open = state()["trackedTabs"]
+        for t in closed_tabs: app.call("close", tab=t)
+        def records_settled():
+            s = tick()
+            ids = [x["id"] for x in s["tabs"]]
+            return s if not any(t in ids for t in closed_tabs) and s["trackedTabs"] <= len(ids) else None
+        after_close = wait_until(records_settled, timeout=8, step=.1) or state()
+        results["sleep_closed_tabs_dropped"] = {"ok": tracked_open >= len(closed_tabs) and after_close["trackedTabs"] <= len(after_close["tabs"])
+                                                      and not any(t in [x["id"] for x in after_close["tabs"]] for t in closed_tabs),
+                                                "trackedOpen": tracked_open, "trackedAfter": after_close["trackedTabs"], "modelTabs": len(after_close["tabs"])}
+        # Review r1: a visible Little Open page is outside the model; passes and its close add no record.
+        main_window = app.call("shell-windows")[0]["id"]
+        previous = {s["id"] for s in app.call("little-open-state")["sessions"]}
+        app.call("menu-perform", id="new-little-open-window")
+        little = wait_until(lambda: next((s for s in app.call("little-open-state")["sessions"] if s["id"] not in previous), None), timeout=5, step=.05)
+        if little:
+            app.call("key", window=little["window"], text=site(50) + "\r")
+            wait_until(lambda: any(s["id"] == little["id"] and s["state"] == "page" and s["content"] and not s["loading"]
+                                   for s in app.call("little-open-state")["sessions"]), timeout=10, step=.05)
+        for _ in range(3): tick()
+        shown_little = state()
+        outside = [i for i in shown_little["visible"] if i not in [x["id"] for x in shown_little["tabs"]]]
+        if little:
+            app.call("little-open-action", id=little["id"], action="close")
+            wait_until(lambda: all(s["id"] != little["id"] for s in app.call("little-open-state")["sessions"]), timeout=5, step=.05)
+        tick(); closed_little = state()
+        app.call("window-focus", id=main_window, activate=True)
+        results["sleep_little_open_no_record"] = {
+            "ok": bool(little) and bool(outside) and shown_little["trackedTabs"] <= len(shown_little["tabs"])
+                  and closed_little["trackedTabs"] <= len(closed_little["tabs"]),
+            "visibleOutsideModel": outside, "trackedShown": shown_little["trackedTabs"], "modelTabsShown": len(shown_little["tabs"]),
+            "trackedClosed": closed_little["trackedTabs"], "modelTabsClosed": len(closed_little["tabs"])}
 
         # F0 (memory-fork §10): the browser runs with Open's feature switches (chrome://version
         # shows the command line every process inherits).

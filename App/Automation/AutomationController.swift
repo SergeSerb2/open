@@ -955,6 +955,7 @@
         return w.tabStripState()
       case "frame-save-counters":
         return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount,
+          "prepares": app.snapshotStore.prepareCount,
           "dirty": app.snapshotStore.isDirty, "treeChanges": w.treeChangeCount, "mirrorSyncs": w.mirrorSyncCount] as [String: Any]
       case "space-profile":
         guard let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }) else { throw Failure(message: "unknown Space") }
