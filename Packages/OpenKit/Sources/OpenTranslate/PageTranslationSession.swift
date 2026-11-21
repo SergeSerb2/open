@@ -245,13 +245,15 @@ public final class PageTranslationSession {
     /// frozen page: try again later). A failure that comes at once (the page closed, a request
     /// limit) ends the loop, so a retry can never spin.
     private func runtimeStillRuns(_ page: any WebContent, after pulled: ContinuousClock.Instant, token: Int) async -> Bool {
-        guard ContinuousClock.now - pulled >= Self.waitedFailure else { return false }
+        // A renderer that crashed, was killed or ran out of memory never answers: requests to it
+        // only time out. An unresponsive (frozen) page is not gone and keeps retrying.
+        guard !page.isRendererGone, ContinuousClock.now - pulled >= Self.waitedFailure else { return false }
         let probed = ContinuousClock.now
         do {
             let active = try await Self.evaluate(page, "window.__openTranslate ? window.__openTranslate.state().active : false")
             return generation == token && !closed && (active as? Bool) == true
         } catch {
-            return generation == token && !closed && ContinuousClock.now - probed >= Self.waitedFailure
+            return generation == token && !closed && !page.isRendererGone && ContinuousClock.now - probed >= Self.waitedFailure
         }
     }
     static let waitedFailure: Duration = .seconds(5)

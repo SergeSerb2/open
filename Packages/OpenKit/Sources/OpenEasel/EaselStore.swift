@@ -22,6 +22,15 @@ public final class EaselStore {
     /// Bumped by `save` and `discard`: a failed write is queued again only while no newer copy was
     /// saved (and possibly written) and the document was not discarded since.
     private var generations: [UUID: Int] = [:]
+    /// Failed writes of background flushes, confined to `queue`. Every reader of the disk state
+    /// (`load`, a waiting flush) and the flush's own main-thread callback drain it first, so a quit
+    /// or a reopen that comes before that callback cannot drop or bypass a failed edit.
+    private final class FailedWrites: @unchecked Sendable {
+        var items: [(EaselDocument, Int, String)] = []
+        /// A flush wrote everything since the last drain.
+        var clean = false
+    }
+    private let failedWrites = FailedWrites()
 
     public init(root: URL) { directory = root.appendingPathComponent("Easels", isDirectory: true) }
 
@@ -33,8 +42,10 @@ public final class EaselStore {
     public func load(_ id: UUID) -> EaselDocument? {
         if let doc = pending[id] { return doc }
         // A debounced flush hands its copy to the write queue and clears `pending`;
-        // wait for that write, or an Easel reopened at once reads the older file.
-        queue.sync {}
+        // wait for that write, or an Easel reopened at once reads the older file. A copy whose
+        // write failed comes back into `pending` here.
+        drainFailedWrites()
+        if let doc = pending[id] { return doc }
         let url = fileURL(for: id)
         guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int,
               size <= EaselDocument.maxFileBytes,
@@ -151,12 +162,15 @@ public final class EaselStore {
     /// Writes every pending document. `wait` blocks until the bytes are on disk (quit).
     public func flush(wait: Bool = true) {
         timer?.invalidate(); timer = nil
-        guard !pending.isEmpty else { if wait { queue.sync {} }; return }
+        // A failed background write is written again by this flush (quit, close, automation).
+        if wait { drainFailedWrites() }
+        guard !pending.isEmpty else { return }
         let jobs = pending.map { ($0.value, fileURL(for: $0.key), generations[$0.key, default: 0]) }
         pending.removeAll()
         writeCount += jobs.count
-        let work: @Sendable () -> [(EaselDocument, Int, String)] = {
-            var failed: [(EaselDocument, Int, String)] = []
+        let failedWrites = self.failedWrites
+        let work: @Sendable () -> Void = {
+            var failed = false
             for (doc, url, generation) in jobs {
                 // A document that cannot be encoded never will be: it is not queued again.
                 guard let data = try? Self.encoder.encode(doc) else { continue }
@@ -164,28 +178,34 @@ public final class EaselStore {
                     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try data.write(to: url, options: .atomic)
                 } catch {
-                    failed.append((doc, generation, "\(doc.id): \(error.localizedDescription)"))
+                    failed = true
+                    failedWrites.items.append((doc, generation, "\(doc.id): \(error.localizedDescription)"))
                 }
             }
-            return failed
+            if !failed { failedWrites.clean = true }
         }
-        if wait { requeue(queue.sync(execute: work)) }
+        if wait { queue.sync(execute: work); drainFailedWrites() }
         else {
-            queue.async { [weak self] in
-                let failed = work()
-                DispatchQueue.main.async { MainActor.assumeIsolated { self?.requeue(failed) } }
-            }
+            queue.async(execute: work)
+            queue.async { [weak self] in DispatchQueue.main.async { MainActor.assumeIsolated { self?.drainFailedWrites() } } }
         }
     }
 
-    /// After a flush: failed documents go back into `pending` unless a newer copy was saved or the
-    /// document was discarded meanwhile.
-    private func requeue(_ failed: [(EaselDocument, Int, String)]) {
-        guard !failed.isEmpty else { lastError = nil; return }
-        for (doc, generation, message) in failed {
-            lastError = message
+    /// Waits for queued writes and takes their failures: each failed document goes back into
+    /// `pending` unless a newer copy was saved or the document was discarded meanwhile. Flushes
+    /// that all succeeded clear `lastError`.
+    private func drainFailedWrites() {
+        let failedWrites = self.failedWrites
+        let (taken, clean) = queue.sync { () -> ([(EaselDocument, Int, String)], Bool) in
+            let result = (failedWrites.items, failedWrites.clean)
+            failedWrites.items.removeAll(); failedWrites.clean = false
+            return result
+        }
+        if taken.isEmpty, clean { lastError = nil }
+        for (doc, generation, message) in taken {
             guard pending[doc.id] == nil, generations[doc.id, default: 0] == generation else { continue }
             pending[doc.id] = doc
+            lastError = message
         }
     }
 

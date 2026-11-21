@@ -14024,6 +14024,35 @@ def page_translate_checks(factory, results, tmp):
             and s8['seen']['p1'].startswith('TRANSLATED') and s8['p1'] == 'Mise à jour en direct.'
             and s8['p2'].startswith('Texte en direct ') and s8['placeholder'] == 'Nouvelle adresse', 'result': live}
 
+        # Review r1 #3/#4: a page that holds text nodes the runtime did not reuse (#r3's " trois", left
+        # out of the translated run) or writes into a text node the runtime made (#r4's last node) keeps
+        # its text on Show Original.
+        try:
+            nodes = app.eval(spa_tab, '''(async () => {
+              const t = window.__openTranslate;
+              const box = document.createElement('div');
+              box.innerHTML = '<p id="r3">Un <b>deux</b> trois</p><p id="r4"><b>Gras</b> fin</p>';
+              document.body.prepend(box);
+              const unused = document.getElementById('r3').lastChild;
+              t.start();
+              const b = await t.nextBatch();
+              t.apply(b.id, b.units.map((u) => u.text.startsWith('Un ⟦1⟧') ? u.text.replace(/^Un /, '')
+                : u.text.startsWith('⟦1⟧Gras') ? 'Avant ' + u.text : 'TRANSLATED ' + u.text));
+              const made = document.getElementById('r4').lastChild;
+              const seen = { r3: document.getElementById('r3').textContent, r4: document.getElementById('r4').textContent,
+                             unusedDetached: !unused.isConnected, made: made.data };
+              unused.data = ' en direct';
+              made.data = ' maigre';
+              t.restore();
+              const out = { seen, r3: document.getElementById('r3').textContent, r4: document.getElementById('r4').textContent };
+              box.remove();
+              return out; })()''', world='open')
+        except Exception as error:
+            nodes = {'error': str(error), 'seen': {}}
+        results['X_revert_keeps_page_text_nodes'] = {'ok': nodes['seen'].get('unusedDetached') is True and nodes['seen'].get('made') == ' fin'
+            and nodes['seen'].get('r4', '').startswith('Avant') and nodes.get('r3') == 'Un deux en direct' and 'maigre' in nodes.get('r4', ''),
+            'result': nodes}
+
         # X1 on Apple's backend: only when French → English is installed (no download prompt in e2e).
         availability = app.call('translate', action='availability', source='fr', target='en')['status']
         if availability != 'installed':

@@ -75,7 +75,7 @@ public final class NoteStore {
     @discardableResult
     public func importIfAbsent(_ note: NoteDocument) -> Bool {
         guard !FileManager.default.fileExists(atPath: fileURL(for: note.id).path), cache[note.id] == nil else { return false }
-        cache[note.id] = note; dirty.insert(note.id); flush()
+        cache[note.id] = note; dirty.insert(note.id); flush(notify: false)
         if oversized.contains(note.id) { cache[note.id] = nil; oversized.remove(note.id); return false }
         return !dirty.contains(note.id)
     }
@@ -88,9 +88,14 @@ public final class NoteStore {
         }
     }
 
-    /// Replaces a Note (an import that fills a placeholder). Written now.
-    public func replace(_ note: NoteDocument) {
-        cache[note.id] = note; dirty.insert(note.id); flush()
+    /// Replaces a Note (an import that fills a placeholder). Written now. False when the Note is
+    /// over the size limit: the previous Note (the placeholder) stays, in memory and on disk.
+    @discardableResult
+    public func replace(_ note: NoteDocument) -> Bool {
+        let previous = cache[note.id]
+        cache[note.id] = note; dirty.insert(note.id); flush(notify: false)
+        guard oversized.remove(note.id) == nil else { cache[note.id] = previous; return false }
+        return !dirty.contains(note.id)
     }
 
     // MARK: Images
@@ -122,8 +127,11 @@ public final class NoteStore {
         return name
     }
 
-    /// Writes every changed Note now. Safe to call often.
-    public func flush() {
+    /// Writes every changed Note now. Safe to call often. `notify` false: an import reports a
+    /// refused Note itself (no editor toast).
+    public func flush() { flush(notify: true) }
+
+    private func flush(notify: Bool) {
         saveTimer?.invalidate(); saveTimer = nil
         guard !dirty.isEmpty else { return }
         let ids = dirty; dirty.removeAll()
@@ -139,7 +147,8 @@ public final class NoteStore {
                 // next open. Keep the last file that fits; the editor still holds the text.
                 guard data.count <= Self.maxFileBytes else {
                     lastError = "\(id): \(data.count) bytes is over the \(Self.maxFileBytes)-byte limit; the last save is kept"
-                    oversized.insert(id); onTooLarge?(id)
+                    oversized.insert(id)
+                    if notify { onTooLarge?(id) }
                     continue
                 }
                 try data.write(to: fileURL(for: id), options: .atomic)

@@ -373,24 +373,28 @@
           }
         } else {
           // Structure goes back only where it is still exactly what the run put there. Where the
-          // page has since replaced or added children, the page owns that structure: only the
-          // original text comes back, and nodes the page removed stay removed.
+          // page has since replaced or added children, or written into a text node the run made,
+          // the page owns that structure: only the original text comes back, nodes the page
+          // removed stay removed, and a made node holding the page's text stays.
+          const ours = (n) => r.written.get(n) === n.data;
+          const pristine = (nodes) => nodes.every((n) => !r.created.has(n) || ours(n));
           for (let j = r.children.length - 1; j >= 0; j--) {
             const c = r.children[j];
-            if (sameNodes(c.el.childNodes, c.placed)) c.el.replaceChildren(...c.nodes);
-            else for (const n of c.placed) if (r.created.has(n) && n.parentNode === c.el) c.el.removeChild(n);
+            if (sameNodes(c.el.childNodes, c.placed) && pristine(c.placed)) c.el.replaceChildren(...c.nodes);
+            else for (const n of c.placed) if (r.created.has(n) && n.parentNode === c.el && ours(n)) c.el.removeChild(n);
           }
-          if (r.inserted.every((n) => n.parentNode === r.container)) {
+          if (r.inserted.every((n) => n.parentNode === r.container) && pristine(r.inserted)) {
             const ref = r.inserted.length ? r.inserted[r.inserted.length - 1].nextSibling : null;
             for (const n of r.inserted) r.container.removeChild(n);
             for (const n of r.original) r.container.insertBefore(n, ref);
           } else {
-            for (const n of r.inserted) if (r.created.has(n) && n.parentNode === r.container) r.container.removeChild(n);
+            for (const n of r.inserted) if (r.created.has(n) && n.parentNode === r.container && ours(n)) r.container.removeChild(n);
           }
           for (const t of r.texts) {
             if (!originalText.has(t)) continue;
-            // A text node this run did not reuse still holds its original (or the page's) text.
-            if (!r.written.has(t) || t.data === r.written.get(t)) t.data = originalText.get(t);
+            // Only a text node this run wrote, still holding what it wrote, takes its original
+            // back. A node the run did not reuse was never written: its text is the page's.
+            if (r.written.has(t) && ours(t)) t.data = originalText.get(t);
             originalText.delete(t);
           }
         }

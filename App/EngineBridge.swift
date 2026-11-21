@@ -8,6 +8,7 @@ import OpenWeb
 extension OEWebContent: @retroactive WebContent {
   public var faviconPNG: Data? { favicon.flatMap(EngineWebContentHostFactory.pngData) }
   public var isCrashed: Bool { crashState != .none }
+  public var isRendererGone: Bool { crashState != .none && crashState != .unresponsive }
   public func evaluateJavaScript(_ script: String, in world: ScriptWorld) async throws -> Any {
     try await evaluateJavaScript(script, inWorld: world == .open ? .open : .page)
   }

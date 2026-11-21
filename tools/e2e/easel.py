@@ -566,6 +566,9 @@ def run(factory, results, tmp, api):
             os.chmod(f_folder, 0o555)
             try:
                 easel(action='tool', tool='ellipse'); easel(action='click', at=[700, 400])
+                # Let the debounced (background) save run and fail first: its failure must come back
+                # for the next waiting flush (review r1 #1), not only a failure of a waiting flush.
+                time.sleep(1.0)
                 during_fail = stored_objects()
                 fail_error = easel(tab=f_tab).get('storeError')
             finally:

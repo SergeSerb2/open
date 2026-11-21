@@ -172,7 +172,7 @@ extension AppDelegate {
     easels.discard(documentID)
     let folder = easels.fileURL(for: documentID).deletingLastPathComponent()
     if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
-    discardArchivedRows(of: documentID) { EaselTab.documentID($0) }
+    discardArchivedRows(url: EaselTab.url(for: documentID))
   }
 }
 

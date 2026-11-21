@@ -96,7 +96,7 @@ extension AppDelegate {
       guard let controller = host.owner?.controller, shown.insert(ObjectIdentifier(controller)).inserted else { continue }
       controller.toasts.show(content)
     }
-    if shown.isEmpty { frontWindowController?.toasts.show(content) }
+    if shown.isEmpty { frontStandardWindowController?.toasts.show(content) }
   }
 
   func deleteNoteEverywhere(_ noteID: UUID) {
@@ -111,24 +111,17 @@ extension AppDelegate {
       factory.controller?.refresh(); factory.scheduleSave()
     }
     notes.delete(noteID)
-    discardArchivedRows(of: noteID) { NoteLink.id(from: $0) }
+    discardArchivedRows(url: NoteLink.url(for: noteID))
   }
 
   /// A Note or Easel was deleted: Archive entries of its rows that left the sidebar earlier
   /// ("Remove … from Sidebar", Close Tab: other row IDs than the rows delete removes) go too, so a
   /// restore never brings back a row whose file is in the Trash (an empty Note or a recreated,
-  /// empty Easel). Every Profile's Archive is searched for the document ID. An archived folder
-  /// keeps such a row inside it (its payload is not searched); restoring that folder still shows
-  /// an empty document.
-  func discardArchivedRows(of documentID: UUID, documentIn: @escaping @MainActor (URL) -> UUID?) {
+  /// empty Easel). One delete per Profile's Archive, on that store's queue (quit waits for it);
+  /// a Profile without an Archive file is skipped. An archived folder keeps such a row inside it
+  /// (its payload is not searched); restoring that folder still shows an empty document.
+  func discardArchivedRows(url: URL) {
     guard let sink = archiveSink else { return }
-    let stores = model.profiles.map { sink.store(for: $0.id) }
-    let key = documentID.uuidString.lowercased()
-    Task { @MainActor in
-      for store in stores {
-        let ids = await store.search(key, limit: 1_000).filter { $0.kind == .tab && documentIn($0.url) == documentID }.map(\.id)
-        if !ids.isEmpty { try? await store.delete(ids: ids) }
-      }
-    }
+    for profile in model.profiles { sink.store(for: profile.id).discardTabs(url: url.absoluteString) }
   }
 }
