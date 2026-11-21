@@ -155,11 +155,24 @@ extension AppDelegate {
     }
   }
 
-  func handleLittleOpenKey(_ event: NSEvent) -> Bool {
+  /// The only key route for a key Little Open window. Its page counts as web content, as in
+  /// BrowserWindowController.handleKeyDown: edit keys reach the page first, and site priorities apply.
+  func handleLittleOpenKey(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
     guard let controller = keyLittleOpen, event.type == .keyDown else { return false }
+    let flags = event.modifierFlags.rawValue
+    if let last = littleOpenKeyRoute, last.window == event.windowNumber, last.code == event.keyCode, last.flags == flags,
+      unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
+    let handled = routeLittleOpenKey(event, controller)
+    littleOpenKeyRoute = (event.windowNumber, event.keyCode, flags, event.timestamp, handled)
+    return handled
+  }
+
+  private func routeLittleOpenKey(_ event: NSEvent, _ controller: LittleOpenWindowController) -> Bool {
     if downloadsCenter.littleOpenTrays[controller.session.id]?.handleKey(event) == true { return true }
-    let context = RoutingContext(isAppActive: NSApp.isActive,
-      isTextFocused: controller.window?.firstResponder is NSTextView || controller.window?.firstResponder is NSTextField)
+    let responder = controller.window?.firstResponder
+    let textFocused = responder is NSTextView || responder is NSTextField
+    let webFocused = !textFocused && (responder as? NSView).map { $0 === controller.container || $0.isDescendant(of: controller.container) } == true
+    let context = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: textFocused || webFocused, isWebContentFocused: webFocused)
     guard case .browserCommand(let id)? = fallbackKeyboard.route(event: event, context: context, overrides: keyBindings),
       isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
     performCommand(id, keyDownTimestamp: event.timestamp); return true

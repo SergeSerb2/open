@@ -57,8 +57,12 @@ import OpenDesign
     }
     public func importBindings(from url: URL) {
         // An import replaces every binding, like Reset All, so it also resolves an unreadable saved file.
-        do { store = try KeyBindingStore.load(from: url); loadFailed = false; saveDraft() }
-        catch { statusText = "Could not read key bindings. Your saved shortcuts were kept." }
+        // The App ignores a file it cannot apply (AppDelegate.reloadKeyBindings), so never save one.
+        do {
+            let imported = try KeyBindingStore.load(from: url)
+            guard imported.isSupported else { statusText = "This file has shortcuts Open cannot use. Your saved shortcuts were kept."; return }
+            store = imported; saveDraft(resolvingLoadError: true)
+        } catch { statusText = "Could not read key bindings. Your saved shortcuts were kept." }
     }
     public func exportBindings(to url: URL) {
         do { try saved.save(to: url); statusText = "Exported." }
@@ -78,7 +82,12 @@ import OpenDesign
     public init(root: SettingsViewModel) {
         self.root = root
         let url = root.root.appendingPathComponent("State/keybindings.json")
-        do { let loaded = FileManager.default.fileExists(atPath: url.path) ? try KeyBindingStore.load(from: url) : .empty; store = loaded; saved = loaded }
+        do {
+            let loaded = FileManager.default.fileExists(atPath: url.path) ? try KeyBindingStore.load(from: url) : .empty
+            // Edits to a file the App ignores would save it again; Import or Reset All replaces it.
+            guard loaded.isSupported else { throw CocoaError(.fileReadCorruptFile) }
+            store = loaded; saved = loaded
+        }
         catch { store = .empty; saved = .empty; loadFailed = true; statusText = "Could not read key bindings. Resolve the file error before saving." }
         conflicts = ConflictChecker.check(overrides: store)
         unexpected = ConflictChecker.unexpected(conflicts)
@@ -125,12 +134,14 @@ import OpenDesign
         store.setOverride(.init(shortcuts: store.effectiveShortcuts(for: command), priority: value), for: id); saveDraft()
     }
     public func revert() { store = saved; conflicts = ConflictChecker.check(overrides: store); statusText = "Reverted." }
-    public func resetAll(confirmed: Bool) { guard confirmed else { confirmsReset = true; return }; loadFailed = false; store = .empty; saveDraft() }
-    private func saveDraft() {
+    public func resetAll(confirmed: Bool) { guard confirmed else { confirmsReset = true; return }; store = .empty; saveDraft(resolvingLoadError: true) }
+    /// Import and Reset All replace an unreadable saved file; other edits never overwrite it.
+    /// The load error clears only after the replacement is on disk.
+    private func saveDraft(resolvingLoadError: Bool = false) {
         conflicts = ConflictChecker.check(overrides: store)
         guard unexpected.isEmpty else { statusText = "Fix the conflicts to save."; return }
-        guard !loadFailed else { return }
-        do { try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true); try store.save(to: fileURL); saved = store; root.actions.keyBindingsDidChange(store: store); statusText = "Saved." }
+        guard !loadFailed || resolvingLoadError else { return }
+        do { try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true); try store.save(to: fileURL); saved = store; loadFailed = false; root.actions.keyBindingsDidChange(store: store); statusText = "Saved." }
         catch { statusText = "Could not save key bindings. \(error.localizedDescription)" }
     }
 }

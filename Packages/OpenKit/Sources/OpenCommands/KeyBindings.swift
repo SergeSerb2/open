@@ -65,6 +65,12 @@ public struct KeyBindingStore: Sendable, Codable, Hashable {
         try encoder.encode(self).write(to: url, options: [.atomic])
     }
 
+    /// A file the App can apply: version 1 and only known, customizable commands. The App also
+    /// requires no unexpected conflicts (Settings resolves those before it saves).
+    public var isSupported: Bool {
+        version == 1 && bindings.keys.allSatisfy { CommandRegistry.byID[$0]?.isCustomizable == true }
+    }
+
     /// Command IDs in the file that name no known command.
     public var unknownCommandIDs: [String] {
         bindings.keys.filter { CommandRegistry.byID[$0] == nil }.sorted()

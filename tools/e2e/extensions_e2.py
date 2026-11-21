@@ -25,10 +25,24 @@ def fixtures(root, tmp, extensions):
             "manifest_version": 3, "name": "Pinned order probe " + suffix,
             "version": "1.0", "action": {"default_title": "Pin probe " + suffix}}))
         pin_probes.append(str(probe))
+    # T8: action shortcuts on named keys (arrow, Home) for the X22 keycap and dispatch rows.
+    keycaps = []
+    for name, suggested in (("Keycap Left Probe", "Alt+Shift+Left"), ("Keycap Home Probe", "Alt+Shift+Home")):
+        probe = Path(tmp) / name.lower().replace(" ", "-")
+        probe.mkdir()
+        (probe / "popup.html").write_text("<!doctype html><title>%s popup</title>%s<input id=field value=seed>"
+            "<script src=popup.js></script>" % (name, name))
+        (probe / "popup.js").write_text("window.keys=[];document.addEventListener('keydown',e=>keys.push(e.key));"
+                                         "document.getElementById('field').focus();")
+        (probe / "manifest.json").write_text(json.dumps({
+            "manifest_version": 3, "name": name, "version": "1.0",
+            "action": {"default_title": name, "default_popup": "popup.html"},
+            "commands": {"_execute_action": {"suggested_key": {"default": suggested}}}}))
+        keycaps.append(str(probe))
     native_drag = [str(Path(extensions) / name) for name in ("ublock-lite", "darkreader")]
     if not all((Path(p) / "manifest.json").is_file() for p in native_drag):
         raise RuntimeError("extensions-e2 requires unpacked ublock-lite and darkreader in --extensions")
-    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes + native_drag
+    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes + keycaps + native_drag
 
 
 def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
@@ -122,6 +136,20 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         keyed_native = wait(lambda: native_window(keyed["id"]), timeout=10)
         title = wait(lambda: (lambda w: w if w and w["title"] == "Action probe popup" else None)(native_window(keyed["id"])), timeout=10)
         app.call("focus", tab=keyed_native["page"])
+        # W2 review: a chrome.windows popup (no browser window owns it) gives the page its edit keys
+        # first; the main menu then pastes once.
+        saved = app.call("pasteboard-preserve")
+        try:
+            pid = keyed_native["page"]
+            app.eval(pid, "window.keys=[];document.body.insertAdjacentHTML('beforeend','<input id=w2 value=seed>');"
+                     "document.addEventListener('keydown',e=>keys.push(e.key),true);document.getElementById('w2').focus();true")
+            app.call("pasteboard-write", text="W2 WINDOW")
+            for k in ("a", "v"): app.call("key", key=k, modifiers=["cmd"], window=keyed_native["number"], route="app")
+            pasted = wait(lambda: app.eval(pid, "document.getElementById('w2').value") == "W2 WINDOW", timeout=3)
+            results["W2_extension_window_paste"] = {"ok": bool(pasted) and app.eval(pid, "window.keys") == ["a", "v"],
+                "value": app.eval(pid, "document.getElementById('w2').value"), "keys": app.eval(pid, "window.keys")}
+        finally:
+            app.call("pasteboard-restore")
         tabs_before = len(app.call("tabs"))
         app.call("key", key="w", modifiers=["cmd"], window=keyed_native["number"], route="app")
         key_closed = wait(lambda: native_window(keyed["id"]) is None, timeout=5)
@@ -134,6 +162,36 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         results["E11_normal_today"] = {"ok": normal["id"] == parent and bool(today) and today[0]["section"] == "today"
             and not app.call("ext-windows"), "window": normal["id"], "parent": parent, "today": today}
 
+        # T8 (X22): named-key action shortcuts. The command-bar row shows readable keycaps, and the
+        # key itself (no Command, so it reaches the page route) opens that extension's popup.
+        for name, named_key, caps in (("Keycap Left Probe", "left", ["⌥", "⇧", "Left"]),
+                                      ("Keycap Home Probe", "home", ["⌥", "⇧", "Home"])):
+            probe = next((x["id"] for x in app.call("extensions")["installed"] if x["name"] == name), None)
+            key("t", ["cmd"]); type_text(name.lower())
+            found = wait(lambda: [r for r in rows().get("rows", []) if r["kind"] == "extensionAction" and r["extension"] == probe], timeout=5)
+            key("escape"); time.sleep(.3)
+            results["X22_" + named_key + "_action_row"] = {"ok": bool(found) and found[0]["keycaps"] == caps, "rows": found}
+            app.call("select", tab=reporter); app.call("focus", tab=reporter); time.sleep(.3)
+            key(named_key, ["option", "shift"])
+            popup = wait(lambda: (lambda p: p if p.get("open") and p.get("extension") == probe else None)(app.call("ext-popup")), timeout=5)
+            results["X22_" + named_key + "_shortcut_opens_popup"] = {"ok": bool(popup) and popup["source"] == "command",
+                "popup": popup or app.call("ext-popup"), "commands": [c for c in app.call("ext-commands").get("commands", []) if c.get("extension") == probe]}
+            if popup and named_key == "left":
+                # W2 in an extension popup (password managers paste here): the popup page sees
+                # Cmd-A and Cmd-V first, then the native Select All and Paste run once.
+                saved = app.call("pasteboard-preserve")
+                try:
+                    pid = popup["page"]["identifier"]
+                    wait(lambda: app.eval(pid, "document.activeElement && document.activeElement.id") == "field", timeout=5)
+                    app.call("pasteboard-write", text="X22 PASTE")
+                    for k in ("a", "v"): app.call("key", key=k, modifiers=["cmd"], window="popup", route="app")
+                    pasted = wait(lambda: app.eval(pid, "document.getElementById('field').value") == "X22 PASTE", timeout=3)
+                    results["W2_extension_popup_paste"] = {"ok": bool(pasted) and app.eval(pid, "window.keys") == ["a", "v"],
+                        "value": app.eval(pid, "document.getElementById('field').value"), "keys": app.eval(pid, "window.keys")}
+                finally:
+                    app.call("pasteboard-restore")
+            if popup: app.call("popup-close")
+            time.sleep(.3)
         # Keep the reporter out of the selected target so current-tab navigation cannot destroy it.
         target = new_tab(app, "https://example.com/?target")
         key("t", ["cmd"]); type_text("action pro")
