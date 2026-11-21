@@ -470,22 +470,25 @@ func runCommandsDemo(args: [String]) async throws {
     step("profiles: archive Favorites on delete, undo and redo")
     let profileFavorite = model.newTab(in: sid, url: url("profile-favorite"), title: "Profile Favorite")
     model.addFavorite(tabID: profileFavorite.id, to: addedID)
-    let profileArchive = composite.store(for: addedID)
+    // The Profile's own archive file goes with its folder; the delete archives to the Default Profile.
+    let profileArchive = composite.store(for: nil), ownArchive = composite.store(for: addedID)
+    let defaultRowsBefore = await profileArchive.count()
     let callsBeforeProfileDelete = sink.archiveCalls
     events.removeAll()
     check((try model.deleteProfile(id: addedID)) && sink.archiveCalls == callsBeforeProfileDelete + 1
           && sink.lastBatch.count == 1 && sink.lastBatch[0].profileID == addedID
           && sink.lastBatch[0].originalLocation == NodeParent.favorites(addedID).archiveLocation
           && events.map(describe) == ["reload(favorites)"], "Profile delete archives Favorites in one sink call and emits one reload")
-    var profileRows = await profileArchive.count()
+    var profileRows = await profileArchive.count() - defaultRowsBefore
+    let ownRows = await ownArchive.count()
     check(model.profile(id: addedID) == nil && model.tab(id: profileFavorite.id) == nil
-          && profileRows == 1, "deleted Favorite is in its own Profile archive")
+          && profileRows == 1 && ownRows == 0, "deleted Favorite is in the Default Profile archive, not its own")
     events.removeAll(); undo.undo()
     check(model.profile(id: addedID) === added && model.tab(id: profileFavorite.id) === profileFavorite
           && events.map(describe) == ["reload(favorites)"], "delete undo restores Profile, Favorites and index")
-    check(await profileArchive.count() == 0, "delete undo discards archived Favorite")
+    check(await profileArchive.count() == defaultRowsBefore, "delete undo discards archived Favorite")
     events.removeAll(); undo.redo()
-    profileRows = await profileArchive.count()
+    profileRows = await profileArchive.count() - defaultRowsBefore
     check(model.profile(id: addedID) == nil && events.map(describe) == ["reload(favorites)"]
           && profileRows == 1, "delete redo archives Favorite again")
 
