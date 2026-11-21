@@ -97,9 +97,11 @@ def run(factory, results, tmp, h):
             listed = any(r['url'] == secret and r['kind'] == 'history' for r in before.get('rows', []))
             cleared = app.call('history-clear')
             gone = wait_until(lambda: secret not in history_urls(), timeout=8, step=.1)
-            after = type_query('secret-carry')
+            # One more letter: the new query extends the last answered one, so carry-over applies.
+            app.call('key', text='y')
+            after = wait_until(lambda: (lambda s: s if s.get('text') == 'secret-carry' and s.get('final') else None)(state()), timeout=5, step=.05) or state()
             first = after.get('firstSnapshotURLs', [])
-            row('nav4_cleared_history_not_carried', listed and not cleared.get('error') and bool(gone) and secret not in first
+            row('nav4_cleared_history_not_carried', after.get('text') == 'secret-carry' and listed and not cleared.get('error') and bool(gone) and secret not in first
                 and not any(r['url'] == secret for r in after.get('rows', [])),
                 listedBefore=listed, firstSnapshot=first, rows=[r['url'] for r in after.get('rows', [])])
         guarded('nav4_cleared_history_not_carried', carry_over)
@@ -169,7 +171,8 @@ def run(factory, results, tmp, h):
         guarded('nav4_library_reopen_follows_profile', library_profile,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
 
-        # F-13: Cmd+F in Library ▸ Spaces does not open Find on the page strip behind Library.
+        # F-13 guard (seed was a false positive on the real key path): Cmd+F in Library ▸ Spaces opens no Find
+        # on the page strip behind Library.
         def library_spaces_find():
             app.call('select', tab=start)
             app.call('library', action='open', section='spaces')
