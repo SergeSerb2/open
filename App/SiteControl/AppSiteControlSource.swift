@@ -186,43 +186,41 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       commandsEnabled: ["new-boost": boostProvider != nil && !context.isIncognito, "share-page": true,
         "capture-page": context.isWebsite, "capture-full-page": context.isWebsite])
   }
-  /// The tab still shows the displayed origin in the same Profile and window kind. A redirect
-  /// or Profile rebind can land between drawing the panel and receiving its click: refuse then,
-  /// and the pending panel refresh shows the new origin.
-  private func stillDisplayed(_ live: SiteControlContext, _ displayed: SiteControlContext) -> Bool {
-    live.tabID == displayed.tabID && live.profileID == displayed.profileID && live.isIncognito == displayed.isIncognito
-      && Self.originKey(live.url) == Self.originKey(displayed.url)
-  }
-  func toggle(_ tile: SiteSettingTile, displayed: SiteControlContext) {
+  /// Refuses (false) when the tab no longer shows the displayed origin in the same Profile and
+  /// window kind: a redirect or Profile rebind can land between drawing the panel and receiving
+  /// its click. The pending panel refresh then shows the new origin.
+  @discardableResult func toggle(_ tile: SiteSettingTile, displayed: SiteControlContext) -> Bool {
     #if OPEN_AUTOMATION
     toggleCallCount += 1
     #endif
     let tabID = displayed.tabID
     guard let factory, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
-          stillDisplayed(snapshot.context, displayed), tile.isEnabled else { return }
+          snapshot.context.showsSameSite(as: displayed), tile.isEnabled else { return false }
     switch tile.kind {
     case .contentBlocking:
       let adBlockProfileID = factory.incognitoSession?.parent.id ?? snapshot.context.profileID
       let privateSession = factory.isIncognito ? factory.incognitoSession?.context?.identifier : nil
       guard let store = adBlockStore, store.onEngineEvent != nil, store.isEnabled, store.isProfileOpen(adBlockProfileID),
             !factory.isIncognito || privateSession.map({ store.isPrivateSessionOpen($0, profile: adBlockProfileID) }) == true,
-            let host = snapshot.context.url.host() else { openAdBlockSettings(tabID: tabID); return }
-      guard Self.canExcludeAdBlockSite(host) else { return }
+            let host = snapshot.context.url.host() else { openAdBlockSettings(tabID: tabID); return false }
+      guard Self.canExcludeAdBlockSite(host) else { return false }
       do {
         let currentlyBlocking = try store.siteSnapshot(for: adBlockProfileID, privateSession: privateSession).shouldBlock(host: host)
         try store.setExcluded(host, excluded: currentlyBlocking, profile: adBlockProfileID, privateSession: privateSession)
+        return true
       }
-      catch { factory.controller?.toasts.show(.init(title: "Ad blocking settings could not be saved.")) }
+      catch { factory.controller?.toasts.show(.init(title: "Ad blocking settings could not be saved.")); return false }
     case .permission(let permission):
       guard let row = Self.permissionRows.first(where: { $0.permission == permission }),
-            let context = factory.hosts[tabID]?.content.context else { return }
+            let context = factory.hosts[tabID]?.content.context else { return false }
       let store = SitePermissionStore.forContext(context)
       store.set(origin: snapshot.context.url, kind: row.engine,
         state: store.state(origin: snapshot.context.url, kind: row.engine) == .allow ? .block : .allow)
       factory.app.tabSleep.permissionsChanged(context: context)
+      return true
     case .content(let kind):
       guard Self.contentRows.contains(where: { $0.kind == kind }),
-            let context = factory.hosts[tabID]?.content.context else { return }
+            let context = factory.hosts[tabID]?.content.context else { return false }
       let profile = EngineWebProfile(context), origin = snapshot.context.url
       let current = profile.changedSiteSettings(origin: origin).first { $0.kind == kind }?.state
       let key = Self.originKey(origin)
@@ -238,6 +236,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       // Keep entries for this window's open tabs only; a closed tab's entry is never read again.
       toggledContent = toggledContent.filter { factory.hosts[$0.key] != nil }
       toggledContent[tabID] = entry
+      return true
     }
   }
   func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) {
@@ -267,12 +266,13 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     SFCertificatePanel.shared().beginSheet(for: window, modalDelegate: nil, didEnd: nil, contextInfo: nil,
                                            certificates: chain, showGroup: true)
   }
-  func clearSiteData(_ kinds: SiteDataKinds, displayed: SiteControlContext) {
+  @discardableResult func clearSiteData(_ kinds: SiteDataKinds, displayed: SiteControlContext) -> Bool {
     let tabID = displayed.tabID
     guard kinds == .cookies || kinds == .cache,
-          let snapshot = snapshot(for: tabID), snapshot.context.isWebsite, stillDisplayed(snapshot.context, displayed),
-          let page = factory?.hosts[tabID]?.content else { return }
+          let snapshot = snapshot(for: tabID), snapshot.context.isWebsite, snapshot.context.showsSameSite(as: displayed),
+          let page = factory?.hosts[tabID]?.content else { return false }
     PageSiteDataCommands.clearAndRefresh(page, kinds: kinds == .cache ? .cache : .cookies)
+    return true
   }
   func openURLInNewTab(_ url: URL, tabID: ItemID) {
     guard factory?.selectedTab?.id == tabID else { return }; _ = factory?.openNewTab(url: url, background: false)

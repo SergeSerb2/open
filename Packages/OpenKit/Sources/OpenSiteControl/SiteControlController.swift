@@ -62,9 +62,11 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
                 self.actions.openAdBlockSettings(tabID: tabID)
             } else {
                 let generation = self.presentationGeneration
-                self.actions.toggle(tile, displayed: displayed)
+                let applied = self.actions.toggle(tile, displayed: displayed)
                 guard self.isPresented,self.tabID == tabID,self.presentationGeneration == generation else { return }
-                self.view.panel.showsReload = true; self.refreshView(animated: true)
+                // A refused toggle changed nothing: show the current state, not a reload prompt.
+                if applied { self.view.panel.showsReload = true }
+                self.refreshView(animated: true)
             }
         }
         view.panel.onBoostEnabled = { [weak self] id, enabled in
@@ -323,12 +325,18 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         menuActionInvoked = true
         switch id {
         case "clearCache", "clearCookies":
-            actions.clearSiteData(id == "clearCache" ? .cache : .cookies, displayed: request.context)
+            let applied = actions.clearSiteData(id == "clearCache" ? .cache : .cookies, displayed: request.context)
             guard isPresented,self.tabID == tabID,presentationGeneration == request.generation else { return }
-            view.panel.showsReload = true; refreshView(animated: true)
-        case "newBoost":
-            dismiss(reason: .action, animated: false); actions.openEditor(boostID: nil, tabID: tabID, mode: .simple)
-        case "siteSettings": dismiss(reason: .action, animated: false); openSiteSettings(tabID: tabID)
+            if applied { view.panel.showsReload = true }
+            refreshView(animated: true)
+        case "newBoost", "siteSettings":
+            // Site-scoped items act only on the site the menu was built for (a redirect can land meanwhile).
+            guard let live = source.snapshot(for: tabID), live.context.showsSameSite(as: request.context) else {
+                refreshView(animated: true); return
+            }
+            dismiss(reason: .action, animated: false)
+            if id == "newBoost" { actions.openEditor(boostID: nil, tabID: tabID, mode: .simple) }
+            else { openSiteSettings(context: live.context) }
         default: dismiss(reason: .action, animated: false); actions.perform(command: id, tabID: tabID, anchor: nil)
         }
     }
@@ -346,8 +354,12 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         if !selected && !menuActionInvoked && isPresented { dismiss(reason: .menuCancelled, animated: false) }
     }
     private func openSiteSettings(tabID: ItemID) {
-        guard let context = source.snapshot(for: tabID)?.context,
-              var origin = URLComponents(url: context.url, resolvingAgainstBaseURL: false) else { return }
+        guard let context = source.snapshot(for: tabID)?.context else { return }
+        openSiteSettings(context: context)
+    }
+    private func openSiteSettings(context: SiteControlContext) {
+        let tabID = context.tabID
+        guard var origin = URLComponents(url: context.url, resolvingAgainstBaseURL: false) else { return }
         origin.path = ""; origin.query = nil; origin.fragment = nil; origin.user = nil; origin.password = nil
         var url = URLComponents(string: "chrome://settings/content/siteDetails")!
         url.queryItems = [URLQueryItem(name: "site", value: origin.string)]

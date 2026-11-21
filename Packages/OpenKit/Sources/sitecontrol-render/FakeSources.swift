@@ -48,7 +48,7 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
         }
     }
     func snapshot(for tabID: ItemID) -> SiteControlSnapshot? { tabID == self.tabID ? value : nil }
-    func toggle(_ tile: SiteSettingTile, displayed: SiteControlContext) {
+    func toggle(_ tile: SiteSettingTile, displayed: SiteControlContext) -> Bool {
         calls.append("toggle:" + tile.id)
         if let index = value?.tiles.firstIndex(where: { $0.id == tile.id }) {
             let on = tile.state != .on
@@ -56,6 +56,7 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
             value?.tiles[index].subtitle = tile.kind == .contentBlocking ? (on ? "On" : "Off") : (on ? "Allowed" : "Blocked")
         }
         changed()
+        return true
     }
     func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) {
         calls.append("boost:\(id):\(enabled)")
@@ -67,7 +68,7 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
     func runExtension(_ id: String, tabID: ItemID, anchor: NSRect) { calls.append("extension:" + id) }
     func setExtensionPinned(_ id: String, pinned: Bool) { calls.append("pin:" + id) }
     func showSecurityDetails(tabID: ItemID) { calls.append("security") }
-    func clearSiteData(_ kinds: SiteDataKinds, displayed: SiteControlContext) { calls.append("clear:\(kinds.rawValue)") }
+    func clearSiteData(_ kinds: SiteDataKinds, displayed: SiteControlContext) -> Bool { calls.append("clear:\(kinds.rawValue)"); return true }
     func openURLInNewTab(_ url: URL, tabID: ItemID) { calls.append("url:" + url.absoluteString) }
     func reload(tabID: ItemID) { calls.append("reload") }
     func openAdBlockSettings(tabID: ItemID) { calls.append("settings:advanced:adblock") }

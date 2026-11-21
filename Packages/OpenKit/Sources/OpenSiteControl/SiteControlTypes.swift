@@ -16,6 +16,12 @@ public struct SiteControlContext: Sendable, Equatable {
         self.isIncognito = isIncognito; self.security = security
     }
     public var isWebsite: Bool { ["http", "https"].contains(url.scheme?.lowercased() ?? "") && url.host != nil }
+    /// Same tab, Profile and window kind, on the same origin (scheme, host, port). An action drawn
+    /// for one context must not run after a redirect or a Profile rebind changed it.
+    public func showsSameSite(as other: SiteControlContext) -> Bool {
+        tabID == other.tabID && profileID == other.profileID && isIncognito == other.isIncognito
+            && url.scheme?.lowercased() == other.url.scheme?.lowercased() && url.host() == other.url.host() && url.port == other.url.port
+    }
 }
 
 public enum SiteSettingKind: Hashable, Sendable { case contentBlocking, permission(SitePermission), content(String) }

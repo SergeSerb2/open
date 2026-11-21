@@ -5,6 +5,8 @@ G1: a click drawn for one origin must not act on the origin the tab shows later
 G2: the ad-block tile on a one-word host cannot be changed (its exclusion has no
 registrable domain to store), so it is disabled instead of failing to save.
 G3: content tiles toggled in a tab that closed are forgotten.
+G4: a mouse press that began on a panel button for one origin does nothing when
+the release lands after the panel refreshed for another origin.
 """
 import hashlib
 import os
@@ -54,18 +56,41 @@ def run(factory, results, origin, tmp, env):
         app.eval(tab, "document.cookie='g=1';true")
         refreshed = wait(lambda: (lambda s: s if s['presented'] and s['host'] == 'b.guard.test' else None)(state()), timeout=8)
         a_before, b_before = settings(a_origin), settings(b_origin)
-        app.call('site-controls', action='toggle-captured')
+        toggled_state = app.call('site-controls', action='toggle-captured')
         a_after, b_after = settings(a_origin), settings(b_origin)
         record('G1_redirect_toggle_refused', bool(refreshed) and row(drawn, 'row.content.popups').get('subtitle') == 'Allowed'
                and a_before.get('popups') == 'allow' and 'popups' not in b_before
-               and a_after == a_before and b_after == b_before,
+               and a_after == a_before and b_after == b_before and not toggled_state['reloadVisible'],
                drawnHost=drawn.get('host'), panel=refreshed, a=[a_before, a_after], b=[b_before, b_after],
+               reloadVisible=toggled_state['reloadVisible'],
                negative='without the guard, the A tile sets popups=allow on B')
         app.call('site-controls', action='perform-captured-menu', item='Clear Cookies')
         # A clear runs asynchronously and reloads the page; give it time to act.
         kept = not wait(lambda: 'g=1' not in app.eval(tab, 'document.cookie'), timeout=3, step=.1)
-        record('G1_redirect_clear_refused', bool(refreshed) and kept, cookie=app.eval(tab, 'document.cookie'),
+        cleared_state = state()
+        record('G1_redirect_clear_refused', bool(refreshed) and kept and not cleared_state['reloadVisible'],
+               cookie=app.eval(tab, 'document.cookie'), reloadVisible=cleared_state['reloadVisible'],
                negative='without the guard, Clear Cookies built for A clears B and reloads it')
+        close()
+
+        # G4: press New Boost while the panel shows A, let the tab land on B, then release.
+        # Tile rows are rebuilt (AppKit then drops their mouse-up); the top buttons stay and
+        # would run the command for B. The command dismisses the panel first.
+        visit(a_origin + '/ads.html')
+        pressed_on = opened()
+        button = next(c for c in pressed_on['controls'] if c['id'] == 'action.newBoost')
+        x, y, w, h = button['frame']
+        point = dict(x=x + w / 2, y=y + h / 2)
+        app.call('mouse', action='down', **point)
+        visit(b_origin + '/ads.html')
+        moved = wait(lambda: (lambda s: s if s['presented'] and s['host'] == 'b.guard.test' else None)(state()), timeout=8)
+        app.call('mouse', action='up', **point)
+        released, editor = state(), app.call('boost-editor')
+        if editor.get('open'): app.call('boost-editor', action='close')
+        record('G4_press_across_redirect_refused', bool(moved) and button['enabled'] and released['presented']
+               and released['host'] == 'b.guard.test' and not editor.get('open'),
+               button=button, point=point, presentedAfterRelease=released['presented'], editorOpened=bool(editor.get('open')),
+               negative='old buttons kept the press across the refresh: mouse-up dismissed the panel and opened New Boost for B')
         close()
         app.call('site-setting', tab=tab, origin=a_origin, kind='popups', state='block')
 
@@ -90,7 +115,7 @@ def run(factory, results, origin, tmp, env):
         word_tile, control_tile = row(word, 'row.contentBlocking'), row(control, 'row.contentBlocking')
         record('G2_one_word_host_adblock', control_tile.get('enabled') is True and word_tile.get('enabled') is False
                and word_tile.get('help') == "Ad blocking can't be turned off for this site." and blocked and tap_refused
-               and row(after, 'row.contentBlocking').get('state') == 'on' and exclusions() == files_before
+               and row(after, 'row.contentBlocking').get('state') == 'on' and not after['reloadVisible'] and exclusions() == files_before
                and len(toasts) == toasts_before and not any('could not be saved' in t for t in toasts),
                word=word_tile, control=control_tile, adBlocked=blocked, tapRefused=tap_refused, toasts=toasts,
                negative='old tile was enabled; turning it off showed "Ad blocking settings could not be saved."')
