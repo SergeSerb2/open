@@ -12,8 +12,11 @@ from loopback_http import LoopbackHTTPServer
 def run(factory, results, wait_until):
     class Page(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            body = (b'<!doctype html><title>Focus fixture</title><input id="field" autofocus>'
-                    b'<script>addEventListener("load",()=>document.getElementById("field").focus())</script>')
+            if self.path == '/dark':
+                body = b'<!doctype html><title>Dark fixture</title><body style="background:#121212;color:#eee">Dark page</body>'
+            else:
+                body = (b'<!doctype html><title>Focus fixture</title><input id="field" autofocus>'
+                        b'<script>addEventListener("load",()=>document.getElementById("field").focus())</script>')
             self.send_response(200); self.send_header('Content-Type', 'text/html')
             self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
         def log_message(self, *_): pass
@@ -84,6 +87,23 @@ def run(factory, results, wait_until):
             'headings': headings, 'visitActions': visit and visit['actions'],
             'rowActionNames': sorted({n for e in rows for n in e['actions']})}
         app.call('library-close')
+
+        # A11Y-02: the content toolbar takes a dark page's color; its host text must turn light.
+        def luminance(c): return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 if c else None
+        app.call('navigate', tab=tab, url=page.replace('/focus', '/dark')); app.call('wait', tab=tab)
+        key('d', mods=['cmd', 'shift'])
+        def dark_bar():
+            st = app.call('window-state')
+            bg = next((p['color'] for p in st.get('paneBackgrounds', []) if p['color']), None)
+            return st if st['toolbar']['drawn'] and bg and luminance(bg) < .3 else None
+        state = wait_until(dark_bar, timeout=8, step=.2) or app.call('window-state')
+        bar_color = next((p['color'] for p in state.get('paneBackgrounds', []) if p['color']), None)
+        text = state['toolbar'].get('textColor')
+        results['a11y_toolbar_text_legible_on_dark_page'] = {
+            'ok': bool(state['toolbar']['drawn']) and luminance(bar_color) is not None and luminance(bar_color) < .3
+                  and luminance(text) is not None and luminance(text) > .7,
+            'barColor': bar_color, 'textColor': text, 'text': state['toolbar'].get('text')}
+        key('d', mods=['cmd', 'shift'])
     finally:
         app.quit()
         server.shutdown(); server.server_close()
