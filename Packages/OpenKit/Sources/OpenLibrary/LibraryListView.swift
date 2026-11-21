@@ -456,7 +456,11 @@ private final class LibraryHeadingView: NSView {
     override func updateLayer() {}
     override init(frame:NSRect) { super.init(frame:frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay; layer?.addSublayer(text) }
     required init?(coder:NSCoder) { fatalError() }
-    func configure(_ title:String,color:NSColor) { text.string = LibraryText.value(title,size:13,weight:.semibold,color:color) }
+    func configure(_ title:String,color:NSColor) {
+        text.string = LibraryText.value(title,size:13,weight:.semibold,color:color)
+        // The heading is drawn in a layer; VoiceOver reads it from here ("Today", "Yesterday", ...).
+        setAccessibilityElement(true); setAccessibilityRole(.staticText); setAccessibilityLabel(title)
+    }
     override func layout() { super.layout(); text.frame = CGRect(x:12,y:6,width:bounds.width-24,height:18); text.contentsScale = window?.backingScaleFactor ?? 2 }
 }
 
@@ -537,7 +541,10 @@ private final class LibraryItemView: NSView {
             more.setAccessibilityRole(.button); more.onPress = { [weak self] in self?.onMenu?() }
         }
         setAccessibilityElement(!gallery); setAccessibilityRole(gallery ? .group : .row); setAccessibilityLabel(item.title+". "+item.subtitle+(item.isOn.map { $0 ? " · on" : " · off" } ?? ""))
-        let accessibleActions = !item.contextMenu && !item.showsMoreButton ? item.actions : item.hoverActions
+        // A list row is one accessibility element, so its buttons (hover actions, the hidden "…" menu)
+        // are not reachable on their own: offer every enabled row action once, never a separator.
+        var named = Set<String>()
+        let accessibleActions = gallery ? item.hoverActions : (item.hoverActions + item.actions).filter { $0.enabled && $0.title != "-" && named.insert($0.title).inserted }
         setAccessibilityCustomActions(accessibleActions.map { action in NSAccessibilityCustomAction(name:action.title) { action.run(); return true } })
         hovered = false; buttons.forEach { $0.isHidden = !gallery }; needsLayout = true; needsDisplay = true
     }

@@ -339,6 +339,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyGlyph.color = foreground.withAlphaComponent(0.46)
         emptyTitle.textColor = foreground; emptyBody.textColor = foreground.withAlphaComponent(0.68)
         loadingSkeleton.tint(overlay)
+        // An open Filter drawer takes its colors from configureFilter; recolor it with the panel.
+        if filterOpen { configureFilter() }
         needsDisplay = true
     }
     func observeTheme() {
