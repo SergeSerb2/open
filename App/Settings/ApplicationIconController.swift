@@ -95,10 +95,11 @@ import OpenSettings
       return
     }
     let file = cacheFile(option)
-    // An update changed the artwork version: the file of the earlier version proves the user chose this icon.
-    // Render the current version once, through the normal path, in the same late low-priority turn a restore uses
-    // (that also points the Dock tile plug-in at it). A missing file without an earlier version still fails below.
-    if !FileManager.default.fileExists(atPath: file.path), !otherVersions(of: option).isEmpty {
+    // No cached file of the current version: an update changed the artwork version, or the Cache folder was
+    // cleaned (or the preferences came from another Mac). The selection is valid and the artwork is in the
+    // bundle: write the file again once, through the normal path, in the same late low-priority turn a restore
+    // uses (that also points the Dock tile plug-in at it, never at a missing file).
+    if !FileManager.default.fileExists(atPath: file.path) {
       DispatchQueue.main.asyncAfter(deadline: .now() + 1, qos: .utility, flags: .enforceQoS) { [weak self] in
         guard let self, generation == self.selectionGeneration,
               !self.app.shutdownPrepared, !self.app.terminationRequested else { return }
