@@ -630,7 +630,8 @@ def run(factory, results, tmp, harness):
         results['live_fetch_host_hidden_page'] = {'ok': fetched.get('value') == 'Sleep /live-fetch|undefined'
             and fetched.get('created') == fetched.get('closed') == 1 and len(app.call('tabs')) == before, 'fetched': fetched}
         case = os.environ.get('OPEN_LIVE_DATA_CASE', '')
-        if case == 'r3-folder':
+        if case == 'r3-folder':  # diagnostic: the Live Folder rows alone (row glyphs need one plain tab)
+            new_tab(app, url('plain', 'r3-folder'))
             app = live_folder_checks(holder, results, wait_until, factory, new_tab)
             return
         # Bug sweep r3 E7 (claim rejected): a script that never settles must not hold the one fetch
