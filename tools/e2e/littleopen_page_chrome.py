@@ -207,6 +207,22 @@ def run(factory, results, tmp, h):
             app.call('quit'); state=visible(ds); answer(False)
             return dict(ok=state['parent']==row['window'] and ev('document.title')=='Little fixture',state=state)
         gate('little_quit_cancel',quit_cancel)
+
+        def new_tab_from_little():
+            # WC-04: a target=_blank link in Little Open opens a tab that a main window shows.
+            # It used to go into the shared model unselected, through Little Open's own factory.
+            page()
+            target = origin + '/from-little?' + str(time.time_ns())
+            ev('const a=document.createElement("a");a.id="blank";a.href=%s;a.target="_blank";a.textContent="Blank";document.body.append(a);true' % json.dumps(target))
+            app.call('click', tab=current()['content'], selector='#blank')
+            def shown():
+                state = app.call('window-state'); selected = state.get('selected')
+                tab = next((t for t in app.call('tabs') if t['id'] == selected), None) if selected else None
+                return state if tab and tab.get('url', '').startswith(origin + '/from-little') else None
+            state = wait(shown, timeout=8, step=.1)
+            if state: app.call('close', tab=state['selected'])
+            return dict(ok=bool(state), state=state and {k: state.get(k) for k in ('id', 'selected')})
+        gate('little_target_blank_new_tab', new_tab_from_little)
         def quit_partial_cancel():
             nonlocal row
             armed = {}

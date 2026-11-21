@@ -123,6 +123,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var fullscreenTransition = false
     public private(set) var fullScreenTransitionCount = 0
     public var isChangingFullScreen: Bool { fullscreenTransition }
+    /// After the window entered (true) or left (false) full screen.
+    public var onFullScreenChange: ((Bool) -> Void)?
     /// Page fullscreen is transient and never changes the saved sidebar mode.
     public var isPageFullscreen = false {
         didSet {
@@ -1779,12 +1781,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
     public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true; applyTrafficLightDim(animated: false) }
-    public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?(); resumePendingSpaceCreation() }
+    public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?(); resumePendingSpaceCreation(); onFullScreenChange?(true) }
     public func windowDidExitFullScreen(_ notification: Notification) {
         fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?()
         // The window is back at its frame; the pointer may or may not be over the buttons.
         dimmedLights.syncWithPointer()
         resumePendingSpaceCreation()
+        onFullScreenChange?(false)
     }
     public func windowDidBecomeKey(_ notification: Notification) {
         context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?()

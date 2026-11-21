@@ -32,7 +32,12 @@ final class TranslateAdapter {
   private var undoDriven: Set<ObjectIdentifier> = []
   private(set) var toastsShown: [String] = []
   /// Translate Selection (context menu, PB4 row 5).
-  private(set) lazy var selection = TranslateSelectionController(adapter: self)
+  /// Made on first use (the context menu); closing pages and windows only clean up an existing one.
+  private var existingSelection: TranslateSelectionController?
+  var selection: TranslateSelectionController {
+    if let existingSelection { return existingSelection }
+    let made = TranslateSelectionController(adapter: self); existingSelection = made; return made
+  }
 
   /// The window's own undo stack: an Incognito window's model has its own, so its "Translate" steps
   /// never reach a regular window's Cmd+Z.
@@ -104,12 +109,16 @@ final class TranslateAdapter {
     lastTarget[id] = nil
     if popoverSession == id { popover?.dismiss() }
     if focused === content { focused = nil; syncStatus() }
+    // Translate Selection's panel and its event monitor go with their page (bug sweep r4 WC-09).
+    existingSelection?.pageDidClose(content)
   }
 
   func closeAll() {
     for content in sessions.keys { if let s = sessions[content] { undoManager.removeAllActions(withTarget: s); s.close() } }
     sessions.removeAll(); documents.removeAll(); lastTarget.removeAll(); undoDriven.removeAll()
     popover?.dismiss(); languagesTask?.cancel()
+    // The window closes: its Translate Selection panel and app-wide event monitor too.
+    existingSelection?.close()
   }
 
   // MARK: Sessions

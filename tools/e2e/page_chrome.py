@@ -281,6 +281,103 @@ def run(factory, results, tmp, h):
                          and app.eval(tab,'document.title')=='Quit survivor',state=state)
         gate('dialog_quit_cancel',quit_cancel_identity)
 
+        def arm(target):
+            # A real click gives Chromium the sticky activation its beforeunload contract needs.
+            app.eval(target,'document.body.innerHTML="<button id=arm>Arm</button>";document.querySelector("#arm").onclick=()=>{onbeforeunload=e=>{e.preventDefault();e.returnValue="unsaved"}};true')
+            app.call('click',tab=target,selector='#arm')
+            assert wait(lambda:app.call('engine-sleep',tab=target)['unloadHandlers'],timeout=3,step=.02)
+        def alive():
+            try: return app.call('ping')['pid']==app.pid
+            except Exception: return False
+
+        def background_close():
+            # WC-03: closing a background tab whose beforeunload asks must show that tab and its
+            # sheet; it used to queue an invisible sheet and leave the renderer blocked.
+            target = page(); arm(target); other = page()
+            app.call('close', tab=target)
+            state = visible(ds); shown = app.call('window-state')['selected']
+            answer(False)
+            stays = any(t['id'] == target for t in app.call('tabs'))
+            app.call('select', tab=other); app.call('close', tab=target)
+            visible(ds); answer()
+            gone = wait(lambda: all(t['id'] != target for t in app.call('tabs')), timeout=3, step=.02)
+            return check(state['title'] == 'Leave site?' and shown == target and stays and gone,
+                         state=state, shown=shown, target=target, stays=stays, gone=bool(gone))
+        gate('dialog_beforeunload_background_close', background_close)
+
+        def quit_with_pending_dialog():
+            # WC-02: a page that asks beforeunload and also has an open dialog must not let Quit
+            # skip its beforeunload (the App used to terminate at once).
+            page(); arm(tab)
+            app.call('policy', dialogs='hold'); schedule('confirm("held during quit")')
+            assert wait(lambda: ds()['pending'] == 1, timeout=3, step=.02), ds()
+            app.call('quit'); time.sleep(1.5)
+            survived = alive()
+            if not survived: return check(False, survived=False)
+            app.call('dialog', accept=False); app.call('policy', dialogs='')
+            assert wait(lambda: ds()['pending'] == 0, timeout=3, step=.02), ds()
+            # The refused quit must not leave the preflight stuck: the next Quit asks again.
+            app.call('quit'); state = visible(ds); answer(False)
+            return check(state['title'] == 'Leave site?' and alive(), survived=survived, state=state)
+        gate('dialog_quit_pending_dialog', quit_with_pending_dialog)
+
+        def quit_buried_peek():
+            # WC-02: a beforeunload page under another Peek used to hang Quit for good.
+            source = page()
+            app.call('peek-open', tab=source, url=origin + '/peek-one?' + str(time.time_ns()))
+            first = wait(lambda: (lambda s: s['stack'][0]['content'] if s['stack'] and s['stack'][0]['content'] else None)(app.call('peek-state')), timeout=5, step=.05)
+            assert first, app.call('peek-state')
+            assert wait(lambda: app.eval(first, 'document.readyState') == 'complete', timeout=5, step=.05)
+            arm(first)
+            app.call('peek-open', tab=source, url=origin + '/peek-two?' + str(time.time_ns()))
+            assert wait(lambda: len(app.call('peek-state')['stack']) == 2, timeout=5, step=.05), app.call('peek-state')
+            app.call('quit')
+            state = wait(lambda: (lambda s: s if s.get('visible') else None)(ds()), timeout=5, step=.05)
+            if state: answer(False)
+            survived = alive()
+            if survived:
+                app.eval(first, 'onbeforeunload=null;true', timeout=1); app.call('peek-close')
+            return check(bool(state) and state['title'] == 'Leave site?' and survived, state=state, survived=survived)
+        gate('dialog_quit_buried_peek', quit_buried_peek)
+
+        def ws(): return app.call('window-state')
+        def settled(full, page_full):
+            return wait(lambda: (lambda s: s if s['fullscreen'] == full and s['pageFullscreen'] == page_full
+                                 and not s['fullscreenTransition'] else None)(ws()), timeout=15, step=.1)
+        def enter_page_fullscreen(target):
+            result = app.eval(target, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+            entered = settled(True, True)
+            assert result == 'ok' and entered, {'request': result, 'state': ws()}
+        def fullscreen_rows(how):
+            # WC-01: page fullscreen ends with its page. A closed, hidden or window-exited page
+            # used to leave the window in full screen with the sidebar hidden for good.
+            assert not ws()['fullscreen'], ws()
+            target = page(); other = None
+            if how == 'switch': other = page(); app.call('select', tab=target)
+            enter_page_fullscreen(target)
+            if how == 'close': app.call('close', tab=target)
+            elif how == 'switch': app.call('select', tab=other)
+            elif how == 'window': app.call('window-fullscreen')
+            after = settled(False, False) or ws()
+            doc = None if how == 'close' else app.eval(target, '!!document.fullscreenElement')
+            if ws()['fullscreen']: app.call('window-fullscreen'); settled(False, ws()['pageFullscreen'])
+            return check(not after['fullscreen'] and not after['pageFullscreen'] and after['sidebarVisible'] and not doc,
+                         after={k: after.get(k) for k in ('fullscreen', 'pageFullscreen', 'sidebarVisible', 'fullscreenTransition')},
+                         documentFullscreen=doc)
+        for how in ('close', 'switch', 'window'):
+            gate('fullscreen_ends_on_' + how, lambda how=how: fullscreen_rows(how))
+
+        def fullscreen_background():
+            # WC-01: a page not shown in this window cannot take the window into full screen.
+            target = page(); page()
+            result = app.eval(target, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+            time.sleep(1.5); state = ws(); doc = app.eval(target, '!!document.fullscreenElement')
+            if state['fullscreen']: app.call('window-fullscreen'); settled(False, False)
+            return check(not state['fullscreen'] and not state['pageFullscreen'] and not doc,
+                         request=result, documentFullscreen=doc,
+                         state={k: state.get(k) for k in ('fullscreen', 'pageFullscreen', 'sidebarVisible')})
+        gate('fullscreen_background_refused', fullscreen_background)
+
         # Fresh localhost origins avoid Chromium's repeated-denial embargo.
         port = server.server_address[1]
         def permission_page(host):
@@ -322,6 +419,23 @@ def run(factory, results, tmp, h):
             events=[e for e in app.call('events') if e['type']=='permissionAnswer']
             return check(closed and ps()['decisions']==before+1 and len(events)==1 and events[0]['decision']=='dismiss', events=events)
         gate('permission_tab_switch_once', switched)
+
+        def split_unfocused_pane():
+            # WC-08: a prompt for the unfocused pane of a Split stays while that pane is shown.
+            # It used to be dismissed by the next visibility update.
+            permission_page('splitpane'); target = tab; other = page()
+            panes = [t['id'] for t in app.call('split')]
+            try:
+                assert sorted(panes) == sorted([target, other]), panes
+                app.call('select', tab=other)
+                perm(target=target); state = visible(ps)
+                app.call('select', tab=other); time.sleep(.5)
+                kept = ps()['visible'] and app.eval(target, 'permissionResult') == 'pending'
+                app.call('permission-prompt', answer='notnow')
+            finally:
+                app.call('split')
+            return check(kept and state['anchor']['name'] != 'sidebar-url', state=state, kept=kept)
+        gate('permission_split_unfocused_pane', split_unfocused_pane)
 
         for action in ['navigate','close']:
             def cancel_permission(action=action):
