@@ -43,7 +43,9 @@ enum NoteTab {
         let existing = model.node(id: splitID)?.split, existing.panes.count < 4 {
         let index = (existing.panes.firstIndex { $0.id == current.id } ?? existing.panes.count - 1) + 1
         if model.addPane(splitID: splitID, tabID: tab.id, at: index) {
-          model.focusSplitPane(splitID: splitID, tabID: tab.id); selectID = splitID
+          // Select the new pane, not the split: the factory then focuses it and ends Expand
+          // Current Pane, which would keep the new Note hidden behind the expanded pane.
+          model.focusSplitPane(splitID: splitID, tabID: tab.id); selectID = tab.id
         }
       } else if let made = model.makeSplit(tabIDs: [current.id, tab.id]) {
         model.focusSplitPane(splitID: made.id, tabID: tab.id); selectID = made.id

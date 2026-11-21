@@ -59,6 +59,9 @@ def run(factory, results, tmp, harness):
 
     try:
         app.call('window-frame', frame=[80, 60, 1280, 820])
+        if os.environ.get('OPEN_E2E_CALENDAR_CASE') == 'per-profile':  # diagnostic: step 9 alone
+            per_profile_reminder_checks(app, results, wait_until, new_tab, cal)
+            return
         # Arc enables Join Meeting only while its Live Calendar has an active event with a join link (menu
         # validation FUN_100314424, branch joinLiveMeeting:). Open: only while a joinable meeting is in memory.
         def enabled(): return menu_row('join-meeting').get('enabled')
@@ -218,6 +221,18 @@ def per_profile_reminder_checks(app, results, wait_until, new_tab, cal):
                 and shown_front == second_window and not [r for r in early.get('reminders', []) if r.get('event') == 'p']
                 and len(mine) == 1 and mine[0].get('window') == first_window,
             'menus': menus, 'front': shown_front, 'windows': [first_window, second_window], 'reminders': mine}
+        # Bug sweep r3 L18: Profile B reminds ten minutes before, Profile A two minutes before. The
+        # reminder used to be app-wide, so B's reminder consumed the meeting and A never reminded.
+        front(second_window)
+        app.call('sidebar-menu', node=fav_b, item='Meeting Reminder/Ten Minutes Before')
+        cal(action='fixture', access='granted', events=[{'id': 'q', 'title': 'Both Profiles', 'start': 15, 'end': 45, 'url': ZOOM}])
+        b_due = [r for r in at(6).get('reminders', []) if r.get('event') == 'q']      # 9 minutes before: B only
+        a_due = [r for r in at(13.5).get('reminders', []) if r.get('event') == 'q']   # 1.5 minutes before: A too
+        again = [r for r in at(14).get('reminders', []) if r.get('event') == 'q']     # each Profile reminds once
+        results['cal_live_reminder_each_profile_once'] = {
+            'ok': [r.get('window') for r in b_due] == [second_window]
+                and [r.get('window') for r in a_due] == [second_window, first_window] and len(again) == 2,
+            'b': b_due, 'a': a_due, 'again': again, 'windows': [first_window, second_window]}
     finally:
         if second_window:
             front(second_window); app.call('window-close')

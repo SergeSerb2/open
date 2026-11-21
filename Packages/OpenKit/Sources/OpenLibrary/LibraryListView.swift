@@ -281,6 +281,9 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.scheduleSettle()
         updates += 1
         if let selected, let row = entryIndex(selected) { table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
+        // setRows drops a selected row that is gone without a selection callback. Report it,
+        // or the view model keeps the removed row's ID as selected.
+        else if selected != nil, selectedItem?.id != selected { onSelection?(selectedItem?.id) }
     }
     private func rebuild(previousSources: [LibraryRowSource]? = nil) {
         entries = []; var lastDay = ""
@@ -443,6 +446,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
               "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,
               "drawnSelected":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.selected ?? false,"actions":item.hoverActions.map(\.title),"contextMenu":item.contextMenu,"toolTip":item.toolTip ?? "",
               "buttonToolTips":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonToolTips ?? [],
+              "realized":table.view(atColumn:0,row:row,makeIfNecessary:false) is LibraryItemView,
+              "iconLoaded":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.iconLoaded ?? false,
               "buttons":(table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.buttonState(in:root) ?? []]
         }
     }
@@ -477,6 +482,8 @@ private final class LibraryItemView: NSView {
     private var buttons: [LibraryControl] = []
     /// Tooltips of the drawn row buttons (automation evidence).
     var buttonToolTips: [String] { buttons.filter { !$0.isHidden }.compactMap(\.toolTip) }
+    /// The row's loadImage result is drawn (automation evidence for the favicon queue).
+    private(set) var iconLoaded = false
     private var foreground = NSColor.labelColor, overlay = NSColor.labelColor
     private var tracking: NSTrackingArea?
     private var gallery = false
@@ -497,10 +504,10 @@ private final class LibraryItemView: NSView {
             title.string = text?.title ?? LibraryText.value(item.title,size:15,weight:.medium,color:foreground)
             subtitle.string = text?.subtitle ?? LibraryText.value(item.subtitle,size:13,weight:.regular,color:foreground.withAlphaComponent(0.68))
         }
-        setIcon(item.image)
+        setIcon(item.image); iconLoaded = false
         LibraryIdleWork.measure("favicon.request") { item.loadImage? { [weak self] image in
             guard let self, self.item?.id == item.id, let image else { return }
-            LibraryIdleWork.measure("favicon.decode") { self.setIcon(image) }
+            LibraryIdleWork.measure("favicon.decode") { self.setIcon(image) }; self.iconLoaded = true
         } }
         if let url = item.fileURL {
             LibraryIdleWork.measure("filePreview.request") { setIcon(FilePreviewCache.shared.image(for:url) { [weak self] in

@@ -72,11 +72,14 @@ public enum GitHubQuery {
             if (u.href.length <= 2048 && u.origin === location.origin && /^\/orgs\/[^/]+\/sso\/?$/.test(u.pathname)) { link = u.href; break; }
           } catch {}
         }
-        return {state: 'needsSSO', items: [], ssoURL: link};
+        return {state: 'needsSSO', items: [], ssoURL: link, origin: location.origin};
       }
       const seen = new Set(), items = [];
       for (const link of document.querySelectorAll('a[href*="/pull/"]')) {
-        const href = new URL(link.getAttribute('href'), location.href);
+        // One malformed link must not fail the whole refresh; a link to another site is not a PR here.
+        let href;
+        try { href = new URL(link.getAttribute('href'), location.href); } catch { continue; }
+        if (href.origin !== location.origin) continue;
         const m = href.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/);
         if (!m || seen.has(href.pathname)) continue;
         const title = (link.textContent || '').trim();
@@ -92,7 +95,7 @@ public enum GitHubQuery {
         if (items.length >= 100) break;
       }
       if (!items.length && !document.querySelector('.blankslate, [data-testid="empty-state"], [data-empty-state]')) return {state: 'unexpected', items: []};
-      return {state: 'ok', items};
+      return {state: 'ok', items, origin: location.origin};
     })()
     """#
 
@@ -115,13 +118,19 @@ public enum GitHubQuery {
         return origin.appendingPathComponent("orgs").appendingPathComponent(String(slug)).appendingPathComponent("sso")
     }
 
-    /// Decodes the script's value. Unknown or malformed rows are dropped, never guessed.
-    public static func decode(_ value: Any, kind: LiveFolderConfig.Kind) -> (PageState, [PRSnapshot]) {
+    /// Decodes the script's value. Unknown or malformed rows are dropped, never guessed. With
+    /// `origin`, a result read on another origin (a redirect off GitHub) is unexpected, and only
+    /// rows on `origin` are kept.
+    public static func decode(_ value: Any, kind: LiveFolderConfig.Kind, origin: URL? = nil) -> (PageState, [PRSnapshot]) {
         guard let object = value as? [String: Any], let state = (object["state"] as? String).flatMap(PageState.init(rawValue:)) else { return (.unexpected, []) }
+        if let origin, state == .ok || state == .needsSSO {
+            guard let expected = webOrigin(origin), (object["origin"] as? String)?.lowercased() == expected else { return (.unexpected, []) }
+        }
         let rows = (object["items"] as? [[String: Any]] ?? []).prefix(100)
         let iso = ISO8601DateFormatter()
         let items: [PRSnapshot] = rows.compactMap { row in
-            guard let raw = row["url"] as? String, let url = URL(string: raw), let title = row["title"] as? String, !title.isEmpty,
+            guard let raw = row["url"] as? String, let url = URL(string: raw), origin.map({ webOrigin(url) == webOrigin($0) }) ?? true,
+                  let title = row["title"] as? String, !title.isEmpty,
                   let number = (row["number"] as? NSNumber)?.intValue, let repository = row["repository"] as? String else { return nil }
             let status = (row["status"] as? String).flatMap(PRSnapshot.Status.init(rawValue:)) ?? .open
             return PRSnapshot(url: url, title: String(title.prefix(300)), number: number, repository: repository,
@@ -129,6 +138,13 @@ public enum GitHubQuery {
                               updatedAt: (row["updatedAt"] as? String).flatMap(iso.date(from:)), kinds: [kind])
         }
         return (state, items)
+    }
+
+    /// `scheme://host[:port]` as a page's `location.origin` spells it (lowercase, no default port).
+    static func webOrigin(_ url: URL) -> String? {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(), !host.isEmpty else { return nil }
+        let port = url.port.flatMap { (scheme == "http" && $0 == 80) || (scheme == "https" && $0 == 443) ? nil : $0 }
+        return "\(scheme)://\(host)" + (port.map { ":\($0)" } ?? "")
     }
 
     /// Merges the per-kind results: one row per PR, kinds united, active PRs only, newest first.

@@ -73,6 +73,12 @@ bool SplitUrl(const std::string& url, UrlParts& out, bool is_pattern) {
       if (colon != std::string::npos) {
         authority = authority.substr(0, colon);
       }
+    } else {
+      // An IPv6 literal keeps its brackets; the port follows the "]".
+      size_t end = authority.find(']');
+      if (end != std::string::npos) {
+        authority = authority.substr(0, end + 1);
+      }
     }
   }
   out.host = authority;

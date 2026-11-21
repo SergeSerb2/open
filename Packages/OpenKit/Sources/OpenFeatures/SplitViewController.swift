@@ -40,6 +40,8 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
             guard let self, let split = self.split else { return }; self.model.setSplitFractions(splitID: split.id, fractions: fractions); self.onChange?()
         }
         container.onDrop = { [weak self] id, zone, index in self?.drop(id, zone: zone, paneIndex: index) ?? false }
+        // Esc in the panel ends Expand Current Pane here too, or the next refresh expands it again.
+        container.onMaximizedPaneCancelled = { [weak self] in self?.maximizedPaneID = nil }
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public func refresh() {
@@ -52,13 +54,28 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
     }
     private func canSplit(_ id: ItemID) -> Bool {
         guard model.tab(id: id) != nil, let parent = model.parent(of: id) else { return false }
-        switch parent { case .favorites, .splitPane: return false; default: return true }
+        switch parent { case .favorites, .splitPane: return false; default: break }
+        // A split forms in its first tab's slot, and a center drop selects the tab in this
+        // window's Space. A tab of another Space (another window's drag, maybe another
+        // Profile) would pull this window's page into that Space, or select a node this
+        // Space cannot show: both leave the window blank.
+        var ancestor = parent
+        while case .folder(let folder) = ancestor {
+            guard let next = model.parent(of: folder) else { return false }
+            ancestor = next
+        }
+        switch ancestor {
+        case .spacePinned(let home), .spaceToday(let home): return home == space?.id
+        default: return false
+        }
     }
     public var canAddPane: Bool { if let split { return split.panes.count < 4 }; return focusedTab.map { canSplit($0.id) } ?? false }
     public func addEmptyPane() {
         // GUESS: the alert beep on a refused split is not captured (C9 tested only the successful split; features-advanced SE-2).
         guard canAddPane, let space, let current = focusedTab else { NSSound.beep(); return }
         let tab = model.newTab(in: space.id, url: URL(string: "about:blank")!, at: 0); tab.live.sleepPhase = .live
+        // The new pane takes focus; Expand Current Pane would keep it hidden.
+        clearMaximizedPane(unless: nil)
         if let split { _ = model.addPane(splitID: split.id, tabID: tab.id) }
         else if let made = model.makeSplit(tabIDs: [current.id, tab.id]) {
             model.focusSplitPane(splitID: made.id, tabID: tab.id); select(made.id)
@@ -69,6 +86,8 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         guard canSplit(id), let current = focusedTab, current.id != id else { return }
         if let split { guard model.addPane(splitID: split.id, tabID: id) else { return } }
         else if let made = model.makeSplit(tabIDs: [id, current.id]) { select(made.id); model.focusSplitPane(splitID: made.id, tabID: id) }
+        // The opened tab takes focus; Expand Current Pane would keep it hidden.
+        clearMaximizedPane(unless: nil)
         refresh(); onChange?()
     }
     /// A selection that focuses another pane, or leaves the split (nil), ends Expand Current Pane,
@@ -93,14 +112,14 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
             // valid, so separating its pane still selects the new sibling.
             if separate, model.node(id: split.id)?.split != nil { select(id) }
         }
-        maximizedPaneID = nil; refresh(); onChange?()
+        clearMaximizedPane(unless: nil); refresh(); onChange?()
     }
     /// Adds an empty pane on one side of the focused page (Developer Mode's Split View Menu: Add Right / Left / Top /
     /// Bottom Split, C-report-s10 PB3-a2), as dropping a tab on that edge would.
     public func addEmptyPane(edge zone: SplitDropOverlayView.Zone) {
         guard canAddPane, let space, focusedTab != nil else { NSSound.beep(); return }
         let tab = model.newTab(in: space.id, url: URL(string: "about:blank")!, at: 0); tab.live.sleepPhase = .live
-        maximizedPaneID = nil
+        clearMaximizedPane(unless: nil)
         if !drop(tab.id, zone: zone, paneIndex: nil) { model.closeTab(id: tab.id); NSSound.beep() }
     }
     private func select(_ id: ItemID) { if let space { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) } }
@@ -134,6 +153,8 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
             }
             menu.addItem(FeatureMenuItem("Separate All Tabs") { [weak self] in
                 guard let self else { return }; let focused = self.focusedTab?.id; self.model.unsplit(splitID: split.id)
+                // The split is gone: end Expand Current Pane, or Undo brings the split back expanded.
+                self.clearMaximizedPane(unless: nil)
                 if let focused { self.select(focused) }; self.refresh(); self.onChange?()
             })
             menu.addItem(FeatureMenuItem("Close This Pane") { [weak self] in self?.performCommand("close-split-pane") })
@@ -150,7 +171,8 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
     }
     @discardableResult public func drop(_ id: ItemID, zone: SplitDropOverlayView.Zone, paneIndex: Int?) -> Bool {
         guard canSplit(id), let current = focusedTab, current.id != id else { return false }
-        if zone == .center && paneIndex == nil { select(id); refresh(); onChange?(); return true }
+        // A drop focuses the dropped tab (or leaves the split): end Expand Current Pane.
+        if zone == .center && paneIndex == nil { clearMaximizedPane(unless: nil); select(id); refresh(); onChange?(); return true }
         let orientation: SplitOrientation = zone == .top || zone == .bottom ? .vertical : .horizontal
         let before = zone == .left || zone == .top
         if let split {
@@ -160,6 +182,7 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
             guard let made = model.makeSplit(tabIDs: before ? [id, current.id] : [current.id, id], orientation: orientation) else { return false }
             select(made.id); model.focusSplitPane(splitID: made.id, tabID: id)
         }
+        clearMaximizedPane(unless: nil)
         refresh(); onChange?(); return true
     }
 }

@@ -3,8 +3,11 @@
 
 Launches the real Open.app with a fresh profile, drives it only through the
 automation socket (docs/automation.md), and writes results plus screenshots
-of OUR windows to docs/engine-spike/. Nothing here touches other apps or the
-system mouse and keyboard.
+of OUR windows. A gate run (--output-dir) writes them to docs/engine-spike/
+(the gate archives and restores them); a direct run writes them to a folder
+under $TMPDIR/open-e2e-evidence/ (printed) so tracked files stay unchanged,
+unless --tracked-evidence asks for docs/engine-spike/. Nothing here touches
+other apps or the system mouse and keyboard.
 
   tools/e2e/engine_e2e.py --only shell            # Chrome style (the default, as in the gate)
   tools/e2e/engine_e2e.py --style alloy  --only features
@@ -27,6 +30,7 @@ import math
 import glob
 import hashlib
 import re
+import sqlite3
 import runpy
 import os
 import shutil
@@ -40,9 +44,9 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
-from loopback_http import LoopbackHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from loopback_http import LoopbackHTTPServer
 import prefs_domain  # this run's private preferences domain; never the user's
 
 # The -I shebang drops this folder from sys.path. Put it first so sibling
@@ -5081,12 +5085,47 @@ def sidebar_checks(factory, results, tmp):
         app.call("sidebar-clear")
         results["clear_today"] = {"ok": [t["id"] for t in app.call("tabs")] == [a]
                                        and len(app.call("archive")) >= 3}
+        # Bug sweep round 3 (W8): a second Space switch while the first one's cover is up, in a
+        # panel over the cover's 16 Mpx image limit (a large 2x display; here an unconstrained
+        # 1x window). The running slide cannot fold into an image, so the switch applies without
+        # a cover. Before, it returned early with the first cover's callbacks cancelled: the cover
+        # stayed up for good and took every click in the panel.
+        w8_home = next(s for s in app.call("spaces") if s["focused"])["id"]
+        w8_space = app.call("space-create", title="W8 Wide")
+        w8_tab = new_tab(app, fixture("Sidebar W8"))
+        app.call("space", space=w8_home)
+        app.call("select", tab=a)
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+        w8_reduced = app.call("window-motion")["reduced"]
+        app.call("window-motion", reduced=False)
+        w8_frame = [float(v) for v in re.findall(r"-?[\d.]+", app.call("window-frame"))]
+        try:
+            app.call("window-frame", frame=[0, 0, 5200, 3600], unconstrained=True)
+            time.sleep(.5)
+            app.call("space", space=w8_space)
+            w8_first = app.call("window-motion")["spacePage"]["phase"]
+            app.call("space", space=w8_home)
+            w8_idle = wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
+            w8_after = app.call("window-motion")["spacePage"]
+            w8_page = check_page(app, a, "Sidebar A")
+        finally:
+            # Later rows need the normal, screen-constrained window and motion setting.
+            app.call("window-frame", frame=w8_frame)
+            app.call("window-motion", reduced=w8_reduced)
+        results["W8_interrupted_wide_switch_retires_cover"] = {
+            "ok": w8_first != "idle" and bool(w8_idle) and w8_page,
+            "first_phase": w8_first, "after": w8_after, "page_shown": w8_page, "restored_frame": w8_frame,
+            "w8_tab": w8_tab}
         s1 = next(s for s in app.call("spaces") if s["focused"])["id"]
         s2 = app.call("space-create", title="Work", profile="Work")
         e = new_tab(app, fixture("Sidebar E"))
         context = app.page(e)["context"]
         app.call("space", space=s1)
         app.call("select", tab=a)
+        # An animated switch shows the page when its cover retires (the engine's presented
+        # frame), not at the automation reply: wait for that state, as the click below does.
+        state_when(app, lambda st: st["selected"] == a and st["shownPages"] == [a]
+                   and app.call("window-motion")["spacePage"]["phase"] == "idle")
         first_page = check_page(app, a, "Sidebar A")
         # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
         # A socket-ready launch can still be waiting for its activation grant.
@@ -5098,19 +5137,33 @@ def sidebar_checks(factory, results, tmp):
         # its layer animation (otherwise the receipt can belong to the prior switch).
         after_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e) or app.call("window-state")
         switched = app.call("window-motion")["space"]
+        # The model flips at mouse-up; the panel shows E once the cover retires on E's
+        # presented frame. Read the page there, not at the flip.
+        settle_started = time.monotonic()
+        settled_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e and st["shownPages"] == [e]
+                                   and app.call("window-motion")["spacePage"]["phase"] == "idle") or app.call("window-state")
+        settle_seconds = time.monotonic() - settle_started
+        click_cover = app.call("window-motion")["spacePage"]
+        click_tab = {k: app.tab(e).get(k) for k in ("sleepPhase", "loaded", "hasWebContent")}
         second_page = check_page(app, e, "Sidebar E")
+        second_context = app.page(e)["context"]
         results["space_switch_wrapper"] = {"ok": first_page and second_page and context != "Default"
-                                                and app.page(e)["context"] == context}
+                                                and second_context == context,
+                                           "first_page": first_page, "second_page": second_page,
+                                           "context": context, "second_context": second_context,
+                                           "state": {k: after_click.get(k) for k in ("space", "selected", "shownPages")}}
         # Closed-form critical response from the installed mass/stiffness, not elapsed time.
         omega = math.sqrt(switched.get("stiffness", 0) / switched.get("mass", 1))
         remainder = 228 * (1 + omega * .27) * math.exp(-omega * .27)
         travel = abs(switched.get("to", 0) - switched.get("from", 0))
+        # shownPages is already [e] behind the cover; the cover must also have retired.
         results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
-            and after_click["selected"] == e and after_click["shownPages"] == [e]
+            and after_click["selected"] == e and settled_click["shownPages"] == [e] and click_cover.get("phase") == "idle"
             and scheduled_spring(switched, .20, 1, "transform.translation.x") and remainder <= .5 and travel > .5,
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
-            "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
+            "selected_after_click": after_click["selected"], "shown_after_click": settled_click["shownPages"],
+            "settle_seconds": settle_seconds, "cover_phase_after_settle": click_cover.get("phase"), "tab_after_click": click_tab}
         results["durable_profile_storage"] = {
             "status": "INFO", "coveredBy": "profiles/durable_second_profile",
             "reason": "requires the real cross-launch cookie/storage assertion in the Profiles suite"}
@@ -7261,6 +7314,15 @@ def media_checks(factory, results, tmp):
             "documentPictureInPicture.window ? [documentPictureInPicture.window.innerWidth, documentPictureInPicture.window.innerHeight] : null")),
             timeout=3, step=.02)
         dp_moved = app.eval(dp, "document.getElementById('player') === null")
+        # Bug sweep r3 L24: a Chrome-style page's Document PiP has its own client. Before, the PiP
+        # browser used the opener's, so the PiP document's title (and address) replaced the tab's.
+        dp_retitled = app.eval(dp, "documentPictureInPicture.window ? (documentPictureInPicture.window.document.title = 'R3 PiP document', true) : false")
+        dp_leak = wait_until(lambda: (lambda t: t if t.get("title") == "R3 PiP document" or not t.get("url", "").endswith("docpip.html") else None)(app.tab(dp)),
+                             timeout=1.5, step=.05)
+        dp_opener = {k: app.tab(dp).get(k) for k in ("title", "url")}
+        results["media_document_pip_own_client"] = {"ok": dp_retitled is True and not dp_leak
+            and dp_opener["title"] == "Media Document PiP" and dp_opener["url"].endswith("docpip.html"),
+            "retitled": dp_retitled, "opener": dp_opener, "style": app.style}
         dp_level = dp_win["level"] if dp_win else None
         app.call("pip-action", action="close")
         dp_gone = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
@@ -8628,6 +8690,34 @@ def numbering_checks(factory, results, tmp):
         app.quit(); server.shutdown(); server.server_close()
 
 
+def w2_little_open_edit_key_checks(app, record, page, close_all, origin):
+    """W2 in Little Open: its page sees Paste/Select All/Undo/Bold first; the menu then runs the
+    native action once. Keys enter NSApp.sendEvent for the Little Open window."""
+    row = page(origin + '/plain.html?littleopen=w2-edit-keys')
+    def ev(js): return app.call('little-open-eval', id=row['id'], js=js, timeout=3)
+    def key(name): return app.call('key', window=row['window'], key=name, modifiers=['cmd'], route='app')
+    def value(): return ev("document.querySelector('#w2').value")
+    app.call('pasteboard-preserve')
+    try:
+        ev("window.keys=[];document.body.insertAdjacentHTML('beforeend','<input id=w2 value=seed>');"
+           "document.addEventListener('keydown',e=>{keys.push(e.key);if(e.key==='b'||e.key==='i')e.preventDefault()},true);"
+           "document.querySelector('#w2').focus();true")
+        app.call('pasteboard-write', text='W2 FIRST'); key('a'); key('v')
+        first = wait_until(lambda: value() == 'W2 FIRST', timeout=3, step=.05)
+        app.call('pasteboard-write', text='W2 SECOND'); key('a'); key('v')
+        second = wait_until(lambda: value() == 'W2 SECOND', timeout=3, step=.05)
+        key('z'); undone = wait_until(lambda: value() == 'W2 FIRST', timeout=3, step=.05)
+        time.sleep(.3); once = value() == 'W2 FIRST'
+        key('b'); key('i'); time.sleep(.3)
+        keys = ev('window.keys')
+        record('W2_little_open_page_sees_edit_keys', keys == ['a', 'v', 'a', 'v', 'z', 'b', 'i']
+               and bool(first and second and undone) and once, keys=keys, value=value(),
+               first=bool(first), second=bool(second), undone=bool(undone))
+    finally:
+        app.call('pasteboard-restore')
+        close_all()
+
+
 def littleopen_checks(factory, results, tmp):
     """Routing Steps 6/7: real App windows, engine, menus, archive and visibility.
     Input stays inside the automation socket. Shared defaults are restored even on failure.
@@ -8715,6 +8805,7 @@ def littleopen_checks(factory, results, tmp):
         fixture_path = os.path.join(tmp, 'littleopen-snapshot.json')
         with open(fixture_path, 'w') as stream: json.dump(seed, stream)
         app.quit(); app = factory(urls=(), snapshot=fixture_path, extra_env=env)
+        w2_little_open_edit_key_checks(app, record, page, close_all, origin)
         # Atomic native events exercise Return/close before any queued turn.
         baseline = state()['browserCount']
         immediate_url = origin + '/plain.html?littleopen=immediate'
@@ -9686,13 +9777,128 @@ def routing_checks(factory, results, tmp):
         server.shutdown(); server.server_close()
 
 
+def w2_page_edit_key_checks(app, results, press, tab):
+    """W2: OEApplication's pre-page key route must not run Copy/Paste/Undo/Select All itself.
+    The page sees the keydown first and may cancel it; otherwise the menu runs the native action
+    once. Keys enter NSApp.sendEvent (the hardware path)."""
+    def value(): return app.eval(tab, "document.querySelector('#edit-input').value")
+    saved = app.call('pasteboard-preserve')
+    try:
+        app.call('click', tab=tab, selector='#edit-input')
+        app.eval(tab, "window.keys=[];window.passEdits=true;1")
+        app.call('pasteboard-write', text='W2 FIRST')
+        press('a', modifiers=['cmd'], route='app'); press('v', modifiers=['cmd'], route='app')
+        first = wait_until(lambda: value() == 'W2 FIRST', step=.05)
+        app.call('pasteboard-write', text='W2 SECOND')
+        press('a', modifiers=['cmd'], route='app'); press('v', modifiers=['cmd'], route='app')
+        second = wait_until(lambda: value() == 'W2 SECOND', step=.05)
+        press('z', modifiers=['cmd'], route='app')
+        undone = wait_until(lambda: value() == 'W2 FIRST', step=.05)
+        time.sleep(.3)
+        once = value() == 'W2 FIRST'
+        press('b', modifiers=['cmd'], route='app'); press('i', modifiers=['cmd'], route='app')
+        time.sleep(.3)
+        keys = app.eval(tab, 'window.keys')
+        results['W2_page_sees_edit_keys_app_route'] = {'ok': keys == ['a', 'v', 'a', 'v', 'z', 'b', 'i'], 'keys': keys}
+        results['W2_native_fallback_single_undo'] = {'ok': bool(first and second and undone) and once,
+            'first': bool(first), 'second': bool(second), 'undone': bool(undone), 'value': value()}
+        # A page that cancels the key keeps it: no browser-side Undo or Select All runs.
+        app.eval(tab, "window.keys=[];window.passEdits=false;document.querySelector('#edit-input').setSelectionRange(0,0);1")
+        before = value()
+        press('z', modifiers=['cmd'], route='app'); press('a', modifiers=['cmd'], route='app')
+        time.sleep(.5)
+        selection = app.eval(tab, "(() => {let e=document.querySelector('#edit-input');return [e.selectionStart,e.selectionEnd]})()")
+        keys = app.eval(tab, 'window.keys')
+        results['W2_page_cancel_wins'] = {'ok': keys == ['z', 'a'] and value() == before and selection != [0, len(before)],
+            'keys': keys, 'value': value(), 'selection': selection}
+    finally:
+        app.eval(tab, "window.passEdits=false;1")
+        app.call('pasteboard-restore')
+
+
+W3_BLOCKED_KEYS = (('t', ['cmd']), ('n', ['cmd']), (',', ['cmd']), ('l', ['cmd']), ('n', ['cmd', 'option']),
+                   ('n', ['cmd', 'shift']), ('y', ['cmd']), ('f', ['cmd']), ('g', ['cmd']), ('w', ['cmd']), ('r', ['cmd']))
+
+
+def w3_blocked_keys(app, press, sheet):
+    """Sends every W3 browser shortcut to `sheet` through NSApp.sendEvent. Returns the browser
+    commands and the menu actions each key ran (both must stay empty)."""
+    routes = {}
+    for key, mods in W3_BLOCKED_KEYS:
+        r = press(key, modifiers=mods, window=sheet, route='app', observeCommands=True)
+        routes['+'.join(mods + [key])] = (r.get('commands') or []) + (r.get('menuActions') or [])
+        time.sleep(.3)
+    return routes
+
+
+def w3_sheet_shortcut_checks(app, results, press, sheet, bar_state):
+    """W3: while a Save sheet is key, browser shortcuts must not act behind it. Keys go to the
+    sheet window through NSApp.sendEvent."""
+    def visible(): return sorted(w['number'] for w in app.call('windows') if w.get('visible') and w['number'] != sheet)
+    windows = visible(); tabs = len(app.call('tabs'))
+    def find_open(): return any(p.get('visible') for p in app.call('find-state').get('panes', []))
+    find_before = find_open()
+    routes = w3_blocked_keys(app, press, sheet)
+    still = app.call('save-page-state')
+    menu = {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in ('new-tab', 'new-window', 'settings', 'copy', 'paste')}
+    results['W3_save_sheet_blocks_browser_shortcuts'] = {
+        'ok': still['visible'] and not bar_state().get('presented') and visible() == windows
+              and len(app.call('tabs')) == tabs and not any(routes.values()) and not find_before and not find_open(),
+        'find': [find_before, find_open()], 'routes': routes,
+        'sheet': still, 'bar': bar_state().get('presented'), 'windows': [windows, visible()]}
+    # The menu bar agrees: browser items are off under the sheet; system edit items stay on.
+    results['W3_save_sheet_menu_validation'] = {'ok': menu.get('new-tab') is False and menu.get('new-window') is False
+        and menu.get('settings') is False and menu.get('paste') is True, 'menu': menu}
+
+
+def w3_in_process_sheet_checks(app, results, press, tab):
+    """W3 review: in-process sheets. A save prompt (SavePromptSheet) blocks every browser shortcut;
+    a page prompt() sheet keeps its text keys (Ctrl-D, Cmd-A, Cmd-V) and Cmd-. Cancel."""
+    def visible(): return sorted(w['number'] for w in app.call('windows') if w.get('visible'))
+    app.call('select', tab=tab); app.call('focus', tab=tab); time.sleep(.3)
+    app.call('save-prompt', mock={'kind': 'password', 'host': 'w3.example.com'})
+    prompt = wait_until(lambda: (lambda s: s if s.get('visible') else None)(app.call('save-prompt', state=True)), timeout=5, step=.05)
+    try:
+        windows = [w for w in visible() if not prompt or w != prompt['window']]; tabs = len(app.call('tabs'))
+        routes = w3_blocked_keys(app, press, prompt['window']) if prompt else {}
+        after = app.call('save-prompt', state=True)
+        results['W3_save_prompt_sheet_blocks_browser_shortcuts'] = {'ok': bool(prompt) and after.get('visible')
+            and not any(routes.values()) and [w for w in visible() if w != prompt['window']] == windows
+            and len(app.call('tabs')) == tabs, 'routes': routes, 'prompt': after, 'windows': [windows, visible()]}
+    finally:
+        if app.call('save-prompt', state=True).get('visible'): app.call('save-prompt', answer='dismiss')
+    def ds(): return app.call('dialog-state')
+    saved = app.call('pasteboard-preserve')
+    try:
+        app.eval(tab, 'window.outcome="pending";setTimeout(()=>{window.outcome=prompt("w3 prompt","seed")},50);true')
+        state = wait_until(lambda: (lambda s: s if s.get('visible') else None)(ds()), timeout=5, step=.05)
+        assert state, ds()
+        sheet = state['window']
+        app.call('key', text='abcd', window=sheet, route='app')
+        press('left', window=sheet, route='app'); press('left', window=sheet, route='app')
+        press('d', modifiers=['control'], window=sheet, route='app')
+        forward = wait_until(lambda: ds().get('text') == 'abd', timeout=3, step=.05)
+        app.call('pasteboard-write', text='W3 PASTE')
+        press('a', modifiers=['cmd'], window=sheet, route='app'); press('v', modifiers=['cmd'], window=sheet, route='app')
+        pasted = wait_until(lambda: ds().get('text') == 'W3 PASTE', timeout=3, step=.05)
+        text = ds().get('text')
+        press('.', modifiers=['cmd'], window=sheet, route='app')
+        cancelled = wait_until(lambda: ds()['pending'] == 0, timeout=3, step=.05)
+        outcome = app.eval(tab, 'window.outcome', timeout=3) if cancelled else 'dialog still open'
+        results['W3_prompt_sheet_keeps_text_keys'] = {'ok': bool(forward and pasted and cancelled) and outcome is None,
+            'ctrlD': bool(forward), 'paste': bool(pasted), 'text': text, 'cmdPeriodCancel': bool(cancelled), 'outcome': outcome}
+    finally:
+        if ds().get('pending'): app.call('dialog-button', accept=False)
+        app.call('pasteboard-restore')
+
+
 def commandbar_checks(factory, results, tmp, config):
     import http.server
     import threading
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             body = ("<!doctype html><title>Shell C %s</title><body style='background:#302d4a;color:white'>Shell C %s<p id=copy-source>PAGE COPY</p><input id=edit-input value=seed>"
-                    "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);e.preventDefault()})</script>" % (self.path, self.path)).encode()
+                    "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);if(!window.passEdits)e.preventDefault()})</script>" % (self.path, self.path)).encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
     server = LoopbackHTTPServer(Handler)
@@ -9749,6 +9955,8 @@ def commandbar_checks(factory, results, tmp, config):
         commandbar_results_work_checks(app, results, bar, press, new['id'])
         commandbar_sweep_checks(app, results, bar, press, type_query, state, origin, new['id'])
         app.call('focus', tab=new['id'])
+        # The page sees each edit key first (W2); it does not cancel them, so the native action follows.
+        app.eval(new['id'], "window.keys=[];window.passEdits=true;1")
         app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
         app.call('pasteboard-write', text='COPY NOT RUN')
         press('c', modifiers=['cmd'], route='window')
@@ -9767,8 +9975,11 @@ def commandbar_checks(factory, results, tmp, config):
         press('a', modifiers=['cmd'], route='window'); press('x', modifiers=['cmd'], route='window')
         cut = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == '', step=.05)
         results['page_cut_native_responder'] = {'ok': bool(cut) and app.call('pasteboard') == 'seed'}
+        page_keys = app.eval(new['id'], 'window.keys')
+        results['W2_page_sees_edit_keys_window_route'] = {'ok': page_keys == ['c', 'a', 'v', 'z', 'a', 'x'], 'keys': page_keys}
         press('z', modifiers=['cmd'], route='app')
         wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'seed', step=.05)
+        w2_page_edit_key_checks(app, results, press, new['id'])
         menu = app.call('menu-state')
         native_ids = {'cut','copy','paste','paste-and-match-style','select-all','undo','redo','find','find-next','find-previous','quit-open','hide-open','hide-others','show-all','minimize-window','zoom-window','bring-all-to-front','close-window','toggle-full-screen','emoji-and-symbols','start-speaking','stop-speaking','show-fonts','font-bold','font-italic','font-underline'}
         native_rows = [r for r in menu if r['id'] in native_ids]
@@ -10055,9 +10266,11 @@ def commandbar_checks(factory, results, tmp, config):
         press('s', modifiers=['cmd','shift'])
         save = wait_until(lambda: app.call('save-page-state') if app.call('save-page-state')['visible'] else None, timeout=5, step=.1)
         results['save_page_sheet'] = {'ok': bool(save) and save['requests'] == 1, 'state': save, 'last': app.call('save-page-state')}
+        if save: w3_sheet_shortcut_checks(app, results, press, save['number'], state)
         if save: app.call('dismiss')  # AppKit sheet cancel; remote system key input is not covered
         assert wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
         app.call('dismiss')  # close any remaining owned native panel before the next flow
+        w3_in_process_sheet_checks(app, results, press, target)
         capture = os.path.join(tmp, 'saved-command-page.mhtml')
         # This is a separate native Save action. Re-establish its exact browser
         # key window; the completion deliberately never re-keys a window.
@@ -11791,6 +12004,87 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
     require('R2_stale_folder_row_does_not_block_restore', stale_archived and fixture and dropped and restored and stale in sidebar_ids(),
             fixture=fixture, fixtureDetail=fixture_detail, stale=stale, kept=kept, staleInSidebar=stale in sidebar_ids(), archive=archive_ids()[:3],
             dropped=bool(dropped), restored=bool(restored))
+    # Bug sweep round 3. Both rows are measured before either is asserted.
+    # L2: Cmd+D on an outline selection skips a split, as a selected split disables Pin. Before,
+    # the selection path pinned the whole split (a split row clicked alone, or with a tab).
+    def section_of(node):
+        tree = app.call('sidebar-tree')
+        return 'pinned' if any(n['id'] == node for n in tree['pinned']) else 'today' if any(n['id'] == node for n in tree['today']) else None
+    def sidebar_key(name, mods=()): return app.call('sidebar-key', key=name, modifiers=list(mods))
+    l2_left = opened('R3 Split Left'); opened('R3 Split Right'); app.call('select', tab=l2_left); settle()
+    app.call('split'); settle()
+    l2_split = app.call('split', op='state')['id']
+    l2_lone = opened('R3 Lone')
+    app.call('sidebar-click', node=l2_split); settle()
+    sidebar_key('d', ['cmd']); settle()
+    l2_single = section_of(l2_split)
+    app.call('sidebar-click', node=l2_split); app.call('sidebar-click', node=l2_lone, modifiers=['cmd']); settle()
+    l2_selection = app.call('selection')
+    sidebar_key('d', ['cmd']); settle()
+    l2_mixed = dict(split=section_of(l2_split), lone=section_of(l2_lone))
+    r3_rows = [('R3_selection_pin_skips_split', bool(l2_split) and l2_single == 'today' and l2_mixed == dict(split='today', lone='pinned'),
+        dict(split=l2_split, singleSplitSection=l2_single, mixed=l2_mixed, selection=l2_selection))]
+    # Review round 1: the Tab menu title and the row menu's ⌥ Pin Tabs / Unpin Tabs use the
+    # same rows as Cmd+D. With [Today split, pinned tab] Cmd+D unpins, so the title says Unpin
+    # Tabs (it said Pin Tabs); the ⌥ item never pins the split.
+    def pin_title(): return next((m.get('title') for m in app.call('menu-state') if m['id'] == 'pin-unpin-tab'), None)
+    def select_both():
+        # A plain click on a row that is already in a multi-selection keeps that selection,
+        # so add whichever row is missing with Cmd-click.
+        app.call('sidebar-click', node=l2_split); settle()
+        for node in (l2_lone, l2_split):
+            if node not in app.call('selection'): app.call('sidebar-click', node=node, modifiers=['cmd'])
+        settle(); return sorted(app.call('selection'))
+    def row_menu(title):
+        try: app.call('sidebar-menu', node=l2_lone, item=title, alternate=True); return True
+        except RuntimeError: return False  # the item is missing or disabled
+    l2_selection_unpin = select_both()
+    l2_title_unpin = pin_title()
+    l2_menu_unpin_found = row_menu('Unpin Tabs'); settle()
+    l2_menu_unpin = dict(split=section_of(l2_split), lone=section_of(l2_lone), found=l2_menu_unpin_found)
+    l2_selection_pin = select_both()
+    l2_title_pin = pin_title()
+    l2_menu_pin_found = row_menu('Pin Tabs'); settle()
+    l2_menu_pin = dict(split=section_of(l2_split), lone=section_of(l2_lone), found=l2_menu_pin_found)
+    r3_rows.append(('R3_selection_pin_title_and_menu_match_cmd_d',
+        l2_selection_unpin == l2_selection_pin == sorted([l2_split, l2_lone])
+        and l2_title_unpin == 'Unpin Tabs' and l2_menu_unpin == dict(split='today', lone='today', found=True)
+        and l2_title_pin == 'Pin Tabs' and l2_menu_pin == dict(split='today', lone='pinned', found=True),
+        dict(expectedSelection=sorted([l2_split, l2_lone]), selectionWithPinnedTab=l2_selection_unpin,
+             selectionWithTodayTab=l2_selection_pin, titleWithPinnedTab=l2_title_unpin, afterMenuUnpin=l2_menu_unpin, titleWithTodayTab=l2_title_pin, afterMenuPin=l2_menu_pin)))
+    # L3: an Archive row that cannot come back (here a folder row with an undecodable payload)
+    # is kept and skipped; Cmd+Shift+T restores the next row. Before, every press stopped there.
+    l3_kept = opened('R3 Kept Closed')
+    app.call('close', tab=l3_kept); settle()
+    l3_child = opened('R3 Broken Child')
+    l3_folder = app.call('folder', tabs=[l3_child], title='R3 Broken')
+    l3_archived = delete_folder(l3_folder)
+    l3_snapshot = app.call('save'); app.quit()
+    l3_patched = 0
+    for parent in list(Path(l3_snapshot).parents)[:3]:
+        for database in parent.glob('**/archive.sqlite3'):
+            connection = sqlite3.connect(str(database))
+            try:
+                l3_patched += connection.execute("UPDATE archived_tabs SET payload='{not json' WHERE id=? COLLATE NOCASE AND kind='folder'",
+                                                 (l3_folder,)).rowcount
+                connection.commit()
+            finally:
+                connection.close()
+        if l3_patched: break
+    app = launch(); app.call('space', space=space); settle()
+    l3_fixture = archive_ids()[:2] == [l3_folder, l3_kept] and l3_kept not in sidebar_ids()
+    l3_fixture_detail = archive_ids()[:3]
+    command('restore-last-closed-tab')
+    l3_restored = wait_until(lambda: l3_kept in sidebar_ids(), timeout=5)
+    r3_rows.append(('R3_unrestorable_archive_row_skipped', l3_archived and l3_patched == 1 and l3_fixture and bool(l3_restored)
+        and l3_folder in archive_ids() and l3_folder not in sidebar_ids(),
+        dict(archived=bool(l3_archived), patched=l3_patched, fixture=l3_fixture, archiveBefore=l3_fixture_detail,
+             restored=bool(l3_restored), archiveAfter=archive_ids()[:3], folder=l3_folder, kept=l3_kept)))
+    r3_failed = None
+    for name, condition, detail in r3_rows:
+        try: require(name, condition, **detail)
+        except AssertionError: r3_failed = r3_failed or name
+    if r3_failed: raise AssertionError(r3_failed)
     return app
 
 
@@ -14367,7 +14661,7 @@ E2E_LANE = "all"
 
 
 def main():
-    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
+    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE, OUT
     ap = argparse.ArgumentParser()
     # Direct runs use the shipping Chrome style, as the gate does for every suite
     # (only its ntp-alloy stage passes --style alloy). Alloy is an explicit choice.
@@ -14376,6 +14670,8 @@ def main():
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
     ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
+    ap.add_argument("--tracked-evidence", action="store_true",
+                    help="a direct run writes screenshots and receipts to docs/engine-spike/ (default: a folder under $TMPDIR/open-e2e-evidence/)")
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
@@ -14494,6 +14790,11 @@ def main():
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
         ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
+    if not opts.output_dir and not opts.tracked_evidence:
+        # Bug sweep r3 T1: a direct run never rewrites tracked docs/engine-spike/ files.
+        OUT = os.path.join(tempfile.gettempdir(), 'open-e2e-evidence',
+                           time.strftime('%Y%m%d-%H%M%S') + '-%d' % os.getpid())
+        print('evidence: ' + OUT, file=sys.stderr, flush=True)
     os.makedirs(OUT, exist_ok=True)
     # Every run is isolated: several agents run this harness at once, and two
     # runs of one suite must never share a profile, a cache or a socket. The
@@ -14892,8 +15193,9 @@ def main():
             module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "applescript":
             results["applescript"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
-                factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
+            applescript = runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))
+            applescript["scope_checks"](factory, results["applescript"], _fixture_server, _restore_defaults, wait_until)
+            applescript["run"](factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
         elif opts.only == "sitedata":
             results["sitedata"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/site_data.py"))["run"](

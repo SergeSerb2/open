@@ -52,6 +52,17 @@ removal to the App observer. Back/forward without history and stop while idle ar
 Page commands address the named `ItemID` through `ScriptEngineBridge`. They never
 use `CommandDispatcher`. The URL setter calls `navigate`; it does not change the
 model URL or `pinnedURL`. Engine events supply the eventual URL, including redirects.
+`set URL` and `make … {URL:…}` (sidebar and Little Open tabs) refuse `javascript:` URLs
+with error 1001, also while Allow JavaScript from Apple Events is on: the engine runs a
+loaded `javascript:` URL in the page, and `execute` is the only JavaScript path. They also
+refuse Open's internal `open:` URLs (Welcome, Notes, Easels) with 1001.
+`select` shows the tab in its own Space. A split pane selects its split with that pane
+focused. A Favorite selects in the focused Space when that Space uses the Favorite's
+Profile, otherwise in the first Space of that Profile. `select` and `focus` act on the
+window that the reference names (`… of window id "…"`), else on the key or front window.
+In the App they use the sidebar's own paths (`ScriptHost.selectInWindow` and
+`focusSpaceInWindow`): Expand Current Pane ends, sleeping tabs wake, and no Undo step is
+registered. Scratch probes without these hooks change the model only, also without Undo.
 JavaScript returns text. H2 converts null/undefined to empty text, primitives to their
 JavaScript string forms, and objects/arrays to JSON. Exceptions map to 1013 with the
 first line limited to 300 characters; timeout maps to 1014. Missing engine maps to 1006.

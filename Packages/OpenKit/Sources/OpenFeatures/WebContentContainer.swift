@@ -446,7 +446,12 @@ public final class WebContentContainer: NSView {
         // Selection may come from keyboard cycling, automation, or model observers.
         // Return the preview before changing slots or refreshing any selected host.
         if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
-        if let currentProfile, currentProfile != profileID { closeAll(preservingSpaceMotion: true) }
+        // A Profile change closes the old Profile's pages. An animated switch applies this
+        // selection only once its cover is in place; the sleep wake for an incoming tab can
+        // create and adopt its page before then. That page is already the new Profile's (the
+        // factory closes a page whose tab leaves its Profile), so keep it, or the shown tab is
+        // left a placeholder with no page.
+        if let currentProfile, currentProfile != profileID { closeAll(preservingSpaceMotion: true, keeping: Set(tabIDs)) }
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
         let old = ids, previousFocus = focused, oldOrientation = orientation
         // Split add/remove/convert moves panes. A plain tab switch shares no pane and stays instant.
@@ -763,12 +768,12 @@ public final class WebContentContainer: NSView {
     public func closeAll() {
         closeAll(preservingSpaceMotion: false)
     }
-    private func closeAll(preservingSpaceMotion: Bool) {
+    private func closeAll(preservingSpaceMotion: Bool, keeping kept: Set<ItemID> = []) {
         if !preservingSpaceMotion { spaceMotionStorage?.reset() }
         finishPaneMotion()
         if !previewHosts.isEmpty { onReturnPreviewHost?() }
-        for id in Set(cache.keys).union(previewHosts.keys) { closeHost(for: id) }
-        parkedSlots.removeAll()
+        for id in Set(cache.keys).subtracting(kept).union(previewHosts.keys) { closeHost(for: id) }
+        parkedSlots = parkedSlots.filter { kept.contains($0.key) && cache[$0.key] != nil }
     }
     private func trimCache() {
         guard hiddenLRU.count > Self.maxCachedHiddenHosts else { return }
@@ -992,5 +997,9 @@ public final class WebContentContainer: NSView {
     @discardableResult public func handleDrop(_ id: ItemID, point: CGPoint, paneIndex: Int? = nil) -> Bool {
         onDrop?(id, dropOverlay.zone(at: point), paneIndex) ?? false
     }
-    public override func cancelOperation(_ sender: Any?) { dropOverlay.isHidden = true; maximizedTabID = nil }
+    public var onMaximizedPaneCancelled: (() -> Void)?
+    public override func cancelOperation(_ sender: Any?) {
+        dropOverlay.isHidden = true
+        if maximizedTabID != nil { maximizedTabID = nil; onMaximizedPaneCancelled?() }
+    }
 }

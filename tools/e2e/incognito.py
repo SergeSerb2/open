@@ -272,7 +272,7 @@ def checks(factory, results, tmp, harness):
         check('context_menu_private_link', bool(linked))
         if linked: focus(linked); wait(lambda: state()['ephemeral'], timeout=5, step=.05)
         # The App captures its own native window without screen-recording rights.
-        evidence = Path(harness.ROOT) / 'docs/engine-spike/incognito'; evidence.mkdir(parents=True, exist_ok=True)
+        evidence = Path(harness.OUT) / 'incognito'; evidence.mkdir(parents=True, exist_ok=True)
         for appearance in ['light', 'dark']:
             app.call('appearance', name=appearance)
             # Both reference machines use their built-in 2x panel. A missing
@@ -290,7 +290,7 @@ def checks(factory, results, tmp, harness):
                       and display['scale'] == scale and [width, height] == [p * scale for p in display['sizePoints']]
                       and all(max(abs(a-b) for a, b in zip(c, target)) <= 2 for c in colors), scale=display['scale'],
                       pixels=colors, size=[width, height], sizePoints=display['sizePoints'], method=shot['method'],
-                      path=str(path.relative_to(harness.ROOT)))
+                      path=str(path.relative_to(harness.ROOT)) if path.is_relative_to(harness.ROOT) else str(path))
         # Last-session quit has a beforeunload handler; private pages must not prompt.
         private_tab = next(t['id'] for t in app.call('tabs') if t['selected'])
         app.eval(private_tab, "window.addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='stay';});true")
