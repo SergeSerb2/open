@@ -251,13 +251,17 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         if state == .bar || commandBar.isPresented { presentCommandBar() }
     }
     public func focusURL() { presentCommandBar() }
-    private func presentCommandBar() {
-        // Keycaps show the user's bindings, as in the main window's bar and the menus.
+    /// Keycaps show the user's bindings, as in the main window's bar and the menus. An open
+    /// bar runs its text again, so a binding change shows without a new keystroke.
+    public func refreshKeyBindings() {
         let bindings = coordinator?.keyBindings?() ?? .empty
-        if bindings != actionBindings {
-            commandBar.engine.setActions(CommandRegistry.rekeyed(.arcDefaults, overrides: bindings))
-            actionBindings = bindings
-        }
+        guard bindings != actionBindings else { return }
+        commandBar.engine.setActions(CommandRegistry.rekeyed(.arcDefaults, overrides: bindings))
+        actionBindings = bindings
+        commandBar.refreshResults()
+    }
+    private func presentCommandBar() {
+        refreshKeyBindings()
         commandBar.present(CommandBarRequest(mode: state == .bar ? .littleOpen : .editCurrentURL,
             profileID: session.profileID, spaceID: pillSpaceID, currentTabID: session.tab.id,
             currentTabURL: currentURL ?? session.tab.url, currentTabTitle: session.tab.title,
@@ -422,7 +426,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     public func windowShouldClose(_ sender: NSWindow) -> Bool { coordinator?.close(sessionID: session.id, archiveReason: nil); return false }
     func updateVisibility() { session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
-    public func windowDidBecomeKey(_ notification: Notification) { updateVisibility(); coordinator?.recordActivity(session.id) }
+    public func windowDidBecomeKey(_ notification: Notification) { refreshKeyBindings(); updateVisibility(); coordinator?.recordActivity(session.id) }
     public func windowDidResignKey(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidMiniaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidDeminiaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
