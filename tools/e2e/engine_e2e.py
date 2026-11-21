@@ -40,9 +40,9 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
-from loopback_http import LoopbackHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from loopback_http import LoopbackHTTPServer
 import prefs_domain  # this run's private preferences domain; never the user's
 
 # The -I shebang drops this folder from sys.path. Put it first so sibling
