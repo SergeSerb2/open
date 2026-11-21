@@ -23,10 +23,23 @@ public final class SnapshotStore: @unchecked Sendable {
         }
     }
 
+    /// The model (weak: a later model can reuse its address) and Profile folder set the last
+    /// full prepare covered.
+    @MainActor private weak var preparedModel: BrowserModel?
+    @MainActor private var preparedDirectories: Set<String> = []
+    /// Full data-root prepares (automation evidence: unchanged Profiles skip the disk work).
+    @MainActor public private(set) var prepareCount = 0
+
     @MainActor
     private func prepare(model: BrowserModel) throws {
         try holdRootLock()
+        // The folder listings, retired-name read and per-Profile mkdirs run on the main actor.
+        // Repeat them only for another model or a changed set of Profile folders.
+        let directories = Set(model.profiles.map(\.dataDirectoryName))
+        if preparedModel === model, preparedDirectories == directories { return }
         _ = try OpenDataRoot.prepare(root: root, model: model)
+        prepareCount += 1
+        preparedModel = model; preparedDirectories = directories
     }
 
     public init(root: URL? = nil) {

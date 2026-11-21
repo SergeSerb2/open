@@ -500,6 +500,9 @@ def run(factory, results, tmp, api, defaults_before):
         state(profile='Shell Loaded', action='open-url', url=url)
         session = page_ready(url)
         old_cookie = app.call('little-open-eval', id=session['id'], js='document.cookie')
+        # STATE2: the tab-sleep store opens every Profile's sleep.sqlite3 when it starts.
+        app.call('sleep-start')
+        sleep_before = wait(lambda: (lambda s: s if old_directory in s.get('openStores', []) else None)(app.call('sleep-state')), timeout=10) or {}
         show('Shell Loaded')
         press('Delete Profile')
         assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
@@ -525,6 +528,12 @@ def run(factory, results, tmp, api, defaults_before):
             press('Delete')
             assert wait(lambda: not any(p['id'] == loaded['id'] for p in state()['profiles']) and not state()['deleting'], timeout=15), state()
         gone = state()
+        sleep_after = app.call('sleep-state').get('openStores', [])
+        held = [line for line in subprocess.run(['lsof', '-p', str(app.pid)], capture_output=True, text=True).stdout.splitlines()
+                if '/Profiles/' + old_directory + '/' in line]
+        results['shell_delete_closes_sleep_store'] = {
+            'ok': old_directory in sleep_before.get('openStores', []) and old_directory not in sleep_after and not held,
+            'before': sleep_before.get('openStores'), 'after': sleep_after, 'openFiles': held[:4]}
         app.call('key', window=gone['settings'], key='z', modifiers=['cmd'], route='app')
         pending = root / 'Profiles/.pending-wipe.json'
         durable = json.loads(snapshot.read_text())
