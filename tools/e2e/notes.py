@@ -205,11 +205,16 @@ def size_limit_rows(factory, row, h):
         after = h.wait_until(lambda: (lambda t: t if t['shown'] > shown_before else None)(app.call('toasts')), timeout=8, step=.1) \
             or app.call('toasts')
         shown_after, toasts = after['shown'], [after.get('lastTitle', '')]
+        encodes_before = app.call('note', timeout=300).get('encodeCount')
         # A later edit is refused too, and says so again (each refused save is an edit not on disk).
         app.call('note', action='type', text='x', timeout=300)
         app.call('note', action='flush', timeout=300)
         again = app.call('toasts')
         big = app.call('note', timeout=300)
+        # Bug sweep r3 L21: a refused save of a Note whose text alone encodes over the limit does not
+        # encode the whole Note again (before, every debounced save copied it to JSON).
+        row('oversized_note_not_encoded_again', encodes_before is not None and big.get('encodeCount') == encodes_before,
+            encodesBefore=encodes_before, encodesAfter=big.get('encodeCount'))
         size = os.path.getsize(file) if os.path.exists(file) else 0
         row('oversized_note_not_written', small['stored'] and small['stored']['text'] == 'Short body'
             and 0 < fits < limit and size == fits and len(big['body']) == 2 * len(chunk) + len('Short body') + 1

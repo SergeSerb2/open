@@ -2188,6 +2188,10 @@ static double OEPNGPixelWidth(NSData* png) {
   }
 }
 
+- (void)prepareForClose {
+  _client->SetClosing();
+}
+
 - (void)close {
   [self oe_cancelFramePresentation];
   // An action popup: the engine owns its page (CloseBrowser does nothing for

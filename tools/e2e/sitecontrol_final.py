@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 from pathlib import Path
+import shutil
 import ssl
 import subprocess
 import threading
@@ -17,6 +18,8 @@ from loopback_http import LoopbackHTTPServer
 @contextmanager
 def fixture(tmp):
     root = Path(tmp) / 'scc-final-tls'
+    # A retry in the same scratch folder makes fresh keys and certificates.
+    shutil.rmtree(root, ignore_errors=True)
     root.mkdir(mode=0o700)
     hits = Counter()
     mutex = threading.Lock()

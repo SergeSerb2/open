@@ -13,7 +13,9 @@ import OpenTranslate
 /// - One `PageTranslationSession` per page, made on first use and closed with the page.
 /// - The session's state drives the sidebar status button and the popover; its events become
 ///   toasts and "Translate" entries in the window's undo manager (PG-7.3).
-/// Nothing here runs while idle: no timer; the runtime's `nextBatch()` is an awaited promise.
+/// Nothing here runs while idle: no timer; the runtime's `nextBatch()` is an awaited promise. The
+/// engine ends an Open-world request after 10 s, so an idle translated page pulls again then (two
+/// small requests per 10 s; `PageTranslationSession.idleRepulls`).
 @MainActor
 final class TranslateAdapter {
   unowned let factory: EngineWebContentHostFactory

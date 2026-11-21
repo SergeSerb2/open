@@ -159,17 +159,28 @@ final class BoostEngineAdapter {
         if !p.isEmpty { plans[p.planID] = p }
       }
     }
-    let scopes: [[String: Any]] = values.map { ["id": $0.id.description, "domain": $0.siteMatch.domain,
-      "path": $0.siteMatch.pathPrefix ?? "", "ip": $0.siteMatch.targetsIPAddress] }
-    let scopeJSON = Self.json(scopes)
     var scripts: [UserScript] = []
     for p in plans.values.sorted(by: { $0.planID < $1.planID }) {
       let ids = Self.json(p.boosts.map { $0.boostID.description }.sorted())
+      // The gate compares the exact matching set, so it needs every Boost that can match a
+      // URL these match patterns admit: the plan's domains, their parents and their subdomains.
+      // Boosts of unrelated sites stay out of this script.
+      let planDomains = Set(p.boosts.compactMap { resolved in values.first { $0.id == resolved.boostID }?.siteMatch })
+      let scopes: [[String: Any]] = values.filter { boost in
+        planDomains.contains { plan in
+          let a = plan.domain, b = boost.siteMatch.domain
+          return a == b || (!plan.targetsIPAddress && !boost.siteMatch.targetsIPAddress && (a.hasSuffix("." + b) || b.hasSuffix("." + a)))
+        }
+      }.map { ["id": $0.id.description, "domain": $0.siteMatch.domain,
+        "path": $0.siteMatch.pathPrefix ?? "", "ip": $0.siteMatch.targetsIPAddress] }
+      // The gate runs in its own function: its names must not collide with the Boost's code.
       let gate = """
-      const u = new URL(location.href), h = u.hostname.toLowerCase().replace(/\\.$/, '').replace(/^\\[|\\]$/g, ''), path = u.pathname || '/';
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
-      const ids = \(scopeJSON).filter(s => (h === s.domain || (!s.ip && h.endsWith('.' + s.domain))) && (!s.path || path === s.path || path.startsWith(s.path + '/'))).map(s => s.id).sort();
-      if (JSON.stringify(ids) !== JSON.stringify(\(ids))) return;
+      if (!(() => {
+        const u = new URL(location.href), h = u.hostname.toLowerCase().replace(/\\.$/, '').replace(/^\\[|\\]$/g, ''), path = (u.pathname || '/').replace(/\\[/g, '%5B').replace(/\\]/g, '%5D');
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+        const ids = \(Self.json(scopes)).filter(s => (h === s.domain || (!s.ip && h.endsWith('.' + s.domain))) && (!s.path || path === s.path || path.startsWith(s.path + '/'))).map(s => s.id).sort();
+        return JSON.stringify(ids) === JSON.stringify(\(ids));
+      })()) return;
       """
       let patterns = Array(Set(p.boosts.compactMap { resolved -> String? in
         guard let boost = values.first(where: { $0.id == resolved.boostID }) else { return nil }
@@ -178,8 +189,12 @@ final class BoostEngineAdapter {
       })).sorted()
       scripts.append(UserScript(id: "open.boosts.applier.\(p.planID)", source: "(() => {\n\(gate)\n\(BoostResources.applierJS)\n\(Self.applySource(p))\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true, world: .open))
       if p.containsJS {
-        // Main-world user script, separate from the managed stylesheet runtime.
-        scripts.append(UserScript(id: "open.boosts.js.\(p.planID)", source: "(() => {\n\(gate)\n\(p.combinedJS)\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true))
+        // Main-world user script, separate from the managed stylesheet runtime. Each Boost's
+        // code has its own function scope, so two Boosts can declare the same names, and an
+        // exception in one does not stop the next.
+        let code = p.boosts.map(\.js).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+          .map { "try { (() => {\n\($0)\n})(); } catch (error) { console.error(error); }" }.joined(separator: "\n")
+        scripts.append(UserScript(id: "open.boosts.js.\(p.planID)", source: "(() => {\n\(gate)\n\(code)\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true))
       }
     }
     return scripts

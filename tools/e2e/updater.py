@@ -23,9 +23,9 @@ import tempfile
 import threading
 import time
 import zipfile
-from loopback_http import LoopbackHTTPServer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from loopback_http import LoopbackHTTPServer
 import engine_e2e as harness
 from restore_defaults import write_collection
 
@@ -201,12 +201,16 @@ def run(opts, folder, results, apps):
                 if not serve_fixture or name is None:
                     self.send_response(404); self.end_headers(); return
                 body = (folder / name).read_bytes()
+                if name.endswith('.zip') and SERVE['omit_length']:
+                    # Review round 1: hold the headers so the state before any length or byte shows.
+                    time.sleep(1.2)
                 assert len(body) <= 2 * 1024 * 1024
                 if name.endswith(".xml"):
                     time.sleep(.6)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/xml' if name.endswith('.xml') else 'application/zip')
-                self.send_header('Content-Length', str(len(body)))
+                if not (name.endswith('.zip') and SERVE['omit_length']):
+                    self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
                 try:
                     for offset in range(0, len(body), 4096):
@@ -537,6 +541,10 @@ def capture_pair(app, opts, name, number, results=None):
     return captures
 
 
+# Bug sweep r3 W12: the fixture server can send the update archive without Content-Length.
+SERVE = {'omit_length': False}
+
+
 def exercise_ui(app, opts, results, original):
     state = ui(app)
     row = ax(app, state.get('updateWindow'))
@@ -554,7 +562,8 @@ def exercise_ui(app, opts, results, original):
     results['D3_foreground_link'] = {'ok': any(t['url'] == 'https://github.com/SergeSerb2/open#updates'
         and t.get('selected') and t.get('section') == 'today' for t in app.call('tabs'))}
     app.call('updater-act', action='primary')
-    checking = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading', 'download status missing')
+    # Until the first bytes the bar is indeterminate with no total (W12): sample the progress after them.
+    checking = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading' and (s.get('received') or 0) > 0, 'download status missing')
     number = checking['statusWindow']
     steps = []
     for _ in range(4):
@@ -584,7 +593,7 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
     no_app_attributes = subprocess.check_output([str(opts.tools / 'sign_update'), '--ed-key-file',
         str(folder / 'throwaway.key'), str(no_app)], text=True).strip()
     no_app_enclosure = ET.fromstring('<enclosure xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" ' + no_app_attributes + '/>')
-    for variant in ('without-notes', 'critical', 'minimum', 'information-only', 'html', 'empty-html', 'notes-at-limit', 'notes-over-limit', 'up-to-date', 'system-too-old', 'background-up-to-date', 'bad-signature', 'background-error', 'background-install-error', 'ready', 'background-ready', 'summary', 'summary-dismiss'):
+    for variant in ('without-notes', 'critical', 'minimum', 'information-only', 'html', 'empty-html', 'notes-at-limit', 'notes-over-limit', 'up-to-date', 'system-too-old', 'background-up-to-date', 'bad-signature', 'background-error', 'background-install-error', 'ready', 'background-ready', 'summary', 'summary-dismiss', 'unknown-length'):
         tree = ET.fromstring(base)
         items = list(tree.find('channel').findall('item'))
         for item in items:
@@ -617,6 +626,9 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                 item.find(sparkle + 'minimumSystemVersion').text = '99.0'
             elif variant == 'background-error':
                 item.find('enclosure').set('url', origin + '/download-failure.zip')
+            elif variant == 'unknown-length':
+                # Neither the appcast nor the server gives the archive's length.
+                item.find('enclosure').attrib.pop('length', None)
             elif variant == 'bad-signature':
                 item.find('enclosure').set(sparkle + 'edSignature', base64.b64encode(b'x' * 64).decode())
         feed.write_text(ET.tostring(tree, encoding='unicode'))
@@ -719,6 +731,28 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                         and toast_matches(app, 'failedToDownloadUpdate'), 'ui': state}
                 continue
             state = wait(lambda: ui(app), lambda s: s.get('phase') in ('found', 'upToDate', 'unsupported'), 'no result window')
+            if variant == 'unknown-length':
+                # Bug sweep r3 W12: a download whose length is unknown (no Content-Length) shows the
+                # received bytes and an indeterminate bar. Before: "… of Zero KB" or "of 9.22 EB".
+                SERVE['omit_length'] = True
+                try:
+                    app.call('updater-act', action='primary')
+                    before_data = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading', 'unknown-length download did not start')
+                    first = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading' and (s.get('received') or 0) > 0,
+                                 'unknown-length download got no data')
+                    samples = [before_data, first]
+                    for _ in range(3):
+                        time.sleep(.12); samples.append(ui(app))
+                    texts = [x.get('statusText', '') for x in samples]
+                    results['W12_unknown_length_progress'] = {'ok': all(t and ' of ' not in t and 'EB' not in t for t in texts)
+                        and before_data.get('indeterminate') is True and (before_data.get('received') or 0) == 0
+                        and samples[-1].get('indeterminate') is True,
+                        'texts': texts, 'expected': [x.get('expected') for x in samples], 'indeterminate': samples[-1].get('indeterminate')}
+                    if app.call('updater-act', action='cancel-download'):
+                        wait(lambda: ui(app), lambda s: s.get('statusWindow') == 0, 'unknown-length Cancel left status open')
+                finally:
+                    SERVE['omit_length'] = False
+                continue
             row = ax(app, state['updateWindow'])
             if variant == 'system-too-old':
                 # Bug sweep R2 (seed-media #8): Sparkle's "no update" for a newer release that needs a newer

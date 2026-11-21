@@ -114,9 +114,15 @@ public final class PeekController {
         overlay.endHostSnapshot()
         dismissGeneration += 1; isDismissing = false
         expandingGeneration += 1; isExpanding = false
-        if stack.count >= 5 { overlay.resetMotion(); stack.last?.host?.load(url); refresh(); return }
+        // At the cap the top Peek's page is reused only for the same Profile and source kind. Another
+        // Profile's URL (a Library preview) replaces the top Peek: it must not load with its cookies.
+        if stack.count >= 5, let top = stack.last, top.profileID == profile, top.librarySpaceID == librarySpaceID {
+            overlay.resetMotion(); stack[stack.count - 1].url = url; top.host?.load(url); refresh(); return
+        }
         let hostID = ItemID()
         guard let host = factory.makeHost(tabID: hostID, profileID: profile, url: nil) else { overlay.resetMotion(); return }
+        // Only now that the replacement exists: a failed makeHost keeps the top Peek on screen.
+        if stack.count >= 5 { stack.removeLast().host?.close() }
         let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, librarySpaceID: librarySpaceID, profileID: profile, host: host)
         stack.append(item)
         let itemID = item.id
@@ -400,6 +406,8 @@ public final class PeekController {
             let succeeded: Bool
             if let existing = splitController.split {
                 succeeded = model.addPane(splitID: existing.id, tabID: tab.id)
+                // The new pane takes focus; Expand Current Pane would keep it hidden.
+                if succeeded { splitController.clearMaximizedPane(unless: tab.id) }
             } else if let made = model.makeSplit(tabIDs: [item.sourceTabID, tab.id]) {
                 model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: made.id)
                 model.focusSplitPane(splitID: made.id, tabID: tab.id); succeeded = true
@@ -408,6 +416,9 @@ public final class PeekController {
                 model.closeTab(id: tab.id); NSSound.beep(); return false
             }
         } else {
+            // The promoted tab leaves any split: end Expand Current Pane (this selection does
+            // not pass through the window's select, which ends it for other selections).
+            splitController.clearMaximizedPane(unless: nil)
             model.focusSpace(windowID: splitController.windowID, spaceID: target)
             model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
         }

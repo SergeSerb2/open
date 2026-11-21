@@ -464,6 +464,74 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             expanded=expanded['maximized'], left={k: left[k] for k in ('id', 'selected', 'maximized')},
             back={k: back[k] for k in ('id', 'selected', 'focused', 'maximized')}, shown=shown(), panes=order_panes)
         unsplit()
+        # Bug sweep round 3 (W10): a pane that joins an expanded split takes focus, so Expand
+        # Current Pane ends; before, the new focused pane stayed hidden behind the expanded one.
+        select(order_b); x, y, w, height = state()['container']
+        assert app.call('split', op='drop', node=order_a, point=[x+w-12, y+height/2])['accepted']; settled(2)
+        menu('Expand Current Pane')
+        w10_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        menu('Add Pane'); w10_added = settled(3)
+        w10_shown = [p['id'] for p in w10_added['panes'] if not p['hidden']]
+        row('W10_add_pane_ends_expanded_pane', bool(w10_expanded['maximized']) and not w10_added['maximized']
+            and w10_added['focused'] not in (order_a, order_b) and w10_added['focused'] in w10_shown and len(w10_shown) == 3,
+            expanded=w10_expanded['maximized'], maximized=w10_added['maximized'], focused=w10_added['focused'], shown=w10_shown)
+        if not state()['maximized']: menu('Expand Current Pane')
+        w10_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        w10_drop = opened('w10-drop', background=True); x, y, w, height = state()['container']
+        w10_accepted = app.call('split', op='drop', node=w10_drop, point=[x+w-12, y+height/2])['accepted']
+        w10_dropped = settled(4); w10_shown = [p['id'] for p in w10_dropped['panes'] if not p['hidden']]
+        row('W10_drop_ends_expanded_pane', bool(w10_expanded['maximized']) and w10_accepted and not w10_dropped['maximized']
+            and w10_dropped['focused'] == w10_drop and w10_drop in w10_shown and len(w10_shown) == 4,
+            expanded=w10_expanded['maximized'], accepted=w10_accepted, maximized=w10_dropped['maximized'], focused=w10_dropped['focused'], shown=w10_shown)
+        # Review round 1: Separate All Tabs ends the expansion, so Undo (which brings the split
+        # back) and a click on its row show every pane, not the old expanded one alone.
+        w10_split = state()['id']
+        menu('Expand Current Pane')
+        w10_sep_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        menu('Separate All Tabs'); settled(1)
+        def w10_in_sidebar():
+            tree = app.call('sidebar-tree'); return any(n['id'] == w10_split for n in tree['pinned'] + tree['today'])
+        w10_undos = 0
+        while not w10_in_sidebar() and w10_undos < 3:  # Undo steps until the split is back
+            app.call('sidebar-key', key='z', modifiers=['cmd']); w10_undos += 1; time.sleep(.3)
+        app.call('sidebar-click', node=w10_split); w10_back = settled(4)
+        w10_back_shown = [p['id'] for p in w10_back['panes'] if not p['hidden']]
+        row('W10_separate_all_undo_not_expanded', bool(w10_sep_expanded['maximized']) and w10_back['id'] == w10_split
+            and not w10_back['maximized'] and len(w10_back_shown) == 4,
+            expanded=w10_sep_expanded['maximized'], back=dict(id=w10_back['id'], maximized=w10_back['maximized']),
+            split=w10_split, shown=w10_back_shown, undos=w10_undos)
+        # The same for File > New Note in Split (it selected the split, which kept the expansion).
+        menu('Close This Pane'); settled(3); menu('Expand Current Pane')
+        w10_note_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        app.call('menu-perform', id='new-note-in-split'); w10_note = settled(4)
+        w10_shown = [p['id'] for p in w10_note['panes'] if not p['hidden']]
+        row('W10_note_in_split_ends_expanded_pane', bool(w10_note_expanded['maximized']) and not w10_note['maximized']
+            and w10_note['focused'] in w10_shown and w10_note['focused'] not in [p['id'] for p in w10_dropped['panes']]
+            and len(w10_shown) == 4,
+            expanded=w10_note_expanded['maximized'], maximized=w10_note['maximized'], focused=w10_note['focused'], shown=w10_shown)
+        unsplit()
+        # Bug sweep round 3 (W5): a tab of another Space (another window's sidebar drag, here
+        # another Profile) dropped on this window's split zones is refused. Before, a left-edge
+        # drop formed the split in the dragged tab's Space (pulling this window's page into the
+        # other Profile) and a center drop selected a node this Space cannot show: a blank window.
+        w5_home = next(sp['id'] for sp in app.call('spaces') if sp['focused'])
+        w5_space = app.call('space-create', title='W5 Other', profile='W5 Work'); app.call('space', space=w5_space)
+        w5_foreign = opened('w5-foreign')
+        app.call('space', space=w5_home); w5_before = select(order_b)
+        w5_rows = {}
+        for zone in ('left', 'center'):
+            x, y, w, height = state()['container']
+            point = [x+w/2, y+height/2] if zone == 'center' else edge(state(), zone)
+            accepted = app.call('split', op='drop', node=w5_foreign, point=point)['accepted']
+            time.sleep(.3); after = state()
+            home_tabs = {t['id']: t for t in app.call('tabs')}  # the focused (home) Space's tabs
+            w5_rows[zone] = dict(accepted=accepted, split=after['id'], selected=after['selected'],
+                shown=[p['id'] for p in after['panes'] if not p['hidden']], space=after.get('space'),
+                foreignInHome=w5_foreign in home_tabs, homeTabSpace=home_tabs.get(order_b, {}).get('space'))
+        row('W5_other_space_drop_refused', all(not r['accepted'] and not r['split'] and r['selected'] == order_b
+            and r['shown'] == [order_b] and not r['foreignInHome'] and r['homeTabSpace'] == w5_home
+            for r in w5_rows.values()) and w5_before['selected'] == order_b,
+            rows=w5_rows, home=w5_home, other=w5_space)
         # LEAD 11:50: Close This Pane keeps the closed page drawn while its box collapses,
         # so chrome.tabs reports onRemoved after the strip change. onRemoved must arrive
         # <= 400 ms after the command, and tabs.get must answer for the tab until then.

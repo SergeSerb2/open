@@ -24,6 +24,8 @@ extension AutomationController {
           "frame": [frame.minX, frame.minY, frame.width, frame.height],
           "autosave": window.frameAutosaveName, "style": window.styleMask.rawValue,
           "pageIsContentView": window.contentView === controller.content.view,
+          "context": controller.browser.context.identifier, "ephemeral": controller.browser.context.isEphemeral,
+          "contextClosed": controller.browser.context.state == .closed,
           "hasToolbar": window.toolbar != nil] as [String: Any]
       }
     }

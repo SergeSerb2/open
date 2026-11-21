@@ -2,6 +2,7 @@ import AppKit
 import OpenEngine
 import OpenRouting
 import OpenFeatures
+import OpenModel
 
 /// External `mailto:` links (Arc's Info.plist registers `mailto`, "Email Address URL"). The focused
 /// Profile's web protocol handler (a webmail site the user allowed with "Make <site> your default mail
@@ -30,25 +31,47 @@ final class MailtoRouter {
   }
 
   private func route(_ url: URL, source: RoutingSource) {
-    handledCount += 1
     let factory = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
     let context: OEBrowserContext?
-    // The compose page opens in the Profile whose handler made it.
-    let profile = factory?.incognitoSession?.parent.id ?? factory?.focusedProfile?.id
-    if let parent = factory?.incognitoSession?.parent {
+    // The compose page opens in the Profile whose handler made it. With no window open, ask the Profile
+    // of the first saved standard window's Space (else the default Profile). GUESS, as above.
+    // A key Little Open window (tracked outside windowControllers) names its own Profile.
+    let littleOpen = app.keyLittleOpen.flatMap { app.model.profile(id: $0.session.profileID) }
+    let regular = littleOpen ?? factory?.incognitoSession?.parent ?? (factory == nil ? noWindowProfile() : nil)
+    let profile = regular?.id ?? factory?.focusedProfile?.id
+    if let regular {
       // A private session sees none of its regular Profile's handlers: ask that Profile. The
       // compose page then routes like any external link, never into the Incognito window.
-      context = EngineWebContentHostFactory.createRegularContext(profileID: parent.id, directory: parent.dataDirectoryName, app: app)
+      context = EngineWebContentHostFactory.createRegularContext(profileID: regular.id, directory: regular.dataDirectoryName, app: app)
     } else {
       context = factory?.focusedBrowser(create: true)?.context
     }
-    let target = context?.protocolHandlerURL(for: url)
+    guard let context else { finish(url, target: nil, source: source, profile: profile, factory: factory); return }
+    // A Profile context made just now has no handlers until it is initialized: ask when it is ready.
+    context.protocolHandlerURLWhenReady(for: url) { [weak self, weak factory] target in
+      MainActor.assumeIsolated { self?.finish(url, target: target, source: source, profile: profile, factory: factory) }
+    }
+  }
+
+  /// The Profile of the first saved standard window's Space. `model.windows` is not z-order (see
+  /// AppLinkExecutor); with no window open it is the window that `makeWindow` would show again.
+  private func noWindowProfile() -> Profile? {
+    app.model.windows.first { $0.style == .standard }
+      .flatMap { app.model.space(id: $0.focusedSpaceID) }.flatMap { app.model.profile(id: $0.profileID) }
+      ?? app.model.defaultProfile
+  }
+
+  private func finish(_ url: URL, target: URL?, source: RoutingSource, profile: ProfileID?, factory: EngineWebContentHostFactory?) {
+    // The lookup can finish while the App quits: open nothing then.
+    guard !app.terminationRequested, !app.shutdownPrepared else { return }
     last = (url.scheme ?? "", target?.absoluteString)
+    handledCount += 1
     if let target, ["http", "https"].contains(target.scheme?.lowercased() ?? "") {
       app.linkIntake.handle(urls: [target], source: source, profile: profile)
       return
     }
     AppDelegate.commandLog("A mailto link arrived with no mail site set up.")
-    factory?.controller?.toasts.show(ToastContent(title: "No email site is set up. Open your webmail and allow it as your mail app."))
+    (factory ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })?.controller?.toasts
+      .show(ToastContent(title: "No email site is set up. Open your webmail and allow it as your mail app."))
   }
 }

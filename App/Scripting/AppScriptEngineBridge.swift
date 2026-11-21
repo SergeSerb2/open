@@ -324,6 +324,13 @@ extension AppDelegate {
       guard !incognito else { return nil }
       return self?.makeWindow()?.windowID
     }
+    // The sidebar's own select and Space-switch paths (no Undo step).
+    host.selectInWindow = { [weak self] window, space, node in
+      self?.hostFactories[window]?.performSidebar(.select(nodeID: node, space: space)) == true
+    }
+    host.focusSpaceInWindow = { [weak self] window, space in
+      self?.hostFactories[window]?.performSidebar(.switchSpace(space)) == true
+    }
     host.littleTab = AppScriptLittleTabs(app: self)
     refreshScriptingEngine()
     host.purgeRemovedWrappers()

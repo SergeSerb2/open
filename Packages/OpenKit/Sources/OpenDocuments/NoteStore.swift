@@ -15,6 +15,8 @@ public final class NoteStore {
     /// 32 MiB: far above any typed Note (Arc refused to sync Notes over 1 MB), well under allocator limits.
     public nonisolated static let maxFileBytes = 32 << 20
     public private(set) var writeCount = 0
+    /// Notes encoded to JSON (automation evidence: an oversized Note is not encoded at every save).
+    public private(set) var encodeCount = 0
     public private(set) var lastError: String?
     /// Notes whose last save was refused because its file would be over `maxFileBytes`.
     public private(set) var oversized: Set<UUID> = []
@@ -142,11 +144,16 @@ public final class NoteStore {
         for id in ids {
             guard let note = cache[id] else { continue }
             do {
-                let data = try Self.encoder.encode(note)
                 // `load` refuses a file over the limit, so writing it would lose the whole Note at the
-                // next open. Keep the last file that fits; the editor still holds the text.
-                guard data.count <= Self.maxFileBytes else {
-                    lastError = "\(id): \(data.count) bytes is over the \(Self.maxFileBytes)-byte limit; the last save is kept"
+                // next open. Keep the last file that fits; the editor still holds the text. A Note whose
+                // text alone already encodes over the limit is refused without encoding it (an oversized
+                // Note is refused at every debounced save; each encode copied tens of MB).
+                let textBytes = Self.minimumEncodedBytes(note.text)
+                let data = textBytes > Self.maxFileBytes ? nil : try Self.encoder.encode(note)
+                if data != nil { encodeCount += 1 }
+                guard let data, data.count <= Self.maxFileBytes else {
+                    let size = data?.count ?? textBytes
+                    lastError = "\(id): \(data == nil ? "over " : "")\(size) bytes is over the \(Self.maxFileBytes)-byte limit; the last save is kept"
                     oversized.insert(id)
                     if notify { onTooLarge?(id) }
                     continue
@@ -158,6 +165,20 @@ public final class NoteStore {
                 lastError = "\(id): \(error)"; dirty.insert(id)
             }
         }
+    }
+
+    /// A lower bound of the bytes `encoder` writes for `text` as a JSON string value: UTF-8 bytes,
+    /// with the escapes JSONEncoder always writes ('/', '"', '\\' and control characters).
+    nonisolated static func minimumEncodedBytes(_ text: String) -> Int {
+        var count = 0
+        for byte in text.utf8 {
+            switch byte {
+            case 0x22, 0x2F, 0x5C, 0x08, 0x09, 0x0A, 0x0C, 0x0D: count += 2
+            case 0..<0x20: count += 6
+            default: count += 1
+            }
+        }
+        return count
     }
 
     private static let encoder: JSONEncoder = {

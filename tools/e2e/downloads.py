@@ -157,9 +157,11 @@ def checks(factory, results, tmp, config, harness):
     def dismiss_library(): E._try(lambda: app.call('download-library-close'))
     def cancel_sheet_flow():
         app.call('download-settings', profile=profile, directory=str(first), ask=True)
+        # View Downloads is off while the save sheet is key (browser commands never act behind a
+        # sheet), so the Library opens first; the pending save then appears in it.
+        library()
         pending = start('/slow')
         sheet = wait(lambda: next((v for v in state()['sheets'] if v['visible']), None))
-        library()
         wait(lambda: bool(row(pending)))
         app.call('download-row', id=pending, action='Cancel')
         stopped = wait(lambda: item(pending).get('state') == 'cancelled' and not state()['sheets'] and not state()['running'])
@@ -1088,6 +1090,156 @@ def checks(factory, results, tmp, config, harness):
         check('generic_quit_harness_bypass', not app.quit_report['forced'] and generic_alerts() == 0,
               quit=app.quit_report, alerts=generic_alerts())
 
+    def unowned_flow():
+        # Bug sweep r3 W4: a download whose page no browser window owns. The engine-API
+        # proof page is a real engine page of the default Profile's context outside every
+        # window (like an engine-owned extension window). Its download used to be cancelled.
+        app.call('download-settings', profile=profile, directory=str(first), ask=False)
+        app.call('engine-api', action='start')
+        private = None
+        try:
+            app.call('engine-api', action='add', page='a', browser='a', url=base + '/')
+            wait(lambda: app.call('engine-api', action='eval', page='a', js='document.readyState') == 'complete')
+            before = {v['id'] for v in state()['items']}
+            app.call('engine-api', action='eval', page='a', js='(() => {let a=document.createElement("a"); a.href=%s; document.body.append(a); a.click(); return true})()'
+                     % json.dumps(base + '/fast?name=unowned-page.txt'))
+            key = (wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None)) or {}).get('id')
+            done = key and wait(lambda: item(key).get('state') in ('completed', 'cancelled', 'failed') and (item(key).get('state') != 'completed' or item(key).get('fileExists')))
+            value = item(key) if key else {}
+            check('unowned_page_download', done and value.get('state') == 'completed' and value.get('profile') == profile
+                  and Path(value.get('path') or '/').parent == first, item=value)
+            # The same page's popup has no OEWebContent at all (Chromium's own window): its download
+            # has no page. With an Incognito window in front it used to take that window's private
+            # destination (its folder), not the regular Profile's.
+            app.call('menu-perform', id='new-incognito-window')
+            private = wait(lambda: next((v for v in app.call('incognito-state')['windows'] if v['private']), None))
+            if not private: raise RuntimeError('unowned private window missing')
+            app.call('window-focus', id=private['id'], activate=True)
+            private_dir = root / 'unowned-private'; private_dir.mkdir(exist_ok=True)
+            app.call('download-dir', path=str(private_dir))
+            before = {v['id'] for v in state()['items']}
+            app.call('engine-api', action='eval', page='a', js='(window.open(%s), true)' % json.dumps(base + '/fast?name=unowned-popup.txt'))
+            key = (wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None)) or {}).get('id')
+            done = key and wait(lambda: item(key).get('state') in ('completed', 'cancelled', 'failed') and (item(key).get('state') != 'completed' or item(key).get('fileExists')))
+            value = item(key) if key else {}
+            check('unowned_popup_download_regular', done and value.get('state') == 'completed' and value.get('profile') == profile
+                  and Path(value.get('path') or '/').parent == first and not list(private_dir.iterdir()),
+                  item=value, privateFolder=sorted(p.name for p in private_dir.iterdir()))
+        finally:
+            E._try(lambda: app.call('engine-api', action='cleanup'))
+            if private:
+                E._try(lambda: app.call('window-focus', id=private['id'], activate=True))
+                E._try(lambda: app.call('window-close'))
+
+    def clear_unloaded_flow():
+        nonlocal tab, app
+        # Bug sweep r3 W11: Clear Browsing Data of a Profile whose engine context is not loaded in
+        # this run, while no regular window is open (only an Incognito window), used to fail "This
+        # profile is not open.". Review r1: prove it clears that Profile's persisted cookie (a control
+        # Profile keeps its own), and that the context it loads gets the App as delegate (downloads,
+        # notifications), as every window-loaded context does.
+        original_space = next(s['id'] for s in app.call('spaces') if s['focused'])
+        def cookie_space(name):
+            space = app.call('space-create', profile=name, title=name)
+            page = E.new_tab(app, base + '/')
+            app.eval(page, "document.cookie = 'w11=%s; max-age=3600; path=/'; document.cookie" % name.split()[-1])
+            return space, next(s['profile'] for s in app.call('spaces') if s['focused'])
+        cleared_space, unloaded = cookie_space('Clear unloaded')
+        kept_space, kept = cookie_space('Clear unloaded keep')
+        app.call('space', space=original_space)
+        # A clean quit writes the cookies; the relaunch loads neither Profile until a page needs it.
+        app.call('download-policy', quit='close')
+        app.call('quit')
+        if not wait(lambda: not app.process_path(app.pid), 15): raise RuntimeError('clear-unloaded clean quit did not finish')
+        app.quit()
+        app = factory(urls=(), fresh=False, extra_env=launch_env)
+        app.preferences_domain = domain
+        app.call('download-policy', quit='keep', recordFiles=True)
+        contexts = app.call('engine-contexts')
+        app.call('menu-perform', id='new-incognito-window')
+        private = wait(lambda: next((v for v in app.call('incognito-state')['windows'] if v['private']), None))
+        regular = [w['id'] for w in app.call('incognito-state')['windows'] if not w['private']]
+        for window in regular:
+            app.call('window-focus', id=window, activate=True); app.call('window-close')
+        only_private = wait(lambda: [w['private'] for w in app.call('incognito-state')['windows']] == [True])
+        # History alone must still not load a native context.
+        history = app.call('settings-clear-data', profile=unloaded, kinds=1, range='All time')
+        history_unloaded = app.call('engine-contexts') == contexts
+        cookies = app.call('settings-clear-data', profile=unloaded, kinds=6, range='All time')
+        after = app.call('engine-contexts')
+        delegates = app.call('engine-contexts', delegates=True)
+        added = sorted(set(after) - set(contexts))
+        delegated = isinstance(delegates, dict) and len(added) == 1 and delegates.get(added[0]) is True
+        if private:
+            app.call('window-focus', id=private['id'], activate=True); app.call('window-close')
+        app.call('window-reopen')
+        wait(lambda: app.call('shell-windows'))
+        def read_cookie(space):
+            app.call('space', space=space)
+            page = E.new_tab(app, base + '/')
+            return app.eval(page, 'document.cookie')
+        cleared_cookie, kept_cookie = read_cookie(cleared_space), read_cookie(kept_space)
+        check('clear_unloaded_profile_no_window', bool(private) and bool(only_private) and history['status'] == 'Done' and history_unloaded
+              and cookies['status'] == 'Done' and len(added) == 1 and delegated
+              and 'w11=' not in cleared_cookie and kept_cookie == 'w11=keep',
+              history=history, cookies=cookies, historyUnloaded=history_unloaded, contexts=contexts, after=after,
+              delegates=delegates, clearedCookie=cleared_cookie, keptCookie=kept_cookie)
+        app.call('space', space=original_space)
+        tab = E.new_tab(app, base + '/')
+
+    def unowned_ask_flow():
+        # Bug sweep r3 review r1 item 1: "Ask where to save" for a regular download with no owning
+        # window and no regular window open. Its Save panel must never attach to an Incognito window,
+        # and the download must never be cancelled: with no regular window, a modeless panel asks.
+        ask_dir = root / 'unowned-ask'; ask_dir.mkdir(exist_ok=True)
+        app.call('download-settings', profile=profile, directory=str(first), ask=True)
+        app.call('engine-api', action='start')
+        private = None
+        rows = {}
+        try:
+            # One proof page per download: a second download from one engine-owned page crashes
+            # the engine (found in this review; reported for the engine agent, not this row).
+            for page in ('a', 'b'):
+                app.call('engine-api', action='add', page=page, browser=page, url=base + '/')
+                wait(lambda: app.call('engine-api', action='eval', page=page, js='document.readyState') == 'complete')
+            app.call('menu-perform', id='new-incognito-window')
+            private = wait(lambda: next((v for v in app.call('incognito-state')['windows'] if v['private']), None))
+            for window in [w['id'] for w in app.call('incognito-state')['windows'] if not w['private']]:
+                app.call('window-focus', id=window, activate=True); app.call('window-close')
+            private_number = next((w['number'] for w in app.call('shell-windows') if private and w['id'] == private['id']), -1)
+            def ask(label, page):
+                before = {v['id'] for v in state()['items']}
+                name = 'unowned-ask-%s.txt' % label
+                app.call('engine-api', action='eval', page=page, js='(() => {let a=document.createElement("a"); a.href=%s; document.body.append(a); a.click(); return true})()'
+                         % json.dumps(base + '/fast?name=' + name))
+                key = (wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None)) or {}).get('id')
+                sheet = key and wait(lambda: next((v for v in state()['sheets'] if v['id'] == key and v['visible']), None), 5)
+                if sheet and not sheet['sheet']:
+                    app.call('download-save', id=key, path=str(ask_dir / name))
+                elif sheet:
+                    E._try(lambda: app.call('download-save', id=key, action='cancel'))
+                done = key and wait(lambda: item(key).get('state') in ('completed', 'cancelled', 'failed') and (item(key).get('state') != 'completed' or item(key).get('fileExists')))
+                rows[label] = dict(sheet=sheet, item=item(key) if key else {}, privateWindow=private_number)
+                value = rows[label]['item']
+                return bool(sheet) and not sheet['sheet'] and sheet['parent'] != private_number and done and value.get('state') == 'completed' \
+                    and Path(value.get('path') or '/') == ask_dir / name
+            only_private = ask('only-private', 'a')
+            if private:
+                app.call('window-focus', id=private['id'], activate=True); app.call('window-close'); private = None
+            no_window = wait(lambda: not app.call('shell-windows')) and ask('no-window', 'b')
+            check('unowned_ask_never_private_or_cancelled', only_private and no_window, rows=rows)
+        finally:
+            E._try(lambda: app.call('engine-api', action='cleanup'))
+            for sheet in E._try(lambda: state()['sheets']) or []:
+                E._try(lambda: app.call('download-save', id=sheet['id'], action='cancel'))
+            if private:
+                E._try(lambda: app.call('window-focus', id=private['id'], activate=True))
+                E._try(lambda: app.call('window-close'))
+            if not E._try(lambda: app.call('shell-windows')):
+                E._try(lambda: app.call('window-reopen'))
+                wait(lambda: app.call('shell-windows'))
+            app.call('download-settings', profile=profile, ask=False)
+
     def clear_flow():
         nonlocal tab
         original_space = next(s['id'] for s in app.call('spaces') if s['focused'])
@@ -1163,7 +1315,7 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "names": names_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
+                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "names": names_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow, "unowned": unowned_flow, "unowned-ask": unowned_ask_flow, "clear-unloaded": clear_unloaded_flow,
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
