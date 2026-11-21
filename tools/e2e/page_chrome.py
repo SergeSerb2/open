@@ -330,7 +330,8 @@ def run(factory, results, tmp, h):
         def origin_normalized():
             # Review r1 item 5: the index keeps one canonical origin. An uppercase scheme was dropped
             # (never listed); an explicit default port listed a second row for the same origin.
-            upper, default = 'HTTP://[::1]:%d' % port, 'http://[::1]:80'
+            # A port no other row indexes, so the uppercase case stands alone.
+            upper, default = 'HTTP://[::1]:8443', 'http://[::1]:80'
             try:
                 app.call('permission', origin=upper, kind=8, state=1)
                 app.call('permission', origin=default, kind=8, state=1)
@@ -338,7 +339,7 @@ def run(factory, results, tmp, h):
             finally:
                 for origin6 in (upper, default):
                     app.call('permission', origin=origin6, kind=8, state=0)
-            return check(listed == sorted(['http://[::1]', 'http://[::1]:%d' % port]), listed=listed)
+            return check(listed == sorted(['http://[::1]', 'http://[::1]:8443']), listed=listed)
         gate('permission_origin_index_normalized', origin_normalized)
 
         def switched():
