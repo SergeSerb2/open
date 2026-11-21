@@ -2025,8 +2025,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
     controller?.isPageFullscreen = true
+    // Also for a window already in full screen: its exit must end the page's fullscreen.
+    if let window { observeStandaloneFullScreen(window) }
     if let window, !window.styleMask.contains(.fullScreen) {
-      observeStandaloneFullScreen(window)
       enteredWindowFullscreenForPage = true; window.toggleFullScreen(nil)
     }
   }
@@ -2455,7 +2456,8 @@ extension EngineWebContentHostFactory: NSMenuItemValidation {
   /// Library ▸ Spaces covers the page and has no search field: Find (menu, Cmd+G, Cmd+Shift+G)
   /// must not open on the page strip behind it (bug sweep r5; #646 left only Cmd+F guarded).
   var findCoveredByLibrarySpaces: Bool {
-    guard let controller, controller.isLibraryOpen,
+    // A Peek shown over Library is the shown page: Find works there.
+    guard let controller, controller.isLibraryOpen, !(controller.hasPeekController && controller.peekController.isShown),
       let panel = app.settingsPresenter.librarySessions[controller.windowID]?.panel else { return false }
     return panel.section == .spaces
   }

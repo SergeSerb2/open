@@ -609,10 +609,9 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
 
 // Navigation, close, and every dialog close: CEF has cancelled the page's
 // pending dialog callbacks. The shell removes the sheets still pending.
+// Not filtered by OEIsPageBrowser: a Chrome-style page's Document PiP shares
+// this client, and its dialogs are shown through this page (OnJSDialog).
 void OEClient::OnResetDialogState(CefRefPtr<CefBrowser> browser) {
-  if (!OEIsPageBrowser(view_, browser)) {
-    return;
-  }
   OEWebContent* view = view_;
   if (view && [view.delegate respondsToSelector:@selector(webContentDidResetDialogState:)]) {
     [view.delegate webContentDidResetDialogState:view];

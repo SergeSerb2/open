@@ -329,7 +329,8 @@ extension EngineWebContentHostFactory {
       guard selectedContent != nil else { return false }
       ensureFindController().perform(tag: tag); return true
     }
-    if id == "jump-to-selection", selectedContent != nil, !findCoveredByLibrarySpaces { ensureFindController().jumpToSelection(); return true }
+    if id == "jump-to-selection", findCoveredByLibrarySpaces { return true }
+    if id == "jump-to-selection", selectedContent != nil { ensureFindController().jumpToSelection(); return true }
     // A Find bar keeps Esc even when the Exit menu is disabled (no Peek/split).
     if id == "exit-modal", window === NSApp.keyWindow, windowState.style == .standard,
        dismissFindForExit() { return true }
