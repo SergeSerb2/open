@@ -223,6 +223,29 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
         reply = script.error('make new tab at window 1 with properties {URL:"open://welcome"}', 1001, INTERNAL_URL)
         extra = sorted({row['id'] for row in app.call('tabs')} - before)
         results['S1_make_tab_internal'] = dict(reply, ok=reply['ok'] and not extra, created=len(extra))
+        # A scheme is required: the engine ignores a scheme-relative URL without an error.
+        relative = '//scope.invalid/relative'
+        reply = script.error('set URL of %s to %s' % (target, quote(relative)), 1001, '"%s" is not a valid URL.' % relative)
+        results['S1_set_URL_scheme_relative'] = dict(reply, ok=reply['ok'] and app.call('tab-state', tab=home).get('url') == origin + '/scope-home')
+        before = {row['id'] for row in app.call('tabs')}
+        reply = script.error('make new tab at window 1 with properties {URL:%s}' % quote(relative), 1001)
+        extra = sorted({row['id'] for row in app.call('tabs')} - before)
+        results['S1_make_tab_scheme_relative'] = dict(reply, ok=reply['ok'] and not extra, created=len(extra))
+        # set URL on an existing Little Open tab takes the transient setter path.
+        little = script('set t to make new tab with properties {URL:%s}\nreturn id of t' % quote(origin + '/scope-little'))
+        created_little.append(little)
+        def little_title():
+            row = next((r for r in app.call('little-open-state')['sessions'] if r['tabID'].lower() == little.lower()), None)
+            return row and row['title']
+        loaded = wait_until(lambda: little_title() == 'AppleScript /scope-little' or None, timeout=15, step=.1)
+        reply = script.error('set URL of tab id %s to %s' % (quote(little), quote("javascript:document.title='S1-little';void 0")), 1001, JS_URL)
+        seen = wait_until(lambda: little_title() == 'S1-little' or None, timeout=3, step=.1)
+        results['S1_set_little_URL_javascript'] = dict(reply, ok=bool(loaded) and reply['ok'] and not seen,
+            loaded=bool(loaded), markerSeen=bool(seen))
+        try:
+            script('close tab id %s' % quote(little)); created_little.remove(little)
+        except RuntimeError: pass
+        no_undo = {}  # S2: a script selection is not an Undo step (the App's own select path).
 
         # S2: a split pane. Select a tab outside the split, then select the second pane.
         app.call('select', tab=home)
@@ -234,12 +257,27 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
         app.call('wait', tab=outside)
         pane = next(p for p in panes if p != home) if len(panes) == 2 and home in panes else None
         if pane:
+            app.call('undo-state', clear=True)
             script('select tab id %s of window 1' % quote(pane))
+            no_undo['split_pane'] = not app.call('undo-state')['canUndo']
             state = wait_until(lambda: (s if sorted(s['shownPages']) == panes and s['selected'] == pane else None)
                                if (s := app.call('window-state')) else None, timeout=5, step=.1)
             final = state or app.call('window-state')
             results['S2_select_split_pane'] = {'ok': bool(state), 'panes': len(panes),
                 'shown': sorted(final['shownPages']) == panes, 'selectedIsPane': final['selected'] == pane}
+            # Expand Current Pane shows one pane. Selecting the other pane by script ends it,
+            # as a sidebar click does; otherwise the selected pane stays hidden.
+            app.call('command', id='expand-current-split')
+            expanded = wait_until(lambda: app.call('split', op='state')['maximized'] == pane or None, timeout=5, step=.1)
+            app.call('undo-state', clear=True)
+            script('select tab id %s of window 1' % quote(home))
+            no_undo['expanded_pane'] = not app.call('undo-state')['canUndo']
+            state = wait_until(lambda: (s if sorted(s['shownPages']) == panes and s['selected'] == home else None)
+                               if (s := app.call('window-state')) else None, timeout=5, step=.1)
+            final = state or app.call('window-state')
+            results['S2_select_pane_ends_expanded'] = {'ok': bool(expanded) and bool(state), 'expanded': bool(expanded),
+                'maximizedAfter': app.call('split', op='state')['maximized'] or '',
+                'shown': sorted(final['shownPages']) == panes, 'selectedIsHome': final['selected'] == home}
         else:
             results['S2_select_split_pane'] = {'ok': False, 'reason': 'split fixture failed', 'panes': len(panes)}
 
@@ -251,7 +289,9 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
         app.call('favorite', tab=favorite)
         app.call('space', space=research)
         wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
+        app.call('undo-state', clear=True)
         script('select tab id %s of window 1' % quote(favorite))
+        no_undo['other_profile_favorite'] = not app.call('undo-state')['canUndo']
         # Model state only: L1 (cross-Profile animated switch host) is a separate open bug.
         state = wait_until(lambda: (s if s['space'] == work and s['selected'] == favorite else None)
                            if (s := app.call('window-state')) else None, timeout=5, step=.1)
@@ -260,6 +300,12 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
         results['S2_select_other_profile_favorite'] = {'ok': bool(state) and active == favorite,
             'spaceIsWorkProfile': final['space'] == work, 'selectedIsFavorite': final['selected'] == favorite,
             'activeTabIsFavorite': active == favorite}
+        app.call('space', space=research)
+        wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
+        app.call('undo-state', clear=True)
+        script('focus space id %s of window 1' % quote(work))
+        no_undo['focus'] = not app.call('undo-state')['canUndo']
+        results['S2_script_select_no_undo_step'] = {'ok': len(no_undo) == 4 and all(no_undo.values()), **no_undo}
 
         # S3: the automation select names the focused Space; a tab of another Space is refused.
         app.call('space', space=research)
@@ -282,6 +328,44 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
             'refused': refused, 'spaceUnchanged': state['space'] == research,
             'selectionUnchanged': state['selected'] in panes,
             'sameProfile': profiles.get(other) == profiles.get(research)}
+        try:
+            app.call('select', tab=favorite)
+            refused = None
+        except RuntimeError as error:
+            refused = str(error)
+        state = app.call('window-state')
+        results['S3_automation_select_other_profile_favorite'] = {'ok': refused == 'select: selection refused'
+            and state['space'] == research and state['selected'] in panes,
+            'refused': refused, 'spaceUnchanged': state['space'] == research, 'selectionUnchanged': state['selected'] in panes}
+
+        # S2: select and focus act on the window the specifier names, not on the key window.
+        original = app.call('window-state')['id']
+        second = None
+        try:
+            second = script('set w to make new window\nreturn id of w')
+            # The unfixed path acts on the key window: make the new window key first.
+            app.call('window-focus', id=second, activate=True)
+            front = wait_until(lambda: (s if s['id'].lower() == second.lower() and s['isKeyWindow'] else None)
+                               if (s := app.call('window-state')) else None, timeout=5, step=.1)
+            front_before = front and (front['space'], front['selected'])
+            script('select tab id %s of window id %s' % (quote(other_tab), quote(original)))
+            named = wait_until(lambda: (s if s['space'] == other and s['selected'] == other_tab else None)
+                               if (s := app.call('window-state', id=original)) else None, timeout=5, step=.1)
+            after = app.call('window-state', id=front['id']) if front else {}
+            results['S2_select_named_window'] = {'ok': bool(front) and bool(named)
+                and (after.get('space'), after.get('selected')) == front_before,
+                'secondKey': bool(front), 'namedWindowSelected': bool(named),
+                'keyWindowUnchanged': bool(front) and (after.get('space'), after.get('selected')) == front_before}
+            front_space = after.get('space')
+            script('focus space id %s of window id %s' % (quote(research), quote(original)))
+            named = wait_until(lambda: app.call('window-state', id=original)['space'] == research or None, timeout=5, step=.1)
+            after = app.call('window-state', id=front['id']) if front else {}
+            results['S2_focus_named_window'] = {'ok': bool(front) and bool(named) and after.get('space') == front_space,
+                'namedWindowFocused': bool(named), 'keyWindowUnchanged': after.get('space') == front_space}
+        finally:
+            if second:
+                try: script('close window id %s' % quote(second))
+                except RuntimeError: pass
     finally:
         try:
             for tab in created_little:

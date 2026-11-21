@@ -927,7 +927,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let space = model.space(id: spaceID), model.isSelectable(id, in: space) else { return false }
       if focusedSpace?.id != spaceID { withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: spaceID) } }
       select(nodeID: id); return true
-    case .selectFavorite(let id): guard model.tab(id: id) != nil else { return false }; select(nodeID: id); return true
+    case .selectFavorite(let id):
+      // A Favorite of another Profile would select nothing in this Space and blank the window.
+      guard let space = focusedSpace, model.tab(id: id) != nil, model.isSelectable(id, in: space) else { return false }
+      select(nodeID: id); return true
     case .switchSpace(let id): guard let space = model.space(id: id) else { return false }; focus(space: space); return true
     case .openCommandBar(let source): if source == .urlField { focusAddressBar(nil) } else { newTab(nil) }; return true
     case .newTab: newTab(nil); return true

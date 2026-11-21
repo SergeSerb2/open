@@ -54,6 +54,26 @@ enum ScriptTarget {
         return bridge
     }
 
+    /// The window a command's specifier names (`… of window 2`), else the key or front window.
+    static func window(for command: NSScriptCommand) -> BrowserWindowState? {
+        var current = command.directParameter as? NSScriptObjectSpecifier ?? command.receiversSpecifier
+        while let specifier = current {
+            if specifier.key == "appleScriptWindows", specifier.container == nil {
+                if let named = (specifier.objectsByEvaluatingSpecifier as? ScriptWindow)?.state { return named }
+                break
+            }
+            current = specifier.container
+        }
+        return ScriptRead.preferredWindow()
+    }
+
+    /// Model-only fallback for scratch probes: a script selection is not an Undo step.
+    static func withoutUndo(_ model: BrowserModel, _ body: () -> Void) {
+        let undo = model.undoManager
+        undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }
+        body()
+    }
+
     static func bringForward(_ state: BrowserWindowState) {
         // Scratch probes have model windows but no NSWindow. Do not activate another app.
         guard let window = ScriptHost.shared.windowForState?(state.id) else { return }
@@ -65,7 +85,8 @@ enum ScriptTarget {
 @MainActor
 enum ScriptCreation {
     static func parsedURL(_ text: String) -> URL? {
-        guard let url = URL(string: text), url.scheme != nil || url.host != nil else {
+        // A scheme is required: the engine refuses a scheme-relative "//host" without an error.
+        guard let url = URL(string: text), url.scheme?.isEmpty == false else {
             ScriptFailure.report(ScriptError.invalidURL, "\"\(text)\" is not a valid URL.")
             return nil
         }
@@ -277,7 +298,7 @@ extension ScriptTab {
     @objc public func select(_ command: NSScriptCommand) -> Any? {
         guard let target = ScriptTarget.tab(from: command, receiver: self), let model = ScriptHost.shared.model else { return nil }
         guard target.supportsModelContainment("select") else { return nil }
-        guard let window = ScriptRead.preferredWindow() else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
+        guard let window = ScriptTarget.window(for: command) else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
         let spaceID: SpaceID
         if case .favorites(let profileID)? = ScriptRead.section(of: target.tabID, model: model) {
             // A Favorite shows only in Spaces of its own Profile.
@@ -292,15 +313,23 @@ extension ScriptTab {
             }
             spaceID = id
         }
-        if window.focusedSpaceID != spaceID { model.focusSpace(windowID: window.id, spaceID: spaceID) }
-        // A split pane is not a sidebar node: select its split with that pane focused,
-        // or the other panes hide.
-        var nodeID = target.tabID
-        if case .splitPane(let splitID)? = model.parent(of: target.tabID) {
-            model.focusSplitPane(splitID: splitID, tabID: target.tabID)
-            nodeID = splitID
+        if let select = ScriptHost.shared.selectInWindow {
+            guard select(window.id, spaceID, target.tabID) else {
+                return command.fail(ScriptError.objectNotFound, "The tab \(target.tabID.rawValue.uuidString) cannot be selected.")
+            }
+        } else {
+            ScriptTarget.withoutUndo(model) {
+                if window.focusedSpaceID != spaceID { model.focusSpace(windowID: window.id, spaceID: spaceID) }
+                // A split pane is not a sidebar node: select its split with that pane focused,
+                // or the other panes hide.
+                var nodeID = target.tabID
+                if case .splitPane(let splitID)? = model.parent(of: target.tabID) {
+                    model.focusSplitPane(splitID: splitID, tabID: target.tabID)
+                    nodeID = splitID
+                }
+                model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: nodeID)
+            }
         }
-        model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: nodeID)
         ScriptTarget.bringForward(window)
         return nil
     }
@@ -363,8 +392,14 @@ extension ScriptTab {
 extension ScriptSpace {
     @objc public func focus(_ command: NSScriptCommand) -> Any? {
         guard let target = ScriptTarget.space(from: command, receiver: self), let model = ScriptHost.shared.model else { return nil }
-        guard let window = ScriptRead.preferredWindow() else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
-        model.focusSpace(windowID: window.id, spaceID: target.spaceID)
+        guard let window = ScriptTarget.window(for: command) else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
+        if let focus = ScriptHost.shared.focusSpaceInWindow {
+            guard focus(window.id, target.spaceID) else {
+                return command.fail(ScriptError.objectNotFound, "The space \(target.spaceID.rawValue.uuidString) cannot be focused.")
+            }
+        } else {
+            ScriptTarget.withoutUndo(model) { model.focusSpace(windowID: window.id, spaceID: target.spaceID) }
+        }
         ScriptTarget.bringForward(window)
         return nil
     }

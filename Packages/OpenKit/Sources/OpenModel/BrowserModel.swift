@@ -251,12 +251,17 @@ public final class BrowserModel {
 
     /// A remembered selection is visible only while it belongs to this Space or its Favorites.
     public func selectedNode(in space: Space, window: BrowserWindowState) -> SidebarNode? {
-        guard let id = window.selectedNodeBySpace[space.id], isSelectable(id, in: space) else { return nil }
+        guard let id = window.selectedNodeBySpace[space.id], shows(id, in: space) else { return nil }
         return index[id]
     }
 
-    /// True when the node shows in this Space: in its own sections or in its Profile's Favorites.
+    /// True when a select command may choose this node in this Space: a tab or split in the
+    /// Space's own sections or its Profile's Favorites. A folder shows no page.
     public func isSelectable(_ id: ItemID, in space: Space) -> Bool {
+        index[id]?.folder == nil && shows(id, in: space)
+    }
+
+    private func shows(_ id: ItemID, in space: Space) -> Bool {
         guard let parent = parentByID[id] else { return false }
         switch section(of: parent) {
         case .spacePinned(let owner)?, .spaceToday(let owner)?: return owner == space.id
