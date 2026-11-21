@@ -2289,8 +2289,9 @@
     }
 
     private func sidebarPoint(_ args: [String: Any], controller: BrowserWindowController, favorite: Bool = false) throws -> NSPoint {
+      // A Blank Window's rows are in its own model, not the browser's.
       guard let text = args[favorite ? "favorite" : "node"] as? String, let uuid = UUID(uuidString: text),
-        app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+        (app.hostFactories[controller.windowID]?.model ?? app.model).node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
       let id = ItemID(rawValue: uuid)
       controller.contentView.layoutSubtreeIfNeeded()
       if !favorite { controller.sidebar.reveal(nodeID: id) }

@@ -913,6 +913,21 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       default: break
       }
     }
+    if isBlankWindow {
+      switch intent {
+      // The same window-only rules as the menu bar (isAppCommandEnabled): no Space, Profile,
+      // Pinned or Favorites edits of this window's private model.
+      case .newSpace, .pin, .unpin, .setPinned, .addFavorite, .moveFavorite, .changeSpaceIcon, .renameSpace,
+           .editSpaceTheme, .setSpaceProfile, .exportSpaceIntoFolder, .deleteSpace, .moveSpace,
+           .moveNodesToNewSpace, .moveToNewSpace, .turnFolderIntoSpace: return false
+      // A selection moves into one of the browser's Spaces, one tab at a time, keeping its order.
+      case .moveNodesToSpace(let ids, let space):
+        var moved = false
+        for id in ids.reversed() where model.tab(id: id) != nil { moved = moveBlankWindowTab(id, toSpace: space) || moved }
+        return moved
+      default: break
+      }
+    }
     switch intent {
     case .customizePage(let id):
       guard canCustomizePage(id) else { return false }
@@ -985,10 +1000,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .newSpace:
       return controller?.beginSpaceCreation() == true
     case .openURL(let url, let parent, let index):
-      let before = Set(model.index.keys)
-      guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
-        let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
-      select(nodeID: tab.id); return true
+      // The drop (a new tab, its move, its selection) is one Undo step.
+      return model.asOneUndoStep {
+        let before = Set(model.index.keys)
+        guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
+          let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
+        select(nodeID: tab.id); return true
+      }
     case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
       return copyEaselLink(tabID: id)
     case .copyLink(let id, let markdown):
@@ -1393,7 +1411,9 @@ extension EngineWebContentHostFactory {
       // only then is the Archive row deleted. A failed write rolls the item back and keeps the row.
       let app = self.app, model = self.model
       let save: () throws -> Void = {
-        guard !app.isFirstRun || app.firstRunSaved else { return }
+        // A Blank Window's private model is never the session snapshot (its tabs are written
+        // at quit, beside it); saving it here replaced State/browser.json with that one window.
+        guard model === app.model, !app.isFirstRun || app.firstRunSaved else { return }
         try app.snapshotStore.saveNow(model: model)
       }
       // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
