@@ -1026,13 +1026,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Incognito window of another session, or a regular one for a private download.
   private func downloadOwner(_ download: OEDownload, context: OEBrowserContext) -> EngineWebContentHostFactory? {
     if let page = download.webContent {
-      if let host = littleOpenHosts.values.first(where: { $0.content === page }) { return host.owner }
-      if let owner = hostFactories.values.first(where: { $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } }) { return owner }
+      // A window's tabs and listed popups, and its unlisted pages (extension action popups, Little
+      // Open's popups), whose delegate is that window's factory (review r1 item 3).
+      if let host = littleOpenHosts.values.first(where: { $0.content === page || ($0.owner.map { page.delegate === $0 } ?? false) }) { return host.owner }
+      if let owner = hostFactories.values.first(where: {
+        $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } || page.delegate === $0
+      }) { return owner }
     }
     guard context.isEphemeral || context.originalContext != nil else { return nil }
-    // Window order, not front order: the destination and its later updates reach the same
-    // window, whose private reservation the final update releases.
-    return windowControllers.lazy.compactMap { self.hostFactories[$0.windowID] }.first { $0.incognitoSession?.context === context }
+    // The frontmost window of the private download's own session. The session owns the private
+    // reservations, so any of its windows may close first (review r1 item 4).
+    let session = windowControllers.compactMap { hostFactories[$0.windowID] }.filter { $0.incognitoSession?.context === context }
+    return NSApp.orderedWindows.lazy.compactMap { window in session.first { $0.window === window } }.first ?? session.first
   }
 
   func browserContext(_ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String, completion: @escaping @MainActor (URL?) -> Void) {
@@ -1045,9 +1050,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     // A private download with no window of its own session left: cancel, as before.
     guard !context.isEphemeral, context.originalContext == nil else { completion(nil); return }
-    // A regular one goes to its Profile's Downloads. The front regular window only supplies the
-    // sheet parent (and an automation folder override); the Profile comes from the context.
-    if let front = (frontMainModelWindowController ?? frontStandardWindowController).flatMap({ hostFactories[$0.windowID] }) {
+    // A regular one goes to its Profile's Downloads; the Profile comes from the context. Its own
+    // extension window, else the front regular window, only parents "Ask where to save" (and the
+    // front one supplies an automation folder override). With neither, a modeless panel asks.
+    if let page = download.webContent, let window = ExtensionWindowController.windows.values.first(where: { $0.content === page })?.window {
+      downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, completion: completion)
+    } else if let front = (frontMainModelWindowController ?? frontStandardWindowController).flatMap({ hostFactories[$0.windowID] }) {
       front.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
     } else {
       downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: nil, completion: completion)
