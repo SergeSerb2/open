@@ -251,11 +251,17 @@ public final class BrowserModel {
 
     /// A remembered selection is visible only while it belongs to this Space or its Favorites.
     public func selectedNode(in space: Space, window: BrowserWindowState) -> SidebarNode? {
-        guard let id = window.selectedNodeBySpace[space.id], let parent = parentByID[id] else { return nil }
+        guard let id = window.selectedNodeBySpace[space.id], isSelectable(id, in: space) else { return nil }
+        return index[id]
+    }
+
+    /// True when the node shows in this Space: in its own sections or in its Profile's Favorites.
+    public func isSelectable(_ id: ItemID, in space: Space) -> Bool {
+        guard let parent = parentByID[id] else { return false }
         switch section(of: parent) {
-        case .spacePinned(let owner)?, .spaceToday(let owner)?: return owner == space.id ? index[id] : nil
-        case .favorites(let profile)?: return profile == space.profileID ? index[id] : nil
-        default: return nil
+        case .spacePinned(let owner)?, .spaceToday(let owner)?: return owner == space.id
+        case .favorites(let profile)?: return profile == space.profileID
+        default: return false
         }
     }
 
