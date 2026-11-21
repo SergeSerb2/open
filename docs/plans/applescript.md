@@ -1088,7 +1088,7 @@ public enum ScriptError {
 | Number | When | Message (exact; `<…>` is filled in) |
 |---|---|---|
 | 1000 | ID or index names an object that is not in the model | `The tab (or space, or window) <id> does not exist.` Use the right noun. |
-| 1001 | `set URL` or `make … {URL:…}` with text that is not a URL, or a URL with no scheme and no host | `"<text>" is not a valid URL.` |
+| 1001 | `set URL` or `make … {URL:…}` with text that is not a URL, or a URL with no scheme and no host; a `javascript:` or internal `open:` URL (bug sweep round 3) | `"<text>" is not a valid URL.` / `javascript: URLs are not supported. Use execute to run JavaScript.` / `open: URLs are internal to Open and cannot be loaded by a script.` |
 | 1002 | Unknown `location` string; missing `javascript` parameter | `"<value>" is not a location. Use topApp, pinned, or unpinned.` / `execute needs a javascript string.` |
 | 1003 | `location` move the model refuses (split pane to favorites) | `A split pane cannot move to favorites. Separate it first.` |
 | 1004 | Read or count of `tabs of application` | `tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.` |
