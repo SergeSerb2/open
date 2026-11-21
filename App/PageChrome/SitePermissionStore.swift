@@ -1,11 +1,13 @@
+import AppKit
 import Foundation
 import OpenEngine
+import OpenModel
 
 /// Section 12's Profile-scoped data hook. Values always come from OpenEngine.
 /// The small origin index only makes App-written settings enumerable. It never
 /// copies Chromium's settings or runs disk work on the main thread.
 @MainActor
-final class SitePermissionStore {
+final class SitePermissionStore: ProfileDataOwner {
   struct Decision {
     let origin: URL
     let kind: OEPermissionKind
@@ -37,17 +39,26 @@ final class SitePermissionStore {
   private(set) var indexReady = false
   private(set) var persistenceTask: Task<Void, Never>?
 
+  private var retired = false
   private init(_ context: OEBrowserContext) {
     self.context = context
     index = SitePermissionOriginIndex(directory: context.directory)
+    (NSApp.delegate as? AppDelegate)?.profileTeardown.register(self)
     persistenceTask = Task { [weak self, index] in
       let saved = await index.read()
       guard let self else { return }
       self.origins = Set(self.origins.union(saved).sorted().prefix(SitePermissionOriginIndex.limit)); self.indexReady = true
       // A read-only panel may be the first caller. Only persist decisions
       // remembered while the index was loading, not the unchanged saved set.
-      if self.origins != saved { await index.write(self.origins) }
+      if self.origins != saved, !self.retired { await index.write(self.origins) }
     }
+  }
+  /// Profile deletion: no index write after this, and the pending one finishes before the
+  /// Profile's folder goes (a late write could recreate the file; bug sweep r5 item 6).
+  func retireProfile(_ profileID: ProfileID, directory: String) async {
+    guard context?.identifier == directory else { return }
+    retired = true
+    await persistenceTask?.value
   }
   func state(origin: URL, kind: OEPermissionKind) -> OEPermissionState {
     // Index only an origin that has a decision. A prompt or a read of an undecided site
@@ -90,7 +101,7 @@ final class SitePermissionStore {
           host.utf8.count <= 2048, origins.count < SitePermissionOriginIndex.limit else { return }
     let port = parts.port.flatMap { (scheme == "http" && $0 == 80) || (scheme == "https" && $0 == 443) ? nil : $0 }
     let origin = "\(scheme)://\(host)" + (port.map { ":\($0)" } ?? "")
-    guard origins.insert(origin).inserted, indexReady else { return }
+    guard !retired, origins.insert(origin).inserted, indexReady else { return }
     let previous = persistenceTask, snapshot = origins
     persistenceTask = Task { [index] in
       await previous?.value

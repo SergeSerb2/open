@@ -726,6 +726,8 @@ public final class WebContentContainer: NSView {
     public private(set) var pinnedPageTitles: [ItemID: String] = [:]
 
     public func closeHost(for id: ItemID) {
+        // A tab that left the model keeps no pinned title (a sleeping tab keeps it; bug sweep r5 item 7).
+        if tabProvider(id) == nil { pinnedPageTitles[id] = nil }
         if previewHosts[id] != nil { onReturnPreviewHost?() }
         parkedSlots[id] = nil
         generations[id] = nil

@@ -51,7 +51,10 @@ final class DownloadDestinationChoice {
   }
   func cancel() {
     finish(nil)
-    panel.sheetParent?.endSheet(panel, returnCode: .cancel)
+    if let parent = panel.sheetParent { parent.endSheet(panel, returnCode: .cancel) }
+    // A modeless panel (begin) ends its session with cancel(_:), which hiding it does not
+    // (bug sweep r5 item 1). Its completion then finds `completion` already nil.
+    else if started && panel.isVisible { panel.cancel(nil) }
     panel.orderOut(nil)
   }
   isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }

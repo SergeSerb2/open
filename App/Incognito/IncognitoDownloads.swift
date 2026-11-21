@@ -45,6 +45,11 @@ final class IncognitoDownloads {
   func close() {
     guard !closed else { return }
     closed = true
+    reset()
+  }
+  /// Cancels open choices and releases reservations, and keeps taking new requests: a renewed
+  /// private context numbers its downloads from 1 again (bug sweep r5 item 3).
+  func reset() {
     let pending = Array(choices.values); choices.removeAll()
     for choice in pending { choice.cancel() }
     let urls = Array(reserved.values); reserved.removeAll()

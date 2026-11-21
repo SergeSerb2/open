@@ -30,13 +30,24 @@ final class MailtoRouter {
     for (url, source) in queued { route(url, source: source) }
   }
 
+  private func frontLittleOpen() -> LittleOpenWindowController? {
+    let browsers = Set(app.windowControllers.compactMap { $0.window.map(ObjectIdentifier.init) })
+    for window in NSApp.orderedWindows where window.isVisible {
+      if let controller = app.littleOpenCoordinator?.controllers.values.first(where: { $0.window === window }) { return controller }
+      if browsers.contains(ObjectIdentifier(window)) { return nil }
+    }
+    return nil
+  }
+
   private func route(_ url: URL, source: RoutingSource) {
     let factory = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
     let context: OEBrowserContext?
     // The compose page opens in the Profile whose handler made it. With no window open, ask the Profile
     // of the first saved standard window's Space (else the default Profile). GUESS, as above.
     // A key Little Open window (tracked outside windowControllers) names its own Profile.
-    let littleOpen = app.keyLittleOpen.flatMap { app.model.profile(id: $0.session.profileID) }
+    // With Open inactive there is no key window: use a Little Open window in front of every
+    // browser window (bug sweep r5 item 4).
+    let littleOpen = (app.keyLittleOpen ?? frontLittleOpen()).flatMap { app.model.profile(id: $0.session.profileID) }
     let regular = littleOpen ?? factory?.incognitoSession?.parent ?? (factory == nil ? noWindowProfile() : nil)
     let profile = regular?.id ?? factory?.focusedProfile?.id
     if let regular {
