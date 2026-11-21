@@ -1788,7 +1788,7 @@ public final class BrowserModel {
                   let slot = model.spaces.firstIndex(where: { $0.id == id }), model.index[folder.id] == nil else { return nil }
             let pinned = source.pinned, today = source.today
             let focused = model.windows.filter { $0.focusedSpaceID == id }
-            model.removeSpace(id)
+            let selections = model.removeSpace(id)
             source.pinned = []; source.today = []
             folder.children = pinned + today
             let prior = model.applyPinnedRule(to: .folder(folder), from: .spaceToday(id), to: .spacePinned(destination))
@@ -1803,6 +1803,7 @@ public final class BrowserModel {
                 Self.restore(prior)
                 model.insertSpace(source, at: slot)
                 for window in focused { window.focusedSpaceID = id }
+                Self.restoreSelections(selections, space: id)
                 model.emit(.reload(parent: .spaceToday(id)))
                 return true
             }
@@ -2378,9 +2379,7 @@ public final class BrowserModel {
             for node in doomed.today { entries += archiveEntries(for: node, in: .spaceToday(id), reason: .closed) }
         }
         let focusedWindows = windows.filter { $0.focusedSpaceID == id }
-        // Each window's remembered selection for the deleted Space goes with it (Undo puts it back).
-        let selections = windows.compactMap { window in window.selectedNodeBySpace.removeValue(forKey: id).map { (window, $0) } }
-        removeSpace(id)
+        let selections = removeSpace(id)
         emit(.reload(parent: .spaceToday(id)))
         archive(entries)
         let ids = entries.map { $0.tab.id }
@@ -2388,7 +2387,7 @@ public final class BrowserModel {
             guard model.space(id: id) == nil else { return false }
             model.insertSpace(doomed, at: slot)
             for window in focusedWindows { window.focusedSpaceID = id }
-            for (window, node) in selections where window.selectedNodeBySpace[id] == nil { window.selectedNodeBySpace[id] = node }
+            Self.restoreSelections(selections, space: id)
             model.emit(.reload(parent: .spaceToday(id)))
             model.archiveSink?.discardArchived(ids: ids)
             return true
@@ -2402,8 +2401,12 @@ public final class BrowserModel {
         for node in space.today { register(node, under: .spaceToday(space.id)) }
     }
 
-    private func removeSpace(_ id: SpaceID) {
-        guard let i = spaces.firstIndex(where: { $0.id == id }) else { return }
+    /// Removes a Space and each window's remembered selection for it. Returns those selections,
+    /// so a revert that puts the Space back can restore them (`restoreSelections`).
+    @discardableResult
+    private func removeSpace(_ id: SpaceID) -> [(BrowserWindowState, ItemID)] {
+        guard let i = spaces.firstIndex(where: { $0.id == id }) else { return [] }
+        let selections = windows.compactMap { window in window.selectedNodeBySpace.removeValue(forKey: id).map { (window, $0) } }
         let space = spaces.remove(at: i)
         spaceByIDCache[id] = nil
         for node in space.pinned { unregister(node) }
@@ -2411,6 +2414,12 @@ public final class BrowserModel {
         if let fallback = spaces.first {
             for window in windows where window.focusedSpaceID == id { window.focusedSpaceID = fallback.id }
         }
+        return selections
+    }
+
+    /// Puts back selections `removeSpace` dropped, unless a window chose another one since.
+    private static func restoreSelections(_ selections: [(BrowserWindowState, ItemID)], space id: SpaceID) {
+        for (window, node) in selections where window.selectedNodeBySpace[id] == nil { window.selectedNodeBySpace[id] = node }
     }
 
     public func moveSpace(id: SpaceID, to newIndex: Int) {
