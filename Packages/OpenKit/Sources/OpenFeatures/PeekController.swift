@@ -328,7 +328,8 @@ public final class PeekController {
         // Live while its toast shows (a hovered toast outlasts the 5 s window), else for 5 s.
         guard let item = undoItem, item.expiry > Date() || undoToast?.isVisible == true else { return }; undoItem = nil; undoTask?.cancel()
         undoToast?.dismiss(); undoToast = nil
-        open(url:item.url,sourceTabID:item.source,librarySpaceID:item.librarySpace,profileID:item.librarySpace == nil ? nil : item.profile)
+        // The Peek comes back in its own Profile: the window may show another Profile's Space now.
+        open(url:item.url,sourceTabID:item.source,librarySpaceID:item.librarySpace,profileID:item.profile)
     }
     /// Closing Library also expires Undo for its last dismissed preview.
     public func closeLibraryPreviews() {
