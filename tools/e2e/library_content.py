@@ -249,7 +249,8 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             revealed=wait(lambda:(lambda s:s if s['open'] and s['section']=='media' and len(s['rows'])==2 and any(r['selected'] for r in s['rows']) else None)(state())) or state()
             check('capture_show_in_library_selects_row',[r['id'].upper() for r in revealed['rows'] if r['selected']]==[real['id'].upper()] and revealed['rows'][0]['id'].upper()==decoy['id'],
                   rows=[(r['title'],r['selected']) for r in revealed['rows']],negative='old card set selectedIDs only; the native panel never read it, so no row was selected')
-            index_file.write_text(json.dumps([real]));(captures_dir/decoy['fileName']).unlink();state(action='close')
+            index_file.write_text(json.dumps([real]));(captures_dir/decoy['fileName']).unlink()
+            state(action='select',section='media');assert wait(lambda:len(rows())==1),rows();state(action='close')
             state(action='open',section='media');check('media_capture_rows',wait(lambda:bool(rows())),rows=rows());check('capture_page_title',rows()[0]['title']=='Unload fixture' and '127.0.0.1' in rows()[0]['subtitle'])
             folder_state=Path(data)/'State/library-media.json'
             check('capture_without_folder_grant',not folder_state.exists() or not json.loads(folder_state.read_text()).get('onboarded'))
