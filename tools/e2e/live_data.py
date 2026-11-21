@@ -633,8 +633,9 @@ def run(factory, results, tmp, harness):
         if case == 'r3-folder':
             app = live_folder_checks(holder, results, wait_until, factory, new_tab)
             return
-        # Bug sweep r3 E7: a script that never settles used to hold the one fetch slot for the
-        # whole run (every later Live Folder refresh and Gmail glance failed "busy").
+        # Bug sweep r3 E7 (claim rejected): a script that never settles must not hold the one fetch
+        # slot. OpenEngine ends an Open-world request after 10 s (OEWebContent.mm, "Open-world request
+        # timed out"); the slot frees and the next fetch works. Regression row for that guarantee.
         try:
             stalled = app.call('live-fetch', url=url('fetch', 'live-fetch-stall'), script='new Promise(() => {})', timeout=45)
         except Exception as error:
@@ -643,7 +644,8 @@ def run(factory, results, tmp, harness):
             after = app.call('live-fetch', url=url('fetch', 'live-fetch'), script='document.title', timeout=45)
         except Exception as error:
             after = {'error': 'client: ' + str(error)[-200:]}
-        results['live_fetch_script_timeout'] = {'ok': str(stalled.get('error', '')).startswith('scriptTimedOut')
+        results['live_fetch_stalled_script_frees_slot'] = {'ok': 'timed out' in str(stalled.get('error', ''))
+            and stalled.get('created') == stalled.get('closed') == 2
             and after.get('value') == 'Sleep /live-fetch' and after.get('created') == after.get('closed') == 3,
             'stalled': stalled, 'after': after}
         if case == 'r3-fetch':
