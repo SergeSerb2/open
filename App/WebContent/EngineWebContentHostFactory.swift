@@ -1395,9 +1395,17 @@ extension EngineWebContentHostFactory {
       // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
       // blank tab and drop its children.
       if record.kind == .folder {
+        // A row left behind for a folder that is already in the sidebar (the Archive delete
+        // did not run after its restore) would stop every later press here. Drop that row and
+        // show the folder, as for a tab that is already back.
+        if model.node(id: record.id)?.folder != nil {
+          store.discardArchived(ids: [record.id])
+          self.showRestoredFolder(record.id)
+          return
+        }
         guard let folder = try? model.restoreArchivedFolder(record, saving: save) else { return }
         store.discardArchived(ids: [folder.id])
-        self.controller?.sidebar.reveal(nodeID: folder.id)
+        self.showRestoredFolder(folder.id)
         return
       }
       let existed = model.tab(id: record.id) != nil
@@ -1409,6 +1417,20 @@ extension EngineWebContentHostFactory {
       // Expanding its folders only reveals it: no Undo step, so one Cmd+Z undoes the restore.
       self.withoutUndo { self.selectTabForCommand(tab.id) }
     }
+  }
+
+  /// Shows a folder that Restore Last Closed Tab put back: its Space is focused (it can be
+  /// another Space, as for a tab) and its parent folders open. No Undo step, so one Cmd+Z
+  /// undoes the restore.
+  private func showRestoredFolder(_ id: ItemID) {
+    withoutUndo {
+      if let space = space(containing: id), space.id != focusedSpace?.id { focus(space: space) }
+      var parent = model.parent(of: id)
+      while case .folder(let folder)? = parent {
+        model.setExpanded(folderID: folder, expanded: true); parent = model.parent(of: folder)
+      }
+    }
+    controller?.sidebar.reveal(nodeID: id)
   }
 
   @objc func togglePin(_ sender: Any?) {

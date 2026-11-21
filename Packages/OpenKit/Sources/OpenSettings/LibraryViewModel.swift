@@ -228,7 +228,11 @@ import OpenStore
         if let spaceID { record.spaceID = spaceID; record.originalLocation = "today:\(spaceID)" }
         let restoredID: ItemID
         do {
-            if record.kind == .folder {
+            if record.kind == .folder, model.node(id: id)?.folder != nil {
+                // A row left behind for a folder that is already in the sidebar (its Archive
+                // delete did not run): drop the row and keep the folder, as for a tab already back.
+                restoredID = id
+            } else if record.kind == .folder {
                 guard let folder = try model.restoreArchivedFolder(record, saving: { try snapshot.saveNow(model: model) }) else {
                     statusText = "This archived folder cannot be restored."; return false
                 }

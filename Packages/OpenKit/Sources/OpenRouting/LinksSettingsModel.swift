@@ -88,7 +88,8 @@ public struct RuleDraft: Hashable, Sendable, Identifiable {
         let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         var issues: [RuleIssue] = []
         if trimmed.isEmpty { issues.append(.emptyPattern(ruleID: id)) }
-        if pattern.contains(" ") { issues.append(.patternHasSpaces(ruleID: id)) }
+        // makeRule saves the trimmed pattern, so only inner whitespace (space, tab, NBSP) is an error.
+        if trimmed.contains(where: \.isWhitespace) { issues.append(.patternHasSpaces(ruleID: id)) }
         if matchKind == .urlPrefix, trimmed.contains("://"),
            URL(string: trimmed)?.host()?.isEmpty != false {
             issues.append(.prefixNotParseable(ruleID: id))

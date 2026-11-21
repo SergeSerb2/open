@@ -367,6 +367,12 @@ public final class CommandBarController: NSObject {
 
     /// Re-read a live default suggestion without changing the field or scope.
     /// The App source reuses the current input's reply instead of sending another input event.
+    /// Runs the current text again, for example after the action keycaps changed.
+    public func refreshResults() {
+        guard isPresented else { return }
+        runQuery(text)
+    }
+
     public func refreshExtensionSuggestions(extensionID: String) {
         guard isPresented, extensionScope?.id == extensionID else { return }
         runQuery(text)

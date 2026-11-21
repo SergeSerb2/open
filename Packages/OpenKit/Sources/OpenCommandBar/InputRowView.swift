@@ -113,14 +113,22 @@ final class CommandBarFieldEditor: NSTextView {
     }
 
     static func normalized(_ text: String) -> String {
-        String(text.replacingOccurrences(of: "\r\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "\n", with: " ").prefix(2_048))
+        String(singleLine(text).prefix(2_048))
     }
+
+    private static func singleLine(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    /// The edit kind for the bounded re-entry below, which replaces the whole text.
+    private var boundedEdit: EditKind?
 
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         let length = (string as NSString).length
-        if pasteDepth > 0 { lastEdit = .paste }
+        if let boundedEdit { lastEdit = boundedEdit }
+        else if pasteDepth > 0 { lastEdit = .paste }
         else if editingUndoManager.isUndoing || editingUndoManager.isRedoing { lastEdit = .undo }
         else if (replacementString ?? "").isEmpty { lastEdit = .deletion }
         else { lastEdit = NSMaxRange(affectedCharRange) == length - keptTail ? .insertionAtEnd : .insertion }
@@ -132,7 +140,14 @@ final class CommandBarFieldEditor: NSTextView {
         guard clean != proposed else { return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString) }
         // Re-enter the normal editing path with the bounded single line. The field and
         // the query then receive the same text, including paste and multi-character input.
-        insertText(clean, replacementRange: NSRange(location: 0, length: (string as NSString).length))
+        // The edit stays where the user made it: the caret follows the new text, and the cap
+        // cuts only from the end of the field (an edit inside a long address keeps its place).
+        let cleanLength = (clean as NSString).length
+        let caret = min(affectedCharRange.location + (Self.singleLine(replacementString) as NSString).length, cleanLength)
+        boundedEdit = lastEdit == .insertionAtEnd && caret < cleanLength ? .insertion : lastEdit
+        defer { boundedEdit = nil }
+        insertText(clean, replacementRange: NSRange(location: 0, length: length))
+        setSelectedRange(NSRange(location: caret, length: 0))
         return false
     }
 

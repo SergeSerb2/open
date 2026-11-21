@@ -1189,6 +1189,7 @@ extension AppDelegate: CommandDispatcher {
       keyBindings = .empty; Self.commandLog("Key bindings could not be loaded: \(error)")
     }
     for controller in windowControllers { controller.keyBindingOverrides = keyBindings }
+    littleOpenCoordinator?.keyBindingsChanged()
     extensionPrompts.rebuildShortcuts()
     updateLittleOpenHotkey(); scheduleMenuRebuild()
   }
