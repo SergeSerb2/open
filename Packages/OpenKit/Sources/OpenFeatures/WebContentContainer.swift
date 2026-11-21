@@ -724,6 +724,12 @@ public final class WebContentContainer: NSView {
     /// The last title each pinned tab or Favorite showed at its pinned URL in this launch. A close
     /// that puts the tab back on its pinned URL shows this title until the page loads again.
     public private(set) var pinnedPageTitles: [ItemID: String] = [:]
+    /// Keeps the titles of tabs that are still pinned (or Favorites), with or without a live
+    /// host; a deleted or unpinned tab's goes (bug sweep r5 item 7, review r1 of #651).
+    public func prunePinnedPageTitles() {
+        guard !pinnedPageTitles.isEmpty else { return }
+        pinnedPageTitles = pinnedPageTitles.filter { tabProvider($0.key)?.pinnedURL != nil }
+    }
 
     public func closeHost(for id: ItemID) {
         // A tab that left the model keeps no pinned title (a sleeping tab keeps it; bug sweep r5 item 7).

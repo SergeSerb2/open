@@ -843,6 +843,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
     else { controller?.refresh(); mirror.sync() }
+    controller?.container.prunePinnedPageTitles()
   }
   /// Shown tabs become live; the sleep controller wakes the ones it put to sleep (or can restore
   /// from a stored back list), so their wake kind and history are right (memory-fork §9.4).

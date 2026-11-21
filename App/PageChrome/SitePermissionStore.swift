@@ -43,7 +43,15 @@ final class SitePermissionStore: ProfileDataOwner {
   private init(_ context: OEBrowserContext) {
     self.context = context
     index = SitePermissionOriginIndex(directory: context.directory)
-    (NSApp.delegate as? AppDelegate)?.profileTeardown.register(self)
+    let app = NSApp.delegate as? AppDelegate
+    app?.profileTeardown.register(self)
+    // Made after its Profile left the model (deletion removes it first, then retires owners):
+    // retired from the start, so no index write can race the folder's removal (review r1 of #651).
+    if let app, !context.isEphemeral, context !== OEEngine.shared.defaultContext,
+      !app.model.profiles.contains(where: { $0.dataDirectoryName == context.identifier }) {
+      retired = true
+      return
+    }
     persistenceTask = Task { [weak self, index] in
       let saved = await index.read()
       guard let self else { return }
