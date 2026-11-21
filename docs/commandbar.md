@@ -119,6 +119,8 @@ All values are points from the panel's outer top-left corner, at 1x (window 2216
 | Kind | Title — subtitle | Icon | Right side | Evidence |
 |---|---|---|---|---|
 | navigate | "\<url\> — \<url\>", or "\<page title\> — \<url\>" after a history merge | favicon, else globe | — | F0040 |
+| navigate, Top Domain | "\<site name\> — \<domain\>" ("Netflix — netflix.com") | favicon, else globe | — | PB1-i (C-report-s6 §8) |
+| navigate, Easel or remote navigation | "\<Easel title\> — Easel", "\<page title\> — \<url\>" | favicon, else globe | — | guess: no capture |
 | history | "\<title\> — \<url\>" | favicon, else globe | — | F0048 |
 | switchToTab | title | favicon | "Switch to Tab", "Switch to Split View", or the tab's Space name + arrow | F0063, A0121, A0327 |
 | switchToTab, a Split View | pane titles with a 1 pt rule between them, no subtitle | one cell per pane on a plate | "Switch to Split View" + arrow | A0120, A0121 (CC-12…CC-14) |
