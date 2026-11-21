@@ -418,7 +418,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func apply(target new: [AnyObject], in d: Displayed, animated: Bool? = nil) {
         let steps = ListDiff.steps(old: list(for: d).map(ObjectIdentifier.init), new: new.map(ObjectIdentifier.init))
         guard !steps.isEmpty else { return }
-        let animate = animated ?? animatesChanges
+        // Reduce Motion: rows appear and go without the slide (as the Space pager and Peek do).
+        let animate = (animated ?? animatesChanges) && !Motion.reducesMotion
         let parent = parentItem(d)
         if syncingExpansion, case .folder = d {
             // A folder transition only inserts or removes a subset, preserving
