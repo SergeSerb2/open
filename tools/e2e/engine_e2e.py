@@ -7333,7 +7333,8 @@ def media_checks(factory, results, tmp):
             if focused_space() != home_space: app.call("space", space=home_space)
             app.call("select", tab=twin)
             # The second window's own page plays and pauses: a paused report from it.
-            wait_until(lambda: app.eval(twin, "document.readyState") == "complete", timeout=10, step=.05)
+            # The new page first answers from its initial blank document: wait for the fixture's own script.
+            wait_until(lambda: app.eval(twin, "document.readyState === 'complete' && typeof start === 'function'") is True, timeout=10, step=.05)
             app.eval(twin, "start().then(() => { document.getElementById('tone').pause(); return true; })")
             time.sleep(.8)
             twin_during = m(twin)
