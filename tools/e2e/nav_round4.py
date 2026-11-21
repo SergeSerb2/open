@@ -183,12 +183,15 @@ def run(factory, results, tmp, h):
             section = app.call('library').get('section')
             # Control: the same key with Library closed opens Find, so the key reaches the window.
             app.call('library', action='close')
-            time.sleep(.6)
-            app.call('key', key='f', modifiers=['cmd'], route='app')
+            time.sleep(1)
+            app.call('select', tab=start)
+            routed = app.call('key', key='f', modifiers=['cmd'], route='app')
             control = wait_until(lambda: any(p.get('visible') for p in app.call('find-state').get('panes', [])), timeout=3, step=.1)
+            control_state = app.call('find-state')
             app.call('key', key='escape', route='app')
             row('nav4_library_spaces_cmd_f_no_find', not any(p.get('visible') for p in panes) and bool(control), panes=panes,
-                section=section, control=bool(control))
+                section=section, control=bool(control), routed=routed, controlState=control_state,
+                window=app.call('window-state').get('selected'), start=start)
         guarded('nav4_library_spaces_cmd_f_no_find', library_spaces_find, lambda: app.call('library', action='close'))
 
         # F-02: a Blank Window's bar lists its own tabs (Switch to Tab) and the current-tab actions.
