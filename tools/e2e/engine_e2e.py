@@ -7254,6 +7254,15 @@ def media_checks(factory, results, tmp):
             "documentPictureInPicture.window ? [documentPictureInPicture.window.innerWidth, documentPictureInPicture.window.innerHeight] : null")),
             timeout=3, step=.02)
         dp_moved = app.eval(dp, "document.getElementById('player') === null")
+        # Bug sweep r3 L24: a Chrome-style page's Document PiP has its own client. Before, the PiP
+        # browser used the opener's, so the PiP document's title (and address) replaced the tab's.
+        dp_retitled = app.eval(dp, "documentPictureInPicture.window ? (documentPictureInPicture.window.document.title = 'R3 PiP document', true) : false")
+        dp_leak = wait_until(lambda: (lambda t: t if t.get("title") == "R3 PiP document" or not t.get("url", "").endswith("docpip.html") else None)(app.tab(dp)),
+                             timeout=1.5, step=.05)
+        dp_opener = {k: app.tab(dp).get(k) for k in ("title", "url")}
+        results["media_document_pip_own_client"] = {"ok": dp_retitled is True and not dp_leak
+            and dp_opener["title"] == "Media Document PiP" and dp_opener["url"].endswith("docpip.html"),
+            "retitled": dp_retitled, "opener": dp_opener, "style": app.style}
         dp_level = dp_win["level"] if dp_win else None
         app.call("pip-action", action="close")
         dp_gone = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
