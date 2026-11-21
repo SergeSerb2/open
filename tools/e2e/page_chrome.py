@@ -78,6 +78,26 @@ def run(factory, results, tmp, h):
             saved[key] = app.call('defaults', key=key)
             app.call('defaults', key=key, value=None)
         app.call('window-frame', frame=[80, 60, 1100, 760])
+
+        def script_batch():
+            # Bug sweep r4 PERF-02: one replace of K user scripts rescanned the whole script list for
+            # every script, in the browser process and again in each renderer (O(K^2) on both main
+            # threads; Ad Block installs up to ~15,000). The later of two scripts with one ID still
+            # wins and moves last. Runs first, with only the launch tab open, so the broadcast is
+            # bounded and no later row shares a busy renderer (review r1 item 2).
+            live = app.call('tabs')[0]['id']
+            app.call('wait', tab=live)
+            batch = app.call('script-batch', count=20000, timeout=300)
+            started = time.monotonic()
+            try:
+                answered = app.eval(live, '1 + 1', timeout=30) == 2
+            except Exception as error:
+                answered = False
+            renderer = (time.monotonic() - started) * 1000
+            return check(batch['count'] == 20000 and batch['last'] == '0' and batch['lastSource'] == 'void 1'
+                         and batch['remaining'] == 0 and batch['milliseconds'] < 1000 and answered and renderer < 1000,
+                         batch=batch, rendererMilliseconds=renderer, answered=answered)
+        gate('user_script_batch_linear', script_batch)
         for name, script, accepted, text, expected, kind in [
             ('alert', '(alert("page message"),"done")', True, None, 'done', 0),
             ('confirm_ok', 'confirm("page message")', True, None, True, 1),

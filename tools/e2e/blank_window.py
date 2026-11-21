@@ -75,6 +75,31 @@ def blank_window_checks(factory, results, h, origin):
         row('row_menu_has_move_to', menu['enabled'] and app.call('sidebar-menu-state', node=first, item='Duplicate')['enabled'],
             menu=menu, blankSpaces=spaces)
 
+        # Bug sweep round 4 (SB-09): no Space, Profile, Pinned or Favorites command edits this window's
+        # private model (it has no Pinned section, no Favorites and one window-only Space).
+        blocked = ['pin-unpin-tab', 'new-space', 'rename-space', 'change-profile', 'edit-theme']
+        app.call('select', tab=first)
+        states = {m['id']: m['enabled'] for m in app.call('menu-state') if m['id'] in blocked}
+        row('workspace_commands_disabled', len(states) == len(blocked) and not any(states.values()), states=states)
+        # A selection's Move to ▸ lists the browser's Spaces, as one row's does (not this window's
+        # own Space and New Space…).
+        browser_spaces = blank()['moveTo'].get('menu', [])
+        def menu_state(path):
+            try: return app.call('sidebar-menu-state', node=first, items=path)
+            except RuntimeError as error: return {'error': str(error)}
+        try:
+            app.call('sidebar-click', node=first); app.call('sidebar-click', node=second, modifiers=['cmd'])
+            selection = sorted(app.call('selection'))
+        except RuntimeError as error:
+            selection = str(error)
+        selection_target = menu_state(['Move to', browser_spaces[0]]) if browser_spaces else {}
+        selection_new = menu_state(['Move to', 'New Space…'])
+        row('selection_move_to_lists_browser_spaces', selection == sorted([first, second])
+            and selection_target.get('enabled') is True and 'error' in selection_new,
+            selection=selection, target=selection_target, newSpace=selection_new, browserSpaces=browser_spaces)
+        try: app.call('sidebar-click', node=first)
+        except RuntimeError: app.call('select', tab=first)
+
         # 4. The snapshot holds nothing of the Blank Window.
         snapshot = json.loads(Path(app.call('save')).read_text())
         text = json.dumps(snapshot)
@@ -146,8 +171,24 @@ def blank_window_checks(factory, results, h, origin):
         third = h.new_tab(app, origin + '/three')
         key('w', 'command')
         h.wait_until(lambda: all(t['id'] != third for t in app.call('tabs')) or None, timeout=5, step=.1)
+        # Bug sweep round 4 (SB-01): the reopen's staged save wrote this window's private model as
+        # the session snapshot (State/browser.json): one "This Window" Space and only its tabs. Read
+        # the file on disk (no `save` call, which would rewrite it) while the reopen runs.
+        snapshot_file = Path(app.call('save'))
+        disk_samples = []
         key('t', 'command', 'shift')
-        back = h.wait_until(lambda: [t for t in app.call('tabs') if '/three' in t['url']] or None, timeout=8, step=.1) or []
+        def reopened_tabs():
+            try: disk_samples.append(snapshot_file.read_text())
+            except OSError: pass
+            return [t for t in app.call('tabs') if '/three' in t['url']] or None
+        back = h.wait_until(reopened_tabs, timeout=8, step=.05) or []
+        for _ in range(20):
+            try: disk_samples.append(snapshot_file.read_text())
+            except OSError: pass
+            time.sleep(.05)
+        overwritten = [i for i, text in enumerate(disk_samples) if '/main' not in text or '/three' in text]
+        row('reopen_in_blank_keeps_session_snapshot', len(back) == 1 and disk_samples and not overwritten,
+            samples=len(disk_samples), overwrittenSamples=len(overwritten))
         reopened = blank()
         row('reopen_closed_tab_in_this_window', len(back) == 1 and reopened['isBlankWindow'] and reopened['browserWindows'] == 2
             and len(app.call('tabs')) == 3, tabs=[t['url'] for t in app.call('tabs')])
@@ -198,6 +239,13 @@ def blank_window_checks(factory, results, h, origin):
             app.call('window-focus', id=blank_window, activate=True); s = app.call('blank-window')
         row('restored_at_relaunch_when_restore_on', s['browserWindows'] == 2 and s['isBlankWindow'] and s['headerTitle'] == 'This Window'
             and [t['url'].rsplit('/', 1)[-1] for t in s['tabs']] == ['six'], state=s, quitFrame=quit_frame)
+        # Bug sweep round 4 (SB-10): restoring the window's tabs is not an Undo step. Cmd+Z in the
+        # restored Blank Window removed its tabs (and the window with its last tab).
+        if s['isBlankWindow']:
+            app.call('sidebar-key', key='z', modifiers=['cmd']); time.sleep(.5)
+        after_undo = app.call('blank-window')
+        row('restored_tabs_not_undoable', s['isBlankWindow'] and after_undo['isBlankWindow'] and after_undo['browserWindows'] == 2
+            and [t['url'].rsplit('/', 1)[-1] for t in after_undo['tabs']] == ['six'], state=after_undo)
         app.call('defaults', key='open.advanced.restoreWindowsOnLaunch', value=False)
     finally:
         app.quit()

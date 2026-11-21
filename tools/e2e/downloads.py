@@ -1090,6 +1090,23 @@ def checks(factory, results, tmp, config, harness):
         check('generic_quit_harness_bypass', not app.quit_report['forced'] and generic_alerts() == 0,
               quit=app.quit_report, alerts=generic_alerts())
 
+    def library_input_flow():
+        # Bug sweep r4 PERF-01: every input event (pointer move, scroll, key) used to cancel and
+        # create a Library prebuild Task. The prebuild must still wait for 3 s without input.
+        prebuild = lambda: app.call('library', action='prebuild-state')
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        wait(lambda: prebuild()['builtAt'] > 0, 25)
+        before = prebuild()
+        frame = app.call('window-state')['frame']
+        for i in range(40):
+            app.call('mouse', action='move', x=frame[2] / 2 + (i % 8), y=frame[3] / 2 + (i % 5))
+        after = prebuild()
+        created = after['tasksCreated'] - before['tasksCreated']
+        built = wait(lambda: (lambda s: s if s['builtAt'] > after['lastInput'] else None)(prebuild()), 10) or prebuild()
+        waited = built['builtAt'] - after['lastInput']
+        check('library_input_one_prebuild_task', created <= 1 and after['lastInput'] > before['lastInput'] and waited >= 3,
+              created=created, waited=waited, before=before, after=after, built=built)
+
     def unowned_flow():
         # Bug sweep r3 W4: a download whose page no browser window owns. The engine-API
         # proof page is a real engine page of the default Profile's context outside every
@@ -1315,7 +1332,7 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "names": names_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow, "unowned": unowned_flow, "unowned-ask": unowned_ask_flow, "clear-unloaded": clear_unloaded_flow,
+                     "captured-kinds": captured_kinds_flow, "captured-mark": captured_mark_flow, "captured-theme": captured_theme_flow, "names": names_flow, "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow, "library-input": library_input_flow, "unowned": unowned_flow, "unowned-ask": unowned_ask_flow, "clear-unloaded": clear_unloaded_flow,
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')

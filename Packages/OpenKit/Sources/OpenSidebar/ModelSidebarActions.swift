@@ -51,9 +51,9 @@ public struct ModelSidebarActions {
         case .setPinned(let ids, let pinned):
             return model.setPinned(ids: ids, pinned: pinned) > 0
         case .duplicateNodes(let ids):
-            return !model.duplicateNodes(ids: ids).isEmpty
+            return !model.duplicateNodes(ids: ids, into: context.focusedSpace?.id).isEmpty
         case .duplicate(let id):
-            return !model.duplicateNodes(ids: [id]).isEmpty
+            return !model.duplicateNodes(ids: [id], into: context.focusedSpace?.id).isEmpty
         case .clearTodayKeeping(let space, let keep):
             guard model.space(id: space) != nil else { return false }
             model.clearToday(space: space, keeping: keep)
@@ -123,17 +123,21 @@ public struct ModelSidebarActions {
         case .setSpaceProfile(let space, let profile):
             return model.moveSpace(id: space, toProfile: profile)
         case .openURL(let url, let parent, let index):
-            switch parent {
-            case .spacePinned(let s), .spaceToday(let s):
-                let tab = model.newTab(in: s, url: url, title: url.host() ?? url.absoluteString, at: index)
-                if case .spacePinned = parent { return model.moveNode(id: tab.id, to: parent, at: index) }
-            case .folder, .favorites:
-                guard let space = context.focusedSpace else { return false }
-                let tab = model.newTab(in: space.id, url: url, title: url.host() ?? url.absoluteString)
-                if case .favorites(let p) = parent { return model.addFavorite(tabID: tab.id, to: p, at: index) }
-                return model.moveNode(id: tab.id, to: parent, at: index)
-            case .splitPane:
-                return false
+            // The new tab and its move are one Undo step.
+            return model.asOneUndoStep { () -> Bool in
+                switch parent {
+                case .spacePinned(let s), .spaceToday(let s):
+                    let tab = model.newTab(in: s, url: url, title: url.host() ?? url.absoluteString, at: index)
+                    if case .spacePinned = parent { return model.moveNode(id: tab.id, to: parent, at: index) }
+                case .folder, .favorites:
+                    guard let space = context.focusedSpace else { return false }
+                    let tab = model.newTab(in: space.id, url: url, title: url.host() ?? url.absoluteString)
+                    if case .favorites(let p) = parent { return model.addFavorite(tabID: tab.id, to: p, at: index) }
+                    return model.moveNode(id: tab.id, to: parent, at: index)
+                case .splitPane:
+                    return false
+                }
+                return true
             }
         default:
             return false

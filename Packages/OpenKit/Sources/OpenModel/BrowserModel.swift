@@ -620,6 +620,15 @@ public final class BrowserModel {
         }
     }
 
+    /// Runs several model commands as one Undo step (a URL dropped into Pinned is a new tab plus
+    /// a move). Inside an open group, or while undoing, it adds nothing.
+    public func asOneUndoStep<T>(_ body: () -> T) -> T {
+        guard let um = undoManager, !um.groupsByEvent, um.groupingLevel == 0, !um.isUndoing, !um.isRedoing,
+              um.isUndoRegistrationEnabled else { return body() }
+        um.beginUndoGrouping(); defer { um.endUndoGrouping() }
+        return body()
+    }
+
     /// Undo for a plain property change.
     private func registerChange(undo: @escaping @MainActor () -> Void, redo: @escaping @MainActor () -> Void) {
         registerUndo({ _ in undo(); return true }, reapply: { _ in redo(); return { _ in undo(); return true } })
@@ -897,8 +906,11 @@ public final class BrowserModel {
     /// Copies a whole sidebar subtree immediately after its source, with fresh
     /// IDs and runtime state. One undo step removes the complete copy.
     @discardableResult
-    public func duplicateNode(id: ItemID) -> ItemID? {
+    public func duplicateNode(id: ItemID, into space: SpaceID? = nil) -> ItemID? {
         guard let source = node(id: id), let parent = parent(of: id), let position = position(of: id, in: parent) else { return nil }
+        // A Favorite's copy goes to Today, as the row menu's and a selection's Duplicate do
+        // (duplicateNodes). Attaching it beside the Favorite skipped the 12-Favorite limit.
+        if case .favorites = parent { return duplicateNodes(ids: [id], into: space).first }
         if case .splitPane(let splitID) = parent, (node(id: splitID)?.split?.panes.count ?? 4) >= 4 { return nil }
         func copyTab(_ tab: Tab) -> Tab {
             Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
@@ -1072,8 +1084,15 @@ public final class BrowserModel {
         tab.lastActiveAt = Date()
         guard let destination = restoreDestination(for: record),
               let revert = place(restored: tab, from: record, into: destination) else { return tab }
-        registerUndo(revert, reapply: { $0.place(restored: tab, from: record, into: destination) ?? Self.noRevert })
+        registerUndo(revert, reapply: { Self.replace(restored: tab, from: record, in: $0) })
         return tab
+    }
+
+    /// Redo of a restore: the destination is chosen again (the split may have collapsed or
+    /// filled meanwhile; restoreDestination then picks Today, as a fresh restore would).
+    private static func replace(restored tab: Tab, from record: ArchivedTabRecord, in model: BrowserModel) -> Revert {
+        guard let destination = model.restoreDestination(for: record) else { return noRevert }
+        return model.place(restored: tab, from: record, into: destination) ?? noRevert
     }
 
     /// Stages a restore around the caller's durable snapshot commit. Failure rolls back the
@@ -1083,11 +1102,20 @@ public final class BrowserModel {
         if let existing = tab(id: record.id) { return existing }
         let tab = Self.tab(from: record)
         tab.lastActiveAt = Date()
-        guard let destination = restoreDestination(for: record),
-              let revert = place(restored: tab, from: record, into: destination, discardArchive: false) else { return tab }
+        guard let destination = restoreDestination(for: record) else { return tab }
+        // place() rebalances a split it joins; a failed save restores the old shares.
+        let splitShares: (Split, [Double])? = {
+            guard case .splitPane(let id) = destination, let split = index[id]?.split else { return nil }
+            return (split, split.fractions)
+        }()
+        guard let revert = place(restored: tab, from: record, into: destination, discardArchive: false) else { return tab }
         do { try saving() }
-        catch { _ = detach(tab.id); throw error }
-        registerUndo(revert, reapply: { $0.place(restored: tab, from: record, into: destination) ?? Self.noRevert })
+        catch {
+            _ = detach(tab.id)
+            if let splitShares { splitShares.0.fractions = splitShares.1 }
+            throw error
+        }
+        registerUndo(revert, reapply: { Self.replace(restored: tab, from: record, in: $0) })
         return tab
     }
 
@@ -1124,9 +1152,19 @@ public final class BrowserModel {
             tab.pinnedURL = priorPinnedURL
             return nil
         }
+        // A pane joins the split with equal shares, as addPane does (the old shares no longer count).
+        if case .splitPane(let splitID) = parent, let split = index[splitID]?.split {
+            split.fractions = Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
+        }
         if discardArchive { archiveSink?.discardArchived(ids: [tab.id]) }
         return { model in
-            guard model.detach(tab.id) != nil else { return false }
+            // A pane leaves through takePane: it rebalances the shares and collapses a split left
+            // with one pane (a sibling may have gone meanwhile).
+            if case .splitPane(let splitID)? = model.parentByID[tab.id], let split = model.index[splitID]?.split {
+                guard model.takePane(tab.id, from: split) != nil else { return false }
+            } else {
+                guard model.detach(tab.id) != nil else { return false }
+            }
             tab.pinnedURL = priorPinnedURL
             model.archive([ArchiveEntry(tab: tab, reason: record.reason, originalLocation: record.originalLocation,
                                         spaceID: record.spaceID, profileID: record.profileID, archivedAt: record.archivedAt)])
@@ -1492,8 +1530,11 @@ public final class BrowserModel {
             var slot = boundary.map { $0 - (offsets[destination]?.before($0) ?? 0) + processed } ?? destinationCount
             if source == destination && fromIndex < slot { slot -= 1 }
             if source != destination || fromIndex != slot {
-                guard let revert = relocate(id, to: destination, at: slot, fromIndex: fromIndex) else { continue }
-                reverts.append(revert); moved.append(id)
+                // A fetched row leaving its Live Folder (a drag, a Space move, Pin/Unpin) stays out,
+                // as for a single move: hidden from refreshes and a normal tab. Undo restores both.
+                let live = source != destination ? noteLiveRowLeaving(id, to: destination) : nil
+                guard let revert = relocate(id, to: destination, at: slot, fromIndex: fromIndex) else { live?(); continue }
+                reverts.append(Self.restoringLive(revert, [live])); moved.append(id)
             }
             // Even a same-slot item joins the logical inserted block. It emits no move.
             offsets[source]?.remove(at: original)
@@ -1630,14 +1671,17 @@ public final class BrowserModel {
     }
 
     @discardableResult
-    public func duplicateNodes(ids: [ItemID]) -> [ItemID] {
+    /// `space`: the window's focused Space, where a Favorite's copy goes when it is of that
+    /// Profile (else the Profile's first focused Space).
+    public func duplicateNodes(ids: [ItemID], into space: SpaceID? = nil) -> [ItemID] {
         var copies: [(node: SidebarNode, parent: NodeParent, source: ItemID)] = []
         for id in topLevelSelection(ids) {
             guard let node = index[id], let parent = parentByID[id] else { continue }
             if case .splitPane = parent { continue }
             let destination: NodeParent
             if case .favorites(let profileID) = parent {
-                guard let spaceID = targetSpace(forProfile: profileID) else { continue }
+                let preferred = space.flatMap { self.space(id: $0) }.flatMap { $0.profileID == profileID ? $0.id : nil }
+                guard let spaceID = preferred ?? targetSpace(forProfile: profileID) else { continue }
                 destination = .spaceToday(spaceID)
             } else { destination = parent }
             copies.append((copyNode(node), destination, id))
@@ -1799,6 +1843,17 @@ public final class BrowserModel {
                   let slot = model.spaces.firstIndex(where: { $0.id == id }), model.index[folder.id] == nil else { return nil }
             let pinned = source.pinned, today = source.today
             let focused = model.windows.filter { $0.focusedSpaceID == id }
+            // One Live Folder per Space: when the destination has one, the incoming Live Folder
+            // becomes a plain folder that keeps its rows (the Space menu finds only the first).
+            var demoted: [(Folder, LiveFolderConfig, [(Tab, URL)])] = []
+            if model.liveFolder(in: destination) != nil {
+                // Every Live Folder of the source (a corrupt or imported Space can hold more than one).
+                while let incoming = model.liveFolder(in: id), let live = incoming.live {
+                    let rows = incoming.children.compactMap { $0.tab }.compactMap { tab in tab.liveItemURL.map { (tab, $0) } }
+                    demoted.append((incoming, live, rows))
+                    incoming.live = nil; for (tab, _) in rows { tab.liveItemURL = nil }
+                }
+            }
             let selections = model.removeSpace(id)
             source.pinned = []; source.today = []
             folder.children = pinned + today
@@ -1811,6 +1866,7 @@ public final class BrowserModel {
                       model.detach(folder.id) != nil else { return false }
                 folder.children = []
                 source.pinned = pinned; source.today = today
+                for (incoming, live, rows) in demoted { incoming.live = live; for (tab, url) in rows { tab.liveItemURL = url } }
                 Self.restore(prior)
                 model.insertSpace(source, at: slot)
                 for window in focused { window.focusedSpaceID = id }

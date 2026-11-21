@@ -481,6 +481,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var libraryFirstSidebarDraws: [WindowID:Double] = [:]
   var libraryLastInput = 0.0
   var libraryPrebuiltAt: Double?
+  #if OPEN_AUTOMATION
+  /// Prebuild tasks created (automation read-back: input must not create one per event).
+  var libraryPrebuildTasksCreated = 0
+  #endif
   func scheduleLibraryPrebuildAfterFirstDraw() {
     guard libraryFirstSidebarDraw == nil else { return }
     libraryFirstSidebarDraw = ProcessInfo.processInfo.systemUptime
@@ -490,10 +494,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func noteLibraryInput() {
     LibraryPanelView.noteUserInput()
     libraryLastInput = ProcessInfo.processInfo.systemUptime
-    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     settingsPresenter.cancelLibraryIdleWork()
+    // A prebuild still waiting for the same front window re-reads the last input when it wakes, so
+    // input moves its deadline without a new Task per event (pointer moves arrive at up to 1 kHz;
+    // bug sweep r4 PERF-01). A prebuild that has started building stops, as before.
+    if libraryPrebuildWaiting, let task = libraryPrebuildTask, !task.isCancelled,
+      libraryPrebuildWindow == frontStandardWindowController?.windowID { return }
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     if libraryFirstSidebarDraw != nil { scheduleLibraryPrebuild() }
   }
+  /// The pending prebuild is still in its 3 s wait, for this window.
+  private var libraryPrebuildWaiting = false
+  private var libraryPrebuildWindow: WindowID?
   func scheduleLibraryPrebuild() {
     #if OPEN_AUTOMATION
     if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREBUILD_DISABLED"] == "1" { return }
@@ -503,9 +515,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     libraryPrebuildGeneration += 1
     let generation = libraryPrebuildGeneration
     let deadline = max(first+3,libraryLastInput+3)
+    #if OPEN_AUTOMATION
+    libraryPrebuildTasksCreated += 1
+    #endif
+    libraryPrebuildWaiting = true; libraryPrebuildWindow = controller.windowID
     libraryPrebuildTask = Task { @MainActor [weak self,weak controller] in
-      try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
-      guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
+      var deadline = deadline
+      while true {
+        try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
+        guard let self,!Task.isCancelled else { return }
+        // Input during the wait moved the deadline: wait again (the deadline rescheduling gave).
+        let moved = max(first+3,self.libraryLastInput+3)
+        if moved <= deadline { break }
+        deadline = moved
+      }
+      guard let self else { return }
+      if self.libraryPrebuildGeneration == generation { self.libraryPrebuildWaiting = false }
+      guard !Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
       defer { if self.libraryPrebuildGeneration == generation { self.libraryPrebuildTask = nil } }
       guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller,self.frontStandardWindowController === controller,
         controller.window?.isVisible == true else { return }
@@ -658,6 +684,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // Closing the final window keeps its state for reopen and relaunch.
     // A Blank Window is not a main-model window: its Space is not in `model`.
     if frontMainModelWindowController == nil, let state = model.windows.first(where: { $0.style == .standard }) {
+      // The caller's Space first (another Profile's extension page, a page's new window): the
+      // retained state still shows the Space it closed on, and no page may load there first.
+      if let focusedSpaceID, model.space(id: focusedSpaceID) != nil, state.focusedSpaceID != focusedSpaceID {
+        withoutWindowUndo { model.focusSpace(windowID: state.id, spaceID: focusedSpaceID) }
+      }
       return createWindowController(state: state)
     }
     guard let spaceID = focusedSpaceID ?? frontMainModelWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
@@ -753,6 +784,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     libraryFirstSidebarDraws.removeValue(forKey:id)
     settingsPresenter.libraryWindowClosed(id)
     guard let factory = hostFactories[id] else { return }
+    // The closed window's page must stop being offered to other devices. With no window left
+    // no key-window change rebuilds the menu, so Handoff is told here.
+    defer { handoff.setNeedsUpdate() }
     if let session = factory.incognitoSession {
       windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
       if session.windows == 1, let context = session.context { extensionPrompts.unregister(context.extensions) }

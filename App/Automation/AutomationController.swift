@@ -339,6 +339,7 @@
       case "welcome": return try welcome(a)
       case "basics-demo": return try basicsDemo(a)
       case "easel": return try easel(a)
+      case "easel-archive": return try await easelArchive(a)
       case "note": return try note(a)
       case "blank-window":
         // action=move-to space=‹title›: the header's "Move to…" menu item (front window).
@@ -356,6 +357,20 @@
         marks["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
         return marks
       case "startup" where app.frontWindowController == nil: return app.startupEvidence
+      // Handoff after the last browser window closed (bug sweep round 4, F-04).
+      case "handoff-state" where app.frontWindowController == nil: return try await runHandoffCommand(cmd, a)
+      case "routing-rules":
+        // Bug sweep round 4 (F-14): add an exact-host rule (`hostEquals`) and list the rules.
+        if let host = a["hostEquals"] as? String {
+          app.model.routingRules.append(RoutingRule(match: .hostEquals(host), destination: .mostRecentSpace(profile: nil)))
+        }
+        return app.model.routingRules.map { rule -> [String: Any] in
+          switch rule.match {
+          case .hostEquals(let h): return ["hostEquals": h]
+          case .hostContains(let h): return ["hostContains": h]
+          case .urlPrefix(let p): return ["urlPrefix": p]
+          }
+        }
       case "spaces" where app.frontWindowController == nil:
         return app.model.spaces.map { ["id": $0.id.description, "title": $0.title ?? "", "profile": $0.profileID.description, "pinned": $0.pinned.count, "today": $0.today.count, "focused": false] as [String: Any] }
       case "tabs" where app.frontWindowController == nil: return [] as [String]
@@ -1698,6 +1713,28 @@
       case "archive":
         let records = await app.archiveSink.store(for: w.focusedProfile?.id).recent(limit: 100)
         return records.map { ["id": $0.id.description, "title": $0.title] }
+      case "ax-elements":
+        // In-process accessibility readout (never System Events): every visible view that is an
+        // accessibility element, with role, label, selection and custom action names.
+        guard let target = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window,
+          let root = target.contentView else { throw Failure(message: "no window") }
+        var elements: [[String: Any]] = []
+        func walk(_ view: NSView, depth: Int) {
+          guard depth < 48, elements.count < 4000, !view.isHiddenOrHasHiddenAncestor else { return }
+          if view.isAccessibilityElement() {
+            elements.append(["role": view.accessibilityRole()?.rawValue ?? "", "label": view.accessibilityLabel() ?? "",
+              "selected": view.isAccessibilitySelected(), "actions": (view.accessibilityCustomActions() ?? []).map(\.name),
+              "class": String(describing: type(of: view))])
+          }
+          // Inside an element VoiceOver follows its accessibility children, not its subviews.
+          let next = view.isAccessibilityElement() ? (view.accessibilityChildren() ?? []).compactMap { $0 as? NSView } : view.subviews
+          for child in next { walk(child, depth: depth + 1) }
+        }
+        walk(root, depth: 0)
+        return elements
+      case "screens":
+        // Visible frames (AppKit screen coordinates) of the connected displays, main screen first.
+        return NSScreen.screens.map { let f = $0.visibleFrame; return [f.minX, f.minY, f.width, f.height] }
       case "window-frame":
         guard let win = w.window else { throw Failure(message: "no window") }
         if let f = a["frame"] as? [Double], f.count == 4 {
@@ -1750,6 +1787,24 @@
             matchPatterns: a["matches"] as? [String] ?? ["<all_urls>"],
             mainFrameOnly: !(a["allFrames"] as? Bool ?? false), world: try scriptWorld(a)))
         return profile.userScripts.map(\.id)
+      case "script-batch":
+        // One replace of `count` scripts whose last entry repeats the first ID (the later one must
+        // win and move last), timed; then the same IDs removed. Returns the batch's resulting IDs.
+        guard let count = a["count"] as? Int, (1...50_000).contains(count) else { throw Failure(message: "count must be 1...50000") }
+        let context = try focusedBrowser(w, create: a["create"] as? Bool ?? false).context
+        let prefix = "batch-\(UUID().uuidString)-"
+        func script(_ i: Int, _ source: String) -> OEUserScript {
+          OEUserScript(identifier: prefix + String(i), source: source, kind: .javaScript, injectionTime: .documentStart,
+            matchPatterns: ["http://batch.invalid/*"], mainFrameOnly: true)
+        }
+        let batch = (0..<count).map { script($0, "void 0") } + [script(0, "void 1")]
+        let started = ProcessInfo.processInfo.systemUptime
+        context.replaceUserScripts(removing: [], adding: batch)
+        let milliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
+        let added = context.userScripts.filter { $0.identifier.hasPrefix(prefix) }
+        context.replaceUserScripts(removing: (0..<count).map { prefix + String($0) }, adding: [])
+        return ["milliseconds": milliseconds, "count": added.count, "last": added.last.map { String($0.identifier.dropFirst(prefix.count)) } ?? "",
+          "lastSource": added.last?.source ?? "", "remaining": context.userScripts.filter { $0.identifier.hasPrefix(prefix) }.count] as [String: Any]
       case "script-remove":
         let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.removeUserScript(id: a["id"] as? String ?? "")
@@ -2124,7 +2179,7 @@
       let slot = controller.container.slots.count == 1 ? controller.container.slots[0] : nil
       let bar = slot?.paneChrome.flatMap { $0.role == .toolbar ? $0 : nil }
       return ["shown": controller.context.window?.showsToolbar == true, "drawn": bar != nil,
-        "frame": bar.map { rect($0.frame) } ?? [], "controls": bar?.visibleControls ?? [], "text": bar?.displayedText ?? "",
+        "frame": bar.map { rect($0.frame) } ?? [], "controls": bar?.visibleControls ?? [], "text": bar?.displayedText ?? "", "textColor": colorComponents(bar?.displayedTextColor), "glyphColor": colorComponents(bar?.displayedGlyphColor),
         "page": slot?.contentHostView.map { rect($0.frame) } ?? [],
         "menu": controller.toolbarMenu()?.items.map { $0.isSeparatorItem ? "-" : $0.title } ?? []]
     }
@@ -2302,8 +2357,9 @@
     }
 
     private func sidebarPoint(_ args: [String: Any], controller: BrowserWindowController, favorite: Bool = false) throws -> NSPoint {
+      // A Blank Window's rows are in its own model, not the browser's.
       guard let text = args[favorite ? "favorite" : "node"] as? String, let uuid = UUID(uuidString: text),
-        app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+        (app.hostFactories[controller.windowID]?.model ?? app.model).node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
       let id = ItemID(rawValue: uuid)
       controller.contentView.layoutSubtreeIfNeeded()
       if !favorite { controller.sidebar.reveal(nodeID: id) }
@@ -2361,7 +2417,7 @@
       guard let target = controller.window, let factory = app.hostFactories[controller.windowID],
         let outline = controller.sidebar.focusedOutline,
         let id = (args["node"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }),
-        let node = app.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
+        let node = factory.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
       try await activateForInput(target)
       let capturesMotion = args["motion"] as? Bool == true
       let previousReduceMotion = Motion.reduceMotionOverride

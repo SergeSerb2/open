@@ -224,6 +224,7 @@ extension EngineWebContentHostFactory {
     if id == NewDocumentActions.redoByNameID { return app.undoManager.canRedo }
     if id == "check-for-updates" { return true }
     if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
+    if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) {
       return selectedContent != nil || selectedNoteHost != nil
@@ -303,9 +304,16 @@ extension EngineWebContentHostFactory {
     default: return true
     }
   }
+  /// A Blank Window has one window-only Space, no Pinned section and no Favorites (capture C10).
+  /// These commands would edit that throwaway model: a phantom Space, Profile or pinned tab.
+  static let blankWindowRefusedCommands: Set<String> = ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites",
+    "remove-from-favorites", "new-space", "rename-space", "change-space-icon", "change-profile", "edit-theme",
+    "expand-pinned-section", "collapse-pinned-section"]
+
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
     if let url = SettingsSuggestionsProvider.url(for: id) { return app.settingsPresenter.showSettingsURL(url) }
     #if OPEN_AUTOMATION
     AutomationShortcutTrace.record(id)
@@ -366,7 +374,7 @@ extension EngineWebContentHostFactory {
     case "pin-unpin-tab": togglePin(nil)
     case "pin-tab": if let tab = selectedTab { model.pinTab(id: tab.id) }
     case "unpin-tab": if let tab = selectedTab { model.unpinTab(id: tab.id) }
-    case "duplicate-tab": if let id = selectedNodeID { _ = model.duplicateNode(id: id) }
+    case "duplicate-tab": if let id = selectedNodeID { _ = model.duplicateNode(id: id, into: focusedSpace?.id) }
     case "rename-tab":
       guard let tab = selectedTab, let controller, let window else { return false }
       if windowState.sidebarMode == .hidden { controller.toggleSidebar() }

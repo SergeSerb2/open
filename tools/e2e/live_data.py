@@ -442,9 +442,90 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             'dropped': dropped, 'nested': {k: nested.get(k) for k in ('exists', 'id', 'pinnedIndex')}, 'refresh': nested_refresh,
             'rows': nested_rows, 'menuOn': menu_on, 'afterToggle': after_toggle.get('exists'), 'menuOff': menu_off}
         app.call('close', tab=holder_tab)
+        # Bug sweep round 4. A fresh top-level folder with two PR rows.
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        gh['prs'] = {'created': trio[:2]}
+        r4 = app.call('live-folder-state', wait=True)
+        r4_rows = refreshed('success') and app.call('live-folder-state').get('rows', [])
+        gh_prs_r4 = gh['prs']
+        # SB-05: a PR row dragged out of the Live Folder (the outline's drop: moveNodes) leaves it for
+        # good, as Remove Pin does: its PR URL is hidden and a refresh does not add it back.
+        dragged = r4_rows[0] if r4_rows else {}
+        today = next(s for s in app.call('spaces') if s['focused'])['id']
+        dragged_ok = bool(dragged) and app.call('sidebar-drop', nodes=[dragged['id']], parent={'kind': 'today', 'id': today}, index=0)
+        refreshed('success')
+        after_drag = app.call('live-folder-state')
+        copies = [r for r in after_drag.get('rows', []) if r.get('live') == dragged.get('live')]
+        results['live_folder_drag_out_stays_out'] = {'ok': bool(dragged_ok) and len(r4_rows) == 2 and not copies
+            and dragged.get('live') in after_drag.get('hiddenItems', []) and app.tab(dragged['id'])['section'] == 'today',
+            'dragged': dragged.get('live'), 'copies': len(copies), 'hidden': after_drag.get('hiddenItems'), 'rows': len(after_drag.get('rows', []))}
+        # SB-04: keyboard Delete on the focused Live Folder row is Delete Live Folder: its alert, no
+        # Archive rows, and automatic creation turns off. It was the plain folder delete (archived).
+        app.call('defaults', key='open.liveFolders.githubAutoCreate', value=True)
+        r4_folder = app.call('live-folder-state')['id']
+        # The outline's Delete key on a selection of the Live Folder row alone (a plain click keeps a
+        # multi-selection it is part of, so add or drop rows until it is the only one).
+        app.call('sidebar-click', node=r4_folder)
+        for node in [n for n in app.call('selection') if n != r4_folder]:
+            app.call('sidebar-click', node=node, modifiers=['cmd'])
+        if r4_folder not in app.call('selection'):
+            app.call('sidebar-click', node=r4_folder, modifiers=['cmd'])
+        r4_selection = app.call('selection')
+        app.call('sidebar-key', key='delete')
+        def read_alert():
+            try: return app.call('alert') or None
+            except RuntimeError: return None
+        r4_alert = wait_until(lambda: (lambda a: a if a and a.get('texts') else None)(read_alert()), timeout=3, step=.05) or {}
+        try: app.call('alert', button='Delete Folder')
+        except RuntimeError: pass
+        r4_gone = app.call('live-folder-state').get('exists') is False
+        r4_archived = [r for r in app.call('archive-list', limit=50)['rows'] if r['id'] == r4_folder]
+        # A lone Live Folder gets Delete Live Folder's alert; with other rows it is the folders' alert.
+        # Either way it is removed, never archived, and automatic creation turns off.
+        lone = r4_selection == [r4_folder]
+        expected_title = 'Delete your GitHub Live Folder?' if lone else 'Delete your Pull Requests folder?'
+        results['live_folder_keyboard_delete_is_live_delete'] = {'ok': expected_title in r4_alert.get('texts', [])
+            and r4_gone and not r4_archived and app.call('defaults', key='open.liveFolders.githubAutoCreate') is False,
+            'alert': r4_alert.get('texts'), 'gone': r4_gone, 'archived': len(r4_archived), 'selection': r4_selection}
+        app.call('defaults', key='open.liveFolders.githubAutoCreate', value=None)
+        gh['prs'] = {'created': []}
+        if not r4_gone:
+            app.call('sidebar-menu', item='Live Folders/GitHub')
         # The checks below toggle the folder off: give them one at the top level again.
         app.call('sidebar-menu', item='Live Folders/GitHub')
         app.call('live-folder-state', wait=True)
+        # Bug sweep round 4 (SB-12): Export a Space into a Folder of a Space that has its own Live
+        # Folder. One Live Folder stays live in the destination; the incoming one is a plain folder
+        # that keeps its rows. It became a second Live Folder the Space menu cannot reach.
+        import json
+        from pathlib import Path
+        home = next(s for s in app.call('spaces') if s['focused'])
+        home_lf = app.call('live-folder-state', space=home['id'])
+        export_space = app.call('space-create', title='LF Export'); app.call('space', space=export_space)
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        export_lf = app.call('live-folder-state', wait=True, space=export_space)
+        # The menu uses the model's display title: the Space's own, else "Space N" by position.
+        order = [sp['id'] for sp in app.call('spaces')]
+        home_title = home.get('title') or 'Space %d' % (order.index(home['id']) + 1)
+        def live_folders_in(space_id):
+            snapshot = json.loads(Path(app.call('save')).read_text())
+            def count(value):
+                if isinstance(value, dict):
+                    own = 1 if isinstance(value.get('live'), dict) and 'children' in value else 0
+                    return own + sum(count(v) for v in value.values())
+                if isinstance(value, list): return sum(count(v) for v in value)
+                return 0
+            return sum(count(sp) for sp in snapshot.get('spaces', []) if sp.get('id') == space_id)
+        try:
+            app.call('sidebar-menu', items=['Export “LF Export” into Folder', home_title]); exported = True
+        except RuntimeError as error:
+            exported = str(error)
+        app.call('space', space=home['id'])
+        after_export = app.call('live-folder-state', space=home['id'])
+        results['live_folder_export_space_keeps_one'] = {'ok': exported is True and home_lf.get('exists') and export_lf.get('exists')
+            and live_folders_in(home['id']) == 1 and after_export.get('id') == home_lf.get('id'),
+            'exported': exported, 'liveFolders': live_folders_in(home['id']), 'homeTitle': home_title,
+            'homeFolder': home_lf.get('id'), 'after': after_export.get('id')}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:
@@ -518,6 +599,28 @@ def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
             app.call('wait', tab=peek['stack'][-1]['content']); href = app.eval(peek['stack'][-1]['content'], 'location.href')
         results['live_gmail_row_opens_peek'] = {'ok': href == 'http://mail.localhost:%d/mail/u/0/?msg=1' % port, 'href': href}
         app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        # Bug sweep round 4 (SB-15): opening a row of a Favorite's card ends the hover preview, so
+        # the same tile shows its card again on the next hover. A Favorite's Peek does not select
+        # the Favorite (a pinned source is selected, which reset the tracker); the tracker kept the
+        # old request and ignored the tile.
+        fav_mail = new_tab(app, 'http://mail.localhost:%d/mail/u/0/#inbox' % port)
+        app.call('favorite', tab=fav_mail)
+        app.call('select', tab=other)
+        def hover_favorite():
+            app.call('hover', leave=True, ms=300)
+            return app.call('hover', favorite=fav_mail, ms=800)
+        first_card = hover_favorite()
+        app.call('glance-open', row=0)
+        fav_peek = wait_until(lambda: (lambda s: s if s.get('shown') else None)(app.call('peek-state')), timeout=5, step=.05)
+        app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        current = app.call('window-state')['selected']
+        again_hover = hover_favorite()
+        again = app.call('glance-state')
+        results['live_glance_rehover_after_open'] = {'ok': first_card.get('kind') == 'glance' and bool(fav_peek) and current != fav_mail
+            and again.get('kind') == 'gmail' and again.get('phase') == 'mail',
+            'first': first_card.get('kind'), 'peek': bool(fav_peek), 'currentIsFavorite': current == fav_mail,
+            'hover': again_hover.get('kind'), 'state': {k: again.get(k) for k in ('shown', 'kind', 'phase')}}
+        app.call('close', tab=fav_mail)
         app.call('select', tab=other)
         # Review r1 item 6: a row whose link scheme only starts with "http" is dropped.
         mail['mail'] = [('Odd scheme', 'Eve', '2026-11-12T10:00:00Z', 'httpfoo://mail.localhost/odd'), ('Plain row', 'Bob', '2026-11-12T07:00:00Z')]

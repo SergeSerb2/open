@@ -181,9 +181,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     // Outside entry points use the browser owner. Internal panel navigation
     // never calls this method and keeps the user's filter selection.
-    if let profileID = (target == .boosts ? boostsProfileID : nil) ?? controller.context.focusedSpace?.profileID {
-      if target == .downloads, session.model.downloadProfileFilter != profileID { session.model.downloadProfileFilter = profileID }
-      if (target == .history || target == .boosts), session.model.historyProfileID != profileID { session.model.historyProfileID = profileID }
+    // Both filters follow the owner: the rail can switch to the other section without a new entry,
+    // and it must not show the Profile of a Space the window has left.
+    if let owner = controller.context.focusedSpace?.profileID {
+      if session.model.downloadProfileFilter != owner { session.model.downloadProfileFilter = owner }
+      let historyProfile = (target == .boosts ? boostsProfileID : nil) ?? owner
+      if session.model.historyProfileID != historyProfile { session.model.historyProfileID = historyProfile }
+    } else if target == .boosts, let boostsProfileID, session.model.historyProfileID != boostsProfileID {
+      session.model.historyProfileID = boostsProfileID
     }
     session.show(section: section)
     window.makeKeyAndOrderFront(nil); NSApp.activate(); app.scheduleMenuRebuild()
@@ -378,11 +383,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     case .favorites, .splitPane: space = nil
     }
     guard let space, model.space(id: space) != nil else { return false }
-    let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
-    // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
-    if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
-    if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
-    else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+    // The new tab, its move and its selection are one Undo step.
+    model.asOneUndoStep {
+      let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
+      // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
+      if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
+      if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
+      else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+    }
     app.scheduleSave(); app.scheduleMenuRebuild()
     return true
   }

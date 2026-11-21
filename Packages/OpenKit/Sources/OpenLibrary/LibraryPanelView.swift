@@ -346,6 +346,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyGlyph.color = foreground.withAlphaComponent(0.46)
         emptyTitle.textColor = foreground; emptyBody.textColor = foreground.withAlphaComponent(0.68)
         loadingSkeleton.tint(overlay)
+        // An open Filter drawer takes its colors from configureFilter; recolor it with the panel.
+        if filterOpen { configureFilter() }
         needsDisplay = true
     }
     func observeTheme() {
@@ -453,6 +455,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command), event.keyCode == 3, section != .spaces {
             window?.makeFirstResponder(searchField); searchField.selectText(nil); return true
         }
+        // Spaces has no search field: plain Cmd+F must not open Find on the page strip behind Library.
+        // Other chords (Ctrl+Cmd+F, Toggle Full Screen) keep their own commands.
+        if event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command, event.keyCode == 3 { return true }
         if event.keyCode == 53 {
             if listView.dismissMenu() { return true }
             if filterOpen { setFilterOpen(false) }

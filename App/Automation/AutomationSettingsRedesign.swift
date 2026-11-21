@@ -48,6 +48,15 @@ extension AutomationController {
       // Visual fixture only: never calls the system default-browser service.
       guard let isDefault = args["isDefault"] as? Bool else { throw Failure(message: "missing presentation state") }
       root.general.isDefault = isDefault
+    case "focus-nav":
+      // Keyboard focus on one navigation button, as Tab gives it with Full Keyboard Access.
+      guard let raw = args["section"] as? String, let window = adapter.settingsPresenter.window,
+        let content = window.contentView else { throw Failure(message: "missing Settings window") }
+      func find(_ view: NSView) -> NSView? {
+        if view.identifier?.rawValue == "settings-nav-" + raw { return view }
+        return view.subviews.lazy.compactMap(find).first
+      }
+      guard let button = find(content), window.makeFirstResponder(button) else { throw Failure(message: "navigation button not focusable") }
     case "blur":
       guard let window = adapter.settingsPresenter.window else { throw Failure(message: "missing Settings window") }
       let target = window.attachedSheet ?? window
