@@ -181,9 +181,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     // Outside entry points use the browser owner. Internal panel navigation
     // never calls this method and keeps the user's filter selection.
-    if let profileID = (target == .boosts ? boostsProfileID : nil) ?? controller.context.focusedSpace?.profileID {
-      if target == .downloads, session.model.downloadProfileFilter != profileID { session.model.downloadProfileFilter = profileID }
-      if (target == .history || target == .boosts), session.model.historyProfileID != profileID { session.model.historyProfileID = profileID }
+    // Both filters follow the owner: the rail can switch to the other section without a new entry,
+    // and it must not show the Profile of a Space the window has left.
+    if let owner = controller.context.focusedSpace?.profileID {
+      if session.model.downloadProfileFilter != owner { session.model.downloadProfileFilter = owner }
+      let historyProfile = (target == .boosts ? boostsProfileID : nil) ?? owner
+      if session.model.historyProfileID != historyProfile { session.model.historyProfileID = historyProfile }
+    } else if target == .boosts, let boostsProfileID, session.model.historyProfileID != boostsProfileID {
+      session.model.historyProfileID = boostsProfileID
     }
     session.show(section: section)
     window.makeKeyAndOrderFront(nil); NSApp.activate(); app.scheduleMenuRebuild()
