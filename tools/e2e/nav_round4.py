@@ -222,14 +222,16 @@ def run(factory, results, tmp, h):
         guarded('nav4_meet_route_exact_host_not_covering', meet_route, close_meet)
 
         # F-11: Little Open's Open in Space (Cmd+O) uses the most recently focused window, not the oldest.
+        # Both windows show Space A (the pill's Space for a Profile A session); only the target window changes.
         def little_open_window():
             app.call('space', space=space_a['id'])
+            app.call('select', tab=start)
             first_window = app.call('window-state')['id']
             app.call('key', key='n', modifiers=['cmd'], route='app')
             assert wait_until(lambda: app.call('window-state')['id'] != first_window or None, timeout=8, step=.1)
             close_bar()
             second_window = app.call('window-state')['id']
-            app.call('space', space=space_b)
+            if app.call('window-state')['space'] != space_a['id']: app.call('space', space=space_a['id'])
             before = {s['id'] for s in app.call('little-open-state')['sessions']}
             app.call('menu-perform', id='new-little-open-window')
             session = wait_until(lambda: next((s for s in app.call('little-open-state')['sessions'] if s['id'] not in before), None), timeout=5, step=.1)
@@ -237,14 +239,18 @@ def run(factory, results, tmp, h):
             assert wait_until(lambda: next((s for s in app.call('little-open-state')['sessions'] if s['id'] == session['id'] and s['state'] == 'page' and not s['loading']), None), timeout=12, step=.1)
             app.call('key', window=session['window'], key='o', modifiers=['cmd'])
             moved = wait_until(lambda: not any(s['id'] == session['id'] for s in app.call('little-open-state')['sessions']), timeout=8, step=.1)
+            target = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/little-move'), None), timeout=5, step=.1)
             first_state = app.call('window-state', id=first_window)
             second_state = app.call('window-state', id=second_window)
-            target = next((t for t in app.call('tabs') if t['url'] == origin + '/little-move'), None) if second_state['space'] == space_b else None
-            row('nav4_little_open_moves_to_recent_window', bool(moved) and first_state['space'] == space_a['id']
-                and second_state['space'] == space_b and target is not None and second_state['selected'] == target['id'],
+            row('nav4_little_open_moves_to_recent_window', bool(moved) and target is not None
+                and second_state['selected'] == target['id'] and first_state['selected'] != target['id'],
                 first=(first_state['space'], first_state['selected']), second=(second_state['space'], second_state['selected']),
-                spaceA=space_a['id'], spaceB=space_b)
-        guarded('nav4_little_open_moves_to_recent_window', little_open_window, lambda: app.call('space', space=space_a['id']))
+                target=target and target['id'])
+        def close_second_window():
+            while len(app.call('shell-windows')) > 1:
+                app.call('window-close'); time.sleep(.5)
+            app.call('space', space=space_a['id'])
+        guarded('nav4_little_open_moves_to_recent_window', little_open_window, close_second_window)
 
         # F-04: closing the last browser window stops Handoff advertising its page.
         def handoff_last_window():
