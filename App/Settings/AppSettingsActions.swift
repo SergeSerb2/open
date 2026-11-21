@@ -338,25 +338,33 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     case .deleteFolders(let selection, _): ids = selection; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
     default: return false
     }
-    guard let alert else { return false }
+    // A Live Folder alone gets its own alert, as in the sidebar; it is never archived (below).
+    let loneLive = ids.count == 1 && model.node(id: ids[0])?.folder?.live != nil
+    let shownAlert = loneLive ? SidebarConfirmations.deleteLiveFolderAlert() : alert
+    guard let alert = shownAlert else { return false }
     let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
     let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
     return SidebarConfirmations.present(alert, on: window) { [weak self, weak context] confirmed in
       guard let self, let context, confirmed else { return }
       let accepted: Bool
+      var archivedFolders = folders
       if case .deleteSpace(let id) = intent { accepted = ModelSidebarActions(context: context).perform(.deleteSpace(id)) }
       else {
-        var archived = 0
-        let removal = { archived = model.archiveNodes(ids: ids) }
+        // Live Folders the deletion reaches are removed, not archived (BrowserModel.deleteFolders).
+        var archived = 0, removed = 0
+        let removal = { (archived, removed) = model.deleteFolders(ids: ids) }
         if let controller = self.app.hostFactories[context.windowID]?.controller { controller.keepingSelection(removal) } else { removal() }
-        accepted = archived > 0
+        if removed > 0 { UserDefaults.standard.set(false, forKey: BrowserWindowController.liveFolderAutoCreateKey) }
+        accepted = archived > 0 || removed > 0
+        archivedFolders = archived > 0 ? max(1, folders - removed) : 0
       }
       guard accepted else { return }
       restoreKeyboardFocus()
       if case .deleteSpace = intent, let panel = self.activeLibrarySession?.panel, panel.isPresented { panel.focusRail() }
       self.app.scheduleSave(); self.app.scheduleMenuRebuild()
-      if folders > 0 {
-        self.app.hostFactories[context.windowID]?.controller?.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
+      // Only archived rows have an Undo step (a removed Live Folder has none).
+      if archivedFolders > 0 {
+        self.app.hostFactories[context.windowID]?.controller?.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders))
       }
     }
   }

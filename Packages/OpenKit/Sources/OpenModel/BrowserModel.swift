@@ -561,9 +561,13 @@ public final class BrowserModel {
         guard let source = parentByID[id] else { return nil }
         let fromSection = section(of: source)
         let toSection = section(of: destination)
-        guard let removed = removeChild(id, from: source, at: knownPosition) else { return nil }
+        // Every move of a fetched row out of its Live Folder (a drag, New Folder with N Items, a
+        // new Space) keeps it out: hidden from refreshes and a normal tab. The revert restores it.
+        let live = source == destination ? nil : noteLiveRowLeaving(id, to: destination)
+        guard let removed = removeChild(id, from: source, at: knownPosition) else { live?(); return nil }
         guard let toIndex = insertChild(removed.node, into: destination, at: position) else {
             _ = insertChild(removed.node, into: source, at: removed.index)
+            live?()
             return nil
         }
         let cleared = source == destination ? nil : clearPeek(in: source, removing: id)
@@ -575,6 +579,7 @@ public final class BrowserModel {
         return { model in
             guard model.relocate(id, to: source, at: fromIndex, restoringPeek: cleared) != nil else { return false }
             Self.restore(prior)
+            live?()
             return true
         }
     }
@@ -1911,6 +1916,32 @@ public final class BrowserModel {
 
     /// Removes a Live Folder and its rows without Archive entries (rows are fetched data, not the
     /// user's tabs; a tab the user moved in by hand is moved out to Today first).
+    /// Deletes the folders and rows `ids` name. A Live Folder they reach (selected, or nested in a
+    /// selected folder) is removed first, never archived: its fetched rows go and its own tabs move
+    /// to Today. What is left is archived (one Undo step). Returns both counts; a Live Folder
+    /// removal has no Undo step, as Delete Live Folder from its row menu.
+    @discardableResult
+    public func deleteFolders(ids: [ItemID], archiveFolderTabs: Bool = false) -> (archived: Int, removedLive: Int) {
+        let live = liveFolders(reachedBy: ids)
+        var removed = 0
+        for id in live where index[id]?.folder?.live != nil { removeLiveFolder(id: id); removed += 1 }
+        // Rows of a removed Live Folder are gone; its own tabs moved to Today and stay selected.
+        let rest = ids.filter { index[$0] != nil && !live.contains($0) }
+        let archived = rest.isEmpty ? 0 : archiveNodes(ids: rest, archiveFolderTabs: archiveFolderTabs)
+        return (archived, removed)
+    }
+
+    /// The Live Folders a deletion of `ids` reaches: selected ones and ones nested in selected folders.
+    public func liveFolders(reachedBy ids: [ItemID]) -> [ItemID] {
+        var found: [ItemID] = []
+        func walk(_ folder: Folder) {
+            if folder.live != nil, !found.contains(folder.id) { found.append(folder.id) }
+            for child in folder.children { if case .folder(let nested) = child { walk(nested) } }
+        }
+        for id in ids { if let folder = index[id]?.folder { walk(folder) } }
+        return found
+    }
+
     public func removeLiveFolder(id: ItemID) {
         guard let folder = index[id]?.folder, folder.live != nil, let parent = parentByID[id] else { return }
         let spaceID: SpaceID? = {
@@ -2549,8 +2580,12 @@ public final class BrowserModel {
         var moved: [(tab: Tab, parent: NodeParent, index: Int, pinned: PinnedURLs)] = []
         var changed: [NodeParent] = [home]
         var clearedPeeks: [ClearedFolderPeek] = []
+        var lives: [LiveRowRestore] = []
         for id in tabIDs {
-            guard let parent = parentByID[id], let removed = removeChild(id, from: parent), let tab = removed.node.tab else { continue }
+            // A fetched row that joins a split leaves its Live Folder for good (as a move does).
+            let live = noteLiveRowLeaving(id, to: .splitPane(split.id))
+            guard let parent = parentByID[id], let removed = removeChild(id, from: parent), let tab = removed.node.tab else { live?(); continue }
+            if let live { lives.append(live) }
             if let cleared = clearPeek(in: parent, removing: id) { clearedPeeks.append(cleared) }
             let pinned = applyPinnedRule(to: removed.node, from: section(of: parent), to: homeSection)
             split.panes.append(tab)
@@ -2562,6 +2597,7 @@ public final class BrowserModel {
         let origins = moved
         let parents = changed
         let peeks = clearedPeeks
+        let liveRestores = lives
         return { model in
             // Auto-archive dissolved the split meanwhile: its survivors stay where they are.
             guard model.index[split.id] != nil else { return false }
@@ -2576,6 +2612,7 @@ public final class BrowserModel {
             model.index[split.id] = nil
             model.parentByID[split.id] = nil
             for peek in peeks { model.restorePeek(peek) }
+            liveRestores.forEach { $0() }
             for parent in parents { model.emit(.reload(parent: parent)) }
             return true
         }
@@ -2595,7 +2632,8 @@ public final class BrowserModel {
               let home = parentByID[splitID] else { return nil }
         switch source { case .favorites, .splitPane: return nil; default: break }
         let oldFractions = split.fractions, oldFocus = split.focusedPaneID
-        guard let removed = removeChild(tabID, from: source) else { return nil }
+        let live = noteLiveRowLeaving(tabID, to: .splitPane(splitID))
+        guard let removed = removeChild(tabID, from: source) else { live?(); return nil }
         let cleared = clearPeek(in: source, removing: tabID)
         let pinned = applyPinnedRule(to: .tab(tab), from: section(of: source), to: section(of: home))
         split.panes.insert(tab, at: max(0, min(at ?? split.panes.count, split.panes.count)))
@@ -2612,6 +2650,7 @@ public final class BrowserModel {
             split.fractions = oldFractions; split.focusedPaneID = oldFocus
             Self.restore(pinned)
             model.restorePeek(cleared)
+            live?()
             for parent in changed { model.emit(.reload(parent: parent)) }
             return true
         }
