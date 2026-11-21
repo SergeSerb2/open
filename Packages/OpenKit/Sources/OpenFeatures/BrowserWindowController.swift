@@ -1930,7 +1930,6 @@ extension BrowserWindowController {
         // through its row menu): alone, it is Delete Live Folder; in a selection it is removed.
         if ids.count == 1, model.node(id: ids[0])?.folder?.live != nil { return confirmDeleteLiveFolder(ids[0]) }
         guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids, quoteTitle: archiveFolderTabs) else { return false }
-        let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
         let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
         pendingConfirmation = alert
         let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
