@@ -912,6 +912,21 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if target.focusedSpace?.id != space.id { target.focus(space: space) }
     return target.openNewTab(url: url, background: false)
   }
+  /// A new tab for a page's menu row: in the page's own Profile. A popup panel of another
+  /// Profile's Space stays open after a Space switch; its rows used the focused Space and so the
+  /// other Profile's cookies and history (bug sweep r4 WC-11).
+  @discardableResult
+  func openNewTab(url: URL, background: Bool, opener: ItemID?, from page: OEWebContent) -> Tab? {
+    guard !isIncognito, controller != nil, let profile = profile(for: page.context), profile.id != focusedProfile?.id,
+      let space = model.mostRecentlyFocusedSpace(profileID: profile.id) ?? model.spaces.first(where: { $0.profileID == profile.id })
+    else { return openNewTab(url: url, background: background, opener: opener) }
+    if background {
+      let tab = model.newTab(in: space.id, url: url, at: 0, unread: true); tab.openerID = opener
+      scheduleSave(); return tab
+    }
+    focus(space: space)
+    return openNewTab(url: url, background: false, opener: opener)
+  }
   func adoptUnownedRequest(_ request: OEOpenRequest) -> OEWebContent? {
     guard app.engineReady else { return nil }
     guard let profile = profile(for: request.context),

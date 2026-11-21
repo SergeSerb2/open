@@ -2061,6 +2061,9 @@ static double OEPNGPixelWidth(NSData* png) {
   if (_devToolsFrontend.get() == frontend) {
     _devToolsFrontend = nullptr;
   }
+  // Ends a panel selection still retrying: it woke every 250 ms for up to
+  // 15 s after DevTools closed (bug sweep r4 WC-14).
+  _devToolsPanelRequest += 1;
   [_devToolsDock close];
   NSNumber* pending = _devToolsDockPendingPanel;
   _devToolsDockPendingPanel = nil;

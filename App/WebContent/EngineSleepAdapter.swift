@@ -85,8 +85,11 @@ final class EngineSleepAdapter: SleepEngine {
     if restore != nil {
       // The engine installs the history when it creates the page (the view enters the window).
       // Wait for its verdict, at most 3 s, in 20 ms steps (one wake, never while idle).
+      // A tab closed meanwhile ends the wait, and is no live page (bug sweep r4 WC-12): the
+      // wait used to run its 3 s and then report the closed tab's page as created.
       for _ in 0..<150 where content.navigationHistoryRestore == .pending {
         try? await Task.sleep(nanoseconds: 20_000_000)
+        if app.model.tab(id: tabID) == nil || !hosts(tabID).contains(where: { $0.1.content === content }) { return false }
       }
       if content.navigationHistoryRestore == .failed {
         // The page loads the fallback URL with no back list. False makes the controller log
