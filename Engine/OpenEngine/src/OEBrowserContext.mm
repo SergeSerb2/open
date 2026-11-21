@@ -595,9 +595,11 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   _state = OEBrowserContextStateClosed;
   _ready = NO;
   _oe_closing = YES;
-  if (_context && _originalContext) {
+  if (_context && _originalContext && OEEngine.shared.isRunning &&
+      !OEEngine.shared.oe_isTerminating) {
     // Private: keep watching the native profile until Chromium closes it. If
     // it is gone already, the watch cannot register: report it closed now.
+    // Not at quit: nothing makes a new private context any more.
     if (!CefSetOpenProfileHandler(_context, new OEPrivateProfileWatch(_originalContext.identifier))) {
       [OEEngine.shared oe_privateProfileClosedForOriginal:_originalContext.identifier];
     }

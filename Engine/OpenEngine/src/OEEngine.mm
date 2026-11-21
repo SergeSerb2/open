@@ -315,8 +315,36 @@ class OEUnownedPopupClient : public CefClient,
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
 
+  bool Closing() const {
+    OEEngine* engine = OEEngine.shared;
+    OEBrowserContext* context = context_;
+    return !engine.isRunning || engine.oe_isTerminating || !context ||
+           context.oe_closing || context.state == OEBrowserContextStateClosed;
+  }
+
+  bool OnBeforePopup(CefRefPtr<CefBrowser> browser,
+                     CefRefPtr<CefFrame> frame,
+                     int popup_id,
+                     const CefString& target_url,
+                     const CefString& target_frame_name,
+                     WindowOpenDisposition target_disposition,
+                     bool user_gesture,
+                     const CefPopupFeatures& features,
+                     CefWindowInfo& windowInfo,
+                     CefRefPtr<CefClient>& client,
+                     CefBrowserSettings& settings,
+                     CefRefPtr<CefDictionaryValue>& extra_info,
+                     bool* no_javascript_access) override {
+    // A child keeps this client (tracked the same way), unless it would be
+    // made too late to be closed.
+    return Closing();
+  }
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
     owner_->Track(browser);
+    // Created after quit, context release or deletion closed the tracked
+    // browsers (CloseAll/CloseForContext): close it too, or they would wait
+    // for it (and it would keep a private profile open).
+    if (Closing()) browser->GetHost()->CloseBrowser(true);
   }
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
     owner_->Untrack(browser);
@@ -624,6 +652,7 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     return;
   }
   _terminating = YES;
+  [self oe_failAllIncognitoRequests];
   // Automation can exercise the existing deadline with cooperative renderers,
   // without hanging or crashing a helper process.
   NSArray<NSString*>* switches = _configuration.additionalSwitches;
@@ -712,7 +741,10 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     fprintf(stderr, "OpenEngine: shutdown contexts=%lu inert=%lu deadline=%d deadlineSeconds=3\n",
             (unsigned long)retained.count, (unsigned long)closed, _quitDeadlineFired);
   }
+  [self oe_failAllIncognitoRequests];
   [_privateContexts removeAllObjects];
+  [_openPrivateProfiles removeAllObjects];
+  [_privateContextClosedAt removeAllObjects];
   [_contexts removeAllObjects];
   _defaultContext = nil;
   _defaultClient = nullptr;
@@ -936,6 +968,16 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     }
     [self oe_finishIncognitoRequestForContext:original result:nil];
   }];
+}
+
+// Quit: a request waiting for its next retry would never complete.
+- (void)oe_failAllIncognitoRequests {
+  NSArray<NSArray*>* pending = _incognitoRequests.allValues;
+  [_incognitoRequests removeAllObjects];
+  NSError* error = [NSError errorWithDomain:OEErrorDomain code:OEErrorContextClosed
+      userInfo:@{NSLocalizedDescriptionKey: @"The engine is shutting down."}];
+  for (NSArray* waiting in pending)
+    for (void (^completion)(OEBrowserContext*, NSError*) in waiting) completion(nil, error);
 }
 
 - (BOOL)oe_privateSessionRecentlyClosedForContext:(OEBrowserContext*)original {

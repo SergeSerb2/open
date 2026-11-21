@@ -56,8 +56,11 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
     // (an unadopted or stale popup of the same opener has another).
     OEWebContent* pending = is_devtools ? nil : [view_ oe_pendingChromePopup];
     CefClient* own = pending ? pending.oe_client.get() : nullptr;
-    return new OEChromeBrowserViewDelegate(
-        own && own == client.get() ? pending : nil, false);
+    // Remembered for OnPopupBrowserViewCreated, which CEF calls next for this
+    // same popup (CefBrowserPlatformDelegate::PopupWebContentsCreated, then
+    // PopupBrowserCreated).
+    matched_popup_ = own && own == client.get() ? pending : nil;
+    return new OEChromeBrowserViewDelegate(matched_popup_, false);
   }
 
   bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
@@ -66,16 +69,21 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
     if (is_devtools) {
       return false;
     }
-    OEWebContent* target = [view_ oe_takePendingChromePopup];
-    if (!target) {
+    // Only the popup whose client matched its pending page above; an
+    // unadopted popup of this opener leaves that page pending.
+    OEWebContent* target = matched_popup_;
+    matched_popup_ = nil;
+    if (!target || target != [view_ oe_pendingChromePopup]) {
       return false;
     }
+    (void)[view_ oe_takePendingChromePopup];
     [target oe_adoptPopupBrowserView:popup_browser_view];
     return true;
   }
 
  private:
   __weak OEWebContent* view_;
+  __weak OEWebContent* matched_popup_;
   bool toolbar_;
   IMPLEMENT_REFCOUNTING(OEChromeBrowserViewDelegate);
 };
