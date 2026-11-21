@@ -2719,6 +2719,7 @@
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
         "left": (String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)), 123),
         "right": (String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), 124),
+        "home": (String(Character(UnicodeScalar(NSHomeFunctionKey)!)), 115),
       ]
       guard let (chars, code) = keys[a["key"] as? String ?? "return"] else { throw Failure(message: "unknown key") }
       var mods: NSEvent.ModifierFlags = []
@@ -2731,7 +2732,7 @@
         default: break
         }
       }
-      if code >= 123 { mods.insert([.function, .numericPad]) }
+      if code >= 123 { mods.insert([.function, .numericPad]) } else if code == 115 { mods.insert(.function) }
       // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
       // equivalents such as Redo need "Z", even though the key router folds case.
       // `characters` sends what real hardware gives (Cmd+Shift+2 carries "@"), for the base-key check.

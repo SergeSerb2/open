@@ -138,7 +138,7 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     host.rebind(tabID: host.tabID, spaceID: nil)
     app.littleOpenHosts[host.tabID] = host
     host.content.drawsEngineHistorySwipeOverlay = true
-    host.additionalKeyHandler = { [weak app] in app?.handleLittleOpenKey($0) ?? false }
+    host.additionalKeyHandler = { [weak app] in app?.handleLittleOpenKey($0, unconsumed: $1) ?? false }
     host.onCloseRequest = { [weak app, weak host] in
       guard let app, let window = host?.view.window,
         let session = app.littleOpenCoordinator.stateForAutomation.first(where: { $0.window === window }) else { return }

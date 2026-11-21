@@ -125,6 +125,18 @@ enum MainMenu {
     if (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
       .contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
+    // A modal panel or a sheet owns its keys. No browser command acts behind it (Cmd-T or Cmd-N
+    // under a Save sheet, Cmd-Q inside an app-modal alert); the main menu would run them if this
+    // returned false. System edit keys (Copy, Paste, Find) still go to AppKit and the panel.
+    if NSApp.modalWindow != nil || event.window?.sheetParent != nil || event.window?.attachedSheet != nil {
+      let responder = event.window?.firstResponder
+      let context = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: responder is NSTextView || responder is NSTextField)
+      guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
+        SystemCommandActions.selectors[id] == nil || id == "quit-open" else { return false }
+      // A panel button with the same key (a Save panel's New Folder) keeps it.
+      if let window = event.window, window === NSApp.modalWindow || window.sheetParent != nil { _ = window.performKeyEquivalent(with: event) }
+      return true
+    }
     // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
     // Pointer and programmatic menu actions call performCommand without a key stamp.
     let littleContext = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: false)
@@ -141,6 +153,9 @@ enum MainMenu {
     if let factory = app.littleOpenExtensionFactory(window: event.window ?? NSApp.keyWindow),
       let browser = factory.focusedBrowser,
       app.extensionPrompts.table(browser.context.extensions).handle(event, factory: factory) { return true }
+    // handleLittleOpenKey made the decision for a Little Open window. A second route here would
+    // see its page as non-web and run Copy/Undo before the page.
+    if app.keyLittleOpen != nil { return false }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       factory.findKeyRequestedAt = event.timestamp
       defer { factory.findKeyRequestedAt = nil }

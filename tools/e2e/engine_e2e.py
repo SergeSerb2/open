@@ -8618,6 +8618,34 @@ def numbering_checks(factory, results, tmp):
         app.quit(); server.shutdown(); server.server_close()
 
 
+def w2_little_open_edit_key_checks(app, record, page, close_all, origin):
+    """W2 in Little Open: its page sees Paste/Select All/Undo/Bold first; the menu then runs the
+    native action once. Keys enter NSApp.sendEvent for the Little Open window."""
+    row = page(origin + '/plain.html?littleopen=w2-edit-keys')
+    def ev(js): return app.call('little-open-eval', id=row['id'], js=js, timeout=3)
+    def key(name): return app.call('key', window=row['window'], key=name, modifiers=['cmd'], route='app')
+    def value(): return ev("document.querySelector('#w2').value")
+    app.call('pasteboard-preserve')
+    try:
+        ev("window.keys=[];document.body.insertAdjacentHTML('beforeend','<input id=w2 value=seed>');"
+           "document.addEventListener('keydown',e=>{keys.push(e.key);if(e.key==='b'||e.key==='i')e.preventDefault()},true);"
+           "document.querySelector('#w2').focus();true")
+        app.call('pasteboard-write', text='W2 FIRST'); key('a'); key('v')
+        first = wait_until(lambda: value() == 'W2 FIRST', timeout=3, step=.05)
+        app.call('pasteboard-write', text='W2 SECOND'); key('a'); key('v')
+        second = wait_until(lambda: value() == 'W2 SECOND', timeout=3, step=.05)
+        key('z'); undone = wait_until(lambda: value() == 'W2 FIRST', timeout=3, step=.05)
+        time.sleep(.3); once = value() == 'W2 FIRST'
+        key('b'); key('i'); time.sleep(.3)
+        keys = ev('window.keys')
+        record('W2_little_open_page_sees_edit_keys', keys == ['a', 'v', 'a', 'v', 'z', 'b', 'i']
+               and bool(first and second and undone) and once, keys=keys, value=value(),
+               first=bool(first), second=bool(second), undone=bool(undone))
+    finally:
+        app.call('pasteboard-restore')
+        close_all()
+
+
 def littleopen_checks(factory, results, tmp):
     """Routing Steps 6/7: real App windows, engine, menus, archive and visibility.
     Input stays inside the automation socket. Shared defaults are restored even on failure.
@@ -8705,6 +8733,7 @@ def littleopen_checks(factory, results, tmp):
         fixture_path = os.path.join(tmp, 'littleopen-snapshot.json')
         with open(fixture_path, 'w') as stream: json.dump(seed, stream)
         app.quit(); app = factory(urls=(), snapshot=fixture_path, extra_env=env)
+        w2_little_open_edit_key_checks(app, record, page, close_all, origin)
         # Atomic native events exercise Return/close before any queued turn.
         baseline = state()['browserCount']
         immediate_url = origin + '/plain.html?littleopen=immediate'
@@ -9676,13 +9705,71 @@ def routing_checks(factory, results, tmp):
         server.shutdown(); server.server_close()
 
 
+def w2_page_edit_key_checks(app, results, press, tab):
+    """W2: OEApplication's pre-page key route must not run Copy/Paste/Undo/Select All itself.
+    The page sees the keydown first and may cancel it; otherwise the menu runs the native action
+    once. Keys enter NSApp.sendEvent (the hardware path)."""
+    def value(): return app.eval(tab, "document.querySelector('#edit-input').value")
+    saved = app.call('pasteboard-preserve')
+    try:
+        app.call('click', tab=tab, selector='#edit-input')
+        app.eval(tab, "window.keys=[];window.passEdits=true;1")
+        app.call('pasteboard-write', text='W2 FIRST')
+        press('a', modifiers=['cmd'], route='app'); press('v', modifiers=['cmd'], route='app')
+        first = wait_until(lambda: value() == 'W2 FIRST', step=.05)
+        app.call('pasteboard-write', text='W2 SECOND')
+        press('a', modifiers=['cmd'], route='app'); press('v', modifiers=['cmd'], route='app')
+        second = wait_until(lambda: value() == 'W2 SECOND', step=.05)
+        press('z', modifiers=['cmd'], route='app')
+        undone = wait_until(lambda: value() == 'W2 FIRST', step=.05)
+        time.sleep(.3)
+        once = value() == 'W2 FIRST'
+        press('b', modifiers=['cmd'], route='app'); press('i', modifiers=['cmd'], route='app')
+        time.sleep(.3)
+        keys = app.eval(tab, 'window.keys')
+        results['W2_page_sees_edit_keys_app_route'] = {'ok': keys == ['a', 'v', 'a', 'v', 'z', 'b', 'i'], 'keys': keys}
+        results['W2_native_fallback_single_undo'] = {'ok': bool(first and second and undone) and once,
+            'first': bool(first), 'second': bool(second), 'undone': bool(undone), 'value': value()}
+        # A page that cancels the key keeps it: no browser-side Undo or Select All runs.
+        app.eval(tab, "window.keys=[];window.passEdits=false;document.querySelector('#edit-input').setSelectionRange(0,0);1")
+        before = value()
+        press('z', modifiers=['cmd'], route='app'); press('a', modifiers=['cmd'], route='app')
+        time.sleep(.5)
+        selection = app.eval(tab, "(() => {let e=document.querySelector('#edit-input');return [e.selectionStart,e.selectionEnd]})()")
+        keys = app.eval(tab, 'window.keys')
+        results['W2_page_cancel_wins'] = {'ok': keys == ['z', 'a'] and value() == before and selection != [0, len(before)],
+            'keys': keys, 'value': value(), 'selection': selection}
+    finally:
+        app.eval(tab, "window.passEdits=false;1")
+        app.call('pasteboard-restore')
+
+
+def w3_sheet_shortcut_checks(app, results, press, sheet, bar_state):
+    """W3: while a Save sheet is key, browser shortcuts must not act behind it. Keys go to the
+    sheet window through NSApp.sendEvent."""
+    def visible(): return sorted(w['number'] for w in app.call('windows') if w.get('visible') and w['number'] != sheet)
+    windows = visible(); tabs = len(app.call('tabs'))
+    routes = {}
+    def find_open(): return any(p.get('visible') for p in app.call('find-state').get('panes', []))
+    find_before = find_open()
+    for key, mods in (('t', ['cmd']), ('n', ['cmd']), (',', ['cmd']), ('l', ['cmd']), ('n', ['cmd', 'option']),
+                      ('n', ['cmd', 'shift']), ('y', ['cmd']), ('f', ['cmd']), ('g', ['cmd'])):
+        routes['+'.join(mods + [key])] = press(key, modifiers=mods, window=sheet, route='app', observeCommands=True).get('commands')
+        time.sleep(.3)
+    still = app.call('save-page-state')
+    results['W3_save_sheet_blocks_browser_shortcuts'] = {
+        'ok': still['visible'] and not bar_state().get('presented') and visible() == windows
+              and len(app.call('tabs')) == tabs and not any(routes.values()) and not find_before and not find_open(),
+        'find': [find_before, find_open()], 'routes': routes, 'sheet': still, 'bar': bar_state().get('presented'), 'windows': [windows, visible()]}
+
+
 def commandbar_checks(factory, results, tmp, config):
     import http.server
     import threading
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             body = ("<!doctype html><title>Shell C %s</title><body style='background:#302d4a;color:white'>Shell C %s<p id=copy-source>PAGE COPY</p><input id=edit-input value=seed>"
-                    "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);e.preventDefault()})</script>" % (self.path, self.path)).encode()
+                    "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);if(!window.passEdits)e.preventDefault()})</script>" % (self.path, self.path)).encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
     server = LoopbackHTTPServer(Handler)
@@ -9739,6 +9826,8 @@ def commandbar_checks(factory, results, tmp, config):
         commandbar_results_work_checks(app, results, bar, press, new['id'])
         commandbar_sweep_checks(app, results, bar, press, type_query, state, origin, new['id'])
         app.call('focus', tab=new['id'])
+        # The page sees each edit key first (W2); it does not cancel them, so the native action follows.
+        app.eval(new['id'], "window.keys=[];window.passEdits=true;1")
         app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
         app.call('pasteboard-write', text='COPY NOT RUN')
         press('c', modifiers=['cmd'], route='window')
@@ -9757,8 +9846,11 @@ def commandbar_checks(factory, results, tmp, config):
         press('a', modifiers=['cmd'], route='window'); press('x', modifiers=['cmd'], route='window')
         cut = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == '', step=.05)
         results['page_cut_native_responder'] = {'ok': bool(cut) and app.call('pasteboard') == 'seed'}
+        page_keys = app.eval(new['id'], 'window.keys')
+        results['W2_page_sees_edit_keys_window_route'] = {'ok': page_keys == ['c', 'a', 'v', 'z', 'a', 'x'], 'keys': page_keys}
         press('z', modifiers=['cmd'], route='app')
         wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'seed', step=.05)
+        w2_page_edit_key_checks(app, results, press, new['id'])
         menu = app.call('menu-state')
         native_ids = {'cut','copy','paste','paste-and-match-style','select-all','undo','redo','find','find-next','find-previous','quit-open','hide-open','hide-others','show-all','minimize-window','zoom-window','bring-all-to-front','close-window','toggle-full-screen','emoji-and-symbols','start-speaking','stop-speaking','show-fonts','font-bold','font-italic','font-underline'}
         native_rows = [r for r in menu if r['id'] in native_ids]
@@ -10045,6 +10137,7 @@ def commandbar_checks(factory, results, tmp, config):
         press('s', modifiers=['cmd','shift'])
         save = wait_until(lambda: app.call('save-page-state') if app.call('save-page-state')['visible'] else None, timeout=5, step=.1)
         results['save_page_sheet'] = {'ok': bool(save) and save['requests'] == 1, 'state': save, 'last': app.call('save-page-state')}
+        if save: w3_sheet_shortcut_checks(app, results, press, save['number'], state)
         if save: app.call('dismiss')  # AppKit sheet cancel; remote system key input is not covered
         assert wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
         app.call('dismiss')  # close any remaining owned native panel before the next flow
