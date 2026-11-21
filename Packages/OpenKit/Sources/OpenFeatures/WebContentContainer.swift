@@ -785,7 +785,10 @@ public final class WebContentContainer: NSView {
     @discardableResult
     public func focusCurrentContent() -> Bool {
         guard let focused, ids.contains(focused) else { return false }
-        focusContent(focused); return true
+        if let sad = slots.first(where: { $0.tabID == focused })?.sadTabView { return window?.makeFirstResponder(sad) ?? false }
+        // An unloaded (placeholder) pane has no host to take focus.
+        guard let host = cache[focused] else { return false }
+        host.focus(); return true
     }
     private func focusContent(_ id: ItemID) {
         if let sad = slots.first(where: { $0.tabID == id })?.sadTabView { window?.makeFirstResponder(sad) }
