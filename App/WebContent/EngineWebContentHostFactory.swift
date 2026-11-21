@@ -1903,6 +1903,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Little Open's page. Not a popup panel's or an extension popup's page (their own windows).
   private func showsInWindow(_ page: OEWebContent) -> Bool {
     guard !auxiliaryPages.contains(where: { $0.content === page }), page !== focusedBrowser?.extensionPopup else { return false }
+    // A shown Peek covers the tabs and panes under it: only the Peek on top is shown.
+    if let controller, controller.hasPeekController, controller.peekController.isShown { return page === selectedContent }
     if page === selectedContent || page === standaloneSurface?.surfacePage { return true }
     return visibleTabs.contains { hosts[$0.id]?.content === page }
   }

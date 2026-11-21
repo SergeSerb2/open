@@ -373,13 +373,15 @@ def run(factory, results, tmp, h):
             if how == 'close': app.call('close', tab=target)
             elif how == 'switch': app.call('select', tab=other)
             elif how == 'window': app.call('window-fullscreen')
+            elif how == 'peek': app.call('peek-open', tab=target, url=origin + '/peek-fs?' + str(time.time_ns()))
             after = settled(False, False) or ws()
             doc = None if how == 'close' else app.eval(target, '!!document.fullscreenElement')
             if ws()['fullscreen']: app.call('window-fullscreen'); settled(False, ws()['pageFullscreen'])
+            if how == 'peek': app.call('peek-close')
             return check(not after['fullscreen'] and not after['pageFullscreen'] and after['sidebarVisible'] and not doc,
                          after={k: after.get(k) for k in ('fullscreen', 'pageFullscreen', 'sidebarVisible', 'fullscreenTransition')},
                          documentFullscreen=doc)
-        for how in ('close', 'switch', 'window'):
+        for how in ('close', 'switch', 'window', 'peek'):
             gate('fullscreen_ends_on_' + how, lambda how=how: fullscreen_rows(how))
 
         def fullscreen_background():
