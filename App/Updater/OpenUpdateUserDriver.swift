@@ -307,7 +307,8 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   }
   func showDownloadInitiated(cancellation: @escaping () -> Void) {
     phase = "downloading"; cancel = cancellation; received = 0; expected = 0
-    showStatus("\(bytes(received)) of \(bytes(expected))", button: "Cancel", progress: 0)
+    // No length is known yet: no "Zero KB of Zero KB", and an indeterminate bar until it is.
+    showStatus(bytes(0), button: "Cancel", progress: nil)
   }
   private func bytes(_ value: UInt64) -> String { ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .file) }
   func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) { expected = expectedContentLength; downloadProgress() }

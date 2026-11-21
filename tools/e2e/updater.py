@@ -200,6 +200,9 @@ def run(opts, folder, results, apps):
                 if not serve_fixture or name is None:
                     self.send_response(404); self.end_headers(); return
                 body = (folder / name).read_bytes()
+                if name.endswith('.zip') and SERVE['omit_length']:
+                    # Review round 1: hold the headers so the state before any length or byte shows.
+                    time.sleep(1.2)
                 assert len(body) <= 2 * 1024 * 1024
                 if name.endswith(".xml"):
                     time.sleep(.6)
@@ -555,7 +558,8 @@ def exercise_ui(app, opts, results, original):
     results['D3_foreground_link'] = {'ok': any(t['url'] == 'https://github.com/SergeSerb2/open#updates'
         and t.get('selected') and t.get('section') == 'today' for t in app.call('tabs'))}
     app.call('updater-act', action='primary')
-    checking = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading', 'download status missing')
+    # Until the first bytes the bar is indeterminate with no total (W12): sample the progress after them.
+    checking = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading' and (s.get('received') or 0) > 0, 'download status missing')
     number = checking['statusWindow']
     steps = []
     for _ in range(4):
@@ -729,13 +733,15 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                 SERVE['omit_length'] = True
                 try:
                     app.call('updater-act', action='primary')
+                    before_data = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading', 'unknown-length download did not start')
                     first = wait(lambda: ui(app), lambda s: s.get('phase') == 'downloading' and (s.get('received') or 0) > 0,
-                                 'unknown-length download did not start')
-                    samples = [first]
+                                 'unknown-length download got no data')
+                    samples = [before_data, first]
                     for _ in range(3):
                         time.sleep(.12); samples.append(ui(app))
                     texts = [x.get('statusText', '') for x in samples]
                     results['W12_unknown_length_progress'] = {'ok': all(t and ' of ' not in t and 'EB' not in t for t in texts)
+                        and before_data.get('indeterminate') is True and (before_data.get('received') or 0) == 0
                         and samples[-1].get('indeterminate') is True,
                         'texts': texts, 'expected': [x.get('expected') for x in samples], 'indeterminate': samples[-1].get('indeterminate')}
                     if app.call('updater-act', action='cancel-download'):
