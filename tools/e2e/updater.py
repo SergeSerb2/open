@@ -1030,11 +1030,13 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                 exited = harness.wait_until(lambda: not app.process_path(app.pid), timeout=15, step=.05)
                 after_log = app.log_text()
                 # Bug sweep r4 F-03: the install quit retries itself after Open's own quit work
-                # (history flush, sleep capture); that is not a cancel, so no retry window appears.
-                retry_marker = 'updater-termination-retry-shown'
-                results['F03_install_quit_no_retry_window'] = {'ok': bool(exited)
-                    and after_log.count(retry_marker) == before_log.count(retry_marker),
-                    'retryWindowsBefore': before_log.count(retry_marker), 'retryWindowsAfter': after_log.count(retry_marker)}
+                # (history flush, sleep capture). That is not a cancel: Sparkle must not hear one, or
+                # once installing it shows its "Ready to Install" retry window while the App quits.
+                # (The paused installer never reaches that phase here, so the row counts the cancel.)
+                cancel_marker = 'updater-termination-cancelled'
+                results['F03_install_quit_not_reported_cancelled'] = {'ok': bool(exited)
+                    and after_log.count(cancel_marker) == before_log.count(cancel_marker),
+                    'cancelsBefore': before_log.count(cancel_marker), 'cancelsAfter': after_log.count(cancel_marker)}
                 markers = ('generic-quit-alert-presented', 'downloads-quit-alert-presented')
                 results['R2_install_relaunch_skips_prompts'] = {'ok': bool(exited)
                     and all(after_log.count(m) == before_log.count(m) for m in markers),

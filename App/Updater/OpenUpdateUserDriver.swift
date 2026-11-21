@@ -342,6 +342,9 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   /// The quit that would install ended without a retry; the next quit is a normal one.
   func clearInstallationRelaunchRequest() { installationRelaunchRequested = false }
   func applicationTerminationCancelled() {
+    #if OPEN_AUTOMATION
+    AppDelegate.commandLog("updater-termination-cancelled")
+    #endif
     // The quit event can arrive before Sparkle reports installation stage 2.
     terminationWasCancelled = true
     guard phase == "installing", retryTermination != nil else { return }
@@ -349,9 +352,6 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     showTerminationRetry()
   }
   private func showTerminationRetry() {
-    #if OPEN_AUTOMATION
-    AppDelegate.commandLog("updater-termination-retry-shown")
-    #endif
     showStatus("Ready to Install", button: "Install and Relaunch", progress: 1)
   }
   func showSendingTerminationSignal() { cancel = nil }
