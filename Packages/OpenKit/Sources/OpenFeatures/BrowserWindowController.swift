@@ -1935,7 +1935,7 @@ extension BrowserWindowController {
             // its row menu), so the rest is archived first (one Undo step, its own toast) and the
             // Live Folders go after it. Rows inside a removed Live Folder go with it.
             let live = ids.filter { self.model.node(id: $0)?.folder?.live != nil }
-            func insideLive(_ id: ItemID) -> Bool {
+            @MainActor func insideLive(_ id: ItemID) -> Bool {
                 var parent = self.model.parent(of: id)
                 while case .folder(let folder)? = parent {
                     if live.contains(folder) { return true }
