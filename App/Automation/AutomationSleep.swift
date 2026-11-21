@@ -79,7 +79,7 @@ extension AutomationController {
       let controller = try sleepController(), hold = WakeHold.shared
       if let on = a["hold"] as? Bool {
         if on {
-          hold.holding = true
+          hold.holding = true; hold.held.removeAll()
           controller.afterWakeHistoryReadForAutomation = { id in
             let hold = WakeHold.shared
             guard hold.holding else { return }
