@@ -274,6 +274,20 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         click('Record shortcut for Search Actions');key('j',['cmd','shift','control','option']);settle()
         binding=Path(ui()['keybindingsFile']);saved_hash=hashlib.sha256(binding.read_bytes()).hexdigest()
         check('shortcut_saved_store','search-actions' in ui()['bindings'])
+        # W6: Import… of a file the App would reject (reloadKeyBindings) keeps the saved file and
+        # bindings, and never says "Saved.". The hook is the button's model call after NSOpenPanel.
+        rejected={'version':{'version':2,'bindings':{}},
+                  'unknown_id':{'version':1,'bindings':{'no-such-command':{'shortcuts':[],'priority':'browser'}}},
+                  'fixed_id':{'version':1,'bindings':{'copy':{'shortcuts':[],'priority':'browser'}}}}
+        for name,payload in rejected.items():
+            bad=out/('w6-import-'+name+'.json');bad.write_text(json.dumps(payload))
+            ui(action='import-shortcuts',path=str(bad));s=settle()
+            check('W6_rejected_import_keeps_bindings_'+name,hashlib.sha256(binding.read_bytes()).hexdigest()==saved_hash
+                  and 'search-actions' in s['bindings'] and s['shortcutStatus']!='Saved.',stop=False,status=s['shortcutStatus'],bindings=s['bindings'])
+        good=out/'w6-import-valid.json';good.write_bytes(binding.read_bytes())
+        ui(action='import-shortcuts',path=str(good));s=settle()
+        check('W6_valid_import_saves',s['shortcutStatus']=='Saved.' and 'search-actions' in s['bindings'],status=s['shortcutStatus'],bindings=s['bindings'])
+        saved_hash=hashlib.sha256(binding.read_bytes()).hexdigest()
         link('shortcuts/new-tab');click('Record shortcut for New Tab…');key('j',['cmd','shift','control','option']);settle()
         check('shortcut_conflict_guard',ui()['conflicts']>0 and hashlib.sha256(binding.read_bytes()).hexdigest()==saved_hash)
         ui(action='filter',filter='conflicts');capture('shortcuts-conflict-light')

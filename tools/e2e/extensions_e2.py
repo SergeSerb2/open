@@ -25,10 +25,21 @@ def fixtures(root, tmp, extensions):
             "manifest_version": 3, "name": "Pinned order probe " + suffix,
             "version": "1.0", "action": {"default_title": "Pin probe " + suffix}}))
         pin_probes.append(str(probe))
+    # T8: action shortcuts on named keys (arrow, Home) for the X22 keycap and dispatch rows.
+    keycaps = []
+    for name, suggested in (("Keycap Left Probe", "Alt+Shift+Left"), ("Keycap Home Probe", "Alt+Shift+Home")):
+        probe = Path(tmp) / name.lower().replace(" ", "-")
+        probe.mkdir()
+        (probe / "popup.html").write_text("<!doctype html><title>%s popup</title>%s" % (name, name))
+        (probe / "manifest.json").write_text(json.dumps({
+            "manifest_version": 3, "name": name, "version": "1.0",
+            "action": {"default_title": name, "default_popup": "popup.html"},
+            "commands": {"_execute_action": {"suggested_key": {"default": suggested}}}}))
+        keycaps.append(str(probe))
     native_drag = [str(Path(extensions) / name) for name in ("ublock-lite", "darkreader")]
     if not all((Path(p) / "manifest.json").is_file() for p in native_drag):
         raise RuntimeError("extensions-e2 requires unpacked ublock-lite and darkreader in --extensions")
-    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes + native_drag
+    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes + keycaps + native_drag
 
 
 def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
@@ -134,6 +145,22 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         results["E11_normal_today"] = {"ok": normal["id"] == parent and bool(today) and today[0]["section"] == "today"
             and not app.call("ext-windows"), "window": normal["id"], "parent": parent, "today": today}
 
+        # T8 (X22): named-key action shortcuts. The command-bar row shows readable keycaps, and the
+        # key itself (no Command, so it reaches the page route) opens that extension's popup.
+        for name, named_key, caps in (("Keycap Left Probe", "left", ["⌥", "⇧", "Left"]),
+                                      ("Keycap Home Probe", "home", ["⌥", "⇧", "Home"])):
+            probe = next((x["id"] for x in app.call("extensions")["installed"] if x["name"] == name), None)
+            key("t", ["cmd"]); type_text(name.lower())
+            found = wait(lambda: [r for r in rows().get("rows", []) if r["kind"] == "extensionAction" and r["extension"] == probe], timeout=5)
+            key("escape"); time.sleep(.3)
+            results["X22_" + named_key + "_action_row"] = {"ok": bool(found) and found[0]["keycaps"] == caps, "rows": found}
+            app.call("select", tab=reporter); app.call("focus", tab=reporter); time.sleep(.3)
+            key(named_key, ["option", "shift"])
+            popup = wait(lambda: (lambda p: p if p.get("open") and p.get("extension") == probe else None)(app.call("ext-popup")), timeout=5)
+            results["X22_" + named_key + "_shortcut_opens_popup"] = {"ok": bool(popup) and popup["source"] == "command",
+                "popup": popup or app.call("ext-popup"), "commands": [c for c in app.call("ext-commands").get("commands", []) if c.get("extension") == probe]}
+            if popup: app.call("popup-close")
+            time.sleep(.3)
         # Keep the reporter out of the selected target so current-tab navigation cannot destroy it.
         target = new_tab(app, "https://example.com/?target")
         key("t", ["cmd"]); type_text("action pro")
