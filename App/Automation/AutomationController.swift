@@ -356,6 +356,20 @@
         marks["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
         return marks
       case "startup" where app.frontWindowController == nil: return app.startupEvidence
+      // Handoff after the last browser window closed (bug sweep round 4, F-04).
+      case "handoff-state" where app.frontWindowController == nil: return try await runHandoffCommand(cmd, a)
+      case "routing-rules":
+        // Bug sweep round 4 (F-14): add an exact-host rule (`hostEquals`) and list the rules.
+        if let host = a["hostEquals"] as? String {
+          app.model.routingRules.append(RoutingRule(match: .hostEquals(host), destination: .mostRecentSpace(profile: nil)))
+        }
+        return app.model.routingRules.map { rule -> [String: Any] in
+          switch rule.match {
+          case .hostEquals(let h): return ["hostEquals": h]
+          case .hostContains(let h): return ["hostContains": h]
+          case .urlPrefix(let p): return ["urlPrefix": p]
+          }
+        }
       case "spaces" where app.frontWindowController == nil:
         return app.model.spaces.map { ["id": $0.id.description, "title": $0.title ?? "", "profile": $0.profileID.description, "pinned": $0.pinned.count, "today": $0.today.count, "focused": false] as [String: Any] }
       case "tabs" where app.frontWindowController == nil: return [] as [String]

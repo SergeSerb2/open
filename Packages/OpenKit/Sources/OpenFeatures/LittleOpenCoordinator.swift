@@ -133,7 +133,11 @@ public final class LittleOpenCoordinator {
         let tab = existing ?? model.newTab(in: spaceID, url: url, title: session.tab.title, at: 0)
         tab.live.sleepPhase = .live
         let main: BrowserWindowState
-        if let current = model.windows.first(where: { $0.style == .standard }) { main = current; model.focusSpace(windowID: main.id, spaceID: spaceID) }
+        // The most recently focused standard window, not the oldest one.
+        let standard = model.windows.filter { $0.style == .standard }
+        if let current = standard.max(by: { ($0.lastFocusedAt ?? .distantPast) < ($1.lastFocusedAt ?? .distantPast) }) {
+            main = current; model.focusSpace(windowID: main.id, spaceID: spaceID)
+        }
         else { main = BrowserWindowState(focusedSpaceID: spaceID); model.windows.append(main) }
         if case .splitPane(let splitID)? = model.parent(of: tab.id) {
             model.selectNode(windowID: main.id, spaceID: spaceID, nodeID: splitID); model.focusSplitPane(splitID: splitID, tabID: tab.id)

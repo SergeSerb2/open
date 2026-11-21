@@ -50,6 +50,8 @@ final class AppCommandBarSession: CommandBarDelegate {
   private var appliedRevision = -1
   private(set) var firstResultsMilliseconds: Double?
   private(set) var openFirstResultsMilliseconds: Double?
+  /// The URLs of the first snapshot applied for the current query (automation: carry-over rows).
+  private(set) var firstSnapshotURLs: [String] = []
   private var openingSelection: ItemID?
   private var openingProfile: ProfileID?
   /// The pinned tab whose pinned URL this presentation edits (Edit Pinned Page ▸ Edit…), else nil.
@@ -64,6 +66,11 @@ final class AppCommandBarSession: CommandBarDelegate {
     let pinned = editingPinnedTab.flatMap { id in factory.model.tab(id: id).flatMap { $0.pinnedURL == nil ? nil : $0 } }
     pinnedEditTabID = pinned?.id
     guard let windowController = factory.controller, let profile = factory.focusedProfile else { return }
+    // A Blank Window's stand-in Profile is a copy made when the window opened: Settings edits made since
+    // (search engines, search suggestions) reach its bar through the real Profile's settings.
+    if factory.isBlankWindow, let live = factory.app.model.profile(id: profile.id), live !== profile, profile.settings != live.settings {
+      profile.settings = live.settings
+    }
     if factory.window?.isKeyWindow != true || !NSApp.isActive {
       factory.app.focusWindow(factory.windowState.id, activate: true)
     }
@@ -98,7 +105,10 @@ final class AppCommandBarSession: CommandBarDelegate {
         self.queryAt = LaunchTiming.shared.elapsedMilliseconds
         self.queryRevision += 1; self.firstResultsMilliseconds = nil
       }
-      bar.onSnapshotApplied = { [weak self] _ in
+      bar.onSnapshotApplied = { [weak self] snapshot in
+        #if OPEN_AUTOMATION
+        if snapshot.sequence == 0 { self?.firstSnapshotURLs = snapshot.suggestions.compactMap { $0.url?.absoluteString } }
+        #endif
         guard let self, self.appliedRevision != self.queryRevision else { return }
         self.appliedRevision = self.queryRevision
         self.firstResultsMilliseconds = LaunchTiming.shared.elapsedMilliseconds - self.queryAt
@@ -173,7 +183,9 @@ final class AppCommandBarSession: CommandBarDelegate {
       default: break
       }
     }
-    if commandBar.request?.mode == .editCurrentURL, WelcomeTab.matches(factory.selectedTab?.url),
+    // Over a Peek, Cmd+L edits the Peek's page: the Welcome tab behind it does not count.
+    let peekShown = factory.controller.map { $0.hasPeekController && $0.peekController.isShown } ?? false
+    if commandBar.request?.mode == .editCurrentURL, !peekShown, WelcomeTab.matches(factory.selectedTab?.url),
        commandBar.text == WelcomeTab.title { return }
     switch intent {
     case .open(let url, let destination, let modifiers),
@@ -237,6 +249,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "engineID": String(describing: ObjectIdentifier(bar.engine)),
+      "firstSnapshotURLs": firstSnapshotURLs,
+      "drawn": bar.rows.map { ["id": $0.id, "title": $0.title, "subtitle": $0.subtitle] },
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",

@@ -10,7 +10,7 @@ import OpenSettings
 /// never exist in a user build.
 extension AutomationController {
   static let sleepCommands: Set<String> = ["sleep-state", "sleep-now", "sleep-mode", "sleep-clock", "sleep-tick",
-                                           "sleep-power", "sleep-start", "sleep-store"]
+                                           "sleep-power", "sleep-start", "sleep-store", "sleep-wake-hold"]
 
   func runSleepCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     let sleep = app.tabSleep
@@ -73,9 +73,36 @@ extension AutomationController {
                      "file": store.fileURL(for: id).path])
       }
       return rows
+    case "sleep-wake-hold":
+      // `hold` true: each wake of a destroyed tab stops after reading its stored history, before it
+      // makes the page, until `hold` false releases it (bug sweep round 4, F-08: Cmd+L during a wake).
+      let controller = try sleepController(), hold = WakeHold.shared
+      if let on = a["hold"] as? Bool {
+        if on {
+          hold.holding = true; hold.held.removeAll()
+          controller.afterWakeHistoryReadForAutomation = { id in
+            let hold = WakeHold.shared
+            guard hold.holding else { return }
+            hold.held.append(id)
+            await withCheckedContinuation { hold.waiters.append($0) }
+          }
+        } else {
+          hold.holding = false; controller.afterWakeHistoryReadForAutomation = nil
+          let waiters = hold.waiters; hold.waiters = []; waiters.forEach { $0.resume() }
+        }
+      }
+      return ["holding": hold.holding, "held": hold.held.map(\.description), "waiting": hold.waiters.count,
+              "waking": a["tab"].map { _ in (try? sleepTab(a)).map { app.tabSleep.isWaking($0.id) } ?? false } ?? false] as [String: Any]
     default:
       throw Failure(message: "unknown sleep command")
     }
+  }
+
+  @MainActor final class WakeHold {
+    static let shared = WakeHold()
+    var holding = false
+    var held: [ItemID] = []
+    var waiters: [CheckedContinuation<Void, Never>] = []
   }
 
   private func sleepController() throws -> SleepController {

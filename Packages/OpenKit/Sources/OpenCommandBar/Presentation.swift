@@ -101,6 +101,7 @@ public enum CommandBarText {
 /// Maps `OpenSuggest` rows to drawn rows. Each rule names its evidence.
 enum RowPresentation {
     /// - navigate: "<url> — <url>", or "<page title> — <url>" after a history merge (F0040 "google.com — google.com").
+    ///   Top Domains: "<name> — <domain>" (PB1-i "Netflix — netflix.com"); Easel and remote rows keep their own title (guess).
     /// - history: "<title> — <url>" (F0048 "The Browser Company — youtube.com/c/…").
     /// - switchToTab: title only, accessory "Switch to Tab", "Switch to Split View", or the Space name (F0063, A0121, F0098).
     /// - search, searchSuggestion: the query only, magnifier (F0052).
@@ -114,6 +115,12 @@ enum RowPresentation {
                 return CommandBarRow(id: s.id, kind: s.kind, title: currentTitle ?? URLDisplay.short(u), icon: icon)
             }
             let display = s.url.map(URLDisplay.short) ?? s.title
+            // The typed-URL row carries a merged history title in `subtitle`. Other navigate rows
+            // (Top Domains, Easels, remote navigation) carry their own title and label.
+            guard s.id == WhatYouTypedProvider.urlRowID else {
+                return CommandBarRow(id: s.id, kind: s.kind, title: s.title.isEmpty ? display : s.title,
+                                     subtitle: s.subtitle.isEmpty ? display : s.subtitle, icon: icon)
+            }
             let title = s.subtitle.isEmpty ? display : s.subtitle
             return CommandBarRow(id: s.id, kind: s.kind, title: title, subtitle: display, icon: icon)
         case .history:

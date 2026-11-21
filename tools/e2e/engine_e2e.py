@@ -15136,7 +15136,12 @@ def main():
                 relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
-            commandbar_checks(factory, results[opts.only], tmp, opts.config)
+            # OPEN_COMMANDBAR_NAV4_ONLY=1 runs only the bug sweep round 4 rows (tools/e2e/nav_round4.py).
+            if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
+                commandbar_checks(factory, results[opts.only], tmp, opts.config)
+            if opts.only == "commandbar":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/nav_round4.py"))["run"](
+                    factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "app-icons":
             # tools/e2e/app_icons.py: picker, cache, reset, relaunch, and the macOS icon grid of every icon.
             results[opts.only] = CheckedResults(tracker)

@@ -83,9 +83,19 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     engine.providers.append(SettingsSuggestionsProvider())
     return engine
   }()
+  /// A Blank Window keeps its tabs in its own in-memory model: its bar indexes those tabs (Switch to
+  /// Tab, current-tab actions). History and Easels are the Profile's, as in the shared engine.
+  private lazy var blankSuggest: SuggestEngine = {
+    let engine = SuggestEngine(model: model, historyStore: { [weak app] in app?.stores.history(for: $0) },
+      actions: CommandRegistry.makeSuggestRegistry())
+    engine.providers.append(SettingsSuggestionsProvider())
+    engine.providers.append(EaselsProvider(catalog: app.easelSearch.catalog))
+    return engine
+  }()
   func suggestEngine() -> SuggestEngine? {
     guard let profile = focusedProfile else { return nil }
-    return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)
+    if isIncognito { return privateSuggest }
+    return isBlankWindow ? blankSuggest : app.stores.suggest(for: profile.id)
   }
   /// Nil for a Little Open factory (no browser window controller).
   var contentContainer: NSView? { controller?.container }
@@ -804,8 +814,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let id = iconPickerSpaceID, focusedSpace?.id != id || model.space(id: id) == nil { iconPicker?.close() }
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
+      app.tabSleep.cancelNavigationAfterWake(ids)
+      // A closed Peek's Undo also ends: it would reopen the old Profile's page over the Space's new Profile.
       if let controller, controller.hasPeekController,
-         controller.peekController.stack.contains(where: { ids.contains($0.sourceTabID) || ($0.host as? EngineWebContentHost)?.spaceID == spaceID }) { controller.peekController.dismissAll() }
+         controller.peekController.stack.contains(where: { ids.contains($0.sourceTabID) || ($0.host as? EngineWebContentHost)?.spaceID == spaceID })
+           || controller.peekController.undoSource.map({ ids.contains($0.tabID) || $0.librarySpaceID == spaceID }) == true { controller.peekController.dismissAll() }
       for (id, host) in hosts where ids.contains(id) || (model.tab(id: id) == nil && host.spaceID == spaceID) {
         controller?.container.closeHost(for: id); host.close()
       }
@@ -1026,7 +1039,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .rename(let id, let title) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
       return renameEasel(tabID: id, title: title)
     case .close(let id), .unloadTab(let id):
-      guard model.tab(id: id) != nil else { return nil }; closeTab(id: id); return true
+      guard model.tab(id: id) != nil else { return nil }; app.tabSleep.cancelNavigationAfterWake([id]); closeTab(id: id); return true
     case .unloadFolder(let id):
       guard let folder = model.node(id: id)?.folder, controller?.context.isPinnedFolder(id) == true else { return false }
       func collect(_ nodes: [SidebarNode]) -> [ItemID] {
@@ -1039,6 +1052,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         }
       }
       let ids = Set(collect(folder.children))
+      app.tabSleep.cancelNavigationAfterWake(ids)
       let loaded = ids.filter { hosts[$0] != nil || controller?.container.host(for: $0) != nil }
       guard !loaded.isEmpty else { return true }
       for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
@@ -1056,7 +1070,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; scheduleSave(); return true
     case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
-      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
+      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }
+      app.tabSleep.cancelNavigationAfterWake([id]); model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
     case .renameSpace(let id, let title):
       guard let space = model.space(id: id) else { return false }
       let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1159,6 +1174,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private func finishClosingTab(id: ItemID) {
     guard model.tab(id: id) != nil else { return }
+    app.tabSleep.cancelNavigationAfterWake([id])
     findController?.forget(id)
     let order = orderedTabs.map(\.id), index = order.firstIndex(of: id) ?? 0
     let wasSelected = selectedTab?.id == id
@@ -1339,15 +1355,20 @@ extension EngineWebContentHostFactory {
     // Welcome is created by the hand-off or Help only; arbitrary internal routes
     // typed in the command bar never reach a page or a system URL handler.
     guard !WelcomeTab.isInternal(url) else { return }
-    if current, let tab = selectedTab, WelcomeTab.matches(tab.url) {
+    // Cmd+L over a Peek edits the Peek's page (selectedContent), not the native tab behind it.
+    let peekShown = controller.map { $0.hasPeekController && $0.peekController.isShown } ?? false
+    if current, !peekShown, let tab = selectedTab, WelcomeTab.matches(tab.url) {
       leaveWelcome(tabID: tab.id, for: url); return
     }
-    if current, NoteTab.matches(selectedTab?.url) { navigateFromCommandBar(url, current: false, background: background); return }
+    if current, !peekShown, NoteTab.matches(selectedTab?.url) { navigateFromCommandBar(url, current: false, background: background); return }
     // An Easel tab is never replaced by a page: the address opens in a new tab.
-    if current, let tab = selectedTab, EaselTab.matches(tab.url) {
+    if current, !peekShown, let tab = selectedTab, EaselTab.matches(tab.url) {
       _ = openNewTab(url: url, background: background, typed: true); return
     }
     app.noteLaunchWindowNavigation(windowState.id)
+    // A tab still waking from sleep loads the typed address when the wake ends (navigateAfterWake).
+    if current, !peekShown, app.engineReady, let tab = selectedTab,
+       app.tabSleep.navigateAfterWake(tab.id, to: url, in: self) { return }
     if current, selectedContent != nil || selectedTab != nil {
       if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
         commandBarNavigationFocus.insert(host.tabID); host.historyRecorder.markTyped()
@@ -1357,10 +1378,33 @@ extension EngineWebContentHostFactory {
       }
       if !app.engineReady, let tab = selectedTab {
         queuedNavigations[tab.id] = url; tab.url = url; scheduleSave()
-      } else { selectedContent?.load(url); selectedContent?.focusPage() }
+      } else if let page = selectedContent { page.load(url); page.focusPage() }
+      else if !peekShown, let tab = selectedTab {
+        // No page and no wake in flight: make the page now with the typed address.
+        tab.url = url; scheduleSave()
+        ensureContent(for: tab)?.focusPage()
+      }
     } else if let tab = openNewTab(url: url, background: background, typed: true) {
       if background { _ = ensureContent(for: tab) }
       else { commandBarNavigationFocus.insert(tab.id) }
+    }
+  }
+  /// The Cmd+L address held while its tab woke from sleep (AppSleepCoordinator.navigateAfterWake):
+  /// it loads in the restored page, so the stored back list stays under the typed page.
+  func navigateAfterWake(tabID: ItemID, to url: URL, profileID: ProfileID?) {
+    // The address was typed for this tab in this Profile; never load it in another Profile's context.
+    guard !isClosing, let tab = model.tab(id: tabID), profile(for: tabID)?.id == profileID else { return }
+    let selected = selectedTab?.id == tabID
+    if let host = hosts[tabID], !host.closed {
+      if selected { commandBarNavigationFocus.insert(tabID) }
+      host.historyRecorder.markTyped(); host.content.load(url)
+      if selected { host.content.focusPage() }
+    } else {
+      // The wake made no page (it failed or the tab left view): make one with the typed address.
+      typedNavigationTabs.insert(tabID); if selected { commandBarNavigationFocus.insert(tabID) }
+      tab.url = url; scheduleSave()
+      let page = ensureContent(for: tab)
+      if selected { page?.focusPage() }
     }
   }
   /// Option+Return in the command bar: the page opens beside the current page in Split View (Arc 11-returns,

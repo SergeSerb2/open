@@ -85,6 +85,7 @@ final class AppSleepCoordinator {
                                      chromiumTag: OEEngine.shared.chromiumVersion,
                                      now: { Date().addingTimeInterval(clock.offset) })
     controller.onLog = { [weak self] in self?.record($0) }
+    controller.onWakeFinished = { [weak self] in self?.finishWake($0) }
     adapter.controller = controller
     self.adapter = adapter; self.store = store; self.controller = controller
     Task { await store.loadKnownStored() }
@@ -116,6 +117,7 @@ final class AppSleepCoordinator {
 
   func stop() {
     isStarted = false
+    navigationsAfterWake.removeAll()
     controller?.stop()
     if let powerObserver { NotificationCenter.default.removeObserver(powerObserver) }
     powerObserver = nil
@@ -270,10 +272,32 @@ final class AppSleepCoordinator {
       await controller.tabBecameVisible(id)
       guard let self else { return }
       self.wakeRequests.remove(id)
+      self.finishWake(id)
       for factory in self.app.hostFactories.values { factory.controller?.container.refreshPlaceholders() }
     }
   }
   private var wakeRequests: Set<ItemID> = []
+
+  /// A wake of this tab is queued or in flight (stored history read, page restore).
+  func isWaking(_ id: ItemID) -> Bool { wakeRequests.contains(id) || controller?.isWaking(id) == true }
+  private struct WakeNavigation { let url: URL; let profileID: ProfileID?; weak var factory: EngineWebContentHostFactory? }
+  private var navigationsAfterWake: [ItemID: WakeNavigation] = [:]
+  /// Cmd+L on a tab that is waking: the address loads once the wake ends, so the restored back list
+  /// stays and the wake can neither replace the typed page nor reload the old address over it.
+  /// False when no wake is in flight (the caller navigates at once).
+  func navigateAfterWake(_ id: ItemID, to url: URL, in factory: EngineWebContentHostFactory) -> Bool {
+    guard isWaking(id) else { return false }
+    navigationsAfterWake[id] = WakeNavigation(url: url, profileID: factory.profile(for: id)?.id, factory: factory)
+    return true
+  }
+  /// The tab closed, unloaded, reset to its pinned address, or changed Profile: the held address is dropped.
+  func cancelNavigationAfterWake(_ ids: some Sequence<ItemID>) {
+    for id in ids { navigationsAfterWake.removeValue(forKey: id) }
+  }
+  private func finishWake(_ id: ItemID) {
+    guard !isWaking(id), let next = navigationsAfterWake.removeValue(forKey: id) else { return }
+    next.factory?.navigateAfterWake(tabID: id, to: next.url, profileID: next.profileID)
+  }
 
   /// Settings or another input changed a Profile's sleep mode.
   func modeChanged() { controller?.setNeedsPass() }

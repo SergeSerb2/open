@@ -75,6 +75,7 @@ extension HistoryStore {
             DELETE FROM history_delete_urls;
             COMMIT;
             """) else { throw HistoryMutationError.unavailable }
+            noteDeletion()
             didChange()
         } catch { db.exec("ROLLBACK"); throw error }
     }

@@ -1,6 +1,7 @@
 import AppKit
 import OpenFeatures
 import OpenModel
+import OpenRouting
 
 /// Arc's default Air Traffic Control route for Google Meet (docs/re/live-data.md §5: pref
 /// `didSetDefaultGoogleMeetRoute`, toast "Meet links now open in your current Space!" with "Choose where they open",
@@ -29,7 +30,9 @@ final class MeetRoute {
     UserDefaults.standard.set(true, forKey: Self.doneKey)
     let covered = model.routingRules.contains { rule in
       switch rule.match {
-      case .hostEquals(let h), .hostContains(let h): return Self.host.contains(h.lowercased()) && !h.isEmpty
+      // The same host rules as RuleEvaluator: an exact-host rule for "google.com" does not cover Meet.
+      case .hostEquals(let h): return HostNormalizer.canonicalPattern(h) == Self.host
+      case .hostContains(let h): let p = HostNormalizer.canonicalPattern(h); return !p.isEmpty && Self.host.contains(p)
       case .urlPrefix(let p): return p.lowercased().contains(Self.host)
       }
     }

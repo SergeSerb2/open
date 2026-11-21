@@ -746,6 +746,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     libraryFirstSidebarDraws.removeValue(forKey:id)
     settingsPresenter.libraryWindowClosed(id)
     guard let factory = hostFactories[id] else { return }
+    // The closed window's page must stop being offered to other devices. With no window left
+    // no key-window change rebuilds the menu, so Handoff is told here.
+    defer { handoff.setNeedsUpdate() }
     if let session = factory.incognitoSession {
       windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
       if session.windows == 1, let context = session.context { extensionPrompts.unregister(context.extensions) }
