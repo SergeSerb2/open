@@ -133,8 +133,9 @@ extension AppImportRunner {
     case .failure(FirefoxImportError.missingFile): result.failures["Open tabs"] = "Not found"; return
     case .failure: result.failures["Open tabs"] = "Could not be read"; return
     }
-    // The import may have been undone, or its Space or Profile removed, during the read.
-    guard !undo.cancelled, app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {
+    // The import may have been cancelled, or its Space or Profile removed, during the read.
+    guard !undo.cancelled else { return }
+    guard app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {
       result.failures["Open tabs"] = "Could not be saved"; return
     }
     var pinned: [SidebarNode] = [], today: [SidebarNode] = []

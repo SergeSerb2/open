@@ -181,11 +181,12 @@ def checks(factory, results, tmp, harness):
             private = private_window('menu'); tab = open_page('/appearance')
             dark = lambda: app.eval(tab, "matchMedia('(prefers-color-scheme: dark)').matches")
             origin_before, light = app.eval(tab, 'performance.timeOrigin'), bool(wait(lambda: dark() is False, timeout=8, step=.1))
-            focus(normal); app.call('command', id='appearance-dark')
+            # The command runs from the normal window; `eval` reads pages of the focused window.
+            focus(normal); app.call('command', id='appearance-dark'); focus(private)
             followed = bool(wait(lambda: dark() is True, timeout=8, step=.2))
             check('website_appearance_reaches_private', light and followed and app.eval(tab, 'performance.timeOrigin') == origin_before,
                   startLight=light, followedDark=followed, darkNow=dark())
-            focus(private); app.call('window-close'); focus(normal)
+            app.call('window-close'); focus(normal)
         finally:
             app.call('command', id='appearance-automatic')
         if os.environ.get('OPEN_INCOGNITO_APPEARANCE_ONLY') == '1':
