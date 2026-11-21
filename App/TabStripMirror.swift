@@ -43,6 +43,10 @@ final class TabStripMirror {
     for profile in owner.model.profiles {
       let tabs = owner.tabs(in: profile.id)
       let loaded = tabs.filter { contents[$0.id] != nil }
+      // A private session the engine closed (its last tab went) is renewed only for a page, not here.
+      if loaded.isEmpty, let browser = browsers[profile.id], browser.context.state == .closed {
+        browsers[profile.id] = nil; browser.close()
+      }
       guard !loaded.isEmpty || browsers[profile.id] != nil else { continue }
       guard let browser = browser(for: profile.id) else { continue }
       let retained = Set(loaded.compactMap { contents[$0.id].map(ObjectIdentifier.init) })

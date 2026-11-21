@@ -498,7 +498,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func context(for profileID: ProfileID, create: Bool = true) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
     if isIncognito {
-      guard let context = incognitoSession?.liveContext() else { return nil }
+      guard let context = incognitoSession?.liveContext(create: create) else { return nil }
       app.extensionPrompts.register(context.extensions)
       return WebsiteAppearance.prepare(context)
     }

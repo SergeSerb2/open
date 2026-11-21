@@ -32,6 +32,9 @@ extension AutomationController {
       result["appearance"] = factory.window?.effectiveAppearance.name.rawValue ?? ""
       result["extensions"] = factory.focusedBrowser?.extensionActions.map(\.extensionIdentifier) ?? []
       result["tabs"] = factory.orderedTabs.map { ["id": $0.id.description, "url": $0.url.absoluteString] }
+      // The session's own context, also with no page: a renewal changes the identifier.
+      let session = factory.incognitoSession?.context
+      result["session"] = ["context": session?.identifier ?? "", "closed": session?.state == .closed] as [String: Any]
     }
     return result
   }

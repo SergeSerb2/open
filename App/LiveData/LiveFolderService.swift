@@ -152,6 +152,13 @@ final class LiveFolderService {
     lastRefresh[folderID] = Date(); refreshCount += 1
     // Every search runs in this Profile's session. Read once: the Space can move while the fetch runs.
     let profileID = space.profileID
+    // The Space moved to another Profile (or the folder left it) while a search ran: stop. Those rows
+    // and a sign-in state belong to the old Profile's account. The new owner's next refresh is not throttled.
+    func moved() -> Bool {
+      guard self.space(of: folderID)?.profileID != profileID else { return false }
+      lastRefresh[folderID] = nil
+      return true
+    }
     var lists: [[PRSnapshot]] = []
     var outcome = LiveFolderConfig.Outcome.success
     var ssoURL: URL?
@@ -159,6 +166,7 @@ final class LiveFolderService {
       do {
         let value = try await app.liveFetch.fetch(profileID: profileID,
           url: GitHubQuery.url(kind, teamReviews: config.teamReviews, origin: origin), script: GitHubQuery.extractionScript)
+        if moved() { return nil }
         let (state, items) = GitHubQuery.decode(value, kind: kind)
         switch state {
         case .ok: lists.append(items)
@@ -169,14 +177,12 @@ final class LiveFolderService {
         case .unexpected: outcome = .failed; break search
         }
       } catch {
+        if moved() { return nil }
         outcome = .failed; break search
       }
     }
     // The folder may be gone (toggled off, undone) while the fetch ran.
     guard let current = app.model.node(id: folderID)?.folder, let live = current.live else { return nil }
-    // The Space moved to another Profile while the fetch ran: these rows (and a sign-in state) belong
-    // to the old Profile's account. Keep the folder as it is; the next refresh fetches for the new owner.
-    guard self.space(of: folderID)?.profileID == profileID else { return nil }
     if outcome == .success || outcome == .needsSSO {
       let fresh = GitHubQuery.merge(lists, config: live)
       let diff = LiveFolderDiff.make(folder: current, fresh: fresh)

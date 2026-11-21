@@ -99,9 +99,29 @@ def checks(factory, results, tmp, harness):
             again = open_page(page_origin + '/en.html?after-last-tab')
             cookie = app.eval(again, 'document.cookie')
             page = app.call('tabs')[0].get('page', {})
+            # Two windows of one session: closing every tab of one keeps the other's session.
+            app.eval(again, "document.cookie='shared=1; path=/'; true")
+            second = private_window()
+            other = open_page(page_origin + '/en.html?second-window')
+            shared = app.eval(other, 'document.cookie')
+            app.call('close', tab=other)
+            focus(incognito)
+            kept = app.eval(again, 'document.cookie')
+            focus(second); app.call('window-close')
+            # An empty Incognito window gets focus: no new session starts until a page needs one.
+            focus(incognito); app.call('close', tab=again)
+            def session(): return app.call('incognito-state', private=True)['session']
+            before = wait(lambda: (lambda s: s if s['closed'] else None)(session()), timeout=5, step=.05) or session()
+            focus(normal); focus(incognito); time.sleep(.5)
+            after = session()
+            renewed_tab = open_page(page_origin + '/en.html?renewed')
+            renewed = session()
+            app.call('close', tab=renewed_tab)
             check('privacy_private_new_tab_after_last_closed', empty == [] and page.get('ephemeral') is True
-                  and 'lastTab' not in cookie, cookie=cookie, page={k: page.get(k) for k in ('ephemeral', 'context', 'live', 'url')})
-            app.call('close', tab=again)
+                  and 'lastTab' not in cookie and 'shared=1' in shared and 'shared=1' in kept
+                  and before['closed'] and after == before and not renewed['closed'] and renewed['context'] != before['context'],
+                  cookie=cookie, shared=shared, kept=kept, sessions=[before, after, renewed],
+                  page={k: page.get(k) for k in ('ephemeral', 'context', 'live', 'url')})
         guarded('privacy_private_new_tab_after_last_closed', row0)
 
         # 1. PiP "Turn off" (Open's own PiP window, phase 2) in an Incognito window.
@@ -134,6 +154,9 @@ def checks(factory, results, tmp, harness):
             focus(incognito)
             def translate(): return app.call('translate', action='state')
             def offered(): return wait(lambda: (lambda s: s if s['state'] == 'offered' else None)(translate()), timeout=15, step=.1)
+            # A second tab keeps the private session alive: closing its last tab starts a new session,
+            # which forgets the session's choices.
+            keeper = open_page(page_origin + '/en.html?keeper')
             fr = open_page(page_origin + '/fr.html')
             first_offer = offered()
             before = pref('open.translate.neverTranslateHosts')
@@ -143,16 +166,39 @@ def checks(factory, results, tmp, harness):
             again = open_page(page_origin + '/fr.html?again')
             time.sleep(1.5)
             private_again = translate()
-            app.call('close', tab=again)
+            app.call('close', tab=again); app.call('close', tab=keeper)
+            # Every tab closed: the next page starts a new session, which offers translation again.
+            fresh = open_page(page_origin + '/fr.html?new-session')
+            renewed_offer = offered()
+            app.call('close', tab=fresh)
             focus(normal)
             regular_fr = open_page(page_origin + '/fr.html?regular')
             regular_offer = offered()
             app.call('close', tab=regular_fr)
             check('privacy_translate_never_memory', bool(first_offer) and after == before and private_again['state'] != 'offered'
-                  and bool(regular_offer),
+                  and bool(regular_offer) and bool(renewed_offer),
                   before=before, after=after, never=never.get('state'), privateAgain=private_again.get('state'),
+                  renewed=(renewed_offer or {}).get('state'),
                   regular=(regular_offer or {}).get('state'))
         guarded('privacy_translate_never_memory', row2)
+
+        # 2b. Translate in an Incognito window: its undo step stays in that window's undo stack.
+        def row2b():
+            focus(incognito)
+            def translate(): return app.call('translate', action='state')
+            local = page_origin.replace('127.0.0.1', 'localhost')
+            tab = open_page(local + '/fr.html?undo')
+            offered = wait(lambda: (lambda s: s if s['state'] == 'offered' else None)(translate()), timeout=15, step=.1)
+            app.call('translate', action='translate')
+            done = wait(lambda: (lambda s: s if s['state'] == 'translated' else None)(translate()), timeout=15, step=.1) or {}
+            private_undo = translate().get('undoTitle')
+            focus(normal)
+            regular_undo = app.call('translate', action='state').get('undoTitle')
+            focus(incognito); app.call('close', tab=tab)
+            check('privacy_translate_undo_private', bool(offered) and done.get('state') == 'translated'
+                  and private_undo == 'Translate' and regular_undo != 'Translate',
+                  privateUndo=private_undo, regularUndo=regular_undo)
+        guarded('privacy_translate_undo_private', row2b)
 
         # 3. Developer Mode toggled in an Incognito window stays in that session.
         def row3():
@@ -212,10 +258,17 @@ def checks(factory, results, tmp, harness):
             cal(action='clock', minutes=9.2)
             regular_toasts = wait(calendar_toasts, timeout=3, step=.05) or []
             state = cal(action='live')
+            # Join on the reminder opens the call in the regular window (Join links resolve to nothing here).
+            joined = app.call('toast-action') if regular_toasts else False
+            join = wait(lambda: (lambda j: j if j.get('origin') == 'liveCalendar' else None)(cal(action='join-result')), timeout=3, step=.05) or {}
+            in_regular = wait(lambda: any(t['url'].startswith(MEET) for t in app.call('tabs')), timeout=3, step=.05)
             check('privacy_calendar_reminder_not_private', bool(live) and not private_toasts
                   and [t['title'] for t in regular_toasts] == ['Private-check sync']
-                  and sum(r.get('event') == 'p' for r in state.get('reminders', [])) == 1,
-                  privateToasts=private_toasts, regularToasts=regular_toasts, reminders=state.get('reminders'))
+                  and sum(r.get('event') == 'p' for r in state.get('reminders', [])) == 1
+                  and bool(joined) and join.get('event') == 'p' and bool(in_regular),
+                  privateToasts=private_toasts, regularToasts=regular_toasts, reminders=state.get('reminders'), join=join)
+            for t in app.call('tabs'):
+                if t['url'].startswith(MEET): app.call('close', tab=t['id'])
             cal(action='clock', minutes=0)
             app.call('close', tab=fav)
         guarded('privacy_calendar_reminder_not_private', row5)
@@ -247,6 +300,35 @@ def checks(factory, results, tmp, harness):
                   mail=mail, landed=bool(landed), privateTabs=[private_tabs, private_after], stderr=sent.stderr[-300:])
             for t in app.call('tabs'):
                 if t['url'] in (expected, page_origin + '/en.html?mail-home'): app.call('close', tab=t['id'])
+            # Two Profiles: the handler belongs to Profile B (its Incognito window in front) while Profile A's
+            # Space is the most recent. The compose page opens in B's Space, with B's session.
+            home = next(s['id'] for s in app.call('spaces') if s['focused'])
+            mail_space = app.call('space-create', title='Privacy Mail', profile='Privacy Mail')
+            mail_space = mail_space.get('id', mail_space) if isinstance(mail_space, dict) else mail_space
+            b_home = open_page(page_origin + '/en.html?b-mail-home')
+            b_context = app.page(b_home)['context']
+            app.eval(b_home, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+            b_registered = wait(lambda: any(h['scheme'] == 'mailto' for h in app.call('protocol-handlers')['handlers']), timeout=8, step=.1)
+            b_private = private_window()
+            focus(normal); app.call('space', space=home)
+            focus(b_private)
+            handled = app.call('mailto-state')['handled']
+            sent = subprocess.run(['/usr/bin/open', '-a', app.bundle, 'mailto:b@example.org'], capture_output=True, text=True, timeout=15)
+            b_mail = wait(lambda: (lambda s: s if s['handled'] > handled else None)(app.call('mailto-state')), timeout=8, step=.1) or {}
+            b_expected = page_origin + '/en.html?compose=mailto%3Ab%40example.org'
+            focus(normal)
+            b_tab = wait(lambda: next((t for t in app.call('tabs') if t['url'] == b_expected), None), timeout=8, step=.05)
+            b_space = next((s['id'] for s in app.call('spaces') if s['focused']), None)
+            b_page = app.page(b_tab['id'])['context'] if b_tab else None
+            focus(b_private); app.call('window-close')
+            focus(normal); app.call('space', space=mail_space)
+            app.call('protocol-handlers', removeScheme='mailto', removeURLTemplate=template)
+            for t in app.call('tabs'):
+                if t['url'] in (b_expected, page_origin + '/en.html?b-mail-home'): app.call('close', tab=t['id'])
+            app.call('space', space=home)
+            check('privacy_mailto_private_front_other_profile', bool(b_registered) and b_mail.get('translated') == b_expected
+                  and bool(b_tab) and b_space == mail_space and b_page == b_context,
+                  mail=b_mail, space=b_space, expectedSpace=mail_space, pageContext=b_page, profileContext=b_context)
         guarded('privacy_mailto_private_front', row6)
 
         # 7. A Live Folder refresh still running when its Space moves to another Profile never lands in the new Profile.
@@ -261,27 +343,30 @@ def checks(factory, results, tmp, harness):
             space, old_profile = space_row['id'], space_row['profile']
             gh['prs'] = {'created': [('acme/app', 99, 'Fetched for the old Profile', 'open')], 'review': [], 'approved': [], 'changes': []}
             gate = threading.Event(); gh['fetch_gate'] = gate
-            requests = len(gh['requests'])
+            def pulls(): return sum(1 for path in gh['requests'] if path == '/pulls')
+            requests = pulls()
             outcome = {}
             def refresh():
                 try: outcome['value'] = app.call('live-folder-refresh', space=space)
                 except Exception as error: outcome['error'] = str(error)
             worker = threading.Thread(target=refresh, daemon=True); worker.start()
-            started = wait(lambda: len(gh['requests']) > requests, timeout=10, step=.05)
+            started = wait(lambda: pulls() > requests, timeout=10, step=.05)
             moved = app.call('space-profile', space=space, profile='Privacy Work')
             app.call('alert', button='Change Profile')
             moved = moved and wait(lambda: next((s for s in app.call('spaces') if s['id'] == space), {}).get('profile') not in (None, old_profile),
                                    timeout=5, step=.05)
             gate.set(); gh['fetch_gate'] = None
             worker.join(timeout=30)
+            time.sleep(.5)
+            searches = pulls() - requests  # the held search only: the others never run for the old Profile
             stale = app.call('live-folder-state', space=space)
             titles = sorted(r['title'] for r in stale.get('rows', []))
             check('privacy_live_folder_profile_move', [r['title'] for r in first.get('rows', [])] == ['Old profile PR'] and bool(started)
                   and moved is True and 'value' in outcome and outcome['value'].get('outcome') is None
-                  and titles == ['Old profile PR'],
-                  first=[r['title'] for r in first.get('rows', [])], refresh=outcome, titles=titles, moved=moved)
-            # Control: a refresh that starts after the move fetches for the new Profile and applies.
-            fresh = app.call('live-folder-refresh', space=space)
+                  and titles == ['Old profile PR'] and searches == 1,
+                  first=[r['title'] for r in first.get('rows', [])], refresh=outcome, titles=titles, moved=moved, searches=searches)
+            # Control: the new owner's next automatic (throttled) refresh runs at once and applies.
+            fresh = app.call('live-folder-refresh', space=space, manual=False)
             after_move = sorted(r['title'] for r in app.call('live-folder-state', space=space).get('rows', []))
             check('privacy_live_folder_after_move_applies', fresh.get('outcome') == 'success' and 'Fetched for the old Profile' in after_move,
                   refresh=fresh, titles=after_move)

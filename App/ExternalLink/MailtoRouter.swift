@@ -33,6 +33,8 @@ final class MailtoRouter {
     handledCount += 1
     let factory = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
     let context: OEBrowserContext?
+    // The compose page opens in the Profile whose handler made it.
+    let profile = factory?.incognitoSession?.parent.id ?? factory?.focusedProfile?.id
     if let parent = factory?.incognitoSession?.parent {
       // A private session sees none of its regular Profile's handlers: ask that Profile. The
       // compose page then routes like any external link, never into the Incognito window.
@@ -43,7 +45,7 @@ final class MailtoRouter {
     let target = context?.protocolHandlerURL(for: url)
     last = (url.scheme ?? "", target?.absoluteString)
     if let target, ["http", "https"].contains(target.scheme?.lowercased() ?? "") {
-      app.linkIntake.handle(urls: [target], source: source)
+      app.linkIntake.handle(urls: [target], source: source, profile: profile)
       return
     }
     AppDelegate.commandLog("A mailto link arrived with no mail site set up.")

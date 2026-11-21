@@ -17,6 +17,8 @@ enum DeveloperMode {
   @MainActor final class SessionHosts {
     fileprivate var added: Set<String> = []
     fileprivate var removed: Set<String> = []
+    /// A new private session forgets the old one's choices.
+    func reset() { added = []; removed = [] }
   }
 
   static var hosts: Set<String> { Set(stored) }
@@ -44,9 +46,16 @@ enum DeveloperMode {
   static func toggle(host: String, session: SessionHosts? = nil) -> Bool {
     if let session {
       let on = !hosts(session: session).contains(host)
-      // The same cap as the stored list: past it, a new site stays off.
-      if on, session.added.count >= maxHosts { return false }
-      if on { session.removed.remove(host); session.added.insert(host) } else { session.added.remove(host); session.removed.insert(host) }
+      let isStored = stored.contains(host)
+      if on {
+        // `removed` holds only stored sites, `added` only other sites (capped like the stored list).
+        if isStored { session.removed.remove(host) }
+        else if session.added.count < maxHosts { session.added.insert(host) }
+        else { return false }
+      } else {
+        session.added.remove(host)
+        if isStored { session.removed.insert(host) }
+      }
       NotificationCenter.default.post(name: didChange, object: nil)
       return on
     }

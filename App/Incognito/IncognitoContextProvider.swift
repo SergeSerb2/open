@@ -47,17 +47,25 @@ final class IncognitoSession {
   private func start() {
     guard let app else { return }
     starting = true
+    let parentID = parent.id
     IncognitoContextProvider.makeContext(parent: parent, app: app) { [weak self, weak app] context, error in
       guard let self, !self.ended else {
-        if let context { OEEngine.shared.releaseContext(context, completion: nil) }
+        // A late answer for an ended session. The engine shares one private session per parent: when a
+        // live session of the same parent exists, it owns (or will receive) this context. Keep it.
+        if let context, app?.incognitoSessions.hasSession(parent: parentID) != true {
+          OEEngine.shared.releaseContext(context, completion: nil)
+        }
         return
       }
       self.starting = false
       guard let context, error == nil else {
-        // Fail closed. Never create a page on a different Profile.
-        for controller in app?.windowControllers ?? [] where
-          app?.hostFactories[controller.windowID]?.incognitoSession === self {
-          controller.window?.close()
+        // Fail closed. Never create a page on a different Profile. The engine can answer at once, inside
+        // a page request (`liveContext`), so close the windows on the next turn.
+        DispatchQueue.main.async { [weak self, weak app] in
+          guard let self, let app else { return }
+          for controller in app.windowControllers where app.hostFactories[controller.windowID]?.incognitoSession === self {
+            controller.window?.close()
+          }
         }
         return
       }
@@ -72,17 +80,19 @@ final class IncognitoSession {
   }
   /// The session's context for a new page. The engine closes a private session when its last
   /// private Browser closes, that is when every tab of the session is gone (OEEngine.h), while
-  /// Open's Incognito windows stay open. A new page then starts a fresh session (no cookies or
-  /// storage carry over): nil now, and the windows' pages are made when it is ready.
-  func liveContext() -> OEBrowserContext? {
+  /// Open's Incognito windows stay open. With `create`, a new page then starts a fresh session (no
+  /// cookies, storage or site choices carry over): nil now, and the windows' pages are made when it
+  /// is ready. Without `create` (a lookup), a closed session stays closed.
+  func liveContext(create: Bool = true) -> OEBrowserContext? {
     guard let context, context.state == .closed else { return context }
-    guard !ended, !starting else { return nil }
+    guard create, !ended, !starting else { return nil }
     context.delegate = nil
     if let app {
       app.adBlockEngineAdapter.contextClosed(context)
       app.extensionPrompts.unregister(context.extensions)
     }
     self.context = nil
+    pipHosts.disabled = []; translateHosts.reset(); developerModeHosts.reset()
     start()
     return nil
   }
@@ -112,4 +122,5 @@ final class IncognitoSessions {
     if session.windows == 0 { sessions[session.parent.id] = nil; session.end() }
   }
   func closeAll() { for session in sessions.values { session.end() }; sessions.removeAll() }
+  func hasSession(parent: ProfileID) -> Bool { sessions[parent] != nil }
 }

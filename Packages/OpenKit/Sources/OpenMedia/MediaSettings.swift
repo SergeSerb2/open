@@ -21,6 +21,8 @@ import Foundation
     }
     /// Menu actions and policy share this session object in an incognito window.
     @MainActor public final class PrivateHosts {
+        /// Choices come only from the PiP menu; past this many sites a new "Turn off" is ignored.
+        public static let maxHosts = 1_000
         public var disabled: Set<String> = []
         public init() {}
     }
@@ -42,7 +44,7 @@ import Foundation
         let host = Self.canonicalHost(host)
         if let privateSession {
             if enabled { privateSession.disabled = privateSession.disabled.filter { !PiPSiteRules.matches(host, rule: Self.canonicalHost($0)) } }
-            else { privateSession.disabled.insert(host) }
+            else if privateSession.disabled.count < PrivateHosts.maxHosts { privateSession.disabled.insert(host) }
         } else {
             var hosts = autoDisabledHosts
             if enabled { hosts = hosts.filter { !PiPSiteRules.matches(host, rule: Self.canonicalHost($0)) } }
