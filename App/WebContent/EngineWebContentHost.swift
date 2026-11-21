@@ -158,6 +158,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if changes.contains(.loading) || changes.contains(.live) || changes.contains(.crash) {
       owner.app.stores.boosts.existingEditorHost?.pickerAvailabilityChanged(tabID: tabID)
     }
+    if changes.contains(.crash), liveState.isCrashed { owner.pageDidCrash(page) }
     if changes.contains(.loading), page.isLoading { historyRecorder.loadingChanged(true) }
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
       // OEWebContent still exposes the previous document's favicon here.
@@ -360,10 +361,14 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     return true
   }
   func webContent(_ page: OEWebContent, decidePermissionRequest request: OEPermissionRequest) -> Bool {
-    !closed && owner?.webContent(page, decidePermissionRequest: request) == true
+    if !closed, owner?.webContent(page, decidePermissionRequest: request) == true { return true }
+    // As for dialogs: false would mean the engine's own prompt in the hidden Chrome window.
+    // Dismiss, not deny: a page that is gone must not leave a stored block.
+    request.dismiss(); return true
   }
   func webContent(_ page: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
-    !closed && owner?.webContent(page, showContextMenu: menu) == true
+    if !closed, owner?.webContent(page, showContextMenu: menu) == true { return true }
+    menu.cancel(); return true
   }
   func webContent(_ page: OEWebContent, didUpdateFindResult result: OEFindResult) { if !closed { owner?.webContent(page, didUpdateFindResult: result) } }
   func webContent(_ page: OEWebContent, didReceiveOpenWorldMessage type: String, payloadJSON: String, documentID: String) {

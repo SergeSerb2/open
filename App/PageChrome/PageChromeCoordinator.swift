@@ -26,16 +26,22 @@ final class PageChromeCoordinator {
   func handleKey(_ event: NSEvent) -> Bool { existingPermissions?.handleKey(event) == true }
   private var observed: Set<ObjectIdentifier> = []
   private var closeRequests: [ObjectIdentifier: (Bool) -> Void] = [:]
+  /// Pages whose shell-started close (a tab close, Quit) waits on their beforeunload sheet while
+  /// they are not on screen (a Peek under another Peek). The sheet shows anyway: a hidden one
+  /// blocked the renderer and the close (or Quit) for good (bug sweep r4 WC-02, WC-03).
+  private var closingOffscreen: Set<ObjectIdentifier> = []
   init(owner: EngineWebContentHostFactory) {
     self.owner = owner
     dialogs.isVisible = { [weak self] in self?.isVisible($0) == true }
     dialogs.record = { [weak owner] in owner?.record($0, $1, $2) }
     dialogs.onDecision = { [weak self] page, kind, accepted in
+      if kind == .beforeUnload || self?.dialogs.hasPending(page) == false { self?.closingOffscreen.remove(ObjectIdentifier(page)) }
       if kind == .beforeUnload, !accepted { self?.closeRequests.removeValue(forKey: ObjectIdentifier(page))?(false) }
       self?.existingPermissions?.presentPending()
     }
   }
   func isVisible(_ page: OEWebContent) -> Bool {
+    if closingOffscreen.contains(ObjectIdentifier(page)) { return true }
     if let surface = owner.standaloneSurface, surface.surfacePage === page {
       return surface.isSurfaceVisible
     }
@@ -58,7 +64,16 @@ final class PageChromeCoordinator {
       let accepted = owner.dialogPolicy == "accept"
       dialog.complete(accepted: accepted, text: accepted ? owner.promptText ?? dialog.defaultPromptText : nil)
       if dialog.kind == .beforeUnload, !accepted { closeRequests.removeValue(forKey: ObjectIdentifier(page))?(false) }
-    } else { dialogs.enqueue(dialog, page: page, held: owner.dialogPolicy == "hold") }
+    } else {
+      // A close the user started asks now, over the page it closes: show that page (a
+      // background tab), or show the sheet over this window when the page cannot be shown.
+      let key = ObjectIdentifier(page)
+      if dialog.kind == .beforeUnload, closeRequests[key] != nil, !isVisible(page) {
+        owner.revealPageForClose(page)
+        if !isVisible(page) { closingOffscreen.insert(key) }
+      }
+      dialogs.enqueue(dialog, page: page, held: owner.dialogPolicy == "hold")
+    }
     return true
   }
   func request(_ request: OEPermissionRequest, page: OEWebContent) -> Bool {
@@ -79,10 +94,11 @@ final class PageChromeCoordinator {
     dialogs.navigated(page); existingPermissions?.cancel(page: page)
   }
   func cancel(_ page: OEWebContent) {
-    observed.remove(ObjectIdentifier(page)); dialogs.navigated(page); existingPermissions?.cancel(page: page)
+    observed.remove(ObjectIdentifier(page)); closingOffscreen.remove(ObjectIdentifier(page))
+    dialogs.navigated(page); existingPermissions?.cancel(page: page)
     closeRequests.removeValue(forKey: ObjectIdentifier(page))?(false)
   }
-  func close() { dialogs.close(); existingPermissions?.close(); observed.removeAll(); closeRequests.removeAll() }
+  func close() { dialogs.close(); existingPermissions?.close(); observed.removeAll(); closeRequests.removeAll(); closingOffscreen.removeAll() }
 
   /// Page.close enters Chromium's own beforeunload path. Destruction and model
   /// mutation occur only after its close delegate callback, on the next turn.
@@ -105,7 +121,24 @@ final class PageChromeCoordinator {
     }
     return true
   }
+  /// An open or queued dialog that is not this close's own beforeunload: the page cannot run
+  /// beforeunload until it is answered.
+  func dialogBlocksClose(_ page: OEWebContent) -> Bool {
+    closeRequests[ObjectIdentifier(page)] == nil && dialogs.hasPending(page)
+  }
+  /// A live page with unload handlers and such a dialog: a close must not skip its beforeunload.
+  func closeBlockedByDialog(_ page: OEWebContent) -> Bool {
+    page.crashState == .none && page.hasUnloadHandlers && dialogBlocksClose(page)
+  }
+  /// Shows a page's queued dialogs over its window even though the page is not on screen (a
+  /// Peek under another Peek), until they are answered: a stopped Quit or close must never
+  /// leave nothing to answer.
+  func showDialogsOffscreen(_ page: OEWebContent) {
+    if !isVisible(page) { closingOffscreen.insert(ObjectIdentifier(page)) }
+    visibilityChanged()
+  }
   func pageRequestedClose(_ page: OEWebContent) -> Bool {
+    closingOffscreen.remove(ObjectIdentifier(page))
     guard let completion = closeRequests.removeValue(forKey: ObjectIdentifier(page)) else { return false }
     DispatchQueue.main.async { completion(true) }
     return true
@@ -167,7 +200,15 @@ final class PageQuitCoordinator {
       running = false; accepted = true; NSApp.terminate(nil); return
     }
     let (owner, page) = remaining.removeFirst()
-    if let window = owner.standaloneSurface?.surfaceWindow { window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged() }
+    if let window = owner.standaloneSurface?.surfaceWindow {
+      if window.isMiniaturized { window.deminiaturize(nil) }
+      window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged()
+    }
+    else if let window = owner.window {
+      // A sheet on a minimized or hidden window is never seen: Quit would wait for ever.
+      if window.isMiniaturized { window.deminiaturize(nil) }
+      window.makeKeyAndOrderFront(nil)
+    }
     if let id = owner.tabID(for: page), let space = owner.space(containing: id) { owner.focus(space: space); owner.select(nodeID: id) }
     // Page.close destroys an accepted page before the normal quit snapshot.
     // Preserve its browser-owned history first, without stopping tab sleep
@@ -184,6 +225,16 @@ final class PageQuitCoordinator {
     }
   }
   private func askClose(owner: EngineWebContentHostFactory, page: OEWebContent) {
+    // The page shows a dialog (or has one queued): its beforeunload cannot run until that
+    // dialog is answered, and requestClose would skip the page, so Quit lost its unsaved
+    // changes without asking. Stop this Quit and leave the page and its dialog on screen
+    // (bug sweep r4 WC-02); the next Quit asks again.
+    if owner.pageChrome.closeBlockedByDialog(page) {
+      running = false; remaining.removeAll(); selections.removeAll()
+      app.quitWarning.resetApproval()
+      owner.pageChrome.showDialogsOffscreen(page)
+      return
+    }
     let waits = owner.pageChrome.requestClose(page) { [weak self, weak owner, weak page] allowed in
       guard let self else { return }
       if allowed {

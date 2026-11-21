@@ -86,10 +86,14 @@
   return self;
 }
 
+// Each answer clears the ivar before it calls CEF: a call that reenters (a
+// navigation or close that cancels or frees this wrapper) finds no callback
+// and cannot answer twice (as OEAuthenticationRequest does).
 - (void)completeWithAccepted:(BOOL)accepted text:(NSString*)text {
-  if (_callback) {
-    _callback->Continue(accepted, OECef(text ?: @""));
-    _callback = nullptr;
+  CefRefPtr<CefJSDialogCallback> callback = _callback;
+  _callback = nullptr;
+  if (callback) {
+    callback->Continue(accepted, OECef(text ?: @""));
   }
 }
 
@@ -134,17 +138,19 @@
 }
 
 - (void)oe_finish:(cef_permission_request_result_t)result {
-  if (_media) {
+  CefRefPtr<CefMediaAccessCallback> media = _media;
+  CefRefPtr<CefPermissionPromptCallback> prompt = _prompt;
+  _media = nullptr;
+  _prompt = nullptr;
+  if (media) {
     if (result == CEF_PERMISSION_RESULT_ACCEPT) {
-      _media->Continue(_mediaRequested);
+      media->Continue(_mediaRequested);
     } else {
-      _media->Cancel();
+      media->Cancel();
     }
-    _media = nullptr;
   }
-  if (_prompt) {
-    _prompt->Continue(result);
-    _prompt = nullptr;
+  if (prompt) {
+    prompt->Continue(result);
   }
 }
 
@@ -156,6 +162,10 @@
 }
 - (void)dismiss {
   [self oe_finish:CEF_PERMISSION_RESULT_DISMISS];
+}
+- (void)oe_releaseCallback {
+  _media = nullptr;
+  _prompt = nullptr;
 }
 - (void)dealloc {
   [self oe_finish:CEF_PERMISSION_RESULT_IGNORE];
@@ -331,15 +341,21 @@ static void OECollectCommands(NSArray<OEContextMenuItem*>* items,
     [self cancel];
     return;
   }
-  _callback->Continue((int)commandIdentifier, EVENTFLAG_NONE);
+  CefRefPtr<CefRunContextMenuCallback> callback = _callback;
   _callback = nullptr;
+  callback->Continue((int)commandIdentifier, EVENTFLAG_NONE);
 }
 
 - (void)cancel {
-  if (_callback) {
-    _callback->Cancel();
-    _callback = nullptr;
+  CefRefPtr<CefRunContextMenuCallback> callback = _callback;
+  _callback = nullptr;
+  if (callback) {
+    callback->Cancel();
   }
+}
+
+- (void)oe_releaseCallback {
+  _callback = nullptr;
 }
 
 - (void)dealloc {

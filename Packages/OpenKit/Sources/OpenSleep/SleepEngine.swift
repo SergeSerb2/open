@@ -55,6 +55,13 @@ public protocol SleepEngine: AnyObject {
     func captureHistory(tabID: ItemID) -> SleepHistoryEnvelope?
     func hasUnloadHandlers(tabID: ItemID) -> Bool
     func handleCriticalPressure()
+    /// True once after createContent returned false because the tab or its page closed while it
+    /// waited (a close or Unload, not a bad history). The controller then makes no fallback page.
+    func takeCreationCancelled(tabID: ItemID) -> Bool
+}
+
+public extension SleepEngine {
+    func takeCreationCancelled(tabID: ItemID) -> Bool { false }
 }
 
 /// One app-owned snapshot, read once at the start of each controller pass.

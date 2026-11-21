@@ -281,6 +281,158 @@ def run(factory, results, tmp, h):
                          and app.eval(tab,'document.title')=='Quit survivor',state=state)
         gate('dialog_quit_cancel',quit_cancel_identity)
 
+        def arm(target):
+            # A real click gives Chromium the sticky activation its beforeunload contract needs.
+            app.eval(target,'document.body.innerHTML="<button id=arm>Arm</button>";document.querySelector("#arm").onclick=()=>{onbeforeunload=e=>{e.preventDefault();e.returnValue="unsaved"}};true')
+            app.call('click',tab=target,selector='#arm')
+            assert wait(lambda:app.call('engine-sleep',tab=target)['unloadHandlers'],timeout=3,step=.02)
+        def alive():
+            try: return app.call('ping')['pid']==app.pid
+            except Exception: return False
+
+        def background_close():
+            # WC-03: closing a background tab whose beforeunload asks must show that tab and its
+            # sheet; it used to queue an invisible sheet and leave the renderer blocked.
+            target = page(); arm(target); other = page()
+            app.call('close', tab=target)
+            state = visible(ds); shown = app.call('window-state')['selected']
+            answer(False)
+            stays = any(t['id'] == target for t in app.call('tabs'))
+            app.call('select', tab=other); app.call('close', tab=target)
+            visible(ds); answer()
+            gone = wait(lambda: all(t['id'] != target for t in app.call('tabs')), timeout=3, step=.02)
+            return check(state['title'] == 'Leave site?' and shown == target and stays and gone,
+                         state=state, shown=shown, target=target, stays=stays, gone=bool(gone))
+        gate('dialog_beforeunload_background_close', background_close)
+
+        def quit_with_pending_dialog():
+            # WC-02: a page that asks beforeunload and also has an open dialog must not let Quit
+            # skip its beforeunload (the App used to terminate at once).
+            page(); arm(tab)
+            app.call('policy', dialogs='hold'); schedule('confirm("held during quit")')
+            assert wait(lambda: ds()['pending'] == 1, timeout=3, step=.02), ds()
+            app.call('quit'); time.sleep(1.5)
+            survived = alive()
+            if not survived: return check(False, survived=False)
+            app.call('dialog', accept=False); app.call('policy', dialogs='')
+            assert wait(lambda: ds()['pending'] == 0, timeout=3, step=.02), ds()
+            # The refused quit must not leave the preflight stuck: the next Quit asks again.
+            app.call('quit'); state = visible(ds); answer(False)
+            return check(state['title'] == 'Leave site?' and alive(), survived=survived, state=state)
+        gate('dialog_quit_pending_dialog', quit_with_pending_dialog)
+
+        def close_with_pending_dialog():
+            # #645 review: closing a tab that asks beforeunload while it shows a dialog keeps the
+            # tab (the close used to skip beforeunload); after the answer, the close asks.
+            target = page(); arm(target)
+            app.call('policy', dialogs='hold'); schedule('confirm("held during close")')
+            assert wait(lambda: ds()['pending'] == 1, timeout=3, step=.02), ds()
+            app.call('close', tab=target); time.sleep(.5)
+            kept = any(t['id'] == target for t in app.call('tabs'))
+            app.call('dialog', accept=False); app.call('policy', dialogs='')
+            assert wait(lambda: ds()['pending'] == 0, timeout=3, step=.02), ds()
+            app.call('close', tab=target); state = visible(ds); answer()
+            gone = wait(lambda: all(t['id'] != target for t in app.call('tabs')), timeout=3, step=.02)
+            return check(kept and state['title'] == 'Leave site?' and gone, kept=kept, state=state)
+        gate('dialog_close_pending_dialog', close_with_pending_dialog)
+
+        def quit_buried_peek():
+            # WC-02: a beforeunload page under another Peek used to hang Quit for good.
+            source = page()
+            app.call('peek-open', tab=source, url=origin + '/peek-one?' + str(time.time_ns()))
+            first = wait(lambda: (lambda s: s['stack'][0]['content'] if s['stack'] and s['stack'][0]['content'] else None)(app.call('peek-state')), timeout=5, step=.05)
+            assert first, app.call('peek-state')
+            assert wait(lambda: app.eval(first, 'document.readyState') == 'complete', timeout=5, step=.05)
+            arm(first)
+            app.call('peek-open', tab=source, url=origin + '/peek-two?' + str(time.time_ns()))
+            assert wait(lambda: len(app.call('peek-state')['stack']) == 2, timeout=5, step=.05), app.call('peek-state')
+            app.call('quit')
+            state = wait(lambda: (lambda s: s if s.get('visible') else None)(ds()), timeout=5, step=.05)
+            if state: answer(False)
+            survived = alive()
+            if survived:
+                app.eval(first, 'onbeforeunload=null;true', timeout=1); app.call('peek-close')
+            return check(bool(state) and state['title'] == 'Leave site?' and survived, state=state, survived=survived)
+        gate('dialog_quit_buried_peek', quit_buried_peek)
+
+        def ws(): return app.call('window-state')
+        def settled(full, page_full):
+            return wait(lambda: (lambda s: s if s['fullscreen'] == full and s['pageFullscreen'] == page_full
+                                 and not s['fullscreenTransition'] else None)(ws()), timeout=15, step=.1)
+        def enter_page_fullscreen(target):
+            result = app.eval(target, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+            entered = settled(True, True)
+            assert result == 'ok' and entered, {'request': result, 'state': ws()}
+        def fullscreen_rows(how):
+            # WC-01: page fullscreen ends with its page. A closed, hidden or window-exited page
+            # used to leave the window in full screen with the sidebar hidden for good.
+            assert not ws()['fullscreen'], ws()
+            target = page(); other = None
+            if how == 'switch': other = page(); app.call('select', tab=target)
+            enter_page_fullscreen(target)
+            if how == 'close': app.call('close', tab=target)
+            elif how == 'switch': app.call('select', tab=other)
+            elif how == 'window': app.call('window-fullscreen')
+            elif how == 'peek': app.call('peek-open', tab=target, url=origin + '/peek-fs?' + str(time.time_ns()))
+            after = settled(False, False) or ws()
+            doc = None if how == 'close' else app.eval(target, '!!document.fullscreenElement')
+            if ws()['fullscreen']: app.call('window-fullscreen'); settled(False, ws()['pageFullscreen'])
+            if how == 'peek': app.call('peek-close')
+            return check(not after['fullscreen'] and not after['pageFullscreen'] and after['sidebarVisible'] and not doc,
+                         after={k: after.get(k) for k in ('fullscreen', 'pageFullscreen', 'sidebarVisible', 'fullscreenTransition')},
+                         documentFullscreen=doc)
+        for how in ('close', 'switch', 'window', 'peek'):
+            gate('fullscreen_ends_on_' + how, lambda how=how: fullscreen_rows(how))
+
+        def fullscreen_background():
+            # WC-01: a page not shown in this window cannot take the window into full screen.
+            target = page(); page()
+            result = app.eval(target, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+            time.sleep(1.5); state = ws(); doc = app.eval(target, '!!document.fullscreenElement')
+            if state['fullscreen']: app.call('window-fullscreen'); settled(False, False)
+            return check(not state['fullscreen'] and not state['pageFullscreen'] and not doc,
+                         request=result, documentFullscreen=doc,
+                         state={k: state.get(k) for k in ('fullscreen', 'pageFullscreen', 'sidebarVisible')})
+        gate('fullscreen_background_refused', fullscreen_background)
+
+        def popup_menu_profile():
+            # WC-11 (#645 review): a popup panel of Profile "Menu Work" stays open after the window
+            # switches to the Default Profile. Its "Open Link in New Tab" opens in a Work Space, and
+            # opens nothing once Work has no Space; it used to open in the focused Default Space.
+            home = ws()['space']
+            work = app.call('space-create', title='Menu Work', profile='Menu Work')
+            page(); app.eval(tab, 'void window.open(%s, "pm", "popup,width=520,height=420")' % json.dumps(origin + '/menu-popup'))
+            popup = wait(lambda: next((x['identifier'] for x in app.call('pages') if x['kind'] == 'popup'), None), timeout=5, step=.05)
+            assert popup, app.call('pages')
+            def link_tabs(space):
+                app.call('space', space=space)
+                return [t['id'] for t in app.call('tabs') if '/menu-link' in t.get('url', '')]
+            def open_link(name):
+                url = origin + '/menu-link-' + name
+                app.eval(popup, 'document.body.innerHTML=%s;true' % json.dumps('<a id=l href="%s" style="position:fixed;left:20px;top:20px">link</a>' % url))
+                x, y = app.eval(popup, '(r=>[r.left+5,r.top+5])(document.querySelector("#l").getBoundingClientRect())')
+                app.call('space', space=home)
+                app.call('policy', contextMenu='run-open:Open Link in New Tab'); app.call('events')
+                app.call('rightclick', tab=popup, x=x, y=y)
+                return wait(lambda: any(e['type'] == 'contextMenu' for e in app.call('events')), timeout=5, step=.05)
+            try:
+                assert wait(lambda: app.eval(popup, 'document.readyState') == 'complete', timeout=5, step=.05)
+                shown = open_link('a'); time.sleep(.5)
+                in_home, in_work = link_tabs(home), link_tabs(work)
+                for t in in_home + in_work: app.call('close', tab=t)
+                # Work loses its last Space: the popup's Profile has none now.
+                app.call('space', space=home); assert app.call('space-profile', space=work, profile='Default')
+                if any(p['name'] == 'Menu Work' and p['spaces'] for p in app.call('profiles-shell')['profiles']):
+                    app.call('alert', button='Change Profile')
+                spaceless = open_link('b'); time.sleep(.5)
+                stray = [t for t in link_tabs(home) + link_tabs(work) if t not in in_home + in_work]
+                for t in stray: app.call('close', tab=t)
+            finally:
+                app.call('policy', contextMenu=''); app.call('close', tab=popup); app.call('space', space=home)
+            return check(shown and in_work and not in_home and spaceless and not stray,
+                         inWork=in_work, inHome=in_home, stray=stray)
+        gate('menu_link_uses_page_profile', popup_menu_profile)
+
         # Fresh localhost origins avoid Chromium's repeated-denial embargo.
         port = server.server_address[1]
         def permission_page(host):
