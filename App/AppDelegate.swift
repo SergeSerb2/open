@@ -1020,25 +1020,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     #endif
   }
 
-  private func downloadOwner(_ download: OEDownload) -> EngineWebContentHostFactory? {
+  /// The window that owns the download's page. A download without one (an engine-owned
+  /// extension window, a popup Chromium opened itself, a page closed while it waited) is routed
+  /// by its context, never by the front window (bug sweep r3 W4): the front window may be an
+  /// Incognito window of another session, or a regular one for a private download.
+  private func downloadOwner(_ download: OEDownload, context: OEBrowserContext) -> EngineWebContentHostFactory? {
     if let page = download.webContent {
       if let host = littleOpenHosts.values.first(where: { $0.content === page }) { return host.owner }
-      return hostFactories.values.first { $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } }
+      if let owner = hostFactories.values.first(where: { $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } }) { return owner }
     }
-    return frontWindowController.flatMap { hostFactories[$0.windowID] }
+    guard context.isEphemeral || context.originalContext != nil else { return nil }
+    // Window order, not front order: the destination and its later updates reach the same
+    // window, whose private reservation the final update releases.
+    return windowControllers.lazy.compactMap { self.hostFactories[$0.windowID] }.first { $0.incognitoSession?.context === context }
   }
 
   func browserContext(_ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String, completion: @escaping @MainActor (URL?) -> Void) {
     #if OPEN_AUTOMATION
     if AutomationOwnerWatch.quittingWithoutPrompts { completion(nil); return }
     #endif
-    guard let owner = downloadOwner(download) else { completion(nil); return }
-    owner.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
+    if let owner = downloadOwner(download, context: context) {
+      owner.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
+      return
+    }
+    // A private download with no window of its own session left: cancel, as before.
+    guard !context.isEphemeral, context.originalContext == nil else { completion(nil); return }
+    // A regular one goes to its Profile's Downloads. The front regular window only supplies the
+    // sheet parent (and an automation folder override); the Profile comes from the context.
+    if let front = (frontMainModelWindowController ?? frontStandardWindowController).flatMap({ hostFactories[$0.windowID] }) {
+      front.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
+    } else {
+      downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: nil, completion: completion)
+    }
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
     downloadsCenter.updated(download, context: context)
-    downloadOwner(download)?.browserContext(context, downloadDidUpdate: download)
+    downloadOwner(download, context: context)?.browserContext(context, downloadDidUpdate: download)
   }
 
   /// A web notification was clicked (EP-6); §4.5.4's 500 ms fallback selects its tab.
