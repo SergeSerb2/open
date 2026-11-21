@@ -1698,9 +1698,9 @@
               "selected": view.isAccessibilitySelected(), "actions": (view.accessibilityCustomActions() ?? []).map(\.name),
               "class": String(describing: type(of: view))])
           }
-          // VoiceOver does not see inside an element (its subviews are not AX children).
-          if view.isAccessibilityElement() { return }
-          for child in view.subviews { walk(child, depth: depth + 1) }
+          // Inside an element VoiceOver follows its accessibility children, not its subviews.
+          let next = view.isAccessibilityElement() ? (view.accessibilityChildren() ?? []).compactMap { $0 as? NSView } : view.subviews
+          for child in next { walk(child, depth: depth + 1) }
         }
         walk(root, depth: 0)
         return elements
