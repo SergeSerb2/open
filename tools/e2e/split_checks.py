@@ -464,6 +464,22 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             expanded=expanded['maximized'], left={k: left[k] for k in ('id', 'selected', 'maximized')},
             back={k: back[k] for k in ('id', 'selected', 'focused', 'maximized')}, shown=shown(), panes=order_panes)
         unsplit()
+        # Bug sweep round 4 (SB-13): Restore Last Closed Tab puts a closed pane back into its split
+        # with one share per pane. The split kept the old shares (2 for 3 panes) in the model.
+        r4 = [opened('r4-pane-' + n) for n in 'abc']
+        select(r4[0]); x, y, w, height = state()['container']
+        for tid in r4[1:]:
+            assert app.call('split', op='drop', node=tid, point=[x+w-12, y+height/2])['accepted']
+        r4_split = settled(3)
+        app.call('focus', tab=r4[2]); menu('Close This Pane'); settled(2)
+        app.call('menu-perform', id='restore-last-closed-tab')
+        r4_back = h.wait_until(lambda: (lambda s: s if len(s['panes']) == 3 else None)(state()), timeout=5, step=.05) or state()
+        app.call('save')
+        r4_fractions = r4_back['fractions']
+        row('restored_pane_rebalances_split', r4_split['id'] and r4_back['id'] == r4_split['id'] and len(r4_back['panes']) == 3
+            and len(r4_fractions) == 3 and abs(sum(r4_fractions) - 1) < 1e-6,
+            fractions=r4_fractions, panes=[p['id'] for p in r4_back['panes']])
+        unsplit()
         # LEAD 11:50: Close This Pane keeps the closed page drawn while its box collapses,
         # so chrome.tabs reports onRemoved after the strip change. onRemoved must arrive
         # <= 400 ms after the command, and tabs.get must answer for the tab until then.

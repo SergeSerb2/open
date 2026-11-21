@@ -599,6 +599,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return
         }
         let size = root.bounds.size, hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
+        // The card exists only over a hidden sidebar. A mode change that did not come through
+        // toggleSidebar (Cmd+Z of Hide Sidebar) drops it here, before the anchored layout.
+        if cardState != .off, !hidden { removeRevealCard(); return }
         let width = context.sidebarWidth
         let panelFrame = pageFrameOutsideLibrary()
         if background.frame != root.bounds { background.frame = root.bounds }
@@ -1791,8 +1794,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
         dimmedLights.syncWithPointer()
     }
-    public func windowWillBeginSheet(_ notification: Notification) { cancelSidebarResize() }
-    public func windowDidResignKey(_ notification: Notification) { cancelSidebarResize(); existingTabSwitcher?.cancel(); let active = (themeEditor != nil || spaceCreationController?.themeEditor != nil) && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
+    // Another Open window, or a sheet, takes the pointer: no pointer events reach this window to
+    // hide its hover-reveal card, as when another app becomes active.
+    public func windowWillBeginSheet(_ notification: Notification) { cancelSidebarResize(); dismissSidebarReveal() }
+    public func windowDidResignKey(_ notification: Notification) { cancelSidebarResize(); dismissSidebarReveal(); existingTabSwitcher?.cancel(); let active = (themeEditor != nil || spaceCreationController?.themeEditor != nil) && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { siteControl?.dismiss(reason: .sourceUnavailable, animated: false); context.isWindowActive = window?.isKeyWindow == true }
@@ -1904,6 +1909,10 @@ extension BrowserWindowController {
     /// Delete folder(s): alert, one undo step, then the toast. The captured normal mixed menu
     /// archives each contained tab separately; other callers retain folder records.
     func confirmDeleteFolders(_ ids: [ItemID], archiveFolderTabs: Bool = false) -> Bool {
+        // A Live Folder is never archived (keyboard Delete and a selection's Delete come here, not
+        // through its row menu): alone, it is Delete Live Folder; in a selection it is removed.
+        let live = ids.filter { model.node(id: $0)?.folder?.live != nil }
+        if ids.count == 1, let id = live.first { return confirmDeleteLiveFolder(id) }
         guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids, quoteTitle: archiveFolderTabs) else { return false }
         let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
         let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
@@ -1913,8 +1922,15 @@ extension BrowserWindowController {
             self.pendingConfirmation = nil
             guard confirmed else { return }
             var archived = 0
-            self.keepingSelection { archived = self.model.archiveNodes(ids: ids, archiveFolderTabs: archiveFolderTabs) }
-            guard archived > 0 else { return }
+            self.keepingSelection {
+                self.model.asOneUndoStep {
+                    for id in live { self.model.removeLiveFolder(id: id) }
+                    let rest = ids.filter { !live.contains($0) }
+                    archived = rest.isEmpty ? 0 : self.model.archiveNodes(ids: rest, archiveFolderTabs: archiveFolderTabs)
+                }
+            }
+            if !live.isEmpty { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
+            guard archived > 0 || !live.isEmpty else { return }
             self.refresh(); restoreKeyboardFocus(); self.changed()
             self.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
         }

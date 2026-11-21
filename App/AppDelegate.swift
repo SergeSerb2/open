@@ -648,6 +648,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // Closing the final window keeps its state for reopen and relaunch.
     // A Blank Window is not a main-model window: its Space is not in `model`.
     if frontMainModelWindowController == nil, let state = model.windows.first(where: { $0.style == .standard }) {
+      // The caller's Space first (another Profile's extension page, a page's new window): the
+      // retained state still shows the Space it closed on, and no page may load there first.
+      if let focusedSpaceID, model.space(id: focusedSpaceID) != nil, state.focusedSpaceID != focusedSpaceID {
+        withoutWindowUndo { model.focusSpace(windowID: state.id, spaceID: focusedSpaceID) }
+      }
       return createWindowController(state: state)
     }
     guard let spaceID = focusedSpaceID ?? frontMainModelWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,

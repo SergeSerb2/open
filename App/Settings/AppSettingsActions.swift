@@ -378,11 +378,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     case .favorites, .splitPane: space = nil
     }
     guard let space, model.space(id: space) != nil else { return false }
-    let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
-    // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
-    if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
-    if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
-    else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+    // The new tab, its move and its selection are one Undo step.
+    model.asOneUndoStep {
+      let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
+      // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
+      if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
+      if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
+      else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+    }
     app.scheduleSave(); app.scheduleMenuRebuild()
     return true
   }
