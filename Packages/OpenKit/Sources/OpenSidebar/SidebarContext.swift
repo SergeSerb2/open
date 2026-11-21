@@ -468,8 +468,11 @@ public final class SidebarContext {
         }
         switch commandID {
         case "pin-unpin-tab":
+            // A split has no Pin action (a single selected split disables Cmd+D); a
+            // selection skips it, as it skips Favorites and folders.
             return ids.contains { id in
-                guard topLevel(id), model.node(id: id)?.folder == nil, let parent = model.parent(of: id) else { return false }
+                guard topLevel(id), let node = model.node(id: id), node.folder == nil, node.split == nil,
+                      let parent = model.parent(of: id) else { return false }
                 if case .favorites = parent { return false }
                 return true
             }
@@ -525,11 +528,13 @@ public final class SidebarContext {
         switch commandID {
         case "pin-unpin-tab":
             let pinnable = ids.filter { id in
-                guard model.node(id: id)?.folder == nil, let parent = model.parent(of: id) else { return false }
+                guard let node = model.node(id: id), node.folder == nil, node.split == nil,
+                      let parent = model.parent(of: id) else { return false }
                 switch parent { case .favorites, .splitPane: return false; default: return true }
             }
             guard !pinnable.isEmpty else { return false }
-            return send(.setPinned(ids: ids, pinned: !pinnable.allSatisfy { model.isPinned(tabID: $0) }))
+            return send(.setPinned(ids: ids.filter { model.node(id: $0)?.split == nil },
+                                   pinned: !pinnable.allSatisfy { model.isPinned(tabID: $0) }))
         case "duplicate-tab": return send(.duplicateNodes(ids: ids))
         case "new-folder": return send(.newFolderFromSelection(ids: ids))
         default: return false

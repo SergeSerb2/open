@@ -27,6 +27,7 @@ import math
 import glob
 import hashlib
 import re
+import sqlite3
 import runpy
 import os
 import shutil
@@ -5071,6 +5072,32 @@ def sidebar_checks(factory, results, tmp):
         app.call("sidebar-clear")
         results["clear_today"] = {"ok": [t["id"] for t in app.call("tabs")] == [a]
                                        and len(app.call("archive")) >= 3}
+        # Bug sweep round 3 (W8): a second Space switch while the first one's cover is up, in a
+        # panel over the cover's 16 Mpx image limit (a large 2x display; here an unconstrained
+        # 1x window). The running slide cannot fold into an image, so the switch applies without
+        # a cover. Before, it returned early with the first cover's callbacks cancelled: the cover
+        # stayed up for good and took every click in the panel.
+        w8_home = next(s for s in app.call("spaces") if s["focused"])["id"]
+        w8_space = app.call("space-create", title="W8 Wide")
+        w8_tab = new_tab(app, fixture("Sidebar W8"))
+        app.call("space", space=w8_home)
+        app.call("select", tab=a)
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+        app.call("window-motion", reduced=False)
+        w8_frame = [float(v) for v in re.findall(r"-?[\d.]+", app.call("window-frame"))]
+        app.call("window-frame", frame=[0, 0, 5200, 3600], unconstrained=True)
+        time.sleep(.5)
+        app.call("space", space=w8_space)
+        w8_first = app.call("window-motion")["spacePage"]["phase"]
+        app.call("space", space=w8_home)
+        w8_idle = wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
+        w8_after = app.call("window-motion")["spacePage"]
+        w8_page = check_page(app, a, "Sidebar A")
+        app.call("window-frame", frame=w8_frame)
+        results["W8_interrupted_wide_switch_retires_cover"] = {
+            "ok": w8_first != "idle" and bool(w8_idle) and w8_page,
+            "first_phase": w8_first, "after": w8_after, "page_shown": w8_page, "restored_frame": w8_frame,
+            "w8_tab": w8_tab}
         s1 = next(s for s in app.call("spaces") if s["focused"])["id"]
         s2 = app.call("space-create", title="Work", profile="Work")
         e = new_tab(app, fixture("Sidebar E"))
@@ -11781,6 +11808,59 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
     require('R2_stale_folder_row_does_not_block_restore', stale_archived and fixture and dropped and restored and stale in sidebar_ids(),
             fixture=fixture, fixtureDetail=fixture_detail, stale=stale, kept=kept, staleInSidebar=stale in sidebar_ids(), archive=archive_ids()[:3],
             dropped=bool(dropped), restored=bool(restored))
+    # Bug sweep round 3. Both rows are measured before either is asserted.
+    # L2: Cmd+D on an outline selection skips a split, as a selected split disables Pin. Before,
+    # the selection path pinned the whole split (a split row clicked alone, or with a tab).
+    def section_of(node):
+        tree = app.call('sidebar-tree')
+        return 'pinned' if any(n['id'] == node for n in tree['pinned']) else 'today' if any(n['id'] == node for n in tree['today']) else None
+    def sidebar_key(name, mods=()): return app.call('sidebar-key', key=name, modifiers=list(mods))
+    l2_left = opened('R3 Split Left'); opened('R3 Split Right'); app.call('select', tab=l2_left); settle()
+    app.call('split'); settle()
+    l2_split = app.call('split', op='state')['id']
+    l2_lone = opened('R3 Lone')
+    app.call('sidebar-click', node=l2_split); settle()
+    sidebar_key('d', ['cmd']); settle()
+    l2_single = section_of(l2_split)
+    app.call('sidebar-click', node=l2_split); app.call('sidebar-click', node=l2_lone, modifiers=['cmd']); settle()
+    l2_selection = app.call('selection')
+    sidebar_key('d', ['cmd']); settle()
+    l2_mixed = dict(split=section_of(l2_split), lone=section_of(l2_lone))
+    r3_rows = [('R3_selection_pin_skips_split', bool(l2_split) and l2_single == 'today' and l2_mixed == dict(split='today', lone='pinned'),
+        dict(split=l2_split, singleSplitSection=l2_single, mixed=l2_mixed, selection=l2_selection))]
+    # L3: an Archive row that cannot come back (here a folder row with an undecodable payload)
+    # is kept and skipped; Cmd+Shift+T restores the next row. Before, every press stopped there.
+    l3_kept = opened('R3 Kept Closed')
+    app.call('close', tab=l3_kept); settle()
+    l3_child = opened('R3 Broken Child')
+    l3_folder = app.call('folder', tabs=[l3_child], title='R3 Broken')
+    l3_archived = delete_folder(l3_folder)
+    l3_snapshot = app.call('save'); app.quit()
+    l3_patched = 0
+    for parent in list(Path(l3_snapshot).parents)[:3]:
+        for database in parent.glob('**/archive.sqlite3'):
+            connection = sqlite3.connect(str(database))
+            try:
+                l3_patched += connection.execute("UPDATE archived_tabs SET payload='{not json' WHERE id=? COLLATE NOCASE AND kind='folder'",
+                                                 (l3_folder,)).rowcount
+                connection.commit()
+            finally:
+                connection.close()
+        if l3_patched: break
+    app = launch(); app.call('space', space=space); settle()
+    l3_fixture = archive_ids()[:2] == [l3_folder, l3_kept] and l3_kept not in sidebar_ids()
+    l3_fixture_detail = archive_ids()[:3]
+    command('restore-last-closed-tab')
+    l3_restored = wait_until(lambda: l3_kept in sidebar_ids(), timeout=5)
+    r3_rows.append(('R3_unrestorable_archive_row_skipped', l3_archived and l3_patched == 1 and l3_fixture and bool(l3_restored)
+        and l3_folder in archive_ids() and l3_folder not in sidebar_ids(),
+        dict(archived=bool(l3_archived), patched=l3_patched, fixture=l3_fixture, archiveBefore=l3_fixture_detail,
+             restored=bool(l3_restored), archiveAfter=archive_ids()[:3], folder=l3_folder, kept=l3_kept)))
+    r3_failed = None
+    for name, condition, detail in r3_rows:
+        try: require(name, condition, **detail)
+        except AssertionError: r3_failed = r3_failed or name
+    if r3_failed: raise AssertionError(r3_failed)
     return app
 
 
