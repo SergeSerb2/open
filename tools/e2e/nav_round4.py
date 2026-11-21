@@ -326,6 +326,45 @@ def run(factory, results, tmp, h):
             app.call('select', tab=start)
         guarded('nav4_cmd_l_during_wake_keeps_typed_and_back', wake_navigation, end_wake)
 
+        # F-05: a blank Little Open whose address never commits (a download) gets its bar back: input,
+        # Esc and close stay. The download goes to this run's own folder.
+        def little_open_download():
+            import http.server, tempfile, threading
+            class Download(http.server.BaseHTTPRequestHandler):
+                def do_GET(self):
+                    body = b'nav4 download fixture\n'
+                    self.send_response(200); self.send_header('Content-Type', 'application/octet-stream')
+                    self.send_header('Content-Disposition', 'attachment; filename="nav4-fixture.bin"')
+                    self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+                def log_message(self, *args): pass
+            files = h.LoopbackHTTPServer(Download)
+            threading.Thread(target=files.serve_forever, daemon=True).start()
+            folder = tempfile.mkdtemp(prefix='nav4-downloads-', dir=tmp)
+            try:
+                app.call('download-settings', profile=profile_a, directory=folder, ask=False)
+                app.call('space', space=space_a['id'])
+                before = {x['id'] for x in app.call('little-open-state')['sessions']}
+                app.call('menu-perform', id='new-little-open-window')
+                session = wait_until(lambda: next((x for x in app.call('little-open-state')['sessions'] if x['id'] not in before), None), timeout=5, step=.1)
+                target = 'http://127.0.0.1:%d/nav4-download' % files.server_address[1]
+                app.call('key', window=session['window'], text=target + '\r')
+                import os
+                saved = wait_until(lambda: [f for f in os.listdir(folder) if f.startswith('nav4-fixture')] or None, timeout=10, step=.1)
+                back = wait_until(lambda: next((x for x in app.call('little-open-state')['sessions']
+                                                if x['id'] == session['id'] and x['state'] == 'bar' and x['barPresented']), None), timeout=5, step=.1)
+                after = next((x for x in app.call('little-open-state')['sessions'] if x['id'] == session['id']), {})
+                closed = False
+                if back:
+                    app.call('key', window=session['window'], key='escape')
+                    closed = wait_until(lambda: not any(x['id'] == session['id'] for x in app.call('little-open-state')['sessions']), timeout=5, step=.1)
+                row('nav4_little_open_bar_back_after_download', bool(saved) and bool(back) and bool(closed),
+                    saved=saved, state=after.get('state'), barPresented=after.get('barPresented'), closedByEsc=bool(closed))
+            finally:
+                for x in app.call('little-open-state')['sessions']:
+                    app.call('little-open-action', id=x['id'], action='close')
+                files.shutdown(); files.server_close()
+        guarded('nav4_little_open_bar_back_after_download', little_open_download)
+
         # F-04: closing the last browser window stops Handoff advertising its page.
         def handoff_last_window():
             app.call('select', tab=start)
