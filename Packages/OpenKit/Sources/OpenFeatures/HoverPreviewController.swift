@@ -93,7 +93,7 @@ public final class HoverPreviewController {
         case .gmail(let account):
             let view = MailPreviewView(context: context, tab: tab, account: account)
             view.onOpen = { [weak self] url in
-                self?.closeAfterChoice()
+                self?.hide(animated: false)
                 self?.openPeek?(url, id)
             }
             view.onResize = { [weak self] in self?.layout() }
@@ -101,7 +101,7 @@ public final class HoverPreviewController {
         case .recents(let site):
             let view = RecentsPreviewView(context: context, tab: tab, site: site)
             view.onOpen = { [weak self] url in
-                self?.closeAfterChoice()
+                self?.hide(animated: false)
                 self?.openPeek?(url, id)
             }
             view.onResize = { [weak self] in self?.layout() }
@@ -110,11 +110,11 @@ public final class HoverPreviewController {
             guard let source = context.calendarGlance else { return false }
             let view = CalendarPreviewView(context: context, tab: tab, provider: provider, source: source)
             view.onOpen = { [weak self] url in
-                self?.closeAfterChoice()
+                self?.hide(animated: false)
                 self?.openPeek?(url, id)
             }
             view.onSelectTab = { [weak self] in
-                self?.closeAfterChoice()
+                self?.hide(animated: false)
                 self?.select(id)
             }
             view.onResize = { [weak self] in self?.layout() }
@@ -170,13 +170,6 @@ public final class HoverPreviewController {
         let frame = CGRect(x: x, y: y, width: width, height: height)
         if card.frame != frame { card.frame = frame }
         context.hoverPreviews.setPreviewFrameInWindow(root.convert(card.frame, to: nil))
-    }
-
-    /// A choice inside a card (a mail row, an event, Recents) ends the hover preview: the card
-    /// goes and the tracker forgets its request, so the same row shows its card on the next hover.
-    private func closeAfterChoice() {
-        hide(animated: false)
-        context.hoverPreviews.dismiss(immediate: true)
     }
 
     /// A click in the page card selects its tab; the container then shows the same host.
