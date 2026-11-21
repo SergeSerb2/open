@@ -319,7 +319,14 @@
       case "credentials-prefs": return try credentialPreferences(a)
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
-        return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
+        let contexts = OEEngine.shared.contexts + [OEEngine.shared.defaultContext]
+        if a["delegates"] as? Bool == true {
+          // Whether each context reports downloads and notification clicks to the App.
+          var delegates: [String: Bool] = [:]
+          for context in contexts { delegates[context.identifier] = context.delegate === app }
+          return delegates
+        }
+        return Set(contexts.map(\.identifier)).sorted()
       case "engine-api": return try await runEngineAPICommand(a)
       case "speed-trace": return try await speedTrace(a)
       case "profiles-shell": return try await profilesShell(a)
@@ -392,6 +399,7 @@
         catch { return ["registered": false, "error": String(describing: error)] }
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
+      case "mailto-state": return try await runHandoffCommand(cmd, a)
       case "default-browser-state": return defaultBrowserState()
       case _ where Self.liveDataCommands.contains(cmd): return try await runLiveDataCommand(cmd, a)
       case "favorites-empty-state": return try runFavoritesEmptyCommand(a)
@@ -980,6 +988,11 @@
       case "peek-open":
         let source = try modelTab(a, w)
         guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
+        if let profile = a["profile"] as? String {
+          // The Library preview path (`previewArchived`): a Peek in the named Profile.
+          guard let id = app.model.profiles.first(where: { $0.id.description == profile || $0.name == profile })?.id else { throw Failure(message: "unknown profile") }
+          controller.peekController.openLibraryPreview(url: url, profileID: id); return true
+        }
         controller.peekController.open(url: url, sourceTabID: source.id); return true
       case "peek-expand":
         w.controller?.peekController.expandTop(); return true
@@ -2720,6 +2733,7 @@
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
         "left": (String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)), 123),
         "right": (String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), 124),
+        "home": (String(Character(UnicodeScalar(NSHomeFunctionKey)!)), 115),
       ]
       guard let (chars, code) = keys[a["key"] as? String ?? "return"] else { throw Failure(message: "unknown key") }
       var mods: NSEvent.ModifierFlags = []
@@ -2732,7 +2746,7 @@
         default: break
         }
       }
-      if code >= 123 { mods.insert([.function, .numericPad]) }
+      if code >= 123 { mods.insert([.function, .numericPad]) } else if code == 115 { mods.insert(.function) }
       // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
       // equivalents such as Redo need "Z", even though the key router folds case.
       // `characters` sends what real hardware gives (Cmd+Shift+2 carries "@"), for the base-key check.

@@ -24,6 +24,17 @@ final class DownloadDestinationChoice {
     })
     presentWhenAvailable()
   }
+  /// No window can parent the panel: ask in a modeless panel.
+  func presentModeless(filename: String, directory: URL) {
+    panel.nameFieldStringValue = filename
+    panel.directoryURL = directory
+    panel.canCreateDirectories = true
+    started = true
+    panel.begin { [weak self] response in
+      guard let self else { return }
+      self.finish(response == .OK ? self.panel.url : nil)
+    }
+  }
   private func presentWhenAvailable() {
     guard completion != nil, !started, let window, window.attachedSheet == nil else { return }
     started = true

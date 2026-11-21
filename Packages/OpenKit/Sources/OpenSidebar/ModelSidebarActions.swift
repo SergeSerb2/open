@@ -21,12 +21,13 @@ public struct ModelSidebarActions {
         case .media: return false
         case .setToolbarShown(let shown): return model.setToolbarShown(windowID: windowID, shown)
         case .select(let id, let space):
+            guard let target = model.space(id: space), model.isSelectable(id, in: target) else { return false }
             if case .splitPane(let splitID) = model.parent(of: id) {
                 model.focusSplitPane(splitID: splitID, tabID: id)
                 model.selectNode(windowID: windowID, spaceID: space, nodeID: splitID)
             } else { model.selectNode(windowID: windowID, spaceID: space, nodeID: id) }
         case .selectFavorite(let id):
-            guard let space = context.focusedSpace else { return false }
+            guard let space = context.focusedSpace, model.tab(id: id) != nil, model.isSelectable(id, in: space) else { return false }
             model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id)
         case .switchSpace(let id):
             model.focusSpace(windowID: windowID, spaceID: id)

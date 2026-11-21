@@ -65,7 +65,7 @@ public enum GmailGlance {
         guard let object = value as? [String: Any], let state = (object["state"] as? String).flatMap(State.init(rawValue:)) else { return (.unexpected, []) }
         let iso = ISO8601DateFormatter()
         let rows = (object["items"] as? [[String: Any]] ?? []).prefix(50).compactMap { row -> UnreadMail? in
-            guard let raw = row["url"] as? String, let url = URL(string: raw), url.scheme?.hasPrefix("http") == true else { return nil }
+            guard let raw = row["url"] as? String, let url = URL(string: raw), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
             let title = (row["title"] as? String).flatMap { $0.isEmpty ? nil : String($0.prefix(300)) } ?? "(no subject)"
             return UnreadMail(title: title, author: String((row["author"] as? String ?? "").prefix(120)),
                               date: (row["date"] as? String).flatMap(iso.date(from:)), url: url)

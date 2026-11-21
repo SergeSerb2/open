@@ -600,6 +600,15 @@ def route(cli, root, seed):
                         ("example.com:8080", "example.com"), ("localhost:3000", "localhost")):
         case("A16 bare authority with port", value, "space:" + target, [rule("hostEquals", host, space)])
 
+    # EXT3 E9: a scheme-less, host-only prefix ends at the host, like an explicit-scheme prefix
+    # (https://corp.example becomes https://corp.example/). Lookalike hosts and other ports do not match.
+    corp = rule("urlPrefix", "corp.example", space)
+    case("A25 host-only prefix own host", "https://corp.example/x", "space:" + target, [corp])
+    case("A25 host-only prefix lookalike host", "https://corp.example.attacker.test/x", "littleOpen", [corp])
+    case("A25 host-only prefix longer label", "https://corp.examples/x", "littleOpen", [corp])
+    case("A25 host:port prefix other port", "https://localhost:30001/x", "littleOpen", [rule("urlPrefix", "localhost:3000", space)])
+    case("A25 host:port prefix own port", "https://localhost:3000/x", "space:" + target, [rule("urlPrefix", "localhost:3000", space)])
+    case("A25 query after host", "https://corp.example/?q=1", "space:" + target, [rule("urlPrefix", "corp.example?q=1", space)])
     for window in data["windows"]:
         if window["style"] == "standard": window["focusedSpaceID"] = target
     for default, toggle, expected, via in ((space, "on", "space:" + target, "defaultDestination"),

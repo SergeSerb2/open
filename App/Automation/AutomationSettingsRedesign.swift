@@ -79,6 +79,10 @@ extension AutomationController {
       guard let id = args["id"] as? String, CommandRegistry.byID[id] != nil else { throw Failure(message: "unknown command") }
       root.shortcuts.keepShortcut(for: id)
     case "revert": root.shortcuts.revert()
+    case "import-shortcuts":
+      // The Import… button's model call after NSOpenPanel returns a file (the panel itself is system UI).
+      guard let path = args["path"] as? String, path.hasPrefix("/") else { throw Failure(message: "missing import path") }
+      root.shortcuts.importBindings(from: URL(fileURLWithPath: path))
     case "state": break
     default: throw Failure(message: "unknown Settings UI action")
     }

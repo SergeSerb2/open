@@ -117,6 +117,8 @@ extension LibraryPanelView {
     }
     public func setBoostProfile(_ name:String) -> Bool {
         guard let profile = viewModel.model.profiles.first(where: { $0.name == name }) else { return false }
+        // A status line describes the previous Profile's Boosts (for example why Edit could not open).
+        viewModel.statusText = ""
         viewModel.historyProfileID = profile.id; hosts[section]?.loaded = false; hosts[section]?.dirty = true; refreshData(); renderRows(); return true
     }
     func showBoostProfiles() {
@@ -135,6 +137,7 @@ extension LibraryPanelView {
         observeContent(); refreshData()
     }
     func endContentUpdates() {
+        pendingReveal = nil
         skeletonTask?.cancel(); skeletonTask = nil; loadingSkeleton.isHidden = true
         reloadTask?.cancel(); reloadTask = nil; historyTask?.cancel(); historyTask = nil
         for host in hosts.values { host.cancel(); host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1; host.list.cancelPrefetch() }
@@ -262,10 +265,10 @@ extension LibraryPanelView {
         // completed snapshot instead of preparing both its intermediate value
         // and its final value (and configuring the first screen twice).
         guard host.loaded else { return }
-        let identity = "\(viewModel.query)|\(viewModel.downloadProfileFilter?.description ?? "")|\(viewModel.historyProfileID)|\(archiveReasonChips.sorted())|\(archiveSpaceChips.sorted())|\(historyWhenChips.sorted())|\(viewModel.boostsPresentation)"
+        let identity = "\(searchText)|\(viewModel.downloadProfileFilter?.description ?? "")|\(viewModel.historyProfileID)|\(archiveReasonChips.sorted())|\(archiveSpaceChips.sorted())|\(historyWhenChips.sorted())|\(viewModel.boostsPresentation)"
         guard host.dirty || host.identity != identity else { return }
         host.cancel(); host.generation += 1
-        let generation = host.generation, target = section, query = viewModel.query
+        let generation = host.generation, target = section, query = searchText
         let rebuild = host.dirty
         host.identity = identity; host.dirty = false
         if rebuild {
@@ -332,6 +335,7 @@ extension LibraryPanelView {
         host.list.update(sources)
         host.phaseMilliseconds["apply"] = (ProcessInfo.processInfo.systemUptime-started)*1000
         if section == target {
+            if let reveal = pendingReveal, reveal.section == target, selectRow(reveal.id) { pendingReveal = nil }
             updateContentChrome()
             if count < 8, (target == .archive || target == .history), hasActiveFilters { loadNextPage() }
         }
@@ -553,7 +557,8 @@ extension LibraryPanelView {
             let id = item.id
             let edit: () -> Void = { [weak self] in
                 guard let self else { return }
-                self.viewModel.actions.editBoost(id:id,profileID:profile)
+                // A successful edit clears an earlier reason.
+                self.viewModel.statusText = self.viewModel.actions.editBoost(id:id,profileID:profile) ?? ""; self.updateContentChrome()
             }
             // Arc's card: the Boost name over its host, no on/off text (capture session 8 item 14,
             // `v13/33-boost-menu-delete/i14-boosts.png`: "My Boost" over "127.0.0.1").

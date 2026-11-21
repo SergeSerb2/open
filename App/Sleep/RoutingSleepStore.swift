@@ -17,6 +17,9 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   /// The Profile folder each tab last saved into, so a purge after the tab left the model
   /// still deletes from the right store.
   private var savedIn: [ItemID: String] = [:]
+  /// Every Profile folder that may hold a row of the tab (rows found at start, and this launch's
+  /// saves): a tab that moved between Profiles can have a row in each. A purge deletes from all.
+  private var storedIn: [ItemID: Set<String>] = [:]
   var onError: ((String) -> Void)?
   /// Tabs with a stored back/forward list (this launch's saves plus the rows found at start).
   private(set) var knownStored: Set<ItemID> = []
@@ -26,6 +29,10 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
       guard let ids = await store(named: name)?.allTabIDs(), !retired.contains(name.lowercased()) else { continue }
       // A Profile deleted while this query ran keeps nothing.
       knownStored.formUnion(ids)
+      for id in ids {
+        storedIn[id, default: []].insert(name)
+        if savedIn[id] == nil { savedIn[id] = name }
+      }
     }
   }
 
@@ -72,6 +79,7 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
     // The Profile may have been deleted while the save ran.
     guard !retired.contains(name.lowercased()) else { return }
     savedIn[tabID] = name
+    storedIn[tabID, default: []].insert(name)
     knownStored.insert(tabID)
   }
 
@@ -92,9 +100,14 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
       containerVersion: r.containerVersion, chromiumTag: r.chromiumTag, capturedAt: r.capturedAt)
   }
 
+  /// Deletes the tab's row from the store of its current Profile and from every store that may hold
+  /// one (a tab that moved to another Profile's Space after a save keeps its row there, also across
+  /// a relaunch).
   func deleteSleepHistory(tabID: ItemID) {
-    store(named: directoryName(for: tabID))?.delete(tabID: tabID)
-    savedIn[tabID] = nil
+    var names = [directoryName(for: tabID)]
+    for name in storedIn[tabID] ?? [] where !names.contains(where: { $0.lowercased() == name.lowercased() }) { names.append(name) }
+    for name in names { store(named: name)?.delete(tabID: tabID) }
+    savedIn[tabID] = nil; storedIn[tabID] = nil
     knownStored.remove(tabID)
   }
 
@@ -113,8 +126,15 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
       stores[name] = nil
       store.retire()
     }
+    // A tab whose row is also in another (live) Profile's store stays known, and saves there now.
+    for (id, names) in storedIn where names.contains(where: { $0.lowercased() == directory.lowercased() }) {
+      let left = names.filter { $0.lowercased() != directory.lowercased() }
+      storedIn[id] = left.isEmpty ? nil : left
+      if left.isEmpty { knownStored.remove(id) }
+    }
     for (id, name) in savedIn where name.lowercased() == directory.lowercased() {
-      savedIn[id] = nil; knownStored.remove(id)
+      savedIn[id] = storedIn[id]?.first
+      if storedIn[id] == nil { knownStored.remove(id) }
     }
   }
 

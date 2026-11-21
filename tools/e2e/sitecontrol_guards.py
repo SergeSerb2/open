@@ -7,6 +7,8 @@ registrable domain to store), so it is disabled instead of failing to save.
 G3: content tiles toggled in a tab that closed are forgotten.
 G4: a mouse press that began on a panel button for one origin does nothing when
 the release lands after the panel refreshed for another origin.
+G5: in Incognito, the ad-block tile for a site that the parent Profile excludes is disabled
+with help text (a private session cannot turn blocking back on for it).
 """
 import hashlib
 import os
@@ -18,7 +20,8 @@ def run(factory, results, origin, tmp, env):
     port = origin.rsplit(':', 1)[1]
     # One-word host and a second registrable site, both on the fixture server.
     a_origin, b_origin, word_origin = origin, 'http://b.guard.test:' + port, 'http://intranet:' + port
-    args = ['--host-resolver-rules=MAP demand.supply 127.0.0.1:%s, MAP *.guard.test 127.0.0.1, MAP intranet 127.0.0.1' % port,
+    other_origin = 'http://c.other.test:' + port
+    args = ['--host-resolver-rules=MAP demand.supply 127.0.0.1:%s, MAP *.guard.test 127.0.0.1, MAP *.other.test 127.0.0.1, MAP intranet 127.0.0.1' % port,
             '--no-proxy-server']
     app, saved = None, {}
 
@@ -139,6 +142,58 @@ def run(factory, results, origin, tmp, env):
         record('G3_closed_tab_toggles_dropped', with_first >= 1 and with_second == with_first,
                withFirst=with_first, withSecond=with_second,
                negative='old source kept one entry per closed tab (withSecond == withFirst + 1)')
+
+        # G5: the parent Profile turns ad blocking off for b.guard.test; an Incognito window then
+        # shows that site's tile disabled with help text. Another site stays enabled (control).
+        visit(b_origin + '/ads.html')
+        assert row(tile_on(), 'row.contentBlocking').get('enabled') is True
+        app.call('site-controls', action='tap', id='row.contentBlocking')
+        assert wait(lambda: row(opened(), 'row.contentBlocking').get('state') == 'off', timeout=10), 'parent exclusion'
+        close()
+        normal_window = app.call('window-state')['id']
+        existing = {w['id'] for w in app.call('incognito-state')['windows'] if w['private']}
+        app.call('menu-perform', id='new-incognito-window')
+        private = wait(lambda: next((w for w in app.call('incognito-state')['windows'] if w['private'] and w['id'] not in existing), None), timeout=10)
+        assert private, 'New Incognito Window did not create one'
+        try:
+            app.call('window-focus', id=private['id'], activate=True)
+            private_tab = app.call('open', url=other_origin + '/ads.html')['id']; app.call('wait', tab=private_tab)
+            control = wait(lambda: (lambda s: s if row(s, 'row.contentBlocking').get('state') == 'on' else None)(opened()), timeout=20) or state()
+            app.call('navigate', tab=private_tab, url=b_origin + '/ads.html'); app.call('wait', tab=private_tab)
+            excluded = wait(lambda: (lambda s: s if s['host'] == 'b.guard.test' and row(s, 'row.contentBlocking').get('state') == 'off' else None)(opened()), timeout=20) or state()
+            tile = row(excluded, 'row.contentBlocking')
+            tap_refused = refused(action='tap', id='row.contentBlocking')
+            app.call('site-controls', action='capture-tile', id='row.contentBlocking')
+            app.call('site-controls', action='toggle-captured')
+            after = row(opened(), 'row.contentBlocking')
+            record('G5_incognito_parent_exclusion_disabled', excluded.get('isIncognito') is True and row(control, 'row.contentBlocking').get('enabled') is True
+                   and tile.get('enabled') is False and tile.get('help') == 'Ad blocking is off for this site in a regular window. Turn it on there.'
+                   and tap_refused and after.get('state') == 'off' and after.get('enabled') is False,
+                   tile=tile, control=row(control, 'row.contentBlocking'), tapRefused=tap_refused, after=after,
+                   negative='old tile was enabled; a tap removed nothing from the session, so the tile stayed Off')
+            close()
+
+            # G5b (review round 1): a tile drawn enabled before the parent Profile excluded the site
+            # (another window changed it) reaches toggle(); its own guard refuses the stale click.
+            # The regular tab still shows b.guard.test: lift the parent exclusion, draw the private
+            # tile enabled, then exclude again from the regular tab (no window focus change).
+            app.call('settings-adblock-site', tab=tab, excluded=False)
+            stale = wait(lambda: (lambda s: s if s['host'] == 'b.guard.test' and row(s, 'row.contentBlocking').get('state') == 'on' else None)(opened()), timeout=20) or state()
+            app.call('site-controls', action='capture-tile', id='row.contentBlocking')
+            parent = app.call('settings-adblock-site', tab=tab, excluded=True)
+            private_site = app.call('settings-adblock-site', tab=private_tab)
+            toggled_stale = app.call('site-controls', action='toggle-captured')
+            record('G5b_stale_tile_parent_exclusion_refused', row(stale, 'row.contentBlocking').get('enabled') is True
+                   and 'guard.test' in parent['excludedDomains'] and private_site['shouldBlock'] is False
+                   and not toggled_stale['reloadVisible'] and app.call('settings-adblock-site', tab=private_tab)['shouldBlock'] is False,
+                   staleTile=row(stale, 'row.contentBlocking'), parent=parent['excludedDomains'], reloadVisible=toggled_stale['reloadVisible'],
+                   negative='without the toggle guard the stale click "applied" (reload prompt shown) and changed nothing')
+            close()
+        finally:
+            for w in app.call('incognito-state')['windows']:
+                if w['private']:
+                    app.call('window-focus', id=w['id'], activate=True); app.call('window-close')
+            app.call('window-focus', id=normal_window, activate=True)
     finally:
         if app:
             try: env['_restore_defaults'](app, saved)

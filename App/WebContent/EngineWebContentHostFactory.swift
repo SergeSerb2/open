@@ -209,7 +209,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
-  private lazy var privateDownloads = IncognitoDownloads()
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
   var recordedOpenWorldMessages: [[String: Any]] = []
@@ -538,6 +537,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         directory: app.directories.engineDirectory(dataDirectoryName: directory))
     }
     guard let context, context.state == .live else { return nil }
+    // Downloads and notification clicks reach the App also before any window shows this Profile
+    // (Clear Browsing Data loads it with no window open; review r1 item 2).
+    context.delegate = app
     app.profileTeardown.didLoad(profileID: profileID, directory: directory)
     app.adBlockEngineAdapter.contextCreated(context, profileID: profileID)
     app.extensionPrompts.register(context.extensions)
@@ -941,10 +943,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       app.dismissAutoArchiveEducation(); app.settingsPresenter.showProfileSettings(profileID: id); return true
     case .toggleSidebar: controller?.toggleSidebar(); return true
     case .select(let id, let spaceID):
-      guard model.space(id: spaceID) != nil, model.node(id: id) != nil else { return false }
+      // A node of another Space would select nothing and blank the window.
+      guard let space = model.space(id: spaceID), model.isSelectable(id, in: space) else { return false }
       if focusedSpace?.id != spaceID { withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: spaceID) } }
       select(nodeID: id); return true
-    case .selectFavorite(let id): guard model.tab(id: id) != nil else { return false }; select(nodeID: id); return true
+    case .selectFavorite(let id):
+      // A Favorite of another Profile would select nothing in this Space and blank the window.
+      guard let space = focusedSpace, model.tab(id: id) != nil, model.isSelectable(id, in: space) else { return false }
+      select(nodeID: id); return true
     case .switchSpace(let id): guard let space = model.space(id: id) else { return false }; focus(space: space); return true
     case .openCommandBar(let source): if source == .urlField { focusAddressBar(nil) } else { newTab(nil) }; return true
     case .newTab: newTab(nil); return true
@@ -1158,7 +1164,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
-    privateDownloads.close()
+    // The session owns private reservations (it closes them when it ends); a Save panel on this
+    // window cancels itself when the window closes.
     pageContextMenu?.cancel(); pageContextMenu = nil
     controller?.existingTabSwitcher?.cancel()
     translate.closeAll()
@@ -1408,8 +1415,10 @@ extension EngineWebContentHostFactory {
     Task { @MainActor in
       // Read without removing: the model discards the Archive row only once the
       // item is back in the sidebar, so a window that closed meanwhile loses nothing.
-      guard let record = await store.recent(limit: 1).first,
-        !self.isClosing, !self.app.terminationRequested else { return }
+      // A row that cannot come back (an undecodable folder, no Space to return to) is
+      // kept and skipped, or it would stop every later press; the next row restores.
+      let records = await store.recent(limit: 50)
+      guard !self.isClosing, !self.app.terminationRequested else { return }
       // Staged like the Library's Restore: the snapshot holding the item is written first, and
       // only then is the Archive row deleted. A failed write rolls the item back and keeps the row.
       let app = self.app, model = self.model
@@ -1419,30 +1428,39 @@ extension EngineWebContentHostFactory {
         guard model === app.model, !app.isFirstRun || app.firstRunSaved else { return }
         try app.snapshotStore.saveNow(model: model)
       }
-      // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
-      // blank tab and drop its children.
-      if record.kind == .folder {
-        // A row left behind for a folder that is already in the sidebar (the Archive delete
-        // did not run after its restore) would stop every later press here. Drop that row and
-        // show the folder, as for a tab that is already back.
-        if model.node(id: record.id)?.folder != nil {
-          store.discardArchived(ids: [record.id])
-          self.showRestoredFolder(record.id)
+      for record in records {
+        // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
+        // blank tab and drop its children.
+        if record.kind == .folder {
+          // A row left behind for a folder that is already in the sidebar (the Archive delete
+          // did not run after its restore) would stop every later press here. Drop that row and
+          // show the folder, as for a tab that is already back.
+          if model.node(id: record.id)?.folder != nil {
+            store.discardArchived(ids: [record.id])
+            self.showRestoredFolder(record.id)
+            return
+          }
+          // A failed save stops the press (the next row would fail the same way); nil is a
+          // row that cannot come back.
+          let restored: Folder?
+          do { restored = try model.restoreArchivedFolder(record, saving: save) } catch { return }
+          guard let restored else { continue }
+          store.discardArchived(ids: [restored.id])
+          self.showRestoredFolder(restored.id)
           return
         }
-        guard let folder = try? model.restoreArchivedFolder(record, saving: save) else { return }
-        store.discardArchived(ids: [folder.id])
-        self.showRestoredFolder(folder.id)
+        let existed = model.tab(id: record.id) != nil
+        if existed { store.discardArchived(ids: [record.id]) }
+        let tab: Tab
+        do { tab = try model.restoreArchivedTab(record, saving: save) } catch { return }
+        guard model.parentByID[tab.id] != nil else { continue }
+        if !existed { store.discardArchived(ids: [tab.id]) }
+        // The tab returns to its original place, which can be in another Space. Selecting it in
+        // the focused Space would leave that Space with a selection it cannot show (a blank page).
+        // Expanding its folders only reveals it: no Undo step, so one Cmd+Z undoes the restore.
+        self.withoutUndo { self.selectTabForCommand(tab.id) }
         return
       }
-      let existed = model.tab(id: record.id) != nil
-      if existed { store.discardArchived(ids: [record.id]) }
-      guard let tab = try? model.restoreArchivedTab(record, saving: save), model.parentByID[tab.id] != nil else { return }
-      if !existed { store.discardArchived(ids: [tab.id]) }
-      // The tab returns to its original place, which can be in another Space. Selecting it in
-      // the focused Space would leave that Space with a selection it cannot show (a blank page).
-      // Expanding its folders only reveals it: no Undo step, so one Cmd+Z undoes the restore.
-      self.withoutUndo { self.selectTabForCommand(tab.id) }
     }
   }
 
@@ -1970,28 +1988,9 @@ extension EngineWebContentHostFactory {
       guard let url, url.absoluteString != "about:blank" else {
         self.record("standaloneExtraTabDropped", content, ["reason": "blank-url"]); return
       }
-      guard let profileID = sourceProfileID,
-        let space = self.model.mostRecentlyFocusedSpace(profileID: profileID) else {
-        self.record("standaloneExtraTabDropped", content, ["reason": "no-profile-space"]); return
+      if let reason = self.app.openExtensionTab(url: url, profileID: sourceProfileID) {
+        self.record("standaloneExtraTabDropped", content, ["reason": reason])
       }
-      var controller = self.app.linkExecutor.orderedControllers.first {
-        $0.context.focusedSpace?.profileID == profileID
-      }
-      if controller == nil {
-        // makeWindow can reuse the retained final main window. Set its Space
-        // before composition, so no page is created in a different Profile.
-        if self.app.windowControllers.isEmpty,
-          let retained = self.model.windows.first(where: { $0.style == .standard }) {
-          self.model.focusSpace(windowID: retained.id, spaceID: space.id)
-        }
-        controller = self.app.makeWindow(focusedSpaceID: space.id)
-      }
-      guard let controller, controller.context.focusedSpace?.profileID == profileID,
-        let target = self.app.hostFactories[controller.windowID],
-        target.openNewTab(url: url, background: false) != nil else {
-        self.record("standaloneExtraTabDropped", content, ["reason": "target-unavailable"]); return
-      }
-      self.app.focusWindow(controller.windowID, activate: true)
     }
   }
 
@@ -2171,16 +2170,16 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     _ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String,
     completion: @escaping @MainActor (URL?) -> Void
   ) {
-    if isIncognito {
-      privateDownloads.decide(download, filename: suggestedFilename, directory: downloadDirectory,
-        profile: incognitoSession?.parent, window: window, completion: completion)
+    if let session = incognitoSession {
+      session.downloads.decide(download, filename: suggestedFilename, directory: downloadDirectory,
+        profile: session.parent, window: window, completion: completion)
     } else {
       app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
     }
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
-    if isIncognito { privateDownloads.updated(download) }
+    if let session = incognitoSession { session.downloads.updated(download) }
     else { app.tabSleep.downloadUpdated(download, factory: self) }
     record(
       "download", download.webContent,

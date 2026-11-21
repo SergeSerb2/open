@@ -118,8 +118,8 @@ extension AppDelegate {
   /// ("Remove … from Sidebar", Close Tab: other row IDs than the rows delete removes) go too, so a
   /// restore never brings back a row whose file is in the Trash (an empty Note or a recreated,
   /// empty Easel). One delete per Profile's Archive, on that store's queue (quit waits for it);
-  /// a Profile without an Archive file is skipped. An archived folder keeps such a row inside it
-  /// (its payload is not searched); restoring that folder still shows an empty document.
+  /// a Profile without an Archive file is skipped. Rows inside archived folders go too (the folder
+  /// stays with its other rows).
   func discardArchivedRows(url: URL) {
     guard let sink = archiveSink else { return }
     for profile in model.profiles { sink.store(for: profile.id).discardTabs(url: url.absoluteString) }
