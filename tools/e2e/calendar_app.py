@@ -159,6 +159,9 @@ def run(factory, results, tmp, harness):
 
         # 8. Import from Arc maps Arc's preview switches, Live Calendar reminder and Meet route (synthetic plist).
         arc_preferences_checks(app, results, wait_until, tmp, harness)
+
+        # 9. Bug sweep R2: per-Profile reminder intervals (adds a second Profile, so it runs last).
+        per_profile_reminder_checks(app, results, wait_until, new_tab, cal)
     finally:
         try:
             app.call('defaults', key='open.general.previewsCalendar', value=None)
@@ -172,6 +175,52 @@ def run(factory, results, tmp, harness):
     # Audit A2: Favorite unread badges (own launch: app hosts map to a local server).
     badges(factory, results, harness)
 
+
+
+def per_profile_reminder_checks(app, results, wait_until, new_tab, cal):
+    """Bug sweep R2 (seed-livedata #10): the reminder interval belongs to each Profile. A second window shows
+    another Profile's calendar Favorite set to Never. While that window is in front, each window's menu
+    still shows its own Profile's interval, and the first Profile reminds at its two minutes, in its window.
+    Runs last: the second Profile stays in the model."""
+    def live(): return cal(action='live')
+    def at(minutes): cal(action='clock', minutes=minutes); return live()
+    def front(window): app.call('window-focus', id=window, activate=True)
+    def checked(window, node, title):
+        # sidebar-menu-state reads the front window's menu.
+        front(window)
+        return app.call('sidebar-menu-state', node=node, item='Meeting Reminder/' + title).get('checked')
+    first_window = app.call('window-state')['id']
+    # Earlier rows unfavorite and disable their calendar Favorites: start from a fresh one, Live Calendar on.
+    app.call('defaults', key='open.favorites.liveCalendarDisabled', value=None)
+    fav = new_tab(app, 'https://calendar.google.com/calendar/u/0/r/month')
+    app.call('favorite', tab=fav)
+    app.call('menu-perform', id='new-window')
+    second_window = wait_until(lambda: (lambda w: w['id'] if w['id'] != first_window else None)(app.call('window-state')), timeout=5, step=.05)
+    profile_b = None
+    try:
+        space_b = app.call('space-create', profile='Calendar B', title='Calendar B')
+        profile_b = next((x['profile'] for x in app.call('spaces') if x['id'] == space_b), None)
+        fav_b = new_tab(app, 'https://calendar.google.com/calendar/u/0/r/week')
+        app.call('favorite', tab=fav_b)
+        front(second_window)
+        app.call('sidebar-menu', node=fav_b, item='Meeting Reminder/Never')
+        menus = {'first': checked(first_window, fav, 'Two Minutes Before'), 'second': checked(second_window, fav_b, 'Never')}
+        front(second_window)
+        cal(action='fixture', access='granted', events=[{'id': 'p', 'title': 'Per Profile', 'start': 5, 'end': 35, 'url': ZOOM}])
+        early = at(2)    # 3 minutes before the start: Profile A's two-minute reminder is not due yet
+        due = at(3.5)    # 1.5 minutes before the start: due for Profile A, never for Profile B
+        mine = [r for r in due.get('reminders', []) if r.get('event') == 'p']
+        shown_front = app.call('window-state')['id']
+        results['cal_live_reminder_per_profile'] = {
+            'ok': bool(second_window) and profile_b is not None and menus == {'first': True, 'second': True}
+                and shown_front == second_window and not [r for r in early.get('reminders', []) if r.get('event') == 'p']
+                and len(mine) == 1 and mine[0].get('window') == first_window,
+            'menus': menus, 'front': shown_front, 'windows': [first_window, second_window], 'reminders': mine}
+    finally:
+        if second_window:
+            front(second_window); app.call('window-close')
+        front(first_window)
+        if profile_b: app.call('defaults', key='open.calendar.reminder.' + profile_b, value=None)
 
 def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
     def hover(node, ms=800):
@@ -307,6 +356,7 @@ def live_checks(app, results, wait_until, new_tab, cal, fav):
             and five.get('interval') == 'fiveMinutes' and 'f' not in [r['event'] for r in early.get('reminders', [])] and 'f' in reminded,
         'never': never.get('reminders'), 'five': five.get('reminders')}
     app.call('sidebar-menu', node=fav, item='Meeting Reminder/Two Minutes Before')
+
 
     # Audit A2: "Show Time to Next Meeting" (Arc's Top App subtitle switch) hides and shows the plate per host.
     cal(action='fixture', access='granted', events=[{'id': 's', 'title': 'Subtitle sync', 'start': 10, 'end': 40, 'url': MEET}])

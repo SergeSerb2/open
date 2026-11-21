@@ -7172,7 +7172,30 @@ def media_checks(factory, results, tmp):
                 and level1 != level0 and level2 == level0 and setting1 != setting0,
                 "items": items, "levels": [level0, level1, level2], "settings": [setting0, setting1]}
             app.call("defaults", key="open.pip.keepOnTop", value=None)
+            # Bug sweep R2 (seed-media #7): a page-muted video (<video muted>) in Open's PiP window. "Unmute"
+            # must make it heard: the tab was never muted, so the page's own mute is the one to clear.
+            select(fv); wait_pip("closed")
+            app.eval(fv, "document.getElementById('main').pause(), true")  # no auto-PiP of fv on the next leave
+            pm = open_tab(base + "video-muted.html"); start(pm)
+            app.call("media-action", tab=pm, action="pip")
+            pm_open = wait_until(lambda: (lambda p: p if p["state"] == "active" and p.get("tab") == pm
+                                          and (p.get("openWindow") or {}).get("visible") else None)(pip()), timeout=3, step=.02)
+            # The engine's PiP mute state does not include the page's own mute, so the window offers "Mute" first.
+            pm_items = app.call("pip-action", action="menu") if pm_open else []
+            if "Mute" in pm_items: app.call("pip-action", action="menu", item="Mute")
+            pm_muted_items = wait_until(lambda: (lambda i: i if "Unmute" in i else None)(app.call("pip-action", action="menu")), timeout=3, step=.05) or []
+            if "Unmute" in pm_muted_items: app.call("pip-action", action="menu", item="Unmute")
+            pm_heard = wait_until(lambda: app.eval(pm, "document.getElementById('main').muted") is False, timeout=3, step=.05)
+            pm_after = app.call("pip-action", action="menu") if pm_open else []
+            pm_tab_muted = m(pm)["modelMuted"]
+            results["media_pip_unmute_page_muted"] = {"ok": bool(pm_open) and "Unmute" in pm_muted_items and bool(pm_heard)
+                and "Mute" in pm_after and pm_tab_muted is False,
+                "itemsBefore": pm_items, "itemsMuted": pm_muted_items, "itemsAfter": pm_after,
+                "elementMuted": app.eval(pm, "document.getElementById('main').muted"), "tabMuted": pm_tab_muted}
+            if pm_open: app.call("pip-action", action="close"); wait_pip("closed")
+            close_tab(pm)
         else:
+            results["media_pip_unmute_page_muted"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Open Unmute"}
             results["media_pip_frames"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 shows Chromium's window"}
             results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
             results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
@@ -7296,6 +7319,57 @@ def media_checks(factory, results, tmp):
             "afterClose": {k: held_closed.get(k) for k in ("phase", "freezeGate")}, "feedHadTab": feed_has}
         app.call("sleep-clock", reset=True)
         close_tab(held); close_tab(idle)
+        # Bug sweep R2 (seed-media #5): one tab shown in two windows has a page in each. The second window's
+        # page (paused) must not take over the first window's playing state and card, and closing the second
+        # window must not remove that card.
+        def focused_space(): return next(x for x in app.call("spaces") if x["focused"])["id"]
+        home_space = focused_space()
+        first_window = app.call("window-state")["id"]
+        twin = open_tab(base + "audio.html?twin=1"); start(twin); select(home)
+        twin_card = wait_until(lambda: twin in ids(first_window), timeout=3, step=.02)
+        app.call("menu-perform", id="new-window")
+        second_window = wait_until(lambda: (lambda w: w["id"] if w["id"] != first_window else None)(app.call("window-state")), timeout=5, step=.05)
+        try:
+            if focused_space() != home_space: app.call("space", space=home_space)
+            app.call("select", tab=twin)
+            # The second window's own page plays and pauses: a paused report from it.
+            # The new page first answers from its initial blank document: wait for the fixture's own script.
+            wait_until(lambda: app.eval(twin, "document.readyState === 'complete' && typeof start === 'function'") is True, timeout=10, step=.05)
+            app.eval(twin, "start().then(() => { document.getElementById('tone').pause(); return true; })")
+            time.sleep(.8)
+            twin_during = m(twin)
+            card_during = twin in ids(first_window)
+        finally:
+            if second_window:
+                app.call("window-focus", id=second_window, activate=True); app.call("window-close")
+            app.call("window-focus", id=first_window, activate=True)
+        time.sleep(.5)
+        twin_after = m(twin)
+        card_after = twin in ids(first_window)
+        results["media_same_tab_two_windows"] = {"ok": bool(twin_card) and bool(second_window) and card_during and card_after
+            and twin_during["playback"] == "playing" and (twin_during.get("source") or {}).get("window") == first_window
+            and twin_after["playback"] == "playing" and (twin_after.get("source") or {}).get("window") == first_window,
+            "cardDuring": card_during, "cardAfter": card_after, "during": {k: twin_during.get(k) for k in ("playback", "source")},
+            "after": {k: twin_after.get(k) for k in ("playback", "source")}, "windows": [first_window, second_window]}
+        app.call("media-action", tab=twin, action="pause"); close_tab(twin)
+
+        # Bug sweep R2 (seed-media #6): Back to Tab for a playing Favorite of another Profile, while the window
+        # shows a Space of the first Profile: it focuses the Favorite's Profile's Space and selects the Favorite.
+        other_space = app.call("space-create", profile="Media B", title="Media B")
+        fav = open_tab(base + "audio.html?fav=1"); start(fav)
+        app.call("favorite", tab=fav)
+        app.call("space", space=home_space)
+        left = wait_until(lambda: focused_space() == home_space, timeout=3, step=.05)
+        fav_card = wait_until(lambda: fav in ids(), timeout=3, step=.02)
+        back_ok = app.call("media-action", tab=fav, action="back-to-tab")
+        fav_space = wait_until(lambda: (lambda f: f if f == other_space else None)(focused_space()), timeout=3, step=.05) or focused_space()
+        fav_selected = app.call("window-state")["selected"]
+        results["media_back_to_tab_other_profile_favorite"] = {"ok": bool(left) and bool(fav_card) and back_ok is True
+            and fav_space == other_space and fav_selected == fav,
+            "card": bool(fav_card), "backToTab": back_ok, "focusedSpace": fav_space, "expectedSpace": other_space, "selected": fav_selected}
+        app.call("media-action", tab=fav, action="pause")
+        app.call("space", space=home_space); select(home)
+
         # E-M1 persistence: a muted tab stays muted after relaunch.
         app.call("media-action", tab=a1, action="toggle-mute")
         app.call("save"); app.quit()

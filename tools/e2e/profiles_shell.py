@@ -571,6 +571,26 @@ def run(factory, results, tmp, api, defaults_before):
             'profileGone': not (root / 'Profiles' / never['directory']).exists(),
             'modelGone': 'Shell Never Loaded' not in gone['rows'], 'error': gone.get('error')}
 
+        # Bug sweep R2 (seed-media #2): the process stopped after a deletion was journaled but before the
+        # snapshot without the Profile was saved (here: a hand-written journal). The next launch must keep
+        # the Profile's data, because the loaded snapshot still lists that Profile, and clear the journal.
+        # Scope: this proves launch recovery only. The other half, saving the snapshot before the wipe is
+        # journaled (ProfileTeardown.wipe, stage commitModel), has a code-path proof: no real-App seam can
+        # stop the process between those two writes.
+        state(action='create', name='Shell Interrupted')
+        interrupted = profile('Shell Interrupted')
+        kept_folder = root / 'Profiles' / interrupted['directory']
+        kept_folder.mkdir(parents=True, exist_ok=True)
+        (kept_folder / 'synthetic-marker').write_text('synthetic interrupted delete')
+        app.call('save')
+        app.quit()
+        pending.write_text(json.dumps([interrupted['directory']]))
+        launch()
+        back = next((p for p in state()['profiles'] if p['id'] == interrupted['id']), None)
+        results['shell_interrupted_delete_keeps_data'] = {
+            'ok': bool(back) and (kept_folder / 'synthetic-marker').exists() and not pending.exists(),
+            'profileBack': bool(back), 'dataKept': (kept_folder / 'synthetic-marker').exists(), 'journalCleared': not pending.exists()}
+
         # Bulk lists the captured unused set. Default and a Profile with a Space stay out.
         assigned_space = app.call('space-create', title='Assigned Space', profile='Shell Assigned')
         state(action='create', name='Shell Unused A')

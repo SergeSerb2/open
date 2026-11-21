@@ -1817,9 +1817,19 @@ public final class BrowserModel {
     @discardableResult
     // MARK: Live Folders (LF L2, live-data §2)
 
-    /// The Space's GitHub Live Folder (top level of Pinned), if any.
+    /// The Space's GitHub Live Folder, if any: made at the top level of Pinned, but the user can drag
+    /// it into another folder or into Today, where refreshes and the Space menu toggle must still find it.
     public func liveFolder(in spaceID: SpaceID) -> Folder? {
-        space(id: spaceID)?.pinned.lazy.compactMap(\.folder).first { $0.live != nil }
+        guard let space = space(id: spaceID) else { return nil }
+        func find(_ nodes: [SidebarNode]) -> Folder? {
+            for node in nodes {
+                guard let folder = node.folder else { continue }
+                if folder.live != nil { return folder }
+                if let nested = find(folder.children) { return nested }
+            }
+            return nil
+        }
+        return find(space.pinned) ?? find(space.today)
     }
 
     /// Creates "Pull Requests" at the end of the Space's Pinned section (capture s5 b3). Undoable like New Folder.
@@ -1835,7 +1845,12 @@ public final class BrowserModel {
     /// user's tabs; a tab the user moved in by hand is moved out to Today first).
     public func removeLiveFolder(id: ItemID) {
         guard let folder = index[id]?.folder, folder.live != nil, let parent = parentByID[id] else { return }
-        let spaceID: SpaceID? = { if case .spacePinned(let s)? = section(of: parent) { return s }; return nil }()
+        let spaceID: SpaceID? = {
+            switch section(of: parent) {
+            case .spacePinned(let s)?, .spaceToday(let s)?: return s
+            default: return nil
+            }
+        }()
         for node in folder.children {
             if case .tab(let tab) = node, tab.liveItemURL != nil { continue }
             if let spaceID { _ = relocate(node.id, to: .spaceToday(spaceID), at: 0) }

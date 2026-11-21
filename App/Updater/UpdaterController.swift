@@ -24,12 +24,14 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   private(set) var foundVersion: String?
   private(set) var completedChecks = 0
   private(set) var lastErrorCode: Int?
+  /// The last "no update" meant a newer release this Mac cannot install (Sparkle's reason), not "up to date".
+  private(set) var lastUpdateUnsupported = false
   /// Off builds still offer the Settings explanation. Sparkle's value is KVO forwarded.
   @objc dynamic private(set) var canCheckForUpdates = true
 
   var settingsStatus: String? {
     if foundVersion != nil { return "Update available" }
-    if completedChecks > 0, let lastErrorCode, lastErrorCode == SUError.noUpdateError.rawValue { return "Up to date" }
+    if completedChecks > 0, let lastErrorCode, lastErrorCode == SUError.noUpdateError.rawValue, !lastUpdateUnsupported { return "Up to date" }
     return nil
   }
   var channel: String { UserDefaults.standard.string(forKey: Self.channelKey) == "beta" ? "beta" : "stable" }
@@ -138,6 +140,7 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
     completedChecks += 1
     lastErrorCode = (error as NSError?)?.code
+    lastUpdateUnsupported = error.map { OpenUpdateUserDriver.unsupportedUpdate($0) != nil } ?? false
     app.settingsPresenter.updateStatusDidChange(settingsStatus)
     userDriver.didFinishUpdateCycle()
   }
@@ -156,7 +159,7 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
       "automaticallyDownloads": updater?.automaticallyDownloadsUpdates ?? false,
       "automaticPreference": automaticallyChecksAndDownloads, "channel": channel,
       "foundVersion": foundVersion ?? NSNull(), "completedChecks": completedChecks,
-      "lastErrorCode": lastErrorCode ?? NSNull(), "ui": userDriver.automationState]
+      "lastErrorCode": lastErrorCode ?? NSNull(), "updateUnsupported": lastUpdateUnsupported, "ui": userDriver.automationState]
   }
   #endif
 }
