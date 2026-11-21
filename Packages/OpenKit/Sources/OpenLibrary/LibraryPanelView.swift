@@ -427,11 +427,12 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     public func handleKey(_ event: NSEvent) -> Bool {
         if [48,123,124,125,126].contains(event.keyCode) { keyboardRailNavigation = true; updateRailFocus() }
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command), event.keyCode == 3 {
-            // Spaces has no search field; Find must not open on the page strip behind Library.
-            if section != .spaces { window?.makeFirstResponder(searchField); searchField.selectText(nil) }
-            return true
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command), event.keyCode == 3, section != .spaces {
+            window?.makeFirstResponder(searchField); searchField.selectText(nil); return true
         }
+        // Spaces has no search field: plain Cmd+F must not open Find on the page strip behind Library.
+        // Other chords (Ctrl+Cmd+F, Toggle Full Screen) keep their own commands.
+        if event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command, event.keyCode == 3 { return true }
         if event.keyCode == 53 {
             if listView.dismissMenu() { return true }
             if filterOpen { setFilterOpen(false) }
