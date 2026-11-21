@@ -96,7 +96,7 @@ final class PageChromeCoordinator {
   func requestClose(_ page: OEWebContent, completion: @escaping (Bool) -> Void) -> Bool {
     // Every close path shares this preflight. A terminated or unresponsive page
     // must not hold closing behind a DevTools beforeunload round trip.
-    guard page.crashState == .none else { return false }
+    guard !owner.isClosing, page.crashState == .none else { return false }
     let key = ObjectIdentifier(page)
     // A close already waits on this page's beforeunload (a tab close, then Quit): both callers
     // get the one answer. Dropping the second completion left the quit preflight running forever.
@@ -173,6 +173,8 @@ final class PageQuitCoordinator {
       running = false; accepted = true; NSApp.terminate(nil); return
     }
     let (owner, page) = remaining.removeFirst()
+    // A window or tab closed while an earlier page was asked: nothing left to ask here.
+    guard !owner.isClosing, owner.contents.values.contains(where: { $0 === page }) else { next(); return }
     if let window = owner.standaloneSurface?.surfaceWindow { window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged() }
     if let id = owner.tabID(for: page), let space = owner.space(containing: id) { owner.focus(space: space); owner.select(nodeID: id) }
     // Page.close destroys an accepted page before the normal quit snapshot.
@@ -186,6 +188,9 @@ final class PageQuitCoordinator {
       if let id = owner.tabID(for: page), let envelope = self.app.tabSleep.adapter?.captureHistory(tabID: id) {
         try? await self.app.tabSleep.store?.save(tabID: id, envelope: envelope)
       }
+      // The save can suspend: a close meanwhile already ran pageChrome.close()/cancel(), so a new
+      // close request would never be answered.
+      guard !owner.isClosing, owner.contents.values.contains(where: { $0 === page }) else { self.next(); return }
       self.askClose(owner: owner, page: page)
     }
   }
