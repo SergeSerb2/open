@@ -93,6 +93,7 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
         }
         if let hidden = state?.isHidden, menuItem.isHidden != hidden { menuItem.isHidden = hidden }
         if state?.isHidden == true { return false }
+        if SystemCommandActions.selectors[id] == nil, MenuBuilder.blocksBrowserCommands(keyWindow: NSApp.keyWindow) { return false }
         return dispatcher?.isCommandEnabled(id, enabledKey: key) ?? true
     }
 }
@@ -103,6 +104,11 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
 /// so overrides restyle every item from one path.
 @MainActor
 public enum MenuBuilder {
+    /// A modal panel runs, or the key window is (or has) a sheet: Open's browser commands stay off
+    /// (menu and keys), so nothing acts behind a Save panel or an alert. System items stay on.
+    public static func blocksBrowserCommands(keyWindow: NSWindow?) -> Bool {
+        NSApp?.modalWindow != nil || keyWindow?.sheetParent != nil || keyWindow?.attachedSheet != nil
+    }
     public static func buildMainMenu(
         dispatcher: any CommandDispatcher,
         spaces: [SpaceMenuEntry] = [],
@@ -517,6 +523,9 @@ public enum SystemCommandActions {
         "font-italic": "addFontTrait:", "font-underline": "underline:",
         "emoji-and-symbols": "orderFrontCharacterPalette:"
     ]
+    /// Edit commands that a focused web page sees before the browser runs them.
+    public static let pageEditCommands: Set<String> = ["cut", "copy", "paste", "paste-and-match-style", "select-all",
+        "undo", "redo", "delete", "font-bold", "font-italic", "font-underline"]
     public static let tags = ["find": 1, "find-next": 2, "find-previous": 3,
                               "use-selection-to-find": 7, "find-and-replace": 12, "font-bold": 2, "font-italic": 1]
     public static func command(for shortcut: KeyboardShortcut, overrides: KeyBindingStore) -> String? {

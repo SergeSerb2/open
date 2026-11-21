@@ -1,6 +1,7 @@
 import AppKit
 import OpenFeatures
 import OpenSettings
+import OpenLibrary
 
 /// Writes captures into the Library (page-platform §4.6.6, settings-library §2.6):
 /// `<root>/Captures/<uuid>.png` and one row appended to `<root>/State/captures.json`.
@@ -87,7 +88,8 @@ final class CaptureLibraryWriter: CaptureLibrary {
 
   func showInLibrary(id: UUID) {
     app.settingsPresenter.showLibrary(section: .captures)
-    app.settingsPresenter.library?.selectedIDs = [id.uuidString]
+    // The native panel selects the row; Media loads its rows after this call returns.
+    app.settingsPresenter.activeLibrarySession?.panel?.reveal(id.uuidString, in: .media)
   }
 
   func fileURL(id: UUID) -> URL? {

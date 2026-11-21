@@ -148,11 +148,16 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       // Exclusions are stored per registrable domain. A one-word host (localhost, an intranet
       // name) or a public suffix has none, so the store cannot save a choice for it.
       let changeable = !available || Self.canExcludeAdBlockSite(url.host() ?? "")
+      // A private session only adds exclusions. It cannot turn blocking back on for a site
+      // that the parent Profile excludes (lead ruling, round 3: disabled, with help text).
+      let parentExcluded = available && privateSession != nil && !on
+        && (try? store?.siteSnapshot(for: adBlockProfileID).shouldBlock(host: url.host() ?? "")) == false
       tiles.append(SiteSettingTile(id: "contentBlocking", kind: .contentBlocking, title: "Block Ads & Trackers",
         subtitle: on ? "On" : "Off", state: available ? (on ? .on : .off) : .unavailable,
         symbol: "hand.raised.fill", help: !changeable ? "Ad blocking can't be turned off for this site."
+          : parentExcluded ? "Ad blocking is off for this site in a regular window. Turn it on there."
           : available ? (on ? "The built-in ad blocker is on for this site." : "The built-in ad blocker is off for this site.") : "The built-in ad blocker is off. You can turn it on in Settings.",
-        isEnabled: changeable))
+        isEnabled: changeable && !parentExcluded))
       if let engineContext = factory.hosts[tabID]?.content.context {
         let permissions = SitePermissionStore.forContext(engineContext)
         for row in Self.permissionRows {
@@ -206,6 +211,8 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       guard Self.canExcludeAdBlockSite(host) else { return false }
       do {
         let currentlyBlocking = try store.siteSnapshot(for: adBlockProfileID, privateSession: privateSession).shouldBlock(host: host)
+        // The session cannot undo the parent Profile's exclusion (the tile is disabled).
+        if privateSession != nil, !currentlyBlocking, try !store.siteSnapshot(for: adBlockProfileID).shouldBlock(host: host) { return false }
         try store.setExcluded(host, excluded: currentlyBlocking, profile: adBlockProfileID, privateSession: privateSession)
         return true
       }

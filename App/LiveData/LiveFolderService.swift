@@ -57,7 +57,7 @@ final class LiveFolderService {
 
   /// Cheap static test used on every address change: only URLs on the GitHub origin go further.
   static func isOnOrigin(_ url: URL) -> Bool {
-    url.host?.lowercased() == origin.host?.lowercased() && url.port == origin.port && url.scheme?.hasPrefix("http") == true
+    url.host?.lowercased() == origin.host?.lowercased() && url.port == origin.port && url.scheme?.lowercased() == origin.scheme?.lowercased()
   }
 
   /// The app became active: refresh Live Folders of the visible Spaces (throttled, 10 s).
@@ -167,7 +167,7 @@ final class LiveFolderService {
         let value = try await app.liveFetch.fetch(profileID: profileID,
           url: GitHubQuery.url(kind, teamReviews: config.teamReviews, origin: origin), script: GitHubQuery.extractionScript)
         if moved() { return nil }
-        let (state, items) = GitHubQuery.decode(value, kind: kind)
+        let (state, items) = GitHubQuery.decode(value, kind: kind, origin: origin)
         switch state {
         case .ok: lists.append(items)
         case .signedOut: outcome = .signedOut; break search

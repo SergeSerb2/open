@@ -353,7 +353,15 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   /// Legacy first-run automation keeps its importer proofs, but walks the new
   /// visible screens using their real actions instead of opening the old window.
   func skipToDefault() async {
-    if step == .name { if firstRun.probe == nil { await firstRun.refreshProbe() }; next() }
+    if step == .name {
+      // As the automation import does: load what next() would load on a task, then leave the name
+      // screen at once (bug sweep r3 T7: next() on its own left it on a task, and Start Fresh returned
+      // before it finished). While the flow is busy, next() does nothing and the step stays on the name screen.
+      if firstRun.probe == nil { await firstRun.refreshProbe() }
+      await firstRun.loadBrowserSources()
+      // A next() pressed before this call can have left the name screen during the awaits.
+      if step == .name { next() }
+    }
     for _ in 0..<6 {
       if step == .defaultBrowser || step == .ready { break }
       if step == .importData && firstRun.step == .report { next() }

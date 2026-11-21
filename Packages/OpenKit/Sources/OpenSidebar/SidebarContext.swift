@@ -455,31 +455,46 @@ public final class SidebarContext {
         return outline.keyboardFocusAfterDeletion()
     }
 
+    /// A selected row that is not a split pane and not inside another selected folder.
+    private func isTopLevel(_ id: ItemID, in ids: [ItemID]) -> Bool {
+        guard model.node(id: id) != nil, let parent = model.parent(of: id) else { return false }
+        if case .splitPane = parent { return false }
+        var ancestor = parent
+        while case .folder(let folder) = ancestor {
+            guard !ids.contains(folder), let next = model.parent(of: folder) else { return false }
+            ancestor = next
+        }
+        return true
+    }
+
+    /// The rows of a selection that Pin/Unpin acts on: top-level tabs outside Favorites.
+    /// A split has no Pin action (a single selected split disables Cmd+D), so a selection
+    /// skips it, as it skips Favorites and folders. Cmd+D, its menu title and the row
+    /// menu's Pin Tabs / Unpin Tabs all use this one set.
+    public func pinnableSelectionIDs(_ ids: [ItemID]) -> [ItemID] {
+        ids.filter { id in
+            guard isTopLevel(id, in: ids), model.node(id: id)?.tab != nil, let parent = model.parent(of: id) else { return false }
+            if case .favorites = parent { return false }
+            return true
+        }
+    }
+
+    /// Whether Pin/Unpin on these rows unpins: every pinnable row is already pinned.
+    public func selectionPinUnpins(_ ids: [ItemID]) -> Bool {
+        let pinnable = pinnableSelectionIDs(ids)
+        return !pinnable.isEmpty && pinnable.allSatisfy { model.isPinned(tabID: $0) }
+    }
+
     /// Existing command IDs only. The App command registry can use this same
     /// path as the focused outline; an empty selection falls through to the App.
     public func isSelectionCommandEnabled(_ commandID: String) -> Bool {
         let ids = selection.ids
         guard !ids.isEmpty else { return false }
-        func topLevel(_ id: ItemID) -> Bool {
-            guard model.node(id: id) != nil, let parent = model.parent(of: id) else { return false }
-            if case .splitPane = parent { return false }
-            var ancestor = parent
-            while case .folder(let folder) = ancestor {
-                guard !ids.contains(folder), let next = model.parent(of: folder) else { return false }
-                ancestor = next
-            }
-            return true
-        }
         switch commandID {
-        case "pin-unpin-tab":
-            return ids.contains { id in
-                guard topLevel(id), model.node(id: id)?.folder == nil, let parent = model.parent(of: id) else { return false }
-                if case .favorites = parent { return false }
-                return true
-            }
-        case "duplicate-tab": return ids.contains(where: topLevel)
+        case "pin-unpin-tab": return !pinnableSelectionIDs(ids).isEmpty
+        case "duplicate-tab": return ids.contains { isTopLevel($0, in: ids) }
         case "new-folder":
-            guard let first = ids.first, topLevel(first), let parent = model.parent(of: first) else { return false }
+            guard let first = ids.first, isTopLevel(first, in: ids), let parent = model.parent(of: first) else { return false }
             if case .favorites = parent { return false }
             return true
         default: return false
@@ -528,12 +543,9 @@ public final class SidebarContext {
         guard isSelectionCommandEnabled(commandID) else { return false }
         switch commandID {
         case "pin-unpin-tab":
-            let pinnable = ids.filter { id in
-                guard model.node(id: id)?.folder == nil, let parent = model.parent(of: id) else { return false }
-                switch parent { case .favorites, .splitPane: return false; default: return true }
-            }
+            let pinnable = pinnableSelectionIDs(ids)
             guard !pinnable.isEmpty else { return false }
-            return send(.setPinned(ids: ids, pinned: !pinnable.allSatisfy { model.isPinned(tabID: $0) }))
+            return send(.setPinned(ids: pinnable, pinned: !selectionPinUnpins(ids)))
         case "duplicate-tab": return send(.duplicateNodes(ids: ids))
         case "new-folder": return send(.newFolderFromSelection(ids: ids))
         default: return false

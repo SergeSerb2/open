@@ -208,15 +208,21 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     host.owner?.controller?.boostEditor?.boundTabDidClose(host.tabID)
     adapter.closed(host)
   }
-  func editFromLibrary(id: BoostID, profileID: ProfileID) {
-    guard let boost = store(for: profileID).boost(id: id), let space = app.model.spaces.first(where: { $0.profileID == profileID }),
-          let url = URL(string: "https://\(boost.siteMatch.targetsIPAddress && boost.siteMatch.domain.contains(":") ? "[\(boost.siteMatch.domain)]" : boost.siteMatch.domain)\(boost.siteMatch.pathPrefix ?? "/")"),
+  /// Nil when the editor opens (or the Boost is gone); otherwise the reason for the Library.
+  @discardableResult func editFromLibrary(id: BoostID, profileID: ProfileID) -> String? {
+    guard let boost = store(for: profileID).boost(id: id) else { return nil }
+    // The editor needs a page of this Profile in a browser window, which needs one of its Spaces.
+    guard let space = app.model.spaces.first(where: { $0.profileID == profileID }) else {
+      return "To edit this Boost, add a Space that uses its Profile."
+    }
+    guard let url = URL(string: "https://\(boost.siteMatch.targetsIPAddress && boost.siteMatch.domain.contains(":") ? "[\(boost.siteMatch.domain)]" : boost.siteMatch.domain)\(boost.siteMatch.pathPrefix ?? "/")"),
           // A window of the main model: an Incognito or Blank Window front window has neither this
           // Space nor an editable page for the Boost (canEdit refuses both).
           let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: space.id),
-          let factory = app.hostFactories[controller.windowID] else { return }
+          let factory = app.hostFactories[controller.windowID] else { return nil }
     factory.focus(space: space)
     if let tab = factory.openNewTab(url: url, background: false) { pendingEditors[tab.id] = id }
+    return nil
   }
   func retireProfile(_ profileID: ProfileID, directory: String) async {
     // Block new work first. Closing an editor can flush its draft, so retire the

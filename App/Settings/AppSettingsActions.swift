@@ -451,8 +451,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     // HistoryStore. If already loaded, clear Chromium's own history as well.
     let identifier = profile.id == app.model.defaultProfile?.id ? "Default" : profile.dataDirectoryName
     let loaded = OEEngine.shared.contexts.first { $0.identifier == identifier && $0.state == .live }
+    // Load the Profile's own regular context directly (bug sweep r3 W11). Borrowing an open
+    // window's factory failed with no regular window open ("This profile is not open.").
     let context = engineKinds.isEmpty ? loaded :
-      (loaded ?? app.hostFactories.values.compactMap { $0.context(for: profileID, create: true) }.first)
+      (loaded ?? EngineWebContentHostFactory.createRegularContext(profileID: profileID, directory: profile.dataDirectoryName, app: app))
     if !engineKinds.isEmpty, context == nil { return "This profile is not open." }
     let now = Date()
     let end = range == .all ? Date.distantFuture : now

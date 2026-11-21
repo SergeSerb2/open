@@ -28,6 +28,11 @@ public final class ScriptHost {
     public var windowForState: ((WindowID) -> NSWindow?)?
     public var littleTab: (any LittleTabProviding)?
     public var makeWindow: ((Bool) -> WindowID?)?
+    /// The App's own window paths: they show the result (split focus, Expand Current Pane,
+    /// sleeping tabs, extensions' tab state, save) and register no Undo step. Scratch probes
+    /// have none and change the model only.
+    public var selectInWindow: ((WindowID, SpaceID, ItemID) -> Bool)?
+    public var focusSpaceInWindow: ((WindowID, SpaceID) -> Bool)?
     public var model: BrowserModel? { modelProvider?() }
     public var lastSetterError: (number: Int, message: String)?
     /// `execute` runs only while this answers true. The App's View ▸ Developer

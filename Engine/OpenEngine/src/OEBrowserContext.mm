@@ -879,6 +879,14 @@ static CefRefPtr<CefListValue> OEUserScriptsValue(NSArray<OEUserScript*>* script
   return translated.empty() ? nil : OEURL(translated);
 }
 
+- (void)protocolHandlerURLWhenReadyForURL:(NSURL*)url
+                               completion:(void (^)(NSURL* _Nullable))completion {
+  void (^done)(NSURL*) = [completion copy];
+  [self oe_whenReady:^{
+    done(self.oe_isReady ? [self protocolHandlerURLForURL:url] : nil);
+  }];
+}
+
 - (BOOL)removeProtocolHandler:(OEProtocolHandler*)handler {
   if (!_context || _oe_closing || !handler) return NO;
   return CefRemoveProtocolHandler(_context, OECef(handler.scheme),

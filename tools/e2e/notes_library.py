@@ -43,6 +43,23 @@ def run(factory, results, tmp, h):
         time.sleep(.5)
         app.call('snapshot', path=os.path.join(frames, 'nl-library-notes.png'))
 
+        # L4 (round 3): Easels keeps its own search text. Switching from a section with a search
+        # must not filter Easels with it, and a search in Easels must not replace that section's.
+        library(action='select', section='downloads'); library(action='search', text='no-such-download')
+        library(action='select', section='easels')
+        entered = h.wait_until(lambda: (lambda x: x if x.get('section') == 'easels' and len(x.get('rows', [])) >= 2 else None)(library()), timeout=8, step=.1) or library()
+        library(action='search', text='Alpha')
+        filtered = h.wait_until(lambda: (lambda x: x if [r.get('title') for r in x.get('rows', [])] == ['Alpha'] else None)(library()), timeout=8, step=.1) or library()
+        library(action='select', section='downloads'); back = library()
+        library(action='select', section='easels'); again = library()
+        row('easels_search_own_text', entered.get('search') == '' and len(entered.get('rows', [])) >= 2 and bool(filtered.get('rows'))
+            and back.get('search') == 'no-such-download' and again.get('search') == 'Alpha',
+            enteredSearch=entered.get('search'), enteredRows=len(entered.get('rows', [])), downloadsSearch=back.get('search'),
+            easelsSearch=again.get('search'), negative='old Easels page used and wrote the Downloads search text')
+        library(action='search', text='')
+        library(action='select', section='downloads'); library(action='search', text=''); library(action='select', section='easels')
+        h.wait_until(lambda: len(library().get('rows', [])) >= 2, timeout=8, step=.1)
+
         b_row = rows.get('Beta', {}).get('id', '')
         menu = library(action='row-menu', id=b_row)['items'] if b_row else []
         library(action='row-action', id=b_row, name='open')
