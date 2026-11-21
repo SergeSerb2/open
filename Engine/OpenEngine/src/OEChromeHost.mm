@@ -4,6 +4,7 @@
 // OEWebContent and keep it glued over the view as a child NSWindow.
 
 #import "OEInternal.h"
+#import "OEClient.h"
 
 #include "include/views/cef_browser_view_delegate.h"
 #include "include/views/cef_window_delegate.h"
