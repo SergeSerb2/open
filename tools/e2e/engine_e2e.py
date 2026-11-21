@@ -5083,6 +5083,7 @@ def sidebar_checks(factory, results, tmp):
         app.call("space", space=w8_home)
         app.call("select", tab=a)
         app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+        w8_reduced = app.call("window-motion")["reduced"]
         app.call("window-motion", reduced=False)
         w8_frame = [float(v) for v in re.findall(r"-?[\d.]+", app.call("window-frame"))]
         app.call("window-frame", frame=[0, 0, 5200, 3600], unconstrained=True)
@@ -5094,6 +5095,7 @@ def sidebar_checks(factory, results, tmp):
         w8_after = app.call("window-motion")["spacePage"]
         w8_page = check_page(app, a, "Sidebar A")
         app.call("window-frame", frame=w8_frame)
+        app.call("window-motion", reduced=w8_reduced)
         results["W8_interrupted_wide_switch_retires_cover"] = {
             "ok": w8_first != "idle" and bool(w8_idle) and w8_page,
             "first_phase": w8_first, "after": w8_after, "page_shown": w8_page, "restored_frame": w8_frame,
@@ -5104,6 +5106,9 @@ def sidebar_checks(factory, results, tmp):
         context = app.page(e)["context"]
         app.call("space", space=s1)
         app.call("select", tab=a)
+        # An animated switch shows the page when its cover retires (the engine's presented
+        # frame), not at the automation reply: wait for that state, as the click below does.
+        state_when(app, lambda st: st["selected"] == a and st["shownPages"] == [a])
         first_page = check_page(app, a, "Sidebar A")
         # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
         # A socket-ready launch can still be waiting for its activation grant.
@@ -5115,19 +5120,32 @@ def sidebar_checks(factory, results, tmp):
         # its layer animation (otherwise the receipt can belong to the prior switch).
         after_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e) or app.call("window-state")
         switched = app.call("window-motion")["space"]
+        # The model flips at mouse-up; the panel shows E once the cover retires on E's
+        # presented frame. Read the page there, not at the flip.
+        settle_started = time.monotonic()
+        settled_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e and st["shownPages"] == [e]
+                                   and app.call("window-motion")["spacePage"]["phase"] == "idle") or app.call("window-state")
+        settle_seconds = time.monotonic() - settle_started
+        click_cover = app.call("window-motion")["spacePage"]
+        click_tab = {k: app.tab(e).get(k) for k in ("sleepPhase", "loaded", "hasWebContent")}
         second_page = check_page(app, e, "Sidebar E")
+        second_context = app.page(e)["context"]
         results["space_switch_wrapper"] = {"ok": first_page and second_page and context != "Default"
-                                                and app.page(e)["context"] == context}
+                                                and second_context == context,
+                                           "first_page": first_page, "second_page": second_page,
+                                           "context": context, "second_context": second_context,
+                                           "state": {k: after_click.get(k) for k in ("space", "selected", "shownPages")}}
         # Closed-form critical response from the installed mass/stiffness, not elapsed time.
         omega = math.sqrt(switched.get("stiffness", 0) / switched.get("mass", 1))
         remainder = 228 * (1 + omega * .27) * math.exp(-omega * .27)
         travel = abs(switched.get("to", 0) - switched.get("from", 0))
         results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
-            and after_click["selected"] == e and after_click["shownPages"] == [e]
+            and after_click["selected"] == e and settled_click["shownPages"] == [e]
             and scheduled_spring(switched, .20, 1, "transform.translation.x") and remainder <= .5 and travel > .5,
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
-            "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
+            "selected_after_click": after_click["selected"], "shown_after_click": settled_click["shownPages"],
+            "settle_seconds": settle_seconds, "cover_phase_after_settle": click_cover.get("phase"), "tab_after_click": click_tab}
         results["durable_profile_storage"] = {
             "status": "INFO", "coveredBy": "profiles/durable_second_profile",
             "reason": "requires the real cross-launch cookie/storage assertion in the Profiles suite"}
