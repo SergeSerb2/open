@@ -27,7 +27,8 @@ public extension CapturesProvider { var loadFailed: Bool { false } }
     func setBoostEnabled(id: String, enabled: Bool, profileID: ProfileID)
     func renameBoost(id: String, to name: String, profileID: ProfileID)
     func deleteBoost(id: String, profileID: ProfileID)
-    func editBoost(id: String, profileID: ProfileID)
+    /// Nil when the editor opens; otherwise the reason it cannot, for the Library's status line.
+    func editBoost(id: String, profileID: ProfileID) -> String?
     func restoreArchived(id: ItemID)
     func previewArchived(url: URL, profileID: ProfileID)
     func deleteArchived(id: ItemID)
@@ -113,7 +114,9 @@ extension LibraryActions { public func flushHistoryWrites() async {} }
             try encoder.encode(next).write(to: indexURL, options: .atomic)
         } catch { if exists { try? FileManager.default.moveItem(at: tombstone, to: file) }; throw error }
         captures = next
-        if exists { try? FileManager.default.removeItem(at: tombstone) }
+        // Also after a delete that an earlier run left unfinished (the App quit between the move
+        // and the index write): the file is then already the tombstone. Only after the commit.
+        if exists || FileManager.default.fileExists(atPath: tombstone.path) { try? FileManager.default.removeItem(at: tombstone) }
     }
 }
 

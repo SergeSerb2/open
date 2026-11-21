@@ -212,6 +212,33 @@ def run_save_prompts(factory, results, tmp, harness):
             return {'waitingLimit': 3, 'oldestIgnored': 1, 'focusedPagesShown': 3}
         row('M-3-capacity-and-focus', capacity_and_focus)
 
+        def active_kept_on_switch():
+            # W9 (round 3): three requests wait (from pages that are not focused) behind a visible
+            # sheet. A tab switch puts the visible one back at the front of the queue; the cap must
+            # then drop the oldest waiting request, not the one the user just saw.
+            events()
+            tabs = [harness['new_tab'](app, 'about:blank') for _ in range(5)]
+            app.call('select', tab=tabs[0])
+            show(host='active-0.example.com')
+            for i in range(1, 4):
+                app.call('save-prompt', mock={'kind': 'password', 'host': 'waiting-%d.example.com' % i, 'tab': tabs[i]})
+            s = state()
+            assert s.get('visible') and s['title'] == 'Save password for active-0.example.com?' and s['queueLength'] == 3, s
+            app.call('select', tab=tabs[4])
+            assert gone(), 'the tab switch kept the sheet'
+            ev = events()
+            assert [(e['displayHost'], e['answer']) for e in ev] == [('waiting-1.example.com', 'ignored')], ev
+            for i, host in [(0, 'active-0'), (2, 'waiting-2'), (3, 'waiting-3')]:
+                app.call('select', tab=tabs[i])
+                s = wait(lambda: (s if (s := state()).get('visible') else None), timeout=5, step=.05)
+                assert s and s['title'] == 'Save password for %s.example.com?' % host, s
+                answer('dismiss')
+            assert [(e['displayHost'], e['answer']) for e in events()] == [('active-0.example.com', 'dismiss'), ('waiting-2.example.com', 'dismiss'), ('waiting-3.example.com', 'dismiss')]
+            for tab in tabs:
+                app.call('close', tab=tab)
+            return {'dropped': 'waiting-1.example.com', 'kept': 'active-0.example.com'}
+        row('M-3-active-kept-on-switch', active_kept_on_switch)
+
         def page_close():
             events()
             tab = harness['new_tab'](app, 'about:blank')

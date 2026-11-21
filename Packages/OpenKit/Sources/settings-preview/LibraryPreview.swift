@@ -14,7 +14,7 @@ import OpenStore
     func setBoostEnabled(id: String, enabled: Bool, profileID: ProfileID) { record("setBoostEnabled \(id) \(enabled) \(profileID)") }
     func renameBoost(id: String, to name: String, profileID: ProfileID) { record("renameBoost \(id) \(profileID)") }
     func deleteBoost(id: String, profileID: ProfileID) { record("deleteBoost \(id) \(profileID)") }
-    func editBoost(id: String, profileID: ProfileID) { record("editBoost \(id) \(profileID)") }
+    func editBoost(id: String, profileID: ProfileID) -> String? { record("editBoost \(id) \(profileID)"); return nil }
     var log: [String] = []
     let model: BrowserModel
     let downloads: PreviewDownloads

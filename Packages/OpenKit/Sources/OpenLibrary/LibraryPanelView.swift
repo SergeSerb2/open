@@ -267,6 +267,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         }
         let animationReady = ProcessInfo.processInfo.systemUptime
         section = next
+        if pendingReveal?.section != next { pendingReveal = nil }
         if let mapped = next.modelSection { viewModel.section = mapped }
         filterOpen = false
         updateSection()
@@ -294,7 +295,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         header.isHidden = section == .spaces; filter.isHidden = !section.hasFilter
         searchField.placeholderAttributedString = NSAttributedString(string:section.placeholder,attributes:[.foregroundColor:foreground.withAlphaComponent(0.46),.font:NSFont.systemFont(ofSize:14)])
         searchField.setAccessibilityLabel(section.placeholder)
-        if searchField.stringValue != viewModel.query { searchField.stringValue = viewModel.query }
+        if searchField.stringValue != searchText { searchField.stringValue = searchText }
         updateEmptyCopy()
         let ordered = sections.compactMap { tiles[$0] }
         for (a,b) in zip(ordered,ordered.dropFirst()) { a.nextKeyView = b }
@@ -309,7 +310,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     func updateEmptyCopy() {
         // Downloads: every outside entry sets the Profile filter to the window owner's Profile, so a filter alone
         // does not mean the user narrowed anything. With no download in any Profile the copy stays "No downloads yet".
-        let noMatches = !viewModel.query.isEmpty || (hasActiveFilters && !(section == .downloads && viewModel.downloads.downloads.isEmpty))
+        let noMatches = !searchText.isEmpty || (hasActiveFilters && !(section == .downloads && viewModel.downloads.downloads.isEmpty))
         let folderSources = section == .media && viewModel.mediaFolders.map { !$0.onboarded } == true
         // C-LF-5 (LEAD 20:45, Open's design): Arc's two first-use strings with "Open" (LB-1). The permission ask is
         // the body beside the button; the "Quickly grab…" line is the button's tooltip and accessibility help.
@@ -411,8 +412,20 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         let rect = CGRect(x:112,y:top,width:304,height:max(0,bounds.height-top-(statusLabel.isHidden ? 0 : 42)))
         if listView.frame != rect { listView.frame = rect; listView.layoutSubtreeIfNeeded() }
     }
+    /// Easels is not a view-model section, so it keeps its own search text: switching to it must
+    /// not filter Easels with the previous section's search, or write that section's search.
+    var easelsQuery = ""
+    /// A row to select when its section's rows arrive ("Show in Library" on a capture card).
+    var pendingReveal: (section: LibraryPanelSection, id: String)?
+    /// Selects the row now when it is shown; otherwise after the section's next rows update.
+    /// A section change drops the request.
+    public func reveal(_ id: String, in target: LibraryPanelSection) {
+        pendingReveal = (target, id)
+        if section == target, selectRow(id) { pendingReveal = nil }
+    }
+    var searchText: String { section == .easels ? easelsQuery : viewModel.query }
     public func setSearch(_ text: String) {
-        viewModel.query = text
+        if section == .easels { easelsQuery = text } else { viewModel.query = text }
         if section == .archive || section == .history {
             let host = hosts[section]
             host?.provider?.cancel(); host?.provider = nil; host?.providerGeneration += 1
@@ -433,7 +446,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         if event.keyCode == 53 {
             if listView.dismissMenu() { return true }
             if filterOpen { setFilterOpen(false) }
-            else if !viewModel.query.isEmpty { setSearch("") }
+            else if !searchText.isEmpty { setSearch("") }
             else { onClose?() }
             return true
         }
@@ -482,7 +495,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             "header":["searchFrame":section == .spaces ? [] : rect(header),"filterFrame":section.hasFilter ? rect(filter) : [],"filterOpen":filterOpen,"chips":filterOpen ? filterEditor.state(in:self) : []] as [String:Any],
             "providers":Dictionary(uniqueKeysWithValues:hosts.map { ($0.key.rawValue,["generation":$0.value.providerGeneration,"loaded":$0.value.loaded,"running":$0.value.provider != nil] as [String:Any]) }),
             "profiles":["history":viewModel.historyProfileID.description,"downloads":viewModel.downloadProfileFilter?.description ?? "all"],
-            "dragSession":listView.dragSession,"search":viewModel.query,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "statusLabel":statusLabel.isHidden ? "" : statusLabel.stringValue, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden,"bodyFrame":rect(emptyBody),"buttonFrame":rect(emptyButton),"bodyNeededHeight":ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:emptyBody.frame.width,height:200),options:[.usesLineFragmentOrigin,.usesFontLeading]).height),"buttonToolTip":emptyButton.toolTip ?? "","buttonHelp":emptyButton.accessibilityHelp() ?? ""],
+            "dragSession":listView.dragSession,"search":searchText,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "statusLabel":statusLabel.isHidden ? "" : statusLabel.stringValue, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden,"bodyFrame":rect(emptyBody),"buttonFrame":rect(emptyButton),"bodyNeededHeight":ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:emptyBody.frame.width,height:200),options:[.usesLineFragmentOrigin,.usesFontLeading]).height),"buttonToolTip":emptyButton.toolTip ?? "","buttonHelp":emptyButton.accessibilityHelp() ?? ""],
             "easels":easelsState, "notes":noteItems.count,
             "menuOpen":listView.activeMenu != nil,"menuLifecycle":listView.menuLifecycle,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? ""]
     }

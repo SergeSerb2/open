@@ -3,6 +3,7 @@ import AppKit
 import OpenFeatures
 import OpenWeb
 import OpenEngine
+import OpenModel
 
 /// Synthetic metadata only. No credentials, Keychain, or engine storage access.
 @MainActor final class MockSavePrompt: SavePromptRequest {
@@ -90,11 +91,14 @@ extension AutomationController {
       throw Failure(message: "no browser window")
     }
     if let mock = args["mock"] as? [String: Any] {
-      guard Set(mock.keys) == ["kind", "host"], let raw = mock["kind"] as? String,
+      // Optional "tab": a request from a page that is not focused (a background tab's form).
+      guard Set(mock.keys) == ["kind", "host"] || Set(mock.keys) == ["kind", "host", "tab"], let raw = mock["kind"] as? String,
             let kind = SavePromptKind(automationName: raw), let host = mock["host"] as? String,
             host.utf8.count <= SavePromptSheet.maximumHostBytes,
             !host.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-            let page = factory.selectedContent else { throw Failure(message: "invalid mock kind/host or no focused page (host limit 4096 UTF-8 bytes)") }
+            let page = mock["tab"] == nil ? factory.selectedContent
+              : (mock["tab"] as? String).flatMap(UUID.init(uuidString:)).flatMap({ factory.hosts[ItemID(rawValue: $0)]?.content })
+      else { throw Failure(message: "invalid mock kind/host/tab or no focused page (host limit 4096 UTF-8 bytes)") }
       let request = MockSavePrompt(kind: kind, displayHost: host) { [weak self, weak factory, weak page] answer in
         guard let factory else { return }
         self?.recordAutofillEvent("savePrompt", owner: factory, page: page, info: ["kind": kind.automationName, "displayHost": host, "answer": answer])

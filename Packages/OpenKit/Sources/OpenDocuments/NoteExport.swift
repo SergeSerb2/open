@@ -63,7 +63,7 @@ public enum NoteExport {
                 if style.underline { piece = "<u>\(piece)</u>" }
                 if style.italic { piece = "*\(piece)*" }
                 if style.bold { piece = "**\(piece)**" }
-                if let link = style.link { piece = "[\(piece)](\(link))" }
+                if let link = style.link { piece = "[\(piece)](\(markdownDestination(link)))" }
                 body += piece
             }
             let level = listLevel(paragraph.block?.level)
@@ -84,6 +84,21 @@ public enum NoteExport {
             }
         }
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+    }
+
+    /// A link destination ends at an unbalanced ")" or at white space, and "<" starts the
+    /// bracketed form. Percent-encode these: the URL stays the same.
+    static func markdownDestination(_ url: String) -> String {
+        var out = ""
+        for scalar in url.unicodeScalars {
+            if scalar == "(" { out += "%28" } else if scalar == ")" { out += "%29" }
+            else if scalar == "<" { out += "%3C" } else if scalar == ">" { out += "%3E" }
+            else if scalar == " " { out += "%20" }
+            else if CharacterSet.whitespacesAndNewlines.contains(scalar) || CharacterSet.controlCharacters.contains(scalar) {
+                out += String(scalar).utf8.map { String(format: "%%%02X", $0) }.joined()
+            } else { out.unicodeScalars.append(scalar) }
+        }
+        return out
     }
 
     static func escapeMarkdown(_ text: String) -> String {
