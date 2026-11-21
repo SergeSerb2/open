@@ -485,10 +485,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func noteLibraryInput() {
     LibraryPanelView.noteUserInput()
     libraryLastInput = ProcessInfo.processInfo.systemUptime
-    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     settingsPresenter.cancelLibraryIdleWork()
+    // A prebuild still waiting for the same front window re-reads the last input when it wakes, so
+    // input moves its deadline without a new Task per event (pointer moves arrive at up to 1 kHz;
+    // bug sweep r4 PERF-01). A prebuild that has started building stops, as before.
+    if libraryPrebuildWaiting, let task = libraryPrebuildTask, !task.isCancelled,
+      libraryPrebuildWindow == frontStandardWindowController?.windowID { return }
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     if libraryFirstSidebarDraw != nil { scheduleLibraryPrebuild() }
   }
+  /// The pending prebuild is still in its 3 s wait, for this window.
+  private var libraryPrebuildWaiting = false
+  private var libraryPrebuildWindow: WindowID?
   func scheduleLibraryPrebuild() {
     #if OPEN_AUTOMATION
     if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREBUILD_DISABLED"] == "1" { return }
@@ -501,9 +509,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     #if OPEN_AUTOMATION
     libraryPrebuildTasksCreated += 1
     #endif
+    libraryPrebuildWaiting = true; libraryPrebuildWindow = controller.windowID
     libraryPrebuildTask = Task { @MainActor [weak self,weak controller] in
-      try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
-      guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
+      var deadline = deadline
+      while true {
+        try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
+        guard let self,!Task.isCancelled else { return }
+        // Input during the wait moved the deadline: wait again (the deadline rescheduling gave).
+        let moved = max(first+3,self.libraryLastInput+3)
+        if moved <= deadline { break }
+        deadline = moved
+      }
+      guard let self else { return }
+      if self.libraryPrebuildGeneration == generation { self.libraryPrebuildWaiting = false }
+      guard !Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
       defer { if self.libraryPrebuildGeneration == generation { self.libraryPrebuildTask = nil } }
       guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller,self.frontStandardWindowController === controller,
         controller.window?.isVisible == true else { return }
