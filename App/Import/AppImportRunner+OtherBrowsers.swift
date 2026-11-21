@@ -143,18 +143,18 @@ extension AppImportRunner {
     // Matching, cheapest first: a tab whose current ID is already there needs nothing; then the old ID
     // of the tab's own window and position (an unchanged session, one hash); then a bounded scan for a
     // reordered session: windows up to the session's last plus 4 (at most 16), positions up to twice the
-    // tab count plus 32 (at most 1,024), at most 16,384 hashes per URL and 500,000 per import. The scans
-    // run after every exact match, so tabs of the user's own with the same URL cannot take the budget
-    // from them. A tab past these bounds gets one new copy.
+    // tab count plus 32 (at most 1,024), the tab's own window first, at most 2,048 hashes per URL and
+    // 500,000 per import. The scans run after every exact match, so tabs of the user's own with the
+    // same URL cannot take the budget from them. A tab past these bounds gets one new copy.
     let windows = min(16, (read.tabs.map(\.window).max() ?? 0) + 5), positions = min(1024, read.tabs.count * 2 + 32)
     var budget = 500_000
     func candidates(_ url: URL, current: ItemID) -> Set<ItemID>? {
       let ids = Set(existing[url] ?? [])
       return ids.isEmpty || ids.contains(current) ? nil : ids
     }
-    func scan(_ url: URL, _ candidates: Set<ItemID>) -> ItemID? {
-      var perURL = 16_384
-      for window in 0..<windows { for index in 0..<positions {
+    func scan(_ url: URL, window own: Int, _ candidates: Set<ItemID>) -> ItemID? {
+      var perURL = 2_048
+      for window in [own] + (0..<windows).filter({ $0 != own }) { for index in 0..<positions {
         guard budget > 0, perURL > 0 else { return nil }
         budget -= 1; perURL -= 1
         let id = legacyID(url, window: window, index: index)
@@ -162,16 +162,16 @@ extension AppImportRunner {
       } }
       return nil
     }
-    var chosen: [URL: ItemID] = [:], unmatched: [(URL, Set<ItemID>)] = []
+    var chosen: [URL: ItemID] = [:], unmatched: [(URL, Int, Set<ItemID>)] = []
     var seenURLs = Set<URL>()
     for (index, tab) in read.tabs.enumerated() where seenURLs.insert(tab.url).inserted {
       let current = BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)
       if importsLegacyIDs { chosen[tab.url] = legacyID(tab.url, window: tab.window, index: index); continue }
       guard let ids = candidates(tab.url, current: current) else { chosen[tab.url] = current; continue }
       let exact = legacyID(tab.url, window: tab.window, index: index)
-      if ids.contains(exact) { chosen[tab.url] = exact } else { chosen[tab.url] = current; unmatched.append((tab.url, ids)) }
+      if ids.contains(exact) { chosen[tab.url] = exact } else { chosen[tab.url] = current; unmatched.append((tab.url, tab.window, ids)) }
     }
-    for (url, ids) in unmatched { if let found = scan(url, ids) { chosen[url] = found } }
+    for (url, window, ids) in unmatched { if let found = scan(url, window: window, ids) { chosen[url] = found } }
     var seen = Set<URL>()
     for tab in read.tabs where seen.insert(tab.url).inserted {
       let id = chosen[tab.url] ?? BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)

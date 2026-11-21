@@ -359,7 +359,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       // before it finished). While the flow is busy, next() does nothing and the step stays on the name screen.
       if firstRun.probe == nil { await firstRun.refreshProbe() }
       await firstRun.loadBrowserSources()
-      next()
+      // A next() pressed before this call can have left the name screen during the awaits.
+      if step == .name { next() }
     }
     for _ in 0..<6 {
       if step == .defaultBrowser || step == .ready { break }

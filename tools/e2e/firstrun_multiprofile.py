@@ -96,8 +96,13 @@ def shapes_fixture(root, h):
     # Favorites), and a split whose fifth child is a five-pane split. Each pane is placed once.
     split('split-orphan', [tab('loose-%d' % i) for i in range(5)])
     favorite_split = split('split-favorite', [tab('fav-split-%d' % i) for i in range(5)])
+    # Review round 2: a Favorites split whose only child is a folder (the split dissolves; the folder stays).
+    ids['fav-folder'] = key('fav-folder')
+    graph['items'] += [ids['fav-folder'], {'id': ids['fav-folder'], 'childrenIds': [tab('fav-folder-inner')],
+                                          'title': 'Example favorites folder', 'data': {'list': {}}}]
+    folder_split = split('split-fav-folder', [ids['fav-folder']])
     for index in range(0, len(graph['items']), 2):
-        if graph['items'][index] == ids['top']: graph['items'][index + 1]['childrenIds'].append(favorite_split)
+        if graph['items'][index] == ids['top']: graph['items'][index + 1]['childrenIds'] += [favorite_split, folder_split]
     inner = split('split-inner', [tab('inner-%d' % i) for i in range(5)])
     outer = split('split-outer', [tab('outer-%d' % i) for i in range(4)] + [inner])
     pinned, today = key('gamma-pinned'), key('gamma-today')
@@ -181,7 +186,7 @@ def shapes_rows(factory, results, tmp, h):
         # Review round 1: every pane of the orphan, Favorites and nested five-pane splits appears exactly
         # once; the nested split's overflow stays in Gamma (its outer split's Space).
         whole = json.dumps(data)
-        loose = ['loose-%d' % i for i in range(5)] + ['fav-split-%d' % i for i in range(5)] + ['inner-%d' % i for i in range(5)] + ['outer-%d' % i for i in range(4)]
+        loose = ['loose-%d' % i for i in range(5)] + ['fav-split-%d' % i for i in range(5)] + ['inner-%d' % i for i in range(5)] + ['outer-%d' % i for i in range(4)] + ['fav-folder-inner']
         counts = {name: whole.count('"https://example.com/shapes/%s"' % name) for name in loose}
         inner_in_gamma = all('"https://example.com/shapes/inner-%d"' % i in gamma_text for i in range(5))
         results['MP_shapes_overflow_placed_once'] = dict(ok=not duplicates and all(c == 1 for c in counts.values()) and inner_in_gamma,

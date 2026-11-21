@@ -852,17 +852,21 @@ public struct ArcImporter {
                 reachedArcIDs.insert(containerID)
                 for childID in (container["childrenIds"] as? [String]) ?? [] {
                     reachedArcIDs.insert(childID)
-                    guard placed.insert(childID).inserted, let node = buildNode(arcID: childID) else { continue }
-                    if let tab = node.tab {
-                        if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
-                        profiles.first(where: { $0.id == owner })?.favorites.append(tab)
-                    } else {
-                        looseNodes.append(node)
+                    if placed.insert(childID).inserted, let node = buildNode(arcID: childID) {
+                        if let tab = node.tab {
+                            if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
+                            profiles.first(where: { $0.id == owner })?.favorites.append(tab)
+                        } else {
+                            looseNodes.append(node)
+                        }
                     }
+                    // Also after a child that built nothing (a dissolved split whose only children
+                    // were a folder or a split): what it left waiting is placed.
                     drainSplitOverflow(into: &looseNodes)
                 }
             }
         }
+        drainSplitOverflow(into: &looseNodes)
         report.profiles = profiles.count
 
         // Opener references: remap Arc opener ids to Open tabs (best effort by URL+order is skipped;

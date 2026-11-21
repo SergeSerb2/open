@@ -126,12 +126,15 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
       stores[name] = nil
       store.retire()
     }
+    // A tab whose row is also in another (live) Profile's store stays known, and saves there now.
     for (id, names) in storedIn where names.contains(where: { $0.lowercased() == directory.lowercased() }) {
       let left = names.filter { $0.lowercased() != directory.lowercased() }
       storedIn[id] = left.isEmpty ? nil : left
+      if left.isEmpty { knownStored.remove(id) }
     }
     for (id, name) in savedIn where name.lowercased() == directory.lowercased() {
-      savedIn[id] = nil; knownStored.remove(id)
+      savedIn[id] = storedIn[id]?.first
+      if storedIn[id] == nil { knownStored.remove(id) }
     }
   }
 
