@@ -243,6 +243,9 @@ final class PageQuitCoordinator {
     if owner.pageChrome.closeBlockedByDialog(page) {
       running = false; remaining.removeAll(); selections.removeAll()
       app.quitWarning.resetApproval()
+      // This ends the quit, as "Stay" does: report the cancel (the attempt was waiting to retry).
+      app.updater?.userDriver.applicationTerminationCancelled()
+      app.updater?.userDriver.clearInstallationRelaunchRequest()
       owner.pageChrome.showDialogsOffscreen(page)
       return
     }
