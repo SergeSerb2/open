@@ -201,6 +201,31 @@ def run(factory, results, tmp, harness):
         popped = wait_until(lambda: len(state()['stack']) == 4, timeout=5, step=.05)
         results['peek_nesting_cap'] = {'ok': native_nesting and depths == [2,3,4,5,5] and all(ready_pages) and bool(at_cap) and bool(popped), 'depths': depths, 'pagesReady': ready_pages}
         clear()
+        # EXT3 E10: at the five-Peek cap, a Library preview of another Profile replaces the top Peek, with a
+        # page in that Profile. It used to load into the top Peek of the source Profile (with its cookies).
+        try:
+            home = app.call('window-state')['space']
+            app.call('space-create', title='R3 Peek B', profile='R3 Peek B')
+            app.call('space', space=home)
+            select_source()
+            profile_b = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'R3 Peek B')
+            for i in range(5):
+                app.call('peek-open', tab=source, url=url('cap%d.localhost' % i)); opened()
+            depth = len(state()['stack'])
+            app.call('peek-open', tab=source, url=url('capb.localhost'), profile=profile_b['id'])
+            def replaced():
+                rows = state()['stack']
+                return rows if len(rows) == 5 and rows[-1]['profile'] == profile_b['id'] and rows[-1]['content'] > 0 else None
+            stack = wait_until(replaced, timeout=8, step=.05) or state()['stack']
+            pages = {p['identifier']: p for p in app.call('pages')}
+            contexts = [pages.get(item['content'], {}).get('context') for item in stack]
+            results['R3_E10_peek_cap_other_profile'] = {'ok': depth == 5 and len(stack) == 5 and stack[-1]['profile'] == profile_b['id']
+                and contexts[-1] == profile_b['directory'] and len(set(contexts[:-1])) == 1 and contexts[0] != profile_b['directory'],
+                'depth': depth, 'contexts': contexts, 'profileB': profile_b['directory'], 'top': stack[-1]}
+        except Exception as error:
+            results['R3_E10_peek_cap_other_profile'] = {'ok': False, 'error': repr(error)[:400]}
+        clear()
+        select_source()
         # Source becomes a split while its Peek is open. The Peek follows the source row.
         app.call('select', tab=source)
         app.call('peek-open', tab=source, url=url('b.localhost'))

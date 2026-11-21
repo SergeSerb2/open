@@ -49,12 +49,20 @@ final class EngineExtensionHost: ExtensionHost {
     extensionActions[index] = value; onActionChanged?(value)
   }
   private func snapshot(_ a: OEExtensionAction) -> ExtensionActionInfo {
-    ExtensionActionInfo(extensionID: a.extensionIdentifier, name: a.extensionName,
-      accessibleName: a.accessibleName, tooltip: a.tooltip,
+    ExtensionActionInfo(extensionID: a.extensionIdentifier, name: Self.bounded(a.extensionName),
+      accessibleName: Self.bounded(a.accessibleName), tooltip: Self.bounded(a.tooltip),
       toolbarImage: EngineExtensionImages.shared.image(a.toolbarImage), menuIcon: EngineExtensionImages.shared.image(a.icon),
-      badgeText: a.badgeText, isEnabled: a.isEnabled, hasPopup: a.hasPopup, isPinned: a.isPinned,
+      badgeText: a.badgeText.map(Self.bounded), isEnabled: a.isEnabled, hasPopup: a.hasPopup, isPinned: a.isPinned,
       pinnedIndex: a.isPinned ? a.pinnedIndex : nil, wantsToRun: a.wantsToRun,
       isShowingPopup: a.isShowingPopup, shortcutKeys: ExtensionShortcutTable.keycaps(a.shortcutKeyEquivalent, flags: a.shortcutModifierFlags))
+  }
+  /// The UI refuses text over 4096 UTF-8 bytes (`ExtensionsUIContext.accepts`), and the engine passes an
+  /// extension's title and badge unbounded. Clip at a Character boundary, so one long title cannot
+  /// empty every extension's toolbar and menu list.
+  static func bounded(_ text: String) -> String {
+    guard text.utf8.count > 4096 else { return text }
+    var bytes = 0
+    return String(text.prefix { bytes += $0.utf8.count; return bytes <= 4096 })
   }
   func executeAction(extensionID: String, source: ExtensionRunSource) -> Bool {
     let engineSource: OEBrowser.ExtensionActionSource = switch source {

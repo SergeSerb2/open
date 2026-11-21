@@ -44,13 +44,17 @@ final class SpaceContentTransitionController {
         if requestedSelection == selection, plate.phase != .idle { return }
         let source = nativeSelection
         let needsCover = source != nil && (source?.space != selection.space || plate.phase != .idle)
-        guard needsCover, container.window?.isVisible == true,
-              let parent = container.superview, !container.bounds.isEmpty else {
-            cancel(clearCache: source?.profile != selection.profile,
-                   preservingCapture: plate.phase == .idle && source?.profile == selection.profile)
-            requestedSelection = selection; nativeSelection = selection; nativeStyle = container.style
-            container.applySpaceSelection(selection, animateSlots: source?.space == selection.space, notify: false)
-            return
+        let scale = container.window?.backingScaleFactor ?? 1
+        // An interrupted slide folds into one image first. When it cannot (a
+        // viewport over the 16 Mpx plate limit), no new cover can replace the
+        // running one, whose callbacks this switch supersedes: cut over directly.
+        let canCover = needsCover && container.window?.isVisible == true
+            && container.superview != nil && !container.bounds.isEmpty
+        let previousCover = canCover && plate.phase != .idle
+            ? plate.capturePresentation(size: container.bounds.size, scale: scale) : nil
+        guard canCover, let parent = container.superview,
+              plate.phase == .idle || previousCover != nil else {
+            applyUncovered(selection, from: source); return
         }
 
         generation &+= 1; let token = generation
@@ -58,9 +62,6 @@ final class SpaceContentTransitionController {
         let previousRequest = requestedSelection
         requestedSelection = selection
         if source?.profile != selection.profile { plate.invalidateAll() }
-        let scale = container.window?.backingScaleFactor ?? 1
-        let previousCover = plate.capturePresentation(size: container.bounds.size, scale: scale)
-        if plate.phase != .idle, previousCover == nil { return }
         plate.frame = container.bounds
         // Share the web panel's ancestor. Sidebar/Cmd+S layer motion therefore
         // moves the cover too, without a per-frame sibling-frame update.
@@ -100,15 +101,27 @@ final class SpaceContentTransitionController {
             apply?()
         }
         if !started {
-            // Keep the old native source/cover and allow the same request to
-            // retry when geometry becomes representable. Never expose a hole.
             applyingCoveredSelection = nil; requestedSelection = nil
             if plate.phase == .idle {
+                // Keep the old native source and allow the same request to
+                // retry when geometry becomes representable. Never expose a hole.
                 plate.removeFromSuperview()
                 if source?.tabs.isEmpty == true { container.isHidden = true }
+            } else {
+                // The running cover's callbacks were superseded above: it would
+                // stay up and take every click. Retire it and show the selection.
+                applyUncovered(selection, from: source); return
             }
         }
         lastViewport = viewport
+    }
+
+    /// The uncovered path: no plate, the selection applies at once.
+    private func applyUncovered(_ selection: SpaceContentSelection, from source: SpaceContentSelection?) {
+        cancel(clearCache: source?.profile != selection.profile,
+               preservingCapture: plate.phase == .idle && source?.profile == selection.profile)
+        requestedSelection = selection; nativeSelection = selection; nativeStyle = container.style
+        container.applySpaceSelection(selection, animateSlots: source?.space == selection.space, notify: false)
     }
 
     private var viewport: WebContentFrameViewport {

@@ -198,6 +198,42 @@ def run(factory, results, tmp, h):
             app.call('window-focus', id=first_window, activate=True)
         row('two_windows_share_edits', w_seen == 'one two' and w_stored.get('text') == 'one two three',
             windows=[first_window, second_window], seenInFirstWindow=w_seen, stored=w_stored.get('text'))
+
+        # Bug sweep r3 L20: Delete Note also removes the Note's row from inside an archived folder.
+        # Before, the folder's stored children kept it, and restoring the folder brought back a row of
+        # a Note whose file is in the Trash (an empty Note). The folder's other row stays.
+        app.call('note', action='create'); app.call('key', text='Theta'); key('return'); app.call('key', text='theta body')
+        th = app.call('note')['tab']
+        th_url = app.call('note', tab=th)['url']
+        app.call('note', action='create'); app.call('key', text='Iota')
+        io = app.call('note')['tab']
+        io_url = app.call('note', tab=io)['url']
+        app.call('note', action='flush')
+        app.call('select', tab=th); shown(th)
+        app.call('menu-perform', id='duplicate-tab')
+        th_rows = h.wait_until(lambda: (lambda r: r if len(r) == 2 else None)([t['id'] for t in app.call('tabs') if t['url'] == th_url]), timeout=5, step=.1) or []
+        th2 = next((t for t in th_rows if t != th), None)
+        archived_kind, restored_urls, status = None, None, None
+        if th2:
+            profile = app.tab(th)['profile']
+            folder = app.call('folder', tabs=[th2, io], title='R3 Notes', section='pinned')
+            app.call('sidebar-menu', node=folder, item='Delete')
+            h.wait_until(lambda: app.call('window-state')['confirmation'], timeout=5, step=.05)
+            app.call('alert', button='Delete Folder')
+            folder_row = h.wait_until(lambda: next((r for r in app.call('archive-list', profile=profile)['rows'] if r['id'] == folder), None), timeout=5, step=.1) or {}
+            archived_kind = folder_row.get('kind')
+            app.call('sidebar-menu', node=th, item='Delete Note')
+            sheet(); app.call('note', action='sheet', press='Delete')
+            h.wait_until(lambda: all(t['url'] != th_url for t in app.call('tabs')) or None, timeout=5, step=.05)
+            app.call('library-open', section='archive')
+            h.wait_until(lambda: any(r['id'] == folder for r in app.call('settings-state')['archive']), timeout=5, step=.1)
+            status = app.call('library-restore', id=folder)
+            restored_urls = h.wait_until(lambda: (lambda u: u if io_url in u else None)([t['url'] for t in app.call('tabs')]), timeout=5, step=.1) or []
+            app.call('library-close')
+        row('delete_note_drops_row_in_archived_folder', len(th_rows) == 2 and archived_kind == 'folder'
+            and restored_urls is not None and io_url in restored_urls and th_url not in restored_urls,
+            rows=th_rows, archivedKind=archived_kind, restoreStatus=status, restoredHasDeleted=th_url in (restored_urls or []),
+            restoredHasKept=io_url in (restored_urls or []))
     finally:
         app.quit()
         server.shutdown()

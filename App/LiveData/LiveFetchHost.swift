@@ -31,8 +31,9 @@ final class LiveFetchHost {
           let context = factory.context(for: profileID) else { throw Failure.noProfile }
     // Engine pages are created once their view is in a window (as the container's hidden cached
     // pages are). The fetch page sits hidden under the window's content view: never drawn, never a tab.
-    // Checked before the page exists, so a missing window cannot leave an unclosed page.
-    guard let root = app.frontWindowController?.contentView ?? app.windowControllers.first?.contentView else { throw Failure.noWindow }
+    // Checked before the page exists, so a missing window cannot leave an unclosed page. The regular
+    // window whose factory made the context, never an Incognito window in front (review r1 item 9).
+    guard let root = factory.controller?.contentView else { throw Failure.noWindow }
     running = true
     defer { running = false }
     let config = OEWebContentConfiguration(context: context)
@@ -49,7 +50,10 @@ final class LiveFetchHost {
     let deadline = Date().addingTimeInterval(Self.timeout)
     // Poll the engine's own loading state (no timer while idle: this loop lives only during a fetch).
     try await Task.sleep(for: .milliseconds(100))
+    var wasLive = false
     while content.isLoading || content.url == nil {
+      // Closed under the wait (its window or Profile went away): stop now, not at the deadline.
+      if content.isLive { wasLive = true } else if wasLive { throw Failure.loadFailed("closed") }
       guard Date() < deadline else { throw Failure.timedOut(loading: content.isLoading, url: content.url?.absoluteString ?? "") }
       try await Task.sleep(for: .milliseconds(100))
     }

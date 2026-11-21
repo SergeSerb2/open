@@ -22,8 +22,8 @@ extension AppSettingsActions {
     }
     if app.stores.boosts.store(for: profileID).delete(id: boostID) { app.stores.boosts.refresh(profile: profileID) }
   }
-  func editBoost(id: String, profileID: ProfileID) {
-    guard let uuid = UUID(uuidString: id), app.model.profile(id: profileID) != nil else { return }
-    app.stores.boosts.editFromLibrary(id: BoostID(rawValue: uuid), profileID: profileID)
+  func editBoost(id: String, profileID: ProfileID) -> String? {
+    guard let uuid = UUID(uuidString: id), app.model.profile(id: profileID) != nil else { return nil }
+    return app.stores.boosts.editFromLibrary(id: BoostID(rawValue: uuid), profileID: profileID)
   }
 }

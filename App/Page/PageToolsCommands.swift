@@ -129,7 +129,7 @@ extension EngineWebContentHostFactory {
     if id == "pin-unpin-tab" || id == "new-folder", let context = controller?.context {
       let ids = context.selection.ids
       if id == "new-folder" { return ids.count >= 2 ? CommandMenuState(title: "New Folder from Selection…") : nil }
-      if ids.count >= 2 { return CommandMenuState(title: ids.allSatisfy { model.isPinned(tabID: $0) } ? "Unpin Tabs" : "Pin Tabs") }
+      if ids.count >= 2 { return CommandMenuState(title: context.selectionPinUnpins(ids) ? "Unpin Tabs" : "Pin Tabs") }
       guard let tab = selectedTab else { return nil }
       return CommandMenuState(title: model.isPinned(tabID: tab.id) ? "Unpin Tab" : "Pin Tab")
     }
