@@ -1750,6 +1750,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
         cancelLibraryPageMotion()
+        // The intro's app-wide event monitor must not outlive the window (bug sweep r4 PERF-14).
+        dismissLiveFolderIntro()
         siteControl?.dismiss(reason: .sourceUnavailable, animated: false)
         // Tear down this controller's appearance observation once at window close.
         systemAppearanceObservation = nil
