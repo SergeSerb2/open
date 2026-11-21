@@ -51,11 +51,13 @@ def github_fixture():
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
             state['requests'].append(parsed.path)
+            if parsed.path == '/pulls' and state.get('redirect'):
+                self.send_response(302); self.send_header('Location', state['redirect']); self.send_header('Content-Length', '0'); self.end_headers(); return
             if parsed.path == '/pulls' and not state['signed_in']:
                 self.send_response(302); self.send_header('Location', '/login?return_to=%2Fpulls'); self.send_header('Content-Length', '0'); self.end_headers(); return
             if parsed.path == '/login':
                 body = '<!doctype html><title>Sign in</title><form action="/session" method="post"><input name="login"></form>'
-            elif parsed.path == '/pulls':
+            elif parsed.path in ('/pulls', '/elsewhere-pulls'):
                 gate = state['fetch_gate']
                 if gate is not None: gate.wait(timeout=10)
                 query = urllib.parse.parse_qs(parsed.query).get('q', [''])[0]
@@ -404,6 +406,16 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             gh['extra'] = None
         results['live_folder_odd_links_skipped'] = {'ok': odd.get('outcome') == 'success'
             and odd_urls == {'http://github.localhost:%d/acme/app/pull/201' % port}, 'refresh': odd, 'rows': sorted(odd_urls)}
+        # Review r1 item 6: the pulls page redirects to another origin (an interstitial). Its PR-shaped
+        # links used to replace the rows; the refresh must fail and keep the rows.
+        gh['prs'] = {'created': [('evil/repo', 401, 'Redirected row', 'open')]}
+        gh['redirect'] = 'http://elsewhere.localhost:%d/elsewhere-pulls?q=author:@me' % port
+        try:
+            redirected = refreshed('failed'); redirected_urls = live_urls()
+        finally:
+            gh['redirect'] = None
+        results['live_folder_offorigin_redirect_fails'] = {'ok': redirected.get('outcome') == 'failed' and redirected_urls == odd_urls,
+            'refresh': redirected, 'rows': sorted(redirected_urls)}
         gh['prs'] = {'created': []}
         refreshed('success')
         # Bug sweep R2 (seed-livedata #12): the user drags the Live Folder into another Pinned folder. The Space
@@ -459,9 +471,10 @@ def gmail_fixture():
                 if not state['signed_in']:
                     self.send_response(302); self.send_header('Location', 'http://accounts.localhost:%d/signin' % port)
                     self.send_header('Content-Length', '0'); self.end_headers(); return
-                entries = ''.join('<entry><title>%s</title><link rel="alternate" href="http://mail.localhost:%d/mail/u/0/?msg=%d" type="text/html"/>'
+                entries = ''.join('<entry><title>%s</title><link rel="alternate" href="%s" type="text/html"/>'
                                   '<issued>%s</issued><author><name>%s</name><email>x@example.com</email></author></entry>'
-                                  % (html.escape(t), port, i, d, html.escape(a)) for i, (t, a, d) in enumerate(state['mail']))
+                                  % (html.escape(m[0]), html.escape(m[3] if len(m) > 3 else 'http://mail.localhost:%d/mail/u/0/?msg=%d' % (port, i), quote=True),
+                                     m[2], html.escape(m[1])) for i, m in enumerate(state['mail']))
                 body = ('<?xml version="1.0" encoding="UTF-8"?><feed version="0.3" xmlns="http://purl.org/atom/ns#">'
                         '<title>Inbox</title><fullcount>%d</fullcount>%s</feed>' % (len(state['mail']), entries)).encode()
                 kind = 'application/atom+xml; charset=utf-8'
@@ -505,6 +518,13 @@ def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
             app.call('wait', tab=peek['stack'][-1]['content']); href = app.eval(peek['stack'][-1]['content'], 'location.href')
         results['live_gmail_row_opens_peek'] = {'ok': href == 'http://mail.localhost:%d/mail/u/0/?msg=1' % port, 'href': href}
         app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        app.call('select', tab=other)
+        # Review r1 item 6: a row whose link scheme only starts with "http" is dropped.
+        mail['mail'] = [('Odd scheme', 'Eve', '2026-11-12T10:00:00Z', 'httpfoo://mail.localhost/odd'), ('Plain row', 'Bob', '2026-11-12T07:00:00Z')]
+        app.call('select', tab=other)
+        hover(inbox); odd = app.call('glance-state')
+        results['live_gmail_odd_scheme_dropped'] = {'ok': odd.get('phase') == 'mail' and [r['title'] for r in odd.get('rows', [])] == ['Plain row'],
+            'state': odd}
         app.call('select', tab=other)
         mail['mail'] = []
         hover(inbox); empty = app.call('glance-state')
@@ -650,6 +670,9 @@ def run(factory, results, tmp, harness):
             and after.get('value') == 'Sleep /live-fetch' and after.get('created') == after.get('closed') == 3,
             'stalled': stalled, 'after': after}
         if case == 'r3-fetch':
+            return
+        if case == 'r3-gmail':
+            gmail_checks(app, results, wait_until, new_tab, {'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
             return
         app.call('glance-alias', aliases={'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
         now_rows = [  # (path, title, seconds ago) — newest first after sorting.

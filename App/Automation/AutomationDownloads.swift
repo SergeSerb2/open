@@ -111,7 +111,8 @@ extension AutomationController {
     case "download-library-close":
       app.settingsPresenter.closeLibrary(); return true
     case "download-save":
-      guard let id = args["id"] as? String, let choice = center.choices[id], choice.panel.isVisible, choice.panel.sheetParent != nil else { throw Failure(message: "no download save sheet") }
+      // A sheet, or the modeless panel used when no regular window can parent it.
+      guard let id = args["id"] as? String, let choice = center.choices[id], choice.panel.isVisible else { throw Failure(message: "no download save panel") }
       let cancel = args["action"] as? String == "cancel"
       if !cancel {
         guard let path = args["path"] as? String, path.utf8.count <= 4096 else { throw Failure(message: "expected cancel or a save path") }
