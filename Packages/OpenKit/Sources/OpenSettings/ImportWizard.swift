@@ -217,7 +217,10 @@ import OpenImport
         if category == "Search settings" { return countLabel(category) }
         return counts[category].map { $0.formatted() } ?? countLabel(category)
     }
-    public func backToSource() { guard startedWithSource, !busy else { return }; accessPoll?.cancel(); accessPoll = nil; accessBlocker = nil; errorText = ""; step = .source }
+    public func backToSource() { guard startedWithSource, !busy else { return }; cancelTransientState(); accessBlocker = nil; errorText = ""; step = .source }
+    /// Stops the access poll and forgets the Firefox Primary Password: Back, Cancel, Done, and any
+    /// other end of the sheet (its disappearance, or Settings dropping the presentation).
+    public func cancelTransientState() { accessPoll?.cancel(); accessPoll = nil; plan.primaryPassword = "" }
     /// GUESS — capture pending (F3 §3 item 3): the destination copy.
     public var destinationText: String { "Bookmarks go to a pinned folder, “\(BrowserBookmarksImport.folderTitle(browserName: plan.source.displayName))”, in your current Space." }
     private func refreshFamilyCounts(_ family: BrowserFamily, _ profile: BrowserSourceProfile) async {
@@ -419,7 +422,7 @@ import OpenImport
         consentWasDecided = false
     }
     public func retry() { guard !busy else { return }; clearConsent(); outcome = nil; step = .choose }
-    public func finish(openLibrary: Bool = false) { guard !busy else { return }; accessPoll?.cancel(); accessPoll = nil; plan.primaryPassword = ""; if plan.isArc && outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
+    public func finish(openLibrary: Bool = false) { guard !busy else { return }; cancelTransientState(); if plan.isArc && outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
     public func installExtensions() async { guard step == .report else { return }; await extensions.install(using: importActions) }
 }
 public struct ImportWizard: View {
@@ -549,6 +552,7 @@ public struct ImportWizard: View {
             }.disabled(model.extensions.isInstalling)
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy).settingsSheet()
         .task { if model.step == .source { await model.loadSources() } else if model.step != .access && !model.readable { await model.refreshCounts() } }
+        .onDisappear { if !model.busy { model.cancelTransientState() } }
     }
     private func reviewRow(_ symbol: String, _ title: String, _ value: String) -> some View {
         HStack(spacing: 10) {

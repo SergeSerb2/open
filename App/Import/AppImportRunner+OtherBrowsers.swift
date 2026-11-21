@@ -134,7 +134,7 @@ extension AppImportRunner {
     case .failure: result.failures["Open tabs"] = "Could not be read"; return
     }
     // The import may have been cancelled, or its Space or Profile removed, during the read.
-    guard !undo.cancelled else { return }
+    guard !undo.cancelled, !app.terminationRequested else { return }
     guard app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {
       result.failures["Open tabs"] = "Could not be saved"; return
     }
