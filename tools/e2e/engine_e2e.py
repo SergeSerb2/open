@@ -14206,6 +14206,119 @@ def page_translate_checks(factory, results, tmp):
         results['X_idle_no_polling'] = {'ok': b0 == b1 and st()['loopRunning'], 'pulls': [b0, b1]}
         shot(app, 'page-translate-translated.png')
         app.call('translate', action='revert')
+        state_is('offered')
+
+        # Bug sweep r2 #6: a named submit button sends its value with the form, so translation
+        # leaves its value alone (the unnamed #search beside it is still translated).
+        app.eval(spa_tab, "document.getElementById('controls').insertAdjacentHTML('beforeend', '<form id=\"f6\" onsubmit=\"return false\"><input id=\"named6\" type=\"submit\" name=\"action\" value=\"Rechercher\"></form>'); true")
+        app.call('translate', action='translate')
+        state_is('translated')
+        wait_until(lambda: app.eval(spa_tab, "document.getElementById('search').getAttribute('value') === 'Search' || null"), timeout=10, step=.2)
+        named = app.eval(spa_tab, '''(() => { const b = document.getElementById('named6');
+          return { value: b.getAttribute('value'), sent: new FormData(b.form, b).get('action'),
+                   control: document.getElementById('search').getAttribute('value') }; })()''')
+        results['X_named_submit_value_kept'] = {'ok': named['control'] == 'Search' and named['value'] == 'Rechercher'
+            and named['sent'] == 'Rechercher', 'result': named}
+
+        # Bug sweep r2 #7: a translated page that stays idle for longer than the engine's 10 s
+        # Open-world request timeout keeps translating: the state stays Translated, text the page
+        # adds afterwards is translated, and Show Original still restores the page.
+        time.sleep(12.5)
+        idle = st()
+        app.eval(spa_tab, "document.body.insertAdjacentHTML('afterbegin', '<p id=\"late7\">Le chat est dans le jardin.</p>'); true")
+        late = wait_until(lambda: app.eval(spa_tab, "(() => { const p = document.getElementById('late7'); return p && !/jardin/.test(p.textContent) ? p.textContent : null })()"),
+                          timeout=10, step=.2)
+        after_idle = st()
+        try:
+            app.call('translate', action='revert')
+            reverted = state_is('offered', timeout=5)
+        except Exception as error:
+            reverted = None
+            after_idle['revertError'] = str(error)
+        p1_back = wait_until(lambda: app.eval(spa_tab, "document.getElementById('p1').textContent.startsWith('Ceci est') || null"), timeout=5, step=.1)
+        results['X_idle_keeps_translating'] = {'ok': idle['state'] == 'translated' and idle['loopRunning'] and bool(late)
+            and after_idle['state'] == 'translated' and bool(reverted) and bool(p1_back),
+            'idle': {k: idle.get(k) for k in ('state', 'loopRunning', 'pulls', 'idleRepulls')}, 'late': late,
+            'afterIdle': {k: after_idle.get(k) for k in ('state', 'loopRunning', 'pulls', 'idleRepulls', 'revertError')},
+            'reverted': bool(reverted), 'p1Restored': bool(p1_back)}
+        # Bug sweep r2 #8: Show Original keeps what the page wrote after translation (a text node,
+        # a reused run text node, an attribute). Apply, page writes and restore run in one script, so
+        # the 300 ms mutation debounce cannot hide the case; a second cycle must not bring back
+        # the old original either. A fresh page, translated and shown in the original once by the shell,
+        # holds the installed (inactive) runtime the script drives.
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html?r2=8')
+        app.call('wait', tab=spa_tab)
+        # Without the #7 fix the host is still sticky (X7 could not revert): the page translates by itself.
+        wait_until(lambda: st()['state'] in ('offered', 'translated') or None, timeout=15, step=.1)
+        if st()['state'] == 'translated':
+            app.call('translate', action='revert')
+            state_is('offered')
+        app.call('translate', action='translate')
+        state_is('translated')
+        wait_until(lambda: (lambda v: v if v['send'] == 'Send' else None)(texts(spa_tab)), timeout=15, step=.2)
+        app.call('translate', action='revert')
+        state_is('offered')
+        wait_until(lambda: app.eval(spa_tab, "document.getElementById('p1').textContent.startsWith('Ceci est') || null"), timeout=5, step=.1)
+        try:
+          live = app.eval(spa_tab, '''(async () => {
+          const t = window.__openTranslate;
+          const cycle = async (write) => {
+            t.start();
+            const b = await t.nextBatch();
+            t.apply(b.id, b.units.map((u) => 'TRANSLATED ' + u.text));
+            const p1 = document.getElementById('p1').firstChild, p2 = document.getElementById('p2').firstChild;
+            const addr = document.getElementById('address');
+            const seen = { p1: p1.data, p2: p2.data, placeholder: addr.getAttribute('placeholder') };
+            if (write) {
+              p1.data = 'Mise à jour en direct.';
+              p2.data = 'Texte en direct ';
+              addr.setAttribute('placeholder', 'Nouvelle adresse');
+            }
+            t.restore();
+            return { seen, p1: document.getElementById('p1').textContent, p2: document.getElementById('p2').textContent,
+                     placeholder: addr.getAttribute('placeholder') };
+          };
+          const first = await cycle(true);
+          const second = await cycle(false);
+          return { first, second }; })()''', world='open')
+        except Exception as error:
+            live = {'error': str(error)}
+        empty = {'seen': {'p1': '', 'p2': '', 'placeholder': ''}, 'p1': '', 'p2': '', 'placeholder': ''}
+        f8, s8 = live.get('first', empty), live.get('second', empty)
+        results['X_revert_keeps_live_update'] = {'ok': f8['seen']['p1'].startswith('TRANSLATED') and f8['seen']['p2'].startswith('TRANSLATED')
+            and f8['seen']['placeholder'].startswith('TRANSLATED')
+            and f8['p1'] == 'Mise à jour en direct.' and f8['p2'].startswith('Texte en direct ') and f8['placeholder'] == 'Nouvelle adresse'
+            and s8['seen']['p1'].startswith('TRANSLATED') and s8['p1'] == 'Mise à jour en direct.'
+            and s8['p2'].startswith('Texte en direct ') and s8['placeholder'] == 'Nouvelle adresse', 'result': live}
+
+        # Review r1 #3/#4: a page that holds text nodes the runtime did not reuse (#r3's " trois", left
+        # out of the translated run) or writes into a text node the runtime made (#r4's last node) keeps
+        # its text on Show Original.
+        try:
+            nodes = app.eval(spa_tab, '''(async () => {
+              const t = window.__openTranslate;
+              const box = document.createElement('div');
+              box.innerHTML = '<p id="r3">Un <b>deux</b> trois</p><p id="r4"><b>Gras</b> fin</p>';
+              document.body.prepend(box);
+              const unused = document.getElementById('r3').lastChild;
+              t.start();
+              const b = await t.nextBatch();
+              t.apply(b.id, b.units.map((u) => u.text.startsWith('Un ⟦1⟧') ? u.text.replace(/^Un /, '')
+                : u.text.startsWith('⟦1⟧Gras') ? 'Avant ' + u.text : 'TRANSLATED ' + u.text));
+              const made = document.getElementById('r4').lastChild;
+              const seen = { r3: document.getElementById('r3').textContent, r4: document.getElementById('r4').textContent,
+                             unusedDetached: !unused.isConnected, made: made.data };
+              unused.data = ' en direct';
+              made.data = ' maigre';
+              t.restore();
+              const out = { seen, r3: document.getElementById('r3').textContent, r4: document.getElementById('r4').textContent };
+              box.remove();
+              return out; })()''', world='open')
+        except Exception as error:
+            nodes = {'error': str(error), 'seen': {}}
+        results['X_revert_keeps_page_text_nodes'] = {'ok': nodes['seen'].get('unusedDetached') is True and nodes['seen'].get('made') == ' fin'
+            and nodes['seen'].get('r4', '').startswith('Avant') and nodes.get('r3') == 'Un deux en direct' and 'maigre' in nodes.get('r4', ''),
+            'result': nodes}
 
         # X1 on Apple's backend: only when French → English is installed (no download prompt in e2e).
         availability = app.call('translate', action='availability', source='fr', target='en')['status']

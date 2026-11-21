@@ -108,12 +108,17 @@ enum NoteImporter {
       }
       parsed.note.importPlaceholder = nil
       if target != nil {
-        store.replace(parsed.note)
+        // A Note over the store's size limit is not written: the placeholder stays.
+        guard store.replace(parsed.note) else { outcome.unreadable += 1; continue }
         placeholders[id] = nil
         outcome.filled += 1
         refresh(noteID: id, title: parsed.note.title, factory: factory)
       } else {
-        guard store.importIfAbsent(parsed.note) else { outcome.alreadyPresent += 1; continue }
+        guard store.importIfAbsent(parsed.note) else {
+          // No file after the import: the Note was over the store's size limit, not already present.
+          if FileManager.default.fileExists(atPath: store.fileURL(for: id).path) { outcome.alreadyPresent += 1 } else { outcome.unreadable += 1 }
+          continue
+        }
         newIDs.append(id)
         outcome.added += 1
       }

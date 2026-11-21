@@ -701,7 +701,7 @@
         // the window content (top-left origin); `panel` is the anchor they sit in.
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         let center = controller.toasts, overlay = controller.toastOverlay, root = controller.contentView
-        return ["panel": rect(root.convert(overlay.bounds, from: overlay)), "shown": center.shownCount,
+        return ["panel": rect(root.convert(overlay.bounds, from: overlay)), "shown": center.shownCount, "lastTitle": center.lastTitle,
           "toasts": center.snapshots.map { s -> [String: Any] in
             ["title": s.content.title, "subtitle": s.content.subtitle ?? NSNull(), "symbol": s.content.symbol ?? NSNull(),
              "accessory": s.content.accessoryName, "coalescingKey": s.content.coalescingKey ?? NSNull(),

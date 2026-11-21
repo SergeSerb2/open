@@ -170,6 +170,23 @@ public final class ArchiveStore: ArchiveSink {
 
     /// Profile deletion: finish queued writes, close the database and never
     /// reopen it, so its folder can be removed without a file coming back.
+    /// Deletes the tab rows whose address is `url` (ASCII case-insensitive): the rows of a deleted
+    /// Note or Easel. Runs on the store's queue, so `flushQueue` (quit) waits for it. A Profile that
+    /// never archived has no file, and none is made.
+    public func discardTabs(url: String) {
+        contentVersion &+= 1
+        queue.async { [weak self] in
+            guard let self, self.db != nil || FileManager.default.fileExists(atPath: self.fileURL.path) else { return }
+            try? self.openOnQueue()
+            guard let db = self.db, db.exec("BEGIN IMMEDIATE") else { return }
+            let stmt = db.prepare("DELETE FROM archived_tabs WHERE kind = 'tab' AND url = ? COLLATE NOCASE")
+            db.bindText(stmt, 1, url)
+            let done = sqlite3_step(stmt) == SQLITE_DONE
+            sqlite3_finalize(stmt)
+            db.exec(done ? "COMMIT" : "ROLLBACK")
+        }
+    }
+
     public func retire() {
         queue.sync { retired = true; db = nil }
     }

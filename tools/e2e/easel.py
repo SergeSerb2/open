@@ -553,6 +553,57 @@ def run(factory, results, tmp, api):
             record('E38e_twin_canvases_share_edits', seen == 1 and stored_count == 2 and twin_titles == ['Twin board'] * 2,
                    rows=t_rows, seenOnTwin=seen, stored=stored_count, hostCount=twin_hosts, titles=twin_titles)
 
+            # E38g (bug sweep r2): a write that fails (here: the Easel's folder is read-only) keeps the edit
+            # queued, and the next flush writes it once the folder is writable again. Before, the failed copy
+            # was dropped silently: a quit right after it lost the last edits.
+            f_tab = easel(action='create')['tab']
+            f_doc = easel(tab=f_tab)['document']
+            easel(action='tool', tool='rectangle'); easel(action='click', at=[300, 400])
+            f_folder = Path(app.call('easel', action='store', document=f_doc)['path']).parent
+            def stored_objects():
+                return len((app.call('easel', action='store', document=f_doc).get('json') or {}).get('objects', []))
+            before_fail = stored_objects()
+            os.chmod(f_folder, 0o555)
+            try:
+                easel(action='tool', tool='ellipse'); easel(action='click', at=[700, 400])
+                # Let the debounced (background) save run and fail first: its failure must come back
+                # for the next waiting flush (review r1 #1), not only a failure of a waiting flush.
+                time.sleep(1.0)
+                during_fail = stored_objects()
+                fail_error = easel(tab=f_tab).get('storeError')
+            finally:
+                os.chmod(f_folder, 0o755)
+            after_fail = stored_objects()
+            after_error = easel(tab=f_tab).get('storeError')
+            record('E38g_failed_write_retried', before_fail == 1 and during_fail == 1 and after_fail == 2
+                   and bool(fail_error) and not after_error,
+                   before=before_fail, during=during_fail, after=after_fail, error=fail_error, errorAfter=after_error)
+            app.call('close', tab=f_tab)
+
+            # E38h (bug sweep r2): Delete Easel also removes Archive entries of the Easel's rows that left the
+            # sidebar earlier (Remove Easel from Sidebar on a twin row: another row ID). Before, restoring one
+            # gave a recreated, empty Easel for a folder that is in the Trash.
+            h_tab = easel(action='create')['tab']
+            h_url = easel(tab=h_tab)['url']
+            app.call('select', tab=h_tab)
+            app.call('menu-perform', id='duplicate-tab')
+            h_rows = api.wait_until(lambda: (lambda r: r if len(r) == 2 else None)(
+                [t['id'] for t in app.call('tabs') if t['url'] == h_url]), timeout=5, step=.1) or []
+            h2 = next((t for t in h_rows if t != h_tab), None)
+            h_before, h_after = [], None
+            if h2:
+                app.call('sidebar-menu', node=h2, item='Remove Easel from Sidebar')
+                api.wait_until(lambda: all(t['id'] != h2 for t in app.call('tabs')) or None, timeout=5, step=.1)
+                h_before = api.wait_until(lambda: [r['id'] for r in app.call('archive-list')['rows'] if r['url'] == h_url] or None, timeout=5, step=.1) or []
+                app.call('sidebar-menu', node=h_tab, item='Delete Easel')
+                api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+                app.call('easel', action='window-sheet', press='Delete')
+                api.wait_until(lambda: all(t['id'] != h_tab for t in app.call('tabs')) or None, timeout=5, step=.1)
+                api.wait_until(lambda: not [r for r in app.call('archive-list')['rows'] if r['url'] == h_url] or None, timeout=5, step=.1)
+                h_after = [r['id'] for r in app.call('archive-list')['rows'] if r['url'] == h_url]
+            record('E38h_delete_easel_drops_archived_twin', len(h_rows) == 2 and h_before == [h2] and h_after == [],
+                   rows=h_rows, archivedBefore=h_before, archivedAfter=h_after)
+
             # E38b: a selection of only Easels ends with Arc's plural "Remove Easels from Sidebar" (STR, easels-notes.md
             # §3.2); Copy Links stays (an Easel has an address). A web tab in the selection keeps "Archive Tabs".
             pair = [easel(action='create')['tab'] for _ in range(2)]

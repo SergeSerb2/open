@@ -69,6 +69,8 @@ public protocol WebContent: AnyObject {
     var isAudible: Bool { get }
     var isMuted: Bool { get set }
     var isCrashed: Bool { get }
+    /// The renderer is gone (crashed, killed, out of memory); an unresponsive page is not gone.
+    var isRendererGone: Bool { get }
     /// 0 = 100%, each step is 20%.
     var zoomLevel: Double { get set }
     var securityLevel: WebSecurityLevel { get }
@@ -106,6 +108,7 @@ public enum ScriptWorld: Sendable, Hashable { case page, open }
 public enum ScriptWorldError: Error { case unsupported }
 
 extension WebContent {
+    public var isRendererGone: Bool { isCrashed }
     public func motionSnapshotPNG() async throws -> Data { try await snapshotPNG() }
     /// Alternate backends must opt in to Open's isolated world.
     public func evaluateJavaScript(_ script: String, in world: ScriptWorld) async throws -> Any {
