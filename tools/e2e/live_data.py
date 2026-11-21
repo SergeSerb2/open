@@ -458,7 +458,11 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         except RuntimeError: pass
         r4_gone = app.call('live-folder-state').get('exists') is False
         r4_archived = [r for r in app.call('archive-list', limit=50)['rows'] if r['id'] == r4_folder]
-        results['live_folder_keyboard_delete_is_live_delete'] = {'ok': 'Delete your GitHub Live Folder?' in r4_alert.get('texts', [])
+        # A lone Live Folder gets Delete Live Folder's alert; with other rows it is the folders' alert.
+        # Either way it is removed, never archived, and automatic creation turns off.
+        lone = r4_selection == [r4_folder]
+        expected_title = 'Delete your GitHub Live Folder?' if lone else 'Delete your Pull Requests folder?'
+        results['live_folder_keyboard_delete_is_live_delete'] = {'ok': expected_title in r4_alert.get('texts', [])
             and r4_gone and not r4_archived and app.call('defaults', key='open.liveFolders.githubAutoCreate') is False,
             'alert': r4_alert.get('texts'), 'gone': r4_gone, 'archived': len(r4_archived), 'selection': r4_selection}
         app.call('defaults', key='open.liveFolders.githubAutoCreate', value=None)
@@ -572,15 +576,28 @@ def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
             app.call('wait', tab=peek['stack'][-1]['content']); href = app.eval(peek['stack'][-1]['content'], 'location.href')
         results['live_gmail_row_opens_peek'] = {'ok': href == 'http://mail.localhost:%d/mail/u/0/?msg=1' % port, 'href': href}
         app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
-        # Bug sweep round 4 (SB-15): opening a card row ends the hover preview, so the same tile
-        # shows its card again on the next hover. The tracker kept the old request and ignored it.
-        # No other selection in between (a selection change also resets the tracker). The pointer
-        # leaves the sidebar (as it does for the Peek) and comes back to the tile.
-        app.call('hover', leave=True, ms=300)
-        again_hover = app.call('hover', node=inbox, ms=800)
+        # Bug sweep round 4 (SB-15): opening a row of a Favorite's card ends the hover preview, so
+        # the same tile shows its card again on the next hover. A Favorite's Peek does not select
+        # the Favorite (a pinned source is selected, which reset the tracker); the tracker kept the
+        # old request and ignored the tile.
+        fav_mail = new_tab(app, 'http://mail.localhost:%d/mail/u/0/#inbox' % port)
+        app.call('favorite', tab=fav_mail)
+        app.call('select', tab=other)
+        def hover_favorite():
+            app.call('hover', leave=True, ms=300)
+            return app.call('hover', favorite=fav_mail, ms=800)
+        first_card = hover_favorite()
+        app.call('glance-open', row=0)
+        fav_peek = wait_until(lambda: (lambda s: s if s.get('shown') else None)(app.call('peek-state')), timeout=5, step=.05)
+        app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
+        current = app.call('window-state')['selected']
+        again_hover = hover_favorite()
         again = app.call('glance-state')
-        results['live_glance_rehover_after_open'] = {'ok': again.get('kind') == 'gmail' and again.get('phase') == 'mail',
-            'hover': again_hover, 'state': {k: again.get(k) for k in ('shown', 'kind', 'phase')}}
+        results['live_glance_rehover_after_open'] = {'ok': first_card.get('kind') == 'glance' and bool(fav_peek) and current != fav_mail
+            and again.get('kind') == 'gmail' and again.get('phase') == 'mail',
+            'first': first_card.get('kind'), 'peek': bool(fav_peek), 'currentIsFavorite': current == fav_mail,
+            'hover': again_hover.get('kind'), 'state': {k: again.get(k) for k in ('shown', 'kind', 'phase')}}
+        app.call('close', tab=fav_mail)
         app.call('select', tab=other)
         mail['mail'] = []
         hover(inbox); empty = app.call('glance-state')
