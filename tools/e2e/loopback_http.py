@@ -19,6 +19,7 @@ Files outside tools/e2e append tools/e2e to sys.path (append, so the standard li
 always wins) before the import.
 """
 import http.server
+import socket
 import socketserver
 
 
@@ -31,3 +32,12 @@ class LoopbackHTTPServer(http.server.ThreadingHTTPServer):
     def server_bind(self):
         socketserver.TCPServer.server_bind(self)
         self.server_name, self.server_port = self.server_address[:2]
+
+
+class LoopbackHTTPServer6(LoopbackHTTPServer):
+    """The same server on the IPv6 loopback address ::1 (URL host `[::1]`)."""
+
+    address_family = socket.AF_INET6
+
+    def __init__(self, handler, port=0, bind_and_activate=True):
+        http.server.ThreadingHTTPServer.__init__(self, ("::1", port), handler, bind_and_activate)

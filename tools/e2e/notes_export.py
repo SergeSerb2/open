@@ -137,6 +137,26 @@ def run(factory, results, tmp, h):
             and '\n' + ' ' * 10 + '- deep\n' + ' ' * 15 + '1. shallow\n- negative' in bad_md,
             html=bad_html[-400:], md=bad_md)
 
+        # 2d. L9 (round 3): a link URL with an unbalanced ")" and a space keeps its whole URL in
+        # Markdown. These characters end a Markdown link destination, so they are percent-encoded.
+        link_id = str(uuid.uuid4())
+        link_url = 'https://example.test/wiki/Foo_(bar)) x'
+        with open(os.path.join(notes_dir, link_id + '.json'), 'w') as f:
+            json.dump({'formatVersion': 1, 'id': link_id.upper(), 'title': 'Paren link', 'text': 'wiki page',
+                       'formats': [{'type': 'link', 'location': 0, 'length': 4, 'url': link_url}],
+                       'createdAt': '2026-01-01T00:00:00Z', 'modifiedAt': '2026-01-01T00:00:00Z'}, f)
+        out4 = os.path.join(tmp, 'notes-paren-link.zip')
+        app.call('note', action='export', path=out4)
+        done4 = h.wait_until(lambda: (lambda s: s if s['last'] == 'exported' and not s['running'] and os.path.exists(out4) else None)(app.call('note', action='export-state')), timeout=20, step=.1)
+        link_md = ''
+        if done4:
+            with zipfile.ZipFile(out4) as z:
+                for n in z.namelist():
+                    if n.endswith('/Paren link.md'): link_md = z.read(n).decode()
+        row('export_markdown_link_parenthesis_escaped', bool(done4)
+            and '[wiki](https://example.test/wiki/Foo_%28bar%29%29%20x) page' in link_md, md=link_md,
+            negative='old writer printed the raw URL, so the destination ended at "bar)"')
+
         # 3. Settings ▸ Profiles ▸ New documents (the real popup) changes what ⌃⇧N creates.
         app.call('settings-ui', action='open', section='profiles')
         app.call('settings-ui', action='link', url='open://settings/profiles/new-documents')
