@@ -353,13 +353,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       autoCreatedLaunchWindowID = model.windows.first?.id
     }
     // Interrupted Profile deletions finish now, after the snapshot loaded (so a folder that a loaded Profile
-    // still uses is kept) and before the engine starts.
-    do {
-      try ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root),
-                                             inUse: Set(model.profiles.map { $0.dataDirectoryName.lowercased() }))
-    } catch {
-      FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
-      exit(1)
+    // still uses is kept) and before the engine starts. Never from a fresh fallback model: an unreadable
+    // snapshot keeps the journal and every folder for a later launch.
+    if loaded != nil {
+      do {
+        try ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root),
+                                               inUse: Set(model.profiles.map { $0.dataDirectoryName.lowercased() }))
+      } catch {
+        FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
+        exit(1)
+      }
     }
     // Audit A7: folders of Profiles that an undone import created go now, if the loaded snapshot does not use
     // them. Never from a fresh fallback model (an unreadable snapshot keeps every folder).
@@ -598,7 +601,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       }
       // Calendar card (plan NS §2 CAL): closures only; EventKit is touched on first hover.
       controller.context.calendarGlance = makeCalendarGlance(factory)
-      controller.context.liveCalendar = liveCalendar.actions { [weak controller] in controller?.context.favoritesProfile?.id }
+      controller.context.liveCalendar = liveCalendar.actions { [weak controller] in controller }
       // Favorite unread badges from page titles (audit A2); normal windows only.
       controller.context.favoriteBadgesEnabled = true
     }

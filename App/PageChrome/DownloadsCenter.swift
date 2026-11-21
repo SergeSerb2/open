@@ -29,10 +29,11 @@ actor DownloadFiles {
   }
   /// `name` split before its extension as Chromium's FilePath does for " (1)": a common double
   /// extension stays whole ("archive.tar.gz" → "archive" + ".tar.gz"; also .tar.bz2, .tar.xz, .user.js).
+  /// The stem is never empty and the extension never just "." (".tar.gz" → ".tar (1).gz", "report." → "report. (1)").
   static func splitExtension(_ name: String) -> (stem: String, ext: String) {
-    guard let last = name.lastIndex(of: "."), last != name.startIndex else { return (name, "") }
+    guard let last = name.lastIndex(of: "."), last != name.startIndex, name.index(after: last) != name.endIndex else { return (name, "") }
     let head = name[..<last]
-    if let penultimate = head.lastIndex(of: ".") {
+    if let penultimate = head.lastIndex(of: "."), penultimate != name.startIndex {
       let double = name[name.index(after: penultimate)...].lowercased()
       let final = name[name.index(after: last)...].lowercased()
       let middle = name.distance(from: penultimate, to: last)

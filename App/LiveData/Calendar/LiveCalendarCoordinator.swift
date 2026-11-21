@@ -61,10 +61,11 @@ final class LiveCalendarCoordinator {
   /// One window's actions. `profile` reads that window's Favorites Profile at call time: the reminder
   /// interval is per Profile (Arc `didSetNotificationInterval(interval, profile)`), so a menu in one
   /// window never reads or writes the front window's Profile.
-  func actions(profile: @escaping @MainActor () -> ProfileID?) -> LiveCalendarActions {
-    LiveCalendarActions(
+  func actions(window: @escaping @MainActor () -> BrowserWindowController?) -> LiveCalendarActions {
+    let profile = { window()?.context.favoritesProfile?.id }
+    return LiveCalendarActions(
       tileAppeared: { [weak self] _ in self?.tileAppeared() },
-      join: { [weak self] state in self?.join(state) },
+      join: { [weak self] state in self?.join(state, in: window()) },
       copyLink: { state in
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(state.link.url.absoluteString, forType: .string)
       },
@@ -115,8 +116,9 @@ final class LiveCalendarCoordinator {
     }
     let visible = events.filter { !dismissed.contains($0.id) }
     var anyTile = false
-    // Each window uses its own Profile's interval; the first window whose interval makes the reminder due shows it.
-    var due: (state: LiveCalendar.TileState, controller: BrowserWindowController)?
+    // Each window uses its own Profile's interval. Of the windows whose interval makes the reminder due,
+    // the frontmost visible one shows it.
+    var due: [(state: LiveCalendar.TileState, controller: BrowserWindowController)] = []
     var intervals: [LiveCalendar.ReminderInterval] = []
     for controller in app.windowControllers where controller.context.liveCalendar != nil {
       let favorites = controller.context.favoritesProfile?.favorites ?? []
@@ -126,12 +128,12 @@ final class LiveCalendarCoordinator {
         anyTile = true; intervals.append(interval)
         guard let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded) else { continue }
         tiles[tab.id] = state
-        if state.remind, due == nil { due = (state, controller) }
+        if state.remind { due.append((state, controller)) }
       }
       if controller.context.liveCalendarTiles != tiles { controller.context.liveCalendarTiles = tiles }
     }
     guard anyTile else { stop(); return }
-    if let due {
+    if let due = frontmost(due) {
       reminded.insert(due.state.event.id)
       remind(due.state, in: due.controller)
     }
@@ -154,8 +156,17 @@ final class LiveCalendarCoordinator {
     for controller in app.windowControllers where !controller.context.liveCalendarTiles.isEmpty { controller.context.liveCalendarTiles = [:] }
   }
 
-  private func join(_ state: LiveCalendar.TileState, in window: BrowserWindowController? = nil) {
-    guard let controller = window.flatMap({ app.hostFactories[$0.windowID] == nil ? nil : $0 }) ?? app.frontWindowController,
+  /// The candidate whose window is frontmost on screen (visible and not minimized first), else the first one.
+  private func frontmost<T>(_ candidates: [(state: T, controller: BrowserWindowController)]) -> (state: T, controller: BrowserWindowController)? {
+    for window in NSApp.orderedWindows where window.isVisible && !window.isMiniaturized {
+      if let match = candidates.first(where: { $0.controller.window === window }) { return match }
+    }
+    return candidates.first
+  }
+
+  private func join(_ state: LiveCalendar.TileState, in window: BrowserWindowController?) {
+    // The tile's or reminder's own window; never an Incognito front window.
+    guard let controller = window.flatMap({ app.hostFactories[$0.windowID] == nil ? nil : $0 }) ?? app.frontStandardWindowController,
           let factory = app.hostFactories[controller.windowID] else { return }
     factory.openMeetingLink(state.link, from: "liveCalendar", event: state.event)
   }

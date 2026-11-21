@@ -164,17 +164,27 @@ final class MediaCoordinator {
   }
 
   /// A tab's page closed: tab close, archive, unload (sleep), crash teardown, window close.
-  func hostClosed(tabID: ItemID) {
+  func hostClosed(_ closing: EngineWebContentHost) {
+    let tabID = closing.tabID
+    // The same tab can show in another window, with its own page: the media state moves to that page,
+    // and only a PiP that the closing page held goes.
+    if let survivor = host(tabID) {
+      sync(survivor)
+      if let window = pipWindow, pipHost?.pip.webContent === closing.content { window.dismiss(reason: .sourceGone) }
+      if let document = documentPiP, document.pip.webContent === closing.content { document.close() }
+      // Phase 1 (Chromium's window): the closing page held the PiP when the survivor is not in one.
+      if pipHost == nil, session.activeSource?.tabID == tabID, survivor.content.mediaSession?.isPictureInPicture != true {
+        session.close(.sourceGone); store.setPiP(tabID: tabID, .none)
+      }
+      feedSleep()
+      return
+    }
     #if OPEN_AUTOMATION
     cardTimings[tabID] = nil
     #endif
     pendingExit[tabID] = nil; decisions[tabID] = nil; pipTimes[tabID] = nil
     exitWaits.removeValue(forKey: tabID)?.cancel()
-    // The same tab can show in another window, with its own page: the media state moves to that page,
-    // and a PiP that page holds stays.
-    let survivor = host(tabID)
-    if let survivor { sync(survivor) } else { store.remove(tabID: tabID) }
-    if survivor?.content.mediaSession?.isPictureInPicture == true { feedSleep(); return }
+    store.remove(tabID: tabID)
     var minimized = false
     if case .minimized(let other) = session.state { minimized = other == tabID }
     if session.activeSource?.tabID == tabID || minimized {
@@ -443,14 +453,16 @@ final class MediaCoordinator {
   // MARK: Helpers
 
   /// The tab's page that media state and controls follow. A tab shown in two windows has a page in
-  /// each: prefer the one that plays or captures, then a paused one; on a tie, the page in the window
-  /// that holds the tab's card.
+  /// each: prefer the one in Picture in Picture, then one that plays or captures, then a paused one;
+  /// on a tie, the page in the window that holds the tab's card.
   private func host(_ id: ItemID) -> EngineWebContentHost? {
     var best: EngineWebContentHost?, bestRank = -1
     let cardWindow = store.sources[id]?.windowID
     for factory in app.hostFactories.values {
       guard let host = factory.hosts[id], !host.closed else { continue }
-      let rank = Self.mediaRank(host.content) * 2 + (factory.windowState.id == cardWindow ? 1 : 0)
+      let inPiP = host.content.mediaSession?.isPictureInPicture == true || pipHost?.pip.webContent === host.content
+        || documentPiP?.pip.webContent === host.content
+      let rank = (inPiP ? 3 : Self.mediaRank(host.content)) * 2 + (factory.windowState.id == cardWindow ? 1 : 0)
       if rank > bestRank { best = host; bestRank = rank }
     }
     return best

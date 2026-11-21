@@ -655,7 +655,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     commandBarNavigationFocus.remove(host.tabID)
     typedNavigationTabs.remove(host.tabID)
     developerPanel.forget(host.tabID)
-    app.media.hostClosed(tabID: host.tabID)
+    app.media.hostClosed(host)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
     mirror.sync()

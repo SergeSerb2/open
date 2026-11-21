@@ -422,12 +422,26 @@ def checks(factory, results, tmp, config, harness):
             key = start('/fast?name=archive.tar.gz')
             wait(lambda: item(key).get('state') == 'completed' and item(key).get('fileExists'))
             paths.append(Path(item(key).get('path') or ''))
+        # Review round 1: a leading-dot name and a trailing-dot name never give an empty stem or a bare "."
+        # extension (" (1).tar.gz", "report (1)."). Chromium may rename these before Open sees them; the
+        # row records the names it got and checks only the collision rule.
+        edge = {}
+        for probe in ('.tar.gz', 'report.'):
+            got = []
+            for _ in range(2):
+                key = start('/fast?name=' + urllib.parse.quote(probe))
+                wait(lambda: item(key).get('state') == 'completed' and item(key).get('fileExists'))
+                got.append(Path(item(key).get('path') or ''))
+            paths.extend(got)
+            edge[probe] = [p.name for p in got]
+        def sane(names): return len(names) == 2 and names[0] != names[1] and not names[1].startswith(' ') and not names[1].endswith(' (1).')
         try:
-            check('collision_double_extension', [p.name for p in paths] == ['archive.tar.gz', 'archive (1).tar.gz']
-                  and all(p.parent == first for p in paths), names=[p.name for p in paths], folders=[str(p.parent) for p in paths])
+            check('collision_double_extension', [p.name for p in paths[:2]] == ['archive.tar.gz', 'archive (1).tar.gz']
+                  and all(p.parent == first for p in paths) and all(sane(v) for v in edge.values()),
+                  names=[p.name for p in paths[:2]], edge=edge, folders=sorted({str(p.parent) for p in paths}))
         finally:
             for p in paths:
-                if p.parent == first and p.name.startswith('archive'): p.unlink(missing_ok=True)
+                if p.parent == first and p.exists(): p.unlink(missing_ok=True)
 
 
     def profiles_flow():
