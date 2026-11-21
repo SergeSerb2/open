@@ -12,7 +12,7 @@ extension AutomationController {
     let pacingRegion = IntroPacingTrace.begin("automation.onboarding")
     defer { pacingRegion?.end() }
     let action = args["action"] as? String ?? "state"
-    let allowed: [String: Set<String>] = ["state": [], "release-allocator-cache": [], "skip-intro": [], "get-started": [], "prepare-handoff": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
+    let allowed: [String: Set<String>] = ["state": [], "release-allocator-cache": [], "skip-intro": [], "get-started": [], "prepare-handoff": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"], "close": []]
     guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,
           let extra = allowed[action], Set(args.keys).isSubset(of: extra.union(["action"])) else {
       throw Failure(message: "unknown onboarding action or argument")
@@ -22,6 +22,12 @@ extension AutomationController {
       let before = OnboardingWindowController.residentBytes()
       let relieved = malloc_zone_pressure_relief(nil,0)
       return ["before":before,"released":relieved,"after":OnboardingWindowController.residentBytes()]
+    }
+    if action == "close" {
+      // The title bar's close button: the real `windowShouldClose` path.
+      guard let window = app.onboardingWindowController?.window, window.isVisible else { throw Failure(message: "onboarding is not active") }
+      window.performClose(nil)
+      return ["closeRequested": true]
     }
     if action == "replay-intro" { app.showOnboarding(replay: true) }
     else if action != "state" {

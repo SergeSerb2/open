@@ -122,8 +122,11 @@ extension AppImportRunner {
     catch { result.failures["Open tabs"] = "Could not be read"; return }
     var pinned: [SidebarNode] = [], today: [SidebarNode] = []
     let now = Date()
-    for (index, tab) in read.tabs.enumerated() {
-      let id = ImportedBookmarksFolder.itemID(sourceKey: key, sourceID: "open-tab:\(tab.window):\(index):" + tab.url.absoluteString)
+    // One tab per URL with a URL-only ID, as the Chromium import: a window or list position in the ID
+    // would add every tab again after the session changes order.
+    var seen = Set<URL>()
+    for tab in read.tabs where seen.insert(tab.url).inserted {
+      let id = BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)
       let date = tab.lastAccessed ?? now
       let node = SidebarNode.tab(Tab(id: id, url: tab.url, title: tab.title, pinnedURL: tab.isPinned ? tab.url : nil,
                                      createdAt: date, lastActiveAt: date))

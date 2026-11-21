@@ -66,6 +66,17 @@ final class AppImportRunner: ProfileDataOwner {
     app.profileTeardown.register(self)
   }
 
+  /// Private source copies (history, and the secret stores) that a crash or kill left in the
+  /// temporary folder. Removed off the main thread a few seconds after launch, so launch work is
+  /// untouched; copies younger than one hour (another live import) are kept.
+  func sweepStaleImportCopiesAfterLaunch() {
+    Task.detached(priority: .background) {
+      try? await Task.sleep(for: .seconds(3))
+      let removed = sweepStaleImportCopies()
+      if removed > 0 { await MainActor.run { AppDelegate.commandLog("import cleanup: removed \(removed) stale copies") } }
+    }
+  }
+
   func run(plan: ImportPlan, firstRun: Bool) async -> ImportOutcome {
     guard !running, !secretsFixtureInProgress, !installingExtension else { return ImportOutcome(errorText: "An import is already running.") }
     running = true
@@ -348,8 +359,12 @@ final class AppImportRunner: ProfileDataOwner {
     // directory collision suffixes must never be used to read the Arc source.
     mapExtensions()
     // Arc app settings (live previews, Live Calendar reminder, Meet route): after the Profiles landed.
-    applyArcPreferences(directory: plan.directory, imported: imported, profileMapping: profileMapping, undo: undo,
-                        counts: &counts, failures: &failures)
+    // First run only (lead ruling, round 2): a Settings re-import must not replace settings the
+    // user has changed in Open since.
+    if firstRun {
+      applyArcPreferences(directory: plan.directory, imported: imported, profileMapping: profileMapping, undo: undo,
+                          counts: &counts, failures: &failures)
+    }
     if plan.boosts {
       guard !undo.cancelled else { return result() }
       #if OPEN_AUTOMATION

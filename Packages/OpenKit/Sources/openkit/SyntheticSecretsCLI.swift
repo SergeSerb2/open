@@ -156,6 +156,8 @@ private enum SyntheticSinkFailure: Error { case stopped }
     let legacy = try verifySyntheticSecretsImport()
     let r = legacy.report
     row("legacy crypto and redaction", legacy.knownKeyMatches && legacy.hashValuesMatch && legacy.redactedRecordKinds == 4 && r.loginsDecryptFailed == 5 && r.badPrefix == 5 && r.cardsDecryptFailed == 3 && r.cookiesExpired == 1)
+    // A 0 (unknown) login or address time keeps the record; only negative and future times fail.
+    row("zero times kept", r.loginsDecryptOK == 5 && r.loginsInvalidTime == 2 && r.addressRows == 4 && r.addressesInvalidTime == 2)
     row("report copy", second.lines.count == (stop == nil ? 4 : 5) && ArcSecretsImportReport.passkeyMessage.count > 0)
     let unmapped = try await ArcSecretsImporter.runSyntheticFixture(sinks: [:])
     row("unmapped profiles", unmapped.unmappedProfiles == 2 && unmapped.profiles.values.allSatisfy {

@@ -141,6 +141,19 @@ def fixture(library):
         'other': {'type': 'folder', 'guid': '00000000-0000-4000-b000-000000000002', 'name': 'Other bookmarks', 'children': []}}}
     (chrome/'Profile 1/Bookmarks').write_text(json.dumps(work))
     (chrome/'Profile 1/Preferences').write_text(json.dumps({'default_search_provider': {'guid': 'example-guid'}}))
+    import struct
+    ii = lambda a, b: struct.pack('<ii', a, b)
+    # Chromium reads the newest session file that holds the initial-state marker (255); a newer file
+    # without it is still being written. Tab 40 had back/forward entries a, b, c, d; history deletion
+    # pruned b (command 24), then the selection moved back one entry: the current entry is c, not b.
+    work_sessions = chrome/'Profile 1/Sessions'; work_sessions.mkdir()
+    marked = [(9, ii(1, 0)), (0, ii(1, 40)), (2, ii(40, 0)), (0, ii(1, 41)), (2, ii(41, 1))]
+    marked += [navigation(40, i, 'https://%s.prune.example.com/' % n, 'Example ' + n) for i, n in enumerate('abcd')]
+    marked += [(7, ii(40, 3)), (24, struct.pack('<iii', 40, 1, 1)), (7, ii(40, 1)),
+               navigation(41, 0, 'https://work-tab.example.com/', 'Example Work Tab'), (255, b'')]
+    (work_sessions/'Session_13400000000000000').write_bytes(snss(marked))
+    (work_sessions/'Session_13450000000000000').write_bytes(snss([(9, ii(1, 0)), (0, ii(1, 50)),
+        navigation(50, 0, 'https://unmarked.example.com/', 'Example Unmarked')]))
     with sqlite3.connect(chrome/'Profile 1/Web Data') as db:
         db.executescript('''CREATE TABLE keywords(id INTEGER PRIMARY KEY, short_name VARCHAR NOT NULL, keyword VARCHAR NOT NULL,
             favicon_url VARCHAR NOT NULL DEFAULT '', url VARCHAR NOT NULL, suggest_url VARCHAR DEFAULT '', sync_guid VARCHAR);''')
@@ -306,6 +319,12 @@ def run(factory, results, tmp, h):
     chosen, report = run_import(profile='Profile 1', history=False)
     outcome = report.get('settingsOutcome', {})
     data, nodes = sidebar(app)
+    work_tabs = sorted(x['tab']['_0']['url'] for space in data['spaces'] for x in space.get('today', [])
+                       if 'tab' in x and ('prune.' in x['tab']['_0']['url'] or x['tab']['_0']['url'].startswith(('https://work-tab.', 'https://unmarked.'))))
+    work_label = chosen.get('settingsBrowserLabels', {}).get('Open tabs')
+    row('session_marker_file', work_label == 'Found: 2' and outcome.get('Open tabs') == 2
+        and 'https://unmarked.example.com/' not in work_tabs, label=work_label, imported=outcome.get('Open tabs'), today=work_tabs)
+    row('session_pruned_entries', work_tabs == ['https://c.prune.example.com/', 'https://work-tab.example.com/'], today=work_tabs)
     custom = [e for p in data['profiles'] for e in p['settings'].get('customSearchEngines', [])]
     engines = {p['settings']['searchEngineID'] for p in data['profiles']}
     row('second_profile_custom_search', outcome.get('Bookmarks') == 1 and 'History' not in outcome

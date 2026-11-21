@@ -87,6 +87,7 @@ indirect enum DER: Equatable {
 enum NSSOID {
     static let pbes2: [UInt8] = [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x05, 0x0D]          // 1.2.840.113549.1.5.13
     static let pbkdf2: [UInt8] = [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x05, 0x0C]         // 1.2.840.113549.1.5.12
+    static let hmacSHA1: [UInt8] = [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x02, 0x07]             // 1.2.840.113549.2.7
     static let hmacSHA256: [UInt8] = [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x02, 0x09]           // 1.2.840.113549.2.9
     static let aes256CBC: [UInt8] = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x01, 0x2A]      // 2.16.840.1.101.3.4.1.42
     static let desEDE3CBC: [UInt8] = [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x03, 0x07]           // 1.2.840.113549.3.7
@@ -107,16 +108,23 @@ enum FirefoxCrypto {
         Array(HMAC<Insecure.SHA1>.authenticationCode(for: data, using: SymmetricKey(data: key)))
     }
 
-    static func pbkdf2SHA256(password: [UInt8], salt: [UInt8], iterations: Int, length: Int) throws -> [UInt8] {
+    static func pbkdf2(password: [UInt8], salt: [UInt8], iterations: Int, length: Int,
+                       prf: CCPseudoRandomAlgorithm = CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256)) throws -> [UInt8] {
         guard iterations > 0, iterations <= 10_000_000, (16...64).contains(length) else { throw FirefoxCryptoError.unsupported }
         var out = [UInt8](repeating: 0, count: length)
         let status = password.withUnsafeBufferPointer { pw in
             CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2), pw.baseAddress.map { UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self) },
-                                 pw.count, salt, salt.count, CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
-                                 UInt32(iterations), &out, length)
+                                 pw.count, salt, salt.count, prf, UInt32(iterations), &out, length)
         }
-        guard status == kCCSuccess else { throw FirefoxCryptoError.decryptFailed }
+        guard status == kCCSuccess else { zeroSecretBytes(&out); throw FirefoxCryptoError.decryptFailed }
         return out
+    }
+
+    /// SHA-1 of the global salt and the Primary Password; the joined input is zeroed too.
+    static func hashedPassword(globalSalt: [UInt8], primaryPassword: [UInt8]) -> [UInt8] {
+        var input = globalSalt + primaryPassword
+        defer { zeroSecretBytes(&input) }
+        return sha1(input)
     }
 
     static func cbc(_ operation: CCOperation, algorithm: CCAlgorithm, key: [UInt8], iv: [UInt8], _ input: [UInt8]) throws -> [UInt8] {
@@ -137,18 +145,25 @@ enum FirefoxCrypto {
     static func decryptPBE(_ der: DER, globalSalt: [UInt8], primaryPassword: [UInt8]) throws -> [UInt8] {
         guard let top = der.children, top.count == 2, let algorithm = top[0].children, algorithm.count == 2,
               let oid = algorithm[0].oidBytes, let ciphertext = top[1].octetBytes else { throw FirefoxCryptoError.malformed }
-        var hashed = sha1(globalSalt + primaryPassword)
+        var hashed = hashedPassword(globalSalt: globalSalt, primaryPassword: primaryPassword)
         defer { zeroSecretBytes(&hashed) }
         if oid == NSSOID.pbes2 {
             guard let params = algorithm[1].children, params.count == 2,
                   let kdf = params[0].children, kdf.count == 2, kdf[0].oidBytes == NSSOID.pbkdf2,
-                  let kdfParams = kdf[1].children, kdfParams.count >= 2,
+                  let kdfParams = kdf[1].children, (2...4).contains(kdfParams.count),
                   let salt = kdfParams[0].octetBytes, let iterations = kdfParams[1].intValue,
                   let cipher = params[1].children, cipher.count == 2, cipher[0].oidBytes == NSSOID.aes256CBC,
                   let ivTail = cipher[1].octetBytes else { throw FirefoxCryptoError.malformed }
-            let length = kdfParams.count >= 3 ? (kdfParams[2].intValue ?? 32) : 32
-            if kdfParams.count >= 4, let prf = kdfParams[3].children, prf.first?.oidBytes != NSSOID.hmacSHA256 { throw FirefoxCryptoError.unsupported }
-            var key = try pbkdf2SHA256(password: hashed, salt: salt, iterations: iterations, length: length)
+            // RFC 8018 PBKDF2-params: salt, iterationCount, keyLength INTEGER OPTIONAL,
+            // prf AlgorithmIdentifier DEFAULT hmacWithSHA1. NSS writes both; either may be left out.
+            var length = 32, prf = CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA1)
+            for (offset, field) in kdfParams.dropFirst(2).enumerated() {
+                if offset == 0, let value = field.intValue { length = value; continue }
+                guard let id = field.children?.first?.oidBytes, offset == kdfParams.count - 3 else { throw FirefoxCryptoError.malformed }
+                if id == NSSOID.hmacSHA256 { prf = CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256) }
+                else if id != NSSOID.hmacSHA1 { throw FirefoxCryptoError.unsupported }
+            }
+            var key = try pbkdf2(password: hashed, salt: salt, iterations: iterations, length: length, prf: prf)
             defer { zeroSecretBytes(&key) }
             // NSS stores 14 IV bytes; the full IV is the DER header 04 0E plus those bytes.
             let iv = ivTail.count == 14 ? [0x04, 0x0E] + ivTail : ivTail
@@ -157,9 +172,9 @@ enum FirefoxCrypto {
         if oid == NSSOID.pbeSHA1TripleDES {
             guard let params = algorithm[1].children, params.count == 2, let entrySalt = params[0].octetBytes else { throw FirefoxCryptoError.malformed }
             var keyIV = legacyKey(hashedPassword: hashed, entrySalt: entrySalt)
-            defer { zeroSecretBytes(&keyIV) }
-            return try cbc(CCOperation(kCCDecrypt), algorithm: CCAlgorithm(kCCAlgorithm3DES),
-                           key: Array(keyIV[0..<24]), iv: Array(keyIV[32..<40]), ciphertext)
+            var key = Array(keyIV[0..<24]), iv = Array(keyIV[32..<40])
+            defer { zeroSecretBytes(&keyIV); zeroSecretBytes(&key); zeroSecretBytes(&iv) }
+            return try cbc(CCOperation(kCCDecrypt), algorithm: CCAlgorithm(kCCAlgorithm3DES), key: key, iv: iv, ciphertext)
         }
         throw FirefoxCryptoError.unsupported
     }
@@ -167,10 +182,16 @@ enum FirefoxCrypto {
     /// NSS legacy PBE: 40 bytes; the 3DES key is bytes 0..<24 and the IV the last 8.
     static func legacyKey(hashedPassword: [UInt8], entrySalt: [UInt8]) -> [UInt8] {
         let padded = entrySalt + [UInt8](repeating: 0, count: max(0, 20 - entrySalt.count))
-        let chp = sha1(hashedPassword + entrySalt)
-        let k1 = hmacSHA1(key: chp, padded + entrySalt)
-        let tk = hmacSHA1(key: chp, padded)
-        let k2 = hmacSHA1(key: chp, tk + entrySalt)
+        var joined = hashedPassword + entrySalt
+        var chp = sha1(joined)
+        var k1 = hmacSHA1(key: chp, padded + entrySalt)
+        var tk = hmacSHA1(key: chp, padded)
+        var tkSalt = tk + entrySalt
+        var k2 = hmacSHA1(key: chp, tkSalt)
+        defer {
+            zeroSecretBytes(&joined); zeroSecretBytes(&chp); zeroSecretBytes(&k1)
+            zeroSecretBytes(&tk); zeroSecretBytes(&tkSalt); zeroSecretBytes(&k2)
+        }
         return k1 + k2
     }
 
@@ -182,7 +203,9 @@ enum FirefoxCrypto {
               let iv = cipher[1].octetBytes, let ciphertext = parts[2].octetBytes else { throw FirefoxCryptoError.malformed }
         if oid == NSSOID.desEDE3CBC {
             guard key.count >= 24 else { throw FirefoxCryptoError.malformed }
-            return try cbc(CCOperation(kCCDecrypt), algorithm: CCAlgorithm(kCCAlgorithm3DES), key: Array(key[0..<24]), iv: iv, ciphertext)
+            var desKey = Array(key[0..<24])
+            defer { zeroSecretBytes(&desKey) }
+            return try cbc(CCOperation(kCCDecrypt), algorithm: CCAlgorithm(kCCAlgorithm3DES), key: desKey, iv: iv, ciphertext)
         }
         if oid == NSSOID.aes256CBC {
             guard key.count == 32 else { throw FirefoxCryptoError.malformed }
@@ -196,7 +219,7 @@ enum FirefoxCrypto {
     static func encryptPBES2(_ plaintext: [UInt8], globalSalt: [UInt8], primaryPassword: [UInt8], salt: [UInt8], ivTail: [UInt8], iterations: Int) throws -> DER {
         var hashed = sha1(globalSalt + primaryPassword)
         defer { zeroSecretBytes(&hashed) }
-        var key = try pbkdf2SHA256(password: hashed, salt: salt, iterations: iterations, length: 32)
+        var key = try pbkdf2(password: hashed, salt: salt, iterations: iterations, length: 32)
         defer { zeroSecretBytes(&key) }
         let ciphertext = try cbc(CCOperation(kCCEncrypt), algorithm: CCAlgorithm(kCCAlgorithmAES), key: key, iv: [0x04, 0x0E] + ivTail, plaintext)
         return .sequence([

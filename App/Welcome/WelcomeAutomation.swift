@@ -83,6 +83,7 @@ extension AutomationController {
       "decoders": all.reduce(0) { $0 + ($1.clipPanel.hasDecoder ? 1 : 0) },
       "clip": page.map { page in ["loaded": page.clipPanel.loadedClip.map { $0 + 1 } as Any? ?? NSNull(),
         "decoder": page.clipPanel.hasDecoder, "playing": page.clipPanel.isPlaying, "end": page.clipPanel.showsEnd,
+        "playersCreated": page.clipPanel.playersCreated,
         "replayAllVisible": !page.clipPanel.replayAll.isHidden && page.clipPanel.replayAll.alphaValue > 0.99,
         "movies": (0..<4).map { WelcomeClips.movie($0) != nil }] as [String: Any] } as Any? ?? NSNull(),
       "hostCount": all.count, "engineContentCreationCount": factory.contentCreationCount,

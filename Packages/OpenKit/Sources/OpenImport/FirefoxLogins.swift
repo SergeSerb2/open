@@ -84,7 +84,8 @@ public struct FirefoxLoginsReader: Sendable {
     private func loadJSON() throws -> [[String: Any]] {
         let file = profileDirectory.appendingPathComponent("logins.json")
         guard FileManager.default.fileExists(atPath: file.path) else { return [] }
-        guard let data = try? Data(contentsOf: file), data.count <= 64 << 20 else { throw FirefoxImportError.unreadable("logins.json") }
+        let data: Data
+        do { data = try readBoundedFile(file, maxBytes: 64 << 20) } catch { throw FirefoxImportError.unreadable("logins.json") }
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let logins = root["logins"] as? [[String: Any]] else { throw FirefoxImportError.schemaMismatch("logins.json") }
         return logins
@@ -102,12 +103,22 @@ public struct FirefoxLoginsReader: Sendable {
             try copy.rows("SELECT a11, a102 FROM nssPrivate") { s in keys.append((copy.bytes(s, 0), copy.bytes(s, 1))) }
         } catch { throw FirefoxImportError.schemaMismatch("key4.db") }
         guard !globalSalt.isEmpty, let checkDER = DER.parse(check) else { throw FirefoxImportError.schemaMismatch("key4.db") }
-        var clear = (try? FirefoxCrypto.decryptPBE(checkDER, globalSalt: globalSalt, primaryPassword: primaryPassword)) ?? []
+        // Only a failed decryption means a wrong Primary Password; a malformed or unsupported
+        // check entry is a key store Open cannot read, not a password to ask for.
+        var clear: [UInt8]
+        do { clear = try FirefoxCrypto.decryptPBE(checkDER, globalSalt: globalSalt, primaryPassword: primaryPassword) }
+        catch FirefoxCryptoError.malformed, FirefoxCryptoError.unsupported { throw FirefoxImportError.schemaMismatch("key4.db") }
+        catch { clear = [] }
         defer { zeroSecretBytes(&clear) }
         guard clear.starts(with: FirefoxCrypto.passwordCheck) else { throw FirefoxImportError.primaryPasswordRequired }
-        guard let entry = keys.first(where: { $0.a102 == FirefoxCrypto.sdrKeyID }), let keyDER = DER.parse(entry.a11),
-              let key = try? FirefoxCrypto.decryptPBE(keyDER, globalSalt: globalSalt, primaryPassword: primaryPassword),
-              key.count >= 24 else { throw FirefoxImportError.schemaMismatch("key4.db") }
-        return key
+        // Several `nssPrivate` rows can carry the SDR key ID (for example one with a NULL `a11`):
+        // use the first that decrypts to a usable key.
+        for entry in keys where entry.a102 == FirefoxCrypto.sdrKeyID {
+            guard let keyDER = DER.parse(entry.a11),
+                  var key = try? FirefoxCrypto.decryptPBE(keyDER, globalSalt: globalSalt, primaryPassword: primaryPassword) else { continue }
+            if key.count >= 24 { return key }
+            zeroSecretBytes(&key)
+        }
+        throw FirefoxImportError.schemaMismatch("key4.db")
     }
 }
