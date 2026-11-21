@@ -124,9 +124,22 @@ extension AppImportRunner {
     let now = Date()
     // One tab per URL with a URL-only ID, as the Chromium import: a window or list position in the ID
     // would add every tab again after the session changes order.
+    // Builds before bug sweep round 2 used the window and the list position in the ID. A tab of such
+    // an import whose URL is still at that place in the session keeps its old ID, so a re-import adds
+    // no copy of it (a session that changed order since then still adds one copy, once).
+    func legacyID(_ tab: ImportedOpenTab, _ index: Int) -> ItemID {
+      ImportedBookmarksFolder.itemID(sourceKey: key, sourceID: "open-tab:\(tab.window):\(index):" + tab.url.absoluteString)
+    }
+    #if OPEN_AUTOMATION
+    // e2e (bug sweep r3 L16): import with those old IDs, as such a build did.
+    let importsLegacyIDs = UserDefaults.standard.bool(forKey: "open.automation.firefoxLegacyOpenTabIDs")
+    #else
+    let importsLegacyIDs = false
+    #endif
     var seen = Set<URL>()
-    for tab in read.tabs where seen.insert(tab.url).inserted {
-      let id = BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)
+    for (index, tab) in read.tabs.enumerated() where seen.insert(tab.url).inserted {
+      let old = legacyID(tab, index)
+      let id = importsLegacyIDs || app.model.tab(id: old) != nil ? old : BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)
       let date = tab.lastAccessed ?? now
       let node = SidebarNode.tab(Tab(id: id, url: tab.url, title: tab.title, pinnedURL: tab.isPinned ? tab.url : nil,
                                      createdAt: date, lastActiveAt: date))
