@@ -370,7 +370,9 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             check('boost_edit_without_space_explains',edit_state['statusLabel']=='To edit this Boost, add a Space that uses its Profile.'
                   and not app.call('boost-editor').get('open') and len(app.call('tabs'))==tabs_before,status=edit_state['statusLabel'],
                   negative='old Edit Boost returned silently: no editor, no tab, no message')
-            app.call('boost-gallery-ui',action='profile',name=profile_name);state(action='close')
+            app.call('boost-gallery-ui',action='profile',name=profile_name)
+            check('boost_profile_switch_clears_status',wait(lambda:state()['statusLabel']==''),status=state()['statusLabel'])
+            state(action='close')
             if frames:
                 # Review both populated and empty Media, and a populated Archive,
                 # using the same real engine and capture paths as the flow above.

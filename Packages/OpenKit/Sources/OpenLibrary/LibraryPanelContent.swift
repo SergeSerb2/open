@@ -117,6 +117,8 @@ extension LibraryPanelView {
     }
     public func setBoostProfile(_ name:String) -> Bool {
         guard let profile = viewModel.model.profiles.first(where: { $0.name == name }) else { return false }
+        // A status line describes the previous Profile's Boosts (for example why Edit could not open).
+        viewModel.statusText = ""
         viewModel.historyProfileID = profile.id; hosts[section]?.loaded = false; hosts[section]?.dirty = true; refreshData(); renderRows(); return true
     }
     func showBoostProfiles() {
