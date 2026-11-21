@@ -184,10 +184,13 @@ def run(factory, results, tmp, h):
         guarded('nav4_library_reopen_follows_profile', library_profile,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
 
-        # F-13 guard (seed was a false positive on the real key path): Cmd+F in Library ▸ Spaces opens no Find
-        # on the page strip behind Library.
+        # F-13: Cmd+F in Library ▸ Spaces opens no Find on the page strip behind Library (and keeps focus).
         def library_spaces_find():
             app.call('select', tab=start)
+            # A wide window: the run that reproduced the bug had a 2077 pt window (Find opened on the page
+            # strip right of Space Manager); 1280 pt runs did not open Find on old code.
+            app.call('window-frame', frame=[40, 40, 2000, 820])
+            frame = app.call('window-state').get('frame')
             app.call('library', action='open', section='spaces')
             assert wait_until(lambda: app.call('library').get('section') == 'spaces' or None, timeout=3, step=.1) or True
             app.call('key', key='f', modifiers=['cmd'], route='app')
@@ -204,8 +207,9 @@ def run(factory, results, tmp, h):
             app.call('key', key='escape', route='app')
             row('nav4_library_spaces_cmd_f_no_find', not any(p.get('visible') for p in panes) and bool(control), panes=panes,
                 section=section, control=bool(control), routed=routed, controlState=control_state,
-                window=app.call('window-state').get('selected'), start=start)
-        guarded('nav4_library_spaces_cmd_f_no_find', library_spaces_find, lambda: app.call('library', action='close'))
+                window=app.call('window-state').get('selected'), start=start, frame=frame)
+        guarded('nav4_library_spaces_cmd_f_no_find', library_spaces_find,
+                lambda: (app.call('library', action='close'), app.call('window-frame', frame=[80, 60, 1280, 820])))
 
         # F-02: a Blank Window's bar lists its own tabs (Switch to Tab) and the current-tab actions.
         def blank_window():
