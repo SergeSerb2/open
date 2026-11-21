@@ -4,12 +4,12 @@
 // OEWebContent and keep it glued over the view as a child NSWindow.
 
 #import "OEInternal.h"
+#import "OEClient.h"
 
 #include "include/views/cef_browser_view_delegate.h"
 #include "include/views/cef_window_delegate.h"
 
 @interface OEWebContent (ChromeHost)
-- (nullable OEWebContent*)oe_takePendingChromePopup;
 - (void)oe_chromeWindowReady:(NSWindow*)window;
 @end
 
@@ -48,7 +48,19 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
       const CefBrowserSettings& settings,
       CefRefPtr<CefClient> client,
       bool is_devtools) override {
-    return new OEChromeBrowserViewDelegate(nil, false);
+    // CEF asks after OnBeforePopup, before OnPopupBrowserViewCreated: the
+    // page adopting this popup is still pending. It must own the popup's
+    // delegate, or a popup opened by that popup found no page here and got
+    // CEF's default window with an empty shell page.
+    // Only the popup that page adopted: its client is that page's client
+    // (an unadopted or stale popup of the same opener has another).
+    OEWebContent* pending = is_devtools ? nil : [view_ oe_pendingChromePopup];
+    CefClient* own = pending ? pending.oe_client.get() : nullptr;
+    // Remembered for OnPopupBrowserViewCreated, which CEF calls next for this
+    // same popup (CefBrowserPlatformDelegate::PopupWebContentsCreated, then
+    // PopupBrowserCreated).
+    matched_popup_ = own && own == client.get() ? pending : nil;
+    return new OEChromeBrowserViewDelegate(matched_popup_, false);
   }
 
   bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
@@ -57,16 +69,21 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
     if (is_devtools) {
       return false;
     }
-    OEWebContent* target = [view_ oe_takePendingChromePopup];
-    if (!target) {
+    // Only the popup whose client matched its pending page above; an
+    // unadopted popup of this opener leaves that page pending.
+    OEWebContent* target = matched_popup_;
+    matched_popup_ = nil;
+    if (!target || target != [view_ oe_pendingChromePopup]) {
       return false;
     }
+    (void)[view_ oe_takePendingChromePopup];
     [target oe_adoptPopupBrowserView:popup_browser_view];
     return true;
   }
 
  private:
   __weak OEWebContent* view_;
+  __weak OEWebContent* matched_popup_;
   bool toolbar_;
   IMPLEMENT_REFCOUNTING(OEChromeBrowserViewDelegate);
 };

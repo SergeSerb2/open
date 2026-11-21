@@ -93,6 +93,10 @@
   }
 }
 
+- (void)oe_releaseCallback {
+  _callback = nullptr;
+}
+
 - (void)dealloc {
   // An unanswered dialog would hang the page; treat it as cancelled.
   if (_callback) {

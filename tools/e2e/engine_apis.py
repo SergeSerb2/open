@@ -2,7 +2,10 @@
 import base64
 import http.server
 import io
+from pathlib import Path
+import re
 import threading
+import time
 import wave
 from loopback_http import LoopbackHTTPServer
 
@@ -47,6 +50,9 @@ def run(factory, results, wait):
                          'r' * 4097 if self.path == '/auth/realm-over' else
                          'Open API fixture%s' % (' proxy' if proxy else self.path))
                 self.send_header('Proxy-Authenticate' if proxy else 'WWW-Authenticate', 'Basic realm="%s"' % realm)
+            elif self.path == '/popup-target':
+                body = b'<!doctype html><title>Popup target</title><p>popup'
+                self.send_response(200)
             else:
                 body = (b'<!doctype html><title>Engine API fixture</title>'
                         # Keep the input visible at the asserted scroll offset.
@@ -207,7 +213,65 @@ def run(factory, results, wait):
         call('close-browser', browser='a')
         row('http_close_withdrawal', wait(lambda: call()['cancelled'] > count, timeout=10)
             and not call()['requests'])
-        call('cleanup'); app.quit(); app = None
+
+        # Bug sweep r2 (engine). The proof delegate has no open-request or
+        # dialog UI: it returns false, which means the engine's own behavior.
+        call('add', page='opener', browser='d', url=base + '/opener')
+        assert loaded('opener')
+        # A popup nobody adopts keeps Chromium's window and its own client:
+        # its address and title must not replace the opener's.
+        opener_before = call()['pages']['opener']
+        evaluate('window.open(%r, "_blank", "popup,width=320,height=240"); true'
+                 % (base + '/popup-target'), 'opener')
+        requested = wait(lambda: attempts.get('/popup-target'), timeout=10)
+        time.sleep(1.5)  # Address/title/loading callbacks of the popup.
+        opener_after = call()['pages']['opener']
+        row('unowned_popup_keeps_opener', bool(requested)
+            and opener_after['url'] == base + '/opener' and opener_after['title'] == opener_before['title']
+            and opener_after['id'] == opener_before['id'] and not opener_after['loading'],
+            requested=bool(requested), before=opener_before, after=opener_after)
+        # A declined dialog belongs to the engine's default dialog: it must
+        # still be open (and answerable), not silently answered "cancel".
+        call('devtools', page='opener', method='Page.enable')
+        evaluate('window.answer="pending";setTimeout(()=>{window.answer=confirm("Engine default?")},0);true',
+                 'opener')
+        declined = wait(lambda: call()['dialogsDeclined'] > 0, timeout=10)
+        time.sleep(.5)
+        try:
+            call('devtools', page='opener', method='Page.handleJavaScriptDialog', params={'accept': True})
+            handled = 'handled'
+        except Exception as error:  # "No dialog is showing" when the answer was consumed.
+            handled = str(error)[-200:]
+        answer = wait(lambda: (lambda a: a if a != 'pending' else None)(evaluate('window.answer', 'opener')),
+                      timeout=10)
+        row('declined_dialog_engine_default', bool(declined) and handled == 'handled' and answer is True,
+            declined=call()['dialogsDeclined'], handled=handled, answer=answer)
+        # Last: on old code this ended the App. DevTools mouse input with JSON null / string modifiers (NSNull has no
+        # -unsignedIntegerValue: an Objective-C exception ended the App).
+        # DevTools itself may refuse the value ("Invalid parameters"); the
+        # App must answer, not die.
+        sent = []
+        for modifiers in (None, '4'):
+            for kind in ('mousePressed', 'mouseReleased'):
+                try:
+                    call('devtools', page='opener', method='Input.dispatchMouseEvent', params={
+                        'type': kind, 'x': 5, 'y': 5, 'button': 'left', 'clickCount': 1,
+                        'modifiers': modifiers})
+                    sent.append('ok')
+                except RuntimeError as error:
+                    sent.append(str(error)[-80:])
+        row('devtools_mouse_null_modifiers', len(sent) == 4 and call()['pages']['opener']['live'],
+            replies=sent)
+        # Quit with the unowned popup still open (no cleanup first): it counts
+        # for quit now and must close, not hold quit until the three-second
+        # deadline. A guard row: old code also met the deadline here.
+        app.quit()
+        log = Path(app.launch_log_path).read_text(errors='replace')
+        receipt = re.findall(r'shutdown contexts=(\d+) inert=(\d+) deadline=(\d+) deadlineSeconds=3', log)
+        row('quit_with_unowned_popup_no_deadline', bool(receipt) and receipt[-1][2] == '0'
+            and app.quit_report.get('ok') and not app.quit_report.get('forced'),
+            receipt=receipt[-1:] if receipt else None, quit=app.quit_report)
+        app = None
 
         app = factory(fresh=True, urls=('about:blank',), extra_args=[
             '--style=chrome', '--engine-api-auth', '--proxy-server=http://127.0.0.1:%d' % port,

@@ -806,6 +806,30 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   return YES;
 }
 
+- (void)oe_popupAborted {
+  if (_browser || !_awaitingPopup || !_isPopup) {
+    return;
+  }
+  // _awaitingPopup stays set: this page must not create a browser of its own
+  // (about:blank) before the shell closes it.
+  // Release the Alloy creation keep-alive (-oe_browserCreated never runs).
+  OEWebContent* keepAlive = _creatingSelf;
+  _creatingSelf = nil;
+  (void)keepAlive;
+  // Like a popup that closed itself; out of Chromium's callback.
+  __weak OEWebContent* weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    OEWebContent* content = weakSelf;
+    if (content && !content->_browser && !content->_closeRequested) {
+      [content oe_requestClose];
+    }
+  });
+}
+
+- (nullable OEWebContent*)oe_pendingChromePopup {
+  return _pendingChromePopup;
+}
+
 - (nullable OEWebContent*)oe_takePendingChromePopup {
   OEWebContent* popup = _pendingChromePopup;
   _pendingChromePopup = nil;
@@ -1448,7 +1472,12 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   if ([method isEqualToString:@"Input.dispatchMouseEvent"] &&
       ([parameters[@"type"] isEqual:@"mousePressed"] ||
        [parameters[@"type"] isEqual:@"mouseReleased"])) {
-    NSUInteger flags = [parameters[@"modifiers"] unsignedIntegerValue];
+    // Caller JSON: `modifiers` can be null (NSNull) or a string. Those have no
+    // -unsignedIntegerValue and would throw; treat them as no modifiers.
+    id rawFlags = parameters[@"modifiers"];
+    NSUInteger flags = [rawFlags isKindOfClass:NSNumber.class]
+                           ? [rawFlags unsignedIntegerValue]
+                           : 0;
     NSEventModifierFlags modifiers = 0;
     if (flags & 1) modifiers |= NSEventModifierFlagOption;
     if (flags & 2) modifiers |= NSEventModifierFlagControl;

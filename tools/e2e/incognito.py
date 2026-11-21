@@ -72,6 +72,52 @@ def checks(factory, results, tmp, harness):
         assert window, 'private window did not open via ' + entry
         focus(window); dismiss()
         return window
+    def reopen_while_closing(normal):
+        # Close the last private window, then open a new one at once, while the
+        # old session is still closing. The new window must get a new, live
+        # session with none of the old session's cookies. The engine used to
+        # hand back the closing session and the new window closed at once
+        # (bug sweep r2). Several rounds: each is one timing sample.
+        rounds = []
+        for attempt in range(3):
+            private_window('menu'); quick_tab = open_page('/quick-session')
+            app.eval(quick_tab, "document.cookie='closingSession=%d; path=/'; true" % attempt)
+            quick_context = state()['context']
+            # Reopen in the same main-thread turn as the close: the old
+            # session is certainly still closing (an RPC round trip is not).
+            before = {w['id'] for w in windows(True)}
+            reopened, error = None, None
+            try:
+                app.call('window-close', thenMenu='new-incognito-window')
+                reopened = wait(lambda: next((w for w in windows(True) if w['id'] not in before), None),
+                                timeout=5, step=.05)
+            except Exception as failure:
+                error = str(failure)[-200:]
+            time.sleep(2)
+            still_open = bool(reopened) and any(w['id'] == reopened['id'] for w in windows(True))
+            fresh, cookie = {}, None
+            if still_open:
+                focus(reopened); fresh_tab = open_page('/reopened'); fresh = state()
+                cookie = app.eval(fresh_tab, 'document.cookie')
+                # The session must stay live after Chromium destroyed the old profile.
+                time.sleep(2)
+                app.call('navigate', tab=fresh_tab, url=base + '/reopened-later'); app.call('wait', tab=fresh_tab)
+                later = app.eval(fresh_tab, 'location.pathname')
+            else:
+                later = None
+            rounds.append(dict(open=still_open, quick=quick_context, fresh=fresh.get('context'),
+                               ephemeral=fresh.get('ephemeral'),
+                               cookie=cookie, later=later, error=error))
+            if still_open: app.call('window-close')
+            focus(normal)
+        waits = sorted(set(l.split('reason=')[-1].strip() for l in Path(app.launch_log_path).read_text(errors='replace').splitlines()
+                           if 'incognito-context-wait' in l))
+        # "invalidated" would mean a new private context was made on the old,
+        # still-open profile (the old session's cookies) before it closed.
+        check('reopen_while_closing_new_session', 'invalidated' not in waits and all(r['open'] and r['fresh'] not in (None, r['quick'])
+              and r['ephemeral'] and r['cookie'] is not None and 'closingSession' not in r['cookie'] and r['later'] == '/reopened-later'
+              for r in rounds), rounds=rounds,
+              engine_waits=waits)
     def fingerprint():
         root = Path(app.user_data)
         tables = {}
@@ -121,6 +167,9 @@ def checks(factory, results, tmp, harness):
         for k in keys: app.call('defaults', key=k, value=None)
         for k, v in zip(keys, [True, True, False, False, False, False]): app.call('defaults', key=k, value=v)
         normal = windows(False)[0]; normal_tab = app.call('tabs')[0]['id']; app.call('wait', tab=normal_tab)
+        if os.environ.get('OPEN_INCOGNITO_REOPEN_ONLY') == '1':
+            reopen_while_closing(normal)
+            return
         if os.environ.get('OPEN_BOOST_PRIVATE_ONLY') == '1':
             from incognito_boosts import check_boosts_private
             check_boosts_private(app, normal, base, wait, results, harness)
@@ -189,6 +238,7 @@ def checks(factory, results, tmp, harness):
         check('no_recently_closed', app.call('archive') == recent_before)
         check('normal_model_dump_private_free', all('private.txt' not in json.dumps(v) and base + '/one' not in json.dumps(v)
               for v in [app.call('tabs'), app.call('spaces')]))
+        reopen_while_closing(normal)
         three = private_window('commandbar'); tab = open_page('/fresh')
         check('last_window_ends_session', 'privateOnly' not in app.eval(tab, 'document.cookie') and state()['context'] != first['context'])
         # All navigation paths below still use the private factory.
