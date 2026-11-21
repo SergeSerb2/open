@@ -65,6 +65,8 @@ final class ProfileTeardown {
       context !== OEEngine.shared.defaultContext else {
       throw Self.failure("The Profile context is unavailable for deletion.")
     }
+    // An extension popup window keeps its Browser, so deletion would wait for it until it timed out.
+    ExtensionWindowController.closeAll(in: context)
     stage = "deleteContext"
     try await OEEngine.shared.deleteContext(context)
     unloaded.insert(profileID)

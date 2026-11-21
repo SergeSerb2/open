@@ -1947,28 +1947,9 @@ extension EngineWebContentHostFactory {
       guard let url, url.absoluteString != "about:blank" else {
         self.record("standaloneExtraTabDropped", content, ["reason": "blank-url"]); return
       }
-      guard let profileID = sourceProfileID,
-        let space = self.model.mostRecentlyFocusedSpace(profileID: profileID) else {
-        self.record("standaloneExtraTabDropped", content, ["reason": "no-profile-space"]); return
+      if let reason = self.app.openExtensionTab(url: url, profileID: sourceProfileID) {
+        self.record("standaloneExtraTabDropped", content, ["reason": reason])
       }
-      var controller = self.app.linkExecutor.orderedControllers.first {
-        $0.context.focusedSpace?.profileID == profileID
-      }
-      if controller == nil {
-        // makeWindow can reuse the retained final main window. Set its Space
-        // before composition, so no page is created in a different Profile.
-        if self.app.windowControllers.isEmpty,
-          let retained = self.model.windows.first(where: { $0.style == .standard }) {
-          self.model.focusSpace(windowID: retained.id, spaceID: space.id)
-        }
-        controller = self.app.makeWindow(focusedSpaceID: space.id)
-      }
-      guard let controller, controller.context.focusedSpace?.profileID == profileID,
-        let target = self.app.hostFactories[controller.windowID],
-        target.openNewTab(url: url, background: false) != nil else {
-        self.record("standaloneExtraTabDropped", content, ["reason": "target-unavailable"]); return
-      }
-      self.app.focusWindow(controller.windowID, activate: true)
     }
   }
 
