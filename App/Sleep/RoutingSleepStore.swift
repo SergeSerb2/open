@@ -20,7 +20,14 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   var onError: ((String) -> Void)?
   /// Tabs with a stored back/forward list (this launch's saves plus the rows found at start).
   private(set) var knownStored: Set<ItemID> = []
-  func loadKnownStored() async { knownStored.formUnion(await storedTabIDs()) }
+  func loadKnownStored() async {
+    for profile in model.profiles {
+      let name = profile.dataDirectoryName
+      guard let ids = await store(named: name)?.allTabIDs(), !retired.contains(name.lowercased()) else { continue }
+      // A Profile deleted while this query ran keeps nothing.
+      knownStored.formUnion(ids)
+    }
+  }
 
   init(model: BrowserModel, directories: ProfileDirectories) {
     self.model = model; self.directories = directories
@@ -69,7 +76,12 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   }
 
   func flush() async throws {
-    for store in stores.values { try await store.flush() }
+    for (name, store) in stores {
+      guard !retired.contains(name.lowercased()) else { continue }
+      do { try await store.flush() }
+      // A Profile deleted during an earlier await: its closed store is not a quit failure.
+      catch where retired.contains(name.lowercased()) { continue }
+    }
   }
 
   func sleepHistory(tabID: ItemID) async -> SleepHistoryEnvelope? {
