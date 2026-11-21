@@ -502,8 +502,10 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(!vm.links.issues().contains(.patternHasSpaces(ruleID: vm.links.drafts[0].id)), "trailing space reported as an error")
                 vm.commitLinks(); disk = try env.diskModel()
                 try require(disk.routingRules.first?.match == .hostEquals("example.org"), "trimmed pattern not saved: \(String(describing: disk.routingRules.first?.match))")
-                vm.links.drafts[0].pattern = "exa mple.org"
-                try require(vm.links.issues().contains(.patternHasSpaces(ruleID: vm.links.drafts[0].id)), "inner space is no error")
+                for inner in ["exa mple.org", "exa\tmple.org", "exa\u{00A0}mple.org"] {
+                    vm.links.drafts[0].pattern = inner
+                    try require(vm.links.issues().contains(.patternHasSpaces(ruleID: vm.links.drafts[0].id)), "inner whitespace is no error: \(inner.debugDescription)")
+                }
                 vm.links.drafts[0].pattern = "example.com"; vm.commitLinks(); disk = try env.diskModel()
                 try require(disk.routingRules.first?.match == .hostEquals("example.com"), "pattern restore did not save")
                 vm.links.drafts[0].pattern = "example.com"; vm.links.spaces.removeAll { $0.id == vm.model.spaces[2].id }; vm.links.runTest()
@@ -793,6 +795,13 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 await library.restore(id: folder.id)
                 try archiveDeleteTrigger(env.archives[space.profileID]!.fileURL, enabled: false)
                 try require(library.statusText.hasPrefix("Folder restored, but its Archive entry"), "folder archive-delete failure was called a Tab restore")
+                // That failed delete left a stale row for a folder that is back in the sidebar. Restore drops
+                // the row and keeps the folder, as for a tab that is already back.
+                await library.reloadArchive()
+                let staleRestored = await library.restore(id: folder.id)
+                let staleRecord = await env.archives[space.profileID]!.record(id: folder.id)
+                try require(staleRestored && staleRecord == nil && vm.model.node(id: folder.id)?.folder != nil && library.restoredSpaceID == space.id,
+                            "stale folder row was not dropped: \(library.statusText)")
                 let oldTab = ArchivedTabRecord(id: ItemID(), url: URL(string: "https://example.invalid/old")!, title: "Old tab", archivedAt: Date(), reason: .folderDeleted, originalLocation: "today:\(space.id)", payloadJSON: "{}")
                 try require(oldTab.kind == .tab && library.archivedChildCount(oldTab) == 0, "L2 legacy folderDeleted tabs were relabeled as folders")
             case "library-downloads":

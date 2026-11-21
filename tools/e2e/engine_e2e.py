@@ -9121,29 +9121,47 @@ def littleopen_checks(factory, results, tmp):
 
 def littleopen_keycaps_checks(app, record, menu, sessions, session):
     """Bug sweep round 2: Little Open's command-bar keycaps follow the user's key bindings, as the
-    main window's bar and the menus do. The override is written to the real bindings file."""
+    main window's bar and the menus do, also in a bar that is already open when they change.
+    The override is written to the real bindings file."""
     bindings = Path(app.user_data, 'State/keybindings.json')
-    def new_tab_row():
+    def new_tab_subtitle(sid):
+        row = next((r for r in (session(sid) or {}).get('barRows', []) if r['action'] == 'new-tab'), None)
+        return row and row['subtitle']
+    def open_bar():
         before = {s['id'] for s in sessions()}
         menu('new-little-open-window')
         row = wait_until(lambda: next((s for s in sessions() if s['id'] not in before and s['barPresented']), None), timeout=5)
-        if not row: return {'opened': False, 'row': None}
+        if not row: return None
         app.call('key', window=row['window'], text='New Tab')
-        typed = wait_until(lambda: (lambda s: s if s and s['barInput'] == 'New Tab' and s['barFinal']
-                                    and any(r['action'] == 'new-tab' for r in s['barRows']) else None)(session(row['id'])), timeout=5)
-        found = next((r for r in (typed or {}).get('barRows', []) if r['action'] == 'new-tab'), None)
-        app.call('little-open-action', id=row['id'], action='close')
-        wait_until(lambda: session(row['id']) is None, timeout=4)
-        return {'opened': True, 'row': found and {k: found[k] for k in ('title', 'subtitle', 'keycaps')}}
+        wait_until(lambda: (lambda s: s and s['barInput'] == 'New Tab' and s['barFinal'] and new_tab_subtitle(row['id']))(session(row['id'])), timeout=5)
+        return row['id']
+    def close(sid):
+        app.call('little-open-action', id=sid, action='close'); wait_until(lambda: session(sid) is None, timeout=4)
+    def rebind(value):
+        if value is None: bindings.unlink(missing_ok=True)
+        else: bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': [value]}}}))
+        app.call('reload-keybindings')
+    custom = '\u2303\u2325\u2318O'
     try:
-        bindings.write_text(json.dumps({'version': 1, 'bindings': {'new-tab': {'shortcuts': [{'key': 'o', 'modifiers': ['command', 'option', 'control']}]}}}))
-        app.call('reload-keybindings'); time.sleep(.1)
-        custom = new_tab_row()
-        record('R2_little_open_keycaps_follow_override', bool(custom['row']) and custom['row']['subtitle'] == '\u2303\u2325\u2318O', **custom)
+        # A bar already open when the binding changes shows the new keycap without a new keystroke.
+        live = open_bar()
+        before = live and new_tab_subtitle(live)
+        rebind({'key': 'o', 'modifiers': ['command', 'option', 'control']})
+        changed = live and wait_until(lambda: new_tab_subtitle(live) == custom, timeout=5)
+        record('R2_little_open_keycaps_follow_override_open_bar', bool(live) and before == '\u2318T' and bool(changed),
+               before=before, after=live and new_tab_subtitle(live))
+        if live: close(live)
+        # A new bar opened under the override shows it too.
+        fresh = open_bar()
+        record('R2_little_open_keycaps_follow_override', bool(fresh) and new_tab_subtitle(fresh) == custom,
+               subtitle=fresh and new_tab_subtitle(fresh))
+        if fresh: close(fresh)
     finally:
-        bindings.unlink(missing_ok=True); app.call('reload-keybindings'); time.sleep(.1)
-    restored = new_tab_row()
-    record('R2_little_open_keycaps_default_after_reset', bool(restored['row']) and restored['row']['subtitle'] == '\u2318T', **restored)
+        rebind(None); time.sleep(.1)
+    restored = open_bar()
+    record('R2_little_open_keycaps_default_after_reset', bool(restored) and new_tab_subtitle(restored) == '\u2318T',
+           subtitle=restored and new_tab_subtitle(restored))
+    if restored: close(restored)
 
 
 def routing_checks(factory, results, tmp):
