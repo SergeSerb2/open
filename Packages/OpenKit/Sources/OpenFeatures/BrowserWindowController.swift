@@ -1941,12 +1941,13 @@ extension BrowserWindowController {
             // reaches (also one nested in a selected folder) is removed first, then the rest is
             // archived (BrowserModel.deleteFolders).
             var archived = 0, removed = 0
-            self.keepingSelection { (archived, removed) = self.model.deleteFolders(ids: ids, archiveFolderTabs: archiveFolderTabs) }
+            var archivedFolders = 0
+            self.keepingSelection { (archived, archivedFolders, removed) = self.model.deleteFolders(ids: ids, archiveFolderTabs: archiveFolderTabs) }
             if removed > 0 { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
             guard archived > 0 || removed > 0 else { return }
             self.refresh(); restoreKeyboardFocus(); self.changed()
             // The toast's Undo covers only the archived rows; a lone Live Folder removal has none.
-            if archived > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: max(1, folders - removed))) }
+            if archivedFolders > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders)) }
         }
         if !shown { pendingConfirmation = nil }
         return shown

@@ -264,7 +264,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         guard let factory, let controller = factory.controller, let space = self.spaceID(containing: id) else { return false }
         if controller.context.focusedSpace?.id != space, factory.performSidebar(.switchSpace(space)) != true { return false }
         return controller.sidebar(controller.sidebar, didRequest: intent)
-      case .deleteSpace, .deleteFolder, .deleteFolders:
+      case .deleteSpace, .deleteFolder, .deleteFolders, .deleteLiveFolder:
         // The Manager's "…" ▸ Delete, folder Delete, and selection Delete confirm first,
         // with a sheet on the Library window (completion §3.3).
         return self.confirmManagerDelete(intent, context: context, factory: factory)
@@ -336,6 +336,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     case .deleteSpace(let id): alert = SidebarConfirmations.deleteSpaceAlert(model: model, spaceID: id); ids = []
     case .deleteFolder(let id): ids = [id]; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
     case .deleteFolders(let selection, _): ids = selection; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
+    // The Live Folder row menu's Delete Live Folder (its alert is chosen below).
+    case .deleteLiveFolder(let id): ids = [id]; alert = nil
     default: return false
     }
     // A Live Folder alone gets its own alert, as in the sidebar; it is never archived (below).
@@ -351,12 +353,12 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       if case .deleteSpace(let id) = intent { accepted = ModelSidebarActions(context: context).perform(.deleteSpace(id)) }
       else {
         // Live Folders the deletion reaches are removed, not archived (BrowserModel.deleteFolders).
-        var archived = 0, removed = 0
-        let removal = { (archived, removed) = model.deleteFolders(ids: ids) }
+        var archived = 0, removed = 0, folderCount = 0
+        let removal = { (archived, folderCount, removed) = model.deleteFolders(ids: ids) }
         if let controller = self.app.hostFactories[context.windowID]?.controller { controller.keepingSelection(removal) } else { removal() }
         if removed > 0 { UserDefaults.standard.set(false, forKey: BrowserWindowController.liveFolderAutoCreateKey) }
         accepted = archived > 0 || removed > 0
-        archivedFolders = archived > 0 ? max(1, folders - removed) : 0
+        archivedFolders = folderCount
       }
       guard accepted else { return }
       restoreKeyboardFocus()

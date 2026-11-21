@@ -1921,14 +1921,15 @@ public final class BrowserModel {
     /// to Today. What is left is archived (one Undo step). Returns both counts; a Live Folder
     /// removal has no Undo step, as Delete Live Folder from its row menu.
     @discardableResult
-    public func deleteFolders(ids: [ItemID], archiveFolderTabs: Bool = false) -> (archived: Int, removedLive: Int) {
+    public func deleteFolders(ids: [ItemID], archiveFolderTabs: Bool = false) -> (archived: Int, archivedFolders: Int, removedLive: Int) {
         let live = liveFolders(reachedBy: ids)
         var removed = 0
         for id in live where index[id]?.folder?.live != nil { removeLiveFolder(id: id); removed += 1 }
         // Rows of a removed Live Folder are gone; its own tabs moved to Today and stay selected.
         let rest = ids.filter { index[$0] != nil && !live.contains($0) }
+        let folders = rest.filter { index[$0]?.folder != nil }.count
         let archived = rest.isEmpty ? 0 : archiveNodes(ids: rest, archiveFolderTabs: archiveFolderTabs)
-        return (archived, removed)
+        return (archived, archived > 0 ? folders : 0, removed)
     }
 
     /// The Live Folders a deletion of `ids` reaches: selected ones and ones nested in selected folders.
@@ -2577,27 +2578,24 @@ public final class BrowserModel {
         index[split.id] = .split(split)
         parentByID[split.id] = home
         let homeSection = section(of: home)
-        var moved: [(tab: Tab, parent: NodeParent, index: Int, pinned: PinnedURLs)] = []
+        var moved: [(tab: Tab, parent: NodeParent, index: Int, pinned: PinnedURLs, live: LiveRowRestore?)] = []
         var changed: [NodeParent] = [home]
         var clearedPeeks: [ClearedFolderPeek] = []
-        var lives: [LiveRowRestore] = []
         for id in tabIDs {
             // A fetched row that joins a split leaves its Live Folder for good (as a move does).
             let live = noteLiveRowLeaving(id, to: .splitPane(split.id))
             guard let parent = parentByID[id], let removed = removeChild(id, from: parent), let tab = removed.node.tab else { live?(); continue }
-            if let live { lives.append(live) }
             if let cleared = clearPeek(in: parent, removing: id) { clearedPeeks.append(cleared) }
             let pinned = applyPinnedRule(to: removed.node, from: section(of: parent), to: homeSection)
             split.panes.append(tab)
             parentByID[id] = .splitPane(split.id)
-            moved.append((tab, parent, removed.index, pinned))
+            moved.append((tab, parent, removed.index, pinned, live))
             if !changed.contains(parent) { changed.append(parent) }
         }
         for parent in changed { emit(.reload(parent: parent)) }
         let origins = moved
         let parents = changed
         let peeks = clearedPeeks
-        let liveRestores = lives
         return { model in
             // Auto-archive dissolved the split meanwhile: its survivors stay where they are.
             guard model.index[split.id] != nil else { return false }
@@ -2607,12 +2605,14 @@ public final class BrowserModel {
                 _ = model.insertChild(.tab(origin.tab), into: origin.parent, at: origin.index)
                 model.parentByID[origin.tab.id] = origin.parent
                 Self.restore(origin.pinned)
+                // Only a pane that went back to its Live Folder becomes a fetched row again
+                // (an expired pane stays archived and hidden).
+                origin.live?()
             }
             if let at = model.parentByID[split.id] { _ = model.removeChild(split.id, from: at) }
             model.index[split.id] = nil
             model.parentByID[split.id] = nil
             for peek in peeks { model.restorePeek(peek) }
-            liveRestores.forEach { $0() }
             for parent in parents { model.emit(.reload(parent: parent)) }
             return true
         }
