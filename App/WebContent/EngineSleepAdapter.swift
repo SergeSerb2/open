@@ -89,7 +89,9 @@ final class EngineSleepAdapter: SleepEngine {
       // wait used to run its 3 s and then report the closed tab's page as created.
       for _ in 0..<150 where content.navigationHistoryRestore == .pending {
         try? await Task.sleep(nanoseconds: 20_000_000)
-        if app.model.tab(id: tabID) == nil || !hosts(tabID).contains(where: { $0.1.content === content }) { return false }
+        if app.model.tab(id: tabID) == nil || !hosts(tabID).contains(where: { $0.1.content === content }) {
+          cancelledCreations.insert(tabID); return false
+        }
       }
       if content.navigationHistoryRestore == .failed {
         // The page loads the fallback URL with no back list. False makes the controller log
@@ -103,6 +105,8 @@ final class EngineSleepAdapter: SleepEngine {
   }
   /// Restores that fell back to the URL (corrupt or unreadable history; F4).
   private(set) var restoreFallbacks = 0
+  private var cancelledCreations: Set<ItemID> = []
+  func takeCreationCancelled(tabID: ItemID) -> Bool { cancelledCreations.remove(tabID) != nil }
 
   func destroyContent(tabID: ItemID) {
     if discarded.remove(tabID) != nil { destroyed.insert(tabID) }

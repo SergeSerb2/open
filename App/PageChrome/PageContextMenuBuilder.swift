@@ -179,14 +179,14 @@ final class PageContextMenuBuilder {
     let anchor = request.items.firstIndex { isLinkOpen($0) } ?? 0
     let survivingBefore = request.items.prefix(anchor).filter { $0.isSeparator || !isLinkOpen($0) }.count
     let items = [
-      openItem("link-incognito", "Open Link in Incognito Window") { [weak owner] in
-        guard let owner else { return }
-        owner.app.makeIncognitoWindow(parent: owner.incognitoSession?.parent ?? opener.flatMap { owner.profile(for: $0) } ?? owner.focusedProfile, url: link)
+      // Every row opens in the clicked page's own Profile, never the focused one (WC-11).
+      openItem("link-incognito", "Open Link in Incognito Window") { [weak owner, weak page] in
+        guard let owner, let parent = owner.incognitoSession?.parent ?? page.flatMap({ owner.profile(for: $0.context) }) else { return }
+        owner.app.makeIncognitoWindow(parent: parent, url: link)
       },
       openItem("link-new-tab", "Open Link in New Tab") { [weak owner, weak page] in
-        guard let owner else { return }
-        if let page { owner.openNewTab(url: link, background: true, opener: opener, from: page) }
-        else { owner.openNewTab(url: link, background: true, opener: opener) }
+        guard let owner, let page else { return }
+        owner.openNewTab(url: link, background: true, opener: opener, in: page.context)
       },
       openItem("link-split", "Open Link in Split View", enabled: canSplit) { [weak owner] in
         guard let owner, let opener, let controller = owner.controller else { return }
@@ -211,11 +211,21 @@ final class PageContextMenuBuilder {
       openItem("link-little-open", "Open Link in Little Open") { [weak owner, weak page] in
         guard let owner else { return }
         if owner.isIncognito { owner.openNewTab(url: link, background: false, opener: opener) }
-        else { owner.app.openLittleOpen(url: link, profileHint: (page.flatMap { owner.profile(for: $0.context) } ?? owner.focusedProfile)?.id) }
+        else if let profile = page.flatMap({ owner.profile(for: $0.context) }) { owner.app.openLittleOpen(url: link, profileHint: profile.id) }
       },
-      openItem("link-window", "Open Link in New Window") { [weak owner] in
-        guard let owner, let window = owner.isIncognito ? owner.app.makeIncognitoWindow(parent: owner.incognitoSession?.parent) : owner.app.makeUserWindow(), let target = owner.app.hostFactories[window.windowID] else { return }
-        target.commandBarSession?.dismiss()
+      openItem("link-window", "Open Link in New Window") { [weak owner, weak page] in
+        guard let owner else { return }
+        if owner.isIncognito {
+          guard let window = owner.app.makeIncognitoWindow(parent: owner.incognitoSession?.parent),
+            let target = owner.app.hostFactories[window.windowID] else { return }
+          target.commandBarSession?.dismiss()
+          _ = target.openNewTab(url: link, background: false); return
+        }
+        // A window on a Space of the page's Profile (makeUserWindow used the front window's).
+        guard let profile = page.flatMap({ owner.profile(for: $0.context) }), let space = owner.space(forProfile: profile.id),
+          let window = owner.app.makeWindow(focusedSpaceID: space.id), let target = owner.app.hostFactories[window.windowID] else { return }
+        // makeWindow reopens a closed last window as it was: show the page's Space there too.
+        if target.focusedSpace?.id != space.id { target.focus(space: space) }
         _ = target.openNewTab(url: link, background: false)
       },
       NSMenuItem.separator(),
@@ -238,9 +248,8 @@ final class PageContextMenuBuilder {
     guard let target = url ?? engine.searchURL(for: text) else { return }
     let index = menu.items.firstIndex { chromeModel ? engineItem($0, in: [ChromeCommand.copy]) : $0.title == "Copy" }.map { $0 + 1 } ?? menu.items.count
     menu.insertItem(openItem("selection-search", title) { [weak owner, weak page] in
-      guard let owner else { return }
-      if let page { owner.openNewTab(url: target, background: false, opener: nil, from: page) }
-      else { owner.openNewTab(url: target, background: false) }
+      guard let owner, let page else { return }
+      owner.openNewTab(url: target, background: false, opener: nil, in: page.context)
     }, at: index)
     // PB4 row 5: Open's on-device Translate Selection, right after the search item.
     if owner.translate.preferences.isEnabled {

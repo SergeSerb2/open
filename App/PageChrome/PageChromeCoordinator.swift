@@ -35,7 +35,7 @@ final class PageChromeCoordinator {
     dialogs.isVisible = { [weak self] in self?.isVisible($0) == true }
     dialogs.record = { [weak owner] in owner?.record($0, $1, $2) }
     dialogs.onDecision = { [weak self] page, kind, accepted in
-      if kind == .beforeUnload { self?.closingOffscreen.remove(ObjectIdentifier(page)) }
+      if kind == .beforeUnload || self?.dialogs.hasPending(page) == false { self?.closingOffscreen.remove(ObjectIdentifier(page)) }
       if kind == .beforeUnload, !accepted { self?.closeRequests.removeValue(forKey: ObjectIdentifier(page))?(false) }
       self?.existingPermissions?.presentPending()
     }
@@ -126,6 +126,17 @@ final class PageChromeCoordinator {
   func dialogBlocksClose(_ page: OEWebContent) -> Bool {
     closeRequests[ObjectIdentifier(page)] == nil && dialogs.hasPending(page)
   }
+  /// A live page with unload handlers and such a dialog: a close must not skip its beforeunload.
+  func closeBlockedByDialog(_ page: OEWebContent) -> Bool {
+    page.crashState == .none && page.hasUnloadHandlers && dialogBlocksClose(page)
+  }
+  /// Shows a page's queued dialogs over its window even though the page is not on screen (a
+  /// Peek under another Peek), until they are answered: a stopped Quit or close must never
+  /// leave nothing to answer.
+  func showDialogsOffscreen(_ page: OEWebContent) {
+    if !isVisible(page) { closingOffscreen.insert(ObjectIdentifier(page)) }
+    visibilityChanged()
+  }
   func pageRequestedClose(_ page: OEWebContent) -> Bool {
     closingOffscreen.remove(ObjectIdentifier(page))
     guard let completion = closeRequests.removeValue(forKey: ObjectIdentifier(page)) else { return false }
@@ -189,7 +200,10 @@ final class PageQuitCoordinator {
       running = false; accepted = true; NSApp.terminate(nil); return
     }
     let (owner, page) = remaining.removeFirst()
-    if let window = owner.standaloneSurface?.surfaceWindow { window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged() }
+    if let window = owner.standaloneSurface?.surfaceWindow {
+      if window.isMiniaturized { window.deminiaturize(nil) }
+      window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged()
+    }
     else if let window = owner.window {
       // A sheet on a minimized or hidden window is never seen: Quit would wait for ever.
       if window.isMiniaturized { window.deminiaturize(nil) }
@@ -215,10 +229,10 @@ final class PageQuitCoordinator {
     // dialog is answered, and requestClose would skip the page, so Quit lost its unsaved
     // changes without asking. Stop this Quit and leave the page and its dialog on screen
     // (bug sweep r4 WC-02); the next Quit asks again.
-    if page.crashState == .none, page.hasUnloadHandlers, owner.pageChrome.dialogBlocksClose(page) {
+    if owner.pageChrome.closeBlockedByDialog(page) {
       running = false; remaining.removeAll(); selections.removeAll()
       app.quitWarning.resetApproval()
-      owner.pageChrome.visibilityChanged()
+      owner.pageChrome.showDialogsOffscreen(page)
       return
     }
     let waits = owner.pageChrome.requestClose(page) { [weak self, weak owner, weak page] allowed in

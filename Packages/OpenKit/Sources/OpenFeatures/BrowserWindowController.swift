@@ -1789,6 +1789,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         resumePendingSpaceCreation()
         onFullScreenChange?(false)
     }
+    /// AppKit gave up a transition: no did-enter/did-exit follows, so the transition flag (and a
+    /// page fullscreen waiting for it) must not stay set.
+    public func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+        fullscreenTransition = false; layoutContent(); onFullScreenChange?(false)
+    }
+    public func windowDidFailToExitFullScreen(_ window: NSWindow) { fullscreenTransition = false; layoutContent() }
     public func windowDidBecomeKey(_ notification: Notification) {
         context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?()
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
