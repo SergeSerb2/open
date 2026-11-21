@@ -53,6 +53,8 @@ def fixture(root):
             reason=reason, archivedAt=now, source={'space': {'_0': ids['alpha']}})])
     archive.extend([ids['archive-easel'], dict(sidebarItem=dict(id=ids['archive-easel'], data={'easel': {}}), reason='manual')])
     write('StorableArchiveItems.json', {'items': archive})
+    # A retry in the same scratch folder (calendar, live data) writes these databases again.
+    shutil.rmtree(root / 'User Data', ignore_errors=True)
     profile = root / 'User Data/Default'
     profile.mkdir(mode=0o700, parents=True)
     with sqlite3.connect(profile / 'History') as db:
