@@ -2349,7 +2349,7 @@
       guard let target = controller.window, let factory = app.hostFactories[controller.windowID],
         let outline = controller.sidebar.focusedOutline,
         let id = (args["node"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }),
-        let node = app.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
+        let node = factory.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
       try await activateForInput(target)
       let capturesMotion = args["motion"] as? Bool == true
       let previousReduceMotion = Motion.reduceMotionOverride

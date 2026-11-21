@@ -441,8 +441,14 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         # Archive rows, and automatic creation turns off. It was the plain folder delete (archived).
         app.call('defaults', key='open.liveFolders.githubAutoCreate', value=True)
         r4_folder = app.call('live-folder-state')['id']
-        # The outline's Delete key on a selection (Cmd-click) of the Live Folder row.
-        app.call('sidebar-click', node=r4_folder, modifiers=['cmd'])
+        # The outline's Delete key on a selection of the Live Folder row alone (a plain click keeps a
+        # multi-selection it is part of, so add or drop rows until it is the only one).
+        app.call('sidebar-click', node=r4_folder)
+        for node in [n for n in app.call('selection') if n != r4_folder]:
+            app.call('sidebar-click', node=node, modifiers=['cmd'])
+        if r4_folder not in app.call('selection'):
+            app.call('sidebar-click', node=r4_folder, modifiers=['cmd'])
+        r4_selection = app.call('selection')
         app.call('sidebar-key', key='delete')
         def read_alert():
             try: return app.call('alert') or None
@@ -454,7 +460,7 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         r4_archived = [r for r in app.call('archive-list', limit=50)['rows'] if r['id'] == r4_folder]
         results['live_folder_keyboard_delete_is_live_delete'] = {'ok': 'Delete your GitHub Live Folder?' in r4_alert.get('texts', [])
             and r4_gone and not r4_archived and app.call('defaults', key='open.liveFolders.githubAutoCreate') is False,
-            'alert': r4_alert.get('texts'), 'gone': r4_gone, 'archived': len(r4_archived)}
+            'alert': r4_alert.get('texts'), 'gone': r4_gone, 'archived': len(r4_archived), 'selection': r4_selection}
         app.call('defaults', key='open.liveFolders.githubAutoCreate', value=None)
         gh['prs'] = {'created': []}
         if not r4_gone:
@@ -568,7 +574,9 @@ def gmail_checks(app, results, wait_until, new_tab, recents_aliases):
         app.call('peek-close'); wait_until(lambda: not app.call('peek-state').get('shown'), timeout=5, step=.05)
         # Bug sweep round 4 (SB-15): opening a card row ends the hover preview, so the same tile
         # shows its card again on the next hover. The tracker kept the old request and ignored it.
-        # No other selection in between (a selection change also resets the tracker).
+        # No other selection in between (a selection change also resets the tracker). The pointer
+        # leaves the sidebar (as it does for the Peek) and comes back to the tile.
+        app.call('hover', leave=True, ms=300)
         again_hover = app.call('hover', node=inbox, ms=800)
         again = app.call('glance-state')
         results['live_glance_rehover_after_open'] = {'ok': again.get('kind') == 'gmail' and again.get('phase') == 'mail',
