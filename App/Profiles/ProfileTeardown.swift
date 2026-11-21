@@ -65,6 +65,8 @@ final class ProfileTeardown {
       context !== OEEngine.shared.defaultContext else {
       throw Self.failure("The Profile context is unavailable for deletion.")
     }
+    // The engine's close would leave the popup's native window open and empty (see closeAll(in:)).
+    ExtensionWindowController.closeAll(in: context)
     stage = "deleteContext"
     try await OEEngine.shared.deleteContext(context)
     unloaded.insert(profileID)

@@ -499,6 +499,17 @@ public struct ArcImporter {
             i += 2
         }
         report.totalItems = itemsByID.count
+        // A damaged file can hold item IDs that differ only in case. UUID parsing ignores case, so
+        // they would become one Open item ID (two model nodes with one ID). The canonical uppercase
+        // spelling keeps its UUID; every other spelling of a shared UUID gets an ID hashed from its
+        // exact text. Files without such pairs keep every ID (re-import stays idempotent).
+        var spellings: [UUID: [String]] = [:]
+        for id in itemsByID.keys { if let uuid = UUID(uuidString: id) { spellings[uuid, default: []].append(id) } }
+        let rehashedArcIDs = Set(spellings.flatMap { uuid, ids in ids.count > 1 ? ids.filter { $0 != uuid.uuidString } : [] })
+        func itemID(_ arcID: String) -> ItemID {
+            rehashedArcIDs.contains(arcID) ? ItemID(rawValue: Self.deterministicUUID(for: "case:" + arcID, namespace: "item"))
+                : Self.itemID(forArcID: arcID)
+        }
         report.containers = itemsByID.values.filter { (($0["data"] as? [String: Any])?.keys.first) == "itemContainer" }.count
 
         var spacesRaw: [(id: String, obj: [String: Any])] = []
@@ -592,6 +603,22 @@ public struct ArcImporter {
 
         /// Split children past the fourth pane, waiting for the Space that holds the split.
         var splitOverflow: [String] = []
+        /// Items already placed in the sidebar tree. A damaged file can name one item from two
+        /// parents (or as an orphan and a split child, in any order); it goes in once, at the first
+        /// place, so no Open item ID appears twice in the model.
+        var placed: Set<String> = []
+        var reachedArcIDs: Set<String> = []
+        /// Places every waiting split child, also the overflow of a split that is itself such a child.
+        func drainSplitOverflow(into list: inout [SidebarNode]) {
+            while !splitOverflow.isEmpty {
+                let batch = splitOverflow; splitOverflow = []
+                for childID in batch {
+                    reachedArcIDs.insert(childID)
+                    guard placed.insert(childID).inserted, let node = buildNode(arcID: childID) else { continue }
+                    list.append(node)
+                }
+            }
+        }
         func buildNode(arcID: String) -> SidebarNode? {
             if let cached = nodeByArcID[arcID] { return cached }
             guard let item = itemsByID[arcID] else { return nil }
@@ -613,7 +640,7 @@ public struct ArcImporter {
                 // Custom title only when it differs from the saved title.
                 let customTitle = (itemTitle != nil && itemTitle != savedTitle) ? itemTitle : nil
                 let tab = Tab(
-                    id: Self.itemID(forArcID: arcID),
+                    id: itemID(arcID),
                     url: url, title: savedTitle, customTitle: customTitle,
                     iconOverride: tabCustomIcon(from: td),
                     createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
@@ -625,10 +652,10 @@ public struct ArcImporter {
                 nodeByArcID[arcID] = node
                 return node
             case "list":
-                let folder = Folder(id: Self.itemID(forArcID: arcID), title: (item["title"] as? String) ?? "Folder")
+                let folder = Folder(id: itemID(arcID), title: (item["title"] as? String) ?? "Folder")
                 var children: [SidebarNode] = []
                 for childID in (item["childrenIds"] as? [String]) ?? [] {
-                    if let child = buildNode(arcID: childID) { children.append(child) }
+                    if !placed.contains(childID), let child = buildNode(arcID: childID) { placed.insert(childID); children.append(child) }
                 }
                 folder.children = children
                 if let list = payload as? [String: Any], let auto = list["automaticLiveFolderData"] as? [String: Any],
@@ -652,7 +679,11 @@ public struct ArcImporter {
                 // Today tabs of the split's own Space (`splitOverflow`, placed by the Space loop).
                 for (index, childID) in children.enumerated() {
                     guard panes.count < 4 else { splitOverflow.append(childID); continue }
-                    if let child = buildNode(arcID: childID), let tab = child.tab { panes.append(tab); keptChildren.append(index) }
+                    guard !placed.contains(childID), let child = buildNode(arcID: childID) else { continue }
+                    if let tab = child.tab { placed.insert(childID); panes.append(tab); keptChildren.append(index) }
+                    // A damaged split can hold a folder or another split: it is built (and counted),
+                    // so it stays in the split's Space with the overflow panes instead of being lost.
+                    else { splitOverflow.append(childID) }
                 }
                 // A split needs two panes: one pane stays a plain tab; none leaves nothing to show.
                 // `dissolvedSplits` keeps the item audit exact.
@@ -671,7 +702,7 @@ public struct ArcImporter {
                     ? shares.map { $0 / sum } : []
                 // focusItemID is an Arc ID; a skipped child must not shift it onto another pane.
                 let focused = (sd["focusItemID"] as? String).flatMap { nodeByArcID[$0]?.id }
-                let split = Split(id: Self.itemID(forArcID: arcID), orientation: orientation, fractions: fractions, panes: panes,
+                let split = Split(id: itemID(arcID), orientation: orientation, fractions: fractions, panes: panes,
                                   focusedPaneID: panes.first { $0.id == focused }?.id ?? panes.first?.id)
                 let node = SidebarNode.split(split)
                 nodeByArcID[arcID] = node
@@ -690,7 +721,7 @@ public struct ArcImporter {
                 let documentID = EaselImporter.documentID(forArcEaselID: easelID).uuidString.lowercased()
                 let rawTitle = (ed["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 // `SidebarEasel.customInfo.iconType` is the same custom icon as a tab's (easels-notes.md §3.2).
-                let tab = Tab(id: Self.itemID(forArcID: arcID), url: URL(string: "open://easel/\(documentID)")!,
+                let tab = Tab(id: itemID(arcID), url: URL(string: "open://easel/\(documentID)")!,
                               title: rawTitle.isEmpty ? "Untitled Easel" : String(rawTitle.prefix(1_000)),
                               iconOverride: tabCustomIcon(from: ed),
                               createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
@@ -719,7 +750,7 @@ public struct ArcImporter {
                 note.title = title
                 // `SidebarArcDocument.customInfo.iconType` is the same custom icon as a tab's
                 // (easels-notes.md §4.3); Open's Note rows take an icon through Change Icon….
-                let tab = Tab(id: Self.itemID(forArcID: arcID), url: NoteLink.url(for: noteID),
+                let tab = Tab(id: itemID(arcID), url: NoteLink.url(for: noteID),
                               title: title.isEmpty ? "Untitled" : title,
                               iconOverride: tabCustomIcon(from: nd),
                               createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
@@ -732,7 +763,7 @@ public struct ArcImporter {
                 return node
             case "welcomeToArc":
                 guard Self.buildsSidebarNode(item),let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
-                let tab = Tab(id: Self.itemID(forArcID: arcID), url: Self.welcomeURL,
+                let tab = Tab(id: itemID(arcID), url: Self.welcomeURL,
                               title: item["title"] as? String ?? "Getting Started",
                               createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
                               lastActiveAt: Self.date(from2001: (td["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
@@ -782,7 +813,6 @@ public struct ArcImporter {
 
         // Spaces.
         var spaces: [Space] = []
-        var reachedArcIDs: Set<String> = []
         for (spaceArcID, obj) in spacesRaw {
             let pid = sourceProfiles.spaceOwners[spaceArcID] ?? defaultProfileID
             let info = obj["customInfo"] as? [String: Any]
@@ -797,13 +827,9 @@ public struct ArcImporter {
                 var result: [SidebarNode] = []
                 for childID in (container["childrenIds"] as? [String]) ?? [] {
                     reachedArcIDs.insert(childID)
-                    if let node = buildNode(arcID: childID) { result.append(node) }
+                    if !placed.contains(childID), let node = buildNode(arcID: childID) { placed.insert(childID); result.append(node) }
                     // Panes past a split's fourth stay in this Space, as Today tabs.
-                    let overflow = splitOverflow; splitOverflow = []
-                    for paneID in overflow {
-                        reachedArcIDs.insert(paneID)
-                        if let node = buildNode(arcID: paneID) { overflowTabs.append(node) }
-                    }
+                    drainSplitOverflow(into: &overflowTabs)
                 }
                 return result
             }
@@ -814,6 +840,9 @@ public struct ArcImporter {
         report.spaces = spaces.count
 
         // Every alternating ProfileRef/container pair owns its own Favorites.
+        // A damaged Favorites container can hold a folder or a split: Favorites hold tabs only, so it
+        // stays with the orphans (with its overflow) instead of being lost with its tabs.
+        var looseNodes: [SidebarNode] = []
         if let topApps = holder["topAppsContainerIDs"] as? [Any] {
             var offset = 0
             while offset + 1 < topApps.count {
@@ -823,13 +852,21 @@ public struct ArcImporter {
                 reachedArcIDs.insert(containerID)
                 for childID in (container["childrenIds"] as? [String]) ?? [] {
                     reachedArcIDs.insert(childID)
-                    if let tab = buildNode(arcID: childID)?.tab {
-                        if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
-                        profiles.first(where: { $0.id == owner })?.favorites.append(tab)
+                    if placed.insert(childID).inserted, let node = buildNode(arcID: childID) {
+                        if let tab = node.tab {
+                            if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
+                            profiles.first(where: { $0.id == owner })?.favorites.append(tab)
+                        } else {
+                            looseNodes.append(node)
+                        }
                     }
+                    // Also after a child that built nothing (a dissolved split whose only children
+                    // were a folder or a split): what it left waiting is placed.
+                    drainSplitOverflow(into: &looseNodes)
                 }
             }
         }
+        drainSplitOverflow(into: &looseNodes)
         report.profiles = profiles.count
 
         // Opener references: remap Arc opener ids to Open tabs (best effort by URL+order is skipped;
@@ -851,7 +888,7 @@ public struct ArcImporter {
         report.importedTabNodes = report.pinnedTabs + report.todayTabs + report.favorites
 
         // Orphans: item objects never reached and not containers.
-        var orphanNodes: [SidebarNode] = []
+        var orphanNodes: [SidebarNode] = looseNodes
         for (arcID, item) in itemsByID {
             guard let dataDict = item["data"] as? [String: Any], let kind = dataDict.keys.first else {
                 if !skipCounted.contains(arcID) { countSkip(arcID) { report.skippedUnknown += 1 } }
@@ -865,10 +902,12 @@ public struct ArcImporter {
             }
             // Unreached item: build it so tab/list/split become orphans and every
             // other kind is counted once as skipped. This keeps the audit exact.
-            if let node = buildNode(arcID: arcID) {
+            if placed.insert(arcID).inserted, let node = buildNode(arcID: arcID) {
                 orphanNodes.append(node)
                 report.orphans += 1
             }
+            // An orphan split's panes past the fourth stay with the orphans.
+            drainSplitOverflow(into: &orphanNodes)
         }
         // Orphans need a Space: make the fallback Space before placing them, or they are lost.
         if spaces.isEmpty, !orphanNodes.isEmpty {

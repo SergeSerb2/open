@@ -2,7 +2,7 @@
 
 Date: 2026-10-25. Engine: CEF 156.0.14+g4fa4ab5 (Chromium 156.0.8078.48), the same CEF commit as our fork's base, from the Spotify CDN (`tools/fetch-cef.sh`). Machine: Apple Silicon, 18 cores, macOS 27.2 beta. A Chromium build ran in parallel during every measurement (load average about 26), so the timings are pessimistic.
 
-All results come from the real app driven through the automation channel ([automation.md](automation.md)) by `tools/e2e/engine_e2e.py`. Raw results: `docs/engine-spike/results-*.json`. Screenshots show Open's own windows only.
+All results come from the real app driven through the automation channel ([automation.md](automation.md)) by `tools/e2e/engine_e2e.py`. Raw results: `docs/engine-spike/results-*.json` (a direct run writes its results and screenshots to a folder under `$TMPDIR/open-e2e-evidence/`, printed at the start, so tracked files stay unchanged; pass `--tracked-evidence` to write here, as the gate's `--output-dir` runs do). Screenshots show Open's own windows only.
 
 ## Verdict
 

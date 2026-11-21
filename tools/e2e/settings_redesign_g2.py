@@ -274,6 +274,20 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         click('Record shortcut for Search Actions');key('j',['cmd','shift','control','option']);settle()
         binding=Path(ui()['keybindingsFile']);saved_hash=hashlib.sha256(binding.read_bytes()).hexdigest()
         check('shortcut_saved_store','search-actions' in ui()['bindings'])
+        # W6: Import… of a file the App would reject (reloadKeyBindings) keeps the saved file and
+        # bindings, and never says "Saved.". The hook is the button's model call after NSOpenPanel.
+        rejected={'version':{'version':2,'bindings':{}},
+                  'unknown_id':{'version':1,'bindings':{'no-such-command':{'shortcuts':[],'priority':'browser'}}},
+                  'fixed_id':{'version':1,'bindings':{'copy':{'shortcuts':[],'priority':'browser'}}}}
+        for name,payload in rejected.items():
+            bad=out/('w6-import-'+name+'.json');bad.write_text(json.dumps(payload))
+            ui(action='import-shortcuts',path=str(bad));s=settle()
+            check('W6_rejected_import_keeps_bindings_'+name,hashlib.sha256(binding.read_bytes()).hexdigest()==saved_hash
+                  and 'search-actions' in s['bindings'] and s['shortcutStatus']!='Saved.',stop=False,status=s['shortcutStatus'],bindings=s['bindings'])
+        good=out/'w6-import-valid.json';good.write_bytes(binding.read_bytes())
+        ui(action='import-shortcuts',path=str(good));s=settle()
+        check('W6_valid_import_saves',s['shortcutStatus']=='Saved.' and 'search-actions' in s['bindings'],status=s['shortcutStatus'],bindings=s['bindings'])
+        saved_hash=hashlib.sha256(binding.read_bytes()).hexdigest()
         link('shortcuts/new-tab');click('Record shortcut for New Tab…');key('j',['cmd','shift','control','option']);settle()
         check('shortcut_conflict_guard',ui()['conflicts']>0 and hashlib.sha256(binding.read_bytes()).hexdigest()==saved_hash)
         ui(action='filter',filter='conflicts');capture('shortcuts-conflict-light')
@@ -372,7 +386,7 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
                     capture(section+'-'+mode,presentation='Non-default browser hero; view state only, system default unchanged')
                     check('hero_did_not_change_system_'+mode,app.call('default-browser-state')==default_state)
                 else:capture(section+'-'+mode)
-            link('general/import');click('Import…');time.sleep(.5);capture('import-empty-'+mode,sheet=True);click('Cancel')
+            link('general/import');click('Import…');time.sleep(.5);capture('import-empty-'+mode,sheet=True);click('Maybe Later')
             link('search/suggestions')
             app.call('defaults',key='open.general.searchSuggestNoticeDismissed',value=False)
             click('Include search engine suggestions',role='AXCheckBox');click('Include search engine suggestions',role='AXCheckBox')
@@ -449,6 +463,22 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
                 results['perf_'+mode]=measurement
                 (out/('perf-'+mode+'.json')).write_text(json.dumps(measurement,indent=2))
                 check('perf_'+mode+'_completed',not measurement['running'] and measurement['missingDraws']==0, missingDraws=measurement['missingDraws'],samples=len(measurement['sections']),frames=measurement['frames'])
+        # W6 review: an unreadable saved file stays on disk until Import or Reset All replaces it,
+        # also after an Import that stops at a conflict, a Revert, and a later edit (relaunch).
+        app.quit(); first_quit=app.quit_report
+        bad_file=Path(data)/'State/keybindings.json';bad_file.write_text(json.dumps({'version':2,'bindings':{}}))
+        bad_hash=hashlib.sha256(bad_file.read_bytes()).hexdigest()
+        app = Open(config, 'alloy', data, [], str(out/'app-w6.log'), extra_env={'OPEN_E2E_APP_BUNDLE': str(bundle)})
+        link('shortcuts/search-actions');loaded=ui()['shortcutStatus']
+        combo={'key':'j','modifiers':['command','shift','control','option']}
+        clash=out/'w6-import-conflict.json'
+        clash.write_text(json.dumps({'version':1,'bindings':{'search-actions':{'shortcuts':[combo],'priority':'browser'},
+                                                             'new-tab':{'shortcuts':[combo],'priority':'browser'}}}))
+        ui(action='import-shortcuts',path=str(clash));conflict=settle()['shortcutStatus']
+        ui(action='revert');settle()
+        click('Record shortcut for Search Actions');key('k',['cmd','shift','control','option']);settle()
+        check('W6_load_error_survives_conflicting_import',first_quit.get('ok') and hashlib.sha256(bad_file.read_bytes()).hexdigest()==bad_hash,
+              stop=False,loaded=loaded,conflict=conflict,after=ui()['shortcutStatus'])
         results['load']=list(os.getloadavg())
         results['binarySHA256']=hashlib.sha256((bundle/'Contents/MacOS/Open').read_bytes()).hexdigest()
         assert all(row.get('ok',True) for row in results.values() if isinstance(row,dict)), 'one or more qualification checks failed'

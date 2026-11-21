@@ -141,9 +141,10 @@ struct SidebarMenus {
         }
         items.append(item("Open in Split View", enabled: canSplit, .splitNodes(ids: ids)))
         if folders.isEmpty {
-            let unpin = ids.allSatisfy { context.model.isPinned(tabID: $0) }
+            // The same rows as Cmd+D: a split in the selection is skipped, never pinned.
+            let pinnable = context.pinnableSelectionIDs(ids), unpin = context.selectionPinUnpins(ids)
             items += [item("Duplicate", .duplicateNodes(ids: ids)),
-                      alternate(item(unpin ? "Unpin Tabs" : "Pin Tabs", .setPinned(ids: ids, pinned: !unpin)))]
+                      alternate(item(unpin ? "Unpin Tabs" : "Pin Tabs", enabled: !pinnable.isEmpty, .setPinned(ids: pinnable, pinned: !unpin)))]
         }
         items += [moveTo(ids), item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)), .separator()]
         if !tabs.isEmpty && !archiveFolderTabs {

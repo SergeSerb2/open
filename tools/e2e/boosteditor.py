@@ -21,6 +21,10 @@ def run(factory, results, tmp, env):
         import boost_profile_retirement
         boost_profile_retirement.run(factory, results, tmp, env)
         return
+    if os.environ.get("OPEN_E2E_BOOST_MATCH_ONLY") == "1":
+        import boost_match
+        boost_match.run(factory, results, tmp, env)
+        return
     if os.environ.get("OPEN_E2E_BOOST_ZAP_ONLY") == "1":
         import boost_zap
         boost_zap.run(factory, results, tmp, env)
@@ -630,6 +634,8 @@ def run(factory, results, tmp, env):
             profile_retirement(factory, results, tmp, env)
             from boost_script_update import run as script_update
             script_update(factory, results, tmp, env)
+            from boost_match import run as boost_match
+            boost_match(factory, results, tmp, env)
         finally:
             if app and not app.closed:
                 try:

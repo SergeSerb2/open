@@ -22,7 +22,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   var onTitleChange: ((String) -> Void)?
   var onLoadingChange: ((Bool) -> Void)?
   var onFaviconChange: ((Data?) -> Void)?
-  var additionalKeyHandler: ((NSEvent) -> Bool)?
+  /// (event, unconsumed): the Little Open key route, before the page and after it declines a key.
+  var additionalKeyHandler: ((NSEvent, Bool) -> Bool)?
   var onCloseRequest: (() -> Void)?
   var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
   private(set) var pageBackgroundColor: NSColor?
@@ -127,7 +128,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
     owner?.pageChrome.cancel(content)
     content.delegate = nil
-    if keepsPageOnClose { content.isMuted = true } else { content.close(); content.view.removeFromSuperview() }
+    // A page kept drawn for a pane's collapse has no delegate now: the engine refuses its popups,
+    // dialogs and permission prompts (without this, they got the engine's defaults).
+    if keepsPageOnClose { content.isMuted = true; content.prepareForClose() } else { content.close(); content.view.removeFromSuperview() }
     owner?.hostDidClose(self)
   }
   /// Close This Pane (Split motion): close() leaves the page drawn until the pane's
@@ -339,14 +342,14 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
     if owner?.pageChrome.handleKey(event) == true { return true }
-    if additionalKeyHandler?(event) == true { return true }
+    if additionalKeyHandler?(event, false) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
     if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }
     return false
   }
   func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
-    !closed && (additionalKeyHandler?(event) == true || owner?.controller?.handleKeyDown(event, unconsumed: true) == true)
+    !closed && (additionalKeyHandler?(event, true) == true || owner?.controller?.handleKeyDown(event, unconsumed: true) == true)
   }
   func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
     if !closed, owner?.webContent(page, runJavaScriptDialog: dialog) == true { return true }

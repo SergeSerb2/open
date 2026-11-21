@@ -150,6 +150,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var littleOpenCoordinator: LittleOpenCoordinator!
   var pendingLittleOpenBlankStamps: [TimeInterval?] = []
   var littleOpenProfileAlert: NSAlert?
+  /// The last Little Open key decision. One key-down reaches handleLittleOpenKey up to three
+  /// times (OEApplication, the page's pre-key hook, its unconsumed hook); the router is stateful.
+  var littleOpenKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
   var littleOpenHosts: [ItemID: EngineWebContentHost] = [:]
   var commandWindowObserver: (any NSObjectProtocol)?
   var commandDefaultsObserver: (any NSObjectProtocol)?
@@ -1020,25 +1023,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     #endif
   }
 
-  private func downloadOwner(_ download: OEDownload) -> EngineWebContentHostFactory? {
+  /// The window that owns the download's page. A download without one (an engine-owned
+  /// extension window, a popup Chromium opened itself, a page closed while it waited) is routed
+  /// by its context, never by the front window (bug sweep r3 W4): the front window may be an
+  /// Incognito window of another session, or a regular one for a private download.
+  private func downloadOwner(_ download: OEDownload, context: OEBrowserContext) -> EngineWebContentHostFactory? {
     if let page = download.webContent {
-      if let host = littleOpenHosts.values.first(where: { $0.content === page }) { return host.owner }
-      return hostFactories.values.first { $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } }
+      // A window's tabs and listed popups, and its unlisted pages (extension action popups, Little
+      // Open's popups), whose delegate is that window's factory (review r1 item 3).
+      if let host = littleOpenHosts.values.first(where: { $0.content === page || ($0.owner.map { page.delegate === $0 } ?? false) }) { return host.owner }
+      if let owner = hostFactories.values.first(where: {
+        $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } || page.delegate === $0
+      }) { return owner }
     }
-    return frontWindowController.flatMap { hostFactories[$0.windowID] }
+    guard context.isEphemeral || context.originalContext != nil else { return nil }
+    // The frontmost window of the private download's own session. The session owns the private
+    // reservations, so any of its windows may close first (review r1 item 4).
+    let session = windowControllers.compactMap { hostFactories[$0.windowID] }.filter { $0.incognitoSession?.context === context }
+    return NSApp.orderedWindows.lazy.compactMap { window in session.first { $0.window === window } }.first ?? session.first
   }
 
   func browserContext(_ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String, completion: @escaping @MainActor (URL?) -> Void) {
     #if OPEN_AUTOMATION
     if AutomationOwnerWatch.quittingWithoutPrompts { completion(nil); return }
     #endif
-    guard let owner = downloadOwner(download) else { completion(nil); return }
-    owner.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
+    if let owner = downloadOwner(download, context: context) {
+      owner.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
+      return
+    }
+    // A private download with no window of its own session left: cancel, as before.
+    guard !context.isEphemeral, context.originalContext == nil else { completion(nil); return }
+    // A regular one goes to its Profile's Downloads; the Profile comes from the context. Its own
+    // extension window, else the front regular window, only parents "Ask where to save" (and the
+    // front one supplies an automation folder override). With neither, a modeless panel asks.
+    if let page = download.webContent, let window = ExtensionWindowController.windows.values.first(where: { $0.content === page })?.window {
+      downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, completion: completion)
+    } else if let front = (frontMainModelWindowController ?? frontStandardWindowController).flatMap({ hostFactories[$0.windowID] }) {
+      front.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
+    } else {
+      downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: nil, completion: completion)
+    }
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
     downloadsCenter.updated(download, context: context)
-    downloadOwner(download)?.browserContext(context, downloadDidUpdate: download)
+    downloadOwner(download, context: context)?.browserContext(context, downloadDidUpdate: download)
   }
 
   /// A web notification was clicked (EP-6); §4.5.4's 500 ms fallback selects its tab.
@@ -1194,9 +1223,7 @@ extension AppDelegate: CommandDispatcher {
     let file = options.userDataDirectory.appendingPathComponent("State/keybindings.json")
     do {
       let loaded = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
-      guard loaded.version == 1, loaded.unknownCommandIDs.isEmpty,
-        loaded.bindings.keys.allSatisfy({ CommandRegistry.byID[$0]?.isCustomizable == true }),
-        ConflictChecker.unexpected(ConflictChecker.check(overrides: loaded)).isEmpty else {
+      guard loaded.isSupported, ConflictChecker.unexpected(ConflictChecker.check(overrides: loaded)).isEmpty else {
         throw CocoaError(.fileReadCorruptFile)
       }
       keyBindings = loaded

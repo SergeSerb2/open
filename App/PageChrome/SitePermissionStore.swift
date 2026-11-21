@@ -81,9 +81,15 @@ final class SitePermissionStore {
     }
   }
   private func remember(_ url: URL) {
-    guard let scheme = url.scheme, let host = url.host(), ["http", "https"].contains(scheme),
+    // The encoded host keeps an IPv6 literal's brackets: "http://::1:8080" does not parse back
+    // (bug sweep r3 E13), so that decision could never be listed. One canonical origin per entry:
+    // lowercase scheme and host, no default port (review r1 item 5).
+    guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: true),
+          let scheme = parts.scheme?.lowercased(), let host = parts.percentEncodedHost?.lowercased(),
+          !host.isEmpty, ["http", "https"].contains(scheme),
           host.utf8.count <= 2048, origins.count < SitePermissionOriginIndex.limit else { return }
-    let origin = "\(scheme)://\(host)" + (url.port.map { ":\($0)" } ?? "")
+    let port = parts.port.flatMap { (scheme == "http" && $0 == 80) || (scheme == "https" && $0 == 443) ? nil : $0 }
+    let origin = "\(scheme)://\(host)" + (port.map { ":\($0)" } ?? "")
     guard origins.insert(origin).inserted, indexReady else { return }
     let previous = persistenceTask, snapshot = origins
     persistenceTask = Task { [index] in
