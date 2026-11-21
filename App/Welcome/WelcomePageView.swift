@@ -333,8 +333,12 @@ final class WelcomePageView: NSScrollView {
 
   /// Hidden or covered: pause where we are and release the decoder.
   private func pause() {
-    if revealTimer != nil || revealAnimationCount > 0 {
-      finishReveal()
+    // The reveal's last fades (the links) still run while the first clip already plays: finish them,
+    // then pause that clip where it is (bug sweep r3 T6: before, the reveal path left the clip's timer
+    // and progress running, so a miniaturized Welcome page never came to rest).
+    let revealing = revealTimer != nil || revealAnimationCount > 0
+    if revealing { finishReveal() }
+    if revealing, !animating {
       if playlistPlaying { paused = (0, true, 0) }
       clipPanel.stop(release: true)
       return
