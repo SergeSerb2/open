@@ -286,7 +286,16 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     #endif
     closingForHandoff = true
     onHandoff = nil
+    // A replay over a running browser (Help ▸ Troubleshooting ▸ Replay Intro) only ends: the browser
+    // window becomes key first, so the fade orders the dim under it, as at the first-run hand-off.
+    // A first run, or a `--replay-onboarding` launch (a first-run session) whose browser window is not
+    // shown yet, quits: otherwise the App would stay with no window to reopen.
+    let delegate = NSApp.delegate as? AppDelegate
+    let browser = delegate?.frontWindowController?.window
+    let keepApp = replay && (delegate?.isFirstRun == false || browser?.isVisible == true)
+    if keepApp { browser?.makeKeyAndOrderFront(nil) }
     finish()
+    if keepApp { return false }
     #if OPEN_AUTOMATION
     (NSApp.delegate as? AppDelegate)?.recordShutdownPhase("onboarding.fadeStarted")
     #endif

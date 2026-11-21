@@ -285,7 +285,10 @@ public final class ArcSecretsBatchReader {
             report.loginRows += 1
             if !db.text(row, 13).isEmpty { report.loginsFederated += 1; return nil }
             let blocked = sqlite3_column_int(row, 6) != 0
-            guard let date = chromiumDate(sqlite3_column_int64(row, 5)) else { report.loginsInvalidTime += 1; return nil }
+            // Chromium writes an unknown (null) creation time as 0. The password is still good:
+            // keep it with the import time, as the Firefox and Safari readers do.
+            let created = sqlite3_column_int64(row, 5)
+            guard let date = created == 0 ? Date() : chromiumDate(created) else { report.loginsInvalidTime += 1; return nil }
             let action = db.text(row, 1)
             var record = ImportedLoginRecord(originURLString: db.text(row, 0), actionURLString: action.isEmpty ? nil : action,
                 username: db.text(row, 2), passwordBytes: [], signonRealm: db.text(row, 4), dateCreated: date,
@@ -386,7 +389,9 @@ public final class ArcSecretsBatchReader {
         ], clear: { $0.zeroSecrets() }) { row in
             guard sqlite3_column_int(row, 5) == 0 else { return nil }
             report.addressRows += 1
-            guard let date = validatedImportDate(unixSeconds: Double(sqlite3_column_int64(row, 2))) else {
+            // 0 is an unknown last-use time, not a broken row: keep the address with the import time.
+            let used = sqlite3_column_int64(row, 2)
+            guard let date = used == 0 ? Date() : validatedImportDate(unixSeconds: Double(used)) else {
                 report.addressesInvalidTime += 1; return nil
             }
             var record = ImportedAddressRecord(guid: db.text(row, 0), fields: [:], useCount: Int(sqlite3_column_int64(row, 1)), useDate: date)

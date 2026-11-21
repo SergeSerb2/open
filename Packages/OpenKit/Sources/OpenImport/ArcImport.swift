@@ -24,6 +24,8 @@ public struct ImportReport: Sendable {
     /// Profiles whose Favorites empty-state card Arc had dismissed (A3).
     public var favoritesEmptyDismissed: Int = 0
     public var splits: Int = 0
+    /// Split items with fewer than two usable panes: one pane imports as a plain tab, none as nothing.
+    public var dissolvedSplits: Int = 0
     public var routingRules: Int = 0
     public var skippedEasels: Int = 0
     /// Arc sidebar Easels with an `easelID`: Open Easel rows (content comes from Arc's export).
@@ -84,7 +86,7 @@ public struct ImportReport: Sendable {
 
     public var accounted: Int {
         // Easel rows are tab nodes too: `importedEasels` is a subset of `importedTabNodes`.
-        importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedUnknown
+        importedTabNodes + folders + splits + dissolvedSplits + skippedEasels + skippedNotes + skippedUnknown
     }
     /// Every sidebar item object: imported + skipped + structural containers.
     public var accountedTotal: Int { accounted + containers }
@@ -351,6 +353,10 @@ public struct ArcImporter {
         func canonicalKey(_ ref: String) -> String {
             if ref == "default" || ref == defaultMetadataKey { return "default" }
             if metadata[ref] != nil { return ref }
+            // A UUID ref names the same Profile in any letter case (its stable ID ignores case too).
+            if let uuid = UUID(uuidString: ref), let match = metadataOrder.first(where: { UUID(uuidString: $0) == uuid }) {
+                return match == defaultMetadataKey ? "default" : match
+            }
             if let match = metadataOrder.first(where: { metadata[$0]?.directory == ref }) {
                 return match == defaultMetadataKey ? "default" : match
             }
@@ -367,6 +373,9 @@ public struct ArcImporter {
             if let existing = profileIDByKey[key] { return existing }
             let pid = ProfileID(rawValue: Self.deterministicUUID(for: key, namespace: "profile"))
             profileIDByKey[key] = pid
+            // UUID refs parse without regard to case, so two keys can name one Profile.
+            // A second entry with the same ID would trap `Dictionary(uniqueKeysWithValues:)`.
+            if profiles.contains(where: { $0.id == pid }) { return pid }
             let found = metadataFor(key)
             let fallback = "Profile-" + pid.description.prefix(8).uppercased()
             var directory = key == "default" ? "Default" : (existingDirectories[pid] ?? found?.directory ?? fallback)
@@ -581,6 +590,8 @@ public struct ArcImporter {
             apply()
         }
 
+        /// Split children past the fourth pane, waiting for the Space that holds the split.
+        var splitOverflow: [String] = []
         func buildNode(arcID: String) -> SidebarNode? {
             if let cached = nodeByArcID[arcID] { return cached }
             guard let item = itemsByID[arcID] else { return nil }
@@ -634,26 +645,34 @@ public struct ArcImporter {
             case "splitView":
                 let sd = payload as? [String: Any] ?? [:]
                 let orientation: SplitOrientation = (sd["layoutOrientation"] as? String) == "vertical" ? .vertical : .horizontal
-                var fractions: [Double] = []
-                if let factors = sd["itemWidthFactors"] as? [Any] {
-                    fractions = factors.compactMap { ($0 as? NSNumber)?.doubleValue }
+                let factors = ((sd["itemWidthFactors"] as? [Any]) ?? []).map { ($0 as? NSNumber)?.doubleValue ?? .nan }
+                let children = (item["childrenIds"] as? [String]) ?? []
+                var panes: [Tab] = [], keptChildren: [Int] = []
+                // Open's model holds at most 4 panes (as archive restore). Later children become
+                // Today tabs of the split's own Space (`splitOverflow`, placed by the Space loop).
+                for (index, childID) in children.enumerated() {
+                    guard panes.count < 4 else { splitOverflow.append(childID); continue }
+                    if let child = buildNode(arcID: childID), let tab = child.tab { panes.append(tab); keptChildren.append(index) }
                 }
-                var panes: [Tab] = []
-                for childID in (item["childrenIds"] as? [String]) ?? [] {
-                    if let child = buildNode(arcID: childID), let tab = child.tab { panes.append(tab) }
+                // A split needs two panes: one pane stays a plain tab; none leaves nothing to show.
+                // `dissolvedSplits` keeps the item audit exact.
+                if panes.count < 2 {
+                    countSkip(arcID) { report.dissolvedSplits += 1 }
+                    guard let only = panes.first else { return nil }
+                    let node = SidebarNode.tab(only)
+                    nodeByArcID[arcID] = node
+                    return node
                 }
-                // Normalize fractions or drop them when they do not match the pane count.
-                if fractions.count != panes.count { fractions = [] }
-                else if !fractions.isEmpty {
-                    let sum = fractions.reduce(0, +)
-                    if sum > 0 { fractions = fractions.map { $0 / sum } }
-                }
+                // Width factors follow the Arc children; keep the kept panes' shares. Any missing,
+                // non-finite, zero or negative share gives equal panes (empty fractions).
+                let shares = factors.count == children.count ? keptChildren.map { factors[$0] } : factors
+                let sum = shares.reduce(0, +)
+                let fractions = shares.count == panes.count && shares.allSatisfy({ $0.isFinite && $0 > 0 }) && sum.isFinite
+                    ? shares.map { $0 / sum } : []
+                // focusItemID is an Arc ID; a skipped child must not shift it onto another pane.
+                let focused = (sd["focusItemID"] as? String).flatMap { nodeByArcID[$0]?.id }
                 let split = Split(id: Self.itemID(forArcID: arcID), orientation: orientation, fractions: fractions, panes: panes,
-                                  focusedPaneID: (sd["focusItemID"] as? String).flatMap { nodeByArcID[$0]?.id })
-                // focusItemID refers to an Arc id; resolve after panes exist.
-                if let focusArc = sd["focusItemID"] as? String, let idx = ((item["childrenIds"] as? [String]) ?? []).firstIndex(of: focusArc), idx < panes.count {
-                    split.focusedPaneID = panes[idx].id
-                }
+                                  focusedPaneID: panes.first { $0.id == focused }?.id ?? panes.first?.id)
                 let node = SidebarNode.split(split)
                 nodeByArcID[arcID] = node
                 report.splits += 1
@@ -771,6 +790,7 @@ public struct ArcImporter {
             if title == nil { report.untitledSpaces += 1 }
             let space = Space(id: Self.spaceID(forArcID: spaceArcID), title: title, icon: spaceIcon(from: info), theme: spaceTheme(from: info), profileID: pid)
             let (pinnedCID, todayCID) = containerIDs(for: obj)
+            var overflowTabs: [SidebarNode] = []
             func nodes(forContainer cid: String?) -> [SidebarNode] {
                 guard let cid, let container = itemsByID[cid] else { return [] }
                 reachedArcIDs.insert(cid)
@@ -778,11 +798,17 @@ public struct ArcImporter {
                 for childID in (container["childrenIds"] as? [String]) ?? [] {
                     reachedArcIDs.insert(childID)
                     if let node = buildNode(arcID: childID) { result.append(node) }
+                    // Panes past a split's fourth stay in this Space, as Today tabs.
+                    let overflow = splitOverflow; splitOverflow = []
+                    for paneID in overflow {
+                        reachedArcIDs.insert(paneID)
+                        if let node = buildNode(arcID: paneID) { overflowTabs.append(node) }
+                    }
                 }
                 return result
             }
             space.pinned = nodes(forContainer: pinnedCID)
-            space.today = nodes(forContainer: todayCID)
+            space.today = nodes(forContainer: todayCID) + overflowTabs
             spaces.append(space)
         }
         report.spaces = spaces.count
@@ -843,6 +869,11 @@ public struct ArcImporter {
                 orphanNodes.append(node)
                 report.orphans += 1
             }
+        }
+        // Orphans need a Space: make the fallback Space before placing them, or they are lost.
+        if spaces.isEmpty, !orphanNodes.isEmpty {
+            spaces.append(Space(title: "Space", profileID: profiles.first?.id ?? defaultProfileID))
+            report.spaces = 1
         }
         if !orphanNodes.isEmpty, let first = spaces.first {
             for node in orphanNodes {
@@ -932,6 +963,12 @@ public struct ArcImporter {
                 profileReferences[Self.profileReferenceKey(reference)] = owner
             }
         }
+        // A rule can name a Profile that no Space references: by its source directory
+        // (`custom.directoryBasename`) or by the "Default" directory string.
+        for profile in sourceProfiles.profiles where profileReferences[profile.sourceDirectory] == nil {
+            profileReferences[profile.sourceDirectory] = profile.id
+        }
+        if profileReferences["Default"] == nil { profileReferences["Default"] = sourceProfiles.defaultID }
         func destination(_ raw: Any?) -> DefaultDestination? {
             let result = parseDestination(raw, arcSpaceIDToOpen: arcSpaceIDToOpen,
                 profileReferences: profileReferences, spaces: spaces)

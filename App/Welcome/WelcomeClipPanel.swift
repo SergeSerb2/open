@@ -117,6 +117,7 @@ final class WelcomeClipPanel: NSView {
     // A fresh player per clip: its layer reports readiness for this item only.
     let item = AVPlayerItem(url: url)
     let player = AVPlayer(playerItem: item)
+    playersCreated += 1
     player.isMuted = true; player.preventsDisplaySleepDuringVideoPlayback = false
     player.actionAtItemEnd = .pause
     if offset > 0 { player.seek(to: CMTime(seconds: offset, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
@@ -144,11 +145,16 @@ final class WelcomeClipPanel: NSView {
     }
   }
   private var prepared: Int?
+  /// Players made by `play` (automation: a prepared clip is reused, not decoded twice).
+  private(set) var playersCreated = 0
 
   /// Pause; with `release`, drop the player and its decoder. The poster then
   /// shows the paused frame (taken once, off the main thread).
   func stop(release: Bool) {
-    readyObservation = nil; prepared = nil
+    // A pause without release keeps a clip prepared by `play(autostart: false)`: the reveal
+    // prepares clip 0 and its own `play` first halts the page, which must not discard it.
+    readyObservation = nil
+    if release { prepared = nil }
     guard let player else { return }
     player.pause()
     guard release else { return }

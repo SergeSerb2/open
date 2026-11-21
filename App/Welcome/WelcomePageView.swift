@@ -286,6 +286,9 @@ final class WelcomePageView: NSScrollView {
       activeCard = index
     }
     playlistPlaying = playlist; animating = true; paused = nil
+    // Until this clip's first frame shows, a pause resumes at `offset`. A start time left by the
+    // previous clip would count its play time and resume this clip near its end (skipped).
+    clipStartedAt = nil; clipOffset = offset
     if offset == 0 { playedCards.append(index + 1); if playedCards.count > 32 { playedCards.removeFirst() } }
     let remaining = max(0.1, WelcomeClips.duration - offset)
     clipPanel.play(index, crossfade: crossfade && animate, autostart: true, from: offset) { [weak self] in

@@ -158,9 +158,11 @@ public func verifySyntheticSecretsImport() throws -> SyntheticSecretsResult {
         loginSQL += "INSERT INTO logins VALUES('https://example.com/login', '', 'fixture-user', \(blob), 'https://example.com', \(date), 0, 1);"
     }
     loginSQL += "INSERT INTO logins VALUES('https://example.com', '', '', X'', '', \(date), 1, 0);"
-    for invalid in [Int64(0), .min, future] {
+    for invalid in [Int64.min, future] {
         loginSQL += "INSERT INTO logins VALUES('https://example.com', '', '', X'61', '', \(invalid), 0, 0);"
     }
+    // An unknown (0) creation time keeps a good password.
+    loginSQL += "INSERT INTO logins VALUES('https://example.com/zero', '', 'fixture-zero', \(loginBlobs[0]), 'https://example.com', 0, 0, 1);"
     try fixture.createDatabase("Login Data", sql: loginSQL)
 
     let host = "example.com"

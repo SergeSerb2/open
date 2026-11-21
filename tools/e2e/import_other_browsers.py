@@ -8,7 +8,12 @@ Rows: detection, Firefox counts/import/re-import/Undo, Primary Password, running
 Safari Full Disk Access (denied on Next, then granted), Safari live import, Safari export + CSV.
 """
 import fcntl
+import json
 import os
+import sqlite3
+import struct
+import tempfile
+import uuid
 from pathlib import Path
 import runpy
 import shutil
@@ -30,6 +35,26 @@ def openkit():
     return str(ROOT/'Packages/OpenKit/.build/debug/openkit')
 
 
+def mozlz4(document):
+    """A Firefox session file: `mozLz40\0`, u32 size, then one LZ4 block of literals only (valid LZ4)."""
+    raw = json.dumps(document).encode()
+    n, token = len(raw), min(len(raw), 15) << 4
+    length = b''
+    if n >= 15:
+        rest = n - 15
+        length = b'\xff' * (rest // 255) + bytes([rest % 255])
+    return b'mozLz40\0' + struct.pack('<I', n) + bytes([token]) + length + raw
+
+
+def session_tabs(windows):
+    """Session JSON: each tab is (url, pinned) or a raw dict."""
+    def tab(t):
+        if isinstance(t, dict): return t
+        url, pinned = t
+        return {'entries': [{'url': url, 'title': 'Example'}], 'index': 1, 'pinned': pinned}
+    return {'version': ['sessionrestore', 1], 'windows': [{'tabs': [tab(t) for t in w]} for w in windows]}
+
+
 def run(factory, results, tmp, h):
     helpers = runpy.run_path(str(ROOT/'tools/e2e/import_browsers.py'))
     sidebar, visit_count = helpers['sidebar'], helpers['visit_count']
@@ -46,6 +71,14 @@ def run(factory, results, tmp, h):
 
     def row(name, ok, **detail):
         results[name] = dict(ok=bool(ok), **detail)
+    # A crash can leave private source copies (history, secret stores) in the temporary folder. The App
+    # removes ones older than an hour after launch and keeps younger ones (another live import).
+    temp_root = Path(tempfile.gettempdir())
+    stale, young = temp_root/('open-history-import-e2e-' + str(uuid.uuid4())), temp_root/('open-history-import-e2e-' + str(uuid.uuid4()))
+    for folder in (stale, young):
+        folder.mkdir(mode=0o700); (folder/'Login Data').write_bytes(b'synthetic')
+    old = time.time() - 2 * 3600
+    os.utime(stale/'Login Data', (old, old)); os.utime(stale, (old, old))
     # The mock-key engine writes logins only with this switch (OEAutofill.mm Import); the secrets suites use it too.
     app = factory(urls=(), fresh=True, extra_args=['--browser-import-library=' + str(library), '--open-allow-mock-keychain-secrets',
                                                    '--host-resolver-rules=MAP * ~NOTFOUND'])
@@ -75,6 +108,13 @@ def run(factory, results, tmp, h):
         return urls
     def folders_of(nodes, root):
         return sorted('/'.join(n[1][1:]) for n in nodes if n[0] == 'folder' and n[1][1:2] == [root])
+    swept = h.wait_until(lambda: not stale.exists(), timeout=15, step=.2)
+    row('stale_import_copies_swept', swept and young.exists(), staleGone=not stale.exists(), youngKept=young.exists())
+    shutil.rmtree(young, ignore_errors=True); shutil.rmtree(stale, ignore_errors=True)
+    # Seed: a second key4.db row carries the SDR key ID with a NULL key blob, ahead of the real key row.
+    # The reader must skip it and use the row that decrypts (every Firefox password failed before).
+    with sqlite3.connect(default_profile/'key4.db') as db:
+        db.execute("UPDATE nssPrivate SET a11 = NULL, a102 = X'F8000000000000000000000000000001' WHERE id = 1")
 
     # Detection: Firefox profiles from profiles.ini (default first); Safari is one profile.
     s = open_sources()
@@ -85,6 +125,38 @@ def run(factory, results, tmp, h):
         firefox=(ff.get('selectable'), ff.get('status'), [p['name'] for p in ff.get('profiles', [])]),
         safari=(sf.get('selectable'), sf.get('status')))
     cancel()
+
+    # Files that exist but cannot be read are "Could not be read", never "Not found".
+    session_file = default_profile/'sessionstore-backups/recovery.jsonlz4'
+    for path in (default_profile/'logins.json', session_file): os.chmod(path, 0)
+    try:
+        open_sources(); call('settings-source', id='firefox')
+        unreadable = {k: v for k, v in settle().get('settingsBrowserLabels', {}).items() if k in ('Passwords', 'Open tabs')}
+    finally:
+        for path in (default_profile/'logins.json', session_file): os.chmod(path, 0o644)
+        cancel()
+    row('firefox_unreadable_labels', unreadable == {'Passwords': 'Could not be read', 'Open tabs': 'Could not be read'},
+        labels=unreadable)
+    # A FIFO in place of logins.json must not block the reader (open without O_NONBLOCK waits for a writer).
+    logins_file = default_profile/'logins.json'
+    shutil.move(str(logins_file), str(files/'logins.json.aside'))
+    os.mkfifo(logins_file)
+    fifo_label, fifo_settled = None, False
+    try:
+        open_sources(); call('settings-source', id='firefox')
+        fifo_settled = bool(h.wait_until(lambda: not state().get('settingsBusy'), timeout=20, step=.1))
+        fifo_label = state().get('settingsBrowserLabels', {}).get('Passwords') if fifo_settled else None
+    except Exception as error:
+        fifo_label = 'error: %s' % str(error)[:80]
+    finally:
+        try:  # release a reader blocked in open() (old code): a writer end that closes gives it EOF
+            os.close(os.open(logins_file, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+        logins_file.unlink()
+        shutil.move(str(files/'logins.json.aside'), str(logins_file))
+    if fifo_settled: cancel()
+    row('firefox_fifo_not_blocking', fifo_settled and fifo_label == 'Could not be read', settled=fifo_settled, label=fifo_label)
 
     # Firefox: counts on Choose, then the import.
     before_data, before_nodes = sidebar(app)
@@ -124,13 +196,20 @@ def run(factory, results, tmp, h):
         appLog=[l for l in app.log_text().splitlines() if 'browser passwords import failed' in l][:3],
         error=report.get('settingsError'))
 
-    # Re-import: nothing new; then Undo both imports (the sidebar and history; passwords stay, as for Arc).
+    # Re-import: nothing new, also after Firefox reordered its windows and tabs (IDs must not hold
+    # positions); then Undo both imports (the sidebar and history; passwords stay, as for Arc).
+    original_session = session_file.read_bytes()
+    session_file.write_bytes(mozlz4(session_tabs([
+        [('https://third.session.example.test/w2', False), ('https://second.session.example.test/w2', False)],
+        [{'entries': [{'url': 'https://back.session.example.test/1'}, {'url': 'https://current.session.example.test/2'}], 'index': 2},
+         ('https://pinned.session.example.test/s1', True)]])))
     open_sources(); call('settings-source', id='firefox'); settle()
     again = finish_import().get('settingsOutcome', {})
     _, nodes2 = sidebar(app)
     row('firefox_reimport', again.get('Bookmarks') == 0 and again.get('History') == 0 and again.get('Passwords') == 0 and again.get('Open tabs') == 0
         and again.get('Password duplicates') == 3 and sorted(map(str, nodes2)) == sorted(map(str, nodes)) and visit_count(app) == after_visits
         and logins() == after_logins, repeat={k: again.get(k) for k in ('Bookmarks', 'History', 'Passwords', 'Password duplicates', 'Open tabs')})
+    session_file.write_bytes(original_session)
     undo_title = state().get('undoTitle')
     app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
     for _ in range(2):
@@ -157,6 +236,18 @@ def run(factory, results, tmp, h):
     _, _, right = work_passwords('synthetic-primary')
     row('primary_password_right', right.get('settingsOutcome', {}).get('Passwords') == 3 and logins() - count == 3,
         outcome=right.get('settingsOutcome', {}).get('Passwords'), logins=logins() - count)
+
+    # A session whose tab index is Int.min (a corrupt or hand-made file) is skipped, not a crash.
+    original_session = session_file.read_bytes()
+    session_file.write_bytes(mozlz4(session_tabs([[{'entries': [{'url': 'https://min.session.example.test/'}], 'index': -2**63},
+                                                    ('https://ok.session.example.test/', False)]])))
+    try:
+        open_sources(); call('settings-source', id='firefox')
+        tabs_label = settle().get('settingsBrowserLabels', {}).get('Open tabs')
+    finally:
+        session_file.write_bytes(original_session)
+        cancel()
+    row('firefox_session_index_min', tabs_label == 'Found: 1', label=tabs_label)
 
     # A running Firefox holds the profile lock: Arc's "Quit Firefox to continue importing".
     lock = os.open(default_profile/'.parentlock', os.O_RDWR | os.O_CREAT)
@@ -234,6 +325,24 @@ def run(factory, results, tmp, h):
         and outcome.get('Passwords') == 3 and outcome.get('Password duplicates') == 3 and logins() - before_logins == 3,
         refused=refused[:60], labels=labels, safariFolders=(roots_before, roots_after), failures=report.get('settingsFailures'),
         outcome={k: outcome.get(k) for k in ('Bookmarks', 'History', 'Passwords', 'Password duplicates')}, logins=logins() - before_logins)
+
+    # A '"' inside an unquoted CSV field is a literal character (Chromium's CSV rule). Before, it opened
+    # a quoted field and swallowed every later row.
+    quoted_csv = files/'Passwords-quote.csv'
+    quoted_csv.write_text('Title,URL,Username,Password\nQuote,https://quote.example.com/,example-quote,pa"ss\n'
+                          'After,https://after.example.com/,example-after,fixture-after\n')
+    before_logins = logins()
+    open_sources(); call('settings-source', id='safari'); settle()
+    call('settings-passwords-file', path=str(quoted_csv)); settle()
+    call('settings-browser-select', bookmarks=False, history=False, passwords=True)
+    quoted_chosen = settle()
+    quoted_report = finish_import()
+    quoted = quoted_report.get('settingsOutcome', {})
+    row('safari_csv_inner_quote', quoted.get('Passwords') == 2 and logins() - before_logins == 2,
+        outcome={k: quoted.get(k) for k in ('Passwords', 'Skipped passwords', 'Password duplicates')}, logins=logins() - before_logins,
+        label=quoted_chosen.get('settingsBrowserLabels', {}).get('Passwords'), plan=quoted_chosen.get('settingsPlan'),
+        failures=quoted_report.get('settingsFailures'), error=quoted_report.get('settingsError'),
+        appLog=[l for l in app.log_text().splitlines() if 'browser passwords import failed' in l][-3:])
 
     # A fresh Safari profile has no Bookmarks.plist: Bookmarks shows "Not found", is unticked and disabled, and the
     # Report has no "could not be imported" line (hand check, IMF 20:15). The file returns for later rows.
