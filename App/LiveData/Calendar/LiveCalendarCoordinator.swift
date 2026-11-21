@@ -120,6 +120,7 @@ final class LiveCalendarCoordinator {
     // Each window uses its own Profile's interval. For each Profile whose interval makes the reminder due,
     // that Profile's frontmost visible window shows it.
     var due: [ProfileID?: [(state: LiveCalendar.TileState, controller: BrowserWindowController)]] = [:]
+    var dueOrder: [ProfileID?] = []  // window order: a stable reminder order
     var intervals: [LiveCalendar.ReminderInterval] = []
     for controller in app.windowControllers where controller.context.liveCalendar != nil {
       let favorites = controller.context.favoritesProfile?.favorites ?? []
@@ -130,14 +131,19 @@ final class LiveCalendarCoordinator {
         anyTile = true; intervals.append(interval)
         guard let state = LiveCalendar.tile(events: visible, now: now, interval: interval, dismissed: reminded[profile] ?? []) else { continue }
         tiles[tab.id] = state
-        if state.remind { due[profile, default: []].append((state, controller)) }
+        if state.remind {
+          if due[profile] == nil { dueOrder.append(profile) }
+          due[profile, default: []].append((state, controller))
+        }
       }
       if controller.context.liveCalendarTiles != tiles { controller.context.liveCalendarTiles = tiles }
     }
     guard anyTile else { stop(); return }
+    // A deleted Profile's reminders go with it.
+    reminded = reminded.filter { entry in entry.key.map { app.model.profile(id: $0) != nil } ?? true }
     // Each Profile reminds once, in its frontmost window.
-    for (profile, candidates) in due {
-      guard let due = frontmost(candidates) else { continue }
+    for profile in dueOrder {
+      guard let due = frontmost(due[profile] ?? []) else { continue }
       reminded[profile, default: []].insert(due.state.event.id)
       remind(due.state, in: due.controller)
     }
