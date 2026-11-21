@@ -124,6 +124,9 @@ enum MainMenu {
     }
     if (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
       .contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
+    // A modal panel or a sheet owns its keys: AppKit gives them to it. No browser command acts
+    // behind it (Cmd-T or Cmd-N under a Save sheet, Cmd-Q inside an app-modal alert).
+    if NSApp.modalWindow != nil || event.window?.sheetParent != nil || event.window?.attachedSheet != nil { return false }
     app.prepareCommandServices()
     // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
     // Pointer and programmatic menu actions call performCommand without a key stamp.
@@ -141,6 +144,9 @@ enum MainMenu {
     if let factory = app.littleOpenExtensionFactory(window: event.window ?? NSApp.keyWindow),
       let browser = factory.focusedBrowser,
       app.extensionPrompts.table(browser.context.extensions).handle(event, factory: factory) { return true }
+    // handleLittleOpenKey made the decision for a Little Open window. A second route here would
+    // see its page as non-web and run Copy/Undo before the page.
+    if app.keyLittleOpen != nil { return false }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       factory.findKeyRequestedAt = event.timestamp
       defer { factory.findKeyRequestedAt = nil }

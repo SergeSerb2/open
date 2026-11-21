@@ -22,7 +22,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   var onTitleChange: ((String) -> Void)?
   var onLoadingChange: ((Bool) -> Void)?
   var onFaviconChange: ((Data?) -> Void)?
-  var additionalKeyHandler: ((NSEvent) -> Bool)?
+  /// (event, unconsumed): the Little Open key route, before the page and after it declines a key.
+  var additionalKeyHandler: ((NSEvent, Bool) -> Bool)?
   var onCloseRequest: (() -> Void)?
   var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
   private(set) var pageBackgroundColor: NSColor?
@@ -338,14 +339,14 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
     if owner?.pageChrome.handleKey(event) == true { return true }
-    if additionalKeyHandler?(event) == true { return true }
+    if additionalKeyHandler?(event, false) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
     if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }
     return false
   }
   func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
-    !closed && (additionalKeyHandler?(event) == true || owner?.controller?.handleKeyDown(event, unconsumed: true) == true)
+    !closed && (additionalKeyHandler?(event, true) == true || owner?.controller?.handleKeyDown(event, unconsumed: true) == true)
   }
   func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
     if !closed, owner?.webContent(page, runJavaScriptDialog: dialog) == true { return true }

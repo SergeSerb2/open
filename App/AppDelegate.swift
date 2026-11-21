@@ -150,6 +150,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var littleOpenCoordinator: LittleOpenCoordinator!
   var pendingLittleOpenBlankStamps: [TimeInterval?] = []
   var littleOpenProfileAlert: NSAlert?
+  /// The last Little Open key decision. One key-down reaches handleLittleOpenKey up to three
+  /// times (OEApplication, the page's pre-key hook, its unconsumed hook); the router is stateful.
+  var littleOpenKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
   var littleOpenHosts: [ItemID: EngineWebContentHost] = [:]
   var commandWindowObserver: (any NSObjectProtocol)?
   var commandDefaultsObserver: (any NSObjectProtocol)?
@@ -1194,9 +1197,7 @@ extension AppDelegate: CommandDispatcher {
     let file = options.userDataDirectory.appendingPathComponent("State/keybindings.json")
     do {
       let loaded = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
-      guard loaded.version == 1, loaded.unknownCommandIDs.isEmpty,
-        loaded.bindings.keys.allSatisfy({ CommandRegistry.byID[$0]?.isCustomizable == true }),
-        ConflictChecker.unexpected(ConflictChecker.check(overrides: loaded)).isEmpty else {
+      guard loaded.isSupported, ConflictChecker.unexpected(ConflictChecker.check(overrides: loaded)).isEmpty else {
         throw CocoaError(.fileReadCorruptFile)
       }
       keyBindings = loaded

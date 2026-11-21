@@ -1564,9 +1564,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 now: Date(timeIntervalSinceReferenceDate: event.timestamp))
         }
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, false)
-        // CEF can deliver a page event straight to the window. Keep native
-        // edit actions on the same nil-target responder path in that layer.
-        if case .system? = decision, webFocused, routing.isAppActive,
+        // The page sees its edit keys (Copy, Paste, Undo, Select All) first and may cancel them.
+        // Before the page, return false; an uncancelled key comes back here unconsumed (or the
+        // engine offers it to the main menu), which runs the native nil-target action once.
+        if case .system? = decision, webFocused, unconsumed, routing.isAppActive,
            let shortcut = KeyboardShortcut.from(event: event),
            let id = SystemCommandActions.command(for: shortcut, overrides: keyBindingOverrides),
            SystemCommandActions.isEnabled(id), SystemCommandActions.perform(id) {
