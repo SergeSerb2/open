@@ -884,17 +884,42 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     }
   }
   if (wait) {
-    if (NSProcessInfo.processInfo.systemUptime >= deadline) { fail(); return; }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 10), dispatch_get_main_queue(), ^{
-      [self oe_makeIncognitoContextForContext:original deadline:deadline fail:fail completion:completion];
-    });
+    [self oe_retryIncognitoContextForContext:original reason:context ? "closing" : "refused"
+                                    deadline:deadline fail:fail completion:completion];
     return;
   }
   if (!context) { fail(); return; }
   [context oe_whenReady:^{
-    if (context.oe_isReady && original.oe_isReady) completion(context, nil);
-    else fail();
+    if (context.oe_isReady && original.oe_isReady) {
+      completion(context, nil);
+      return;
+    }
+    // A wrapper made in the gap after the old one closed, but before Chromium
+    // marked the old profile closed, shares that dying profile and closes
+    // during its own initialization. Wait for the next fresh profile.
+    NSNumber* closed = self->_privateContextClosedAt[original.identifier];
+    if (original.oe_isReady && closed &&
+        NSProcessInfo.processInfo.systemUptime - closed.doubleValue < 10) {
+      [self oe_retryIncognitoContextForContext:original reason:"invalidated"
+                                      deadline:deadline fail:fail completion:completion];
+      return;
+    }
+    fail();
   }];
+}
+
+- (void)oe_retryIncognitoContextForContext:(OEBrowserContext*)original
+                                    reason:(const char*)reason
+                                  deadline:(NSTimeInterval)deadline
+                                      fail:(dispatch_block_t)fail
+                                completion:(void (^)(OEBrowserContext*, NSError*))completion {
+  if (NSProcessInfo.processInfo.systemUptime >= deadline) { fail(); return; }
+  if ([_configuration.additionalSwitches containsObject:@"--open-automation"]) {
+    fprintf(stderr, "OpenEngine: incognito-context-wait reason=%s\n", reason);
+  }
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 10), dispatch_get_main_queue(), ^{
+    [self oe_makeIncognitoContextForContext:original deadline:deadline fail:fail completion:completion];
+  });
 }
 
 - (void)deleteContext:(OEBrowserContext*)context completion:(void (^)(NSError*))completion {

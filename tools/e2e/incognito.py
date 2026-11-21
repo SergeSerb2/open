@@ -112,7 +112,9 @@ def checks(factory, results, tmp, harness):
             focus(normal)
         check('reopen_while_closing_new_session', all(r['open'] and r['fresh'] not in (None, r['quick'])
               and r['ephemeral'] and r['cookie'] is not None and 'closingSession' not in r['cookie'] and r['later'] == '/reopened-later'
-              for r in rounds), rounds=rounds)
+              for r in rounds), rounds=rounds,
+              engine_waits=sorted(set(l.split('reason=')[-1].strip() for l in Path(app.launch_log_path).read_text(errors='replace').splitlines()
+                                      if 'incognito-context-wait' in l)))
     def fingerprint():
         root = Path(app.user_data)
         tables = {}
