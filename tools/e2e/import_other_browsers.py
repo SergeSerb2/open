@@ -233,12 +233,23 @@ def run(factory, results, tmp, h):
     finally:
         app.call('defaults', key=legacy_key, value=None)
     current = open_tabs_import()
+    # The same session in another order (other windows and positions than the old IDs hold).
+    legacy_session = session_file.read_bytes()
+    session_file.write_bytes(mozlz4(session_tabs([
+        [('https://third.session.example.test/w2', False), ('https://second.session.example.test/w2', False)],
+        [{'entries': [{'url': 'https://back.session.example.test/1'}, {'url': 'https://current.session.example.test/2'}], 'index': 2},
+         ('https://pinned.session.example.test/s1', True)]])))
+    try:
+        reordered = open_tabs_import()
+    finally:
+        session_file.write_bytes(legacy_session)
     row('firefox_reimport_legacy_ids', legacy.get('Open tabs') == 4 and current.get('Open tabs') == 0
-        and current.get('Open tab duplicates') == 4,
+        and current.get('Open tab duplicates') == 4 and reordered.get('Open tabs') == 0 and reordered.get('Open tab duplicates') == 4,
         legacy={k: legacy.get(k) for k in ('Open tabs', 'Open tab duplicates')},
-        current={k: current.get(k) for k in ('Open tabs', 'Open tab duplicates')})
+        current={k: current.get(k) for k in ('Open tabs', 'Open tab duplicates')},
+        reordered={k: reordered.get(k) for k in ('Open tabs', 'Open tab duplicates')})
     app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
-    for _ in range(2):
+    for _ in range(4):
         if state().get('undoTitle') != 'Import from Firefox':
             break
         app.call('sidebar-key', key='z', modifiers=['command'])
