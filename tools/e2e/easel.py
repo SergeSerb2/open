@@ -470,8 +470,10 @@ def run(factory, results, tmp, api):
             # waitUntilExit(), which runs the main run loop; the main thread must keep turning meanwhile.
             archive = Path(tmp) / 'Open Easels - r4.zip'
             zipped = app.call('easel-archive', path=str(archive))
+            # Count only main run-loop turns inside ditto's own run (the export's file writing before it
+            # is excluded). A wait that blocks the main thread gives 0; a turning one about every 2 ms.
             record('E37b_export_archive_off_main', zipped['ok'] and archive.exists() and archive.stat().st_size > 0
-                   and zipped['dittoMs'] > 0 and zipped['mainMaxGapMs'] < zipped['dittoMs'] * 0.75, archive=zipped)
+                   and zipped['dittoMs'] > 0 and zipped['dittoTurns'] >= 2, archive=zipped)
             folder = Path(app.call('easel', action='store', document=easel(tab=e2)['document'])['path']).parent
             app.call('sidebar-menu', node=e2, item='Delete Easel')
             alert = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)

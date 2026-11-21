@@ -66,6 +66,8 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
   /// How long the last archive's `ditto` ran (automation read-back). `waitUntilExit()` runs the
   /// main run loop while it waits, so the main thread keeps turning (e2e E37b measures it).
   private(set) var lastDittoMilliseconds = 0.0
+  /// When the last archive's `ditto` started and ended (system uptime; automation read-back).
+  private(set) var lastDittoInterval: ClosedRange<Double>?
 
 
   /// Writes a folder of web pages into a temporary place, then zips it to `url`.
@@ -82,7 +84,8 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
       ditto.arguments = ["-c", "-k", "--keepParent", folder.path, url.path]
       let started = ProcessInfo.processInfo.systemUptime
       try ditto.run(); ditto.waitUntilExit()
-      lastDittoMilliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
+      let ended = ProcessInfo.processInfo.systemUptime
+      lastDittoMilliseconds = (ended - started) * 1000; lastDittoInterval = started...ended
       return ditto.terminationStatus == 0
     } catch { return false }
   }
