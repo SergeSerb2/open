@@ -23,9 +23,9 @@ import tempfile
 import threading
 import time
 import zipfile
-from loopback_http import LoopbackHTTPServer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from loopback_http import LoopbackHTTPServer
 import engine_e2e as harness
 from restore_defaults import write_collection
 

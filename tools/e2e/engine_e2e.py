@@ -44,9 +44,9 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
-from loopback_http import LoopbackHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from loopback_http import LoopbackHTTPServer
 import prefs_domain  # this run's private preferences domain; never the user's
 
 # The -I shebang drops this folder from sys.path. Put it first so sibling
@@ -15183,8 +15183,9 @@ def main():
             module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "applescript":
             results["applescript"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
-                factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
+            applescript = runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))
+            applescript["scope_checks"](factory, results["applescript"], _fixture_server, _restore_defaults, wait_until)
+            applescript["run"](factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
         elif opts.only == "sitedata":
             results["sitedata"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/site_data.py"))["run"](
