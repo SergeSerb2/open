@@ -18,8 +18,8 @@ public final class NoteStore {
     public private(set) var lastError: String?
     /// Notes whose last save was refused because its file would be over `maxFileBytes`.
     public private(set) var oversized: Set<UUID> = []
-    /// A save was refused for size (once per Note until a save of it succeeds again). The file
-    /// keeps the last text that fits; the App tells the user.
+    /// A save was refused for size (every refused save: each one is an edit that is not on disk).
+    /// The file keeps the last text that fits; the App tells the user.
     public var onTooLarge: ((UUID) -> Void)?
 
     public init(root: URL) {
@@ -139,7 +139,7 @@ public final class NoteStore {
                 // next open. Keep the last file that fits; the editor still holds the text.
                 guard data.count <= Self.maxFileBytes else {
                     lastError = "\(id): \(data.count) bytes is over the \(Self.maxFileBytes)-byte limit; the last save is kept"
-                    if oversized.insert(id).inserted { onTooLarge?(id) }
+                    oversized.insert(id); onTooLarge?(id)
                     continue
                 }
                 try data.write(to: fileURL(for: id), options: .atomic)

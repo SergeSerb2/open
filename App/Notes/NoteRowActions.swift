@@ -87,7 +87,8 @@ extension AppDelegate {
   /// Removes every row of a Note in every window (no Archive entry) and trashes its files.
   /// The store refused a save because the Note's file would be over its read limit; the file
   /// keeps the last text that fits. Each window that shows the Note says so (a longer toast: the
-  /// user has to shorten the Note to keep new changes).
+  /// user has to shorten the Note to keep new changes). It comes again at each refused save.
+  /// GUESS: our wording; Arc's message for this case is not captured.
   func noteTooLargeToSave(_ noteID: UUID) {
     let content = ToastContent(title: "This note is too large to save", subtitle: "Make it shorter to keep your changes.", lifetime: 10)
     var shown = Set<ObjectIdentifier>()
