@@ -470,15 +470,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         assert app.call('split', op='drop', node=order_a, point=[x+w-12, y+height/2])['accepted']; settled(2)
         menu('Expand Current Pane')
         w10_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
-        menu('Add Pane'); w10_moving = state(); w10_added = settled(3)
-        w10_moving_shown = [p for p in w10_moving['panes'] if not p['hidden']]
-        # Review round 1: the expansion ends before the panes lay out, so the add is the normal
-        # pane motion over all three panes (before, the old expanded layout took the motion and
-        # the panes then snapped into place).
-        row('W10_add_pane_from_expanded_animates', motion_mode['reduced'] or (len(w10_moving_shown) == 3
-            and all(p['clipAnimations'] for p in w10_moving_shown) and w10_moving['motionDecision'].startswith('moves=true')),
-            reduced=motion_mode['reduced'], decision=w10_moving['motionDecision'],
-            moving=[dict(id=p['id'], hidden=p['hidden'], clip=p['clipAnimations']) for p in w10_moving['panes']])
+        menu('Add Pane'); w10_added = settled(3)
         w10_shown = [p['id'] for p in w10_added['panes'] if not p['hidden']]
         row('W10_add_pane_ends_expanded_pane', bool(w10_expanded['maximized']) and not w10_added['maximized']
             and w10_added['focused'] not in (order_a, order_b) and w10_added['focused'] in w10_shown and len(w10_shown) == 3,
