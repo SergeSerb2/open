@@ -82,7 +82,13 @@ final class PageChromeCoordinator {
     observed.remove(ObjectIdentifier(page)); dialogs.navigated(page); existingPermissions?.cancel(page: page)
     closeRequests.removeValue(forKey: ObjectIdentifier(page))?(false)
   }
-  func close() { dialogs.close(); existingPermissions?.close(); observed.removeAll(); closeRequests.removeAll() }
+  func close() {
+    dialogs.close(); existingPermissions?.close(); observed.removeAll()
+    // A window closing while its page's beforeunload reply is pending answers "stay" to every waiter.
+    // Dropping them left the quit preflight running forever, so every later quit was refused.
+    let pending = closeRequests; closeRequests.removeAll()
+    for completion in pending.values { completion(false) }
+  }
 
   /// Page.close enters Chromium's own beforeunload path. Destruction and model
   /// mutation occur only after its close delegate callback, on the next turn.

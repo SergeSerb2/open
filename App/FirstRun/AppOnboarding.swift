@@ -79,6 +79,8 @@ extension AppDelegate {
       controller.releaseArtwork()
       #endif
       onboardingWindowController = nil
+      // The no-web start waits for onboarding to finish leaving (its sound and window release first).
+      scheduleStartupWithoutWebContent()
       // Drop the window, bitmap backing and scene before the post-hand-off
       // resident read. Retain only a small value receipt for automation.
       Task { @MainActor [weak self] in

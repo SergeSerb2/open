@@ -1139,12 +1139,18 @@ extension AppDelegate: CommandDispatcher {
   /// exists keeps the paint path. One timer per request; nothing repeats.
   func scheduleStartupWithoutWebContent() {
     guard !deferredStartupBegan, noWebStartupTask == nil else { return }
+    var delay = 2.0
+    #if OPEN_AUTOMATION
+    // e2e: hold the no-web start back to prove the explicit "Check for Updates…" path on its own.
+    if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_NO_WEB_STARTUP_DELAY_MS"], let ms = Double(raw), ms >= 0 { delay = ms / 1000 }
+    #endif
     noWebStartupTask = Task { @MainActor [weak self] in
-      try? await Task.sleep(for: .seconds(2))
+      try? await Task.sleep(for: .seconds(delay))
       guard let self else { return }
       self.noWebStartupTask = nil
       guard !Task.isCancelled, !self.deferredStartupBegan, self.afterPaintTask == nil, self.engineReady,
             !self.shutdownPrepared, !self.terminationRequested,
+            !self.isFirstRun || self.firstRunSaved, self.onboardingWindowController == nil, self.firstRunWindowController == nil,
             self.windowControllers.contains(where: { $0.window?.isVisible == true }),
             OEEngine.shared.allWebContents.isEmpty else { return }
       self.deferredStartupBegan = true
@@ -1193,7 +1199,7 @@ extension AppDelegate: CommandDispatcher {
     #endif
   }
   func prepareUpdaterAfterPaint() {
-    guard updater == nil else { return }
+    guard updater == nil, !shutdownPrepared, !terminationRequested else { return }
     updater = UpdaterController(app: self)
     if checkForUpdatesAfterPaint { checkForUpdatesAfterPaint = false; updater?.checkForUpdates() }
   }
