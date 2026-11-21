@@ -174,7 +174,7 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         results['settings_sleep_launch_reconcile'] = {'ok': all(mode == 'off' for mode in modes.values()),
             'modes': list(modes.values())}
 
-        # Missing and oversized owned cache files fail without a render or crash.
+        # A missing owned cache file is written again; an oversized one fails without a render or crash.
         # The owned cache name carries ApplicationIconController.artworkVersion; read it, never hard-code it.
         controller = (Path(__file__).resolve().parents[2]/'App/Settings/ApplicationIconController.swift').read_text()
         artwork = __import__('re').search(r'static let artworkVersion = (\d+)', controller).group(1)
@@ -187,6 +187,16 @@ def run(factory, results, tmp, wait_until, restore_defaults):
             else:
                 with cache.open('wb') as stream: stream.truncate(16 * 1024 * 1024 + 1)
             app = factory(urls=(url,))
+            if kind == 'missing':
+                # Bug sweep r4 F-14: a missing cache file is written again from the bundled artwork;
+                # the chosen icon stays and no error is reported.
+                regenerated = wait_until(lambda: (lambda s: s if s['applied'] == 'openDark' or s['error'] else None)(
+                    app.call('settings-icon')), timeout=10, step=.05) or app.call('settings-icon')
+                results['settings_app_icon_cache_missing'] = {'ok': regenerated['applied'] == 'openDark'
+                    and not regenerated['error'] and regenerated['matchesApplication'] and cache.is_file(),
+                    'error': regenerated['error'], 'applied': regenerated['applied'], 'fileBack': cache.is_file(),
+                    'load': os.getloadavg()}
+                continue
             broken = wait_until(lambda: (lambda s: s if s['restoreStartedMs'] is not None else None)(
                 app.call('settings-icon')), timeout=10, step=.05)
             results['settings_app_icon_cache_' + kind] = {'ok': bool(broken)

@@ -57,5 +57,10 @@ enum WebsiteAppearance {
     guard OEEngine.shared.isRunning else { return }
     prepare(OEEngine.shared.defaultContext)
     for context in OEEngine.shared.contexts { prepare(context) }
+    // `contexts` lists disk Profiles only; each Incognito session's context is kept apart.
+    // A lookup without `create` never starts or ends a session.
+    for factory in (NSApp.delegate as? AppDelegate)?.hostFactories.values.map({ $0 }) ?? [] {
+      if let context = factory.incognitoSession?.liveContext(create: false) { prepare(context) }
+    }
   }
 }

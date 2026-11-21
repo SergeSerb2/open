@@ -98,7 +98,13 @@ final class PageChromeCoordinator {
     dialogs.navigated(page); existingPermissions?.cancel(page: page)
     closeRequests.removeValue(forKey: ObjectIdentifier(page))?(false)
   }
-  func close() { dialogs.close(); existingPermissions?.close(); observed.removeAll(); closeRequests.removeAll(); closingOffscreen.removeAll() }
+  func close() {
+    dialogs.close(); existingPermissions?.close(); observed.removeAll(); closingOffscreen.removeAll()
+    // A window closing while its page's beforeunload reply is pending answers "stay" to every waiter.
+    // Dropping them left the quit preflight running forever, so every later quit was refused.
+    let pending = closeRequests; closeRequests.removeAll()
+    for completion in pending.values { completion(false) }
+  }
 
   /// Page.close enters Chromium's own beforeunload path. Destruction and model
   /// mutation occur only after its close delegate callback, on the next turn.
@@ -106,7 +112,7 @@ final class PageChromeCoordinator {
   func requestClose(_ page: OEWebContent, completion: @escaping (Bool) -> Void) -> Bool {
     // Every close path shares this preflight. A terminated or unresponsive page
     // must not hold closing behind a DevTools beforeunload round trip.
-    guard page.crashState == .none else { return false }
+    guard !owner.isClosing, page.crashState == .none else { return false }
     let key = ObjectIdentifier(page)
     // A close already waits on this page's beforeunload (a tab close, then Quit): both callers
     // get the one answer. Dropping the second completion left the quit preflight running forever.
@@ -200,6 +206,8 @@ final class PageQuitCoordinator {
       running = false; accepted = true; NSApp.terminate(nil); return
     }
     let (owner, page) = remaining.removeFirst()
+    // A window or tab closed while an earlier page was asked: nothing left to ask here.
+    guard !owner.isClosing, owner.contents.values.contains(where: { $0 === page }) else { next(); return }
     if let window = owner.standaloneSurface?.surfaceWindow {
       if window.isMiniaturized { window.deminiaturize(nil) }
       window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged()
@@ -221,6 +229,9 @@ final class PageQuitCoordinator {
       if let id = owner.tabID(for: page), let envelope = self.app.tabSleep.adapter?.captureHistory(tabID: id) {
         try? await self.app.tabSleep.store?.save(tabID: id, envelope: envelope)
       }
+      // The save can suspend: a close meanwhile already ran pageChrome.close()/cancel(), so a new
+      // close request would never be answered.
+      guard !owner.isClosing, owner.contents.values.contains(where: { $0 === page }) else { self.next(); return }
       self.askClose(owner: owner, page: page)
     }
   }
@@ -232,6 +243,9 @@ final class PageQuitCoordinator {
     if owner.pageChrome.closeBlockedByDialog(page) {
       running = false; remaining.removeAll(); selections.removeAll()
       app.quitWarning.resetApproval()
+      // This ends the quit, as "Stay" does: report the cancel (the attempt was waiting to retry).
+      app.updater?.userDriver.applicationTerminationCancelled()
+      app.updater?.userDriver.clearInstallationRelaunchRequest()
       owner.pageChrome.showDialogsOffscreen(page)
       return
     }
@@ -250,6 +264,9 @@ final class PageQuitCoordinator {
       } else {
         self.running = false; self.remaining.removeAll(); self.selections.removeAll()
         self.app.quitWarning.resetApproval()
+        // The quit returned "cancel" only to wait for this reply; this is the real cancel.
+        self.app.updater?.userDriver.applicationTerminationCancelled()
+        self.app.updater?.userDriver.clearInstallationRelaunchRequest()
       }
     }
     if !waits { next() }

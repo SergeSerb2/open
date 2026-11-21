@@ -67,7 +67,7 @@ extension AppImportRunner {
     }
     if plan.openTabs, !undo.cancelled {
       progress("Importing your open tabs…", nil, false)
-      importOpenTabs(reader: reader, key: key, space: space, target: target, undo: undo, result: &result)
+      await importOpenTabs(reader: reader, key: key, space: space, target: target, undo: undo, result: &result)
     }
     app.importInProgress = false
     if plan.history, !undo.cancelled {
@@ -115,11 +115,29 @@ extension AppImportRunner {
   /// GUESS — capture pending: Arc's names `onboarding_imported_pinned_tabs` / `num_pinned_tabs_imported`
   /// suggest pinned tabs stay pinned (browser-import.md §2). IDs are deterministic, so a re-import adds nothing.
   private func importOpenTabs(reader: BrowserImportReader, key: String, space: Space, target: Profile,
-                              undo: AppImportUndo, result: inout BrowserImportResult) {
+                              undo: AppImportUndo, result: inout BrowserImportResult) async {
+    // The session file can be 64 MiB of LZ4 and 256 MiB of JSON: decompress and parse it on a
+    // worker, as bookmarks, history and passwords are read.
+    struct Handoff: @unchecked Sendable {
+      var read: Result<(tabs: [ImportedOpenTab], report: ImportedOpenTabsReport), any Error>; var onMain: Bool
+    }
+    let handoff = await Task.detached(priority: .utility) {
+      Handoff(read: Result { try reader.openTabs() }, onMain: pthread_main_np() != 0)
+    }.value
+    #if OPEN_AUTOMATION
+    openTabsReadOnMainThread = handoff.onMain
+    #endif
     let read: (tabs: [ImportedOpenTab], report: ImportedOpenTabsReport)
-    do { read = try reader.openTabs() }
-    catch FirefoxImportError.missingFile { result.failures["Open tabs"] = "Not found"; return }
-    catch { result.failures["Open tabs"] = "Could not be read"; return }
+    switch handoff.read {
+    case .success(let value): read = value
+    case .failure(FirefoxImportError.missingFile): result.failures["Open tabs"] = "Not found"; return
+    case .failure: result.failures["Open tabs"] = "Could not be read"; return
+    }
+    // The import may have been cancelled, or its Space or Profile removed, during the read.
+    guard !undo.cancelled, !app.terminationRequested else { return }
+    guard app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {
+      result.failures["Open tabs"] = "Could not be saved"; return
+    }
     var pinned: [SidebarNode] = [], today: [SidebarNode] = []
     let now = Date()
     // One tab per URL with a URL-only ID, as the Chromium import: a window or list position in the ID

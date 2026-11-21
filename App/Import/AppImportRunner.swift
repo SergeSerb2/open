@@ -22,6 +22,10 @@ final class AppImportRunner: ProfileDataOwner {
   var secretsSinks: [ProfileID: AppSecretsImportSink] = [:]
   var secretsTask: Task<ArcSecretsImportReport, any Error>?
   var secretsTaskProfiles = Set<ProfileID>()
+  #if OPEN_AUTOMATION
+  /// e2e (bug sweep r4 F-10): whether the last Firefox open-tabs read ran on the main thread.
+  var openTabsReadOnMainThread: Bool?
+  #endif
   /// First run, browser import: the transactional sidebar commit already wrote this run's snapshot.
   var firstRunMergeSaved = false
   /// First run, browser import: landed data still needs the landing checkpoint (kept across a failed save).

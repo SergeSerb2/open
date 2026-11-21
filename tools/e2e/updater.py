@@ -138,16 +138,17 @@ def run(opts, folder, results, apps):
     caches = Path.home() / 'Library/Caches' / app_root.name
     tracker = results.tracker
     try:
-        def launch(bundle, allow='0', fresh=True):
+        def launch(bundle, allow='0', fresh=True, urls=(FIXTURE,), env=None):
             if fresh:
                 shutil.rmtree(app_root, ignore_errors=True)
                 shutil.rmtree(caches, ignore_errors=True)
             app = harness.Open(opts.config, 'chrome', str(app_root), ['--use-mock-keychain'],
-                str(folder / 'open.log'), urls=(FIXTURE,), extra_env={
-                    'OPEN_E2E_APP_BUNDLE': str(bundle), 'OPEN_UPDATER_ALLOW_ADHOC': allow})
+                str(folder / 'open.log'), urls=urls, extra_env={
+                    'OPEN_E2E_APP_BUNDLE': str(bundle), 'OPEN_UPDATER_ALLOW_ADHOC': allow, **(env or {})})
             apps.append(app)
             app.focus_tracker = tracker; tracker.apps.append(app)
-            app.call('wait', tab=app.call('tabs')[0]['id'])
+            if urls:
+                app.call('wait', tab=app.call('tabs')[0]['id'])
             return app
 
         if opts.main_bundle:
@@ -283,6 +284,7 @@ def run(opts, folder, results, apps):
             serve_fixture = True
             if opts.review_only:
                 configure(public, canary)
+                exercise_no_paint_launch(opts, results, launch, copied, origin)
                 exercise_review_regressions(opts, folder, results, launch, public, origin, original)
                 return
             for channel, expected in [('stable', '900001'), ('beta', '900002')]:
@@ -362,6 +364,8 @@ def run(opts, folder, results, apps):
                     app.quit()
                 tracker.checkpoint()
             exercise_variants(opts, folder, results, launch, configure, public, origin, original)
+            configure(public, canary)
+            exercise_no_paint_launch(opts, results, launch, copied, origin)
             exercise_review_regressions(opts, folder, results, launch, public, origin, original)
             exercise_windowless_alerts(opts, folder, results, launch, configure, public, origin)
         finally:
@@ -909,6 +913,41 @@ def stop_review_installer(app, results, copied):
         'binarySHA256Before': app.review_binary_sha, 'binarySHA256After': after}
 
 
+def exercise_no_paint_launch(opts, results, launch, bundle, origin):
+    """Bug sweep r4 F-02: a launch that paints no web page (a Space without web tabs) still starts
+    the updater, and "Check for Updates…" never waits for a web paint."""
+    write('open.general.updateChannel', 'stable')
+    write('open.general.automaticallyUpdate', False)
+    write('open.debug.updateFeedURL', origin + '/appcast.xml')
+    write('SULastCheckTime', datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))
+    for variant in ('menu', 'idle'):
+        # The menu variant holds the no-web start back for a minute, so only the menu path can create the updater.
+        app = launch(bundle, allow='1', urls=(), env={'OPEN_AUTOMATION_NO_WEB_STARTUP_DELAY_MS': '60000'} if variant == 'menu' else None)
+        try:
+            webPages = [t for t in app.call('tabs') if str(t.get('url', '')).startswith(('http', 'about', 'data'))]
+            if variant == 'menu':
+                # The user's own request, at once: before the fix it only set a flag for a later web paint.
+                before = app.call('updater-state')
+                app.call('menu-perform', id='check-for-updates')
+                state = harness.wait_until(lambda: (lambda s: s if s.get('created') and s.get('ui', {}).get('phase') not in (None, '', 'idle') else None)(
+                    app.call('updater-state')), timeout=5, step=.1) or app.call('updater-state')
+                results['F02_no_paint_menu_check'] = {'ok': not before.get('created') and bool(state.get('created'))
+                    and state.get('ui', {}).get('phase') in ('checking', 'found') and not webPages,
+                    'createdBeforeMenu': before.get('created'), 'phase': state.get('ui', {}).get('phase'),
+                    'created': state.get('created'), 'webTabs': len(webPages)}
+            else:
+                # No input at all: the deferred start-up services run without a web paint.
+                state = harness.wait_until(lambda: (lambda s: s if s.get('created') else None)(app.call('updater-state')),
+                                           timeout=15, step=.2) or app.call('updater-state')
+                results['F02_no_paint_updater_started'] = {'ok': bool(state.get('created')) and not webPages,
+                    'created': state.get('created'), 'started': state.get('started'), 'webTabs': len(webPages)}
+            if app.call('updater-state').get('created'):
+                close_updates(app)
+        finally:
+            app.quit()
+        results.tracker.checkpoint()
+
+
 def exercise_review_regressions(opts, folder, results, launch, public, origin, original):
     """The three review regressions use real Sparkle cycles and native alerts."""
     import xml.etree.ElementTree as ET
@@ -992,10 +1031,19 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                 app.call('wait', tab=tab)
                 app.call('click', tab=tab, selector='#arm')
                 wait(lambda: app.call('engine-sleep', tab=tab), lambda s: s['unloadHandlers'], 'beforeunload not armed')
+                # Bug sweep r4 F-03 (Stay): the quit waits on the page reply without reporting a cancel;
+                # the page's "Stay" is the cancel and reports it once.
+                cancel_marker = 'updater-termination-cancelled'
+                stay_before = app.log_text().count(cancel_marker)
                 app.call('quit-warning', request=True)
                 page = wait(lambda: app.call('dialog-state'), lambda s: s.get('visible'), 'normal quit did not show beforeunload')
+                stay_waiting = app.log_text().count(cancel_marker)
                 app.call('dialog-button', accept=False)
                 wait(lambda: app.call('dialog-state'), lambda s: not s.get('pending'), 'beforeunload stayed open')
+                stay_after = harness.wait_until(lambda: (lambda n: n if n == stay_before + 1 else None)(app.log_text().count(cancel_marker)),
+                                                timeout=3, step=.05) or app.log_text().count(cancel_marker)
+                results['F03_beforeunload_stay_reports_cancel'] = {'ok': stay_waiting == stay_before and stay_after == stay_before + 1,
+                    'cancelsBefore': stay_before, 'cancelsWhileWaiting': stay_waiting, 'cancelsAfterStay': stay_after}
                 app.call('defaults', key='open.general.warnBeforeQuitting', value=True)
                 # A download navigation on the armed page would itself ask
                 # beforeunload before the quit proof. Keep both real fixtures.
@@ -1030,6 +1078,14 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                 app.call('quit-warning', request=True)
                 exited = harness.wait_until(lambda: not app.process_path(app.pid), timeout=15, step=.05)
                 after_log = app.log_text()
+                # Bug sweep r4 F-03: the install quit retries itself after Open's own quit work
+                # (history flush, sleep capture). That is not a cancel: Sparkle must not hear one, or
+                # once installing it shows its "Ready to Install" retry window while the App quits.
+                # (The paused installer never reaches that phase here, so the row counts the cancel.)
+                cancel_marker = 'updater-termination-cancelled'
+                results['F03_install_quit_not_reported_cancelled'] = {'ok': bool(exited)
+                    and after_log.count(cancel_marker) == before_log.count(cancel_marker),
+                    'cancelsBefore': before_log.count(cancel_marker), 'cancelsAfter': after_log.count(cancel_marker)}
                 markers = ('generic-quit-alert-presented', 'downloads-quit-alert-presented')
                 results['R2_install_relaunch_skips_prompts'] = {'ok': bool(exited)
                     and all(after_log.count(m) == before_log.count(m) for m in markers),

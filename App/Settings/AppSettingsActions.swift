@@ -427,8 +427,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return nil
   }
   func checkForUpdates() {
-    if let updater = app.updater { updater.checkForUpdates() }
-    else { app.checkForUpdatesAfterPaint = true }
+    if let updater = app.updater { updater.checkForUpdates(); return }
+    // The user's own request starts the updater now. A launch that shows no web page never
+    // reaches the post-paint hook, so a deferred request would wait forever.
+    app.checkForUpdatesAfterPaint = true
+    app.prepareUpdaterAfterPaint()
   }
   func showUpdatesUnavailable() { status(UpdaterController.unavailableStatus, pane: .general); show(pane: .general) }
   func openMoreSettings() { openURL(URL(string: "chrome://settings")!, profileID: settings.selectedProfileID) }

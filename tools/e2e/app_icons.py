@@ -6,6 +6,7 @@ import json
 import math
 import os
 import plistlib
+import shutil
 import subprocess
 from pathlib import Path
 import tempfile
@@ -98,6 +99,16 @@ class RealDock:
         return dict(error='no usable Apple reference tile', skipped=skipped, capture=path.name)
 
 
+def wait_for(read, timeout, step=.2):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        value = read()
+        if value:
+            return value
+        time.sleep(step)
+    return None
+
+
 def run(output, config, factory=None):
     """`factory` (engine_e2e's suite factory) records each launch for the gate's owned-process cleanup."""
     output = output.resolve()
@@ -116,11 +127,11 @@ def run(output, config, factory=None):
         assert ok, (name, evidence)
     with tempfile.TemporaryDirectory(prefix='open-icons-') as tmp:
         fresh_next = [True]
-        def launch():
+        def launch(urls=()):
             if factory is not None:
                 fresh, fresh_next[0] = fresh_next[0], False
-                return factory(urls=(), fresh=fresh)
-            return Open(config, 'alloy', str(Path(tmp)/'data'), [], str(Path(tmp)/'app.log'), urls=())
+                return factory(urls=urls, fresh=fresh)
+            return Open(config, 'alloy', str(Path(tmp)/'data'), [], str(Path(tmp)/'app.log'), urls=urls)
         try:
             app = launch()
             info = plistlib.loads((Path(app.bundle)/'Contents/Info.plist').read_bytes())
@@ -204,6 +215,22 @@ def run(output, config, factory=None):
             except RuntimeError as error:
                 refused = 'unknown icon' in str(error)
             check('unknown_option_refused', refused and app.call('settings-icon')['applied'] == 'openDefault')
+            # Bug sweep r4 F-14: a chosen icon whose cache file is gone (a cleaned Cache folder, or
+            # preferences moved to another Mac) is made again from the bundled artwork at the next
+            # launch. Before, the restore failed and pointed the Dock tile plug-in at a missing file.
+            app.call('settings-icon', select='openDark')
+            app.quit()
+            shutil.rmtree(Path(app.user_data)/'Cache/AppIcons')
+            page = 'data:text/html,<title>Icon restore</title><h1>Icon restore</h1>'
+            app = launch(urls=(page,))
+            restored = wait_for(lambda: (lambda s: s if s['applied'] == 'openDark' or s['error'] else None)(app.call('settings-icon')), 20)
+            restored = restored or app.call('settings-icon')
+            cached = sorted((Path(app.user_data)/'Cache/AppIcons').glob('openDark-v*.png'))
+            tile = app.call('defaults', key='open.appIcon.dockTileFile')
+            check('missing_cache_regenerated', restored['applied'] == 'openDark' and not restored['error']
+                  and restored['matchesApplication'] and len(cached) == 1 and tile == str(cached[0]),
+                  state=restored, files=[p.name for p in cached], dockTileFile=tile)
+            app.call('settings-icon', select='openDefault')
         finally:
             if app: app.quit()
             (output/'results.json').write_text(json.dumps(checks, indent=2))

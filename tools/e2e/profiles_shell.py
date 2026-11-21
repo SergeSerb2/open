@@ -210,6 +210,48 @@ def run(factory, results, tmp, api, defaults_before):
         assert wait(lambda: not state()['deleting'] and state()['sheet'] == 0, timeout=15), state()
         return before, typed, state()
 
+    def check_deleted_profile_favorites():
+        # Bug sweep r4 F-01: a Settings delete is permanent (no Undo). The deleted Profile's
+        # Favorites go to the Archive. Before the fix they went to that Profile's own archive
+        # file, which the same delete then removed with the Profile's folder.
+        launch(fresh=True)
+        try:
+            app.call('defaults', key=confirm_key, value=False)
+            home = next(s for s in app.call('spaces') if s['focused'])
+            space = app.call('space-create', title='Favorites Victim', profile='Favorites Victim')
+            victim = profile('Favorites Victim')
+            url = origin + '/deleted-profile-favorite'
+            tab = app.call('open', url=url)['id']
+            dropped = app.call('sidebar-drop', nodes=[tab], parent={'kind': 'favorites', 'id': victim['id']}, index=0)
+            moved = app.call('space-profile', space=space, profile='Default')
+            app.call('space', space=home['id'])
+            folder = Path(app.user_data) / 'Profiles' / victim['directory']
+            assert dropped and moved and folder.exists(), (dropped, moved, folder.exists())
+            confirm('Favorites Victim')
+            gone = not folder.exists() and all(row['name'] != 'Favorites Victim' for row in state()['profiles'])
+
+            def archived():
+                return [row for row in app.call('archive-list')['rows'] if row['url'] == url]
+            kept = archived()
+            app.quit()
+            launch()
+            relaunched = archived()
+            restored = None
+            if relaunched:
+                app.call('library-open', section='archive')
+                restored = wait(lambda: (lambda text: text if text and text.startswith('Restored to') else None)(
+                    app.call('library-restore', id=relaunched[0]['id'])), timeout=10)
+                app.call('library-close')
+            live = [t for t in app.call('tabs') if t['url'] == url]
+            results['shell_deleted_profile_favorites_archived'] = {
+                'ok': gone and len(kept) == 1 and kept[0]['originalLocation'].startswith('favorites')
+                      and len(relaunched) == 1 and bool(restored) and len(live) == 1 and not archived(),
+                'profileFolderRemoved': gone, 'archivedAfterDelete': kept, 'archivedAfterRelaunch': len(relaunched),
+                'restoreStatus': restored, 'restoredTabs': len(live)}
+        finally:
+            app.call('defaults', key=confirm_key, value=None)
+            app.quit()
+
     def check_adblock():
         # Exercise Settings and the scheduled real list repository through the actual App.
         # The loopback HTTP server replaces upstream transport only; it serves valid filter lists.
@@ -337,6 +379,9 @@ def run(factory, results, tmp, api, defaults_before):
             thread.join(timeout=5)
 
     try:
+        if os.environ.get('OPEN_PROFILES_SHELL_FAVORITES_ONLY') == '1':
+            check_deleted_profile_favorites()
+            return
         if os.environ.get('OPEN_PROFILES_PENDING_NAV_ONLY') == '1':
             launch(fresh=True, extra_env={DELAY_KEY: str(DELAY_MS)})
             pending_navigation(app, results, origin, api)
@@ -354,6 +399,9 @@ def run(factory, results, tmp, api, defaults_before):
             check_adblock()
         if os.environ.get('OPEN_PROFILES_SHELL_ADBLOCK_ONLY') == '1':
             return
+        if not any(os.environ.get(key) == '1' for key in
+                   ('OPEN_PROFILES_SHELL_PAGES_ONLY', 'OPEN_PROFILES_SHELL_REPAIR_ONLY', 'OPEN_PROFILES_SHELL_MANAGER_ONLY')):
+            check_deleted_profile_favorites()
         launch(fresh=True)
         one = state()
         results['shell_indicator_one_profile'] = {'ok': len(one['profiles']) == 1 and one['indicators'] == [], 'indicators': one['indicators']}

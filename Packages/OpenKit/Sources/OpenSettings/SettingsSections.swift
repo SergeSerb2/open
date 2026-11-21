@@ -207,7 +207,7 @@ struct SettingsAdvancedSection: View {
             row("widevine", "Play DRM-protected video", key: "enableWidevine", help: "Downloads Google's Widevine module. Some services may still refuse. Applies after you quit and reopen Open.", last: true)
         }
         OpenSettingsGroup("Tools") {
-            OpenSettingsRow(root: root, id: "advanced/translate", title: "Translated-site prompts", help: "Show translation prompts again for this Profile.") { Button("Reset prompts") { root.advanced.resetTranslate() } }
+            OpenSettingsRow(root: root, id: "advanced/translate", title: "Translated-site prompts", help: "Show translation prompts again on every site, in all Profiles.") { Button("Reset prompts") { root.advanced.resetTranslate() } }
             OpenSettingsRow(root: root, id: "advanced/more", title: "More browser settings") { Button("Open in tab") { root.actions.openMoreSettings() } }
             OpenSettingsRow(root: root, id: "advanced/data-folder", title: "Open data folder") { Button("Show in Finder") { root.actions.revealOpenDataFolder() } }
             OpenSettingsRow(root: root, id: "advanced/copy-info", title: "Open information", last: true) { Button("Copy info") { root.actions.copyOpenInfoToPasteboard() } }

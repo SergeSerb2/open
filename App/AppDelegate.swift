@@ -143,6 +143,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var hotkeyAttempts = 0
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
+  /// The post-paint (or no-web) start-up chain has begun; see `scheduleStartupWithoutWebContent`.
+  private var deferredStartupBegan = false
+  private var noWebStartupTask: Task<Void, Never>?
   private var cloneCleanupScheduled = false
   #if OPEN_AUTOMATION
   var cloneCleanupCounts: [String: NSNumber]?
@@ -227,11 +230,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if quitWarning.presenting || downloadsCenter.presentingQuitAlert { return .terminateCancel }
     // Sparkle may retry after a user cancels or the quit preflight defers.
     defer {
-      if !terminationRequested {
+      // A quit that cancelled only to retry itself (history flush, sleep capture, page replies)
+      // is still going: Sparkle must not show its "Ready to Install" retry window for it. A page's
+      // "Stay" ends such an attempt later (PageQuitCoordinator) and reports the cancel there.
+      if !terminationRequested, !quitWarning.retryPending {
         updater?.userDriver.applicationTerminationCancelled()
         // An install quit that ended without a self-retry must not make a later normal quit
         // prompt-free. Sparkle's retry button requests the relaunch again.
-        if !quitWarning.retryPending { updater?.userDriver.clearInstallationRelaunchRequest() }
+        updater?.userDriver.clearInstallationRelaunchRequest()
       }
     }
     if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
@@ -668,6 +674,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         self.scheduleLibraryPrebuild()
       }
     }
+    scheduleStartupWithoutWebContent()
     return controller
   }
 
@@ -950,6 +957,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       for timestamp in pendingLittleOpen { openBlankLittleOpen(timestamp: timestamp) }
     }
     if !isFirstRun || firstRunSaved { completeLinkRestoration() }
+    if !windowControllers.isEmpty { scheduleStartupWithoutWebContent() }
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
     // Empty Spaces, Welcome, and onboarding have a native first frame but no
@@ -1011,6 +1019,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     recordShutdownPhase("prepare")
     libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     afterPaintTask?.cancel(); afterPaintTask = nil
+    noWebStartupTask?.cancel(); noWebStartupTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     littleOpenCoordinator?.closeAll()
     downloadsCenter.closeDetachedPages()
@@ -1144,6 +1153,7 @@ extension AppDelegate: CommandDispatcher {
               !self.terminationRequested, !Task.isCancelled else { return }
         let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
         if painted == true {
+          self.deferredStartupBegan = true
           self.scheduleCloneCleanupAfterPaint()
           // Each service body gets its own main run-loop turn, so input is
           // handled between them and no turn carries several bodies.
@@ -1175,6 +1185,7 @@ extension AppDelegate: CommandDispatcher {
       }
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
+      self.deferredStartupBegan = true
       self.scheduleCloneCleanupAfterPaint()
       self.startupRegion("fallback.sleep") { self.tabSleep.start() }
       guard await self.nextStartupTurn() else { return }
@@ -1183,6 +1194,42 @@ extension AppDelegate: CommandDispatcher {
       self.startupRegion("fallback.icon") { self.applicationIcon.restoreAfterContent() }
       guard await self.nextStartupTurn() else { return }
       self.startupRegion("fallback.updater") { self.prepareUpdaterAfterPaint() }
+    }
+  }
+  /// A launch without any web page (only native tabs, or an empty Space) never calls
+  /// `prepareCommandsAfterPaint`. Two seconds after a browser window and the engine are both
+  /// ready, start the same deferred services when no web page exists then. A web page that
+  /// exists keeps the paint path. One timer per request; nothing repeats.
+  func scheduleStartupWithoutWebContent() {
+    guard !deferredStartupBegan, noWebStartupTask == nil else { return }
+    var delay = 2.0
+    #if OPEN_AUTOMATION
+    // e2e: hold the no-web start back to prove the explicit "Check for Updates…" path on its own.
+    if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_NO_WEB_STARTUP_DELAY_MS"], let ms = Double(raw), ms >= 0 { delay = ms / 1000 }
+    #endif
+    noWebStartupTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(delay))
+      guard let self else { return }
+      self.noWebStartupTask = nil
+      guard !Task.isCancelled, !self.deferredStartupBegan, self.afterPaintTask == nil, self.engineReady,
+            !self.shutdownPrepared, !self.terminationRequested,
+            !self.isFirstRun || self.firstRunSaved, self.onboardingWindowController == nil, self.firstRunWindowController == nil,
+            self.windowControllers.contains(where: { $0.window?.isVisible == true }),
+            OEEngine.shared.allWebContents.isEmpty else { return }
+      self.deferredStartupBegan = true
+      self.afterPaintTask = Task { @MainActor [weak self] in
+        defer { self?.afterPaintTask = nil }
+        guard let self else { return }
+        self.startupRegion("noWeb.commandServices") { self.prepareCommandServices() }
+        guard await self.nextStartupTurn() else { return }
+        self.startupRegion("noWeb.sleep") { self.tabSleep.start() }
+        guard await self.nextStartupTurn() else { return }
+        self.startupRegion("noWeb.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
+        guard await self.nextStartupTurn() else { return }
+        self.startupRegion("noWeb.icon") { self.applicationIcon.restoreAfterContent() }
+        guard await self.nextStartupTurn() else { return }
+        self.startupRegion("noWeb.updater") { self.prepareUpdaterAfterPaint() }
+      }
     }
   }
   private func scheduleCloneCleanupAfterPaint() {
@@ -1214,8 +1261,8 @@ extension AppDelegate: CommandDispatcher {
     body()
     #endif
   }
-  private func prepareUpdaterAfterPaint() {
-    guard updater == nil else { return }
+  func prepareUpdaterAfterPaint() {
+    guard updater == nil, !shutdownPrepared, !terminationRequested else { return }
     updater = UpdaterController(app: self)
     if checkForUpdatesAfterPaint { checkForUpdatesAfterPaint = false; updater?.checkForUpdates() }
   }

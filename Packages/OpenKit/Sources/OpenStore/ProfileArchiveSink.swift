@@ -31,8 +31,11 @@ public final class ProfileArchiveSink: ArchiveSink {
         for id in Set(tabs.keys).union(trees.keys) { store(for: id).archive(tabs[id] ?? [], folders: trees[id] ?? []) }
     }
     public func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
-        // A Profile delete contains only one Profile, so the archive is one transaction.
-        try store(for: entries.first?.profileID).archiveForProfileDeletion(entries, directoryName: directoryName)
+        // A Profile delete contains only one Profile, so the archive is one transaction. It goes to the
+        // Default Profile's archive: the deleted Profile's own archive file is in the folder that the
+        // same delete removes (ProfileTeardown.wipe). Rows keep their Profile ID; a restore of a row
+        // whose Profile is gone lands in the focused Space (BrowserModel.restoreDestination).
+        try store(for: nil).archiveForProfileDeletion(entries, directoryName: directoryName)
         try directories.retireDirectoryName(directoryName)
     }
     /// Profile deletion: close that folder's archive before the folder is removed.

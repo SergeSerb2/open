@@ -174,6 +174,23 @@ def checks(factory, results, tmp, harness):
             from incognito_boosts import check_boosts_private
             check_boosts_private(app, normal, base, wait, results, harness)
             return
+        # Bug sweep r4 F-07: View ▸ Appearance ("Websites will use") reaches a page in an open
+        # Incognito window without a reload, as it does for normal windows.
+        try:
+            app.call('command', id='appearance-light')
+            private = private_window('menu'); tab = open_page('/appearance')
+            dark = lambda: app.eval(tab, "matchMedia('(prefers-color-scheme: dark)').matches")
+            origin_before, light = app.eval(tab, 'performance.timeOrigin'), bool(wait(lambda: dark() is False, timeout=8, step=.1))
+            # The command runs from the normal window; `eval` reads pages of the focused window.
+            focus(normal); app.call('command', id='appearance-dark'); focus(private)
+            followed = bool(wait(lambda: dark() is True, timeout=8, step=.2))
+            check('website_appearance_reaches_private', light and followed and app.eval(tab, 'performance.timeOrigin') == origin_before,
+                  startLight=light, followedDark=followed, darkNow=dark())
+            app.call('window-close'); focus(normal)
+        finally:
+            app.call('command', id='appearance-automatic')
+        if os.environ.get('OPEN_INCOGNITO_APPEARANCE_ONLY') == '1':
+            return
         profile = app.call('history-state')['profile']
         app.eval(normal_tab, "document.cookie='normalOnly=1; path=/'; true")
         # Drain normal launch metadata and durable writes before the private session.

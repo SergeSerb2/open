@@ -15302,7 +15302,7 @@ def main():
             # OPEN_INCOGNITO_PRIVACY_ONLY=1 runs only the privacy rows (bug sweep round 2).
             if os.environ.get("OPEN_INCOGNITO_PRIVACY_ONLY") != "1":
                 incognito.checks(factory, results["incognito"], tmp, sys.modules[__name__])
-            if os.environ.get("OPEN_BOOST_PRIVATE_ONLY") != "1":
+            if os.environ.get("OPEN_BOOST_PRIVATE_ONLY") != "1" and os.environ.get("OPEN_INCOGNITO_APPEARANCE_ONLY") != "1":
                 incognito_privacy.checks(factory, results["incognito"], tmp, sys.modules[__name__])
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
