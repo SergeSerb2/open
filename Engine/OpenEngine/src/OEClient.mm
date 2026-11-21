@@ -89,7 +89,9 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
   id<OEWebContentDelegate> delegate = source.delegate;
   // Document PiP of a Chrome-style page: CEF uses Chromium's default creation,
   // where the fork's EM-7 hook (chromium/0403) shows it through the shell's
-  // pictureInPictureDelegate, or Chromium's own window without one.
+  // pictureInPictureDelegate, or Chromium's own window without one. It keeps
+  // this client (the page's keys, menu, dialogs and permissions); the display,
+  // load and crash callbacks skip its browser (OEIsPageBrowser).
   if (source && target_disposition == CEF_WOD_NEW_PICTURE_IN_PICTURE &&
       source.runtimeStyle == OERuntimeStyleChrome) {
     return false;
@@ -337,10 +339,16 @@ void OEClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
 }
 
 #pragma mark Display
+// A browser that shares this client but is not the page's own (a Chrome-style
+// page's Document PiP, made by Chromium's default creation with the opener's
+// client; OnBeforePopup) never reports its address, title, favicon, loading
+// or crash state as the page's. Keyboard, context menu, dialogs and
+// permissions still go through the page (the PiP document is the page's).
 
 void OEClient::OnAddressChange(CefRefPtr<CefBrowser> browser,
                                CefRefPtr<CefFrame> frame,
                                const CefString& url) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   if (frame->IsMain()) {
     [view_ oe_setURL:OEURL(url)];
   }
@@ -348,21 +356,25 @@ void OEClient::OnAddressChange(CefRefPtr<CefBrowser> browser,
 
 void OEClient::OnTitleChange(CefRefPtr<CefBrowser> browser,
                              const CefString& title) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setTitle:OEString(title)];
 }
 
 void OEClient::OnFaviconURLChange(CefRefPtr<CefBrowser> browser,
                                   const std::vector<CefString>& icon_urls) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setFaviconURL:icon_urls.empty() ? nil : OEURL(icon_urls[0])];
 }
 
 void OEClient::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser,
                                       bool fullscreen) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setFullscreen:fullscreen];
 }
 
 void OEClient::OnStatusMessage(CefRefPtr<CefBrowser> browser,
                                const CefString& value) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setStatusText:OEString(value)];
 }
 
@@ -371,6 +383,7 @@ bool OEClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
                                 const CefString& message,
                                 const CefString& source,
                                 int line) {
+  if (!OEIsPageBrowser(view_, browser)) return false;
   OEWebContent* view = view_;
   if ([view.delegate respondsToSelector:@selector
                      (webContent:didLogConsoleMessage:level:source:line:)]) {
@@ -385,6 +398,7 @@ bool OEClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
 
 bool OEClient::OnAutoResize(CefRefPtr<CefBrowser> browser,
                             const CefSize& new_size) {
+  if (!OEIsPageBrowser(view_, browser)) return false;
   OEWebContent* view = view_;
   if (!view) {
     return false;
@@ -395,12 +409,14 @@ bool OEClient::OnAutoResize(CefRefPtr<CefBrowser> browser,
 
 void OEClient::OnLoadingProgressChange(CefRefPtr<CefBrowser> browser,
                                        double progress) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setProgress:progress];
 }
 
 void OEClient::OnMediaAccessChange(CefRefPtr<CefBrowser> browser,
                                    bool has_video_access,
                                    bool has_audio_access) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setMediaCaptureCamera:has_video_access
                        microphone:has_audio_access];
 }
@@ -410,6 +426,7 @@ void OEClient::OnMediaAccessChange(CefRefPtr<CefBrowser> browser,
 void OEClient::OnLoadStart(CefRefPtr<CefBrowser> browser,
                            CefRefPtr<CefFrame> frame,
                            TransitionType transition_type) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   OEWebContent* view = view_;
   if (frame->IsMain() &&
       [view.delegate respondsToSelector:@selector(webContent:didCommitNavigationToURL:isReload:)]) {
@@ -427,12 +444,14 @@ void OEClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                     bool isLoading,
                                     bool canGoBack,
                                     bool canGoForward) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setLoading:isLoading canGoBack:canGoBack canGoForward:canGoForward];
 }
 
 void OEClient::OnLoadEnd(CefRefPtr<CefBrowser> browser,
                          CefRefPtr<CefFrame> frame,
                          int httpStatusCode) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   OEWebContent* view = view_;
   if (frame->IsMain() &&
       [view.delegate respondsToSelector:@selector(webContent:
@@ -446,6 +465,7 @@ void OEClient::OnLoadError(CefRefPtr<CefBrowser> browser,
                            ErrorCode errorCode,
                            const CefString& errorText,
                            const CefString& failedUrl) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   OEWebContent* view = view_;
   if (!frame->IsMain() || errorCode == ERR_ABORTED) {
     return;
@@ -718,6 +738,7 @@ void OEClient::OnFindResult(CefRefPtr<CefBrowser> browser,
                             const CefRect& selectionRect,
                             int activeMatchOrdinal,
                             bool finalUpdate) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   OEWebContent* view = view_;
   if ([view.delegate respondsToSelector:@selector(webContent:
                                             didUpdateFindResult:)]) {
@@ -862,13 +883,14 @@ void OEClient::OnRenderViewReady(CefRefPtr<CefBrowser> browser) {
       CefProcessMessage::Create(kOEMsgScriptsUpdate);
   msg->GetArgumentList()->SetList(0, [view.context oe_scriptsValue]);
   browser->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
-  [view oe_setCrashState:OEWebContentCrashStateNone];
+  if (OEIsPageBrowser(view, browser)) [view oe_setCrashState:OEWebContentCrashStateNone];
 }
 
 void OEClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
                                          TerminationStatus status,
                                          int error_code,
                                          const CefString& error_string) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   OEWebContentCrashState state = OEWebContentCrashStateCrashed;
   if (status == TS_PROCESS_WAS_KILLED) {
     state = OEWebContentCrashStateKilled;
@@ -881,11 +903,13 @@ void OEClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
 bool OEClient::OnRenderProcessUnresponsive(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefUnresponsiveProcessCallback> callback) {
+  if (!OEIsPageBrowser(view_, browser)) return false;
   [view_ oe_setCrashState:OEWebContentCrashStateUnresponsive];
   return false;
 }
 
 void OEClient::OnRenderProcessResponsive(CefRefPtr<CefBrowser> browser) {
+  if (!OEIsPageBrowser(view_, browser)) return;
   [view_ oe_setCrashState:OEWebContentCrashStateNone];
 }
 

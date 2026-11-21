@@ -124,9 +124,42 @@ extension AppImportRunner {
     let now = Date()
     // One tab per URL with a URL-only ID, as the Chromium import: a window or list position in the ID
     // would add every tab again after the session changes order.
+    // Builds before bug sweep round 2 used the window and the list position in the ID. A tab such a
+    // build imported is matched by URL: an existing tab with the same URL whose ID is the old ID for
+    // some window and position (searched over a bounded range, only for tabs with that URL) keeps its
+    // ID, so a re-import adds no copy of it, also after the session changed order.
+    func legacyID(_ url: URL, window: Int, index: Int) -> ItemID {
+      ImportedBookmarksFolder.itemID(sourceKey: key, sourceID: "open-tab:\(window):\(index):" + url.absoluteString)
+    }
+    #if OPEN_AUTOMATION
+    // e2e (bug sweep r3 L16): import with those old IDs, as such a build did.
+    let importsLegacyIDs = UserDefaults.standard.bool(forKey: "open.automation.firefoxLegacyOpenTabIDs")
+    #else
+    let importsLegacyIDs = false
+    #endif
+    let urls = Set(read.tabs.map(\.url))
+    var existing: [URL: [ItemID]] = [:]
+    for tab in app.model.allTabsForNotes() where urls.contains(tab.url) { existing[tab.url, default: []].append(tab.id) }
+    // Bounds: windows up to the session's last plus 4 (at most 16), positions up to twice the session's
+    // tab count plus 32 (at most 1,024), and at most 500,000 hashed IDs per import (about 0.2 s on the
+    // main actor). A tab past them gets one new copy, as before this match.
+    let windows = min(16, (read.tabs.map(\.window).max() ?? 0) + 5), positions = min(1024, read.tabs.count * 2 + 32)
+    var budget = 500_000
+    func legacyMatch(_ url: URL, current: ItemID) -> ItemID? {
+      let candidates = Set(existing[url] ?? []).subtracting([current])
+      guard !candidates.isEmpty else { return nil }
+      for window in 0..<windows { for index in 0..<positions {
+        guard budget > 0 else { return nil }
+        budget -= 1
+        let id = legacyID(url, window: window, index: index)
+        if candidates.contains(id) { return id }
+      } }
+      return nil
+    }
     var seen = Set<URL>()
-    for tab in read.tabs where seen.insert(tab.url).inserted {
-      let id = BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)
+    for (index, tab) in read.tabs.enumerated() where seen.insert(tab.url).inserted {
+      let current = BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)
+      let id = importsLegacyIDs ? legacyID(tab.url, window: tab.window, index: index) : legacyMatch(tab.url, current: current) ?? current
       let date = tab.lastAccessed ?? now
       let node = SidebarNode.tab(Tab(id: id, url: tab.url, title: tab.title, pinnedURL: tab.isPinned ? tab.url : nil,
                                      createdAt: date, lastActiveAt: date))

@@ -183,8 +183,71 @@ public final class ArchiveStore: ArchiveSink {
             db.bindText(stmt, 1, url)
             let done = sqlite3_step(stmt) == SQLITE_DONE
             sqlite3_finalize(stmt)
-            db.exec(done ? "COMMIT" : "ROLLBACK")
+            db.exec(done && self.discardFolderChildrenOnQueue(db, url: url) ? "COMMIT" : "ROLLBACK")
         }
+    }
+
+    /// An archived folder keeps its rows in its payload: rows of the deleted document go there too, or
+    /// restoring the folder brings back a row whose file is in the Trash (an empty Note or Easel).
+    /// Candidate rows match the URL's last path component (the document's ID; JSON escapes '/'); each
+    /// payload is then compared by exact URL. A payload that does not parse stays as it is.
+    nonisolated private func discardFolderChildrenOnQueue(_ db: SQLiteDB, url: String) -> Bool {
+        let key = URL(string: url)?.lastPathComponent ?? ""
+        guard key.count >= 8 else { return true }
+        guard let select = db.prepare("SELECT id, payload FROM archived_tabs WHERE kind = 'folder' AND payload LIKE ? ESCAPE '\\'") else { return false }
+        db.bindText(select, 1, Self.likePattern(key))
+        var updates: [(id: String, payload: String)] = []
+        while sqlite3_step(select) == SQLITE_ROW {
+            guard let id = db.columnText(select, 0), let payload = db.columnText(select, 1),
+                  var folder = (try? JSONSerialization.jsonObject(with: Data(payload.utf8))) as? [String: Any],
+                  Self.removeTabs(url: url, fromFolder: &folder),
+                  let data = try? JSONSerialization.data(withJSONObject: folder, options: [.sortedKeys]) else { continue }
+            updates.append((id, String(decoding: data, as: UTF8.self)))
+        }
+        sqlite3_finalize(select)
+        for update in updates {
+            guard let stmt = db.prepare("UPDATE archived_tabs SET payload = ? WHERE id = ?") else { return false }
+            db.bindText(stmt, 1, update.payload)
+            db.bindText(stmt, 2, update.id)
+            let done = sqlite3_step(stmt) == SQLITE_DONE
+            sqlite3_finalize(stmt)
+            guard done else { return false }
+        }
+        return true
+    }
+
+    /// Removes the tab rows whose URL is `url` from a folder payload's children, nested folders and
+    /// split panes (with each removed pane's share). A split left with no pane goes. True when a row went.
+    nonisolated static func removeTabs(url: String, fromFolder folder: inout [String: Any]) -> Bool {
+        guard let children = folder["children"] as? [Any] else { return false }
+        func matches(_ tab: Any?) -> Bool {
+            ((tab as? [String: Any])?["url"] as? String)?.caseInsensitiveCompare(url) == .orderedSame
+        }
+        var changed = false, kept: [Any] = []
+        for child in children {
+            guard var node = child as? [String: Any] else { kept.append(child); continue }
+            if let wrap = node["tab"] as? [String: Any] {
+                if matches(wrap["_0"]) { changed = true; continue }
+            } else if var wrap = node["folder"] as? [String: Any], var inner = wrap["_0"] as? [String: Any] {
+                if removeTabs(url: url, fromFolder: &inner) { wrap["_0"] = inner; node["folder"] = wrap; changed = true }
+            } else if var wrap = node["split"] as? [String: Any], var inner = wrap["_0"] as? [String: Any],
+                      let panes = inner["panes"] as? [Any], panes.contains(where: matches) {
+                let fractions = inner["fractions"] as? [Any]
+                var keptPanes: [Any] = [], keptFractions: [Any] = []
+                for (index, pane) in panes.enumerated() where !matches(pane) {
+                    keptPanes.append(pane)
+                    if let fractions, fractions.indices.contains(index) { keptFractions.append(fractions[index]) }
+                }
+                changed = true
+                if keptPanes.isEmpty { continue }
+                inner["panes"] = keptPanes
+                if fractions != nil { inner["fractions"] = keptFractions }
+                wrap["_0"] = inner; node["split"] = wrap
+            }
+            kept.append(node)
+        }
+        if changed { folder["children"] = kept }
+        return changed
     }
 
     public func retire() {

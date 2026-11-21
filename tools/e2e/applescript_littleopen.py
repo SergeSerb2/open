@@ -140,6 +140,13 @@ def run(app, script, results, wait_until, quote, key, off_message, prefix=''):
         retained = script.error('set t to '+target(blank_id)+'\nclose t\nget id of t', 1000)
         record('retained_closed', retained['ok'], **error_without_ok(retained))
         record('blank_no_model_tab', {row['id'] for row in app.call('tabs')} == model_ids)
+        # Bug sweep r3 L19: Little Open never shows a Note or an Easel (open:// pages). A window made
+        # with such a URL still gets its web page. Before, the internal URL made a Note host in the
+        # window's own host list, the page was never made, and that Note host was never closed.
+        internal = script('set t to make new tab with properties {URL:"open://note/00000000-0000-4000-8000-000000000019"}\nreturn id of t')
+        internal_state = wait_until(lambda: (lambda s: s if s and s['content'] else None)(state(internal)), timeout=10, step=.1)
+        record('internal_URL_gets_page', bool(internal_state), state=internal_state or state(internal))
+        script('close '+target(internal))
     finally:
         release.set()
         try:

@@ -272,7 +272,7 @@ def checks(factory, results, tmp, harness):
         check('context_menu_private_link', bool(linked))
         if linked: focus(linked); wait(lambda: state()['ephemeral'], timeout=5, step=.05)
         # The App captures its own native window without screen-recording rights.
-        evidence = Path(harness.ROOT) / 'docs/engine-spike/incognito'; evidence.mkdir(parents=True, exist_ok=True)
+        evidence = Path(harness.OUT) / 'incognito'; evidence.mkdir(parents=True, exist_ok=True)
         for appearance in ['light', 'dark']:
             app.call('appearance', name=appearance)
             # Both reference machines use their built-in 2x panel. A missing

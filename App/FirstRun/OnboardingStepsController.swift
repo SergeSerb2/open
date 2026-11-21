@@ -353,7 +353,15 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   /// Legacy first-run automation keeps its importer proofs, but walks the new
   /// visible screens using their real actions instead of opening the old window.
   func skipToDefault() async {
-    if step == .name { if firstRun.probe == nil { await firstRun.refreshProbe() }; next() }
+    if step == .name {
+      if firstRun.probe == nil { await firstRun.refreshProbe() }
+      next()
+      // next() leaves the name screen on a task while the browser sources load. Wait for it: the
+      // loop below and the caller's finishFromDefault() did nothing on the name screen (bug sweep r3
+      // T7: Start Fresh returned before it finished).
+      let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+      while step == .name, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+    }
     for _ in 0..<6 {
       if step == .defaultBrowser || step == .ready { break }
       if step == .importData && firstRun.step == .report { next() }

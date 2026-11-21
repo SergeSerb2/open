@@ -564,6 +564,11 @@ OE_EXPORT @interface OEWebContent : NSObject
 - (void)focusPage;
 /// Exits HTML fullscreen.
 - (void)exitFullscreen;
+/// The shell has closed this page but keeps it drawn for a moment (a pane's
+/// collapse) and calls -close after that. From now on the page gets no new
+/// popup, dialog, permission prompt or context menu (as after -close), with
+/// or without a delegate; the browser and its pixels stay until -close.
+- (void)prepareForClose;
 /// Destroys the Chromium browser. The view stays and paints its background.
 - (void)close;
 @end

@@ -3,8 +3,11 @@
 
 Launches the real Open.app with a fresh profile, drives it only through the
 automation socket (docs/automation.md), and writes results plus screenshots
-of OUR windows to docs/engine-spike/. Nothing here touches other apps or the
-system mouse and keyboard.
+of OUR windows. A gate run (--output-dir) writes them to docs/engine-spike/
+(the gate archives and restores them); a direct run writes them to a folder
+under $TMPDIR/open-e2e-evidence/ (printed) so tracked files stay unchanged,
+unless --tracked-evidence asks for docs/engine-spike/. Nothing here touches
+other apps or the system mouse and keyboard.
 
   tools/e2e/engine_e2e.py --only shell            # Chrome style (the default, as in the gate)
   tools/e2e/engine_e2e.py --style alloy  --only features
@@ -7251,6 +7254,15 @@ def media_checks(factory, results, tmp):
             "documentPictureInPicture.window ? [documentPictureInPicture.window.innerWidth, documentPictureInPicture.window.innerHeight] : null")),
             timeout=3, step=.02)
         dp_moved = app.eval(dp, "document.getElementById('player') === null")
+        # Bug sweep r3 L24: a Chrome-style page's Document PiP has its own client. Before, the PiP
+        # browser used the opener's, so the PiP document's title (and address) replaced the tab's.
+        dp_retitled = app.eval(dp, "documentPictureInPicture.window ? (documentPictureInPicture.window.document.title = 'R3 PiP document', true) : false")
+        dp_leak = wait_until(lambda: (lambda t: t if t.get("title") == "R3 PiP document" or not t.get("url", "").endswith("docpip.html") else None)(app.tab(dp)),
+                             timeout=1.5, step=.05)
+        dp_opener = {k: app.tab(dp).get(k) for k in ("title", "url")}
+        results["media_document_pip_own_client"] = {"ok": dp_retitled is True and not dp_leak
+            and dp_opener["title"] == "Media Document PiP" and dp_opener["url"].endswith("docpip.html"),
+            "retitled": dp_retitled, "opener": dp_opener, "style": app.style}
         dp_level = dp_win["level"] if dp_win else None
         app.call("pip-action", action="close")
         dp_gone = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
@@ -14357,7 +14369,7 @@ E2E_LANE = "all"
 
 
 def main():
-    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
+    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE, OUT
     ap = argparse.ArgumentParser()
     # Direct runs use the shipping Chrome style, as the gate does for every suite
     # (only its ntp-alloy stage passes --style alloy). Alloy is an explicit choice.
@@ -14366,6 +14378,8 @@ def main():
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
     ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
+    ap.add_argument("--tracked-evidence", action="store_true",
+                    help="a direct run writes screenshots and receipts to docs/engine-spike/ (default: a folder under $TMPDIR/open-e2e-evidence/)")
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
@@ -14484,6 +14498,11 @@ def main():
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
         ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
+    if not opts.output_dir and not opts.tracked_evidence:
+        # Bug sweep r3 T1: a direct run never rewrites tracked docs/engine-spike/ files.
+        OUT = os.path.join(tempfile.gettempdir(), 'open-e2e-evidence',
+                           time.strftime('%Y%m%d-%H%M%S') + '-%d' % os.getpid())
+        print('evidence: ' + OUT, file=sys.stderr, flush=True)
     os.makedirs(OUT, exist_ok=True)
     # Every run is isolated: several agents run this harness at once, and two
     # runs of one suite must never share a profile, a cache or a socket. The

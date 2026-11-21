@@ -92,8 +92,12 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
       containerVersion: r.containerVersion, chromiumTag: r.chromiumTag, capturedAt: r.capturedAt)
   }
 
+  /// Deletes the tab's row from the store of its current Profile and from the store it last saved
+  /// into (a tab that moved to another Profile's Space after its save keeps its row there).
   func deleteSleepHistory(tabID: ItemID) {
-    store(named: directoryName(for: tabID))?.delete(tabID: tabID)
+    let current = directoryName(for: tabID)
+    store(named: current)?.delete(tabID: tabID)
+    if let saved = savedIn[tabID], saved.lowercased() != current.lowercased() { store(named: saved)?.delete(tabID: tabID) }
     savedIn[tabID] = nil
     knownStored.remove(tabID)
   }
