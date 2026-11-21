@@ -14882,8 +14882,9 @@ def main():
             module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "applescript":
             results["applescript"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
-                factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
+            applescript = runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))
+            applescript["scope_checks"](factory, results["applescript"], _fixture_server, _restore_defaults, wait_until)
+            applescript["run"](factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
         elif opts.only == "sitedata":
             results["sitedata"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/site_data.py"))["run"](

@@ -69,7 +69,18 @@ enum ScriptCreation {
             ScriptFailure.report(ScriptError.invalidURL, "\"\(text)\" is not a valid URL.")
             return nil
         }
-        return url
+        // The engine runs a loaded javascript: URL in the current page. Page JavaScript
+        // runs only through execute, behind Allow JavaScript from Apple Events.
+        switch url.scheme?.lowercased() {
+        case "javascript":
+            ScriptFailure.report(ScriptError.invalidURL, "javascript: URLs are not supported. Use execute to run JavaScript.")
+            return nil
+        case "open":
+            // Welcome, Note, and Easel pages open only through their own commands.
+            ScriptFailure.report(ScriptError.invalidURL, "open: URLs are internal to Open and cannot be loaded by a script.")
+            return nil
+        default: return url
+        }
     }
 
     static func makeTab(inSpace spaceID: SpaceID, atIndex index: Int?, properties: [String: Any]) -> ScriptTab? {
@@ -267,10 +278,29 @@ extension ScriptTab {
         guard let target = ScriptTarget.tab(from: command, receiver: self), let model = ScriptHost.shared.model else { return nil }
         guard target.supportsModelContainment("select") else { return nil }
         guard let window = ScriptRead.preferredWindow() else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
-        let spaceID = ScriptRead.spaceID(of: target.tabID, model: model) ?? window.focusedSpaceID
-        guard model.space(id: spaceID) != nil else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
+        let spaceID: SpaceID
+        if case .favorites(let profileID)? = ScriptRead.section(of: target.tabID, model: model) {
+            // A Favorite shows only in Spaces of its own Profile.
+            let focused = model.space(id: window.focusedSpaceID)
+            guard let space = focused?.profileID == profileID ? focused : model.spaces(using: profileID).first else {
+                return command.fail(ScriptError.objectNotFound, "No space uses the profile of tab \(target.tabID.rawValue.uuidString).")
+            }
+            spaceID = space.id
+        } else {
+            guard let id = ScriptRead.spaceID(of: target.tabID, model: model), model.space(id: id) != nil else {
+                return command.fail(ScriptError.objectNotFound, "The space of tab \(target.tabID.rawValue.uuidString) does not exist.")
+            }
+            spaceID = id
+        }
         if window.focusedSpaceID != spaceID { model.focusSpace(windowID: window.id, spaceID: spaceID) }
-        model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: target.tabID)
+        // A split pane is not a sidebar node: select its split with that pane focused,
+        // or the other panes hide.
+        var nodeID = target.tabID
+        if case .splitPane(let splitID)? = model.parent(of: target.tabID) {
+            model.focusSplitPane(splitID: splitID, tabID: target.tabID)
+            nodeID = splitID
+        }
+        model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: nodeID)
         ScriptTarget.bringForward(window)
         return nil
     }

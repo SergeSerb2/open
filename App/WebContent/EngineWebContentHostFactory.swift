@@ -923,7 +923,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       app.dismissAutoArchiveEducation(); app.settingsPresenter.showProfileSettings(profileID: id); return true
     case .toggleSidebar: controller?.toggleSidebar(); return true
     case .select(let id, let spaceID):
-      guard model.space(id: spaceID) != nil, model.node(id: id) != nil else { return false }
+      // A node of another Space would select nothing and blank the window.
+      guard let space = model.space(id: spaceID), model.isSelectable(id, in: space) else { return false }
       if focusedSpace?.id != spaceID { withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: spaceID) } }
       select(nodeID: id); return true
     case .selectFavorite(let id): guard model.tab(id: id) != nil else { return false }; select(nodeID: id); return true
