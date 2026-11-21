@@ -57,6 +57,8 @@ public final class PeekController {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var keyMonitor: Any?
     @ObservationIgnored private var undoItem: (url: URL, source: ItemID, librarySpace: SpaceID?, profile: ProfileID, expiry: Date)?
+    /// The source tab and Library Space of the closed Peek that Undo can bring back, if any.
+    public var undoSource: (tabID: ItemID, librarySpaceID: SpaceID?)? { undoItem.map { ($0.source, $0.librarySpace) } }
     @ObservationIgnored private var undoTask: Task<Void, Never>?
     @ObservationIgnored private var expandingGeneration = 0
     public private(set) var isExpanding = false
@@ -152,7 +154,8 @@ public final class PeekController {
             guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return false }
             if FeatureSite.shouldPeek(source: host.currentURL, target: target, pinned: true, flags: flags, defaults: self.defaults) && self.stack.count < 5 {
                 guard let source = self.stack.last else { return false }
-                self.open(url:target,sourceTabID:source.sourceTabID,librarySpaceID:source.librarySpaceID,profileID:source.librarySpaceID == nil ? nil : source.profileID); return false
+                // A nested Peek stays in its source Peek's Profile, whatever Space the window shows.
+                self.open(url:target,sourceTabID:source.sourceTabID,librarySpaceID:source.librarySpaceID,profileID:source.profileID); return false
             }
             return true
         }

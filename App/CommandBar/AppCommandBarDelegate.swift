@@ -66,6 +66,11 @@ final class AppCommandBarSession: CommandBarDelegate {
     let pinned = editingPinnedTab.flatMap { id in factory.model.tab(id: id).flatMap { $0.pinnedURL == nil ? nil : $0 } }
     pinnedEditTabID = pinned?.id
     guard let windowController = factory.controller, let profile = factory.focusedProfile else { return }
+    // A Blank Window's stand-in Profile is a copy made when the window opened: Settings edits made since
+    // (search engines, search suggestions) reach its bar through the real Profile's settings.
+    if factory.isBlankWindow, let live = factory.app.model.profile(id: profile.id), live !== profile, profile.settings != live.settings {
+      profile.settings = live.settings
+    }
     if factory.window?.isKeyWindow != true || !NSApp.isActive {
       factory.app.focusWindow(factory.windowState.id, activate: true)
     }
@@ -178,7 +183,9 @@ final class AppCommandBarSession: CommandBarDelegate {
       default: break
       }
     }
-    if commandBar.request?.mode == .editCurrentURL, WelcomeTab.matches(factory.selectedTab?.url),
+    // Over a Peek, Cmd+L edits the Peek's page: the Welcome tab behind it does not count.
+    let peekShown = factory.controller.map { $0.hasPeekController && $0.peekController.isShown } ?? false
+    if commandBar.request?.mode == .editCurrentURL, !peekShown, WelcomeTab.matches(factory.selectedTab?.url),
        commandBar.text == WelcomeTab.title { return }
     switch intent {
     case .open(let url, let destination, let modifiers),
