@@ -1390,8 +1390,10 @@ extension EngineWebContentHostFactory {
     Task { @MainActor in
       // Read without removing: the model discards the Archive row only once the
       // item is back in the sidebar, so a window that closed meanwhile loses nothing.
-      guard let record = await store.recent(limit: 1).first,
-        !self.isClosing, !self.app.terminationRequested else { return }
+      // A row that cannot come back (an undecodable folder, no Space to return to) is
+      // kept and skipped, or it would stop every later press; the next row restores.
+      let records = await store.recent(limit: 50)
+      guard !self.isClosing, !self.app.terminationRequested else { return }
       // Staged like the Library's Restore: the snapshot holding the item is written first, and
       // only then is the Archive row deleted. A failed write rolls the item back and keeps the row.
       let app = self.app, model = self.model
@@ -1399,30 +1401,39 @@ extension EngineWebContentHostFactory {
         guard !app.isFirstRun || app.firstRunSaved else { return }
         try app.snapshotStore.saveNow(model: model)
       }
-      // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
-      // blank tab and drop its children.
-      if record.kind == .folder {
-        // A row left behind for a folder that is already in the sidebar (the Archive delete
-        // did not run after its restore) would stop every later press here. Drop that row and
-        // show the folder, as for a tab that is already back.
-        if model.node(id: record.id)?.folder != nil {
-          store.discardArchived(ids: [record.id])
-          self.showRestoredFolder(record.id)
+      for record in records {
+        // A closed folder is archived as one folder row; rebuilding it as a Tab would make a
+        // blank tab and drop its children.
+        if record.kind == .folder {
+          // A row left behind for a folder that is already in the sidebar (the Archive delete
+          // did not run after its restore) would stop every later press here. Drop that row and
+          // show the folder, as for a tab that is already back.
+          if model.node(id: record.id)?.folder != nil {
+            store.discardArchived(ids: [record.id])
+            self.showRestoredFolder(record.id)
+            return
+          }
+          // A failed save stops the press (the next row would fail the same way); nil is a
+          // row that cannot come back.
+          let restored: Folder?
+          do { restored = try model.restoreArchivedFolder(record, saving: save) } catch { return }
+          guard let restored else { continue }
+          store.discardArchived(ids: [restored.id])
+          self.showRestoredFolder(restored.id)
           return
         }
-        guard let folder = try? model.restoreArchivedFolder(record, saving: save) else { return }
-        store.discardArchived(ids: [folder.id])
-        self.showRestoredFolder(folder.id)
+        let existed = model.tab(id: record.id) != nil
+        if existed { store.discardArchived(ids: [record.id]) }
+        let tab: Tab
+        do { tab = try model.restoreArchivedTab(record, saving: save) } catch { return }
+        guard model.parentByID[tab.id] != nil else { continue }
+        if !existed { store.discardArchived(ids: [tab.id]) }
+        // The tab returns to its original place, which can be in another Space. Selecting it in
+        // the focused Space would leave that Space with a selection it cannot show (a blank page).
+        // Expanding its folders only reveals it: no Undo step, so one Cmd+Z undoes the restore.
+        self.withoutUndo { self.selectTabForCommand(tab.id) }
         return
       }
-      let existed = model.tab(id: record.id) != nil
-      if existed { store.discardArchived(ids: [record.id]) }
-      guard let tab = try? model.restoreArchivedTab(record, saving: save), model.parentByID[tab.id] != nil else { return }
-      if !existed { store.discardArchived(ids: [tab.id]) }
-      // The tab returns to its original place, which can be in another Space. Selecting it in
-      // the focused Space would leave that Space with a selection it cannot show (a blank page).
-      // Expanding its folders only reveals it: no Undo step, so one Cmd+Z undoes the restore.
-      self.withoutUndo { self.selectTabForCommand(tab.id) }
     }
   }
 

@@ -406,6 +406,8 @@ public final class PeekController {
             let succeeded: Bool
             if let existing = splitController.split {
                 succeeded = model.addPane(splitID: existing.id, tabID: tab.id)
+                // The new pane takes focus; Expand Current Pane would keep it hidden.
+                if succeeded { splitController.clearMaximizedPane(unless: tab.id) }
             } else if let made = model.makeSplit(tabIDs: [item.sourceTabID, tab.id]) {
                 model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: made.id)
                 model.focusSplitPane(splitID: made.id, tabID: tab.id); succeeded = true
@@ -414,6 +416,9 @@ public final class PeekController {
                 model.closeTab(id: tab.id); NSSound.beep(); return false
             }
         } else {
+            // The promoted tab leaves any split: end Expand Current Pane (this selection does
+            // not pass through the window's select, which ends it for other selections).
+            splitController.clearMaximizedPane(unless: nil)
             model.focusSpace(windowID: splitController.windowID, spaceID: target)
             model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
         }
