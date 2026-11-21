@@ -33,8 +33,14 @@ public struct SiteMatch: Codable, Hashable, Sendable {
         if host.hasSuffix(".") { host.removeLast() }
         self.domain = host
         let parts = (pathPrefix ?? "").split(separator: "/", omittingEmptySubsequences: true)
-        self.pathPrefix = host.isEmpty || parts.isEmpty ? nil : "/" + parts.joined(separator: "/")
+        let path = "/" + parts.joined(separator: "/")
+        // Matching compares against the browser's percent-encoded path. The editor already
+        // stores that form; a raw space or non-ASCII letter (a hand-edited file) is encoded
+        // here. "%" is kept, so an encoded prefix is unchanged.
+        self.pathPrefix = host.isEmpty || parts.isEmpty ? nil : path.addingPercentEncoding(withAllowedCharacters: Self.pathCharacters) ?? path
     }
+    /// The characters Chromium keeps as they are in a URL path (url_canon_path.cc), plus "%".
+    private static let pathCharacters = CharacterSet(charactersIn: "!$%&'()*+,-./0123456789:;=@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz~")
 
     public static func normalized(domain: String, pathPrefix: String?) -> SiteMatch {
         SiteMatch(domain: domain, pathPrefix: pathPrefix)

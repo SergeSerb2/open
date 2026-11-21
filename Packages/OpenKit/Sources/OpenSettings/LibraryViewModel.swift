@@ -67,7 +67,7 @@ import OpenStore
         if cachedSpaceManagerView !== view { cachedSpaceManagerView = view }
     }
     public func releaseContentViews() {
-        cachedSpaceManagerView = nil; rowIcons.removeAll(); iconRequests.removeAll()
+        cachedSpaceManagerView = nil; rowIcons.removeAll(); iconRequests.removeAll(); waitingIcons.removeAll(); waitingIconOrder.removeAll()
         thumbnails = [:]; thumbnailImages = [:]; faviconImages = [:]; historyFaviconImages = [:]
     }
     public var boostsProvider: (any BoostsProvider)?
@@ -87,11 +87,25 @@ import OpenStore
     @ObservationIgnored private var rowIcons: [URL:NSImage] = [:]
     @ObservationIgnored private var captureLocations: [UUID:URL] = [:]
     @ObservationIgnored private var iconRequests: [URL:[@MainActor (NSImage?) -> Void]] = [:]
+    /// Requests that arrived while all 16 slots were busy (as in FilePreviewCache). A row
+    /// configured then keeps its callback here instead of showing the placeholder until reuse.
+    @ObservationIgnored private var waitingIcons: [URL:[@MainActor (NSImage?) -> Void]] = [:]
+    @ObservationIgnored private var waitingIconOrder: [URL] = []
     public func loadRowIcon(_ url:URL, completion:@escaping @MainActor (NSImage?) -> Void) {
         if let cached = rowIcons[url] { completion(cached); return }
         if iconRequests[url] != nil { if iconRequests[url]!.count < 32 { iconRequests[url]!.append(completion) }; return }
-        guard iconRequests.count < 16, let faviconStore else { return }
-        iconRequests[url] = [completion]
+        guard faviconStore != nil else { return }
+        guard iconRequests.count < 16 else {
+            if waitingIcons[url] == nil { waitingIcons[url] = []; waitingIconOrder.append(url) }
+            if waitingIcons[url]!.count < 32 { waitingIcons[url]!.append(completion) }
+            if waitingIconOrder.count > 256 { waitingIcons[waitingIconOrder.removeFirst()] = nil }
+            return
+        }
+        startRowIcon(url, callbacks:[completion])
+    }
+    private func startRowIcon(_ url:URL, callbacks:[@MainActor (NSImage?) -> Void]) {
+        guard let faviconStore else { return }
+        iconRequests[url] = callbacks
         Task { @MainActor [weak self] in
             let data = await faviconStore.icon(for:url)?.png32
             guard let self else { return }
@@ -100,6 +114,13 @@ import OpenStore
             if let image { rowIcons[url] = image }
             let callbacks = iconRequests.removeValue(forKey:url) ?? []
             for callback in callbacks { callback(image) }
+            // Newest first: the rows configured last are the ones on screen.
+            while iconRequests.count < 16, let next = waitingIconOrder.popLast() {
+                guard let waiting = waitingIcons.removeValue(forKey:next) else { continue }
+                if let cached = rowIcons[next] { waiting.forEach { $0(cached) }; continue }
+                if iconRequests[next] != nil { iconRequests[next]! += waiting.prefix(max(0,32-iconRequests[next]!.count)); continue }
+                startRowIcon(next, callbacks:waiting)
+            }
         }
     }
     private var activeArchiveLoad = UUID()

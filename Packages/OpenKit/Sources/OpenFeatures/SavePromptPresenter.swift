@@ -124,7 +124,8 @@ import OpenWeb
             else if let sheet = self.active, let page = self.activePage, !self.isFocused(page) {
                 if let request = sheet.request { self.pending.insert(Entry(request: request, page: page), at: 0) }
                 self.removeActive(preservingRequest: true)
-                if self.pending.count > 3 { self.discard(self.pending.removeFirst().request) }
+                // Keep the prompt the user just saw (index 0); drop the oldest waiting one behind it.
+                if self.pending.count > 3 { self.discard(self.pending.remove(at: 1).request) }
             }
             self.showNext()
         }

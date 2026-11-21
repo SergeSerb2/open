@@ -281,6 +281,9 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.scheduleSettle()
         updates += 1
         if let selected, let row = entryIndex(selected) { table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
+        // setRows drops a selected row that is gone without a selection callback. Report it,
+        // or the view model keeps the removed row's ID as selected.
+        else if selected != nil, selectedItem?.id != selected { onSelection?(selectedItem?.id) }
     }
     private func rebuild(previousSources: [LibraryRowSource]? = nil) {
         entries = []; var lastDay = ""
