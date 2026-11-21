@@ -215,7 +215,10 @@ extension HistoryStore {
         }
         guard db.exec("COMMIT") else { return false }
         committed = true
-        if !affected.isEmpty || !receipt.titleChanges.isEmpty { didChange() }
+        if !affected.isEmpty || !receipt.createdURLIDs.isEmpty || !receipt.titleChanges.isEmpty {
+            // Removed imported visits must not come back from a search cache (command bar carry-over).
+            noteDeletion(); didChange()
+        }
         return true
     }
 }

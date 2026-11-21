@@ -534,6 +534,8 @@ public struct HistoryProvider: SuggestProvider {
             let generation = store.deletionGeneration
             let matches = await store.search(text, limit: limit)
             if Task.isCancelled { return nil }
+            // A deletion that landed during the search: the answer may hold deleted pages. Show and keep none.
+            guard store.deletionGeneration == generation else { carry.clear(); return [] }
             carry.store(profile: profile, query: query.bytes, matches: matches, generation: generation)
             return matches.compactMap { Self.row($0, query: query, now: now, site: site, provider: provider) }
         }
@@ -584,8 +586,12 @@ final class HistoryCarryOver: Sendable {
     /// was deleted since, else none.
     func matches(profile: ProfileID?, extending query: [UInt8], generation: UInt64) -> [HistoryMatch] {
         last.withLock { l in
-            guard let l, l.profile == profile, l.generation == generation, query.count > l.query.count, query.starts(with: l.query) else { return [] }
+            // Pages from before a deletion are dropped from memory, not only hidden.
+            if let held = l, held.generation != generation { l = nil; return [] }
+            guard let l, l.profile == profile, query.count > l.query.count, query.starts(with: l.query) else { return [] }
             return l.matches
         }
     }
+
+    func clear() { last.withLock { $0 = nil } }
 }
