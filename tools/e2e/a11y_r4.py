@@ -1,0 +1,89 @@
+"""Bug sweep r4 keyboard rows, through the App's real key path (OEApplication.sendEvent route).
+
+A11Y-03: closing Library with Esc gives keyboard focus back to the page, not the hidden search field.
+A11Y-04: Space and Return on a focused Settings navigation button open that section.
+"""
+import http.server
+import threading
+import time
+from loopback_http import LoopbackHTTPServer
+
+
+def run(factory, results, wait_until):
+    class Page(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = (b'<!doctype html><title>Focus fixture</title><input id="field" autofocus>'
+                    b'<script>addEventListener("load",()=>document.getElementById("field").focus())</script>')
+            self.send_response(200); self.send_header('Content-Type', 'text/html')
+            self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *_): pass
+    server = LoopbackHTTPServer(Page)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    page = 'http://127.0.0.1:%d/focus' % server.server_address[1]
+    app = factory(urls=(page,), fresh=True)
+    try:
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+
+        def key(name=None, text=None, mods=(), window=None):
+            args = dict(route='app', modifiers=list(mods))
+            if name: args['key'] = name
+            if text: args['text'] = text
+            if window: args['window'] = window
+            return app.call('key', **args)
+
+        def browser():
+            return next(w for w in app.call('windows') if w['class'] == 'BrowserWindow' and w['visible'])
+
+        # A11Y-03: Library search typed, cleared with Esc, then Library closed with Esc.
+        app.call('library-open', section='history')
+        wait_until(lambda: app.call('library-state').get('open') or None, timeout=5, step=.1)
+        key('f', mods=['cmd'])
+        searching = wait_until(lambda: 'TextView' in browser()['firstResponder'] or None, timeout=5, step=.1)
+        key(text='zz')
+        key('escape')
+        key('escape')
+        closed = wait_until(lambda: not app.call('library-state').get('open') or None, timeout=5, step=.1)
+        time.sleep(.3)
+        responder = browser()['firstResponder']
+        focused = app.eval(tab, 'document.hasFocus()')
+        key(text='ok')
+        typed = wait_until(lambda: app.eval(tab, 'document.getElementById("field").value') == 'ok' or None, timeout=3, step=.1)
+        results['a11y_library_close_returns_focus_to_page'] = {
+            'ok': bool(searching) and bool(closed) and focused is True and bool(typed),
+            'searchFocused': bool(searching), 'firstResponderAfterClose': responder,
+            'pageHasFocus': focused, 'typedIntoPage': bool(typed)}
+
+        # A11Y-04: keyboard activation of the Settings navigation rail.
+        app.call('settings-ui', action='open', section='general')
+        settings = app.call('settings-ui')['window']
+        rows = {}
+        for section, name in (('shortcuts', 'space'), ('profiles', 'return')):
+            app.call('settings-ui', action='focus-nav', section=section)
+            key(name, window=settings)
+            state = wait_until(lambda: (lambda s: s if s['section'] == section else None)(app.call('settings-ui')),
+                               timeout=3, step=.1) or app.call('settings-ui')
+            rows[name] = {'section': state['section'], 'query': state.get('query', '')}
+        results['a11y_settings_nav_keyboard_activation'] = {
+            'ok': rows['space'] == {'section': 'shortcuts', 'query': ''} and rows['return'] == {'section': 'profiles', 'query': ''},
+            'rows': rows}
+        # A11Y-05: Library list headings and row actions in the accessibility tree (read in-process).
+        app.call('library-open', section='history')
+        wait_until(lambda: app.call('library-state').get('open') or None, timeout=5, step=.1)
+        number = browser()['number']
+        def tree():
+            elements = app.call('ax-elements', window=number)
+            return elements if any(e['label'].startswith('Focus fixture') for e in elements) else None
+        elements = wait_until(tree, timeout=10, step=.3) or app.call('ax-elements', window=number)
+        headings = [e['label'] for e in elements if e['role'] == 'AXStaticText' and e['class'] == 'LibraryHeadingView']
+        rows = [e for e in elements if e['role'] == 'AXRow']
+        visit = next((e for e in rows if e['label'].startswith('Focus fixture')), None)
+        results['a11y_library_headings_and_row_actions'] = {
+            'ok': 'Today' in headings and visit is not None and bool(visit['actions'])
+                  and not any('-' == name for e in rows for name in e['actions']),
+            'headings': headings, 'visitActions': visit and visit['actions'],
+            'rowActionNames': sorted({n for e in rows for n in e['actions']})}
+        app.call('library-close')
+    finally:
+        app.quit()
+        server.shutdown(); server.server_close()

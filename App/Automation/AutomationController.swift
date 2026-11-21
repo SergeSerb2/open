@@ -1685,6 +1685,26 @@
       case "archive":
         let records = await app.archiveSink.store(for: w.focusedProfile?.id).recent(limit: 100)
         return records.map { ["id": $0.id.description, "title": $0.title] }
+      case "ax-elements":
+        // In-process accessibility readout (never System Events): every visible view that is an
+        // accessibility element, with role, label, selection and custom action names.
+        guard let target = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window,
+          let root = target.contentView else { throw Failure(message: "no window") }
+        var elements: [[String: Any]] = []
+        func walk(_ view: NSView, depth: Int) {
+          guard depth < 48, elements.count < 4000, !view.isHiddenOrHasHiddenAncestor else { return }
+          if view.isAccessibilityElement() {
+            elements.append(["role": view.accessibilityRole()?.rawValue ?? "", "label": view.accessibilityLabel() ?? "",
+              "selected": view.isAccessibilitySelected(), "actions": (view.accessibilityCustomActions() ?? []).map(\.name),
+              "class": String(describing: type(of: view))])
+          }
+          for child in view.subviews { walk(child, depth: depth + 1) }
+        }
+        walk(root, depth: 0)
+        return elements
+      case "screens":
+        // Visible frames (AppKit screen coordinates) of the connected displays, main screen first.
+        return NSScreen.screens.map { let f = $0.visibleFrame; return [f.minX, f.minY, f.width, f.height] }
       case "window-frame":
         guard let win = w.window else { throw Failure(message: "no window") }
         if let f = a["frame"] as? [Double], f.count == 4 {
