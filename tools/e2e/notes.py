@@ -192,18 +192,28 @@ def size_limit_rows(factory, row, h):
         line = '/' * 99 + '\n'
         chunk = line * 84000
         started = time.time()
-        for _ in range(2):
-            app.call('note', action='paste', text=chunk, timeout=300)
-        paste_seconds = round(time.time() - started, 1)
+        # The first paste fits (about 16.8 MB on disk): it is saved. The second one would make the file
+        # over the limit: that save is refused, and the file keeps the first paste.
+        app.call('note', action='paste', text=chunk, timeout=300)
         app.call('note', action='flush', timeout=300)
-        toasts = [t['title'] for t in app.call('toasts')['toasts']]
+        fits = os.path.getsize(file) if os.path.exists(file) else 0
+        shown_before = app.call('toasts')['shown']
+        app.call('note', action='paste', text=chunk, timeout=300)
+        paste_seconds = round(time.time() - started, 1)
+        # The debounced save runs right after the paste. Its toast lives 10 s, which a 34 MB reply can
+        # outlast on a loaded machine: read the window's toast count and last title instead.
+        after = h.wait_until(lambda: (lambda t: t if t['shown'] > shown_before else None)(app.call('toasts')), timeout=8, step=.1) \
+            or app.call('toasts')
+        shown_after, toasts = after['shown'], [after.get('lastTitle', '')]
+        app.call('note', action='flush', timeout=300)
         big = app.call('note', timeout=300)
         size = os.path.getsize(file) if os.path.exists(file) else 0
         row('oversized_note_not_written', small['stored'] and small['stored']['text'] == 'Short body'
-            and size < limit and big['stored'] and big['stored']['text'] == 'Short body'
-            and 'limit' in big['storeError'] and any('too large' in t for t in toasts),
-            fileBytes=size, limit=limit, storeError=big['storeError'][:200], toasts=toasts,
+            and 0 < fits < limit and size == fits and len(big['body']) == 2 * len(chunk) + len('Short body')
+            and 'limit' in big['storeError'] and shown_after == shown_before + 1 and 'too large' in toasts[0],
+            fileBytes=size, savedFirstPaste=fits, limit=limit, storeError=big['storeError'][:200], toasts=toasts, toastsShown=[shown_before, shown_after],
             bodyCharacters=len(big['body']), pasteSeconds=paste_seconds)
+        expected_body = len(chunk) + len('Short body')
         note_tab = big['tab']
     finally:
         app.quit()
@@ -213,6 +223,7 @@ def size_limit_rows(factory, row, h):
         back = h.wait_until(lambda: (lambda v: v if v['tab'] == note_tab and v['shown'] else None)(app.call('note')), timeout=10, step=.1)
         back = back or app.call('note')
         row('oversized_note_reopens_last_save', not back['unreadable'] and back['editable'] and back['title'] == 'Big note'
-            and back['body'] == 'Short body', unreadable=back['unreadable'], title=back['title'][:40], bodyCharacters=len(back['body']))
+            and len(back['body']) == expected_body and back['body'].startswith('Short body'),
+            unreadable=back['unreadable'], title=back['title'][:40], bodyCharacters=len(back['body']), expected=expected_body)
     finally:
         app.quit()
