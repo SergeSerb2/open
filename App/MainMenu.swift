@@ -119,9 +119,20 @@ enum MainMenu {
     if (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
       .contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
-    // A modal panel or a sheet owns every key: AppKit gives it to the panel first, then to the
-    // main menu, where MenuBuilder.blocksBrowserCommands disables Open's browser commands.
-    if MenuBuilder.blocksBrowserCommands(keyWindow: event.window ?? NSApp.keyWindow) { return false }
+    // A modal panel or a sheet owns every key. MenuBuilder.blocksBrowserCommands disables Open's
+    // browser commands, but a disabled menu item still swallows its key (Ctrl-D forward delete,
+    // Cmd-. Cancel, a Save panel's Cmd-D). For those keys, do what AppKit does when no menu item
+    // matches: the panel's key equivalents, then the panel's own key-down. Other keys (Cmd-V)
+    // take AppKit's normal path through the system menu items.
+    if MenuBuilder.blocksBrowserCommands(keyWindow: event.window ?? NSApp.keyWindow) {
+      guard let target = event.window?.attachedSheet ?? event.window else { return false }
+      let responder = target.firstResponder
+      let context = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: responder is NSTextView || responder is NSTextField)
+      guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
+        SystemCommandActions.selectors[id] == nil else { return false }
+      if !target.performKeyEquivalent(with: event) { target.sendEvent(event) }
+      return true
+    }
     // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
     // Pointer and programmatic menu actions call performCommand without a key stamp.
     let littleContext = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: false)
