@@ -410,6 +410,9 @@ public final class PeekController {
                 model.closeTab(id: tab.id); NSSound.beep(); return false
             }
         } else {
+            // The promoted tab leaves any split: end Expand Current Pane (this selection does
+            // not pass through the window's select, which ends it for other selections).
+            splitController.clearMaximizedPane(unless: nil)
             model.focusSpace(windowID: splitController.windowID, spaceID: target)
             model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
         }

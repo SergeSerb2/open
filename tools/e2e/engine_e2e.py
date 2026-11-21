@@ -5086,16 +5086,19 @@ def sidebar_checks(factory, results, tmp):
         w8_reduced = app.call("window-motion")["reduced"]
         app.call("window-motion", reduced=False)
         w8_frame = [float(v) for v in re.findall(r"-?[\d.]+", app.call("window-frame"))]
-        app.call("window-frame", frame=[0, 0, 5200, 3600], unconstrained=True)
-        time.sleep(.5)
-        app.call("space", space=w8_space)
-        w8_first = app.call("window-motion")["spacePage"]["phase"]
-        app.call("space", space=w8_home)
-        w8_idle = wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
-        w8_after = app.call("window-motion")["spacePage"]
-        w8_page = check_page(app, a, "Sidebar A")
-        app.call("window-frame", frame=w8_frame)
-        app.call("window-motion", reduced=w8_reduced)
+        try:
+            app.call("window-frame", frame=[0, 0, 5200, 3600], unconstrained=True)
+            time.sleep(.5)
+            app.call("space", space=w8_space)
+            w8_first = app.call("window-motion")["spacePage"]["phase"]
+            app.call("space", space=w8_home)
+            w8_idle = wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
+            w8_after = app.call("window-motion")["spacePage"]
+            w8_page = check_page(app, a, "Sidebar A")
+        finally:
+            # Later rows need the normal, screen-constrained window and motion setting.
+            app.call("window-frame", frame=w8_frame)
+            app.call("window-motion", reduced=w8_reduced)
         results["W8_interrupted_wide_switch_retires_cover"] = {
             "ok": w8_first != "idle" and bool(w8_idle) and w8_page,
             "first_phase": w8_first, "after": w8_after, "page_shown": w8_page, "restored_frame": w8_frame,
@@ -5108,7 +5111,8 @@ def sidebar_checks(factory, results, tmp):
         app.call("select", tab=a)
         # An animated switch shows the page when its cover retires (the engine's presented
         # frame), not at the automation reply: wait for that state, as the click below does.
-        state_when(app, lambda st: st["selected"] == a and st["shownPages"] == [a])
+        state_when(app, lambda st: st["selected"] == a and st["shownPages"] == [a]
+                   and app.call("window-motion")["spacePage"]["phase"] == "idle")
         first_page = check_page(app, a, "Sidebar A")
         # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
         # A socket-ready launch can still be waiting for its activation grant.
@@ -5139,8 +5143,9 @@ def sidebar_checks(factory, results, tmp):
         omega = math.sqrt(switched.get("stiffness", 0) / switched.get("mass", 1))
         remainder = 228 * (1 + omega * .27) * math.exp(-omega * .27)
         travel = abs(switched.get("to", 0) - switched.get("from", 0))
+        # shownPages is already [e] behind the cover; the cover must also have retired.
         results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
-            and after_click["selected"] == e and settled_click["shownPages"] == [e]
+            and after_click["selected"] == e and settled_click["shownPages"] == [e] and click_cover.get("phase") == "idle"
             and scheduled_spring(switched, .20, 1, "transform.translation.x") and remainder <= .5 and travel > .5,
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
@@ -11846,6 +11851,25 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
     l2_mixed = dict(split=section_of(l2_split), lone=section_of(l2_lone))
     r3_rows = [('R3_selection_pin_skips_split', bool(l2_split) and l2_single == 'today' and l2_mixed == dict(split='today', lone='pinned'),
         dict(split=l2_split, singleSplitSection=l2_single, mixed=l2_mixed, selection=l2_selection))]
+    # Review round 1: the Tab menu title and the row menu's ⌥ Pin Tabs / Unpin Tabs use the
+    # same rows as Cmd+D. With [Today split, pinned tab] Cmd+D unpins, so the title says Unpin
+    # Tabs (it said Pin Tabs); the ⌥ item never pins the split.
+    def pin_title(): return next((m.get('title') for m in app.call('menu-state') if m['id'] == 'pin-unpin-tab'), None)
+    def row_menu(title):
+        try: app.call('sidebar-menu', node=l2_lone, item=title, alternate=True); return True
+        except RuntimeError: return False  # the item is missing or disabled
+    app.call('sidebar-click', node=l2_split); app.call('sidebar-click', node=l2_lone, modifiers=['cmd']); settle()
+    l2_title_unpin = pin_title()
+    l2_menu_unpin_found = row_menu('Unpin Tabs'); settle()
+    l2_menu_unpin = dict(split=section_of(l2_split), lone=section_of(l2_lone), found=l2_menu_unpin_found)
+    app.call('sidebar-click', node=l2_split); app.call('sidebar-click', node=l2_lone, modifiers=['cmd']); settle()
+    l2_title_pin = pin_title()
+    l2_menu_pin_found = row_menu('Pin Tabs'); settle()
+    l2_menu_pin = dict(split=section_of(l2_split), lone=section_of(l2_lone), found=l2_menu_pin_found)
+    r3_rows.append(('R3_selection_pin_title_and_menu_match_cmd_d',
+        l2_title_unpin == 'Unpin Tabs' and l2_menu_unpin == dict(split='today', lone='today', found=True)
+        and l2_title_pin == 'Pin Tabs' and l2_menu_pin == dict(split='today', lone='pinned', found=True),
+        dict(titleWithPinnedTab=l2_title_unpin, afterMenuUnpin=l2_menu_unpin, titleWithTodayTab=l2_title_pin, afterMenuPin=l2_menu_pin)))
     # L3: an Archive row that cannot come back (here a folder row with an undecodable payload)
     # is kept and skipped; Cmd+Shift+T restores the next row. Before, every press stopped there.
     l3_kept = opened('R3 Kept Closed')

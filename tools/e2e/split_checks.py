@@ -470,7 +470,15 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         assert app.call('split', op='drop', node=order_a, point=[x+w-12, y+height/2])['accepted']; settled(2)
         menu('Expand Current Pane')
         w10_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
-        menu('Add Pane'); w10_added = settled(3)
+        menu('Add Pane'); w10_moving = state(); w10_added = settled(3)
+        w10_moving_shown = [p for p in w10_moving['panes'] if not p['hidden']]
+        # Review round 1: the expansion ends before the panes lay out, so the add is the normal
+        # pane motion over all three panes (before, the old expanded layout took the motion and
+        # the panes then snapped into place).
+        row('W10_add_pane_from_expanded_animates', motion_mode['reduced'] or (len(w10_moving_shown) == 3
+            and all(p['clipAnimations'] for p in w10_moving_shown) and w10_moving['motionDecision'].startswith('moves=true')),
+            reduced=motion_mode['reduced'], decision=w10_moving['motionDecision'],
+            moving=[dict(id=p['id'], hidden=p['hidden'], clip=p['clipAnimations']) for p in w10_moving['panes']])
         w10_shown = [p['id'] for p in w10_added['panes'] if not p['hidden']]
         row('W10_add_pane_ends_expanded_pane', bool(w10_expanded['maximized']) and not w10_added['maximized']
             and w10_added['focused'] not in (order_a, order_b) and w10_added['focused'] in w10_shown and len(w10_shown) == 3,
@@ -483,6 +491,23 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         row('W10_drop_ends_expanded_pane', bool(w10_expanded['maximized']) and w10_accepted and not w10_dropped['maximized']
             and w10_dropped['focused'] == w10_drop and w10_drop in w10_shown and len(w10_shown) == 4,
             expanded=w10_expanded['maximized'], accepted=w10_accepted, maximized=w10_dropped['maximized'], focused=w10_dropped['focused'], shown=w10_shown)
+        # Review round 1: Separate All Tabs ends the expansion, so Undo (which brings the split
+        # back) and a click on its row show every pane, not the old expanded one alone.
+        w10_split = state()['id']
+        menu('Expand Current Pane')
+        w10_sep_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()
+        menu('Separate All Tabs'); settled(1)
+        def w10_in_sidebar():
+            tree = app.call('sidebar-tree'); return any(n['id'] == w10_split for n in tree['pinned'] + tree['today'])
+        w10_undos = 0
+        while not w10_in_sidebar() and w10_undos < 3:  # Undo steps until the split is back
+            app.call('sidebar-key', key='z', modifiers=['cmd']); w10_undos += 1; time.sleep(.3)
+        app.call('sidebar-click', node=w10_split); w10_back = settled(4)
+        w10_back_shown = [p['id'] for p in w10_back['panes'] if not p['hidden']]
+        row('W10_separate_all_undo_not_expanded', bool(w10_sep_expanded['maximized']) and w10_back['id'] == w10_split
+            and not w10_back['maximized'] and len(w10_back_shown) == 4,
+            expanded=w10_sep_expanded['maximized'], back=dict(id=w10_back['id'], maximized=w10_back['maximized']),
+            split=w10_split, shown=w10_back_shown, undos=w10_undos)
         # The same for File > New Note in Split (it selected the split, which kept the expansion).
         menu('Close This Pane'); settled(3); menu('Expand Current Pane')
         w10_note_expanded = h.wait_until(lambda: (lambda s: s if s['maximized'] else None)(state()), timeout=5, step=.05) or state()

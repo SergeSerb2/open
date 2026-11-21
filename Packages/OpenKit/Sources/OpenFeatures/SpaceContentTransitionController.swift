@@ -48,10 +48,11 @@ final class SpaceContentTransitionController {
         // An interrupted slide folds into one image first. When it cannot (a
         // viewport over the 16 Mpx plate limit), no new cover can replace the
         // running one, whose callbacks this switch supersedes: cut over directly.
-        let previousCover = needsCover && plate.phase != .idle
+        let canCover = needsCover && container.window?.isVisible == true
+            && container.superview != nil && !container.bounds.isEmpty
+        let previousCover = canCover && plate.phase != .idle
             ? plate.capturePresentation(size: container.bounds.size, scale: scale) : nil
-        guard needsCover, container.window?.isVisible == true,
-              let parent = container.superview, !container.bounds.isEmpty,
+        guard canCover, let parent = container.superview,
               plate.phase == .idle || previousCover != nil else {
             applyUncovered(selection, from: source); return
         }
