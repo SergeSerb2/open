@@ -33,8 +33,8 @@ final class MailtoRouter {
   private func route(_ url: URL, source: RoutingSource) {
     let factory = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
     let context: OEBrowserContext?
-    // The compose page opens in the Profile whose handler made it. With no window open, that is the
-    // Profile of the most recent Space (else the default Profile). GUESS, as above.
+    // The compose page opens in the Profile whose handler made it. With no window open, ask the Profile
+    // of the first saved standard window's Space (else the default Profile). GUESS, as above.
     let regular = factory?.incognitoSession?.parent ?? (factory == nil ? noWindowProfile() : nil)
     let profile = regular?.id ?? factory?.focusedProfile?.id
     if let regular {
@@ -51,7 +51,8 @@ final class MailtoRouter {
     }
   }
 
-  /// The saved order of standard windows puts the most recent first; its Space names the Profile.
+  /// The Profile of the first saved standard window's Space. `model.windows` is not z-order (see
+  /// AppLinkExecutor); with no window open it is the window that `makeWindow` would show again.
   private func noWindowProfile() -> Profile? {
     app.model.windows.first { $0.style == .standard }
       .flatMap { app.model.space(id: $0.focusedSpaceID) }.flatMap { app.model.profile(id: $0.profileID) }

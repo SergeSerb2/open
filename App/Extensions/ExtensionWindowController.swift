@@ -62,7 +62,14 @@ final class ExtensionWindowController: NSWindowController, NSWindowDelegate, OEW
     case .currentTab, .saveToDisk, .newPictureInPicture: return nil
     default: break
     }
-    guard let url = request.url, url.absoluteString != "about:blank", let app = NSApp.delegate as? AppDelegate else { return nil }
+    // openNewTab is a browser-initiated load, which page navigations are not: only web URLs, and pages
+    // of the opener's own extension, may open. file:, chrome: and Open's internal pages stay refused,
+    // as Chromium refuses them for a page's own window.open.
+    guard let url = request.url, let app = NSApp.delegate as? AppDelegate else { return nil }
+    let scheme = url.scheme?.lowercased()
+    let ownExtensionPage = scheme == "chrome-extension" && webContent.url?.scheme?.lowercased() == "chrome-extension"
+      && url.host?.lowercased() == webContent.url?.host?.lowercased()
+    guard scheme == "http" || scheme == "https" || ownExtensionPage, !WelcomeTab.isInternal(url) else { return nil }
     let context = request.context
     DispatchQueue.main.async { _ = app.openExtensionTab(url: url, context: context) }
     return nil

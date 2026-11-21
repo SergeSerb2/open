@@ -521,11 +521,62 @@ def sweep3(app, results, wait, new_tab, action, reporter):
             found[name] = {"error": str(error)}
             continue
         found[name] = wait(lambda: [t for t in sidebar(marker) if t["visible"]], timeout=10) or []
+    # Refused: URLs a page could not open itself must not become browser-initiated tabs.
+    refused_urls = ("file:///etc/hosts", "chrome://settings/", "open://welcome")
+    for target in refused_urls:
+        try: js("window.open(%s,'_blank'); true" % json.dumps(target), page=page)
+        except RuntimeError: pass
+    time.sleep(1.5)
+    leaked = [t["url"] for t in app.call("tabs") if t["url"].startswith(("file:", "chrome://settings", "open://welcome"))]
     results["R3_L26_window_open_from_popup"] = {"ok": all(isinstance(v, list) and v for v in found.values())
-        and len(popup_tabs(cid) or []) == 1, "found": found, "popupTabs": popup_tabs(cid)}
+        and len(popup_tabs(cid) or []) == 1 and not leaked, "found": {k: len(v) if isinstance(v, list) else v for k, v in found.items()},
+        "popupTabs": popup_tabs(cid), "refusedLeaked": leaked}
     remove(cid)
     profile_lifetime(app, results, wait, new_tab, action)
+    private_lifetime(app, results, wait, new_tab, action, reporter)
     return app
+
+
+def private_lifetime(app, results, wait, new_tab, action, reporter):
+    """E1, Incognito half (rejected seed, regression guard): an extension allowed in Incognito opens
+    a popup window in the private session; closing the last Incognito window ends the session, which
+    closes the popup too (the engine's releaseContext closes the context's Browsers)."""
+    evidence = {}
+    try:
+        management = new_tab(app, "chrome://extensions")
+        wait(lambda: app.eval(management, "typeof chrome.developerPrivate") == "object", timeout=20)
+        evidence["grant"] = app.eval(management, "new Promise(done=>chrome.developerPrivate.updateExtensionConfiguration("
+                                     "{extensionId:%s,incognitoAccess:true},()=>done(chrome.runtime.lastError?"
+                                     "chrome.runtime.lastError.message:'ok')))" % json.dumps(action))
+        app.call("close", tab=management)
+        # The grant reloads the extension: open a fresh reporter page.
+        time.sleep(1)
+        reporter = new_tab(app, "chrome-extension://%s/popup.html" % action)
+        wait(lambda: app.eval(reporter, "typeof chrome.windows") == "object", timeout=20)
+        normal = app.call("window-state")["id"]
+        app.call("menu-perform", id="new-incognito-window")
+        private = wait(lambda: (lambda w: w if w["id"] != normal else None)(app.call("window-state")), timeout=5)
+        private_tab = app.call("open", url="about:blank")["id"]
+        session = wait(lambda: (lambda s: s if s.get("context") and not s.get("closed") else None)(
+            app.call("incognito-state").get("session", {})), timeout=10)
+        evidence["session"] = session
+        app.call("window-focus", id=normal, activate=True)
+        made = app.eval(reporter, "chrome.windows.create({type:'popup',incognito:true,url:'about:blank',focused:false})"
+                        ".then(w=>({id:w.id,incognito:w.incognito}),e=>({error:String(e)}))")
+        evidence["created"] = made
+        native = wait(lambda: next((w for w in app.call("ext-windows") if w["chromeWindowId"] == made.get("id")), None), timeout=10)
+        evidence["popup"] = native and {k: native.get(k) for k in ("context", "ephemeral", "contextClosed")}
+        app.call("window-focus", id=private["id"], activate=True)
+        app.call("window-close")
+        gone = wait(lambda: not any(w["chromeWindowId"] == made.get("id") for w in app.call("ext-windows")), timeout=10)
+        evidence["popupClosedWithSession"] = bool(gone)
+        contexts = app.call("engine-contexts")
+        evidence["sessionContextLeft"] = bool(session) and session["context"] in contexts
+        results["R3_E1_private_session_closes_popup"] = dict(evidence, ok=evidence["grant"] == "ok" and bool(session)
+            and bool(native) and native.get("ephemeral") is True and native.get("context") == session["context"]
+            and bool(gone) and not evidence["sessionContextLeft"])
+    except Exception as error:
+        results["R3_E1_private_session_closes_popup"] = dict(evidence, ok=False, error=repr(error)[:400])
 
 
 def profile_lifetime(app, results, wait, new_tab, action, popup=True):
@@ -542,7 +593,6 @@ def profile_lifetime(app, results, wait, new_tab, action, popup=True):
         context = app.page(page)["context"]
         made = app.eval(page, "chrome.windows.create({type:'popup',url:'about:blank',focused:false})") if popup else {"id": -1}
         native = wait(lambda: next((w for w in app.call("ext-windows") if w["chromeWindowId"] == made["id"]), None), timeout=10) if popup else {"control": True}
-        evidence["popup"] = native
         evidence["pageContext"] = context
         app.call("space", space=home)
         assert app.call("space-profile", space=space, profile="Default")
@@ -555,6 +605,7 @@ def profile_lifetime(app, results, wait, new_tab, action, popup=True):
         app.press_profile_delete()
         wait(lambda: app.call("profiles-shell")["sheet"] > 0, timeout=5)
         app.call("profiles-shell", action="type-delete", text=name)
+        evidence["popupAtPress"] = next((w for w in app.call("ext-windows") if w["chromeWindowId"] == made["id"]), None) if popup else None
         started = time.monotonic()
         app.call("profiles-shell", action="press", label="Delete")
         timeline = []
@@ -571,7 +622,9 @@ def profile_lifetime(app, results, wait, new_tab, action, popup=True):
         evidence["stage"] = shell.get("teardownStage"); evidence["error"] = shell.get("errorText")
         evidence["popupsLeft"] = [w for w in app.call("ext-windows") if w["chromeWindowId"] == made["id"]]
         evidence["modelGone"] = not any(p["id"] == profile["id"] for p in shell["profiles"])
+        at_press = evidence["popupAtPress"]
         results["R3_E1_profile_delete_closes_popup"] = dict(evidence, ok=bool(native)
+            and (not popup or (bool(at_press) and at_press.get("context") == context))
             and bool(finished) and evidence["deleteSeconds"] < 10 and not evidence["popupsLeft"] and evidence["modelGone"])
     except Exception as error:
         results["R3_E1_profile_delete_closes_popup"] = dict(evidence, ok=False, error=str(error))
