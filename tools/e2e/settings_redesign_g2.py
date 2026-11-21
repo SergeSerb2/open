@@ -386,7 +386,7 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
                     capture(section+'-'+mode,presentation='Non-default browser hero; view state only, system default unchanged')
                     check('hero_did_not_change_system_'+mode,app.call('default-browser-state')==default_state)
                 else:capture(section+'-'+mode)
-            link('general/import');click('Import…');time.sleep(.5);capture('import-empty-'+mode,sheet=True);click('Cancel')
+            link('general/import');click('Import…');time.sleep(.5);capture('import-empty-'+mode,sheet=True);click('Maybe Later')
             link('search/suggestions')
             app.call('defaults',key='open.general.searchSuggestNoticeDismissed',value=False)
             click('Include search engine suggestions',role='AXCheckBox');click('Include search engine suggestions',role='AXCheckBox')
