@@ -236,7 +236,27 @@ def run_save_prompts(factory, results, tmp, harness):
             assert [(e['displayHost'], e['answer']) for e in events()] == [('active-0.example.com', 'dismiss'), ('waiting-2.example.com', 'dismiss'), ('waiting-3.example.com', 'dismiss')]
             for tab in tabs:
                 app.call('close', tab=tab)
-            return {'dropped': 'waiting-1.example.com', 'kept': 'active-0.example.com'}
+            # Review round 1: a switch straight to a tab whose request waits shows that request.
+            # The cap must not drop it (it leaves the queue when it shows).
+            tabs = [harness['new_tab'](app, 'about:blank') for _ in range(4)]
+            app.call('select', tab=tabs[0])
+            show(host='active-0.example.com')
+            for i in range(1, 4):
+                app.call('save-prompt', mock={'kind': 'password', 'host': 'waiting-%d.example.com' % i, 'tab': tabs[i]})
+            app.call('select', tab=tabs[1])
+            s = wait(lambda: (s if (s := state()).get('visible') and 'waiting-1' in s['title'] else None), timeout=5, step=.05)
+            assert s and s['title'] == 'Save password for waiting-1.example.com?' and s['queueLength'] == 3, state()
+            assert not events(), 'a request was dropped although the queue holds three after the switch'
+            answer('dismiss')
+            for i, host in [(0, 'active-0'), (2, 'waiting-2'), (3, 'waiting-3')]:
+                app.call('select', tab=tabs[i])
+                s = wait(lambda: (s if (s := state()).get('visible') else None), timeout=5, step=.05)
+                assert s and s['title'] == 'Save password for %s.example.com?' % host, s
+                answer('dismiss')
+            assert len(events()) == 3
+            for tab in tabs:
+                app.call('close', tab=tab)
+            return {'dropped': 'waiting-1.example.com', 'kept': 'active-0.example.com', 'focusedWaitingShown': 'waiting-1.example.com'}
         row('M-3-active-kept-on-switch', active_kept_on_switch)
 
         def page_close():

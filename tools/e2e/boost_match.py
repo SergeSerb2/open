@@ -10,6 +10,8 @@ BM2 (E5): the gate keeps the exact matching set: on a page that a host-wide Boos
 BM3 (E11): a Boost for the IPv6 literal ::1 runs on http://[::1]:<port>/ (a URL with a port).
 BM4 (E14): a stored path prefix with a space (a hand-edited file) matches the browser's
   percent-encoded path.
+BM5 (review round 1): a path prefix with "[" "]" matches at document start. Chromium keeps
+  them raw in location.pathname; Foundation encodes them as %5B %5D.
 Synthetic pages on loopback servers only.
 """
 import json
@@ -75,6 +77,7 @@ def run(factory, results, tmp, env):
             _boost('Host wide', '127.0.0.1', count('hostWideRuns')),
             _boost('Space path', '127.0.0.1', count('spacePathRuns'), '/my docs'),
             _boost('IPv6', '::1', count('ipv6Runs')),
+            _boost('Bracket path', '127.0.0.1', count('bracketRuns'), '/v1[test]'),
         ]
         boosts_file.parent.mkdir(parents=True, exist_ok=True)
         boosts_file.write_text(json.dumps({'schemaVersion': 1, 'profileID': profile['id'], 'boosts': boosts}))
@@ -86,7 +89,7 @@ def run(factory, results, tmp, env):
             app.call('navigate', tab=tab, url=url); app.call('wait', tab=tab)
             return app.eval(tab, "({url:location.href,gateNames:window.gateNamesRuns??0,gatePath:window.gatePath??null,"
                                  "sameNames:window.sameNamesRuns??0,hostWide:window.hostWideRuns??0,"
-                                 "spacePath:window.spacePathRuns??0,ipv6:window.ipv6Runs??0})")
+                                 "spacePath:window.spacePathRuns??0,ipv6:window.ipv6Runs??0,bracket:window.bracketRuns??0})")
         e5 = probe(origin + '/e5/page.html')
         record('BM1_boost_js_names_isolated', e5['gateNames'] == 1 and e5['gatePath'] == 'boost' and e5['sameNames'] == 1, page=e5,
                negative="old script declared the gate's const path in the Boost's scope: SyntaxError, no Boost code ran")
@@ -100,6 +103,10 @@ def run(factory, results, tmp, env):
         stored = next(b for b in app.call('boosts', action='list') if b['name'] == 'Space path')
         record('BM4_space_path_prefix_matches', spaced['spacePath'] == 1 and spaced['hostWide'] == 1 and stored['siteMatch'].get('pathPrefix') == '/my%20docs',
                page=spaced, stored=stored['siteMatch'], negative='raw "/my docs" never equals the percent-encoded "/my%20docs"')
+        bracket = probe(origin + '/v1[test]/page.html')
+        stored = next(b for b in app.call('boosts', action='list') if b['name'] == 'Bracket path')
+        record('BM5_bracket_path_prefix_matches', bracket['bracket'] == 1 and '[test]' in bracket['url'] and stored['siteMatch'].get('pathPrefix') == '/v1%5Btest%5D',
+               page=bracket, stored=stored['siteMatch'], negative='the matcher saw /v1%5Btest%5D (Foundation) but the stored prefix or the page gate kept /v1[test]')
     finally:
         try:
             env['_restore_defaults'](app if app and not app.closed else None, saved)

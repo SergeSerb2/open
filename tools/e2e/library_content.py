@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import tempfile
 import time
+import runpy
 import uuid
 from engine_e2e import Open, wait_until, new_tab
 from boost_gallery import fixture as boost_fixture
@@ -171,7 +172,17 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                     visited=time.time()-1000-index
                     inserted=db.execute('INSERT INTO urls(url,title,visit_count,typed_count,last_visit) VALUES(?,?,1,0,?)',('https://history.example.test/item/%d'%index,'Library history %03d'%index,visited))
                     db.execute('INSERT INTO visits(url_id,time,transition) VALUES(?,?,?)',(inserted.lastrowid,visited,'link'))
+            # L8 (review round 1): one cached favicon for the 240 History pages' origin. Each row asks for
+            # its own page URL, so the first page makes far more than 16 icon requests at once.
+            png=Path(data)/'favicon-fixture.png';runpy.run_path(str(Path(__file__).with_name('notes_format.py')))['png'](str(png),32,32)
+            with sqlite3.connect(Path(data)/'State/favicons.sqlite3') as db:
+                db.execute('CREATE TABLE IF NOT EXISTS favicons(origin TEXT NOT NULL, page_key TEXT NOT NULL, icon_url TEXT, png32 BLOB, png64 BLOB, fetched_at REAL NOT NULL, expires_at REAL NOT NULL, status INTEGER NOT NULL, copy_token TEXT, image_info TEXT, PRIMARY KEY(origin, page_key))')
+                db.execute("INSERT OR REPLACE INTO favicons(origin,page_key,icon_url,png32,png64,fetched_at,expires_at,status) VALUES('https://history.example.test','',NULL,?,NULL,?,?,0)",(png.read_bytes(),time.time(),time.time()+86400))
             state(action='select',section='history');check('history_first_page',wait(lambda:len(rows())==100))
+            realized=lambda:[r for r in rows() if r['realized']]
+            check('history_icons_past_sixteen_requests',wait(lambda:len(realized())>=8 and all(r['iconLoaded'] for r in realized())),
+                  realized=len(realized()),missing=[r['title'] for r in realized() if not r['iconLoaded']],
+                  negative='old loadRowIcon returned without a callback while 16 requests ran, so those rows kept the globe')
             state(action='focus-rail');key('tab');check('tab_rail_to_search',state()['firstResponder'] in ['NSTextView','LibrarySearchEditor'],responder=state()['firstResponder'])
             key('tab');check('tab_search_to_filter',state()['firstResponder']=='LibraryControl',responder=state()['firstResponder'])
             key('space');check('keyboard_opens_filter',state()['header']['filterOpen']);key('escape')
@@ -236,6 +247,8 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='close')
             # Use the real capture pipeline and persisted index.
             capture_source=base+'/arm?capture=library#source'
+            # Review round 1: a Media search kept from an earlier visit must not hide the revealed capture.
+            state(action='open',section='media');state(action='search',text='no-such-capture');state(action='close')
             capture_tab=new_tab(app,capture_source);app.call('focus',tab=capture_tab)
             check('capture_ready_page',wait(lambda:next(m['enabled'] for m in app.call('menu-state') if m['id']=='capture-page')))
             receipt=app.call('capture',mode='area',rect=[30,30,240,150]);check('capture_real_file',receipt['state']['phase'] in ['showing'],receipt=receipt)
@@ -247,8 +260,8 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             (captures_dir/decoy['fileName']).write_bytes((captures_dir/real['fileName']).read_bytes());index_file.write_text(json.dumps([real,decoy]))
             app.call('capture-action',action='library')
             revealed=wait(lambda:(lambda s:s if s['open'] and s['section']=='media' and len(s['rows'])==2 and any(r['selected'] for r in s['rows']) else None)(state())) or state()
-            check('capture_show_in_library_selects_row',[r['id'].upper() for r in revealed['rows'] if r['selected']]==[real['id'].upper()] and revealed['rows'][0]['id'].upper()==decoy['id'],
-                  rows=[(r['title'],r['selected']) for r in revealed['rows']],negative='old card set selectedIDs only; the native panel never read it, so no row was selected')
+            check('capture_show_in_library_selects_row',[r['id'].upper() for r in revealed['rows'] if r['selected']]==[real['id'].upper()] and revealed['rows'][0]['id'].upper()==decoy['id']
+                  and revealed['search']=='',search=revealed['search'],rows=[(r['title'],r['selected']) for r in revealed['rows']],negative='old card set selectedIDs only; the native panel never read it, so no row was selected')
             index_file.write_text(json.dumps([real]));(captures_dir/decoy['fileName']).unlink()
             state(action='select',section='media');assert wait(lambda:len(rows())==1),rows();state(action='close')
             state(action='open',section='media');check('media_capture_rows',wait(lambda:bool(rows())),rows=rows());check('capture_page_title',rows()[0]['title']=='Unload fixture' and '127.0.0.1' in rows()[0]['subtitle'])
@@ -370,6 +383,12 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             check('boost_edit_without_space_explains',edit_state['statusLabel']=='To edit this Boost, add a Space that uses its Profile.'
                   and not app.call('boost-editor').get('open') and len(app.call('tabs'))==tabs_before,status=edit_state['statusLabel'],
                   negative='old Edit Boost returned silently: no editor, no tab, no message')
+            # Review round 1: an outside entry that changes the Boosts Profile also clears the reason.
+            state(action='open',section='boosts')
+            check('boost_outside_profile_switch_clears_status',wait(lambda:state()['profiles']['history']==profile and state()['statusLabel']==''),
+                  status=state()['statusLabel'],profiles=state()['profiles'],negative='old status line stayed after the Profile changed')
+            app.call('boost-gallery-ui',action='profile',name='Library Work');assert wait(lambda:row(work_boost)),rows()
+            menu(work_boost,'Edit Boost');assert wait(lambda:state()['statusLabel']!='')
             app.call('boost-gallery-ui',action='profile',name=profile_name)
             check('boost_profile_switch_clears_status',wait(lambda:state()['statusLabel']==''),status=state()['statusLabel'])
             state(action='close')
