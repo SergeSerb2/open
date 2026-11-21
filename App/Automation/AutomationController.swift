@@ -875,7 +875,7 @@
       case "library-history-open":
         guard let library = app.settingsPresenter.library, let url = (a["url"] as? String).flatMap(URL.init(string:)) else { throw Failure(message: "Library not open") }
         library.actions.openHistoryItem(url: url); return true
-      case "save-page-state": return ["requests": w.savePageRequestCount, "visible": w.pendingSavePanel?.isVisible == true, "pending": w.pendingSavePanel != nil, "number": w.pendingSavePanel?.windowNumber ?? 0] as [String: Any]
+      case "save-page-state": return ["requests": w.savePageRequestCount, "visible": w.pendingSavePanel?.isVisible == true, "pending": w.pendingSavePanel != nil, "number": w.pendingSavePanel?.windowNumber ?? 0, "name": w.pendingSavePanel?.nameFieldStringValue ?? ""] as [String: Any]
       case "focus-state":
         let owner = (a["id"] as? String).flatMap { id in app.hostFactories.first { $0.key.description == id }?.value } ?? w
         return owner.focusStateForAutomation()

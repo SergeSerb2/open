@@ -9731,7 +9731,7 @@ def w2_page_edit_key_checks(app, results, press, tab):
         results['W2_native_fallback_single_undo'] = {'ok': bool(first and second and undone) and once,
             'first': bool(first), 'second': bool(second), 'undone': bool(undone), 'value': value()}
         # A page that cancels the key keeps it: no browser-side Undo or Select All runs.
-        app.eval(tab, "window.keys=[];window.passEdits=false;1")
+        app.eval(tab, "window.keys=[];window.passEdits=false;document.querySelector('#edit-input').setSelectionRange(0,0);1")
         before = value()
         press('z', modifiers=['cmd'], route='app'); press('a', modifiers=['cmd'], route='app')
         time.sleep(.5)
@@ -9754,6 +9754,11 @@ def w3_sheet_shortcut_checks(app, results, press, sheet, bar_state):
         routes['+'.join(mods + [key])] = press(key, modifiers=mods, window=sheet, route='app', observeCommands=True).get('commands')
         time.sleep(.3)
     still = app.call('save-page-state')
+    # The sheet keeps its own text editing: Cmd-A in the name field, then typing, replaces it all.
+    name_before = still.get('name')
+    press('a', modifiers=['cmd'], window=sheet, route='app'); app.call('key', text='w3name', window=sheet, route='app')
+    renamed = wait_until(lambda: app.call('save-page-state').get('name') == 'w3name', timeout=3, step=.05)
+    results['W3_save_sheet_keeps_text_keys'] = {'ok': bool(renamed), 'before': name_before, 'after': app.call('save-page-state').get('name')}
     results['W3_save_sheet_blocks_browser_shortcuts'] = {
         'ok': still['visible'] and not bar_state().get('presented') and visible() == windows
               and len(app.call('tabs')) == tabs and not any(routes.values()),
