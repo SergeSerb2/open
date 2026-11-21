@@ -9750,14 +9750,17 @@ def w3_sheet_shortcut_checks(app, results, press, sheet, bar_state):
     def visible(): return sorted(w['number'] for w in app.call('windows') if w.get('visible') and w['number'] != sheet)
     windows = visible(); tabs = len(app.call('tabs'))
     routes = {}
-    for key, mods in (('t', ['cmd']), ('n', ['cmd']), (',', ['cmd']), ('l', ['cmd']), ('n', ['cmd', 'option'])):
+    def find_open(): return any(p.get('visible') for p in app.call('find-state').get('panes', []))
+    find_before = find_open()
+    for key, mods in (('t', ['cmd']), ('n', ['cmd']), (',', ['cmd']), ('l', ['cmd']), ('n', ['cmd', 'option']),
+                      ('n', ['cmd', 'shift']), ('y', ['cmd']), ('f', ['cmd']), ('g', ['cmd'])):
         routes['+'.join(mods + [key])] = press(key, modifiers=mods, window=sheet, route='app', observeCommands=True).get('commands')
         time.sleep(.3)
     still = app.call('save-page-state')
     results['W3_save_sheet_blocks_browser_shortcuts'] = {
         'ok': still['visible'] and not bar_state().get('presented') and visible() == windows
-              and len(app.call('tabs')) == tabs and not any(routes.values()),
-        'routes': routes, 'sheet': still, 'bar': bar_state().get('presented'), 'windows': [windows, visible()]}
+              and len(app.call('tabs')) == tabs and not any(routes.values()) and not find_before and not find_open(),
+        'find': [find_before, find_open()], 'routes': routes, 'sheet': still, 'bar': bar_state().get('presented'), 'windows': [windows, visible()]}
 
 
 def commandbar_checks(factory, results, tmp, config):
