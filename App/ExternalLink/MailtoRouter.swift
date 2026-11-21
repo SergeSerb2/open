@@ -35,7 +35,9 @@ final class MailtoRouter {
     let context: OEBrowserContext?
     // The compose page opens in the Profile whose handler made it. With no window open, ask the Profile
     // of the first saved standard window's Space (else the default Profile). GUESS, as above.
-    let regular = factory?.incognitoSession?.parent ?? (factory == nil ? noWindowProfile() : nil)
+    // A key Little Open window (tracked outside windowControllers) names its own Profile.
+    let littleOpen = app.keyLittleOpen.flatMap { app.model.profile(id: $0.session.profileID) }
+    let regular = littleOpen ?? factory?.incognitoSession?.parent ?? (factory == nil ? noWindowProfile() : nil)
     let profile = regular?.id ?? factory?.focusedProfile?.id
     if let regular {
       // A private session sees none of its regular Profile's handlers: ask that Profile. The
@@ -60,6 +62,8 @@ final class MailtoRouter {
   }
 
   private func finish(_ url: URL, target: URL?, source: RoutingSource, profile: ProfileID?, factory: EngineWebContentHostFactory?) {
+    // The lookup can finish while the App quits: open nothing then.
+    guard !app.terminationRequested, !app.shutdownPrepared else { return }
     last = (url.scheme ?? "", target?.absoluteString)
     handledCount += 1
     if let target, ["http", "https"].contains(target.scheme?.lowercased() ?? "") {

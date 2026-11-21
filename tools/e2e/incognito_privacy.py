@@ -400,6 +400,35 @@ def checks(factory, results, tmp, harness):
                   mail=mail, tab=tab, windowsAfter=windows(), stderr=sent.stderr[-300:])
         guarded('privacy_mailto_no_window', row8)
 
+        # 9. (EXT3 review E8) The mailto handler belongs to a Profile whose engine context is not loaded in this
+        # launch. The lookup must wait until the new context is ready; a synchronous lookup finds no handler.
+        def row9():
+            nonlocal app
+            focus(windows(False)[0])
+            app.call('policy', permissions='grant')
+            space = app.call('space-create', title='Later Mail', profile='Later Mail')
+            home = open_page(page_origin + '/en.html?later-mail-home')
+            template = page_origin + '/en.html?compose=%s'
+            app.eval(home, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+            registered = wait(lambda: any(h['scheme'] == 'mailto' for h in app.call('protocol-handlers')['handlers']), timeout=8, step=.1)
+            directory = app.page(home)['context']
+            app.call('close', tab=home)
+            app.call('save'); app.quit()
+            app = factory(urls=(), extra_args=ENGINE_SWITCHES,
+                          extra_env={'OPEN_AUTOMATION_TRANSLATE_BACKEND': 'fixture', 'OPEN_E2E_NO_SYSTEM_SETTINGS': '1'})
+            app.call('defaults', key='open.links.externalInLittleOpen', value=False)
+            shown = app.call('window-state').get('space')
+            loaded_before = directory in app.call('engine-contexts')
+            handled = app.call('mailto-state')['handled']
+            sent = subprocess.run(['/usr/bin/open', '-a', app.bundle, 'mailto:later@example.org'], capture_output=True, text=True, timeout=15)
+            mail = wait(lambda: (lambda s: s if s['handled'] > handled else None)(app.call('mailto-state')), timeout=10, step=.1) or {}
+            expected = page_origin + '/en.html?compose=mailto%3Alater%40example.org'
+            tab = wait(lambda: next((t for t in app.call('tabs') if t['url'] == expected), None), timeout=8, step=.05)
+            check('privacy_mailto_unloaded_profile_context', bool(registered) and shown == space and not loaded_before
+                  and sent.returncode == 0 and mail.get('translated') == expected and bool(tab),
+                  mail=mail, shownSpace=shown, expectedSpace=space, loadedBefore=loaded_before, tab=bool(tab))
+        guarded('privacy_mailto_unloaded_profile_context', row9)
+
     finally:
         if saved: harness._restore_defaults(app, saved)
         if app: app.quit()

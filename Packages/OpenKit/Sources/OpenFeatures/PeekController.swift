@@ -114,16 +114,15 @@ public final class PeekController {
         overlay.endHostSnapshot()
         dismissGeneration += 1; isDismissing = false
         expandingGeneration += 1; isExpanding = false
-        if stack.count >= 5 {
-            // At the cap the top Peek's page is reused only for the same Profile and source kind. Another
-            // Profile's URL (a Library preview) replaces the top Peek: it must not load with its cookies.
-            if let top = stack.last, top.profileID == profile, top.librarySpaceID == librarySpaceID {
-                overlay.resetMotion(); stack[stack.count - 1].url = url; top.host?.load(url); refresh(); return
-            }
-            stack.removeLast().host?.close()
+        // At the cap the top Peek's page is reused only for the same Profile and source kind. Another
+        // Profile's URL (a Library preview) replaces the top Peek: it must not load with its cookies.
+        if stack.count >= 5, let top = stack.last, top.profileID == profile, top.librarySpaceID == librarySpaceID {
+            overlay.resetMotion(); stack[stack.count - 1].url = url; top.host?.load(url); refresh(); return
         }
         let hostID = ItemID()
         guard let host = factory.makeHost(tabID: hostID, profileID: profile, url: nil) else { overlay.resetMotion(); return }
+        // Only now that the replacement exists: a failed makeHost keeps the top Peek on screen.
+        if stack.count >= 5 { stack.removeLast().host?.close() }
         let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, librarySpaceID: librarySpaceID, profileID: profile, host: host)
         stack.append(item)
         let itemID = item.id
