@@ -101,15 +101,19 @@ public final class SidebarContext {
     /// Each tab has its own observable state, so a change reaches only that row:
     /// a badge on or off lays the row out again, a new URL or favicon only redraws it.
     public var peekBadges: [ItemID: SidebarPeekBadge] {
-        get { peekBadgeStates.compactMapValues(\.badge) }
+        // Only this setter writes badges, so the shown ones are known without scanning the state of
+        // every row ever drawn in this window (bug sweep r4 PERF-09: read on every window refresh).
+        get { shownPeekBadges }
         set {
-            for id in Set(peekBadgeStates.keys).union(newValue.keys) {
+            for id in Set(shownPeekBadges.keys).union(newValue.keys) {
                 let state = peekBadgeState(for: id), badge = newValue[id]
                 if state.badge != badge { state.badge = badge }
                 if state.isShown != (badge != nil) { state.isShown = badge != nil }
             }
+            shownPeekBadges = newValue
         }
     }
+    @ObservationIgnored private var shownPeekBadges: [ItemID: SidebarPeekBadge] = [:]
     @ObservationIgnored private var peekBadgeStates: [ItemID: SidebarPeekBadgeState] = [:]
     /// The badge state a row observes (made on first use and kept, so a row that
     /// observes it before a Peek opens still hears about it).
