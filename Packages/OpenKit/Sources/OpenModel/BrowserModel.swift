@@ -1835,10 +1835,13 @@ public final class BrowserModel {
             // One Live Folder per Space: when the destination has one, the incoming Live Folder
             // becomes a plain folder that keeps its rows (the Space menu finds only the first).
             var demoted: [(Folder, LiveFolderConfig, [(Tab, URL)])] = []
-            if model.liveFolder(in: destination) != nil, let incoming = model.liveFolder(in: id), let live = incoming.live {
-                let rows = incoming.children.compactMap { $0.tab }.compactMap { tab in tab.liveItemURL.map { (tab, $0) } }
-                demoted.append((incoming, live, rows))
-                incoming.live = nil; for (tab, _) in rows { tab.liveItemURL = nil }
+            if model.liveFolder(in: destination) != nil {
+                // Every Live Folder of the source (a corrupt or imported Space can hold more than one).
+                while let incoming = model.liveFolder(in: id), let live = incoming.live {
+                    let rows = incoming.children.compactMap { $0.tab }.compactMap { tab in tab.liveItemURL.map { (tab, $0) } }
+                    demoted.append((incoming, live, rows))
+                    incoming.live = nil; for (tab, _) in rows { tab.liveItemURL = nil }
+                }
             }
             let selections = model.removeSpace(id)
             source.pinned = []; source.today = []
