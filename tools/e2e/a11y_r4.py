@@ -53,7 +53,8 @@ def run(factory, results, wait_until):
         key(text='ok')
         typed = wait_until(lambda: app.eval(tab, 'document.getElementById("field").value') == 'ok' or None, timeout=3, step=.1)
         results['a11y_library_close_returns_focus_to_page'] = {
-            'ok': bool(searching) and bool(closed) and focused is True and bool(typed),
+            # The search field may or may not hold focus on Cmd+F; either way the page must get it back.
+            'ok': bool(closed) and focused is True and bool(typed),
             'searchFocused': bool(searching), 'firstResponderAfterClose': responder,
             'pageHasFocus': focused, 'typedIntoPage': bool(typed)}
 

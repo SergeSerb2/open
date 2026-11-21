@@ -44,7 +44,7 @@ def run(factory, results):
         try:
             frames = [rect(w['frame']) for w in app.call('windows')
                       if w['visible'] and w['class'] in ('BrowserWindow', 'SpaceThemeWindow')]
-            rows[name] = {'frames': frames, 'reachable': bool(frames) and all(reachable(f, screens) for f in frames)}
+            rows[name] = {'saved': frame, 'frames': frames, 'reachable': bool(frames) and all(reachable(f, screens) for f in frames)}
         finally:
             app.quit()
     results['window_offscreen_frame_moved_on_screen'] = {
