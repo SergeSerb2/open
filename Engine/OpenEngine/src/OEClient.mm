@@ -602,7 +602,13 @@ bool OEClient::OnRequestMediaAccessPermission(
           mediaCallback:callback
          mediaRequested:requested_permissions
          promptCallback:nullptr];
-  return [view.delegate webContent:view decidePermissionRequest:request];
+  // NO means CEF's default handling, which owns the callback: the wrapper must
+  // not answer it from dealloc too (as OERunDialog; bug sweep r4 WC-06).
+  if ([view.delegate webContent:view decidePermissionRequest:request]) {
+    return true;
+  }
+  [request oe_releaseCallback];
+  return false;
 }
 
 bool OEClient::OnShowPermissionPrompt(
@@ -638,7 +644,11 @@ bool OEClient::OnShowPermissionPrompt(
                                urlTemplate:OEString(handler->GetString("url"))];
     }
   }
-  return [view.delegate webContent:view decidePermissionRequest:request];
+  if ([view.delegate webContent:view decidePermissionRequest:request]) {
+    return true;
+  }
+  [request oe_releaseCallback];
+  return false;
 }
 
 #pragma mark Context menu
@@ -670,7 +680,11 @@ bool OEClient::RunContextMenu(CefRefPtr<CefBrowser> browser,
   OEContextMenu* menu = [[OEContextMenu alloc] initOEWithParams:params
                                                            model:model
                                                         callback:callback];
-  return [view.delegate webContent:view showContextMenu:menu];
+  if ([view.delegate webContent:view showContextMenu:menu]) {
+    return true;
+  }
+  [menu oe_releaseCallback];
+  return false;
 }
 
 #pragma mark Downloads

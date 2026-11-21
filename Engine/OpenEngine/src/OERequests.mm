@@ -157,6 +157,10 @@
 - (void)dismiss {
   [self oe_finish:CEF_PERMISSION_RESULT_DISMISS];
 }
+- (void)oe_releaseCallback {
+  _media = nullptr;
+  _prompt = nullptr;
+}
 - (void)dealloc {
   [self oe_finish:CEF_PERMISSION_RESULT_IGNORE];
 }
@@ -340,6 +344,10 @@ static void OECollectCommands(NSArray<OEContextMenuItem*>* items,
     _callback->Cancel();
     _callback = nullptr;
   }
+}
+
+- (void)oe_releaseCallback {
+  _callback = nullptr;
 }
 
 - (void)dealloc {
