@@ -47,7 +47,7 @@ final class LiveFolderService {
     if !UserDefaults.standard.bool(forKey: Self.introSeenKey), let controller = app.frontWindowController,
        controller.context.focusedSpace?.id == spaceID {
       UserDefaults.standard.set(true, forKey: Self.introSeenKey)
-      DispatchQueue.main.async { controller.showLiveFolderIntro(folderID: folder.id) }
+      DispatchQueue.main.async { [weak controller] in controller?.showLiveFolderIntro(folderID: folder.id) }
     }
     Task { await refresh(folderID: folder.id, manual: true) }
     return true
