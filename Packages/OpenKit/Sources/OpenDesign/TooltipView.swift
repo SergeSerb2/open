@@ -158,6 +158,14 @@ public final class TooltipController {
             let p = point.map { window.convertPoint(toScreen: view.convert($0, to: nil)) } ?? NSPoint(x: anchor.midX, y: anchor.minY)
             origin = NSPoint(x: p.x + 12, y: p.y - size.height - 14)
         }
+        // Keep the tooltip on the screen of its anchor: a window at a display edge put it partly
+        // off-screen. An off-screen window (no screen, e.g. an offscreen render) is left as it is.
+        if let visible = (NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? window.screen)?.visibleFrame {
+            if tooltip.placement == .below, origin.y < visible.minY { origin.y = anchor.maxY + TooltipMetrics.anchorGap }
+            if tooltip.placement == .above, origin.y + size.height > visible.maxY { origin.y = anchor.minY - TooltipMetrics.anchorGap - size.height }
+            origin.x = min(max(origin.x, visible.minX + 4), max(visible.minX + 4, visible.maxX - 4 - size.width))
+            origin.y = min(max(origin.y, visible.minY + 4), max(visible.minY + 4, visible.maxY - 4 - size.height))
+        }
         let panel = self.panel ?? makePanel()
         self.panel = panel
         let host = NSView(frame: NSRect(x: 0, y: 0, width: size.width + 2 * margin, height: size.height + 2 * margin))

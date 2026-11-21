@@ -164,6 +164,11 @@ private final class FlippedSettingsView: NSView { override var isFlipped: Bool {
     override func becomeFirstResponder() -> Bool { needsDisplay = true; return super.becomeFirstResponder() }
     override func resignFirstResponder() -> Bool { needsDisplay = true; return super.resignFirstResponder() }
     override func keyDown(with event: NSEvent) {
+        // Space, Return and Enter open the focused section, as for any focused button (Full Keyboard
+        // Access). Other printable keys start a Settings search.
+        if event.modifierFlags.intersection([.command, .control, .option]).isEmpty, [49, 36, 76].contains(event.keyCode) {
+            performClick(nil); return
+        }
         if event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
            let text = event.characters, text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && $0.value < 0xF700 }) {
             var ancestor = superview

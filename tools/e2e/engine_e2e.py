@@ -2798,10 +2798,20 @@ def shutdown_order_checks(factory, results, tmp):
 
 
 def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False, launch_only=False, launch_continuation=None):
+    # Bug sweep r4 A11Y-01: OPEN_WINDOW_OFFSCREEN_ONLY=1 runs only the off-screen frame row.
+    if os.environ.get("OPEN_WINDOW_OFFSCREEN_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
+        return
+    # Bug sweep r4 A11Y keyboard rows (tools/e2e/a11y_r4.py); OPEN_A11Y_R4_ONLY=1 runs only them.
+    if os.environ.get("OPEN_A11Y_R4_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
+        return
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
     if not launch_only:
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
         sidebar_resize_gesture_checks(app_factory, results, tmp)
         window_chrome_followup_checks(app_factory, results, tmp)
