@@ -81,6 +81,12 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         if focus == "tabs":
             tab_events(app, results, tabs, wait, new_tab)
             return
+        if focus == "e1":
+            profile_lifetime(app, results, wait, new_tab, action, popup=os.environ.get("OPEN_E2E_E1_POPUP", "1") == "1")
+            return
+        if focus == "sweep3":
+            app = sweep3(app, results, wait, new_tab, action, reporter, factory)
+            return
         # X20: actual native controller, view ownership, type, bounds, update and remove.
         made = js("chrome.windows.create({type:'popup',url:chrome.runtime.getURL('popup.html'),"
                   "left:120,top:140,width:430,height:510,focused:false})")
@@ -228,6 +234,9 @@ def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
         pin_order(app, results, wait)
         tab_events(app, results, tabs, wait, new_tab)
         app = native_drag_safety(app, results, wait, action, factory)
+        reporter = new_tab(app, "chrome-extension://%s/popup.html" % action)
+        app.call("wait", tab=reporter)
+        app = sweep3(app, results, wait, new_tab, action, reporter, factory)
     finally:
         try:
             app.quit()
@@ -419,3 +428,246 @@ def tab_events(app, results, extension, wait, new_tab):
     else: changed = highlighted = None
     results["tabs_split_focus_events"] = {"ok": bool(changed and highlighted), "activated": changed, "highlighted": highlighted}
     app.call("split")
+
+
+def screen_frames():
+    # AppKit's own visible frames (Cocoa coordinates), the same space as ext-windows frames.
+    script = ('ObjC.import("AppKit"); var s=$.NSScreen.screens, out=[]; for (var i=0;i<s.count;i++)'
+              '{var f=s.objectAtIndex(i).visibleFrame; out.push([f.origin.x,f.origin.y,f.size.width,f.size.height]);}'
+              ' JSON.stringify(out)')
+    import subprocess
+    return json.loads(subprocess.run(["/usr/bin/osascript", "-l", "JavaScript", "-e", script],
+                                     capture_output=True, text=True, timeout=10).stdout)
+
+
+def on_screen(frame, screens):
+    if not frame: return False
+    x, y, w, h = frame
+    return any(x >= sx - .5 and y >= sy - .5 and x + w <= sx + sw + .5 and y + h <= sy + sh + .5 for sx, sy, sw, sh in screens)
+
+
+def sweep3(app, results, wait, new_tab, action, reporter, factory):
+    """Bug sweep round 3 (EXT3): extension windows, popups and the toolbar snapshot."""
+    def js(code, page=None):
+        return app.eval(reporter if page is None else page, code)
+
+    def native_window(cid):
+        return next((w for w in app.call("ext-windows") if w["chromeWindowId"] == cid), None)
+
+    def popup_tabs(cid):
+        return js("chrome.windows.get(%d,{populate:true}).then(w=>w.tabs.map(t=>t.url||t.pendingUrl),()=>null)" % cid)
+
+    def sidebar(marker):
+        return [t for t in app.call("tabs") if marker in t["url"]]
+
+    def remove(cid):
+        js("chrome.windows.remove(%d).then(()=>true,()=>false)" % cid)
+        wait(lambda: native_window(cid) is None, timeout=5)
+
+    # E4: one action whose title is over the 4 KiB UI bound must not empty the whole
+    # toolbar snapshot. A list reload (another extension disabled and enabled) rebuilds it.
+    installed = app.call("extensions")["installed"]
+    other = next(x["id"] for x in installed if x["name"] == "Pinned order probe B")
+    before = app.call("ext-strip")["contextIDs"]
+    js("chrome.action.setTitle({title:'x'.repeat(5000)}).then(()=>true)")
+    app.call("ext-manage", extension=other, action="disable")
+    wait(lambda: other not in app.call("ext-strip")["contextIDs"], timeout=5)
+    app.call("ext-manage", extension=other, action="enable")
+    after = wait(lambda: (lambda ids: ids if other in ids else None)(app.call("ext-strip")["contextIDs"]), timeout=5) or []
+    titled = next((a for a in app.call("actions")["actions"] if a["id"] == action), {})
+    results["R3_E4_long_title_keeps_toolbar"] = {"ok": action in before and action in after and other in after
+        and set(before) <= set(after), "before": before, "after": after,
+        "engineTitleLength": len(titled.get("title", ""))}
+    js("chrome.action.setTitle({title:''}).then(()=>true)")
+
+    # L13 (rejected seed): Chromium's windows API itself refuses bounds that are less than half on a
+    # screen, at create and at update, so no off-screen frame reaches ExtensionWindowController.
+    def refused(code):
+        try:
+            js(code); return None
+        except RuntimeError as error:
+            return str(error) if "50% within visible screen space" in str(error) else "other: " + str(error)
+    create_refused = refused("chrome.windows.create({type:'popup',url:chrome.runtime.getURL('popup.html'),"
+                             "left:-30000,top:-30000,width:430,height:510,focused:false})")
+    made = js("chrome.windows.create({type:'popup',url:chrome.runtime.getURL('popup.html'),"
+              "left:120,top:140,width:430,height:510,focused:false})")
+    created = wait(lambda: native_window(made["id"]), timeout=10) or {}
+    update_refused = refused("chrome.windows.update(%d,{left:40000,top:40000})" % made["id"])
+    time.sleep(.3)
+    kept = native_window(made["id"]) or {}
+    screens = screen_frames()
+    results["R3_L13_engine_refuses_offscreen_bounds"] = {"ok": bool(create_refused) and not create_refused.startswith("other")
+        and bool(update_refused) and not update_refused.startswith("other") and on_screen(kept.get("frame"), screens),
+        "create": create_refused, "update": update_refused, "frame": kept.get("frame"), "screens": screens}
+
+    # E12: chrome.tabs.create into the popup window opens a visible sidebar tab in the
+    # Profile's window; the popup keeps only its own page.
+    cid = made["id"]
+    js("chrome.tabs.create({windowId:%d,url:'https://example.com/?r3e12'}).then(()=>true,()=>false)" % cid)
+    landed = wait(lambda: [t for t in sidebar("r3e12") if t["visible"]], timeout=10)
+    popup = native_window(cid) or {}
+    results["R3_E12_tab_into_popup_window"] = {"ok": bool(landed) and popup_tabs(cid) is not None
+        and len(popup_tabs(cid)) == 1 and popup.get("pageIsContentView") is True,
+        "sidebar": landed, "popupTabs": popup_tabs(cid), "native": popup}
+
+    # L26: window.open from the hosted popup page (with and without window features).
+    page = popup.get("page")
+    found = {}
+    for name, features in (("tab", ""), ("popup", "width=420,height=320")):
+        marker = "r3l26" + name
+        try:
+            js("window.open('https://example.com/?%s','_blank','%s'); true" % (marker, features), page=page)
+        except RuntimeError as error:
+            found[name] = {"error": str(error)}
+            continue
+        found[name] = wait(lambda: [t for t in sidebar(marker) if t["visible"]], timeout=10) or []
+    # Refused: URLs a page could not open itself must not become browser-initiated tabs.
+    own_page = js("chrome.runtime.getURL('popup.html')")
+    own_before = len([t for t in app.call("tabs") if t["url"] == own_page])
+    refused_urls = ("file:///etc/hosts", "chrome://settings/", "open://welcome", own_page)
+    for target in refused_urls:
+        try: js("window.open(%s,'_blank'); true" % json.dumps(target), page=page)
+        except RuntimeError: pass
+    time.sleep(1.5)
+    leaked = [t["url"] for t in app.call("tabs") if t["url"].startswith(("file:", "chrome://settings", "open://welcome"))]
+    if len([t for t in app.call("tabs") if t["url"] == own_page]) != own_before: leaked.append(own_page)
+    results["R3_L26_window_open_from_popup"] = {"ok": all(isinstance(v, list) and v for v in found.values())
+        and len(popup_tabs(cid) or []) == 1 and not leaked, "found": {k: len(v) if isinstance(v, list) else v for k, v in found.items()},
+        "popupTabs": popup_tabs(cid), "refusedLeaked": leaked}
+    remove(cid)
+    profile_lifetime(app, results, wait, new_tab, action)
+    return private_lifetime(app, results, wait, new_tab, action, factory)
+
+
+def private_lifetime(app, results, wait, new_tab, action, factory):
+    """E1, Incognito half (rejected seed, regression guard): an extension allowed in Incognito opens
+    a popup window in the private session; closing the last Incognito window ends the session, which
+    closes the popup too (the engine's releaseContext closes the context's Browsers)."""
+    evidence = {}
+    try:
+        management = new_tab(app, "chrome://extensions")
+        wait(lambda: app.eval(management, "typeof chrome.developerPrivate") == "object", timeout=20)
+        evidence["grant"] = app.eval(management, "new Promise(done=>chrome.developerPrivate.updateExtensionConfiguration("
+                                     "{extensionId:%s,incognitoAccess:true},()=>done(chrome.runtime.lastError?"
+                                     "chrome.runtime.lastError.message:'ok')))" % json.dumps(action))
+        app.call("close", tab=management)
+        # The grant applies from the next launch (as in engine_e2e's extension_isolation row).
+        app.call("save"); app.quit()
+        app = factory(urls=())
+        wait(lambda: app.call("extensions")["ready"], timeout=30)
+        def allowed_reporter():
+            page = new_tab(app, "chrome-extension://%s/popup.html" % action)
+            try:
+                if app.eval(page, "chrome.extension.isAllowedIncognitoAccess()") is True: return page
+            except RuntimeError: pass
+            app.call("close", tab=page); time.sleep(.5)
+        reporter = wait(allowed_reporter, timeout=20)
+        assert reporter, "the Incognito grant did not reach the extension"
+        normal = app.call("window-state")["id"]
+        app.call("menu-perform", id="new-incognito-window")
+        private = wait(lambda: (lambda w: w if w["id"] != normal else None)(app.call("window-state")), timeout=5)
+        app.call("open", url="about:blank")
+        session = wait(lambda: (lambda s: s if s.get("context") and not s.get("closed") else None)(
+            app.call("incognito-state", private=True).get("session", {})), timeout=10)
+        evidence["session"] = session
+        app.call("window-focus", id=normal, activate=True)
+        made = app.eval(reporter, "chrome.windows.create({type:'popup',incognito:true,url:'about:blank',focused:false})"
+                        ".then(w=>({id:w.id,incognito:w.incognito}),e=>({error:String(e)}))")
+        evidence["created"] = made
+        native = wait(lambda: next((w for w in app.call("ext-windows") if w["chromeWindowId"] == made.get("id")), None), timeout=10)
+        evidence["popup"] = native and {k: native.get(k) for k in ("browser", "context", "ephemeral", "contextClosed")}
+        # L26 in Incognito: window.open from the private popup opens in the session's own window.
+        app.eval(native["page"], "window.open('https://example.com/?r3l26private','_blank'); true")
+        app.call("window-focus", id=private["id"], activate=True)
+        private_tabs = wait(lambda: [t["url"] for t in app.call("incognito-state", private=True).get("tabs", [])
+                                     if "r3l26private" in t["url"]], timeout=10) or []
+        evidence["l26PrivateTabs"] = private_tabs
+        app.call("window-close")
+        # The Chrome window id reads -1 once the engine closed the strip: match the stable Browser id,
+        # and no popup of the session's context may stay.
+        gone = wait(lambda: not any(w["browser"] == native["browser"] or w.get("context") == session["context"]
+                                    for w in app.call("ext-windows")), timeout=10)
+        evidence["windowsLeft"] = [{k: w.get(k) for k in ("browser", "chromeWindowId", "context", "contextClosed", "visible")}
+                                   for w in app.call("ext-windows")]
+        evidence["popupClosedWithSession"] = bool(gone)
+        contexts = app.call("engine-contexts")
+        evidence["sessionContextLeft"] = bool(session) and session["context"] in contexts
+        results["R3_E1_private_session_closes_popup"] = dict(evidence, ok=evidence["grant"] == "ok" and bool(session)
+            and bool(native) and native.get("ephemeral") is True and native.get("context") == session["context"]
+            and bool(gone) and not evidence["sessionContextLeft"])
+        results["R3_L26_private_window_open"] = {"ok": bool(private_tabs), "privateTabs": private_tabs}
+    except Exception as error:
+        results.setdefault("R3_L26_private_window_open", {"ok": False, "error": repr(error)[:300]})
+        results["R3_E1_private_session_closes_popup"] = dict(evidence, ok=False, error=repr(error)[:400])
+    return app
+
+
+def profile_lifetime(app, results, wait, new_tab, action, popup=True):
+    """E1 (rejected seed, regression guard): deleting a Profile with an extension popup window
+    open finishes at once and closes the popup (the engine's deleteContext closes the context's
+    Browsers, popups included). popup=False is the control run without a popup."""
+    name = "R3 Popup Profile"
+    evidence = {}
+    try:
+        home = next(s["id"] for s in app.call("spaces") if s["focused"])
+        space = app.call("space-create", title="R3 Popup Space", profile=name)
+        page = new_tab(app, "chrome-extension://%s/popup.html" % action)
+        app.call("wait", tab=page)
+        context = app.page(page)["context"]
+        made = app.eval(page, "chrome.windows.create({type:'popup',url:'about:blank',focused:false})") if popup else {"id": -1}
+        native = wait(lambda: next((w for w in app.call("ext-windows") if w["chromeWindowId"] == made["id"]), None), timeout=10) if popup else {"control": True}
+        evidence["pageContext"] = context
+        app.call("space", space=home)
+        if popup:
+            # L26 for another Profile: no window shows its Space now, so the tab opens in a new window of it.
+            normal = app.call("window-state")["id"]
+            app.eval(native["page"], "window.open('https://example.com/?r3l26profile','_blank'); true")
+            landed = wait(lambda: [t for t in app.call("tabs") if "r3l26profile" in t["url"]], timeout=10) or []
+            front = app.call("window-state")
+            evidence["l26"] = {"tabs": len(landed), "newWindow": front["id"] != normal, "space": front.get("space"),
+                               "context": landed and (landed[0].get("page") or {}).get("context")}
+            results["R3_L26_other_profile_window_open"] = {"ok": bool(landed) and front["id"] != normal
+                and front.get("space") == space and evidence["l26"]["context"] == context, **evidence["l26"]}
+            if front["id"] != normal: app.call("window-close")
+            app.call("window-focus", id=normal, activate=True)
+            app.call("space", space=home)
+        assert app.call("space-profile", space=space, profile="Default")
+        profile = next(p for p in app.call("profiles-shell")["profiles"] if p["name"] == name)
+        if profile["spaces"]:
+            app.call("alert", button="Change Profile")
+        wait(lambda: next(p for p in app.call("profiles-shell")["profiles"] if p["id"] == profile["id"])["spaces"] == 0, timeout=5)
+        app.call("profiles-shell", action="show", profile=name)
+        time.sleep(.15)
+        app.press_profile_delete()
+        wait(lambda: app.call("profiles-shell")["sheet"] > 0, timeout=5)
+        app.call("profiles-shell", action="type-delete", text=name)
+        evidence["popupAtPress"] = next((w for w in app.call("ext-windows") if w["browser"] == native["browser"]), None) if popup else None
+        started = time.monotonic()
+        app.call("profiles-shell", action="press", label="Delete")
+        timeline = []
+        def done():
+            shell = app.call("profiles-shell")
+            row = [round(time.monotonic() - started, 1), shell.get("teardownStage"), shell.get("deleting"), shell.get("sheet")]
+            if not timeline or timeline[-1][1:] != row[1:]: timeline.append(row)
+            # `sheet` is a window number, not a count: the wipe is over when its stage is done.
+            return not shell["deleting"] and shell.get("teardownStage") == "done"
+        finished = wait(done, timeout=40, step=.1)
+        evidence["timeline"] = timeline
+        evidence["deleteSeconds"] = round(time.monotonic() - started, 2)
+        shell = app.call("profiles-shell")
+        evidence["stage"] = shell.get("teardownStage"); evidence["error"] = shell.get("errorText")
+        # The Chrome window id reads -1 once the engine closed the strip: match the stable Browser id and the context.
+        def left(): return [{k: w.get(k) for k in ("browser", "chromeWindowId", "context", "contextClosed", "visible")}
+                            for w in app.call("ext-windows") if (popup and w["browser"] == native["browser"]) or w.get("context") == context]
+        wait(lambda: not left(), timeout=3)
+        evidence["popupsLeft"] = left()
+        evidence["modelGone"] = not any(p["id"] == profile["id"] for p in shell["profiles"])
+        at_press = evidence["popupAtPress"]
+        results["R3_E1_profile_delete_closes_popup"] = dict(evidence, ok=bool(native)
+            and (not popup or (bool(at_press) and at_press.get("context") == context))
+            and bool(finished) and evidence["deleteSeconds"] < 10 and not evidence["popupsLeft"] and evidence["modelGone"])
+    except Exception as error:
+        results["R3_E1_profile_delete_closes_popup"] = dict(evidence, ok=False, error=str(error))
+    finally:
+        try: app.call("profiles-shell", action="cancel")
+        except Exception: pass
