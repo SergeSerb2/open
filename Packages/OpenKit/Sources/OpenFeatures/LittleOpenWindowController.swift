@@ -150,6 +150,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             guard let self else { return }
             self.window?.title = self.state == .bar ? "Little Open" : title
             self.updateChrome(); self.coordinator?.onChange?()
+            self.barLoadChanged()
         }
         // E3 URL change is the committed-URL boundary (routing §7). Ignore about:blank.
         container.onTabURLChanged = { [weak self] _, url in
@@ -159,8 +160,21 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         }
         container.show(tabIDs: [session.tab.id], focusedTabID: session.tab.id, orientation: .horizontal, fractions: [1], spaceID: SpaceID(), profileID: session.profileID)
     }
+    /// A blank bar's submitted address: true from Return until the page commits or its load ends.
+    private var barLoadPending = false
+    private var barLoadStarted = false
+    /// A load from the blank bar that ended without a commit (a download, `about:blank`) brings the
+    /// embedded bar back, so the window keeps its input, Esc, and close control.
+    private func barLoadChanged() {
+        guard barLoadPending, state == .bar, !closed else { barLoadPending = false; return }
+        if session.tab.live.isLoading { barLoadStarted = true; return }
+        guard barLoadStarted else { return }
+        barLoadPending = false
+        restoreEmbeddedBarIfNeeded()
+    }
     private func commitPage() {
         guard state == .bar, let window else { return }
+        barLoadPending = false
         state = .page
         commandBar.dismiss(reason: .programmatic)
         window.styleMask.insert(.resizable); window.minSize = LittleOpenMetrics.minimumPageSize
@@ -272,6 +286,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         switch intent {
         case .open(let url, _, _), .search(_, let url, _, _, _):
             commandBar.dismiss(reason: .programmatic)
+            if state == .bar { barLoadPending = true; barLoadStarted = false }
             container.host(for: session.tab.id)?.load(url)
         case .switchToTab(let id, let spaceID):
             // The callback may close this session itself. close is idempotent and all state is Swift-owned.
