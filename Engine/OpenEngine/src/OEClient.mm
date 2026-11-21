@@ -94,10 +94,27 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
       source.runtimeStyle == OERuntimeStyleChrome) {
     return false;
   }
-  if (!source ||
-      ![delegate respondsToSelector:@selector(webContent:
+  if (!source) {
+    // The opener page is gone: OnAfterCreated would close an orphaned popup
+    // at once. Do not create it.
+    return true;
+  }
+  if (![delegate respondsToSelector:@selector(webContent:
                                         createWebContentForOpenRequest:)]) {
-    return false;  // Chromium's default popup window.
+    // Chromium's default popup window, with its own client. With the
+    // opener's (CEF's default) the popup's address, title and loading state
+    // replaced the opener's, and quit tracking missed the popup.
+    // Not for a closing page (the shell cleared its delegate) or context,
+    // nor while the engine shuts down: nothing would close that popup.
+    CefRefPtr<CefClient> unowned =
+        closing_ || close_requested_
+            ? nullptr
+            : [[OEEngine shared] oe_unownedPopupClientForContext:source.context];
+    if (!unowned) {
+      return true;
+    }
+    client = unowned;
+    return false;
   }
   NSRect frameRect = NSZeroRect;
   if (features.widthSet || features.heightSet) {
@@ -126,7 +143,33 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                                     opener:source]) {
     return true;
   }
+  for (NSNumber* key in [[pending_popups_ keyEnumerator] allObjects]) {
+    OEWebContent* pending = [pending_popups_ objectForKey:key];
+    if (!pending || pending.live) [pending_popups_ removeObjectForKey:key];
+  }
+  [pending_popups_ setObject:target forKey:@(popup_id)];
   return false;
+}
+
+void OEClient::OnBeforePopupAborted(CefRefPtr<CefBrowser> browser,
+                                    int popup_id) {
+  // Chromium refused the popup after OnBeforePopup allowed it. Without this
+  // the adopting page waited for a browser forever (an Alloy page also kept
+  // itself, its view and its context alive).
+  OEWebContent* target = [pending_popups_ objectForKey:@(popup_id)];
+  [pending_popups_ removeObjectForKey:@(popup_id)];
+  AbortPendingPopup(target);
+}
+
+void OEClient::AbortPendingPopup(OEWebContent* target) {
+  if (!target || target.live) {
+    return;
+  }
+  OEWebContent* opener = view_;
+  if (opener && [opener oe_pendingChromePopup] == target) {
+    (void)[opener oe_takePendingChromePopup];
+  }
+  [target oe_popupAborted];
 }
 
 namespace {
@@ -282,6 +325,9 @@ void OEClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     return;
   }
   CancelAuthenticationRequests();
+  // Popups still pending here are not aborted: Chromium may have accepted one
+  // whose OnAfterCreated is still to come. CEF reports real aborts with
+  // OnBeforePopupAborted, also after this callback (cef_life_span_handler.h).
   if (!closing_ && !close_requested_ && view.oe_hostBrowser) {
     close_requested_ = true;
     [view oe_requestClose];
@@ -459,6 +505,21 @@ bool OEClient::OnKeyEvent(CefRefPtr<CefBrowser> browser,
 
 #pragma mark JavaScript dialogs
 
+namespace {
+
+// NO from the delegate means the engine's default dialog (OEWebContent.h).
+// The wrapper must not keep the callback: its dealloc answered "cancel" before
+// CEF could show that dialog (a beforeunload silently kept the page).
+bool OERunDialog(OEWebContent* view, OEJavaScriptDialog* dialog) {
+  if ([view.delegate webContent:view runJavaScriptDialog:dialog]) {
+    return true;
+  }
+  [dialog oe_releaseCallback];
+  return false;
+}
+
+}  // namespace
+
 bool OEClient::OnJSDialog(CefRefPtr<CefBrowser> browser,
                           const CefString& origin_url,
                           JSDialogType dialog_type,
@@ -489,7 +550,7 @@ bool OEClient::OnJSDialog(CefRefPtr<CefBrowser> browser,
                origin:OEURL(origin_url)
              isReload:NO
              callback:callback];
-  return [view.delegate webContent:view runJavaScriptDialog:dialog];
+  return OERunDialog(view, dialog);
 }
 
 bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
@@ -514,7 +575,7 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
                origin:view.URL
              isReload:is_reload
              callback:callback];
-  return [view.delegate webContent:view runJavaScriptDialog:dialog];
+  return OERunDialog(view, dialog);
 }
 
 #pragma mark Permissions

@@ -15,6 +15,8 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
   var inTransfer = false
   var synchronousCallbacks = 0
   var handlesAuth = true
+  /// JavaScript dialogs this delegate declined (returned false: the engine's default dialog).
+  var dialogsDeclined = 0
   private var nextRequest = 1
   var frameRequests: [String: OEWebContentFrameRequest] = [:]
   var frameReceipts: [[String: Any]] = []
@@ -61,6 +63,10 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
     requests[nextRequest] = request; nextRequest += 1
     return true
   }
+  func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
+    dialogsDeclined += 1
+    return false
+  }
   func webContent(_ page: OEWebContent, didCancelAuthenticationRequest request: OEAuthenticationRequest) {
     cancelled += 1
     requests = requests.filter { $0.value !== request }
@@ -71,7 +77,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
       ["id": page.identifier, "tabID": page.chromeTabIdentifier,
        "live": page.isLive, "loading": page.isLoading,
        "framePresentation": page.supportsFramePresentation,
-       "url": page.url?.absoluteString ?? "",
+       "url": page.url?.absoluteString ?? "", "title": page.title ?? "",
        "pinned": page.browser?.isPinned(page) ?? false,
        "view": String(describing: ObjectIdentifier(page.view)),
        "browser": page.browser?.identifier ?? -1] as [String: Any]
@@ -86,7 +92,7 @@ final class EngineAPIProof: NSObject, OEWebContentDelegate, OEBrowserDelegate {
         "realm": r.realm, "scheme": r.scheme, "proxy": proxy,
         "host": r.host, "port": r.port] as [String: Any]
     }, "frameReceipts": frameReceipts, "received": received, "cancelled": cancelled,
-     "synchronousCallbacks": synchronousCallbacks,
+     "synchronousCallbacks": synchronousCallbacks, "dialogsDeclined": dialogsDeclined,
      "visibleWindows": NSApp.windows.filter(\.isVisible).count]
   }
 
@@ -132,6 +138,11 @@ extension AutomationController {
       guard let page = proof.pages[args["page"] as? String ?? ""],
         let js = args["js"] as? String, js.count <= 16384 else { throw Failure(message: "invalid eval") }
       return try await page.evaluateJavaScript(js) ?? NSNull()
+    case "devtools":
+      // Raw JSON parameters (including null values) reach the engine unchanged.
+      guard let page = proof.pages[args["page"] as? String ?? ""],
+        let method = args["method"] as? String, method.count <= 128 else { throw Failure(message: "invalid devtools") }
+      return try await page.sendDevToolsMethod(method, parameters: args["params"] as? [String: Any])
     case "presentation-request":
       guard let page = proof.pages[args["page"] as? String ?? ""],
         let width = args["pixelWidth"] as? Int,
