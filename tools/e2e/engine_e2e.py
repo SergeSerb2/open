@@ -11855,21 +11855,30 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
     # same rows as Cmd+D. With [Today split, pinned tab] Cmd+D unpins, so the title says Unpin
     # Tabs (it said Pin Tabs); the ⌥ item never pins the split.
     def pin_title(): return next((m.get('title') for m in app.call('menu-state') if m['id'] == 'pin-unpin-tab'), None)
+    def select_both():
+        # A plain click on a row that is already in a multi-selection keeps that selection,
+        # so add whichever row is missing with Cmd-click.
+        app.call('sidebar-click', node=l2_split); settle()
+        for node in (l2_lone, l2_split):
+            if node not in app.call('selection'): app.call('sidebar-click', node=node, modifiers=['cmd'])
+        settle(); return sorted(app.call('selection'))
     def row_menu(title):
         try: app.call('sidebar-menu', node=l2_lone, item=title, alternate=True); return True
         except RuntimeError: return False  # the item is missing or disabled
-    app.call('sidebar-click', node=l2_split); app.call('sidebar-click', node=l2_lone, modifiers=['cmd']); settle()
+    l2_selection_unpin = select_both()
     l2_title_unpin = pin_title()
     l2_menu_unpin_found = row_menu('Unpin Tabs'); settle()
     l2_menu_unpin = dict(split=section_of(l2_split), lone=section_of(l2_lone), found=l2_menu_unpin_found)
-    app.call('sidebar-click', node=l2_split); app.call('sidebar-click', node=l2_lone, modifiers=['cmd']); settle()
+    l2_selection_pin = select_both()
     l2_title_pin = pin_title()
     l2_menu_pin_found = row_menu('Pin Tabs'); settle()
     l2_menu_pin = dict(split=section_of(l2_split), lone=section_of(l2_lone), found=l2_menu_pin_found)
     r3_rows.append(('R3_selection_pin_title_and_menu_match_cmd_d',
-        l2_title_unpin == 'Unpin Tabs' and l2_menu_unpin == dict(split='today', lone='today', found=True)
+        l2_selection_unpin == l2_selection_pin == sorted([l2_split, l2_lone])
+        and l2_title_unpin == 'Unpin Tabs' and l2_menu_unpin == dict(split='today', lone='today', found=True)
         and l2_title_pin == 'Pin Tabs' and l2_menu_pin == dict(split='today', lone='pinned', found=True),
-        dict(titleWithPinnedTab=l2_title_unpin, afterMenuUnpin=l2_menu_unpin, titleWithTodayTab=l2_title_pin, afterMenuPin=l2_menu_pin)))
+        dict(expectedSelection=sorted([l2_split, l2_lone]), selectionWithPinnedTab=l2_selection_unpin,
+             selectionWithTodayTab=l2_selection_pin, titleWithPinnedTab=l2_title_unpin, afterMenuUnpin=l2_menu_unpin, titleWithTodayTab=l2_title_pin, afterMenuPin=l2_menu_pin)))
     # L3: an Archive row that cannot come back (here a folder row with an undecodable payload)
     # is kept and skipped; Cmd+Shift+T restores the next row. Before, every press stopped there.
     l3_kept = opened('R3 Kept Closed')
