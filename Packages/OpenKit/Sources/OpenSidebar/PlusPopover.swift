@@ -5,26 +5,18 @@ import OpenDesign
 /// Rows come from `SidebarMenus.plus()`, so the menu stays the one list of items, titles, keys
 /// and enabled rules. Opens with the last row ("New Tab") highlighted; ↓ and ↑ move and wrap,
 /// Return runs the row, Esc or a click outside closes.
-/// One drawn row of the "+" popover as a VoiceOver menu item: its title, enabled state, frame and press.
-@MainActor
+/// One drawn row of the "+" popover as a VoiceOver menu item. The popover refreshes these values
+/// (on the main actor) each time VoiceOver asks for its children.
 final class PlusPopoverRowElement: NSAccessibilityElement {
-    weak var popover: PlusPopoverView?
-    let index: Int
-    init(popover: PlusPopoverView, index: Int) {
-        self.popover = popover; self.index = index; super.init()
-        setAccessibilityRole(.menuItem); setAccessibilityParent(popover)
-    }
-    private var row: PlusPopoverView.Row? { popover.flatMap { index < $0.rows.count ? $0.rows[index] : nil } }
-    override func accessibilityLabel() -> String? { row?.item.title }
-    override func isAccessibilityEnabled() -> Bool { row?.item.isEnabled ?? false }
-    override func isAccessibilitySelected() -> Bool { popover?.highlighted == index }
-    override func accessibilityFrame() -> NSRect {
-        guard let popover, let row, let window = popover.window else { return .zero }
-        return window.convertToScreen(popover.convert(row.frame, to: nil))
-    }
+    nonisolated(unsafe) var title = "", enabled = false, selected = false, screenFrame = NSRect.zero
+    nonisolated(unsafe) var press: (@MainActor () -> Bool)?
+    override func accessibilityLabel() -> String? { title }
+    override func isAccessibilityEnabled() -> Bool { enabled }
+    override func isAccessibilitySelected() -> Bool { selected }
+    override func accessibilityFrame() -> NSRect { screenFrame }
     override func accessibilityPerformPress() -> Bool {
-        guard let popover, let row, row.item.isEnabled else { return false }
-        popover.onRun?(row.item); return true
+        let press = press
+        return MainActor.assumeIsolated { press?() ?? false }
     }
 }
 
@@ -38,9 +30,27 @@ final class PlusPopoverView: NSView {
     var colors: PlusPopoverColors { didSet { needsDisplay = true } }
     var highlighted: Int? { didSet { if highlighted != oldValue { needsDisplay = true; NSAccessibility.post(element: self, notification: .selectedChildrenChanged) } } }
     /// The rows are drawn, not views: VoiceOver reads one menu item element per row (A11Y-07).
-    private lazy var rowElements: [PlusPopoverRowElement] = rows.indices.map { PlusPopoverRowElement(popover: self, index: $0) }
-    override func accessibilityChildren() -> [Any]? { rowElements }
-    override func accessibilitySelectedChildren() -> [Any]? { highlighted.map { [rowElements[$0]] } ?? [] }
+    private lazy var rowElements: [PlusPopoverRowElement] = rows.indices.map { index in
+        let element = PlusPopoverRowElement()
+        element.setAccessibilityRole(.menuItem); element.setAccessibilityParent(self)
+        element.press = { [weak self] in
+            guard let self, index < self.rows.count, self.rows[index].item.isEnabled else { return false }
+            self.onRun?(self.rows[index].item); return true
+        }
+        return element
+    }
+    override func accessibilityChildren() -> [Any]? {
+        for (index, element) in rowElements.enumerated() where index < rows.count {
+            let row = rows[index]
+            element.title = row.item.title; element.enabled = row.item.isEnabled; element.selected = highlighted == index
+            element.screenFrame = window.map { $0.convertToScreen(convert(row.frame, to: nil)) } ?? .zero
+        }
+        return rowElements
+    }
+    override func accessibilitySelectedChildren() -> [Any]? {
+        guard let highlighted, let children = accessibilityChildren(), highlighted < children.count else { return [] }
+        return [children[highlighted]]
+    }
     var onRun: ((NSMenuItem) -> Void)?
     /// Arrow tip x in this view's coordinates.
     var arrowX: CGFloat = 0 { didSet { needsDisplay = true } }
