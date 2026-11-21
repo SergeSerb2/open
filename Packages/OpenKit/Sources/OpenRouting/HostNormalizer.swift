@@ -65,7 +65,10 @@ public enum HostNormalizer {
         let end = pattern.firstIndex(where: { "/?#".contains($0) }) ?? pattern.endIndex
         let authority = String(pattern[..<end])
         guard let parts = URLComponents(string: "//" + authority), let host = componentHost(parts), !host.isEmpty else { return pattern }
-        return prefixAuthority(host, port: parts.port, scheme: scheme?.lowercased()) + pattern[end...]
+        // The authority ends at its host, as in an explicit-scheme pattern (whose empty path becomes "/"):
+        // `corp.example` must not match `corp.example.attacker.test` or `corp.example:8443`.
+        let remainder = pattern[end...]
+        return prefixAuthority(host, port: parts.port, scheme: scheme?.lowercased()) + (remainder.hasPrefix("/") ? "" : "/") + remainder
     }
 
     private static func componentHost(_ parts: URLComponents) -> String? {

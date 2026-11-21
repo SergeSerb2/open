@@ -392,6 +392,7 @@
         catch { return ["registered": false, "error": String(describing: error)] }
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
+      case "mailto-state": return try await runHandoffCommand(cmd, a)
       case "default-browser-state": return defaultBrowserState()
       case _ where Self.liveDataCommands.contains(cmd): return try await runLiveDataCommand(cmd, a)
       case "favorites-empty-state": return try runFavoritesEmptyCommand(a)
@@ -980,6 +981,11 @@
       case "peek-open":
         let source = try modelTab(a, w)
         guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
+        if let profile = a["profile"] as? String {
+          // The Library preview path (`previewArchived`): a Peek in the named Profile.
+          guard let id = app.model.profiles.first(where: { $0.id.description == profile || $0.name == profile })?.id else { throw Failure(message: "unknown profile") }
+          controller.peekController.openLibraryPreview(url: url, profileID: id); return true
+        }
         controller.peekController.open(url: url, sourceTabID: source.id); return true
       case "peek-expand":
         w.controller?.peekController.expandTop(); return true
