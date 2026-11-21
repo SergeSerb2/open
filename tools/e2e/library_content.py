@@ -179,7 +179,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                 db.execute('CREATE TABLE IF NOT EXISTS favicons(origin TEXT NOT NULL, page_key TEXT NOT NULL, icon_url TEXT, png32 BLOB, png64 BLOB, fetched_at REAL NOT NULL, expires_at REAL NOT NULL, status INTEGER NOT NULL, copy_token TEXT, image_info TEXT, PRIMARY KEY(origin, page_key))')
                 db.execute("INSERT OR REPLACE INTO favicons(origin,page_key,icon_url,png32,png64,fetched_at,expires_at,status) VALUES('https://history.example.test','',NULL,?,NULL,?,?,0)",(png.read_bytes(),time.time(),time.time()+86400))
             state(action='select',section='history');check('history_first_page',wait(lambda:len(rows())==100))
-            realized=lambda:[r for r in rows() if r['realized']]
+            realized=lambda:[r for r in rows() if r['realized'] and r['id'].startswith('https://history.example.test/')]
             check('history_icons_past_sixteen_requests',wait(lambda:len(realized())>=8 and all(r['iconLoaded'] for r in realized())),
                   realized=len(realized()),missing=[r['title'] for r in realized() if not r['iconLoaded']],
                   negative='old loadRowIcon returned without a callback while 16 requests ran, so those rows kept the globe')

@@ -103,9 +103,15 @@ def run(factory, results, tmp, env):
         stored = next(b for b in app.call('boosts', action='list') if b['name'] == 'Space path')
         record('BM4_space_path_prefix_matches', spaced['spacePath'] == 1 and spaced['hostWide'] == 1 and stored['siteMatch'].get('pathPrefix') == '/my%20docs',
                page=spaced, stored=stored['siteMatch'], negative='raw "/my docs" never equals the percent-encoded "/my%20docs"')
-        bracket = probe(origin + '/v1[test]/page.html')
+        # Navigate from the page: the automation navigate command parses the URL with Foundation,
+        # which encodes "[" "]"; a page link keeps them raw, as Chromium shows them in pathname.
+        app.call('navigate', tab=tab, url=origin + '/other.html'); app.call('wait', tab=tab)
+        app.eval(tab, "location.href='/v1[test]/page.html';true")
+        wait(lambda: app.eval(tab, "location.pathname==='/v1[test]/page.html'&&document.readyState==='complete'"), timeout=10, step=.1)
+        app.call('wait', tab=tab)
+        bracket = app.eval(tab, "({url:location.href,bracket:window.bracketRuns??0})")
         stored = next(b for b in app.call('boosts', action='list') if b['name'] == 'Bracket path')
-        record('BM5_bracket_path_prefix_matches', bracket['bracket'] == 1 and '[test]' in bracket['url'] and stored['siteMatch'].get('pathPrefix') == '/v1%5Btest%5D',
+        record('BM5_bracket_path_prefix_matches', bracket['bracket'] == 1 and bracket['url'].endswith('/v1[test]/page.html') and stored['siteMatch'].get('pathPrefix') == '/v1%5Btest%5D',
                page=bracket, stored=stored['siteMatch'], negative='the matcher saw /v1%5Btest%5D (Foundation) but the stored prefix or the page gate kept /v1[test]')
     finally:
         try:

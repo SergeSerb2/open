@@ -124,15 +124,16 @@ import OpenWeb
             else if let sheet = self.active, let page = self.activePage, !self.isFocused(page) {
                 if let request = sheet.request { self.pending.insert(Entry(request: request, page: page), at: 0) }
                 self.removeActive(preservingRequest: true)
-                // Keep the prompt the user just saw (index 0) and the newly focused page's prompt
-                // (showNext presents it below); drop the oldest other waiting one.
-                self.pending.removeAll { $0.request.isAnswered }
-                if self.pending.count > 3 {
-                    let drop = self.pending.indices.dropFirst().first { !self.isFocused(self.pending[$0].page) } ?? 1
-                    self.discard(self.pending.remove(at: drop).request)
-                }
             }
             self.showNext()
+            // A tab switch put the prompt the user just saw back at index 0, and showNext took the
+            // newly focused page's prompt out of the queue. Only then trim: keep index 0 and any
+            // focused page's prompt; drop the oldest other waiting one.
+            self.pending.removeAll { $0.request.isAnswered }
+            if self.pending.count > 3 {
+                let drop = self.pending.indices.dropFirst().first { !self.isFocused(self.pending[$0].page) } ?? 1
+                self.discard(self.pending.remove(at: drop).request)
+            }
         }
     }
     public func cancelAll() {

@@ -253,7 +253,7 @@ def run_save_prompts(factory, results, tmp, harness):
                 s = wait(lambda: (s if (s := state()).get('visible') else None), timeout=5, step=.05)
                 assert s and s['title'] == 'Save password for %s.example.com?' % host, s
                 answer('dismiss')
-            assert len(events()) == 3
+            assert [(e['displayHost'], e['answer']) for e in events()] == [('waiting-1.example.com', 'dismiss'), ('active-0.example.com', 'dismiss'), ('waiting-2.example.com', 'dismiss'), ('waiting-3.example.com', 'dismiss')]
             for tab in tabs:
                 app.call('close', tab=tab)
             return {'dropped': 'waiting-1.example.com', 'kept': 'active-0.example.com', 'focusedWaitingShown': 'waiting-1.example.com'}

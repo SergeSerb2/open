@@ -175,19 +175,19 @@ def run(factory, results, origin, tmp, env):
 
             # G5b (review round 1): a tile drawn enabled before the parent Profile excluded the site
             # (another window changed it) reaches toggle(); its own guard refuses the stale click.
-            app.call('navigate', tab=private_tab, url=other_origin + '/ads.html'); app.call('wait', tab=private_tab)
-            stale = wait(lambda: (lambda s: s if s['host'] == 'c.other.test' and row(s, 'row.contentBlocking').get('state') == 'on' else None)(opened()), timeout=20) or state()
+            # The regular tab still shows b.guard.test: lift the parent exclusion, draw the private
+            # tile enabled, then exclude again from the regular tab (no window focus change).
+            app.call('settings-adblock-site', tab=tab, excluded=False)
+            stale = wait(lambda: (lambda s: s if s['host'] == 'b.guard.test' and row(s, 'row.contentBlocking').get('state') == 'on' else None)(opened()), timeout=20) or state()
             app.call('site-controls', action='capture-tile', id='row.contentBlocking')
-            app.call('navigate', tab=tab, url=other_origin + '/ads.html'); app.call('wait', tab=tab)
             parent = app.call('settings-adblock-site', tab=tab, excluded=True)
             private_site = app.call('settings-adblock-site', tab=private_tab)
             toggled_stale = app.call('site-controls', action='toggle-captured')
             record('G5b_stale_tile_parent_exclusion_refused', row(stale, 'row.contentBlocking').get('enabled') is True
-                   and 'other.test' in parent['excludedDomains'] and private_site['shouldBlock'] is False
+                   and 'guard.test' in parent['excludedDomains'] and private_site['shouldBlock'] is False
                    and not toggled_stale['reloadVisible'] and app.call('settings-adblock-site', tab=private_tab)['shouldBlock'] is False,
                    staleTile=row(stale, 'row.contentBlocking'), parent=parent['excludedDomains'], reloadVisible=toggled_stale['reloadVisible'],
                    negative='without the toggle guard the stale click "applied" (reload prompt shown) and changed nothing')
-            app.call('settings-adblock-site', tab=tab, excluded=False)
             close()
         finally:
             for w in app.call('incognito-state')['windows']:
