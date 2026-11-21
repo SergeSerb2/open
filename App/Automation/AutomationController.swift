@@ -319,7 +319,14 @@
       case "credentials-prefs": return try credentialPreferences(a)
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
-        return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
+        let contexts = OEEngine.shared.contexts + [OEEngine.shared.defaultContext]
+        if a["delegates"] as? Bool == true {
+          // Whether each context reports downloads and notification clicks to the App.
+          var delegates: [String: Bool] = [:]
+          for context in contexts { delegates[context.identifier] = context.delegate === app }
+          return delegates
+        }
+        return Set(contexts.map(\.identifier)).sorted()
       case "engine-api": return try await runEngineAPICommand(a)
       case "speed-trace": return try await speedTrace(a)
       case "profiles-shell": return try await profilesShell(a)

@@ -237,13 +237,19 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
           AppDelegate.commandLog("download-directory-fallback")
         }
         if ask {
-          guard let parent = window ?? app.frontWindowController?.window else { completion(nil); return }
           let choice = DownloadDestinationChoice { [weak self] url in
             self?.choices[key] = nil
             completion(url)
           }
           choices[key] = choice
-          choice.present(in: parent, filename: name, directory: directory.url)
+          // A regular Profile's Save panel never attaches to an Incognito window, and a download
+          // with no regular window to parent it is asked in a modeless panel, not cancelled
+          // (bug sweep r3 review r1 item 1).
+          if let parent = window ?? app.frontMainModelWindowController?.window ?? app.frontStandardWindowController?.window {
+            choice.present(in: parent, filename: name, directory: directory.url)
+          } else {
+            choice.presentModeless(filename: name, directory: directory.url)
+          }
         } else {
           let url = try await files.unique(in: directory.url, name: name)
           guard !app.terminationRequested, !retiredProfiles.contains(profile.id), app.model.profile(id: profile.id) != nil else { await files.release(url); completion(nil); return }

@@ -209,7 +209,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
-  private lazy var privateDownloads = IncognitoDownloads()
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
   var recordedOpenWorldMessages: [[String: Any]] = []
@@ -538,6 +537,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         directory: app.directories.engineDirectory(dataDirectoryName: directory))
     }
     guard let context, context.state == .live else { return nil }
+    // Downloads and notification clicks reach the App also before any window shows this Profile
+    // (Clear Browsing Data loads it with no window open; review r1 item 2).
+    context.delegate = app
     app.profileTeardown.didLoad(profileID: profileID, directory: directory)
     app.adBlockEngineAdapter.contextCreated(context, profileID: profileID)
     app.extensionPrompts.register(context.extensions)
@@ -1137,7 +1139,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
-    privateDownloads.close()
+    // The session owns private reservations (it closes them when it ends); a Save panel on this
+    // window cancels itself when the window closes.
     pageContextMenu?.cancel(); pageContextMenu = nil
     controller?.existingTabSwitcher?.cancel()
     translate.closeAll()
@@ -2129,16 +2132,16 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     _ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String,
     completion: @escaping @MainActor (URL?) -> Void
   ) {
-    if isIncognito {
-      privateDownloads.decide(download, filename: suggestedFilename, directory: downloadDirectory,
-        profile: incognitoSession?.parent, window: window, completion: completion)
+    if let session = incognitoSession {
+      session.downloads.decide(download, filename: suggestedFilename, directory: downloadDirectory,
+        profile: session.parent, window: window, completion: completion)
     } else {
       app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
     }
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
-    if isIncognito { privateDownloads.updated(download) }
+    if let session = incognitoSession { session.downloads.updated(download) }
     else { app.tabSleep.downloadUpdated(download, factory: self) }
     record(
       "download", download.webContent,

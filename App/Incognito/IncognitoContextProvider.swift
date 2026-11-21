@@ -38,6 +38,9 @@ final class IncognitoSession {
   let pipHosts = MediaSettings.PrivateHosts()
   let translateHosts = TranslatePreferences.SessionHosts()
   let developerModeHosts = DeveloperMode.SessionHosts()
+  /// Destinations of this session's downloads: shared by its windows, so the window that asked
+  /// may close first. Released when the session ends.
+  let downloads = IncognitoDownloads()
   init(parent: Profile, app: AppDelegate) {
     self.parent = parent
     self.app = app
@@ -99,6 +102,7 @@ final class IncognitoSession {
   func end() {
     guard !ended else { return }
     ended = true
+    downloads.close()
     context?.delegate = nil
     if let context {
       app?.adBlockEngineAdapter.contextClosed(context)
