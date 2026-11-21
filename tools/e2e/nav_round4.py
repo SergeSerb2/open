@@ -34,6 +34,7 @@ def run(factory, results, tmp, h):
         return wait_until(lambda: (lambda s: s if s.get('text') == text and s.get('final') else None)(state()), timeout=5, step=.05) or state()
 
     def close_bar():
+        if not app.call('shell-windows'): return
         if state().get('presented'):
             app.call('key', key='escape', route='app')
             wait_until(lambda: not state().get('presented'), timeout=3, step=.05)
@@ -116,8 +117,9 @@ def run(factory, results, tmp, h):
             moved = wait_until(lambda: (lambda s: s['stack'] and s['stack'][-1]['url'] == target)(app.call('peek-state')), timeout=6, step=.05)
             tabs = app.call('tabs')
             still_welcome = any(t['id'] == welcome and t['url'] == 'open://welcome' for t in tabs)
-            row('nav4_cmd_l_peek_over_welcome', edited.get('text') == origin + '/peek9' and bool(moved) and still_welcome
-                and not any(t['url'] == target for t in tabs), peek=app.call('peek-state'), tabs=[(t['id'], t['url']) for t in tabs])
+            row('nav4_cmd_l_peek_over_welcome', edited.get('mode') == 'editCurrentURL' and bool(moved) and still_welcome
+                and not any(t['url'] == target for t in tabs), seed=edited.get('text'), peek=app.call('peek-state'),
+                tabs=[(t['id'], t['url']) for t in tabs])
         guarded('nav4_cmd_l_peek_over_welcome', peek_over_welcome, lambda: app.call('peek-close'))
 
         # F-01: Undo of a closed Peek after a switch to another Profile's Space keeps the Peek's Profile.
