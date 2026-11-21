@@ -27,6 +27,7 @@ import math
 import glob
 import hashlib
 import re
+import sqlite3
 import runpy
 import os
 import shutil
@@ -5071,12 +5072,43 @@ def sidebar_checks(factory, results, tmp):
         app.call("sidebar-clear")
         results["clear_today"] = {"ok": [t["id"] for t in app.call("tabs")] == [a]
                                        and len(app.call("archive")) >= 3}
+        # Bug sweep round 3 (W8): a second Space switch while the first one's cover is up, in a
+        # panel over the cover's 16 Mpx image limit (a large 2x display; here an unconstrained
+        # 1x window). The running slide cannot fold into an image, so the switch applies without
+        # a cover. Before, it returned early with the first cover's callbacks cancelled: the cover
+        # stayed up for good and took every click in the panel.
+        w8_home = next(s for s in app.call("spaces") if s["focused"])["id"]
+        w8_space = app.call("space-create", title="W8 Wide")
+        w8_tab = new_tab(app, fixture("Sidebar W8"))
+        app.call("space", space=w8_home)
+        app.call("select", tab=a)
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+        w8_reduced = app.call("window-motion")["reduced"]
+        app.call("window-motion", reduced=False)
+        w8_frame = [float(v) for v in re.findall(r"-?[\d.]+", app.call("window-frame"))]
+        app.call("window-frame", frame=[0, 0, 5200, 3600], unconstrained=True)
+        time.sleep(.5)
+        app.call("space", space=w8_space)
+        w8_first = app.call("window-motion")["spacePage"]["phase"]
+        app.call("space", space=w8_home)
+        w8_idle = wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
+        w8_after = app.call("window-motion")["spacePage"]
+        w8_page = check_page(app, a, "Sidebar A")
+        app.call("window-frame", frame=w8_frame)
+        app.call("window-motion", reduced=w8_reduced)
+        results["W8_interrupted_wide_switch_retires_cover"] = {
+            "ok": w8_first != "idle" and bool(w8_idle) and w8_page,
+            "first_phase": w8_first, "after": w8_after, "page_shown": w8_page, "restored_frame": w8_frame,
+            "w8_tab": w8_tab}
         s1 = next(s for s in app.call("spaces") if s["focused"])["id"]
         s2 = app.call("space-create", title="Work", profile="Work")
         e = new_tab(app, fixture("Sidebar E"))
         context = app.page(e)["context"]
         app.call("space", space=s1)
         app.call("select", tab=a)
+        # An animated switch shows the page when its cover retires (the engine's presented
+        # frame), not at the automation reply: wait for that state, as the click below does.
+        state_when(app, lambda st: st["selected"] == a and st["shownPages"] == [a])
         first_page = check_page(app, a, "Sidebar A")
         # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
         # A socket-ready launch can still be waiting for its activation grant.
@@ -5088,19 +5120,32 @@ def sidebar_checks(factory, results, tmp):
         # its layer animation (otherwise the receipt can belong to the prior switch).
         after_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e) or app.call("window-state")
         switched = app.call("window-motion")["space"]
+        # The model flips at mouse-up; the panel shows E once the cover retires on E's
+        # presented frame. Read the page there, not at the flip.
+        settle_started = time.monotonic()
+        settled_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e and st["shownPages"] == [e]
+                                   and app.call("window-motion")["spacePage"]["phase"] == "idle") or app.call("window-state")
+        settle_seconds = time.monotonic() - settle_started
+        click_cover = app.call("window-motion")["spacePage"]
+        click_tab = {k: app.tab(e).get(k) for k in ("sleepPhase", "loaded", "hasWebContent")}
         second_page = check_page(app, e, "Sidebar E")
+        second_context = app.page(e)["context"]
         results["space_switch_wrapper"] = {"ok": first_page and second_page and context != "Default"
-                                                and app.page(e)["context"] == context}
+                                                and second_context == context,
+                                           "first_page": first_page, "second_page": second_page,
+                                           "context": context, "second_context": second_context,
+                                           "state": {k: after_click.get(k) for k in ("space", "selected", "shownPages")}}
         # Closed-form critical response from the installed mass/stiffness, not elapsed time.
         omega = math.sqrt(switched.get("stiffness", 0) / switched.get("mass", 1))
         remainder = 228 * (1 + omega * .27) * math.exp(-omega * .27)
         travel = abs(switched.get("to", 0) - switched.get("from", 0))
         results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
-            and after_click["selected"] == e and after_click["shownPages"] == [e]
+            and after_click["selected"] == e and settled_click["shownPages"] == [e]
             and scheduled_spring(switched, .20, 1, "transform.translation.x") and remainder <= .5 and travel > .5,
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
-            "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
+            "selected_after_click": after_click["selected"], "shown_after_click": settled_click["shownPages"],
+            "settle_seconds": settle_seconds, "cover_phase_after_settle": click_cover.get("phase"), "tab_after_click": click_tab}
         results["durable_profile_storage"] = {
             "status": "INFO", "coveredBy": "profiles/durable_second_profile",
             "reason": "requires the real cross-launch cookie/storage assertion in the Profiles suite"}
@@ -11781,6 +11826,59 @@ def sidebar_sweep_r2_checks(app, require, tmp, launch):
     require('R2_stale_folder_row_does_not_block_restore', stale_archived and fixture and dropped and restored and stale in sidebar_ids(),
             fixture=fixture, fixtureDetail=fixture_detail, stale=stale, kept=kept, staleInSidebar=stale in sidebar_ids(), archive=archive_ids()[:3],
             dropped=bool(dropped), restored=bool(restored))
+    # Bug sweep round 3. Both rows are measured before either is asserted.
+    # L2: Cmd+D on an outline selection skips a split, as a selected split disables Pin. Before,
+    # the selection path pinned the whole split (a split row clicked alone, or with a tab).
+    def section_of(node):
+        tree = app.call('sidebar-tree')
+        return 'pinned' if any(n['id'] == node for n in tree['pinned']) else 'today' if any(n['id'] == node for n in tree['today']) else None
+    def sidebar_key(name, mods=()): return app.call('sidebar-key', key=name, modifiers=list(mods))
+    l2_left = opened('R3 Split Left'); opened('R3 Split Right'); app.call('select', tab=l2_left); settle()
+    app.call('split'); settle()
+    l2_split = app.call('split', op='state')['id']
+    l2_lone = opened('R3 Lone')
+    app.call('sidebar-click', node=l2_split); settle()
+    sidebar_key('d', ['cmd']); settle()
+    l2_single = section_of(l2_split)
+    app.call('sidebar-click', node=l2_split); app.call('sidebar-click', node=l2_lone, modifiers=['cmd']); settle()
+    l2_selection = app.call('selection')
+    sidebar_key('d', ['cmd']); settle()
+    l2_mixed = dict(split=section_of(l2_split), lone=section_of(l2_lone))
+    r3_rows = [('R3_selection_pin_skips_split', bool(l2_split) and l2_single == 'today' and l2_mixed == dict(split='today', lone='pinned'),
+        dict(split=l2_split, singleSplitSection=l2_single, mixed=l2_mixed, selection=l2_selection))]
+    # L3: an Archive row that cannot come back (here a folder row with an undecodable payload)
+    # is kept and skipped; Cmd+Shift+T restores the next row. Before, every press stopped there.
+    l3_kept = opened('R3 Kept Closed')
+    app.call('close', tab=l3_kept); settle()
+    l3_child = opened('R3 Broken Child')
+    l3_folder = app.call('folder', tabs=[l3_child], title='R3 Broken')
+    l3_archived = delete_folder(l3_folder)
+    l3_snapshot = app.call('save'); app.quit()
+    l3_patched = 0
+    for parent in list(Path(l3_snapshot).parents)[:3]:
+        for database in parent.glob('**/archive.sqlite3'):
+            connection = sqlite3.connect(str(database))
+            try:
+                l3_patched += connection.execute("UPDATE archived_tabs SET payload='{not json' WHERE id=? COLLATE NOCASE AND kind='folder'",
+                                                 (l3_folder,)).rowcount
+                connection.commit()
+            finally:
+                connection.close()
+        if l3_patched: break
+    app = launch(); app.call('space', space=space); settle()
+    l3_fixture = archive_ids()[:2] == [l3_folder, l3_kept] and l3_kept not in sidebar_ids()
+    l3_fixture_detail = archive_ids()[:3]
+    command('restore-last-closed-tab')
+    l3_restored = wait_until(lambda: l3_kept in sidebar_ids(), timeout=5)
+    r3_rows.append(('R3_unrestorable_archive_row_skipped', l3_archived and l3_patched == 1 and l3_fixture and bool(l3_restored)
+        and l3_folder in archive_ids() and l3_folder not in sidebar_ids(),
+        dict(archived=bool(l3_archived), patched=l3_patched, fixture=l3_fixture, archiveBefore=l3_fixture_detail,
+             restored=bool(l3_restored), archiveAfter=archive_ids()[:3], folder=l3_folder, kept=l3_kept)))
+    r3_failed = None
+    for name, condition, detail in r3_rows:
+        try: require(name, condition, **detail)
+        except AssertionError: r3_failed = r3_failed or name
+    if r3_failed: raise AssertionError(r3_failed)
     return app
 
 
