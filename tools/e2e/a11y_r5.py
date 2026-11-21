@@ -33,6 +33,13 @@ def run(factory, results, wait_until):
                   and all(r['role'] == 'AXMenuItem' for r in ax) and [r['enabled'] for r in ax] == [r['enabled'] for r in rows]
                   and [r['label'] for r in ax if r['selected']] == [state.get('highlighted')],
             'rows': [r['title'] for r in rows], 'axRows': ax, 'highlighted': state.get('highlighted')}
+        # The popover itself is an AX element, and its selected child follows the highlight (review #652 #1, #2).
+        moved = app.call('plus-popover', op='key', code=126)
+        results['a11y_plus_popover_selection_follows_highlight'] = {
+            'ok': moved.get('axElement') is True and moved.get('highlighted') != state.get('highlighted')
+                  and moved.get('axSelected') == [moved.get('highlighted')]
+                  and [r['label'] for r in moved.get('axRows', []) if r['selected']] == [moved.get('highlighted')],
+            'axElement': moved.get('axElement'), 'highlighted': moved.get('highlighted'), 'axSelected': moved.get('axSelected')}
         app.call('plus-popover', op='key', code=53)
 
         # A11Y-06

@@ -28,7 +28,9 @@ final class PlusPopoverView: NSView {
     let sourceMenu: NSMenu
     private var separators: [CGRect] = []
     var colors: PlusPopoverColors { didSet { needsDisplay = true } }
-    var highlighted: Int? { didSet { if highlighted != oldValue { needsDisplay = true; NSAccessibility.post(element: self, notification: .selectedChildrenChanged) } } }
+    var highlighted: Int? { didSet { if highlighted != oldValue {
+        needsDisplay = true; refreshRowElements(); NSAccessibility.post(element: self, notification: .selectedChildrenChanged)
+    } } }
     /// The rows are drawn, not views: VoiceOver reads one menu item element per row (A11Y-07).
     private lazy var rowElements: [PlusPopoverRowElement] = rows.indices.map { index in
         let element = PlusPopoverRowElement()
@@ -39,13 +41,19 @@ final class PlusPopoverView: NSView {
         }
         return element
     }
-    override func accessibilityChildren() -> [Any]? {
+    /// Element values follow the rows and the highlight (an AX client may hold an element).
+    private func refreshRowElements() {
         for (index, element) in rowElements.enumerated() where index < rows.count {
             let row = rows[index]
             element.title = row.item.title; element.enabled = row.item.isEnabled; element.selected = highlighted == index
             element.screenFrame = window.map { $0.convertToScreen(convert(row.frame, to: nil)) } ?? .zero
         }
-        return rowElements
+    }
+    override func accessibilityChildren() -> [Any]? { refreshRowElements(); return rowElements }
+    /// The rows have no views: a pointer location (screen coordinates) resolves to its row element.
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        refreshRowElements()
+        return rowElements.first { $0.screenFrame.contains(point) } ?? self
     }
     override func accessibilitySelectedChildren() -> [Any]? {
         guard let highlighted, let children = accessibilityChildren(), highlighted < children.count else { return [] }
@@ -82,7 +90,7 @@ final class PlusPopoverView: NSView {
         let body = m.bodyHeight(rows: rows.count, groups: separators.count + 1)
         frame = CGRect(x: 0, y: 0, width: m.bodyWidth + 2 * m.margin, height: body + 2 * m.margin + m.arrowSize.height)
         highlighted = rows.lastIndex { $0.item.isEnabled }
-        setAccessibilityRole(.popover); setAccessibilityLabel("New")
+        setAccessibilityElement(true); setAccessibilityRole(.popover); setAccessibilityLabel("New")
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
