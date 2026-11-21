@@ -64,7 +64,7 @@ def github_fixture():
                 items = ''.join('<li data-pr-row data-pr-state="%s" data-pr-author="octo"><a class="Link--primary" href="/%s/pull/%d">%s</a>'
                                 '<relative-time datetime="2026-11-1%dT10:00:00Z"></relative-time></li>' % (st, repo, n, html.escape(t), n % 10)
                                 for repo, n, t, st in rows)
-                body = '<!doctype html><title>Pull requests</title><ul>%s</ul>%s' % (items, '' if rows else '<div class="blankslate">No results</div>')
+                body = '<!doctype html><title>Pull requests</title><ul>%s%s</ul>%s' % (items, state.get('extra') or '', '' if rows else '<div class="blankslate">No results</div>')
                 if state['sso'] is not None:
                     body += '<div data-testid="global-sso-banner">%s</div>' % ''.join(
                         '<a href="%s">Authorize organization</a>' % html.escape(href, quote=True) for href in state['sso'])
@@ -394,6 +394,16 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and partial.get('outcome') == 'needsSSO' and during_sso == before_sso
             and complete.get('outcome') == 'success' and len(after_sso) == 1 and after_sso < before_sso,
             'before': sorted(before_sso), 'duringSSO': sorted(during_sso), 'after': sorted(after_sso)}
+        # Bug sweep r3 E15: one malformed /pull/ link used to throw and fail the whole refresh; a
+        # link to another origin used to become a row on the GitHub origin.
+        gh['extra'] = ('<li><a href="http://[/acme/app/pull/301">Malformed link</a></li>'
+                       '<li><a href="https://elsewhere.invalid/evil/repo/pull/302">Cross-origin link</a></li>')
+        try:
+            odd = refreshed('success'); odd_urls = live_urls()
+        finally:
+            gh['extra'] = None
+        results['live_folder_odd_links_skipped'] = {'ok': odd.get('outcome') == 'success'
+            and odd_urls == {'http://github.localhost:%d/acme/app/pull/201' % port}, 'refresh': odd, 'rows': sorted(odd_urls)}
         gh['prs'] = {'created': []}
         refreshed('success')
         # Bug sweep R2 (seed-livedata #12): the user drags the Live Folder into another Pinned folder. The Space
@@ -619,6 +629,25 @@ def run(factory, results, tmp, harness):
         fetched = app.call('live-fetch', url=url('fetch', 'live-fetch'), script='document.title + "|" + typeof window.__pageOnly')
         results['live_fetch_host_hidden_page'] = {'ok': fetched.get('value') == 'Sleep /live-fetch|undefined'
             and fetched.get('created') == fetched.get('closed') == 1 and len(app.call('tabs')) == before, 'fetched': fetched}
+        case = os.environ.get('OPEN_LIVE_DATA_CASE', '')
+        if case == 'r3-folder':
+            app = live_folder_checks(holder, results, wait_until, factory, new_tab)
+            return
+        # Bug sweep r3 E7: a script that never settles used to hold the one fetch slot for the
+        # whole run (every later Live Folder refresh and Gmail glance failed "busy").
+        try:
+            stalled = app.call('live-fetch', url=url('fetch', 'live-fetch-stall'), script='new Promise(() => {})', timeout=45)
+        except Exception as error:
+            stalled = {'error': 'client: ' + str(error)[-200:]}
+        try:
+            after = app.call('live-fetch', url=url('fetch', 'live-fetch'), script='document.title', timeout=45)
+        except Exception as error:
+            after = {'error': 'client: ' + str(error)[-200:]}
+        results['live_fetch_script_timeout'] = {'ok': str(stalled.get('error', '')).startswith('scriptTimedOut')
+            and after.get('value') == 'Sleep /live-fetch' and after.get('created') == after.get('closed') == 3,
+            'stalled': stalled, 'after': after}
+        if case == 'r3-fetch':
+            return
         app.call('glance-alias', aliases={'recents.localhost': 'linear', 'empty.localhost': 'notion', 'today.localhost': 'figma'})
         now_rows = [  # (path, title, seconds ago) — newest first after sorting.
             ('issue/ENG-3', 'ENG-3 Newest issue', 60),

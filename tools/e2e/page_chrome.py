@@ -315,6 +315,18 @@ def run(factory, results, tmp, h):
                          state=state, stored=stored, decisions=decisions)
         gate('permission_allow_remember_data', allow)
 
+        def ipv6_origin():
+            # Bug sweep r3 E13: the decision index stored IPv6 origins without brackets
+            # ("http://::1:8080"). That string does not parse, so the decision was never listed.
+            origin6 = 'http://[::1]:%d' % port
+            try:
+                stored = app.call('permission', origin=origin6, kind=8, state=1)
+                listed = [d for d in app.call('permission-decisions')['decisions'] if d['origin'] == origin6]
+            finally:
+                app.call('permission', origin=origin6, kind=8, state=0)
+            return check(stored == 1 and len(listed) == 1 and listed[0]['state'] == 1, stored=stored, listed=listed)
+        gate('permission_ipv6_origin_listed', ipv6_origin)
+
         def switched():
             permission_page('switch'); target=tab; other=page(); app.call('select',tab=target); perm(target=target); visible(ps)
             app.call('events'); before=ps()['decisions']; app.call('select', tab=other)
