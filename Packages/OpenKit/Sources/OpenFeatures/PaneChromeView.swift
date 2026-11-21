@@ -121,6 +121,8 @@ public final class PaneChromeView: NSView {
                 b.contentTintColor = dark ? NSColor.white.withAlphaComponent(alpha + 0.2) : NSColor.black.withAlphaComponent(alpha)
             }
             label.textColor = dark ? NSColor.white.withAlphaComponent(0.8) : NSColor.black.withAlphaComponent(0.6)
+            // Extension buttons resolve their ink from the appearance; light pages keep the inherited one.
+            extensionStrip?.appearance = dark ? NSAppearance(named: .darkAqua) : nil
         }
         let text = host?.currentURL?.absoluteString == "open://welcome" ? "Welcome to Open"
             : role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
@@ -154,6 +156,7 @@ public final class PaneChromeView: NSView {
             let strip = ExtensionStripView(style: stripStyle, context: extensionsUI)
             strip.onVisibilityChange = { [weak self] in self?.needsLayout = true }
             addSubview(strip); extensionStrip = strip
+            if drawsOnDark { strip.appearance = NSAppearance(named: .darkAqua) }
         }
         if let strip = extensionStrip {
             strip.frame = bounds; strip.isFocused = isFocused || role == .toolbar; strip.hasPage = host != nil
@@ -211,6 +214,8 @@ public final class PaneChromeView: NSView {
     public var displayedText: String { label.isHidden ? "" : label.stringValue }
     /// The host label's color (automation reads its contrast against the bar).
     public var displayedTextColor: NSColor? { label.textColor }
+    /// The Back glyph's tint (automation reads its contrast against the bar).
+    public var displayedGlyphColor: NSColor? { buttons.first?.contentTintColor }
     private var drawsOnDark = false
     /// Relative luminance under 0.45 (sRGB): the bar is dark.
     static func isDark(_ color: NSColor) -> Bool {

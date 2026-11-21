@@ -1698,6 +1698,8 @@
               "selected": view.isAccessibilitySelected(), "actions": (view.accessibilityCustomActions() ?? []).map(\.name),
               "class": String(describing: type(of: view))])
           }
+          // VoiceOver does not see inside an element (its subviews are not AX children).
+          if view.isAccessibilityElement() { return }
           for child in view.subviews { walk(child, depth: depth + 1) }
         }
         walk(root, depth: 0)
@@ -2131,7 +2133,7 @@
       let slot = controller.container.slots.count == 1 ? controller.container.slots[0] : nil
       let bar = slot?.paneChrome.flatMap { $0.role == .toolbar ? $0 : nil }
       return ["shown": controller.context.window?.showsToolbar == true, "drawn": bar != nil,
-        "frame": bar.map { rect($0.frame) } ?? [], "controls": bar?.visibleControls ?? [], "text": bar?.displayedText ?? "", "textColor": colorComponents(bar?.displayedTextColor),
+        "frame": bar.map { rect($0.frame) } ?? [], "controls": bar?.visibleControls ?? [], "text": bar?.displayedText ?? "", "textColor": colorComponents(bar?.displayedTextColor), "glyphColor": colorComponents(bar?.displayedGlyphColor),
         "page": slot?.contentHostView.map { rect($0.frame) } ?? [],
         "menu": controller.toolbarMenu()?.items.map { $0.isSeparatorItem ? "-" : $0.title } ?? []]
     }

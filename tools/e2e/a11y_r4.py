@@ -43,6 +43,7 @@ def run(factory, results, wait_until):
         wait_until(lambda: app.call('library-state').get('open') or None, timeout=5, step=.1)
         key('f', mods=['cmd'])
         searching = wait_until(lambda: 'TextView' in browser()['firstResponder'] or None, timeout=5, step=.1)
+        responder_in_library = browser()['firstResponder']
         key(text='zz')
         key('escape')
         key('escape')
@@ -55,7 +56,7 @@ def run(factory, results, wait_until):
         results['a11y_library_close_returns_focus_to_page'] = {
             # The search field may or may not hold focus on Cmd+F; either way the page must get it back.
             'ok': bool(closed) and focused is True and bool(typed),
-            'searchFocused': bool(searching), 'firstResponderAfterClose': responder,
+            'searchFocused': bool(searching), 'firstResponderInLibrary': responder_in_library, 'firstResponderAfterClose': responder,
             'pageHasFocus': focused, 'typedIntoPage': bool(typed)}
 
         # A11Y-04: keyboard activation of the Settings navigation rail.
@@ -68,6 +69,7 @@ def run(factory, results, wait_until):
             state = wait_until(lambda: (lambda s: s if s['section'] == section else None)(app.call('settings-ui')),
                                timeout=3, step=.1) or app.call('settings-ui')
             rows[name] = {'section': state['section'], 'query': state.get('query', '')}
+        key('w', mods=['cmd'], window=settings)
         results['a11y_settings_nav_keyboard_activation'] = {
             'ok': rows['space'] == {'section': 'shortcuts', 'query': ''} and rows['return'] == {'section': 'profiles', 'query': ''},
             'rows': rows}
@@ -99,11 +101,21 @@ def run(factory, results, wait_until):
             return st if st['toolbar']['drawn'] and bg and luminance(bg) < .3 else None
         state = wait_until(dark_bar, timeout=8, step=.2) or app.call('window-state')
         bar_color = next((p['color'] for p in state.get('paneBackgrounds', []) if p['color']), None)
-        text = state['toolbar'].get('textColor')
+        text, glyph = state['toolbar'].get('textColor'), state['toolbar'].get('glyphColor')
+        # Back to a light page: the old dark ink returns.
+        app.call('navigate', tab=tab, url=page); app.call('wait', tab=tab)
+        def light_bar():
+            st = app.call('window-state')
+            bg = next((p['color'] for p in st.get('paneBackgrounds', []) if p['color']), None)
+            return st if st['toolbar']['drawn'] and bg and luminance(bg) > .7 else None
+        light = wait_until(light_bar, timeout=8, step=.2) or app.call('window-state')
+        light_text, light_glyph = light['toolbar'].get('textColor'), light['toolbar'].get('glyphColor')
         results['a11y_toolbar_text_legible_on_dark_page'] = {
             'ok': bool(state['toolbar']['drawn']) and luminance(bar_color) is not None and luminance(bar_color) < .3
-                  and luminance(text) is not None and luminance(text) > .7,
-            'barColor': bar_color, 'textColor': text, 'text': state['toolbar'].get('text')}
+                  and luminance(text) is not None and luminance(text) > .7 and luminance(glyph) is not None and luminance(glyph) > .7
+                  and luminance(light_text) is not None and luminance(light_text) < .3 and luminance(light_glyph) is not None and luminance(light_glyph) < .3,
+            'barColor': bar_color, 'textColor': text, 'glyphColor': glyph, 'text': state['toolbar'].get('text'),
+            'lightTextColor': light_text, 'lightGlyphColor': light_glyph}
         key('d', mods=['cmd', 'shift'])
     finally:
         app.quit()
