@@ -143,10 +143,17 @@ def run(app, script, results, wait_until, quote, key, off_message, prefix=''):
         # Bug sweep r3 L19: Little Open never shows a Note or an Easel (open:// pages). A window made
         # with such a URL still gets its web page. Before, the internal URL made a Note host in the
         # window's own host list, the page was never made, and that Note host was never closed.
-        internal = script('set t to make new tab with properties {URL:"open://note/00000000-0000-4000-8000-000000000019"}\nreturn id of t')
-        internal_state = wait_until(lambda: (lambda s: s if s and s['content'] else None)(state(internal)), timeout=10, step=.1)
-        record('internal_URL_gets_page', bool(internal_state), state=internal_state or state(internal))
-        script('close '+target(internal))
+        # With #644 merged, scripts refuse open:// URLs (error 1001). That refusal also keeps the
+        # internal page out of Little Open, so either outcome satisfies L19.
+        made = script('try\nset t to make new tab with properties {URL:"open://note/00000000-0000-4000-8000-000000000019"}\n'
+                      'return "ID|" & (id of t)\non error msg number n\nreturn (n as text) & "|" & msg\nend try')
+        if not str(made).startswith('ID|'):
+            record('internal_URL_gets_page', str(made).startswith('1001|'), refused=made)
+        else:
+            internal = str(made)[3:]
+            internal_state = wait_until(lambda: (lambda s: s if s and s['content'] else None)(state(internal)), timeout=10, step=.1)
+            record('internal_URL_gets_page', bool(internal_state), state=internal_state or state(internal))
+            script('close '+target(internal))
     finally:
         release.set()
         try:
