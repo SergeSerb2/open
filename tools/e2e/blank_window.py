@@ -77,7 +77,7 @@ def blank_window_checks(factory, results, h, origin):
 
         # Bug sweep round 4 (SB-09): no Space, Profile, Pinned or Favorites command edits this window's
         # private model (it has no Pinned section, no Favorites and one window-only Space).
-        blocked = ['pin-unpin-tab', 'new-space', 'rename-space', 'change-profile']
+        blocked = ['pin-unpin-tab', 'new-space', 'rename-space', 'change-profile', 'edit-theme']
         app.call('select', tab=first)
         states = {m['id']: m['enabled'] for m in app.call('menu-state') if m['id'] in blocked}
         row('workspace_commands_disabled', len(states) == len(blocked) and not any(states.values()), states=states)

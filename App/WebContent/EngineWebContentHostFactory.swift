@@ -917,9 +917,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       switch intent {
       // The same window-only rules as the menu bar (isAppCommandEnabled): no Space, Profile,
       // Pinned or Favorites edits of this window's private model.
-      case .newSpace, .pin, .unpin, .setPinned, .addFavorite, .moveFavorite, .changeSpaceIcon, .renameSpace,
+      case .newSpace, .pin, .unpin, .setPinned, .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .exportSpaceIntoFolder, .deleteSpace, .moveSpace,
-           .moveNodesToNewSpace, .moveToNewSpace, .turnFolderIntoSpace: return false
+           .moveNodesToNewSpace, .moveToNewSpace, .turnFolderIntoSpace, .setPinnedCollapsed,
+           .resetToPinnedURL, .replacePinnedURL, .editPinnedURL, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState: return false
+      // Only tabs leave a Blank Window (a folder or split here has no move to the browser's Spaces).
+      case .moveNodesToSpace(let ids, _) where !ids.allSatisfy({ model.node(id: $0)?.tab != nil }): return false
       // A selection moves into one of the browser's Spaces, one tab at a time, keeping its order.
       case .moveNodesToSpace(let ids, let space):
         var moved = false
@@ -1023,7 +1026,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .shareVia(let id, let service): return shareSidebarTab(id, via: service)
     case .shareSplit(let id): return shareSidebarSplit(id)
     case .shareNodes(let ids): return shareSidebarNodes(ids)
-    case .duplicate(let id): return model.duplicateNode(id: id) != nil
+    case .duplicate(let id): return model.duplicateNode(id: id, into: focusedSpace?.id) != nil
     case .toggleLibraryMediaSource(let id): return app.settingsPresenter.toggleLibraryMediaSource(id)
     case .showLibrary:
       app.settingsPresenter.toggleLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true

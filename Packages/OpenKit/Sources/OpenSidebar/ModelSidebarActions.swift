@@ -50,9 +50,9 @@ public struct ModelSidebarActions {
         case .setPinned(let ids, let pinned):
             return model.setPinned(ids: ids, pinned: pinned) > 0
         case .duplicateNodes(let ids):
-            return !model.duplicateNodes(ids: ids).isEmpty
+            return !model.duplicateNodes(ids: ids, into: context.focusedSpace?.id).isEmpty
         case .duplicate(let id):
-            return !model.duplicateNodes(ids: [id]).isEmpty
+            return !model.duplicateNodes(ids: [id], into: context.focusedSpace?.id).isEmpty
         case .clearTodayKeeping(let space, let keep):
             guard model.space(id: space) != nil else { return false }
             model.clearToday(space: space, keeping: keep)

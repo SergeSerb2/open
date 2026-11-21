@@ -67,7 +67,9 @@ struct SidebarMenus {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
         if context.isWindowOnly {
             // As for one row: a Blank Window's tabs move into the browser's Spaces (the App handles it).
-            parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, .moveNodesToSpace(ids: ids, space: $0.id)) })
+            // Only tabs move out of a Blank Window; a selection with a folder or split cannot.
+            let tabsOnly = ids.allSatisfy { context.model.node(id: $0)?.tab != nil }
+            parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, enabled: tabsOnly, .moveNodesToSpace(ids: ids, space: $0.id)) })
             return parent
         }
         let current = Set(ids.compactMap { context.model.parent(of: $0).flatMap(spaceID(of:)) })

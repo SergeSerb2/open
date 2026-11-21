@@ -895,11 +895,11 @@ public final class BrowserModel {
     /// Copies a whole sidebar subtree immediately after its source, with fresh
     /// IDs and runtime state. One undo step removes the complete copy.
     @discardableResult
-    public func duplicateNode(id: ItemID) -> ItemID? {
+    public func duplicateNode(id: ItemID, into space: SpaceID? = nil) -> ItemID? {
         guard let source = node(id: id), let parent = parent(of: id), let position = position(of: id, in: parent) else { return nil }
         // A Favorite's copy goes to Today, as the row menu's and a selection's Duplicate do
         // (duplicateNodes). Attaching it beside the Favorite skipped the 12-Favorite limit.
-        if case .favorites = parent { return duplicateNodes(ids: [id]).first }
+        if case .favorites = parent { return duplicateNodes(ids: [id], into: space).first }
         if case .splitPane(let splitID) = parent, (node(id: splitID)?.split?.panes.count ?? 4) >= 4 { return nil }
         func copyTab(_ tab: Tab) -> Tab {
             Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
@@ -1073,8 +1073,15 @@ public final class BrowserModel {
         tab.lastActiveAt = Date()
         guard let destination = restoreDestination(for: record),
               let revert = place(restored: tab, from: record, into: destination) else { return tab }
-        registerUndo(revert, reapply: { $0.place(restored: tab, from: record, into: destination) ?? Self.noRevert })
+        registerUndo(revert, reapply: { Self.replace(restored: tab, from: record, in: $0) })
         return tab
+    }
+
+    /// Redo of a restore: the destination is chosen again (the split may have collapsed or
+    /// filled meanwhile; restoreDestination then picks Today, as a fresh restore would).
+    private static func replace(restored tab: Tab, from record: ArchivedTabRecord, in model: BrowserModel) -> Revert {
+        guard let destination = model.restoreDestination(for: record) else { return noRevert }
+        return model.place(restored: tab, from: record, into: destination) ?? noRevert
     }
 
     /// Stages a restore around the caller's durable snapshot commit. Failure rolls back the
@@ -1084,11 +1091,20 @@ public final class BrowserModel {
         if let existing = tab(id: record.id) { return existing }
         let tab = Self.tab(from: record)
         tab.lastActiveAt = Date()
-        guard let destination = restoreDestination(for: record),
-              let revert = place(restored: tab, from: record, into: destination, discardArchive: false) else { return tab }
+        guard let destination = restoreDestination(for: record) else { return tab }
+        // place() rebalances a split it joins; a failed save restores the old shares.
+        let splitShares: (Split, [Double])? = {
+            guard case .splitPane(let id) = destination, let split = index[id]?.split else { return nil }
+            return (split, split.fractions)
+        }()
+        guard let revert = place(restored: tab, from: record, into: destination, discardArchive: false) else { return tab }
         do { try saving() }
-        catch { _ = detach(tab.id); throw error }
-        registerUndo(revert, reapply: { $0.place(restored: tab, from: record, into: destination) ?? Self.noRevert })
+        catch {
+            _ = detach(tab.id)
+            if let splitShares { splitShares.0.fractions = splitShares.1 }
+            throw error
+        }
+        registerUndo(revert, reapply: { Self.replace(restored: tab, from: record, in: $0) })
         return tab
     }
 
@@ -1644,14 +1660,17 @@ public final class BrowserModel {
     }
 
     @discardableResult
-    public func duplicateNodes(ids: [ItemID]) -> [ItemID] {
+    /// `space`: the window's focused Space, where a Favorite's copy goes when it is of that
+    /// Profile (else the Profile's first focused Space).
+    public func duplicateNodes(ids: [ItemID], into space: SpaceID? = nil) -> [ItemID] {
         var copies: [(node: SidebarNode, parent: NodeParent, source: ItemID)] = []
         for id in topLevelSelection(ids) {
             guard let node = index[id], let parent = parentByID[id] else { continue }
             if case .splitPane = parent { continue }
             let destination: NodeParent
             if case .favorites(let profileID) = parent {
-                guard let spaceID = targetSpace(forProfile: profileID) else { continue }
+                let preferred = space.flatMap { self.space(id: $0) }.flatMap { $0.profileID == profileID ? $0.id : nil }
+                guard let spaceID = preferred ?? targetSpace(forProfile: profileID) else { continue }
                 destination = .spaceToday(spaceID)
             } else { destination = parent }
             copies.append((copyNode(node), destination, id))

@@ -293,7 +293,8 @@ extension EngineWebContentHostFactory {
   /// A Blank Window has one window-only Space, no Pinned section and no Favorites (capture C10).
   /// These commands would edit that throwaway model: a phantom Space, Profile or pinned tab.
   static let blankWindowRefusedCommands: Set<String> = ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites",
-    "remove-from-favorites", "new-space", "rename-space", "change-space-icon", "change-profile", "edit-theme"]
+    "remove-from-favorites", "new-space", "rename-space", "change-space-icon", "change-profile", "edit-theme",
+    "expand-pinned-section", "collapse-pinned-section"]
 
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
@@ -359,7 +360,7 @@ extension EngineWebContentHostFactory {
     case "pin-unpin-tab": togglePin(nil)
     case "pin-tab": if let tab = selectedTab { model.pinTab(id: tab.id) }
     case "unpin-tab": if let tab = selectedTab { model.unpinTab(id: tab.id) }
-    case "duplicate-tab": if let id = selectedNodeID { _ = model.duplicateNode(id: id) }
+    case "duplicate-tab": if let id = selectedNodeID { _ = model.duplicateNode(id: id, into: focusedSpace?.id) }
     case "rename-tab":
       guard let tab = selectedTab, let controller, let window else { return false }
       if windowState.sidebarMode == .hidden { controller.toggleSidebar() }
