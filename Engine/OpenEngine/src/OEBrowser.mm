@@ -312,6 +312,9 @@ class OETabStripHandler : public CefTabStripHandler {
   NSString* _popupExtension;
   NSUInteger _popupDelegateDepth;
   BOOL _popupCloseScheduled;
+  // The popup the scheduled close is for. A replacement popup asked to close
+  // before that turn runs takes its place (one BOOL dropped its close).
+  OEWebContent* __weak _popupCloseTarget;
   // Fork patch P1.
   CefRefPtr<CefTabStrip> _strip;
   // Pages Chromium is creating in the strip, until OnTabCreated.
@@ -1115,12 +1118,15 @@ class OETabStripHandler : public CefTabStripHandler {
     return;
   }
   if (_popupDelegateDepth) {
+    _popupCloseTarget = popup;
     if (!_popupCloseScheduled) {
       _popupCloseScheduled = YES;
       dispatch_async(dispatch_get_main_queue(), ^{
         self->_popupCloseScheduled = NO;
+        OEWebContent* target = self->_popupCloseTarget;
+        self->_popupCloseTarget = nil;
         // A request for an older popup must not close its replacement.
-        if (self->_popup == popup) {
+        if (target && self->_popup == target) {
           [self closeExtensionPopup];
         }
       });
@@ -1182,13 +1188,34 @@ class OETabStripHandler : public CefTabStripHandler {
       break;
     }
   }
+  if (!action) {
+    // The cached action list can predate the extension (installed or
+    // reloaded since): read it again once.
+    _actions = nil;
+    for (OEExtensionAction* a in self.extensionActions) {
+      if ([a.extensionIdentifier isEqualToString:identifier]) {
+        action = a;
+        break;
+      }
+    }
+  }
   _popupAction = action;
   if (action && [_delegate respondsToSelector:@selector
                            (browser:didOpenExtensionPopup:forAction:)]) {
     ++_popupDelegateDepth;
     [_delegate browser:self didOpenExtensionPopup:content forAction:action];
     --_popupDelegateDepth;
+    return;
   }
+  // Nothing shows this popup: close it (outside Chromium's open callback),
+  // or it stays open invisibly and blocks -transferWebContent:.
+  __weak OEBrowser* weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    OEBrowser* strongSelf = weakSelf;
+    if (strongSelf && strongSelf->_popup == content) {
+      [strongSelf closeExtensionPopup];
+    }
+  });
 }
 
 - (BOOL)oe_isPopupBrowser:(CefRefPtr<CefBrowser>)browser {

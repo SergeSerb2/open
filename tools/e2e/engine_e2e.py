@@ -15496,7 +15496,11 @@ def main():
             littleopen_checks(factory, results["littleopen"], tmp)
         elif opts.only == "routing":
             results["routing"] = CheckedResults(tracker)
-            routing_checks(factory, results["routing"], tmp)
+            # OPEN_ROUTING_ENG6_ONLY=1 runs only the bug sweep round 6 engine rows (tools/e2e/engine_round6.py).
+            if os.environ.get("OPEN_ROUTING_ENG6_ONLY") != "1":
+                routing_checks(factory, results["routing"], tmp)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_round6.py"))["run"](
+                factory, results["routing"], tmp, sys.modules[__name__])
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
