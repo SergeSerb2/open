@@ -76,7 +76,10 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     let table = ExtensionShortcutTable(); table.rebuild(manager, overrides: app.keyBindings); tables[key] = table; return table
   }
   func rebuildShortcuts() {
-    for context in OEEngine.shared.contexts { table(context.extensions).rebuild(context.extensions, overrides: app.keyBindings) }
+    // OEEngine.contexts lists regular Profiles only: drop every snapshot so an Incognito
+    // manager's table is built again (table(_:)) at its next key event or Settings read.
+    tables.removeAll()
+    for context in OEEngine.shared.contexts { _ = table(context.extensions) }
   }
   func extensionManager(_ manager: OEExtensionManager, show prompt: OEExtensionPrompt) {
     let key = ObjectIdentifier(prompt)
