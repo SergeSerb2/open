@@ -46,15 +46,17 @@ final class SQLiteDB: @unchecked Sendable {
     }
 
     /// Opens the store. A damaged file and its -wal/-shm are moved aside as
-    /// `<name>.damaged-<time>[-wal|-shm]` (kept, never deleted) and a fresh store is opened in its
+    /// `<name>.damaged-<time>-<id>[-wal|-shm]` (kept, never deleted) and a fresh store is opened in its
     /// place, as the session snapshot keeps `browser.unreadable-*.json` (bug sweep r7 Z-02).
     static func openSettingAsideDamage(path: String, open: (String) throws -> SQLiteDB) throws -> SQLiteDB {
         do {
             let first = try open(path)
             if !first.isDamaged { return first }
         }
-        let stamp = Int(Date().timeIntervalSince1970)
-        for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: path + suffix) {
+        // Unique per set-aside; the sidecars go first, so a failed move never leaves the old WAL beside a
+        // new database (review r1 of #670).
+        let stamp = "\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8))"
+        for suffix in ["-shm", "-wal", ""] where FileManager.default.fileExists(atPath: path + suffix) {
             try FileManager.default.moveItem(atPath: path + suffix, toPath: path + ".damaged-\(stamp)" + suffix)
         }
         FileHandle.standardError.write(Data("Open: damaged store kept as \((path as NSString).lastPathComponent).damaged-\(stamp); starting a new one\n".utf8))

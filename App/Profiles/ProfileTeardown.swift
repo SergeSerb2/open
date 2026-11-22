@@ -135,9 +135,12 @@ final class ProfileTeardown {
     try sync(parent)
     purge([trash])
   }
+  /// Every trash removal and the launch sweep run on this one serial queue, so the sweep never walks a
+  /// tree that a delete is still removing (review r1 of #670).
+  nonisolated private static let trashQueue = DispatchQueue(label: "open.profile-trash", qos: .utility)
   nonisolated private static func purge(_ urls: [URL]) {
     guard !urls.isEmpty else { return }
-    Task.detached(priority: .utility) {
+    trashQueue.async {
       for url in urls {
         do { try FileManager.default.removeItem(at: url) }
         catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError {}
@@ -150,13 +153,13 @@ final class ProfileTeardown {
   nonisolated static func sweepTrash(directories: ProfileDirectories) {
     let parents = [directories.root.appendingPathComponent("Profiles", isDirectory: true), directories.engineRoot,
                    ProfileDirectories.chromiumCacheDirectory(forProfile: directories.engineRoot)]
-    Task.detached(priority: .utility) {
+    trashQueue.async {
       var found: [URL] = []
       for parent in Set(parents.map(\.standardizedFileURL)) {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: parent.path) else { continue }
         found += names.filter { $0.hasPrefix(trashPrefix) }.map { parent.appendingPathComponent($0, isDirectory: true) }
       }
-      purge(found)
+      purge(found)  // queued behind this block on the same serial queue
     }
   }
 
@@ -296,9 +299,14 @@ final class ProfileTeardown {
     do { journaled = try pending(directories) }
     catch {
       let url = pendingURL(directories)
-      let kept = url.deletingLastPathComponent().appendingPathComponent(".pending-wipe.unreadable-\(Int(Date().timeIntervalSince1970)).json")
-      try? FileManager.default.moveItem(at: url, to: kept)
-      log("Profile cleanup list unreadable (kept as \(kept.lastPathComponent)); no folder deleted: \(error)")
+      let kept = url.deletingLastPathComponent().appendingPathComponent(
+        ".pending-wipe.unreadable-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json")
+      do {
+        try FileManager.default.moveItem(at: url, to: kept)
+        log("Profile cleanup list unreadable (kept as \(kept.lastPathComponent)); no folder deleted: \(error)")
+      } catch let move {
+        log("Profile cleanup list unreadable and not set aside (\(move)); no folder deleted: \(error)")
+      }
       return
     }
     guard !journaled.isEmpty else { return }

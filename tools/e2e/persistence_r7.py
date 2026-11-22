@@ -158,6 +158,29 @@ def rows(factory, results, tmp, h, origin):
         row('persist_z02_damaged_history_set_aside', bool(history) and any(n.startswith('history.sqlite3.damaged-') for n in kept),
             history=[r['url'] for r in app.call('history-state')['rows']][:5], kept=kept)
 
+    def z02_toast():
+        # Z-02 (review r1 of #670): a closed tab that cannot be written to the Archive shows a toast.
+        # The Profile's State folder refuses new files before the Archive database exists or opens.
+        default_state = root / 'Profiles/Default/State'
+        for suffix in ('', '-wal', '-shm'):
+            target = default_state / ('archive.sqlite3' + suffix)
+            if target.exists():
+                target.unlink()
+        app = launch(urls=())
+        closed = h.new_tab(app, origin + '/z02-toast-closed')
+        h.new_tab(app, origin + '/z02-toast-open')
+        mode = default_state.stat().st_mode & 0o7777
+        os.chmod(default_state, 0o500)
+        try:
+            app.call('select', tab=closed)
+            app.call('close')
+            toast = wait(lambda: next((t for t in app.call('toasts')['toasts']
+                                       if t['title'] == 'Closed tabs could not be saved to the Archive'), None), timeout=8, step=.2)
+        finally:
+            os.chmod(default_state, mode)
+        row('persist_z02_archive_write_failure_toast', bool(toast), toast=toast,
+            archiveExists=(default_state / 'archive.sqlite3').exists())
+
     def z07():
         # Z-07: a Blank Window with a tab, then a force quit. It comes back at relaunch, and again after
         # a second force quit of that launch.
@@ -290,6 +313,7 @@ def rows(factory, results, tmp, h, origin):
     section('persist_z05_z06', z05_z06)
     section('persist_z08', z08)
     section('persist_z02', z02)
+    section('persist_z02_toast', z02_toast)
     section('persist_z07', z07)
     section('persist_z03', z03)
     section('persist_z01_z04', z01_z04)

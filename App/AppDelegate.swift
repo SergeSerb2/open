@@ -76,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Bug sweep r7 Z-07: the pending Blank Window save, and whether `blank-windows.json` holds windows.
   var blankWindowsSaveTask: Task<Void, Never>?
   var blankWindowsFileHoldsWindows = false
+  /// The content last written to `blank-windows.json` (nil: no file).
+  var blankWindowsWritten: Data?
   private var faviconShutdownTask: Task<Void, Never>?
   private var historyQuitTask: Task<Void, Never>?
   /// Uptime of the last quit-time history flush. A quit cancelled later (downloads alert,
@@ -350,7 +352,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         "Open: engine layout \(layout.layout) in \(String(format: "%.1f", layout.milliseconds)) ms\n".utf8))
     }
     snapshotStore = SnapshotStore(root: root)
-    snapshotStore.onSaveFailure = { [weak self] _ in self?.snapshotSaveFailed() }
+    snapshotStore.onSaveFailure = { [weak self] _ in self?.snapshotSaveFailed() ?? false }
     // Only an unreadable snapshot starts a fresh model, and the unreadable
     // file is kept beside the new one, never overwritten.
     var loaded: BrowserModel?
@@ -401,7 +403,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // The repair save replaces the only copy on disk: keep the file as it was first (bug sweep r7 Z-08).
     if repaired, loaded != nil {
       let kept = snapshotStore.fileURL.deletingLastPathComponent()
-        .appendingPathComponent("browser.repaired-\(Int(Date().timeIntervalSince1970)).json")
+        .appendingPathComponent("browser.repaired-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json")
       do { try FileManager.default.copyItem(at: snapshotStore.fileURL, to: kept) }
       catch { FileHandle.standardError.write(Data("Open: snapshot copy before repair failed: \(error)\n".utf8)) }
     }
@@ -858,9 +860,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   /// A background snapshot write failed (a full disk, a read-only folder). The state stays in memory
   /// and unsaved; the next change, flush or quit writes it again (bug sweep r7 Z-05).
-  func snapshotSaveFailed() {
-    frontStandardWindowController?.toasts.show(ToastContent(title: "Your tabs could not be saved",
+  /// False when no browser window can show it: the next failure tries again (review r1 of #670).
+  func snapshotSaveFailed() -> Bool {
+    guard let controller = frontStandardWindowController else { return false }
+    controller.toasts.show(ToastContent(title: "Your tabs could not be saved",
       subtitle: "Make sure your disk has free space. Open tries again after your next change.", lifetime: 10))
+    return true
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -930,7 +935,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     archiveSink.flushAll()
     notes.flush()
-    if let blankWindowsAtQuit { writeBlankWindows(blankWindowsAtQuit) }
+    if let blankWindowsAtQuit { writeBlankWindows(blankWindowsAtQuit, wait: true) }
   }
 
   /// Used after import (including an E-5 save error) so the imported items are
