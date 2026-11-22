@@ -453,6 +453,27 @@ def run(factory, results, tmp, h):
                          inWork=in_work, inHome=in_home, stray=stray)
         gate('menu_link_uses_page_profile', popup_menu_profile)
 
+        def find_behind_library_spaces():
+            # Round 5 (#646 leftover): Edit > Find, Cmd+G and Cmd+Shift+G open no Find on the page
+            # strip behind Library > Spaces (Cmd+F alone was guarded). Wide window, as #646's row.
+            page(); app.call('window-frame', frame=[40, 40, 2000, 820])
+            try:
+                app.call('library', action='open', section='spaces')
+                assert wait(lambda: app.call('library').get('section') == 'spaces', timeout=3, step=.1), app.call('library')
+                for key, mods in (('g', ['cmd']), ('g', ['cmd', 'shift'])): app.call('key', key=key, modifiers=mods, route='app')
+                try: menu = app.call('menu-perform', id='find')
+                except RuntimeError as error: menu = str(error)
+                time.sleep(.5)
+                panes = app.call('find-state').get('panes', [])
+                app.call('library', action='close'); time.sleep(.5)
+                app.call('focus', tab=tab); app.call('key', key='g', modifiers=['cmd'], route='app')
+                control = wait(lambda: any(p.get('visible') for p in app.call('find-state').get('panes', [])), timeout=3, step=.1)
+                app.call('key', key='escape', route='app')
+            finally:
+                h['_try'](lambda: app.call('library', action='close')); app.call('window-frame', frame=[80, 60, 1100, 760])
+            return check(not any(p.get('visible') for p in panes) and bool(control), panes=panes, menu=menu, control=bool(control))
+        gate('find_hidden_by_library_spaces', find_behind_library_spaces)
+
         # Fresh localhost origins avoid Chromium's repeated-denial embargo.
         port = server.server_address[1]
         def permission_page(host):

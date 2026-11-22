@@ -607,6 +607,17 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
   return OERunDialog(view, dialog);
 }
 
+// Navigation, close, and every dialog close: CEF has cancelled the page's
+// pending dialog callbacks. The shell removes the sheets still pending.
+// Not filtered by OEIsPageBrowser: a Chrome-style page's Document PiP shares
+// this client, and its dialogs are shown through this page (OnJSDialog).
+void OEClient::OnResetDialogState(CefRefPtr<CefBrowser> browser) {
+  OEWebContent* view = view_;
+  if (view && [view.delegate respondsToSelector:@selector(webContentDidResetDialogState:)]) {
+    [view.delegate webContentDidResetDialogState:view];
+  }
+}
+
 #pragma mark Permissions
 
 bool OEClient::OnRequestMediaAccessPermission(
@@ -674,10 +685,29 @@ bool OEClient::OnShowPermissionPrompt(
     }
   }
   if ([view.delegate webContent:view decidePermissionRequest:request]) {
+    [prompts_ setObject:request forKey:@(prompt_id)];
     return true;
   }
   [request oe_releaseCallback];
   return false;
+}
+
+// CEF also sends this after the shell's own answer (with that result); only an
+// unanswered prompt reaches the delegate (bug sweep r5: a prompt the engine
+// dismissed stayed on screen).
+void OEClient::OnDismissPermissionPrompt(CefRefPtr<CefBrowser> browser,
+                                         uint64_t prompt_id,
+                                         cef_permission_request_result_t result) {
+  OEPermissionRequest* request = [prompts_ objectForKey:@(prompt_id)];
+  [prompts_ removeObjectForKey:@(prompt_id)];
+  OEWebContent* view = view_;
+  if (!request || ![request oe_isPending]) {
+    return;
+  }
+  [request oe_releaseCallback];
+  if (view && [view.delegate respondsToSelector:@selector(webContent:didDismissPermissionRequest:)]) {
+    [view.delegate webContent:view didDismissPermissionRequest:request];
+  }
 }
 
 #pragma mark Context menu

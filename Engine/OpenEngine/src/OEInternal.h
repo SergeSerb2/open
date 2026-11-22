@@ -347,6 +347,8 @@ class OEDevToolsClient;
 /// The delegate declined the request: CEF's default handling takes the callback.
 /// Afterwards grant/deny/dismiss and dealloc no longer answer it.
 - (void)oe_releaseCallback;
+/// Not answered yet (a callback is still held).
+- (BOOL)oe_isPending;
 @end
 
 // DevTools docked in an embedder view (OEDevToolsDock.mm).

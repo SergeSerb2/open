@@ -140,6 +140,7 @@ class OEClient : public CefClient,
                             const CefString& message_text,
                             bool is_reload,
                             CefRefPtr<CefJSDialogCallback> callback) override;
+  void OnResetDialogState(CefRefPtr<CefBrowser> browser) override;
 
   // CefPermissionHandler
   bool OnRequestMediaAccessPermission(
@@ -154,6 +155,9 @@ class OEClient : public CefClient,
       const CefString& requesting_origin,
       uint32_t requested_permissions,
       CefRefPtr<CefPermissionPromptCallback> callback) override;
+  void OnDismissPermissionPrompt(CefRefPtr<CefBrowser> browser,
+                                 uint64_t prompt_id,
+                                 cef_permission_request_result_t result) override;
 
   // CefContextMenuHandler
   void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
@@ -232,6 +236,10 @@ class OEClient : public CefClient,
   // is created (pruned on the next popup) or aborted (OnBeforePopupAborted,
   // which CEF also sends after this page's OnBeforeClose).
   NSMapTable<NSNumber*, OEWebContent*>* pending_popups_ =
+      [NSMapTable strongToWeakObjectsMapTable];
+  // Permission prompts the shell took, by CEF prompt id, until CEF dismisses
+  // them (OnDismissPermissionPrompt). Weak: the shell owns the request.
+  NSMapTable<NSNumber*, OEPermissionRequest*>* prompts_ =
       [NSMapTable strongToWeakObjectsMapTable];
   // CEF patch 1001 can deliver a download update after this page is gone.
   // Keep its original Profile attribution without retaining the page or Profile.

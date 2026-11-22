@@ -10,6 +10,7 @@ import OpenStore
 import OpenSidebar
 import OpenSpaceEditor
 import OpenCommands
+import OpenLibrary
 import OpenCommandBar
 import OpenSuggest
 import OpenSettings
@@ -195,6 +196,36 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private weak var fullscreenPage: OEWebContent?
   /// The page ended during the window's own enter transition: leave full screen after it.
   private var exitWindowFullscreenAfterTransition = false
+  /// A window with no BrowserWindowController (Little Open): its own full-screen transitions,
+  /// read from NSWindow notifications. endPageFullscreen could not see them, so a page that left
+  /// fullscreen during the enter animation left the window in full screen (bug sweep r5).
+  private weak var standaloneFullscreenWindow: NSWindow?
+  private var standaloneFullscreenObservers: [any NSObjectProtocol] = []
+  private var standaloneFullscreenTransition = false
+  private var isChangingWindowFullScreen: Bool { controller?.isChangingFullScreen ?? standaloneFullscreenTransition }
+  private func observeStandaloneFullScreen(_ window: NSWindow) {
+    guard controller == nil, standaloneFullscreenWindow !== window else { return }
+    removeStandaloneFullscreenObservers()
+    standaloneFullscreenWindow = window
+    for name in [NSWindow.willEnterFullScreenNotification, NSWindow.willExitFullScreenNotification,
+                 NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+      standaloneFullscreenObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
+        let name = note.name
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          switch name {
+          case NSWindow.didEnterFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(true)
+          case NSWindow.didExitFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(false)
+          default: self.standaloneFullscreenTransition = true
+          }
+        }
+      })
+    }
+  }
+  private func removeStandaloneFullscreenObservers() {
+    for observer in standaloneFullscreenObservers { NotificationCenter.default.removeObserver(observer) }
+    standaloneFullscreenObservers.removeAll(); standaloneFullscreenWindow = nil; standaloneFullscreenTransition = false
+  }
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
   var popupPanel: NSPanel? { extensions.popup.panel }
   private(set) lazy var extensions = WindowExtensions(factory: self)
@@ -1257,6 +1288,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func closeAll() {
     guard !isClosing else { return }
+    removeStandaloneFullscreenObservers()
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
     for host in Array(noteHosts.values) { host.close() }
@@ -1962,6 +1994,11 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     pageChrome.request(request, page: webContent)
   }
 
+  // Popup panels (this factory is their delegate).
+  func webContent(_ webContent: OEWebContent, didDismissPermissionRequest request: OEPermissionRequest) {
+    pageChrome.engineDismissed(request)
+  }
+  func webContentDidResetDialogState(_ webContent: OEWebContent) { pageChrome.engineResetDialogs(webContent) }
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
     pageContextMenu?.cancel()
     let session = PageContextMenuBuilder(request: menu, page: webContent, owner: self)
@@ -1989,6 +2026,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
     controller?.isPageFullscreen = true
+    // Also for a window already in full screen: its exit must end the page's fullscreen.
+    if let window { observeStandaloneFullScreen(window) }
     if let window, !window.styleMask.contains(.fullScreen) {
       enteredWindowFullscreenForPage = true; window.toggleFullScreen(nil)
     }
@@ -2013,7 +2052,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     if controller?.isPageFullscreen == true { controller?.isPageFullscreen = false }
     guard enteredWindowFullscreenForPage else { return }
     // AppKit ignores a toggle during a transition: finish when the window has entered.
-    if controller?.isChangingFullScreen == true { exitWindowFullscreenAfterTransition = true; return }
+    if isChangingWindowFullScreen { exitWindowFullscreenAfterTransition = true; return }
     enteredWindowFullscreenForPage = false
     if let window, window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
   }
@@ -2415,7 +2454,17 @@ extension EngineWebContentHostFactory: NSMenuItemValidation {
     return host
   }
 
+  /// Library ▸ Spaces covers the page and has no search field: Find (menu, Cmd+G, Cmd+Shift+G)
+  /// must not open on the page strip behind it (bug sweep r5; #646 left only Cmd+F guarded).
+  var findCoveredByLibrarySpaces: Bool {
+    // A Peek shown over Library is the shown page: Find works there.
+    guard let controller, controller.isLibraryOpen, !(controller.hasPeekController && controller.peekController.isShown),
+      let panel = app.settingsPresenter.librarySessions[controller.windowID]?.panel else { return false }
+    return panel.section == .spaces
+  }
+
   @objc func performFindPanelAction(_ sender: Any?) {
+    if findCoveredByLibrarySpaces { return }
     if let note = selectedNoteHost { note.editor.showFind(); return }
     ensureFindController().perform(tag: (sender as? NSMenuItem)?.tag ?? 1)
   }
@@ -2423,7 +2472,7 @@ extension EngineWebContentHostFactory: NSMenuItemValidation {
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     switch item.action {
     case #selector(performFindPanelAction(_:)), #selector(performTextFinderAction(_:)), #selector(centerSelectionInVisibleArea(_:)):
-      return selectedContent != nil || selectedNoteHost != nil
+      return !findCoveredByLibrarySpaces && (selectedContent != nil || selectedNoteHost != nil)
     default: return true
     }
   }

@@ -227,7 +227,7 @@ extension EngineWebContentHostFactory {
     if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) {
-      return selectedContent != nil || selectedNoteHost != nil
+      return !findCoveredByLibrarySpaces && (selectedContent != nil || selectedNoteHost != nil)
     }
     if ["new-boost", "edit-boost", "new-legacy-boost"].contains(id) {
       // Menu validation runs during first-window composition. No page is
@@ -323,10 +323,13 @@ extension EngineWebContentHostFactory {
     if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
       // A Note: every Find action shows the Note's own find bar (Arc's Note editor sends its text
       // view `performTextFinderAction:` with tag 1 for any of them; docs/re/find-and-replace.md).
+      // Library ▸ Spaces covers the page: no Find opens behind it (the key is consumed).
+      if findCoveredByLibrarySpaces { return true }
       if let note = selectedNoteHost { note.editor.showFind(); return true }
       guard selectedContent != nil else { return false }
       ensureFindController().perform(tag: tag); return true
     }
+    if id == "jump-to-selection", findCoveredByLibrarySpaces { return true }
     if id == "jump-to-selection", selectedContent != nil { ensureFindController().jumpToSelection(); return true }
     // A Find bar keeps Esc even when the Exit menu is disabled (no Peek/split).
     if id == "exit-modal", window === NSApp.keyWindow, windowState.style == .standard,

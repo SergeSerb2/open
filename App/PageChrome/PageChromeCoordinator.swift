@@ -93,6 +93,12 @@ final class PageChromeCoordinator {
     guard method == "Page.frameNavigated", let frame = parameters["frame"] as? [String: Any], frame["parentId"] == nil else { return }
     dialogs.navigated(page); existingPermissions?.cancel(page: page)
   }
+  /// CEF cancelled the page's pending dialogs (navigation, close; also after each closed
+  /// dialog): their sheets go. Suppression state stays (that is per document).
+  func engineResetDialogs(_ page: OEWebContent) {
+    if dialogs.hasPending(page) { owner.record("dialogReset", page, [:]); dialogs.cancel(page: page) }
+  }
+  func engineDismissed(_ request: OEPermissionRequest) { existingPermissions?.engineDismissed(request) }
   func cancel(_ page: OEWebContent) {
     observed.remove(ObjectIdentifier(page)); closingOffscreen.remove(ObjectIdentifier(page))
     dialogs.navigated(page); existingPermissions?.cancel(page: page)

@@ -167,6 +167,9 @@
   _media = nullptr;
   _prompt = nullptr;
 }
+- (BOOL)oe_isPending {
+  return _media != nullptr || _prompt != nullptr;
+}
 - (void)dealloc {
   [self oe_finish:CEF_PERMISSION_RESULT_IGNORE];
 }

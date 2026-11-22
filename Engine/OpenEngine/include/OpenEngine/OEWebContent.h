@@ -183,6 +183,19 @@ NS_SWIFT_UI_ACTOR
     decidePermissionRequest:(OEPermissionRequest*)request
     NS_SWIFT_NAME(webContent(_:decidePermissionRequest:));
 
+/// The engine dismissed a permission prompt the delegate took and has not
+/// answered (navigation, a closed frame, the page closing). The request can
+/// no longer be answered: remove its UI. Not sent for an answered request.
+- (void)webContent:(OEWebContent*)webContent
+    didDismissPermissionRequest:(OEPermissionRequest*)request
+    NS_SWIFT_NAME(webContent(_:didDismissPermissionRequest:));
+
+/// The engine cancelled the page's pending JavaScript dialogs and their
+/// callbacks (navigation, close). Also sent after every dialog closes and on
+/// navigations with no dialog: remove only the UI of still-pending dialogs.
+- (void)webContentDidResetDialogState:(OEWebContent*)webContent
+    NS_SWIFT_NAME(webContentDidResetDialogState(_:));
+
 /// HTTP/proxy authentication, on the main thread. Retain and answer the
 /// request to show shell UI. NO (or no implementation) cancels the challenge.
 /// Chromium's own login dialog is never shown.

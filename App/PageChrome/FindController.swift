@@ -369,6 +369,6 @@ extension EngineWebContentHostFactory {
     let controller = FindController(factory: self); findController = controller; return controller
   }
   /// Find and Replace on a web page: no effect, as in Arc. In a Note it shows the Note's find bar.
-  @objc override func performTextFinderAction(_ sender: Any?) { selectedNoteHost?.editor.showFind() }
-  @objc override func centerSelectionInVisibleArea(_ sender: Any?) { ensureFindController().jumpToSelection() }
+  @objc override func performTextFinderAction(_ sender: Any?) { if !findCoveredByLibrarySpaces { selectedNoteHost?.editor.showFind() } }
+  @objc override func centerSelectionInVisibleArea(_ sender: Any?) { if !findCoveredByLibrarySpaces { ensureFindController().jumpToSelection() } }
 }
