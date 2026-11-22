@@ -100,7 +100,7 @@ final class TranslateSelectionController {
         // keyboard's reach (bug sweep r6, A11Y-10). Esc gives the key back to the window.
         if event.keyCode == 48, !panel.isKeyWindow, event.window === panel.parent, !panel.content.copyButton.isHidden,
            event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
-          panel.makeKey(); panel.makeFirstResponder(panel.content.copyButton); return nil
+          panel.allowsKey = true; panel.makeKey(); panel.makeFirstResponder(panel.content.copyButton); return nil
         }
         return event
       }
@@ -196,8 +196,10 @@ final class TranslateSelectionPanel: NSPanel {
     bubble.addSubview(content)
     contentView = bubble
   }
-  /// Key only when Tab moves keyboard focus into it (A11Y-10); showing it never takes the key.
-  override var canBecomeKey: Bool { true }
+  /// Key only after Tab moves keyboard focus into it (A11Y-10). Showing it, or a click on Copy
+  /// or the text, never takes the key from the page.
+  var allowsKey = false
+  override var canBecomeKey: Bool { allowsKey }
 }
 
 /// The bubble's shape: body plus arrow, in the window background colour with a hairline.

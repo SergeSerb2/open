@@ -79,6 +79,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Section 12's read-only private-state hook (lead ruling 16:12).
   var isIncognito: Bool { incognitoSession != nil }
   func scheduleSave() { if !isIncognito { app.scheduleSave() } }
+  func scheduleMetadataSave() { if !isIncognito { app.scheduleMetadataSave() } }
   private lazy var privateSuggest: SuggestEngine = {
     let engine = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
     engine.providers.append(SettingsSuggestionsProvider())
@@ -1419,6 +1420,8 @@ extension EngineWebContentHostFactory {
     if let panel = controller?.boostEditor?.panel, candidate === panel || candidate.sheetParent === panel { return true }
     if let panel = controller?.boostEditor?.view?.advancedPopover?.panel, candidate === panel { return true }
     if candidate === controller?.themeEditor?.panel || candidate === controller?.spaceCreationController?.themeEditor?.panel { return true }
+    // The Translate Selection bubble takes the key only by Tab (A11Y-10); it is this window's.
+    if candidate is TranslateSelectionPanel, let window, candidate.parent === window { return true }
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
