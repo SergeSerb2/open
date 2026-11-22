@@ -439,6 +439,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return profile?.dataDirectoryName ?? "Default"
     }
     model.archiveSink = archiveSink; model.undoManager = undoManager
+    // Undo of New Profile (Settings, or a Space created with a new Profile) leaves the Profile's folders
+    // behind. Its Redo needs them back, and a wiped Profile's stores never write again in this process
+    // (ProfileDataOwner contract), so they are journaled like an undone import's (audit A7): the next
+    // launch wipes them unless the saved snapshot still has the Profile. Redo takes them off the list.
+    model.onProfileCreationUndone = { [weak self] profile, removed in
+      guard let self else { return }
+      do {
+        if removed { try ProfileTeardown.journalOrphans([profile.dataDirectoryName], directories: directories) }
+        else { try ProfileTeardown.unjournalOrphans([profile.dataDirectoryName], directories: directories) }
+      } catch {
+        FileHandle.standardError.write(Data("Open: Profile folder cleanup list not updated: \(error)\n".utf8))
+      }
+      if settingsPresenter.hasSettingsModel { settingsPresenter.settings.profiles.refresh() }
+    }
     modelSaveObserver = model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     // Profile creation belongs to the currently installed model, including an import swap.
     tabSleep.installSettingsPolicy()
@@ -831,11 +845,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Shell window lifetime and the setup-created Welcome tab are not sidebar
   /// edits. Preserve an
   /// enclosing caller's disabled registration state, including on early return.
-  private func withoutWindowUndo<T>(_ body: () -> T) -> T {
+  private func withoutWindowUndo<T>(_ body: () throws -> T) rethrows -> T {
     let wasEnabled = undoManager.isUndoRegistrationEnabled
     if wasEnabled { undoManager.disableUndoRegistration() }
     defer { if wasEnabled { undoManager.enableUndoRegistration() } }
-    return body()
+    return try body()
   }
 
   /// Live Folder refresh when the app comes to the front (live-data §2.5). Nothing runs (no
@@ -888,7 +902,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     assert(imported || model === firstRunDefaultModel, "A fresh finish must keep the original default model")
     let priorBlocker = stores.adBlock?.isEnabled
     do {
-      try onboardingWindowController?.steps?.applyChoices()
+      // The chosen Favorites and theme are setup, not edits: the first Undo stays the import's.
+      try withoutWindowUndo { try onboardingWindowController?.steps?.applyChoices() }
       try snapshotStore.saveNow(model: model)
       // Save the choices first, then insert Welcome before any browser is built.
       // Retain its ID across a failed second save so retry cannot add a duplicate.
@@ -1377,7 +1392,8 @@ extension AppDelegate: CommandDispatcher {
     // An action row's payload is a Space ID, which names no Profile, so it falls back too.
     if id == "search-settings" {
       let named = payload.flatMap(UUID.init(uuidString:)).map { ProfileID(rawValue: $0) }.flatMap { model.profile(id: $0) == nil ? nil : $0 }
-      let profile = named ?? frontWindowController.flatMap { hostFactories[$0.windowID]?.focusedProfile?.id }
+      // An Incognito window's Profile is a stand-in that Settings does not list: use its parent.
+      let profile = named ?? frontWindowController.flatMap { hostFactories[$0.windowID] }.flatMap { $0.incognitoSession?.parent.id ?? $0.focusedProfile?.id }
       if let profile, model.profile(id: profile) != nil { settingsPresenter.show(section: .search, profileID: profile) }
       else { settingsPresenter.show(section: .search) }
       return

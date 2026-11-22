@@ -452,7 +452,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     public func handleKey(_ event: NSEvent) -> Bool {
         if [48,123,124,125,126].contains(event.keyCode) { keyboardRailNavigation = true; updateRailFocus() }
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command), event.keyCode == 3, section != .spaces {
+        // Plain Cmd+F only: other chords (Ctrl+Cmd+F, Toggle Full Screen) keep their own commands.
+        if event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command, event.keyCode == 3, section != .spaces {
             window?.makeFirstResponder(searchField); searchField.selectText(nil); return true
         }
         // Spaces has no search field: plain Cmd+F must not open Find on the page strip behind Library.

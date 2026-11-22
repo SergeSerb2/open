@@ -30,6 +30,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
+    vm.frontBrowserWindowID = { [unowned app] in app.frontMainModelWindowController?.windowID }
     // Command services can create Settings before its window is shown. An
     // unsupported engine must not open a Profile or schedule list updates then.
     if (!app.isFirstRun || app.firstRunSaved) && app.adBlockEngineAdapter.isSupported {
