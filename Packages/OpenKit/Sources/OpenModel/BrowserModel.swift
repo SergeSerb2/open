@@ -2592,6 +2592,9 @@ public final class BrowserModel {
             moved.append((tab, parent, removed.index, pinned, live))
             if !changed.contains(parent) { changed.append(parent) }
         }
+        // A window that selected an absorbed tab now shows the split: a pane selected as a plain
+        // tab hides the other panes (sidebar multi-select, another window's split).
+        let reselected = moved.flatMap { origin in retargetSelection(from: origin.tab.id, to: split.id).map { ($0, origin.tab.id) } }
         for parent in changed { emit(.reload(parent: parent)) }
         let origins = moved
         let parents = changed
@@ -2599,6 +2602,7 @@ public final class BrowserModel {
         return { model in
             // Auto-archive dissolved the split meanwhile: its survivors stay where they are.
             guard model.index[split.id] != nil else { return false }
+            for (slot, tabID) in reselected { model.restoreSelection([slot], from: split.id, to: tabID) }
             // Reverse order puts every tab back at the exact index it left from.
             for origin in origins.reversed() where model.parentByID[origin.tab.id] == .splitPane(split.id) {
                 _ = model.removeChild(origin.tab.id, from: .splitPane(split.id))
@@ -2640,11 +2644,14 @@ public final class BrowserModel {
         parentByID[tabID] = .splitPane(splitID)
         split.fractions = Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
         split.focusedPaneID = tabID
+        // A window that selected the added tab shows the split it joined.
+        let reselected = retargetSelection(from: tabID, to: splitID)
         let changed = source == home ? [home] : [source, home]
         for parent in changed { emit(.reload(parent: parent)) }
         return { model in
             guard model.parentByID[tabID] == .splitPane(splitID), model.index[splitID]?.split === split,
                   model.insertChild(.tab(tab), into: source, at: removed.index) != nil else { return false }
+            model.restoreSelection(reselected, from: splitID, to: tabID)
             split.panes.removeAll { $0.id == tabID }
             model.parentByID[tabID] = source
             split.fractions = oldFractions; split.focusedPaneID = oldFocus
