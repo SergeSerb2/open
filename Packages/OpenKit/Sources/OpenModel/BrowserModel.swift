@@ -2139,6 +2139,8 @@ public final class BrowserModel {
         let slot = profiles.count
         insertProfile(profile, at: slot)
         func undoCreation(_ model: BrowserModel) -> Bool {
+            // A Space that still uses the Profile keeps it (and its folders, which the App would journal).
+            guard model.spaces(using: profile.id).isEmpty else { return false }
             model.removeProfile(profile.id); model.onProfileCreationUndone?(profile, true); return true
         }
         registerUndo(undoCreation, reapply: { model in
