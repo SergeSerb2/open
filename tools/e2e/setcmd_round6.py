@@ -2,7 +2,7 @@
 automation socket (keys go through the App route; Settings through its real view models and sheet).
 
 Runs inside `engine_e2e.py --only commandbar`; OPEN_COMMANDBAR_SETCMD6_ONLY=1 runs only these rows.
-OPEN_E2E_SETCMD6_ROWS=q01,s01 runs a subset (row keys: q04 q02 q01 q03 q05 s05 s02 s01).
+OPEN_E2E_SETCMD6_ROWS=q01,s01 runs a subset (row keys: q04 q02 q01 q03 q05 s05 s02 s01 s01b).
 Loopback pages only; every other host resolves to nothing, so no row reaches a real service.
 """
 import os
@@ -345,12 +345,21 @@ def run(factory, results, tmp, h):
             reveal(); app.call('menu-perform', id='redo'); time.sleep(.3)
             redone = shell()
             back = profile_named('SC6 Undo') is not None
-            reveal(); app.call('menu-perform', id='undo'); time.sleep(.3)
+            # The last Undo comes with no other edit: an earlier step's debounced save (1 s) lands first, and no
+            # reveal (a selection change, which saves too) precedes it, so only the Undo itself can save.
+            time.sleep(2.5)
+            try: app.call('menu-perform', id='undo')
+            except RuntimeError:
+                reveal(); time.sleep(2.5); app.call('menu-perform', id='undo')
+            time.sleep(.3)
             undone_again = shell()
             # Review r1 #1: no explicit save and no normal quit. The Undo's own scheduled save (1 s debounce)
             # must reach disk; then the App dies as in a crash (no quit-time save).
             time.sleep(3)
-            import signal
+            import json, signal
+            snapshot = json.loads(open(os.path.join(app.user_data, 'State', 'browser.json')).read())
+            saved_profiles = [p.get('name') for p in snapshot.get('profiles', [])]
+            killed_pid = app.pid
             os.kill(app.pid, signal.SIGKILL)
             app.quit()
             app = factory(urls=(), extra_args=ENGINE_SWITCHES)
@@ -364,8 +373,51 @@ def run(factory, results, tmp, h):
                 directory=directory, onDisk=bool(on_disk), removed=removed, redoBack=back, selectedBefore=selected_before,
                 orphans=[undone['orphans'], redone['orphans'], undone_again['orphans'], relaunched['orphans']],
                 selectedAfterUndo=undone['selectedProfile'], profileIDs=ids,
+                savedBeforeKill=saved_profiles, killedPid=killed_pid, quitReport=getattr(app, 'quit_report', None) and None,
                 afterRelaunch=dict(engine=os.path.isdir(engine_dir), profile=os.path.isdir(profile_dir), profiles=relaunched_profiles))
         if wanted('s01'): guarded('setcmd6_s01_undo_new_profile_wipes_folders', undo_new_profile)
+
+        # Review r1 #1: Undo of a new Profile saves the snapshot by itself. Here no Settings model exists (a
+        # fresh process; Settings is not touched until after the crash), so nothing else saves after the Undo.
+        def undo_saves_without_settings():
+            nonlocal app
+            import json, signal
+            app.quit()
+            app = factory(urls=(), extra_args=ENGINE_SWITCHES)
+            focus_main()
+            def saved():
+                snapshot = json.loads(open(os.path.join(app.user_data, 'State', 'browser.json')).read())
+                return [p.get('name') for p in snapshot.get('profiles', [])]
+            space = app.call('space-create', title='SC6 Crash', profile='SC6 Crash Profile')
+            time.sleep(2.5)
+            created = 'SC6 Crash Profile' in saved()
+            steps = [app.call('undo-state')]
+            reveal(); time.sleep(2.5)
+            app.call('menu-perform', id='undo')       # the Space
+            time.sleep(2.5)
+            steps.append(dict(app.call('undo-state'), spaces=len(app.call('spaces'))))
+            # The Profile, through the command bar's "Undo" action: it calls the Undo manager directly, without the
+            # save that Edit ▸ Undo's command path schedules.
+            bar('t'); found = type_query('undo')
+            rows = found.get('rows', [])
+            index = next((i for i, r in enumerate(rows) if r.get('action') == 'undo-by-name'), None)
+            assert index is not None, [(r.get('title'), r.get('action')) for r in rows]
+            for _ in range(max(0, index - found['selected'])): press('down')
+            time.sleep(2.5)                           # no earlier save is still pending
+            before_last = saved()
+            press('return')
+            time.sleep(3)
+            steps.append(dict(app.call('undo-state'), spaces=len(app.call('spaces'))))
+            after_last = saved()
+            os.kill(app.pid, signal.SIGKILL)
+            app.quit()
+            app = factory(urls=(), extra_args=ENGINE_SWITCHES)
+            relaunched = [p['name'] for p in shell()['profiles']]
+            row('setcmd6_s01_undo_saves_without_settings', created and 'SC6 Crash Profile' in before_last
+                and 'SC6 Crash Profile' not in after_last and 'SC6 Crash Profile' not in relaunched
+                and space not in [s['id'] for s in app.call('spaces')],
+                created=created, steps=steps, savedBeforeLastUndo=before_last, savedAfterLastUndo=after_last, relaunched=relaunched)
+        if wanted('s01b'): guarded('setcmd6_s01_undo_saves_without_settings', undo_saves_without_settings)
     finally:
         try:
             if not app.closed: app.quit()
