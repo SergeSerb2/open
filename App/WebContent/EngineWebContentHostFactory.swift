@@ -739,6 +739,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       }
       windowClosePages = nil; windowCloseSelection = nil; windowCloseAccepted = true
       window?.performClose(nil)
+      // A window that stayed open (AppKit refused the close) asks again next time.
+      windowCloseAccepted = false
       return
     }
     let page = remaining.removeFirst(); windowClosePages = remaining
@@ -2086,6 +2088,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
     controller?.isPageFullscreen = true
+    littleOpenController?.isPageFullscreen = true
     // Also for a window already in full screen: its exit must end the page's fullscreen.
     if let window { observeStandaloneFullScreen(window) }
     if let window, !window.styleMask.contains(.fullScreen) {
@@ -2110,6 +2113,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func endPageFullscreen() {
     fullscreenPage = nil
     if controller?.isPageFullscreen == true { controller?.isPageFullscreen = false }
+    if littleOpenController?.isPageFullscreen == true { littleOpenController?.isPageFullscreen = false }
     guard enteredWindowFullscreenForPage else { return }
     // AppKit ignores a toggle during a transition: finish when the window has entered.
     if isChangingWindowFullScreen { exitWindowFullscreenAfterTransition = true; return }

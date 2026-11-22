@@ -78,6 +78,15 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private var systemAppearanceObservation: NSKeyValueObservation?
     public var currentURL: URL? { container.host(for: session.tab.id)?.currentURL }
     public var showsIntro: Bool { !banner.isHidden }
+    /// A page in HTML fullscreen fills the window: no title bar, intro banner or rounded corners
+    /// over the video (bug sweep r6 WL-07).
+    public var isPageFullscreen = false {
+        didSet {
+            guard isPageFullscreen != oldValue else { return }
+            root.layer?.cornerRadius = isPageFullscreen ? 0 : LittleOpenMetrics.windowCornerRadius
+            layoutContent()
+        }
+    }
 
     public init(session: LittleOpenSession, coordinator: LittleOpenCoordinator, factory: any WebContentHostFactory, defaults: UserDefaults) {
         self.session = session; self.coordinator = coordinator; self.factory = factory; self.defaults = defaults
@@ -193,20 +202,22 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         // layout. Equal frame writes still enter the engine geometry bridge.
         func setFrame(_ view: NSView, _ frame: CGRect) { if view.frame != frame { view.frame = frame } }
         let m = LittleOpenMetrics.self, w = root.bounds.width, h = root.bounds.height
-        let isPage = state == .page
-        titleBar.isHidden = !isPage; container.isHidden = !isPage
+        let isPage = state == .page, full = isPage && isPageFullscreen
+        titleBar.isHidden = !isPage || full; container.isHidden = !isPage
+        let titleHeight = full ? 0 : m.titleBarHeight
         setFrame(titleBar, CGRect(x: 0, y: h - m.titleBarHeight, width: w, height: m.titleBarHeight))
-        let introHeight = isPage && !banner.isHidden ? m.bannerHeight : 0
-        setFrame(banner, CGRect(x: 0, y: h - m.titleBarHeight - introHeight, width: w, height: introHeight))
+        let introHeight = isPage && !full && !banner.isHidden ? m.bannerHeight : 0
+        setFrame(banner, CGRect(x: 0, y: h - titleHeight - introHeight, width: w, height: introHeight))
         setFrame(bannerLabel, CGRect(x: m.bannerInset, y: m.bannerLabelY, width: max(0, w - 3 * m.bannerInset - m.bannerButtonWidth), height: m.hostHeight))
         setFrame(bannerButton, CGRect(x: w - m.bannerInset - m.bannerButtonWidth, y: m.bannerButtonY, width: m.bannerButtonWidth, height: m.bannerHeight - 2 * m.bannerButtonY))
-        setFrame(container, CGRect(x: 0, y: 0, width: w, height: max(0, h - m.titleBarHeight - introHeight)))
+        setFrame(container, CGRect(x: 0, y: 0, width: w, height: max(0, h - titleHeight - introHeight)))
         setFrame(commandBar.view, root.bounds)
         commandBar.view.overlayPanelWidth = isPage ? min(CommandBarMetrics.panelWidth, max(0, w - 2 * m.screenInset)) : nil
         placeTrafficLights()
     }
     private func placeTrafficLights() {
-        guard !placingTrafficLights else { return }
+        // In full screen AppKit owns the buttons in its title bar at the top of the screen.
+        guard !placingTrafficLights, window?.styleMask.contains(.fullScreen) != true else { return }
         placingTrafficLights = true; defer { placingTrafficLights = false }
         for (kind, frame) in zip([NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton], LittleOpenMetrics.trafficLights) {
             guard let button = window?.standardWindowButton(kind) else { continue }
