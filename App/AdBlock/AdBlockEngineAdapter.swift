@@ -230,7 +230,9 @@ final class AdBlockEngineAdapter {
         if alreadySet { context.reloadAdBlockLists() }
       }
     case let .enabled(enabled):
-      for profile in app.model.profiles where store?.isProfileOpen(profile.id) == true {
+      // Off reaches every Profile: configureBeforeRequests turned on contexts whose Profile is
+      // still opening or failed to open. On stays for open Profiles (a closed one stays off).
+      for profile in app.model.profiles where !enabled || store?.isProfileOpen(profile.id) == true {
         for context in contexts(for: profile.id) { context.isAdBlockEnabled = enabled }
       }
     case let .exclusions(profile, _):
