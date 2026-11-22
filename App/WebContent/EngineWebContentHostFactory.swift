@@ -458,6 +458,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onClose = { [weak self] in
       guard let self else { return }; self.closeAll(); self.app.windowDidClose(self.windowState.id)
     }
+    controller.shouldClose = { [weak self] in self?.windowShouldClose() ?? true }
+    controller.pageClosePreflight = { [weak self] ids, action in self?.askPagesBeforeClosing(ids, then: action) ?? false }
   }
   func engineDidBecomeReady() {
     #if OPEN_AUTOMATION
@@ -1109,14 +1111,19 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
           }
         }
       }
-      let ids = Set(collect(folder.children))
-      app.tabSleep.cancelNavigationAfterWake(ids)
-      let loaded = ids.filter { hosts[$0] != nil || controller?.container.host(for: $0) != nil }
-      guard !loaded.isEmpty else { return true }
-      for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
-      if let selected = selectedTab?.id, ids.contains(selected) {
-        select(nodeID: model.sidebarSelectionID(for: orderedTabs.first { !ids.contains($0.id) }?.id))
-      } else { controller?.refresh(); mirror.sync(); scheduleSave() }
+      let order = collect(folder.children), ids = Set(order)
+      let unload = { [weak self] in
+        guard let self else { return }
+        self.app.tabSleep.cancelNavigationAfterWake(ids)
+        let loaded = ids.filter { self.hosts[$0] != nil || self.controller?.container.host(for: $0) != nil }
+        guard !loaded.isEmpty else { return }
+        for id in loaded { self.controller?.container.closeHost(for: id); self.hosts[id]?.close() }
+        if let selected = self.selectedTab?.id, ids.contains(selected) {
+          self.select(nodeID: self.model.sidebarSelectionID(for: self.orderedTabs.first { !ids.contains($0.id) }?.id))
+        } else { self.controller?.refresh(); self.mirror.sync(); self.scheduleSave() }
+      }
+      // Unload of one tab asks beforeunload (closeTab); a folder's Unload asks each page too (bug sweep r6 P-01).
+      if !askPagesBeforeClosing(order, then: unload) { unload() }
       return true
     case .goBack: guard let page = selectedContent, page.canGoBack else { return false }; page.goBack(); return true
     case .goForward: guard let page = selectedContent, page.canGoForward else { return false }; page.goForward(); return true
@@ -1129,7 +1136,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
       guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }
-      app.tabSleep.cancelNavigationAfterWake([id]); model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
+      app.tabSleep.cancelNavigationAfterWake([id]); model.resetPinnedTab(id: id); hosts[id]?.load(url)
+      if model === app.model { app.tabSleep.forgetStoredHistory([id]) }
+      scheduleSave(); return true
     case .renameSpace(let id, let title):
       guard let space = model.space(id: id) else { return false }
       let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1219,6 +1228,41 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return controller?.beginSpaceCreation(options: SpaceCreationOptions(moving: ids, placement: .preserveSection)) == true
   }
 
+  private var closeBatch: PageCloseBatch?
+  /// A close of many pages at once (a sidebar bulk archive or delete, a window close) asks each
+  /// live page with a beforeunload handler first (bug sweep r6 P-01, WL-04). False: no page
+  /// asks, and the caller acts now. True: `action` runs once every page agreed, or never.
+  func askPagesBeforeClosing(_ ids: [ItemID], restoresSelection: Bool = true, then action: @escaping () -> Void) -> Bool {
+    guard !isClosing, !app.terminationRequested, !app.quitWarning.withoutPrompts else { return false }
+    #if OPEN_AUTOMATION
+    // A dead runner cannot answer a sheet (as Quit and Little Open's close).
+    if AutomationOwnerWatch.quittingWithoutPrompts { return false }
+    #endif
+    let asking = PageCloseBatch.asking(ids, in: self)
+    guard !asking.isEmpty else { return false }
+    // One round at a time: a second action while pages still ask is refused, not merged.
+    if closeBatch?.isRunning == true { NSSound.beep(); return true }
+    let batch = PageCloseBatch(owner: self, ids: asking, restoresSelection: restoresSelection) { [weak self] in
+      // The restored selection's title, page and menus (the action's refresh does not set them).
+      action(); if restoresSelection, let self, !self.isClosing { self.showSelection(focus: false) }
+    }
+    closeBatch = batch
+    // On the next turn: a confirmation sheet (Delete Folder, Delete Space) may still be ending.
+    DispatchQueue.main.async { [weak batch] in batch?.start() }
+    return true
+  }
+  func closeBatchEnded(_ batch: PageCloseBatch) { if closeBatch === batch { closeBatch = nil } }
+  /// The window's close button, Close Window (Shift-Cmd-W) and every other performClose: each
+  /// live page with a beforeunload handler asks first; "Stay" keeps the window open (WL-04).
+  func windowShouldClose() -> Bool {
+    if closeBatch?.isRunning == true { NSSound.beep(); return false }
+    // Sidebar order: the shown Space first, then the other Spaces.
+    let tabs = orderedTabs + model.profiles.flatMap(\.favorites) + model.spaces.flatMap { flattened($0.pinned) + flattened($0.today) }
+    var order: [ItemID: Int] = [:]
+    for (index, tab) in tabs.enumerated() where order[tab.id] == nil { order[tab.id] = index }
+    let ids = hosts.keys.sorted { (order[$0] ?? .max, $0.rawValue.uuidString) < (order[$1] ?? .max, $1.rawValue.uuidString) }
+    return !askPagesBeforeClosing(ids, restoresSelection: false) { [weak self] in self?.window?.close() }
+  }
   /// One close rule for Cmd-W, the sidebar, window.close() and
   /// chrome.tabs.remove: pinned tabs and favorites stay in the sidebar and
   /// unload; Today tabs close (archived).
@@ -1245,6 +1289,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     var inSplit = false, splitSelected = false
     if case .splitPane(let splitID)? = model.parent(of: id) { inSplit = true; splitSelected = selectedNodeID == splitID }
     if isPinned || isFavorite {
+      // Before the page closes: the close keeps a stored back list current (bug sweep r6 V-03),
+      // and this reset must not leave one behind (V-02).
+      if model === app.model { app.tabSleep.forgetStoredHistory([id]) }
       controller?.container.closeHost(for: id); hosts[id]?.close()
       returnToPinnedURL(id)
     } else { model.closeTab(id: id) }

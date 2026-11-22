@@ -278,3 +278,98 @@ final class PageQuitCoordinator {
     if !waits { next() }
   }
 }
+
+/// One beforeunload round for a close of many pages at once: a window close, or a bulk archive
+/// or delete in the sidebar (bug sweep r6 WL-04, P-01). These used to destroy every page with a
+/// forced close, so unsaved input went without a prompt. As Chrome's window close does, each
+/// page with a beforeunload handler asks in turn, through the same `requestClose` as Cmd+W and
+/// Quit. "Stay" on any page cancels the whole action and keeps every tab. A page that already
+/// agreed has closed (Page.close destroys it): its tab stays and rebuilds on selection, from the
+/// back list stored before it asked, as after Quit's preflight.
+@MainActor
+final class PageCloseBatch {
+  private unowned let owner: EngineWebContentHostFactory
+  private var remaining: [ItemID]
+  private var action: (() -> Void)?
+  private let restoresSelection: Bool
+  private let focusedSpaceID: SpaceID
+  private let selectedNodeBySpace: [SpaceID: ItemID]
+  private(set) var isRunning = false
+
+  /// The tabs among `ids` whose live page in this window would ask before it closes.
+  static func asking(_ ids: [ItemID], in owner: EngineWebContentHostFactory) -> [ItemID] {
+    var seen: Set<ItemID> = []
+    return ids.filter { id in
+      guard seen.insert(id).inserted, let host = owner.hosts[id], !host.closed else { return false }
+      return host.content.crashState == .none && host.content.hasUnloadHandlers
+    }
+  }
+
+  init(owner: EngineWebContentHostFactory, ids: [ItemID], restoresSelection: Bool, action: @escaping () -> Void) {
+    self.owner = owner; remaining = ids; self.action = action; self.restoresSelection = restoresSelection
+    focusedSpaceID = owner.windowState.focusedSpaceID; selectedNodeBySpace = owner.windowState.selectedNodeBySpace
+  }
+
+  func start() { isRunning = true; next() }
+
+  private func next() {
+    guard isRunning else { return }
+    // The window closed meanwhile (its pageChrome answered every waiter "stay"): nothing to do.
+    guard !owner.isClosing else { end(); return }
+    guard !remaining.isEmpty else { finish(); return }
+    let id = remaining.removeFirst()
+    guard let host = owner.hosts[id], !host.closed, host.content.crashState == .none,
+          host.content.hasUnloadHandlers else { next(); return }
+    let page = host.content
+    Task { @MainActor [weak self, weak page] in
+      guard let self, self.isRunning else { return }
+      guard let page, !self.owner.isClosing else { self.next(); return }
+      // Page.close destroys an accepted page before the action runs. Keep its browser-owned
+      // history first, so a later "Stay" keeps the tab with its back list (as Quit does).
+      let app = self.owner.app
+      if self.owner.model === app.model, let tab = app.model.tab(id: id),
+         let envelope = app.tabSleep.adapter?.captureHistory(host: host, tab: tab) {
+        try? await app.tabSleep.store?.save(tabID: id, envelope: envelope)
+      }
+      // The save can suspend: a close meanwhile already answered or cancelled this page.
+      guard self.isRunning, !self.owner.isClosing, self.owner.hosts[id] === host, !host.closed else { self.next(); return }
+      self.ask(id: id, host: host, page: page)
+    }
+  }
+
+  private func ask(id: ItemID, host: EngineWebContentHost, page: OEWebContent) {
+    // A page that also shows a dialog cannot run beforeunload until it is answered: stop the
+    // action and leave the page and its dialog on screen, as a tab close does (bug sweep r4 WC-02).
+    if owner.pageChrome.closeBlockedByDialog(page) {
+      owner.revealPageForClose(page); owner.pageChrome.showDialogsOffscreen(page); end(); return
+    }
+    let waits = owner.pageChrome.requestClose(page) { [weak self] accepted in
+      guard let self, self.isRunning else { return }
+      guard accepted else { self.end(); return }
+      // Page.close has destroyed the browser: the tab shows a placeholder from now on.
+      if self.owner.hosts[id] === host { self.owner.controller?.container.closeHost(for: id); host.close() }
+      self.next()
+    }
+    if !waits { next() }
+  }
+
+  private func finish() {
+    if restoresSelection, owner.model.windows.contains(where: { $0 === owner.windowState }) {
+      // A sheet selected each background page that asked. The action acts on the user's own
+      // selection, as before it asked. Written directly: a selection here would wake a page
+      // for a tab the action is about to archive.
+      owner.windowState.selectedNodeBySpace = selectedNodeBySpace.filter {
+        owner.model.space(id: $0.key) != nil && owner.model.node(id: $0.value) != nil
+      }
+      if owner.model.space(id: focusedSpaceID) != nil { owner.windowState.focusedSpaceID = focusedSpaceID }
+    }
+    let action = self.action
+    end()
+    action?()
+  }
+
+  private func end() {
+    isRunning = false; remaining.removeAll(); action = nil
+    owner.closeBatchEnded(self)
+  }
+}

@@ -356,6 +356,90 @@ def run(factory, results, tmp, h):
             return check(kept and state['title'] == 'Leave site?' and gone, kept=kept, state=state)
         gate('dialog_close_pending_dialog', close_with_pending_dialog)
 
+        def tab_row(target): return next((t for t in app.call('tabs') if t['id'] == target), {})
+        def bulk_archive():
+            # Bug sweep r6 P-01: a bulk archive (here Archive Tabs Above) force-closed a page with a
+            # beforeunload handler, with no prompt. Each such page asks now; "Stay" keeps every tab
+            # of the action; "Leave" archives them all and keeps the user's own selection.
+            low = page(); target = page(); arm(target); top = page()
+            app.call('select', tab=low)
+            app.call('sidebar-menu', node=low, item='Archive Tabs Above', alternate=True)
+            state = visible(ds); shown = app.call('window-state')['selected']
+            answer(False)
+            ids = {t['id'] for t in app.call('tabs')}
+            kept = target in ids and top in ids and tab_row(target).get('loaded')
+            app.call('select', tab=low)
+            app.call('sidebar-menu', node=low, item='Archive Tabs Above', alternate=True)
+            visible(ds); answer()
+            gone = wait(lambda: (lambda ids: target not in ids and top not in ids)({t['id'] for t in app.call('tabs')}), timeout=3, step=.02)
+            selected = app.call('window-state')['selected']
+            return check(state['title'] == 'Leave site?' and shown == target and kept and gone and selected == low,
+                         state=state, shown=shown, target=target, kept=kept, gone=bool(gone), selected=selected, low=low)
+        gate('dialog_beforeunload_bulk_archive', bulk_archive)
+
+        def window_close():
+            # Bug sweep r6 WL-04: closing a window (its close button, Close Window) destroyed its
+            # pages without beforeunload; a Blank Window loses its tabs with it. "Stay" keeps the
+            # window; "Leave" closes it.
+            def windows(): return len(app.call('shell-windows'))
+            before = windows()
+            app.call('key', key='n', modifiers=['control', 'command'], route='app')
+            assert wait(lambda: windows() == before + 1, timeout=8, step=.1), app.call('shell-windows')
+            try:
+                if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
+                target = page(); arm(target)
+                app.call('window-close'); state = visible(ds); answer(False)
+                stays = windows() == before + 1 and any(t['id'] == target for t in app.call('tabs'))
+                app.call('window-close'); visible(ds); answer()
+                closed = wait(lambda: windows() == before, timeout=5, step=.05)
+                return check(state['title'] == 'Leave site?' and stays and bool(closed), state=state, stays=stays, closed=bool(closed))
+            finally:
+                if windows() > before:
+                    app.call('policy', dialogs='accept'); app.call('window-close')
+                    wait(lambda: windows() == before, timeout=5, step=.05); app.call('policy', dialogs='')
+        gate('dialog_beforeunload_window_close', window_close)
+
+        def cache_keeps_unload_page():
+            # Bug sweep r6 V-01: the 8-page hidden-page cache force-closed a background page with a
+            # beforeunload handler (no prompt; its input was lost). Such a page stays past the cap.
+            # Liveness is read from the tab list: an eval of an evicted tab would make a new page.
+            target = page(); arm(target); app.eval(target, 'window.keptMarker=42;true')
+            for _ in range(10): page()
+            loaded = tab_row(target).get('loaded')
+            marker = app.eval(target, 'window.keptMarker') if loaded else None
+            return check(loaded and marker == 42, loaded=loaded, marker=marker)
+        gate('cache_keeps_beforeunload_page', cache_keeps_unload_page)
+
+        def wake_after_cache_close():
+            # Bug sweep r6 V-03: a page closed outside sleep (here by the hidden-page cache) woke from
+            # an older stored back list, so its newer navigation was lost. The stored row follows the
+            # page's own list now. The tab is selected again at once, without a wait.
+            assert wait(lambda: app.call('sleep-state').get('started'), timeout=10, step=.1)
+            stamp = str(time.time_ns())
+            first, second, third = (origin + '/v3-' + n + '?' + stamp for n in 'abc')
+            def sleep_tab(t): return app.call('sleep-state', tab=t)['tabs'][0]
+            try:
+                target = page(first)
+                app.call('navigate', tab=target, url=second); app.call('wait', tab=target)
+                page()
+                app.call('sleep-clock', advance=15.0); app.call('sleep-now', tab=target)
+                app.call('sleep-clock', advance=86400.0); app.call('sleep-tick')
+                assert wait(lambda: (lambda t: not t['content'] and t['hosts'] == 0)(sleep_tab(target)), timeout=8, step=.1), sleep_tab(target)
+                app.call('sleep-clock', reset=True)
+                app.call('select', tab=target)
+                assert wait(lambda: (lambda t: t.get('loaded') and t.get('url') == second and not t.get('loading'))(tab_row(target)), timeout=8, step=.05), tab_row(target)
+                app.call('navigate', tab=target, url=third); app.call('wait', tab=target)
+                for _ in range(10): page()
+                evicted = not tab_row(target).get('loaded')
+                app.call('select', tab=target)
+                woke = wait(lambda: (lambda t: t if t.get('loaded') and not t.get('loading') else None)(tab_row(target)), timeout=8, step=.05) or tab_row(target)
+                href = app.eval(target, 'location.href') if woke.get('loaded') else ''
+                length = app.eval(target, 'history.length') if woke.get('loaded') else 0
+                return check(evicted and href == third and length >= 3, evicted=evicted, href=href, historyLength=length, tab=woke)
+            finally:
+                app.call('sleep-clock', reset=True)
+        gate('wake_after_cache_close_keeps_navigation', wake_after_cache_close)
+
         def quit_buried_peek():
             # WC-02: a beforeunload page under another Peek used to hang Quit for good.
             source = page()

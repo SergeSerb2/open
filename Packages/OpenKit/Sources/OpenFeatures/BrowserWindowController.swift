@@ -110,6 +110,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onClose: (() -> Void)?
     /// Cancel window-owned extension consent before AppKit checks attached sheets.
     public var onCloseRequested: (() -> Void)?
+    /// performClose (close button, Close Window): false keeps the window open while its pages
+    /// ask beforeunload; the App closes it after every page agreed (bug sweep r6 WL-04).
+    public var shouldClose: (() -> Bool)?
+    /// A sidebar action that removes many tabs at once asks their live pages first (bug sweep r6
+    /// P-01). True: the pages ask, and the closure runs once each agreed (or never). False:
+    /// no page asks, and the caller acts now.
+    public var pageClosePreflight: ((_ tabIDs: [ItemID], _ action: @escaping () -> Void) -> Bool)?
     /// Ordinary keys, selection and window layout never create switcher state.
     public private(set) var existingTabSwitcher: TabSwitcherController?
     public var tabSwitcher: TabSwitcherController {
@@ -1692,9 +1699,25 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             model.setLiveRepository(folderID: id, repository: repository, hidden: hidden); changed(); return true
         case .deleteFolders(let ids, let archiveFolderTabs): return confirmDeleteFolders(ids, archiveFolderTabs: archiveFolderTabs)
         case .clearToday(let space), .clearTodayKeeping(let space, _):
-            let before = model.space(id: space)?.today.count ?? 0
-            guard ModelSidebarActions(context: context).perform(intent) else { return false }
-            if (model.space(id: space)?.today.count ?? 0) < before { showClearedToast() }
+            var keep: Set<ItemID> = []
+            if case .clearTodayKeeping(_, let kept) = intent { keep = kept }
+            // As the model's clear: a folder or split that holds a kept tab stays whole.
+            func retained(_ node: SidebarNode) -> Bool {
+                if keep.contains(node.id) { return true }
+                switch node {
+                case .tab: return false
+                case .folder(let folder): return folder.children.contains(where: retained)
+                case .split(let split): return split.panes.contains { keep.contains($0.id) }
+                }
+            }
+            let cleared = (model.space(id: space)?.today ?? []).filter { !retained($0) }.map(\.id)
+            return afterPagesAgreeToClose(tabIDs(under: cleared)) { [weak self] in
+                guard let self else { return false }
+                let before = self.model.space(id: space)?.today.count ?? 0
+                guard ModelSidebarActions(context: self.context).perform(intent) else { return false }
+                if (self.model.space(id: space)?.today.count ?? 0) < before { self.showClearedToast() }
+                self.refresh(); self.changed(); return true
+            }
         case .openCommandBar(let source): dismissSidebarReveal(); onOpenCommandBar?(source, context.currentTab?.url); return onOpenCommandBar != nil
         case .newSplitView: splitController.addEmptyPane()
         case .addTabToSplit(let id):
@@ -1704,12 +1727,27 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
             if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
+        case .archiveFolder(let id):
+            return afterPagesAgreeToClose(tabIDs(under: [id])) { [weak self] in
+                guard let self, ModelSidebarActions(context: self.context).perform(intent) else { return false }
+                self.refresh(); self.changed(); return true
+            }
         case .close, .archiveNodes:
             // A split's or a multi-selection's archive can take the current item. As Cmd+W and
             // folder Delete do, select the item now in its place instead of leaving a blank page.
-            var accepted = false
-            keepingSelection { accepted = ModelSidebarActions(context: context).perform(intent) }
-            guard accepted else { return false }
+            var nodes: [ItemID] = []
+            switch intent {
+            case .close(let id): nodes = [id]
+            case .archiveNodes(let ids): nodes = ids
+            default: break
+            }
+            return afterPagesAgreeToClose(tabIDs(under: nodes)) { [weak self] in
+                guard let self else { return false }
+                var accepted = false
+                self.keepingSelection { accepted = ModelSidebarActions(context: self.context).perform(intent) }
+                guard accepted else { return false }
+                self.refresh(); self.changed(); return true
+            }
         case .goBack: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
         case .goForward: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }
@@ -1759,6 +1797,24 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         editor.updateAnchor(.sidebarTrailingEdge(sidebarFrameInWindow: frame))
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
+    public func windowShouldClose(_ sender: NSWindow) -> Bool { shouldClose?() ?? true }
+    /// Runs `action` now, or after the live pages of `tabIDs` agreed to close. The result is the
+    /// action's own when it ran now, and true while the pages ask.
+    func afterPagesAgreeToClose(_ tabIDs: [ItemID], _ action: @escaping () -> Bool) -> Bool {
+        if pageClosePreflight?(tabIDs, { _ = action() }) == true { return true }
+        return action()
+    }
+    /// Every tab a removal of these nodes takes (folders, splits and their panes).
+    func tabIDs(under ids: [ItemID]) -> [ItemID] {
+        func walk(_ node: SidebarNode) -> [ItemID] {
+            switch node {
+            case .tab(let tab): [tab.id]
+            case .split(let split): split.panes.map(\.id)
+            case .folder(let folder): folder.children.flatMap(walk)
+            }
+        }
+        return ids.flatMap { model.node(id: $0).map(walk) ?? [] }
+    }
     public func windowWillClose(_ notification: Notification) {
         cancelLibraryPageMotion()
         // The intro's app-wide event monitor must not outlive the window (bug sweep r4 PERF-14).
@@ -1914,9 +1970,11 @@ extension BrowserWindowController {
         let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
             guard let self else { return }
             self.pendingConfirmation = nil
-            guard confirmed, self.model.space(id: id) != nil else { return }
-            if ModelSidebarActions(context: self.context).perform(.deleteSpace(id)) {
-                self.refresh(); restoreKeyboardFocus(); self.changed()
+            guard confirmed, let space = self.model.space(id: id) else { return }
+            _ = self.afterPagesAgreeToClose(self.tabIDs(under: (space.pinned + space.today).map(\.id))) { [weak self] in
+                guard let self, self.model.space(id: id) != nil,
+                      ModelSidebarActions(context: self.context).perform(.deleteSpace(id)) else { return false }
+                self.refresh(); restoreKeyboardFocus(); self.changed(); return true
             }
         }
         if !shown { pendingConfirmation = nil }
@@ -1936,17 +1994,21 @@ extension BrowserWindowController {
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed else { return }
-            // Read again in the model: the sheet is asynchronous. Every Live Folder the deletion
-            // reaches (also one nested in a selected folder) is removed first, then the rest is
-            // archived (BrowserModel.deleteFolders).
-            var archived = 0, removed = 0
-            var archivedFolders = 0
-            self.keepingSelection { (archived, archivedFolders, removed) = self.model.deleteFolders(ids: ids, archiveFolderTabs: archiveFolderTabs) }
-            if removed > 0 { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
-            guard archived > 0 || removed > 0 else { return }
-            self.refresh(); restoreKeyboardFocus(); self.changed()
-            // The toast's Undo covers only the archived rows; a lone Live Folder removal has none.
-            if archivedFolders > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders)) }
+            _ = self.afterPagesAgreeToClose(self.tabIDs(under: ids)) { [weak self] in
+                guard let self else { return false }
+                // Read again in the model: the sheet is asynchronous. Every Live Folder the deletion
+                // reaches (also one nested in a selected folder) is removed first, then the rest is
+                // archived (BrowserModel.deleteFolders).
+                var archived = 0, removed = 0
+                var archivedFolders = 0
+                self.keepingSelection { (archived, archivedFolders, removed) = self.model.deleteFolders(ids: ids, archiveFolderTabs: archiveFolderTabs) }
+                if removed > 0 { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
+                guard archived > 0 || removed > 0 else { return false }
+                self.refresh(); restoreKeyboardFocus(); self.changed()
+                // The toast's Undo covers only the archived rows; a lone Live Folder removal has none.
+                if archivedFolders > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders)) }
+                return true
+            }
         }
         if !shown { pendingConfirmation = nil }
         return shown
