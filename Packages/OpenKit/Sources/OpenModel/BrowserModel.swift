@@ -585,8 +585,9 @@ public final class BrowserModel {
     }
 
     /// One archive entry per tab under `node`, each with the tab's direct parent.
+    /// `skippingLiveRows`: leave out a Live Folder's fetched rows (fetched data, not the user's tabs).
     private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date(),
-                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil) -> [ArchiveEntry] {
+                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil, skippingLiveRows: Bool = false) -> [ArchiveEntry] {
         let owning = ownership ?? owner(of: parent)
         var entries: [ArchiveEntry] = []
         func collect(_ node: SidebarNode, _ parent: NodeParent) {
@@ -594,7 +595,10 @@ public final class BrowserModel {
             case .tab(let tab):
                 entries.append(ArchiveEntry(tab: tab, reason: reason, originalLocation: parent.archiveLocation, spaceID: owning.space, profileID: owning.profile, archivedAt: date))
             case .folder(let folder):
-                for child in folder.children { collect(child, .folder(folder.id)) }
+                for child in folder.children {
+                    if skippingLiveRows, folder.live != nil, case .tab(let tab) = child, tab.liveItemURL != nil { continue }
+                    collect(child, .folder(folder.id))
+                }
             case .split(let split):
                 for pane in split.panes { collect(.tab(pane), .splitPane(split.id)) }
             }
@@ -2489,8 +2493,10 @@ public final class BrowserModel {
         guard spaces.count > 1, let doomed = space(id: id), let slot = spaces.firstIndex(where: { $0.id == id }) else { return nil }
         var entries: [ArchiveEntry] = []
         if archiveTabs {
-            for node in doomed.pinned { entries += archiveEntries(for: node, in: .spacePinned(id), reason: .closed) }
-            for node in doomed.today { entries += archiveEntries(for: node, in: .spaceToday(id), reason: .closed) }
+            // A Live Folder's fetched rows are not archived, as when the folder itself is deleted
+            // (`deleteFolders`); tabs the user put in it are (bug sweep r7 W-03).
+            for node in doomed.pinned { entries += archiveEntries(for: node, in: .spacePinned(id), reason: .closed, skippingLiveRows: true) }
+            for node in doomed.today { entries += archiveEntries(for: node, in: .spaceToday(id), reason: .closed, skippingLiveRows: true) }
         }
         let focusedWindows = windows.filter { $0.focusedSpaceID == id }
         let selections = removeSpace(id)

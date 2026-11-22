@@ -345,6 +345,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onSpaceCreationIcon = { [weak self] current, anchor, onPick in
       self?.openDraftSpaceIconPicker(current: current, anchor: anchor, onPick: onPick)
     }
+    controller.onLibraryCloseRequest = { [weak self] in
+      guard let self else { return }
+      self.app.settingsPresenter.librarySessions[self.windowState.id]?.close(); self.app.scheduleMenuRebuild()
+    }
     controller.onExitPageFullscreen = { [weak self] in
       // The fullscreen page can be an unfocused Split pane.
       guard let page = self?.fullscreenPage ?? self?.selectedContent else { return false }
@@ -1185,7 +1189,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
     case .editSpaceTheme(let id):
-      iconPicker?.close(); return controller?.editSpaceTheme(id) == true
+      iconPicker?.close()
+      let previous = focusedSpace?.id
+      guard controller?.editSpaceTheme(id) == true else { return false }
+      // Another Space: the controller switched only the model (it keeps an open editor and
+      // retargets it). Finish the switch on the window's own focus path, or the window title, the
+      // extensions' active tab and the menus keep the previous Space's tab (bug sweep r7 W-01).
+      if previous != id, let space = model.space(id: id) { focus(space: space) }
+      return true
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true

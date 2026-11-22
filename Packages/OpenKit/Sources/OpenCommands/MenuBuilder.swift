@@ -354,13 +354,16 @@ public enum MenuBuilder {
             menu.addItem(.separator())
             for (index, space) in spaces.enumerated() {
                 let number = index + 1
+                // The Go to Space N binding as Settings ▸ Shortcuts set it (default ⌃N). A fixed ⌃N
+                // kept working, and kept showing, after the user changed or removed it (bug sweep r7 W-04).
+                let shortcut = number <= 9 ? CommandRegistry.byID["go-to-space-\(number)"].flatMap { overrides.effectiveShortcuts(for: $0).first } : nil
                 let dynamic = NSMenuItem(
                     title: space.title,
                     action: #selector(MenuCommandTarget.openCommandAction(_:)),
-                    keyEquivalent: number <= 9 ? String(number) : ""
+                    keyEquivalent: shortcut?.keyEquivalent ?? ""
                 )
                 dynamic.target = target
-                dynamic.keyEquivalentModifierMask = [.control]
+                dynamic.keyEquivalentModifierMask = shortcut?.keyEquivalentModifierMask ?? []
                 dynamic.representedObject = ["command": "go-to-space-\(min(number, 9))", "payload": space.id]
                 dynamic.identifier = NSUserInterfaceItemIdentifier("dynamic-space-\(space.id)")
                 menu.addItem(dynamic)

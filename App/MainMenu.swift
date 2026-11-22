@@ -411,7 +411,9 @@ extension EngineWebContentHostFactory {
     // docs/commands.md lists all four entries with “—”.
     case "rename-space":
       guard let controller else { return false }
-      if windowState.sidebarMode == .hidden { return showRenameSpaceDialog() }
+      // The Library hides the sidebar too: its header field would take the typing out of sight
+      // (bug sweep r7 W-02).
+      if windowState.sidebarMode == .hidden || controller.isLibraryOpen { return showRenameSpaceDialog() }
       controller.sidebar.layoutSubtreeIfNeeded()
       controller.sidebar.beginRename(nodeID: nil)
     case "change-profile":

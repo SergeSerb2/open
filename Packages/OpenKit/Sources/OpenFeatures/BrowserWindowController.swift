@@ -781,6 +781,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     /// Delayed idle work attaches only the hidden shell; it never moves the page.
     public var onLibraryIdleRefresh: (() -> Void)?
+    /// Closes this window's Library through its App session (Space Creation opens in the sidebar).
+    public var onLibraryCloseRequest: (() -> Void)?
     public func prepareLibraryPanel(_ panel:NSView,width:CGFloat) {
         guard !isLibraryOpen else { return }
         if libraryPanel !== panel { libraryPanel?.removeFromSuperview(); libraryPanel = panel; root.addSubview(panel,positioned:.below,relativeTo:container) }
@@ -2104,7 +2106,7 @@ extension BrowserWindowController {
 extension BrowserWindowController {
     @discardableResult
     public func beginSpaceCreation(options: SpaceCreationOptions = SpaceCreationOptions()) -> Bool {
-        if !isPageFullscreen, let creation = spaceCreationController { creation.focus(); return true }
+        if !isPageFullscreen, let creation = spaceCreationController { closeLibraryForSpaceCreation(); creation.focus(); return true }
         guard let window, model.canCreateSpace(at: options.insertionIndex, moving: options.moving,
                                                removingEmptyFolder: options.removingEmptyFolder) else { return false }
         if isPageFullscreen {
@@ -2114,6 +2116,7 @@ extension BrowserWindowController {
         }
         closeThemeEditor()
         dismissSidebarReveal()
+        closeLibraryForSpaceCreation()
         let previousSpaceID = context.focusedSpace?.id
         let creation = SpaceCreationController(model: model, windowID: windowID, options: options)
         creation.creationView.systemAppearance = context.systemAppearance
@@ -2136,6 +2139,14 @@ extension BrowserWindowController {
         spaceCreationController = creation; layoutContent(animated: true)
         sidebar.beginSpaceCreation(page: creation.view); creation.updatePreview(); creation.focus()
         return true
+    }
+    /// The form is a sidebar page, and the Library hides the sidebar: close the Library first, or the
+    /// name field takes the typing out of sight (bug sweep r7 W-02). The layout that shows the form
+    /// must not take the Library branch, so the panel is closed in this turn.
+    private func closeLibraryForSpaceCreation() {
+        guard isLibraryOpen else { return }
+        onLibraryCloseRequest?()
+        if isLibraryOpen { dismissLibraryPanel(animated: false) }
     }
     private func resumePendingSpaceCreation() {
         guard !isPageFullscreen, !fullscreenTransition, window?.isVisible == true,
