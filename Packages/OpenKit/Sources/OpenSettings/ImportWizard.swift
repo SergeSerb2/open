@@ -62,7 +62,8 @@ import OpenImport
     }
     public var canContinue: Bool {
         if !plan.isArc { return readable && !busy && (plan.bookmarks || plan.openTabs || plan.history || plan.searchSettings || plan.passwords || (plan.secretsRequested && canImportBrowserSecrets)) && passwordsReady }
-        return readable && !busy && (!plan.providers.isEmpty || plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
+        // Arc's search engine is not imported (bug sweep r7 Y-01): `searchSettings` alone selects nothing.
+        return readable && !busy && (!plan.providers.isEmpty || plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public var title: String { step == .source ? "Import from another browser" : "Import from " + plan.source.displayName }
     public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.source = .arc; selectedSourceID = "arc"; if step == .source { step = .choose }; plan.directory = directory; await refreshCounts() }
     // MARK: Source picker (IMC I-1; IMF adds Firefox and Safari readers)
@@ -344,7 +345,7 @@ import OpenImport
         let file = plan.providerFiles[provider.id].map { " · " + $0.lastPathComponent } ?? ""
         return (providerCounts[provider.id].map { "Found: \($0.formatted())" } ?? "Not found") + file
     }
-    public var displayedReportCategories: [String] { if !plan.isArc { return browserCategories }; return Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } + providers.filter { plan.providers.contains($0.id) }.map(\.title) }
+    public var displayedReportCategories: [String] { if !plan.isArc { return browserCategories }; return Self.reportCategories.filter { $0 != "Search settings" && ($0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false) } + providers.filter { plan.providers.contains($0.id) }.map(\.title) }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
     public var unfinishedSecretsImportMessage: String? {
         unfinishedSecretsImport && !secretsReportLines.contains(ArcSecretsImportReport.unfinishedMessage) ? ArcSecretsImportReport.unfinishedMessage : nil
@@ -397,7 +398,7 @@ import OpenImport
             self.plan = plan; self.plan.skipSecrets(); consentWasDecided = false; outcome = nil; errorText = ""; step = .review
             await requestImport(); return
         }
-        guard !isImporting, plan.isArc, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies) else { return }
+        guard !isImporting, plan.isArc, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || (plan.secretsRequested && canImportPasswordsAndCookies) else { return }
         self.plan=plan; if !canImportPasswordsAndCookies {self.plan.skipSecrets()}; consentWasDecided=false; outcome=nil; errorText=""; step = .review
         await requestImport()
     }
@@ -490,8 +491,7 @@ public struct ImportWizard: View {
                 case .choose:
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
-                    option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested).disabled(!model.canImportPasswordsAndCookies)
-                    Text("Imports your search engine choice only.").font(.caption).foregroundStyle(.secondary)
+                    option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Passwords and cookies", \.secretsRequested).disabled(!model.canImportPasswordsAndCookies)
                     ForEach(model.providers, id: \.id) { provider in providerRow(provider) }
                 case .review:
                     ForEach(model.spaceMapping, id: \.self) { Text($0) }

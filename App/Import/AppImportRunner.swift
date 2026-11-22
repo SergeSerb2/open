@@ -19,6 +19,8 @@ final class AppImportRunner: ProfileDataOwner {
   var secretsFixtureInProgress = false
   var retiredSecretsProfiles = Set<ProfileID>()
   var retiredSecretsDirectories = Set<String>()
+  /// Arc source Profile ID → the new ID that replaced it after an in-session delete (bug sweep r7 Y-02).
+  var retiredProfileReplacements: [ProfileID: ProfileID] = [:]
   var secretsSinks: [ProfileID: AppSecretsImportSink] = [:]
   var secretsTask: Task<ArcSecretsImportReport, any Error>?
   var secretsTaskProfiles = Set<ProfileID>()
@@ -243,6 +245,13 @@ final class AppImportRunner: ProfileDataOwner {
         if profile.id == imported.sourceDefaultProfileID, let live = app.model.defaultProfile {
           profileMapping[profile.id] = live.id
         } else if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
+        else if app.profileTeardown.isRetired(profile.id) {
+          // A Profile deleted in this session keeps its ID in every App store's retired set.
+          // Give the re-import a new ID, and reuse it on later imports (bug sweep r7 Y-02).
+          let replacement = retiredProfileReplacements[profile.id].flatMap { app.profileTeardown.isRetired($0) ? nil : $0 } ?? ProfileID()
+          retiredProfileReplacements[profile.id] = replacement
+          profileMapping[profile.id] = replacement
+        }
       }
     }
     func mapExtensions() {
@@ -282,8 +291,7 @@ final class AppImportRunner: ProfileDataOwner {
         counts["Splits"] = report.splits
         counts["Imported tabs"] = report.importedTabNodes
         counts[ImportOutcomeKeys.tabs] = report.importedTabNodes
-        // A fallback Profile in an empty source is not imported data.
-        if plan.searchSettings && hasSidebarData { counts["Search settings"] = imported.model.profiles.count }
+        // Arc's search engine is not read (bug sweep r7 Y-01), so no search settings are imported.
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
@@ -329,7 +337,9 @@ final class AppImportRunner: ProfileDataOwner {
         let beforeProfiles = app.model.profiles.count, beforeRules = app.model.routingRules.count
         let merged = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings,
+          // Arc's search engine is not read: the source Profiles carry only default settings.
+          // Applying them would reset each mapped Profile to Google and drop its custom engines (bug sweep r7 Y-01).
+          searchSettings: false,
           profiles: plan.archive || plan.history || plan.boosts || (plan.secretsConsented && canImportPasswordsAndCookies),
           archivedIDsByProfile: archivedIDs,
           importedAt: Date(), saving: {
