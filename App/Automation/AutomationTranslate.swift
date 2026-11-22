@@ -42,6 +42,19 @@
       case "selection": return adapter.selection.state
       case "selection-copy": return ["pressed": adapter.selection.pressCopy(), "state": adapter.selection.state]
       case "selection-close": adapter.selection.close(); return adapter.selection.state
+      // Tab or Esc through the real event queue (NSApp.postEvent), so the bubble's local key
+      // monitor sees it as it sees a key press; `key` (NSApp.sendEvent) would skip monitors.
+      case "selection-key":
+        guard let code = a["code"] as? Int, [48, 53].contains(code), let window = NSApp.keyWindow ?? w.window,
+          let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber, context: nil, characters: code == 48 ? "\t" : "\u{1b}",
+            charactersIgnoringModifiers: code == 48 ? "\t" : "\u{1b}", isARepeat: false, keyCode: UInt16(code))
+        else { throw Failure(message: "selection-key needs code 48 (Tab) or 53 (Esc) and a key window") }
+        NSApp.postEvent(event, atStart: false)
+        try await Task.sleep(for: .milliseconds(200))
+        var state = adapter.selection.state
+        state["keyWindowBefore"] = window.windowNumber
+        return state
       case "detect":
         // The real detector on a text (X1: the translated body is no longer French).
         let text = String((a["text"] as? String ?? "").prefix(PageLanguageDetector.maxProbeCharacters))
