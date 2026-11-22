@@ -664,6 +664,19 @@
       case "sidebar-key": return try await sidebarKey(a)
       case "hover": return try await sidebarHover(a)
       case "selection": return try sidebarController(a).context.selection.ids.map(\.description)
+      case "sidebar-url-drop":
+        // An external drop of `urls` (links or files) on the focused page's list at `index`
+        // (optionally in `folder`), or on Favorites at `favoritesIndex`, through the real
+        // validate and accept callbacks (bug sweep r7 AB-05).
+        let controller = try sidebarController(a)
+        guard let window = controller.window, let raw = a["urls"] as? [String], !raw.isEmpty else { throw Failure(message: "invalid sidebar url drop") }
+        let urls = try raw.map { text -> URL in guard let url = URL(string: text) else { throw Failure(message: "invalid url") }; return url }
+        let folder = try (a["folder"] as? String).map { text -> ItemID in
+          guard let uuid = UUID(uuidString: text) else { throw Failure(message: "invalid folder") }; return ItemID(rawValue: uuid)
+        }
+        let info = SplitDraggingInfo(window: window, point: .zero, urls: urls)
+        return controller.sidebar.performExternalDrop(info, intoFolder: folder, childIndex: a["index"] as? Int ?? 0,
+                                                      favoritesIndex: a["favoritesIndex"] as? Int)
       case "sidebar-drop":
         let controller = try sidebarController(a)
         guard let raw = a["nodes"] as? [String], let parent = a["parent"] as? [String: Any],
@@ -1560,6 +1573,8 @@
           "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
           "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
           "toolbarButtons": controller.sidebar.toolbarVisibleButtons,
+          "toolbarTooltips": controller.sidebar.toolbarTooltips,
+          "toolbarMoreRows": controller.sidebar.toolbarMoreRows().map { [$0.title, $0.shortcut] },
           "spaceSwitcherFrames": app.model.spaces.reduce(into: [String: [Double]]()) { frames, space in
             if let view = controller.sidebar.spaceSwitcher(spaceID: space.id) {
               frames[space.id.description] = rect(root.convert(view.bounds, from: view))

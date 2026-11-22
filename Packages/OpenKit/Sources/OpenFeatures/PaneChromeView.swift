@@ -125,12 +125,12 @@ public final class PaneChromeView: NSView {
             extensionStrip?.appearance = dark ? NSAppearance(named: .darkAqua) : nil
         }
         let text = host?.currentURL?.absoluteString == "open://welcome" ? "Welcome to Open"
-            : role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
-            : host?.currentURL?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? ""
+            : Self.pageKind(host?.currentURL) ?? (role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
+            : host?.currentURL?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? "")
         var layoutChanged = false
         if label.stringValue != text { label.stringValue = text; layoutChanged = true }
         for (i, b) in buttons.enumerated() {
-            let hidden = role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)
+            let hidden = (role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)) || (i == 3 && showsNote)
             if b.isHidden != hidden { b.isHidden = hidden; layoutChanged = true }
         }
         let back = host?.canGoBack ?? false, forward = host?.canGoForward ?? false
@@ -186,17 +186,28 @@ public final class PaneChromeView: NSView {
         label.frame = CGRect(x: x, y: 8, width: max(0, box), height: 16)
         buttons[3].frame = CGRect(x: x - 25, y: 4, width: 24, height: 24)
         // Both focus states show the host group, so room alone decides.
-        label.isHidden = !fits; buttons[3].isHidden = !fits
+        label.isHidden = !fits; buttons[3].isHidden = !fits || showsNote
     }
+    /// The page kind the bar names for Open's own pages, as the sidebar URL field does: "Note" or
+    /// "Easel", not the route's host "note" (bug sweep r7 AB-06).
+    private static func pageKind(_ url: URL?) -> String? {
+        guard let url, url.scheme?.lowercased() == "open" else { return nil }
+        switch url.host()?.lowercased() { case "note": return "Note"; case "easel": return "Easel"; default: return nil }
+    }
+    /// A Note has no shareable address: no Copy button (its row's Copy Link is disabled too).
+    private var showsNote: Bool { Self.pageKind(host?.currentURL) == "Note" }
     private func press(_ i: Int) {
         switch i {
         case 0: host?.goBack()
         case 1: host?.goForward()
         case 2: if host?.isLoading == true { host?.stop() } else { host?.reload() }
         case 3:
-            if let url = host?.currentURL {
+            if let url = host?.currentURL, !showsNote {
                 let (clean, removed) = URLCleaner.clean(url)
-                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string); onCopy?(!removed.isEmpty)
+                // A link as both `public.url` and plain text, as the sidebar's Copy URL writes it (AB-06).
+                let board = NSPasteboard.general
+                board.clearContents(); board.declareTypes([.URL, .string], owner: nil)
+                (clean as NSURL).write(to: board); board.setString(clean.absoluteString, forType: .string); onCopy?(!removed.isEmpty)
             }
         case 4:
             if NSApp.currentEvent?.modifierFlags.contains(.option) != true { onSiteControls?() }

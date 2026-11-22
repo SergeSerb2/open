@@ -1146,7 +1146,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         let before = Set(model.index.keys)
         guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
           let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
-        select(nodeID: tab.id); return true
+        // A multi-item drop selects only its last tab (bug sweep r7 AB-05).
+        if !context.defersOpenedTabSelection { select(nodeID: tab.id) }
+        return true
       }
     case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
       return copyEaselLink(tabID: id)
@@ -1162,6 +1164,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
     case .shareVia(let id, let service): return shareSidebarTab(id, via: service)
+    case .sharePageVia(let service): return sharePage(via: service)
     case .shareSplit(let id): return shareSidebarSplit(id)
     case .shareNodes(let ids): return shareSidebarNodes(ids)
     case .duplicate(let id): return model.duplicateNode(id: id, into: focusedSpace?.id) != nil
@@ -2025,6 +2028,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     guard showsInWindow(webContent) else { try? webContent.exitFullscreen(); return }
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
+    // Its pane alone fills the screen: no toolbar, pane bars, other panes or corners (bug sweep r7 AB-01).
+    controller?.container.pageFullscreenTabID = tabID(for: webContent)
     controller?.isPageFullscreen = true
     // Also for a window already in full screen: its exit must end the page's fullscreen.
     if let window { observeStandaloneFullScreen(window) }
@@ -2049,6 +2054,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Clears page fullscreen and leaves the window full screen the page started. Idempotent.
   func endPageFullscreen() {
     fullscreenPage = nil
+    controller?.container.pageFullscreenTabID = nil
     if controller?.isPageFullscreen == true { controller?.isPageFullscreen = false }
     guard enteredWindowFullscreenForPage else { return }
     // AppKit ignores a toggle during a transition: finish when the window has entered.
@@ -2249,7 +2255,8 @@ extension EngineWebContentHostFactory {
     let space = space(containing: id)
     if let space, space.id != focusedSpace?.id { focus(space: space) }
     select(nodeID: id)
-    NotificationClickRouter.shared.pageRequestedActivation(tab: id)
+    // Also a Blank Window's tab, which is not in the main model (bug sweep r7 AB-02).
+    NotificationClickRouter.shared.pageRequestedActivation(tab: id, url: webContent.url)
     record("tab-request", webContent, ["request": "activate", "space": space?.id.description ?? ""])
   }
 

@@ -197,10 +197,13 @@ struct SidebarMenus {
     /// AirDrop · Mail · Messages · Notes · … with their icons; the same submenu on Today, pinned,
     /// favourite rows and the URL field). The App shares the link without trackers.
     private func share(_ tab: Tab) -> NSMenuItem {
+        share(tab.url) { .shareVia(nodeID: tab.id, service: $0) }
+    }
+    private func share(_ url: URL, _ intent: (String) -> SidebarIntent) -> NSMenuItem {
         let parent = NSMenuItem(title: "Share", action: nil, keyEquivalent: "")
-        let clean = URLCleaner.clean(tab.url).url
+        let clean = URLCleaner.clean(url).url
         parent.submenu = menu(ShareServices.list(for: [clean]).map { service in
-            let row = item(service.title, .shareVia(nodeID: tab.id, service: service.title))
+            let row = item(service.title, intent(service.title))
             row.image = service.image
             return row
         })
@@ -609,9 +612,12 @@ struct SidebarMenus {
     func urlField() -> NSMenu {
         let tab = context.currentTab
         let quotes = UserDefaults.standard.object(forKey: SidebarContext.sharedQuotesKey) as? Bool ?? true
+        // Copy URL and Share act on the page the field shows: the Peek on screen, else the current
+        // tab (bug sweep r7 AB-03). A Note has no shareable address (AB-06).
+        let page = context.pageIsNote ? nil : context.shownPeek?.url ?? tab?.url
         return menu([
-            item("Copy URL", enabled: tab != nil, .copyCurrentURL),
-            tab.map(share) ?? ClosureMenuItem("Share", enabled: false) {},
+            item("Copy URL", enabled: page != nil, .copyCurrentURL),
+            page.map { url in share(url) { service in .sharePageVia(service: service) } } ?? ClosureMenuItem("Share", enabled: false) {},
             item("Capture…", enabled: tab != nil, .performCommand("capture-page")),
             item("Capture Full Page", enabled: tab != nil, .performCommand("capture-full-page")),
             item("Capture in Portrait Mode", enabled: tab != nil, .performCommand("capture-portrait")),

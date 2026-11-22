@@ -13,12 +13,15 @@ final class NotificationClickRouter {
   static let shared = NotificationClickRouter()
   static let fallbackDelay: TimeInterval = 0.5
 
-  /// The last page activation (P1), so a click can tell whether its page answered.
-  private var lastActivation: (tab: ItemID, at: Date)?
+  /// The last page activation (P1), so a click can tell whether its page answered: its tab in
+  /// the model of the window that showed it, and the page's URL then.
+  private var lastActivation: (tab: ItemID, url: URL?, at: Date)?
   /// Recent clicks and what Open did (automation evidence).
   private(set) var log: [[String: Any]] = []
 
-  func pageRequestedActivation(tab: ItemID) { lastActivation = (tab, Date()) }
+  /// A tab of any window counts, also a Blank Window's (its own model, not `app.model`): the
+  /// fallback then raised another window over the page that had just answered (bug sweep r7 AB-02).
+  func pageRequestedActivation(tab: ItemID, url: URL?) { lastActivation = (tab, url, Date()) }
 
   func clicked(app: AppDelegate, context: OEBrowserContext, identifier: String, origin: URL, persistent: Bool) {
     let clickedAt = Date()
@@ -28,7 +31,7 @@ final class NotificationClickRouter {
         var entry: [String: Any] = ["id": identifier, "origin": origin.absoluteString, "persistent": persistent]
         defer { self.log.append(entry); if self.log.count > 20 { self.log.removeFirst() } }
         if let activation = self.lastActivation, activation.at >= clickedAt,
-           app.model.tab(id: activation.tab).map({ Self.sameOrigin($0.url, origin) }) == true {
+           activation.url.map({ Self.sameOrigin($0, origin) }) == true {
           entry["action"] = "page"; entry["tab"] = activation.tab.description
           return
         }
