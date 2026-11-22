@@ -23,6 +23,7 @@ extension EngineWebContentHostFactory {
     tab.customTitle = nil
     tab.title = trimmed.isEmpty ? EaselDocument.untitled : trimmed
     controller?.refresh(); scheduleSave()
+    app.easelsDidChange()
     return true
   }
 
@@ -173,10 +174,20 @@ extension AppDelegate {
     let folder = easels.fileURL(for: documentID).deletingLastPathComponent()
     if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
     discardArchivedRows(url: EaselTab.url(for: documentID))
+    easelsDidChange()
   }
 }
 
 extension AppDelegate {
+  /// An Easel or Note changed outside the Library (renamed, deleted, imported): an open Library ▸
+  /// Easels & Notes in any window and the command bar's Easel list read them again (bug sweep r6 CF-11).
+  func easelsDidChange() {
+    for session in settingsPresenter.librarySessions.values where session.controller?.isLibraryOpen == true {
+      session.panel?.reloadEasels()
+    }
+    easelSearch.invalidate()
+  }
+
   /// Every Easel (sidebar rows first, then documents without a row), for Export All Easels.
   func allEaselItems() -> [EaselExporter.Item] {
     var seen = Set<UUID>(), items: [EaselExporter.Item] = []

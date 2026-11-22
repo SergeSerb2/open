@@ -14,6 +14,9 @@ final class EaselSearch {
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
 
+  /// An Easel was renamed, deleted or imported: the next command bar reads the folder again.
+  func invalidate() { lastRefresh = -Double.infinity }
+
   func refresh(force: Bool = false) {
     let now = ProcessInfo.processInfo.systemUptime
     guard force || now - lastRefresh > 5, task == nil, let root = app.directories?.root else { return }

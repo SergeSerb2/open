@@ -198,6 +198,34 @@ public enum NoteExport {
 }
 
 extension NoteStore {
+    /// One Library row: a Note's title, the first line of its text, and when it changed.
+    public struct LibrarySummary: Sendable {
+        public let id: UUID
+        public let title: String
+        public let preview: String
+        public let modifiedAt: Date
+    }
+
+    /// Library rows for every readable Note file. Runs off the main actor and keeps no Note in
+    /// memory (bug sweep r6 CF-12: `allNotes` read and cached every Note on the main thread).
+    /// The caller flushes unsaved edits first.
+    public nonisolated static func librarySummaries(directory: URL) -> [LibrarySummary] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var rows: [LibrarySummary] = []
+        for name in names where name.hasSuffix(".json") {
+            guard UUID(uuidString: String(name.dropLast(5))) != nil else { continue }
+            let url = directory.appendingPathComponent(name)
+            guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= maxFileBytes,
+                  let data = try? Data(contentsOf: url), let note = try? decoder.decode(NoteDocument.self, from: data) else { continue }
+            let preview = note.text.replacingOccurrences(of: "\u{FFFC}", with: "").split(whereSeparator: \.isNewline)
+                .first.map { String($0.prefix(80)) } ?? ""
+            rows.append(LibrarySummary(id: note.id, title: note.title, preview: preview, modifiedAt: note.modifiedAt))
+        }
+        return rows
+    }
+
     /// Every stored Note that can be read, oldest first (so the first Note keeps the plain file name). Unreadable files are skipped and counted.
     public func allNotes() -> (notes: [NoteDocument], unreadable: Int) {
         flush()
