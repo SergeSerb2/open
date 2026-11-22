@@ -1064,6 +1064,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .editSpaceTheme, .setSpaceProfile, .exportSpaceIntoFolder, .deleteSpace, .moveSpace,
            .moveNodesToNewSpace, .moveToNewSpace, .turnFolderIntoSpace, .setPinnedCollapsed,
            .resetToPinnedURL, .replacePinnedURL, .editPinnedURL, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState: return false
+      // Its Pinned section is hidden: a folder made there could never be seen (bug sweep r6 REG-04).
+      case .newFolder(in: .spacePinned): return false
       // Only tabs leave a Blank Window (a folder or split here has no move to the browser's Spaces).
       case .moveNodesToSpace(let ids, _) where !ids.allSatisfy({ model.node(id: $0)?.tab != nil }): return false
       // A selection moves into one of the browser's Spaces, one tab at a time, keeping its order.
@@ -1495,10 +1497,13 @@ extension EngineWebContentHostFactory {
   func openFromCommandBarInSplit(_ url: URL) -> Bool {
     guard !WelcomeTab.isInternal(url), let splits = controller?.splitController, let current = splits.focusedTab else { return false }
     guard splits.canAddPane else { navigateFromCommandBar(url, current: true); return true }
-    guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
-    _ = ensureContent(for: tab)
-    splits.openInSplit(tab.id)
-    return true
+    // The new tab and its split are one Undo step (review r1 #3, WL-10).
+    return model.asOneUndoStep { () -> Bool in
+      guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
+      _ = ensureContent(for: tab)
+      splits.openInSplit(tab.id)
+      return true
+    }
   }
   private func finishCommandBarNavigation(_ page: OEWebContent) {
     guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }
@@ -2046,6 +2051,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
     controller?.isPageFullscreen = true
+    littleOpenController?.isPageFullscreen = true
     // Also for a window already in full screen: its exit must end the page's fullscreen.
     if let window { observeStandaloneFullScreen(window) }
     if let window, !window.styleMask.contains(.fullScreen) {
@@ -2070,6 +2076,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func endPageFullscreen() {
     fullscreenPage = nil
     if controller?.isPageFullscreen == true { controller?.isPageFullscreen = false }
+    if littleOpenController?.isPageFullscreen == true { littleOpenController?.isPageFullscreen = false }
     guard enteredWindowFullscreenForPage else { return }
     // AppKit ignores a toggle during a transition: finish when the window has entered.
     if isChangingWindowFullScreen { exitWindowFullscreenAfterTransition = true; return }

@@ -50,7 +50,8 @@ final class MeetRoute {
     #endif
     // The window the link just opened in.
     DispatchQueue.main.async { [weak app] in
-      guard let app, let controller = app.frontStandardWindowController else { return }
+      // The link opens in a main-model window (AppLinkExecutor), never a Blank Window (bug sweep r6 WL-12).
+      guard let app, let controller = app.frontMainModelWindowController else { return }
       let content = ToastContent(title: "Meet links now open in your current Space!", subtitle: "Choose where they open",
         symbol: "video", accessory: .button(symbol: "gearshape", accessibilityLabel: "Choose where they open"), coalescingKey: "meet-route")
       controller.toasts.show(content) { [weak app] handle in
