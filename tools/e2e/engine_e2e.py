@@ -15160,6 +15160,11 @@ def main():
             results["notes-export"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_export.py"))["run"](
                 factory, results["notes-export"], tmp, sys.modules[__name__])
+        elif opts.only == "blank-window" and os.environ.get("OPEN_EXT_R6_ONLY") == "1":
+            # Bug sweep r6 EXT6 rows (tools/e2e/bugsweep_r6_ext.py); OPEN_EXT_R6_ONLY=1 runs only them.
+            results["blank-window"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/bugsweep_r6_ext.py"))["run"](
+                factory, results["blank-window"], tmp, sys.modules[__name__])
         elif opts.only == "blank-window":
             results["blank-window"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/blank_window.py"))["run"](
