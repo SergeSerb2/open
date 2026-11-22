@@ -111,7 +111,7 @@ def run(output, config='Release'):
                 sent = app.call('theme-data-state', tab=tab)['applies'] - applies
                 app.call('editor-close')
                 check('theme_drag_applies_edited_space_only', bool(b_values) and bool(hidden_ready) and final != themed
-                      and bool(shown_live) and bool(hidden_final) and b_kept and frames >= 4 and sent <= frames + 4,
+                      and bool(shown_live) and bool(hidden_final) and b_kept and frames >= 4 and frames <= sent <= frames + 4,
                       previews=frames, scriptsSent=sent, shownLive=bool(shown_live), hiddenFinal=bool(hidden_final),
                       otherSpaceKept=b_kept, hiddenReady=bool(hidden_ready))
                 app.call('close', tab=hidden_a); app.call('close', tab=other_b)

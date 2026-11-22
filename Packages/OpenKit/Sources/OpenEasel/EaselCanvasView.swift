@@ -387,8 +387,10 @@ public final class EaselCanvasView: NSView {
             var sources: [EaselImageSource] = files.prefix(20)
                 .filter { file in UTType(filenameExtension: file.pathExtension).map { type in Self.pictureTypes.contains { type.conforms(to: $0) } } == true }
                 .map { .file($0) }
+            // Pasted bytes are already in memory: their header (type and pixel size, no decode) is
+            // checked here, so data the store would refuse still falls back to a link card or text.
             if sources.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
-               data.count <= EaselStore.maxImageBytes {
+               data.count <= EaselStore.maxImageBytes, EaselStore.imageInfo(data) != nil {
                 sources = [.data(data)]
             }
             if !sources.isEmpty {
@@ -449,14 +451,32 @@ public final class EaselCanvasView: NSView {
             guard let self else { return }
             defer { self.pendingImageImports -= 1 }
             guard !aborted, self.storeImageAsync != nil, !images.isEmpty else { return }
-            // A text box opened while the pictures were stored would, when it ends, put back the
-            // document from before the box (its undo base) and drop them: end it first.
-            self.endTextEditing(commit: true)
-            var ids: [UUID] = []
-            var at = center
-            for image in images { ids.append(self.insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
-            self.setSelection(ids)
+            let ids = self.insertLandedImages(images, at: center, name: name)
+            // A text box being typed in stays open and keeps the selection (review r2 #1).
+            if self.textEditor == nil { self.setSelection(ids) }
         }
+    }
+
+    /// Inserts stored pictures into the current document as one undo step. An open text box is not
+    /// touched. When it is a new box, its placeholder is left out of the undo snapshot, so undoing
+    /// the pictures never brings back an empty box (`endTextEditing` merges onto this document).
+    private func insertLandedImages(_ images: [EaselImage], at center: CGPoint, name: String) -> [UUID] {
+        var next = document
+        var at = center
+        var ids: [UUID] = []
+        for image in images {
+            let w = min(400, CGFloat(image.width)), h = w * CGFloat(image.height) / CGFloat(image.width)
+            let object = EaselObject(frame: Self.clamped(CGRect(x: at.x - w / 2, y: max(0, at.y - h / 2), width: w, height: h)),
+                                     zIndex: next.maxZ + 1, content: .image(image))
+            next.objects.append(object); ids.append(object.id)
+            at.x += 24; at.y += 24
+        }
+        next.modifiedAt = Date()
+        var old = document
+        if let editor = textEditor, editor.undoBase != nil, let i = old.index(of: editor.objectID) { old.objects.remove(at: i) }
+        apply(next)
+        registerUndo(restoring: old, name: name)
+        return ids
     }
 
     /// Pictures land at most 400 document points wide (GUESS — capture pending), keeping
@@ -557,20 +577,23 @@ public final class EaselCanvasView: NSView {
         // Typed or pasted text over the stored limit would make the next load refuse the Easel.
         let typed = EaselDocument.clipped(editor.textView.string, utf16: EaselDocument.maxTextLength)
         let empty = typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if let base = editor.undoBase {
-            // A new box: one "Add Text" step from the document before the box, or nothing.
-            var next = base
+        if editor.undoBase != nil, let index = document.index(of: id) {
+            // A new box: one "Add Text" step, or nothing. Merged onto the current document, not the
+            // one from before the box: pictures (or link details) that landed while the box was open
+            // stay (review r2 #1).
+            var withoutBox = document
+            withoutBox.objects.remove(at: index)
             if commit, !empty {
                 text.string = typed
                 text.paragraphStyle = editor.style.paragraphStyle; text.fontFamily = editor.style.fontFamily
                 var o = object; o.content = .text(text); o.frame.size.height = max(object.frame.height, editor.neededDocHeight(for: typed))
-                next.objects.append(o)
+                var next = document
+                next.objects[index] = o
                 next.modifiedAt = Date()
                 apply(next)
-                registerUndo(restoring: base, name: "Add Text")
+                registerUndo(restoring: withoutBox, name: "Add Text")
             } else {
-                next.modifiedAt = document.modifiedAt
-                apply(next)
+                apply(withoutBox)
                 setSelection([])
             }
             return
