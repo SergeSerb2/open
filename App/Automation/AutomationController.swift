@@ -682,6 +682,7 @@
         }
         return controller.context.performNodeDrop(ids: ids, to: destination, index: index)
       case "sidebar-drag": return try sidebarDrag(a)
+      case "space-dot-drop": return try spaceDotDrop(a)
       case "sidebar-clear-state":
         let controller = try sidebarController(a)
         controller.contentView.layoutSubtreeIfNeeded()
@@ -1774,6 +1775,8 @@
         return w.pageChrome.dialogs.press(accepted: a["accept"] as? Bool ?? true, text: a["text"] as? String, suppress: a["suppress"] as? Bool ?? false)
       case "permission-prompt":
         if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
+        // A click into the prompt: it takes the keyboard (the prompt never takes it by itself).
+        if a["focus"] as? Bool == true { return w.pageChrome.permissions.focusPrompt() }
         return w.pageChrome.permissions.state
       case "permission-decisions":
         guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
@@ -2783,10 +2786,17 @@
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
     func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
+      // `asTyped`: like a hardware key, to whatever window is key now. No window is made key first
+      // (the default path activates its target, which can hide a window that took the keyboard).
+      if a["asTyped"] as? Bool == true {
+        guard NSApp.isActive, let key = NSApp.keyWindow else { throw Failure(message: "no key window for a typed key") }
+        var typed = a; typed["asTyped"] = nil; typed["window"] = key.windowNumber; typed["noActivate"] = true
+        return try await sendKey(typed, w)
+      }
       guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
         (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
-      try await activateForInput(target)
+      if a["noActivate"] as? Bool != true { try await activateForInput(target) }
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).
