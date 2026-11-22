@@ -329,9 +329,11 @@ final class PageCloseBatch {
       guard let self, self.isRunning else { return }
       guard let page, let owner = self.owner, !owner.isClosing else { self.next(); return }
       // Page.close destroys an accepted page before the action runs. Keep its browser-owned
-      // history first, so a later "Stay" keeps the tab with its back list (as Quit does).
+      // history first, so a later "Stay" keeps the tab with its back list (as Quit does). Not
+      // for a Live Folder's fetched row: a Live Folder delete removes it with no Archive entry,
+      // and nothing would ever read or delete that row (review r2 nit 2).
       let app = owner.app
-      if owner.model === app.model, let tab = app.model.tab(id: id),
+      if owner.model === app.model, let tab = app.model.tab(id: id), tab.liveItemURL == nil,
          let envelope = app.tabSleep.adapter?.captureHistory(host: host, tab: tab) {
         try? await app.tabSleep.store?.save(tabID: id, envelope: envelope)
       }
