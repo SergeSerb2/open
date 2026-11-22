@@ -1067,15 +1067,19 @@ def checks(factory, results, tmp, config, harness):
             stay = wait(lambda: dialog_visible() or None, 10)
             if stay: app.call('dialog-button', accept=False)
             survived = wait(lambda: (not dialog_visible() and bool(app.process_path(app.pid))) or None, 5)
+            # Bug sweep r6 DHR-04: "Close Open" approved the quit, but a page's "Stay" ended it: the
+            # transfer that was running must still run (it was cancelled at approval).
+            first = item(running)
             again = start('/slow')
             wait(lambda: item(again).get('received', 0) > 0)
             app.call('download-policy', quit='keep')
             request('cancel')
             asked_again = wait(lambda: download_alerts() >= downloads_before + 2 or None, 10)
             check('generic_quit_stay_then_requit', bool(stay) and bool(survived) and bool(asked_again)
-                  and item(again).get('state') == 'inProgress' and app.process_path(app.pid),
+                  and item(again).get('state') == 'inProgress' and app.process_path(app.pid)
+                  and first.get('state') == 'inProgress',
                   stay=bool(stay), survived=bool(survived), downloadAlerts=download_alerts() - downloads_before,
-                  again=item(again))
+                  again=item(again), first=first)
         finally:
             # Leave no page or quit prompt behind (review checklist §4).
             E._try(lambda: app.call('dialog-button', accept=False) if (app.call('dialog-state') or {}).get('visible') else None)
