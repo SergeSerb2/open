@@ -765,9 +765,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return
     }
     didFocusWindow(id)
-    let window = windowControllers.first { $0.windowID == id }?.window
-    if window?.isMiniaturized == true { window?.deminiaturize(nil) }
-    window?.makeKeyAndOrderFront(nil)
+    windowControllers.first { $0.windowID == id }?.window?.makeKeyAndOrderFront(nil)
     if activate { NSApp.activate() }
   }
 

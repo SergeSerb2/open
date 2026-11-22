@@ -589,6 +589,15 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     historyStores[profileID] = store
     return store
   }
+  /// The history keeps a source address of at most 8 KiB (`DownloadHistoryRecord`). A longer one, as a
+  /// `data:` export or a long signed link, keeps its scheme and host, so the row is saved and no store
+  /// error shows (bug sweep r6 DHR-07). The session row keeps the full address.
+  static func historySource(_ url: URL) -> URL {
+    guard url.absoluteString.utf8.count > 8192, let scheme = url.scheme else { return url }
+    var parts = URLComponents(); parts.scheme = scheme; parts.host = url.host()
+    if parts.host != nil { parts.path = "/" }
+    return parts.url ?? URL(string: scheme + ":") ?? url
+  }
   private func persist(_ item: DownloadItemSnapshot, profile: Profile) {
     // C12-PB1-3: failed transfers remain visible only for this app session.
     guard item.state != .failed, let state = DownloadHistoryRecord.State(rawValue: item.state.rawValue), let source = item.sourceURL,
@@ -605,7 +614,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       $0.endedAt == $1.endedAt ? $0.id < $1.id : ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt)
     }
     for old in profileRows.dropFirst(DownloadHistoryStore.maximumCount) { history[old.id] = nil }
-    store.record(DownloadHistoryRecord(id: item.id, fileName: item.fileName, sourceURL: source, sourceHost: item.sourceHost,
+    store.record(DownloadHistoryRecord(id: item.id, fileName: item.fileName, sourceURL: Self.historySource(source), sourceHost: item.sourceHost,
       filePath: item.filePath, receivedBytes: item.receivedBytes, totalBytes: item.totalBytes,
       startedAt: item.startedAt, endedAt: endedAt, state: state, profileID: profile.id)) { [weak self] error in
         if let error { self?.downloadHistoryError = error }
