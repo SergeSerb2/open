@@ -1314,6 +1314,7 @@ extension AppDelegate: CommandDispatcher {
     }
     for controller in windowControllers { controller.keyBindingOverrides = keyBindings }
     littleOpenCoordinator?.keyBindingsChanged()
+    for factory in hostFactories.values { factory.commandBarSession?.keyBindingsChanged() }
     extensionPrompts.rebuildShortcuts()
     updateLittleOpenHotkey(); scheduleMenuRebuild()
   }

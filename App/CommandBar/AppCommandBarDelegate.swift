@@ -59,6 +59,17 @@ final class AppCommandBarSession: CommandBarDelegate {
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
 
   var isPresented: Bool { controller?.isPresented == true }
+  /// Settings changed a shortcut: an open bar shows the new keycaps now (Little Open's bar does
+  /// the same in refreshKeyBindings). Its engine may be shared and already rekeyed by another window.
+  func keyBindingsChanged() {
+    guard let bar = controller, bar.isPresented else { return }
+    let bindings = factory.app.keyBindings
+    if (suggestActionBindings.object(forKey: bar.engine)?.store ?? .empty) != bindings {
+      bar.engine.setActions(CommandRegistry.makeSuggestRegistry(overrides: bindings))
+      suggestActionBindings.setObject(SuggestActionBindings(bindings), forKey: bar.engine)
+    }
+    bar.refreshResults()
+  }
   /// True when the user opened the current presentation (Cmd+T / Cmd+L, menu, sidebar): only then a second key closes it.
   private(set) var openedByUser = false
   func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
