@@ -1,7 +1,8 @@
 """Bug sweep r6 CONTENT6 rows through the real App (routing and downloads).
 
 DHR-02: a Little Open rule whose Profile is gone is skipped like a missing Space rule.
-DHR-03: a link routed to a Space reuses a minimized browser window (no second window).
+DHR-03 (regression row; the seed was a false positive): a link routed to a Space reuses a
+minimized browser window (no second window), as the parent commit already did.
 DHR-07: a `data:` download whose address is over 8 KiB keeps its history row (no store error).
 DHR-08: an Incognito download in progress counts as a running download (the quit warning).
 
