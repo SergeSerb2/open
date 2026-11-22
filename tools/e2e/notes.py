@@ -73,6 +73,16 @@ def run(factory, results, tmp, h):
         row('second_note_and_switch_back', second['isNote'] and second['noteID'] != first_note and second['title'] == ''
             and back['title'] == 'Groceries list for Friday' and back['body'] == 'Milk\nEggs', second=second, back=back)
 
+        # Print… and Save Page As… act on a web page only: on a Note they are disabled, not enabled no-ops.
+        page_items = ('print', 'save-page-as')
+        on_note = {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in page_items}
+        app.call('select', tab=web)
+        h.wait_until(lambda: app.call('note')['tab'] == web, timeout=5, step=.05)
+        on_page = h.wait_until(lambda: (lambda m: m if all(m.get(i) for i in page_items) else None)(
+            {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in page_items}), timeout=5, step=.05)
+        row('page_commands_disabled_on_note', len(on_note) == 2 and not any(on_note.values()) and bool(on_page),
+            onNote=on_note, onPage=on_page)
+
         # 5. ⌃⌥N beside a web page: a Split with the page and a new Note.
         app.call('select', tab=web)
         h.wait_until(lambda: app.call('note')['tab'] == web, timeout=5, step=.05)
