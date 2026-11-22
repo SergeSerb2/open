@@ -119,10 +119,11 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     if let window = ordered.first(where: { $0.focusedBrowser?.context === manager.context })?.window { return window }
     // A prompt without a page (install, repair, re-enable, permissions) belongs to its Profile:
     // only a regular window that shows a Space of that Profile may host it. Never an Incognito
-    // window or another Profile's window; with none, the caller cancels the prompt.
+    // window, a Blank Window (its stand-in Profile has the real Profile's ID; it closes with its
+    // last tab) or another Profile's window; with none, the caller cancels the prompt.
     guard let context = manager.context, !context.isEphemeral else { return nil }
     return ordered.first(where: { factory in
-      !factory.isIncognito && factory.standaloneSurface == nil && factory.littleOpenController == nil
+      !factory.isIncognito && !factory.isBlankWindow && factory.standaloneSurface == nil && factory.littleOpenController == nil
         && factory.focusedProfile.map { $0.id == factory.profile(for: context)?.id } == true
     })?.window
   }
