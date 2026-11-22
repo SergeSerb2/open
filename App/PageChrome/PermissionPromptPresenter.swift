@@ -41,6 +41,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     popover.behavior = .applicationDefined; popover.animates = false; popover.delegate = self
     view.allow.onPress = { [weak self] in self?.finish(.allow) }
     view.notNow.onPress = { [weak self] in self?.finish(.block) }
+    view.onFocusRequest = { [weak self] in self?.focusPrompt() }
     for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification, NSWindow.didEndSheetNotification] {
       observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
         MainActor.assumeIsolated { self?.presentPending() }
@@ -138,15 +139,18 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     }
     guard anchor.view.window != nil else { return }
     entries.remove(at: index); current = entry
+    view.hasKeyboard = false
     view.question.stringValue = Self.question(origin: entry.request.origin, kinds: entry.request.kinds,
                                                   protocolScheme: entry.request.protocolHandlerScheme)
     let symbol = SitePermissionStore.kinds.first(where: { entry.request.kinds.contains($0.0) })?.2 ?? "lock"
     view.symbol.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
     let screen = anchor.view.window!.convertToScreen(anchor.view.convert(anchor.rect, to: nil))
     anchorState = ["name": anchor.name, "frame": [screen.minX, screen.minY, screen.width, screen.height], "edge": anchor.edge.rawValue]
+    // The prompt does not take the keyboard when it shows (bug sweep r6 V-05): a page could time
+    // a request so the Return the user types into it grants. A click into the prompt gives it the
+    // keyboard; then Return and Escape answer it.
     if standalone {
       card = PermissionPromptCard(prompt: view, root: anchor.view)
-      targetWindow.makeFirstResponder(view)
       return
     }
     popover.contentViewController?.view = view
@@ -156,10 +160,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       // ownership to the browser's child-window appearance policy.
       (anchor.view.window as? any WindowContentAppearanceHost)?.contentAppearanceDidChange(for: promptWindow, inheritsAppearance: popover.appearance == nil)
       if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
-      promptWindow.makeKeyAndOrderFront(nil)
-      promptWindow.makeFirstResponder(view)
+      // No default button yet: AppKit would send it the Return typed into the page.
+      promptWindow.defaultButtonCell = nil
     }
-    view.window?.defaultButtonCell = view.allow.cell as? NSButtonCell
   }
   func visibilityChanged() {
     if let current {
@@ -167,18 +170,38 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     }
     presentPending()
   }
-  /// AppKit keeps the parent as NSApp.keyWindow for this NSPopover. Plain
-  /// keys arriving at the page's native pre-key hook belong to the prompt.
+  /// Only a key the prompt itself has answers it (bug sweep r6 V-05): one in its own popover
+  /// window, or in Little Open's card while the card holds the keyboard. A plain Return or Escape
+  /// typed into a page (any Split pane, a popup) belongs to that page: a page could otherwise
+  /// time a prompt so the user's Enter grants it.
   func handleKey(_ event: NSEvent) -> Bool {
-    guard isShown, current != nil,
-          event.window === owner?.window || event.window === view.window
-            || (current.map { isPopupPage($0.page) && event.window === $0.page.view.window } ?? false),
+    guard isShown, current != nil, promptHasKeyboard(event),
           event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
     switch event.keyCode {
     case 53: view.notNow.performClick(nil); return true
     case 36, 76: view.allow.performClick(nil); return true
     default: return false
     }
+  }
+  /// What a click into the prompt does: it takes the keyboard, so Return and Escape answer it.
+  @discardableResult func focusPrompt() -> Bool {
+    guard isShown, current != nil else { return false }
+    view.hasKeyboard = true
+    if let card {
+      card.window?.makeFirstResponder(view)
+      return card.window?.firstResponder === view
+    }
+    guard let window = view.window else { return false }
+    window.makeKeyAndOrderFront(nil); window.makeFirstResponder(view)
+    window.defaultButtonCell = view.allow.cell as? NSButtonCell
+    return window.firstResponder === view
+  }
+  private func promptHasKeyboard(_ event: NSEvent) -> Bool {
+    if let card {
+      guard let window = card.window, event.window === window, let responder = window.firstResponder as? NSView else { return false }
+      return responder === card || responder.isDescendant(of: card)
+    }
+    return event.window != nil && event.window === view.window
   }
   func owns(_ window: NSWindow) -> Bool { isShown && presentedWindow === window }
   private func finish(_ decision: OEPermissionState?) {
@@ -250,6 +273,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      "question": current == nil ? "" : view.question.stringValue, "kinds": current?.request.kinds.rawValue ?? 0,
      "origin": current?.request.origin.absoluteString ?? "", "anchor": anchorState,
      "keyWindow": NSApp.keyWindow?.windowNumber ?? 0, "promptKey": view.window?.isKeyWindow == true,
+     "promptFirstResponder": view.window?.firstResponder === view && (card != nil || view.window?.isKeyWindow == true),
      "parent": view.window?.parent?.windowNumber ?? 0, "selectedPage": owner?.selectedContent?.identifier ?? 0,
      "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0]
   }

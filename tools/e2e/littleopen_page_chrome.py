@@ -160,9 +160,15 @@ def run(factory, results, tmp, h):
                 app.call('key',window=row['window'],key=key,**({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
                 if key=='w': good=wait(lambda:current() is None,timeout=3)
                 elif key in ['escape','return']:
-                    good=wait(lambda:not ps()['visible'],timeout=3) and ev('pageKeys')==[] and ev('permissionResult')==('granted' if key=='return' else 'denied')
+                    # Bug sweep r6 V-05: the card does not take the keyboard when it shows; the
+                    # key goes to the page. After a click into the card (focus op), it answers.
+                    time.sleep(.4)
+                    page_first=ps()['visible'] and ev('permissionResult')=='pending' and ev('pageKeys')==[{'return':'Enter','escape':'Escape'}[key]]
+                    focused=call('permission-prompt', focus=True)
+                    app.call('key',window=row['window'],key=key)
+                    good=page_first and focused and wait(lambda:not ps()['visible'],timeout=3) and ev('permissionResult')==('granted' if key=='return' else 'denied')
                     app.call('key',window=row['window'],key='x')
-                    good = good and ev('pageKeys') == ['x']
+                    good = good and ev('pageKeys') == [{'return':'Enter','escape':'Escape'}[key], 'x']
                 elif key=='t':
                     good=wait(lambda:app.call('commandbar-state').get('presented'),timeout=3)
                     app.call('key',key='escape')

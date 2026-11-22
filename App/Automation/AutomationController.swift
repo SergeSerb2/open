@@ -1771,6 +1771,8 @@
         return w.pageChrome.dialogs.press(accepted: a["accept"] as? Bool ?? true, text: a["text"] as? String, suppress: a["suppress"] as? Bool ?? false)
       case "permission-prompt":
         if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
+        // A click into the prompt: it takes the keyboard (the prompt never takes it by itself).
+        if a["focus"] as? Bool == true { return w.pageChrome.permissions.focusPrompt() }
         return w.pageChrome.permissions.state
       case "permission-decisions":
         guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
