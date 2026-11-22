@@ -872,6 +872,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id], model.node(id: id) == nil {
       withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nil) }
     }
+    // The selected node moved out of this Space (another window's drop or Move to): it cannot show
+    // here. Return to this window's newest earlier selection that the Space still shows, not a
+    // blank page (bug sweep r6 P-04). The window that moved it picks its neighbour itself.
+    if let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id], model.node(id: id) != nil,
+       model.selectedNode(in: space, window: windowState) == nil {
+      let previous = selectionHistory[space.id]?.last { $0 != id && model.isSelectable($0, in: space) }
+      withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: previous) }
+    }
     if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
     else { controller?.refresh(); mirror.sync() }
     controller?.container.prunePinnedPageTitles()
@@ -1146,7 +1154,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         let before = Set(model.index.keys)
         guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
           let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
-        select(nodeID: tab.id); return true
+        // A link dropped on another Space's icon opens there in the background. Selecting it here
+        // stored a selection this Space cannot show: a blank page (bug sweep r6 P-03).
+        if let space = focusedSpace, model.isSelectable(tab.id, in: space) { select(nodeID: tab.id) }
+        return true
       }
     case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
       return copyEaselLink(tabID: id)
@@ -1584,7 +1595,9 @@ extension EngineWebContentHostFactory {
       // item is back in the sidebar, so a window that closed meanwhile loses nothing.
       // A row that cannot come back (an undecodable folder, no Space to return to) is
       // kept and skipped, or it would stop every later press; the next row restores.
-      let records = await store.recent(limit: 50)
+      // Only rows the user archived: a later auto-archive sweep is not the last closed tab
+      // (bug sweep r6 P-02).
+      let records = await store.recent(limit: 50, excluding: .autoArchived)
       guard !self.isClosing, !self.app.terminationRequested else { return }
       // Staged like the Library's Restore: the snapshot holding the item is written first, and
       // only then is the Archive row deleted. A failed write rolls the item back and keeps the row.

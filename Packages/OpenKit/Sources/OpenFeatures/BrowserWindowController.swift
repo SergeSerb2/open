@@ -1710,6 +1710,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             var accepted = false
             keepingSelection { accepted = ModelSidebarActions(context: context).perform(intent) }
             guard accepted else { return false }
+        case .move, .moveNodes, .moveToSpace, .moveNodesToSpace:
+            // Moving the current item to another Space (Move to, a Space-icon drop) selects its
+            // neighbour here, not a blank page (bug sweep r6 P-04).
+            var accepted = false
+            keepingSelection { accepted = ModelSidebarActions(context: context).perform(intent) }
+            guard accepted else { return false }
         case .goBack: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
         case .goForward: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }
@@ -1992,7 +1998,8 @@ extension BrowserWindowController {
             (window?.firstResponder as? NSView).map { $0 === outline || $0.isDescendant(of: outline) } ?? false
         } ?? false
         removal()
-        guard let selected, model.node(id: selected) == nil, let index else { return }
+        // Gone from the model, or moved to another Space: either way this Space cannot show it.
+        guard let selected, !model.isSelectable(selected, in: space), let index else { return }
         // The model can hand the selection on by itself (a split that collapses to its last
         // pane selects that pane). Keep that choice; its Undo restores the split's selection.
         if model.selectedNode(in: space, window: state) != nil { return }

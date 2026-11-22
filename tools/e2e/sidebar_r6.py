@@ -74,7 +74,9 @@ def _rows(app, results, wait_until, tmp):
     link = (Path(tmp) / 'r6-link.html'); link.write_text('<title>R6 Link</title><h1>Link</h1>')
     url_drop = app.call('space-dot-drop', space=b, url=link.as_uri()); settle()
     after = state()
-    new_in_b = [t for t in app.call('tabs') if t['url'] == link.as_uri()]
+    app.call('space', space=b); settle()
+    new_in_b = [t['id'] for t in app.call('tabs') if t['url'] == link.as_uri()]
+    app.call('space', space=a); settle()
     check('r6_space_icon_link_drop_keeps_current_tab', url_drop.get('accepted') and after['space'] == a and after['selected'] == keep
           and keep in after['shownPages'] and len(new_in_b) == 1,
           drop=url_drop, state={k: after[k] for k in ('space', 'selected', 'shownPages')}, keep=keep, newTabs=new_in_b)
