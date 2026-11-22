@@ -263,6 +263,8 @@ def run(factory, results, tmp, h):
         tab = app.call('tabs')[0]['id']
         app.call('wait', tab=tab)
         popup = open_popup(app, tab)
+        # The popup panel is key now; window commands validate against the key window.
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
         app.call('select', tab=tab)
         app.call('command', id='javascript-console')
         devtools = wait_until(lambda: _try(lambda: app.call('devtools-frontend', tab=tab, js='1')) == 1, timeout=20, step=.5)
