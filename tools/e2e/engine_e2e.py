@@ -15204,7 +15204,11 @@ def main():
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results["split"] = CheckedResults(tracker)
-            module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
+            # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1":
+                module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
+                factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
