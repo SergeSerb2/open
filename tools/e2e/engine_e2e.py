@@ -3653,9 +3653,18 @@ def reveal_card_window_checks(app, results, wid):
     held = state()["revealed"]
     exited = app.call("mouse", action="exit", x=100, y=-4)
     left = wait_until(lambda: (lambda st: st if not st["revealed"] else None)(state()), timeout=2, step=.05) or state()
+    # Review r1 #2: off the top above the traffic lights (x < 40), where the top-left zone reaches
+    # 15 pt above the window. The exit point must land past that zone too.
+    app.call("mouse", action="move", x=700, y=400)
+    corner_card = wait_card(app, False) and reveal_card_and_wait(app)
+    app.call("mouse", action="hover", x=20, y=400)
+    corner_held = state()["revealed"]
+    app.call("mouse", action="exit", x=20, y=-4)
+    corner = wait_until(lambda: (lambda st: st if not st["revealed"] else None)(state()), timeout=2, step=.05) or state()
     results["reveal_card_window_exit_from_card"] = {
-        "ok": bool(card) and held and not left["revealed"],
-        "heldInCard": held, "revealed": left["revealed"], "reveal": left.get("reveal"), "exited": exited.get("exited")}
+        "ok": bool(card) and held and not left["revealed"] and bool(corner_card) and corner_held and not corner["revealed"],
+        "heldInCard": held, "revealed": left["revealed"], "reveal": left.get("reveal"), "exited": exited.get("exited"),
+        "topLeft": {"held": corner_held, "revealed": corner["revealed"], "zone": corner.get("reveal", {}).get("zone")}}
     app.call("mouse", action="move", x=700, y=400)
     ensure_key(app, wid)
     if state()["sidebarMode"] == "hidden":
