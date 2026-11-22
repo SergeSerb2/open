@@ -95,8 +95,13 @@ final class PageChromeCoordinator {
   }
   /// CEF cancelled the page's pending dialogs (navigation, close; also after each closed
   /// dialog): their sheets go. Suppression state stays (that is per document).
-  func engineResetDialogs(_ page: OEWebContent) {
-    if dialogs.hasPending(page) { owner.record("dialogReset", page, [:]); dialogs.cancel(page: page) }
+  /// With `browser`: only the dialogs that engine browser opened (the page's own, or its Document
+  /// PiP's). A PiP's reset used to cancel the page's own pending dialogs too (bug sweep r6).
+  func engineResetDialogs(_ page: OEWebContent, browser: Int? = nil) {
+    owner.record("dialogResetSeen", page, browser.map { ["browser": $0] } ?? [:])
+    if dialogs.hasPending(page, browser: browser) {
+      owner.record("dialogReset", page, browser.map { ["browser": $0] } ?? [:]); dialogs.cancel(page: page, browser: browser)
+    }
   }
   func engineDismissed(_ request: OEPermissionRequest) { existingPermissions?.engineDismissed(request) }
   func cancel(_ page: OEWebContent) {

@@ -977,7 +977,7 @@
       case "tab-strip":
         return w.tabStripState()
       case "frame-save-counters":
-        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount,
+        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount, "metadataScheduled": app.snapshotStore.metadataScheduleCount,
           "prepares": app.snapshotStore.prepareCount,
           "dirty": app.snapshotStore.isDirty, "treeChanges": w.treeChangeCount, "mirrorSyncs": w.mirrorSyncCount] as [String: Any]
       case "space-profile":

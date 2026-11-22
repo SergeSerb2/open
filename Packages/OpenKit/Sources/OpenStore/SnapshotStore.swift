@@ -66,9 +66,33 @@ public final class SnapshotStore: @unchecked Sendable {
         lock.unlock()
         queue.asyncAfter(deadline: .now() + 1.0, execute: work)
     }
+    /// Only a page title changed (a background tab's unread count, a ticking clock): saved within
+    /// 10 s of the first such change, not 1 s after each one. A pending save takes it along, a later
+    /// structural change still saves after 1 s, and quit flushes it (the model stays dirty). Each
+    /// title change used to restart the 1 s save, so a title that ticked every 1-2 s rewrote the
+    /// whole snapshot that often (bug sweep r6, PERF-06).
+    @MainActor
+    public func scheduleMetadataSave(model: BrowserModel) {
+        dirtyModel = model; metadataScheduleCount += 1
+        lock.lock()
+        guard pendingWork == nil else { lock.unlock(); return }
+        saveGeneration += 1
+        let generation = saveGeneration
+        let work = DispatchWorkItem { @Sendable [weak self] in
+            Task { @MainActor [weak self] in self?.capturePending(generation: generation) }
+        }
+        pendingWork = work
+        lock.unlock()
+        queue.asyncAfter(deadline: .now() + Self.metadataSaveDelay, execute: work)
+    }
+    public static let metadataSaveDelay: TimeInterval = 10
+    @MainActor public private(set) var metadataScheduleCount = 0
     @MainActor
     private func capturePending(generation: Int) {
         guard generation == saveGeneration, let model = dirtyModel else { return }
+        // This work item has run: a failed prepare must not leave it "pending", or every later
+        // title-only save would wait for it forever (review of #665, #7).
+        lock.withLock { pendingWork = nil }
         do {
             try prepare(model: model)
             let dto = SnapshotMapper.dto(from: model); captureCount += 1

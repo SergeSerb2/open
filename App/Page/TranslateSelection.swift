@@ -88,13 +88,44 @@ final class TranslateSelectionController {
     let onScreen = window.convertToScreen(view.convert(target, to: nil))
     let panel = TranslateSelectionPanel(content: content, pointingAt: onScreen, inside: area.insetBy(dx: Self.inset, dy: Self.inset))
     window.addChildWindow(panel, ordered: .above)
-    popover = panel
+    popover = panel; popoverParent = window; tabbedOut = false
     last["anchorInPage"] = view !== adapter.factory.controller?.contentView
     last["shown"] = panel.isVisible
     // Transient like a popover: a click elsewhere, Esc or a scroll closes it.
     monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown, .scrollWheel]) { [weak self] event in
       guard let self, let panel = self.popover else { return event }
-      if event.type == .keyDown { if event.keyCode == 53 { self.closePanel(); return nil }; return event }
+      if event.type == .keyDown {
+        if event.keyCode == 53 { self.closePanel(); return nil }
+        let plainTab = event.keyCode == 48 && event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+        if panel.isKeyWindow {
+          // Tab or Shift-Tab in the bubble gives keyboard focus back to the page; the bubble stays, and
+          // later Tabs are the page's again (review of #665, round 2 #2).
+          if plainTab { self.tabbedOut = true; self.returnKeyToPage(); return nil }
+          // Space and Return press the focused Copy. Any other key (Cmd+F, Cmd+L, Cmd+W…) is a window
+          // command: the window takes the key back first, so Find and other fields it focuses get the
+          // typing (review of #665, round 2 #1).
+          guard ![49, 36, 76].contains(event.keyCode), let parent = self.popoverParent else { return event }
+          self.returnKeyToPage()
+          // The same key again, now for the browser window: its key path (menus, Find, the command bar)
+          // runs as for a key pressed there.
+          if let again = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: event.modifierFlags,
+              timestamp: event.timestamp, windowNumber: parent.windowNumber, context: nil, characters: event.characters ?? "",
+              charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "", isARepeat: event.isARepeat, keyCode: event.keyCode) {
+            NSApp.postEvent(again, atStart: true); return nil
+          }
+          return event
+        }
+        // Tab from the page the bubble belongs to moves keyboard focus into the bubble, onto Copy; it
+        // was out of the keyboard's reach (bug sweep r6, A11Y-10). Only from that page (Tab in the
+        // command bar, Find, another tab or pane is theirs; review of #665, #4) and only until Tab has
+        // brought focus back once.
+        if plainTab, !self.tabbedOut, !event.modifierFlags.contains(.shift), event.window === panel.parent,
+           !panel.content.copyButton.isHidden, self.pageHasKeyboardFocus(in: panel.parent) {
+          panel.allowsKey = true; panel.makeKey(); panel.makeFirstResponder(panel.content.copyButton)
+          self.followWindowFocus(of: panel.parent); return nil
+        }
+        return event
+      }
       if event.window !== panel { self.closePanel() }
       return event
     }
@@ -112,10 +143,45 @@ final class TranslateSelectionController {
     selectionRect = NSRect(x: x, y: view.isFlipped ? top : view.bounds.height - top - h, width: w, height: h)
   }
 
+  private weak var popoverParent: NSWindow?
+  /// Tab has taken keyboard focus out of this bubble once: Tab stays with the page until a new bubble.
+  private var tabbedOut = false
+  /// The page this bubble translates holds keyboard focus in its window.
+  private func pageHasKeyboardFocus(in window: NSWindow?) -> Bool {
+    guard let window, let pageView = anchorView, let responder = window.firstResponder as? NSView,
+      !pageView.isHiddenOrHasHiddenAncestor else { return false }
+    return responder === pageView || responder.isDescendant(of: pageView)
+  }
+  private func returnKeyToPage() {
+    parentFocusObservation = nil
+    guard let panel = popover else { return }
+    panel.allowsKey = false
+    if let parent = popoverParent, parent.isVisible { parent.makeKey() } else { panel.resignKey() }
+  }
+  /// While the bubble holds the key, a window command (Cmd+F, Cmd+L…) runs through the App's key
+  /// router before any key monitor and focuses a field in the browser window: the window takes the
+  /// key back then, so that field gets the typing (review of #665, round 2 #1).
+  private var parentFocusObservation: NSKeyValueObservation?
+  private func followWindowFocus(of parent: NSWindow?) {
+    parentFocusObservation = parent?.observe(\.firstResponder, options: [.new]) { [weak self] _, _ in
+      // Not inside the observation's own callback: the hand-back ends this observation.
+      DispatchQueue.main.async { [weak self] in
+        MainActor.assumeIsolated {
+          guard let self, let panel = self.popover, panel.isKeyWindow else { return }
+          self.returnKeyToPage()
+        }
+      }
+    }
+  }
   private func closePanel() {
     if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil
-    if let panel = popover { panel.parent?.removeChildWindow(panel); panel.orderOut(nil) }
-    popover = nil
+    parentFocusObservation = nil
+    if let panel = popover {
+      let wasKey = panel.isKeyWindow
+      panel.parent?.removeChildWindow(panel); panel.orderOut(nil)
+      if wasKey, let parent = popoverParent, parent.isVisible { parent.makeKey() }
+    }
+    popover = nil; popoverParent = nil
   }
   func close() { task?.cancel(); closePanel() }
   /// The page it translates closed: a result still on its way must not show over another tab.
@@ -132,6 +198,10 @@ final class TranslateSelectionController {
       out["arrowTipX"] = Double(panel.arrowTipOnScreen.x)
       out["selectionMidX"] = selectionRect.map { Double(window.convertToScreen(view.convert($0, to: nil)).midX) } ?? -1
       out["arrowUp"] = panel.arrowUp
+      out["copyFrame"] = panel.content.copyButton.isHidden ? [] : box(panel.convertToScreen(panel.content.copyButton.convert(panel.content.copyButton.bounds, to: nil)))
+      out["panelKey"] = panel.isKeyWindow
+      out["copyFocused"] = panel.firstResponder === panel.content.copyButton
+      out["parentKey"] = window.isKeyWindow
     }
     out["menuTitle"] = Self.menuTitle
     if let view = popover?.content { out["shownText"] = view.resultField.stringValue }
@@ -156,7 +226,8 @@ final class TranslateSelectionPanel: NSPanel {
   init(content: TranslateSelectionView, pointingAt target: NSRect, inside area: NSRect) {
     self.content = content
     let width = min(320, max(120, area.width))
-    content.setWidth(width)
+    // The body never grows past the content area: a long translation scrolls, Copy stays shown (A11Y-10).
+    content.setWidth(width, maxHeight: area.height - Self.arrowHeight)
     let size = NSSize(width: width, height: content.fittingSize.height)
     // Below the selection when it fits (screen y grows up), else above.
     let below = target.minY - Self.arrowHeight - size.height >= area.minY
@@ -177,7 +248,12 @@ final class TranslateSelectionPanel: NSPanel {
     bubble.addSubview(content)
     contentView = bubble
   }
-  override var canBecomeKey: Bool { false }
+  /// Key only after Tab moves keyboard focus into it (A11Y-10). Showing it, or a click on Copy
+  /// or the text, never takes the key from the page.
+  var allowsKey = false
+  override var canBecomeKey: Bool { allowsKey }
+  /// Once the key leaves (Esc, Tab back, another window or app), a click again never takes it.
+  override func resignKey() { super.resignKey(); allowsKey = false }
 }
 
 /// The bubble's shape: body plus arrow, in the window background colour with a hairline.
@@ -203,10 +279,28 @@ final class TranslateSelectionBubble: NSView {
 final class TranslateSelectionView: NSView {
   let header = NSTextField(labelWithString: "")
   let resultField = NSTextField(wrappingLabelWithString: "")
-  let copyButton = NSButton(title: "Copy", target: nil, action: nil)
+  let copyButton = TranslateSelectionCopyButton(title: "Copy", target: nil, action: nil)
   private let result: String?
   private lazy var width = widthAnchor.constraint(equalToConstant: 320)
-  func setWidth(_ value: CGFloat) { width.constant = value; resultField.preferredMaxLayoutWidth = value - 28; layoutSubtreeIfNeeded() }
+  /// The text scrolls inside a capped height (A11Y-10); the header and Copy stay outside it.
+  private let scroll = NSScrollView()
+  private let document = TranslateSelectionDocumentView()
+  private lazy var scrollWidth = scroll.widthAnchor.constraint(equalToConstant: 292)
+  private lazy var scrollHeight = scroll.heightAnchor.constraint(equalToConstant: 16)
+  func setWidth(_ value: CGFloat, maxHeight: CGFloat = .greatestFiniteMagnitude) {
+    width.constant = value
+    let textWidth = value - 28
+    resultField.preferredMaxLayoutWidth = textWidth
+    let textHeight = ceil(resultField.sizeThatFits(NSSize(width: textWidth, height: .greatestFiniteMagnitude)).height)
+    resultField.frame = NSRect(x: 0, y: 0, width: textWidth, height: textHeight)
+    document.frame = resultField.frame
+    // Around the text: 12 pt insets, the header, Copy and the 8 pt gaps between them.
+    let chrome = 24 + ceil(header.fittingSize.height) + 8 + (copyButton.isHidden ? 0 : ceil(copyButton.fittingSize.height) + 8)
+    scrollWidth.constant = textWidth
+    scrollHeight.constant = max(16, min(textHeight, maxHeight - chrome))
+    scroll.hasVerticalScroller = textHeight > scrollHeight.constant
+    layoutSubtreeIfNeeded()
+  }
   init(result: String?, message: String?, sourceName: String?, targetName: String) {
     self.result = result
     super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 10))
@@ -219,7 +313,11 @@ final class TranslateSelectionView: NSView {
     copyButton.bezelStyle = .rounded; copyButton.controlSize = .small
     copyButton.target = self; copyButton.action = #selector(copy(_:)); copyButton.isHidden = result == nil
     copyButton.setAccessibilityIdentifier("translate-selection-copy")
-    let stack = NSStackView(views: [header, resultField, copyButton])
+    scroll.drawsBackground = false; scroll.borderType = .noBorder; scroll.scrollerStyle = .overlay
+    scroll.hasHorizontalScroller = false; scroll.documentView = document
+    document.addSubview(resultField)
+    NSLayoutConstraint.activate([scrollWidth, scrollHeight])
+    let stack = NSStackView(views: [header, scroll, copyButton])
     stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 8
     stack.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
     stack.translatesAutoresizingMaskIntoConstraints = false
@@ -234,4 +332,16 @@ final class TranslateSelectionView: NSView {
     guard let result else { return }
     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(result, forType: .string)
   }
+}
+
+/// Top-down document for the scrolling translation: it opens at the first line.
+@MainActor
+final class TranslateSelectionDocumentView: NSView {
+  override var isFlipped: Bool { true }
+}
+
+/// Copy takes keyboard focus even without Full Keyboard Access (Tab moves it there, A11Y-10).
+@MainActor
+final class TranslateSelectionCopyButton: NSButton {
+  override var acceptsFirstResponder: Bool { isEnabled }
 }
