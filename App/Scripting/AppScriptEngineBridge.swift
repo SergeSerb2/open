@@ -331,9 +331,39 @@ extension AppDelegate {
     host.focusSpaceInWindow = { [weak self] window, space in
       self?.hostFactories[window]?.performSidebar(.switchSpace(space)) == true
     }
+    // ⌘W's close path in the named window when it shows or holds the tab, else front to back.
+    // Only main-model windows: scripts see no other.
+    host.closeTab = { [weak self] id, window in
+      self?.scriptCloseFactory(for: id, named: window)?.performSidebar(.close(nodeID: id)) == true
+    }
     host.littleTab = AppScriptLittleTabs(app: self)
     refreshScriptingEngine()
     host.purgeRemovedWrappers()
+  }
+  /// The window whose close path closes a scripted tab: the named window if it shows the tab, else
+  /// the first window (front to back) that shows it; then the named window if it holds the tab's
+  /// page, else the first that holds it; then one that shows its Space; else the named or front
+  /// window. A window that shows the tab must close it: a close in another window (one that only
+  /// keeps a hidden page) blanked it and skipped its page's beforeunload. Main-model windows only.
+  private func scriptCloseFactory(for id: ItemID, named: WindowID?) -> EngineWebContentHostFactory? {
+    let controllers: [BrowserWindowController] = NSApp.orderedWindows.compactMap { window in
+      windowControllers.first { $0.window === window }
+    }
+    let ordered: [EngineWebContentHostFactory] = (controllers + windowControllers.filter { c in !controllers.contains { $0 === c } })
+      .compactMap { hostFactories[$0.windowID] }.filter { $0.model === model }
+    func shows(_ factory: EngineWebContentHostFactory) -> Bool { factory.visibleTabs.contains { $0.id == id } }
+    func holds(_ factory: EngineWebContentHostFactory) -> Bool {
+      factory.hosts[id] != nil || factory.noteHosts[id] != nil || factory.easelHosts[id] != nil || factory.welcomeHosts[id] != nil
+    }
+    let preferred = named.flatMap { id in ordered.first { $0.windowState.id == id } }
+    if let preferred, shows(preferred) { return preferred }
+    if let factory = ordered.first(where: shows) { return factory }
+    if let preferred, holds(preferred) { return preferred }
+    if let factory = ordered.first(where: holds) { return factory }
+    for factory in ordered {
+      if let focused = factory.focusedSpace?.id, factory.space(for: id)?.id == focused { return factory }
+    }
+    return preferred ?? frontMainModelWindowController.flatMap { hostFactories[$0.windowID] }
   }
   func purgeScriptingWrappers() { ScriptHost.shared.purgeRemovedWrappers() }
   func refreshScriptingEngine() {

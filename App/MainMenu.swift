@@ -223,7 +223,7 @@ extension EngineWebContentHostFactory {
     if id == NewDocumentActions.undoByNameID { return app.undoManager.canUndo }
     if id == NewDocumentActions.redoByNameID { return app.undoManager.canRedo }
     if id == "check-for-updates" { return true }
-    if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
+    if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-media", "view-easels-notes", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
     if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
     // A Blank Window has no Pinned section: an empty New Folder would be an invisible folder there
     // (bug sweep r6 REG-04). New Folder with the selected items stays.
@@ -257,6 +257,8 @@ extension EngineWebContentHostFactory {
     if ["pin-unpin-tab", "pin-tab", "unpin-tab"].contains(id), let tab = selectedTab,
       case .splitPane? = model.parent(of: tab.id) { return false }
     if let enabled = isPageToolEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
+    // Both act on the page in the window (a Note, an Easel or Welcome has none): never an enabled no-op.
+    if id == "print" || id == "save-page-as" { return selectedContent != nil }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
@@ -521,7 +523,8 @@ extension EngineWebContentHostFactory {
           let result = try await page.sendDevToolsMethod("Page.captureSnapshot", parameters: ["format": "mhtml"])
           guard !Task.isCancelled, !self.isClosing, self.app.engineReady, !self.app.terminationRequested else { return }
           guard let body = result["data"] as? String else { return }
-          try Data(body.utf8).write(to: url, options: .atomic)
+          // A large page is megabytes of MHTML: convert and write off the main thread.
+          try await Task.detached(priority: .userInitiated) { try Data(body.utf8).write(to: url, options: .atomic) }.value
         } catch { AppDelegate.commandLog("Could not save page: \(error)") }
       }
     }
