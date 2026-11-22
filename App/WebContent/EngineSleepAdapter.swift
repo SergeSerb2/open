@@ -163,6 +163,11 @@ final class EngineSleepAdapter: SleepEngine {
     // OPNH v1. Nil (a page with only its initial entry, or over a container limit) makes the
     // controller back off and retry.
     guard let (_, host) = hosts(tabID).first, let tab = app.model.tab(id: tabID) else { contentVanished(tabID); return nil }
+    return captureHistory(host: host, tab: tab)
+  }
+
+  /// One page's back/forward list as a stored row (a window's own page of the tab).
+  func captureHistory(host: EngineWebContentHost, tab: Tab) -> SleepHistoryEnvelope? {
     guard let history = host.content.captureNavigationHistory() else { return nil }
     return SleepHistoryEnvelope(
       container: history.container, currentIndex: history.currentIndex, entryCount: history.entryCount,

@@ -399,10 +399,21 @@ extension EngineWebContentHostFactory {
           self.model.renameNode(id: tab.id, title: field.stringValue)
         }
       }
-    case "reset-tab": if let tab = selectedTab, let url = tab.pinnedURL { model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
+    case "reset-tab":
+      if let tab = selectedTab, let url = tab.pinnedURL {
+        model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url)
+        if model === app.model { app.tabSleep.forgetStoredHistory([tab.id]) }
+      }
     case "replace-pinned-url": if let tab = selectedTab { model.replacePinnedURL(id: tab.id) }
     case "clear-unpinned-tabs":
-      if let space = focusedSpace, !space.today.isEmpty { model.clearToday(space: space.id); controller?.showClearedToast() }
+      if let space = focusedSpace, !space.today.isEmpty {
+        // Each live page that asks beforeunload answers first (bug sweep r6 P-01).
+        let clear = { [weak self] in
+          guard let self, self.model.space(id: space.id) != nil else { return }
+          self.model.clearToday(space: space.id); self.controller?.showClearedToast(); self.scheduleSave()
+        }
+        if !askPagesBeforeClosing(flattened(space.today).map(\.id), then: clear) { clear() }
+      }
     case "next-tab", "cycle-tab-forward": cycleTab(by: 1)
     case "previous-tab", "cycle-tab-backward": cycleTab(by: -1)
     case "tab-switcher-forward": showTabSwitcher(by: 1)
@@ -473,7 +484,9 @@ extension EngineWebContentHostFactory {
       // Pinned tabs of the focused Space that left their pinned URL (folders and splits
       // included, Favorites excluded); one undo step. Live pages navigate back.
       if let space = focusedSpace {
-        for tabID in model.resetPinnedTabs(spaceID: space.id) { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
+        let reset = model.resetPinnedTabs(spaceID: space.id)
+        for tabID in reset { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
+        if model === app.model { app.tabSleep.forgetStoredHistory(reset) }
       }
     default: app.performCommand(id)
     }
