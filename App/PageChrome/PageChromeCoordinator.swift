@@ -288,7 +288,9 @@ final class PageQuitCoordinator {
 /// back list stored before it asked, as after Quit's preflight.
 @MainActor
 final class PageCloseBatch {
-  private unowned let owner: EngineWebContentHostFactory
+  /// Weak: a save of the page's history can suspend while the window closes and its factory
+  /// goes (review r1 #1). The factory also cancels its batch when it closes.
+  private weak var owner: EngineWebContentHostFactory?
   private var remaining: [ItemID]
   private var action: (() -> Void)?
   private let restoresSelection: Bool
@@ -311,11 +313,13 @@ final class PageCloseBatch {
   }
 
   func start() { isRunning = true; next() }
+  /// The window closes: nothing more is asked and the action never runs.
+  func cancel() { isRunning = false; remaining.removeAll(); action = nil }
 
   private func next() {
     guard isRunning else { return }
     // The window closed meanwhile (its pageChrome answered every waiter "stay"): nothing to do.
-    guard !owner.isClosing else { end(); return }
+    guard let owner, !owner.isClosing else { end(); return }
     guard !remaining.isEmpty else { finish(); return }
     let id = remaining.removeFirst()
     guard let host = owner.hosts[id], !host.closed, host.content.crashState == .none,
@@ -323,21 +327,21 @@ final class PageCloseBatch {
     let page = host.content
     Task { @MainActor [weak self, weak page] in
       guard let self, self.isRunning else { return }
-      guard let page, !self.owner.isClosing else { self.next(); return }
+      guard let page, let owner = self.owner, !owner.isClosing else { self.next(); return }
       // Page.close destroys an accepted page before the action runs. Keep its browser-owned
       // history first, so a later "Stay" keeps the tab with its back list (as Quit does).
-      let app = self.owner.app
-      if self.owner.model === app.model, let tab = app.model.tab(id: id),
+      let app = owner.app
+      if owner.model === app.model, let tab = app.model.tab(id: id),
          let envelope = app.tabSleep.adapter?.captureHistory(host: host, tab: tab) {
         try? await app.tabSleep.store?.save(tabID: id, envelope: envelope)
       }
       // The save can suspend: a close meanwhile already answered or cancelled this page.
-      guard self.isRunning, !self.owner.isClosing, self.owner.hosts[id] === host, !host.closed else { self.next(); return }
-      self.ask(id: id, host: host, page: page)
+      guard self.isRunning, let owner = self.owner, !owner.isClosing, owner.hosts[id] === host, !host.closed else { self.next(); return }
+      self.ask(id: id, host: host, page: page, owner: owner)
     }
   }
 
-  private func ask(id: ItemID, host: EngineWebContentHost, page: OEWebContent) {
+  private func ask(id: ItemID, host: EngineWebContentHost, page: OEWebContent, owner: EngineWebContentHostFactory) {
     // A page that also shows a dialog cannot run beforeunload until it is answered: stop the
     // action and leave the page and its dialog on screen, as a tab close does (bug sweep r4 WC-02).
     if owner.pageChrome.closeBlockedByDialog(page) {
@@ -346,15 +350,21 @@ final class PageCloseBatch {
     let waits = owner.pageChrome.requestClose(page) { [weak self] accepted in
       guard let self, self.isRunning else { return }
       guard accepted else { self.end(); return }
-      // Page.close has destroyed the browser: the tab shows a placeholder from now on.
-      if self.owner.hosts[id] === host { self.owner.controller?.container.closeHost(for: id); host.close() }
+      // Page.close has destroyed the browser: the tab shows a placeholder from now on. A Peek
+      // page leaves its Peek stack, as after its own window.close() (review r1 #5).
+      if let owner = self.owner, owner.hosts[id] === host {
+        if owner.model.tab(id: id) == nil, let controller = owner.controller, controller.hasPeekController,
+           controller.peekController.stack.contains(where: { $0.host?.tabID == id }) {
+          controller.peekController.pageClosed(hostTabID: id)
+        } else { owner.controller?.container.closeHost(for: id); host.close() }
+      }
       self.next()
     }
     if !waits { next() }
   }
 
   private func finish() {
-    if restoresSelection, owner.model.windows.contains(where: { $0 === owner.windowState }) {
+    if restoresSelection, let owner, owner.model.windows.contains(where: { $0 === owner.windowState }) {
       // A sheet selected each background page that asked. The action acts on the user's own
       // selection, as before it asked. Written directly: a selection here would wake a page
       // for a tab the action is about to archive.
@@ -370,6 +380,6 @@ final class PageCloseBatch {
 
   private func end() {
     isRunning = false; remaining.removeAll(); action = nil
-    owner.closeBatchEnded(self)
+    owner?.closeBatchEnded(self)
   }
 }

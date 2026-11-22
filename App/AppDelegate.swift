@@ -652,7 +652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     factory.attach(controller)
     windowControllers.append(controller)
     updater?.userDriver.attach(controller)
-    if session == nil { media.attach(factory); tabSleep.attach(factory) }
+    if session == nil { media.attach(factory); tabSleep.attach(factory) } else { tabSleep.attachInputProtection(factory) }
     // Off the first-paint path: the media source menu reads one small state file.
     DispatchQueue.main.async { [weak self] in self?.settingsPresenter.syncLibraryMediaSources() }
     activeWindowID = state.id

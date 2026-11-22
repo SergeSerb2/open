@@ -187,6 +187,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard model.setPinnedURL(id: id, url: url) else { return }
     if onPinnedPage {
       if let content = hosts[id]?.content { content.load(url) } else { tab.url = url }
+      // A stored back list on the old pinned page would wake over the new URL (review r1 #6).
+      if model === app.model { app.tabSleep.forgetStoredHistory([id]) }
     }
     controller?.refresh(); mirror.sync(); scheduleSave()
   }
@@ -1035,13 +1037,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState, .newEasel, .exportEasel, .deleteEasel, .exportNote, .deleteNote: return false
       // Same removal rules as before; keepingSelection selects the neighbour when the
       // removal took the current item, as in a normal window (no blank page).
+      // Their live pages ask beforeunload first, as in a normal window (review r1 #4).
       case .archiveNodes(let ids):
-        var count = 0
-        keepingSelection { count = model.archiveNodes(ids: ids) }
-        return count > 0
+        let archive = { [weak self] () -> Bool in
+          guard let self else { return false }
+          var count = 0
+          self.keepingSelection { count = self.model.archiveNodes(ids: ids) }
+          return count > 0
+        }
+        if askPagesBeforeClosing(controller?.tabIDs(under: ids) ?? [], then: { _ = archive() }) { return true }
+        return archive()
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
-        keepingSelection { model.closeTab(id: id) }; return true
+        let close = { [weak self] in
+          guard let self, self.model.node(id: id) != nil else { return }
+          self.keepingSelection { self.model.closeTab(id: id) }
+        }
+        if !askPagesBeforeClosing(controller?.tabIDs(under: [id]) ?? [], then: close) { close() }
+        return true
       case .move(_, let parent, _), .moveNodes(_, let parent, _), .openURL(_, let parent, _):
         guard case .spaceToday(let id) = parent, id == focusedSpace?.id else { return false }
       default: break
@@ -1112,11 +1125,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         }
       }
       let order = collect(folder.children), ids = Set(order)
+      func loaded() -> Set<ItemID> { ids.filter { hosts[$0] != nil || controller?.container.host(for: $0) != nil } }
+      guard !loaded().isEmpty else { return true }
       let unload = { [weak self] in
         guard let self else { return }
         self.app.tabSleep.cancelNavigationAfterWake(ids)
+        // No early return when nothing is loaded now: the pages that asked have already closed,
+        // and the selection must still leave the folder, or it would load the page again (review r1 #2).
         let loaded = ids.filter { self.hosts[$0] != nil || self.controller?.container.host(for: $0) != nil }
-        guard !loaded.isEmpty else { return }
         for id in loaded { self.controller?.container.closeHost(for: id); self.hosts[id]?.close() }
         if let selected = self.selectedTab?.id, ids.contains(selected) {
           self.select(nodeID: self.model.sidebarSelectionID(for: self.orderedTabs.first { !ids.contains($0.id) }?.id))
@@ -1134,6 +1150,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .toggleMute(let id):
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; scheduleSave(); return true
     case .media(let intent): return app.media.perform(intent)
+    case .separateFromPinned(let id):
+      // The pinned tab goes back to its pinned URL, unloaded; its live page moves to the new tab.
+      // Its stored back list is the page it left: drop it, as a reset does (review r1 #6).
+      if model === app.model, model.tab(id: id)?.pinnedURL != nil { app.tabSleep.forgetStoredHistory([id]) }
+      return nil
     case .resetToPinnedURL(let id):
       guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }
       app.tabSleep.cancelNavigationAfterWake([id]); model.resetPinnedTab(id: id); hosts[id]?.load(url)
@@ -1240,8 +1261,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     #endif
     let asking = PageCloseBatch.asking(ids, in: self)
     guard !asking.isEmpty else { return false }
-    // One round at a time: a second action while pages still ask is refused, not merged.
-    if closeBatch?.isRunning == true { NSSound.beep(); return true }
+    // One round at a time, also before the scheduled batch started: a second action while
+    // pages still ask is refused, not merged (review r1 #8).
+    if closeBatch != nil { NSSound.beep(); return true }
     let batch = PageCloseBatch(owner: self, ids: asking, restoresSelection: restoresSelection) { [weak self] in
       // The restored selection's title, page and menus (the action's refresh does not set them).
       action(); if restoresSelection, let self, !self.isClosing { self.showSelection(focus: false) }
@@ -1255,7 +1277,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// The window's close button, Close Window (Shift-Cmd-W) and every other performClose: each
   /// live page with a beforeunload handler asks first; "Stay" keeps the window open (WL-04).
   func windowShouldClose() -> Bool {
-    if closeBatch?.isRunning == true { NSSound.beep(); return false }
+    if closeBatch != nil { NSSound.beep(); return false }
     // Sidebar order: the shown Space first, then the other Spaces.
     let tabs = orderedTabs + model.profiles.flatMap(\.favorites) + model.spaces.flatMap { flattened($0.pinned) + flattened($0.today) }
     var order: [ItemID: Int] = [:]
@@ -1349,6 +1371,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     developerModeObserver = nil; swipeActivationObserver = nil
     savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
+    // A bulk close or window close still asking ends here; its action never runs (review r1 #1).
+    closeBatch?.cancel(); closeBatch = nil
     pageChrome.close()
     // The session owns private reservations (it closes them when it ends); a Save panel on this
     // window cancels itself when the window closes.

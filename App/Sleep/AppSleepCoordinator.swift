@@ -336,18 +336,31 @@ final class AppSleepCoordinator {
   func protects(_ id: ItemID, in factory: EngineWebContentHostFactory? = nil) -> Bool {
     // The cache cap closes loaded pages, including before the controller starts at T5.
     if UserDefaults.standard.string(forKey: "open.advanced.tabSleepMode") == "never" { return true }
-    // The cap's close is a forced close: no beforeunload runs. A page with unload handlers, or
-    // with typing in the form-protection window, would lose its input without a prompt. Keep
-    // it, and let the cache exceed its cap; the cap closes the next oldest page instead (bug
-    // sweep r6 V-01). Read the page itself: the controller's unload answer is cached per tab.
-    if let factory, let host = factory.hosts[id], !host.closed, host.content.crashState == .none,
-       host.content.hasUnloadHandlers { return true }
-    if let typed = (app.model.tab(id: id) ?? factory?.model.tab(id: id))?.live.lastFormInteractionAt,
-       Date().addingTimeInterval(clock.offset).timeIntervalSince(typed) < SleepPolicy().formProtection { return true }
+    if protectsInput(id, in: factory) { return true }
     guard let controller else { return false }
     switch controller.blockingGate(tabID: id, forDiscard: false) {
     case nil, .visible?, .loading?: return false
     default: return true
+    }
+  }
+
+  /// The cap's close is a forced close: no beforeunload runs. A page with unload handlers, or
+  /// with typing in the form-protection window, would lose its input without a prompt. Keep
+  /// it, and let the cache exceed its cap; the cap closes the next oldest page instead (bug
+  /// sweep r6 V-01). Read the page itself: the controller's unload answer is cached per tab.
+  func protectsInput(_ id: ItemID, in factory: EngineWebContentHostFactory?) -> Bool {
+    if let factory, let host = factory.hosts[id], !host.closed, host.content.crashState == .none,
+       host.content.hasUnloadHandlers { return true }
+    if let typed = (app.model.tab(id: id) ?? factory?.model.tab(id: id))?.live.lastFormInteractionAt,
+       Date().addingTimeInterval(clock.offset).timeIntervalSince(typed) < SleepPolicy().formProtection { return true }
+    return false
+  }
+
+  /// An Incognito window has no tab sleep, but its hidden-page cache keeps pages that would lose
+  /// input, as a normal window's does (review r1 #3). Its pages stay in memory only.
+  func attachInputProtection(_ factory: EngineWebContentHostFactory) {
+    factory.controller?.container.retainsHiddenHost = { [weak self, weak factory] id in
+      self?.protectsInput(id, in: factory) == true
     }
   }
 

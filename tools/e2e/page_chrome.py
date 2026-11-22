@@ -394,7 +394,9 @@ def run(factory, results, tmp, h):
             app.call('select', tab=first)
             woke = wait(lambda: (lambda t: t if t.get('loaded') and not t.get('loading') else None)(tab_row(first)), timeout=8, step=.05) or {}
             length = app.eval(first, 'history.length') if woke.get('loaded') else 0
-            return check(shown_first == first and shown_second == second and kept and first_closed and length >= 2,
+            return check(asked_first['title'] == 'Leave site?' and asked_second['title'] == 'Leave site?'
+                         and shown_first == first and shown_second == second and kept and first_closed and length >= 2,
+                         titles=[asked_first['title'], asked_second['title']],
                          shownFirst=shown_first, shownSecond=shown_second, first=first, second=second,
                          kept=kept, firstClosed=first_closed, historyLength=length)
         gate('dialog_beforeunload_bulk_leave_then_stay', bulk_archive_leave_then_stay)
@@ -416,6 +418,24 @@ def run(factory, results, tmp, h):
             gone = wait(lambda: all(t['id'] != inner for t in app.call('tabs')), timeout=3, step=.02)
             return check(state['title'] == 'Leave site?' and kept and bool(gone), state=state, kept=kept, gone=bool(gone))
         gate('dialog_beforeunload_folder_delete', folder_delete)
+
+        def pinned_folder_unload():
+            # Review r1 #2: Unload ("−") of a pinned folder whose only loaded page asks, while that
+            # page is selected. After "Leave" the page stays unloaded and the selection leaves the
+            # folder; it used to load the page again at once.
+            other = page(); inner = page(); arm(inner)
+            folder = app.call('folder', tabs=[inner], section='pinned', title='Pinned unload')
+            app.call('select', tab=inner)
+            assert wait(lambda: app.call('window-state')['selected'] == inner, timeout=3, step=.02)
+            app.call('sidebar-unload', folder=folder)
+            state = visible(ds); answer()
+            left = wait(lambda: app.call('window-state')['selected'] != inner and not tab_row(inner).get('loaded'), timeout=3, step=.02)
+            time.sleep(1.0)
+            stays_unloaded = not tab_row(inner).get('loaded') and app.call('window-state')['selected'] != inner
+            return check(state['title'] == 'Leave site?' and bool(left) and stays_unloaded,
+                         state=state, left=bool(left), staysUnloaded=stays_unloaded, tab=tab_row(inner), selected=app.call('window-state')['selected'])
+        gate('dialog_beforeunload_pinned_folder_unload', pinned_folder_unload)
+
 
         def window_close():
             # Bug sweep r6 WL-04: closing a window (its close button, Close Window) destroyed its
@@ -449,6 +469,40 @@ def run(factory, results, tmp, h):
             marker = app.eval(target, 'window.keptMarker') if loaded else None
             return check(loaded and marker == 42, loaded=loaded, marker=marker)
         gate('cache_keeps_beforeunload_page', cache_keeps_unload_page)
+
+        def incognito(fn):
+            # Runs `fn` in a new Incognito window, then closes that window (its pages agree).
+            def windows(): return len(app.call('shell-windows'))
+            before = windows()
+            app.call('menu-perform', id='new-incognito-window')
+            assert wait(lambda: windows() == before + 1, timeout=8, step=.1), app.call('shell-windows')
+            try:
+                if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
+                return fn()
+            finally:
+                if windows() > before:
+                    app.call('policy', dialogs='accept'); app.call('window-close')
+                    wait(lambda: windows() == before, timeout=5, step=.05); app.call('policy', dialogs='')
+        # Review r1 #3: an Incognito window's hidden-page cache keeps a page that asks beforeunload.
+        gate('incognito_cache_keeps_beforeunload_page', lambda: incognito(cache_keeps_unload_page))
+
+        def incognito_bulk_archive():
+            # Review r1 #4: an Incognito window's bulk close (a selection's Close Tabs) asks first too.
+            low = page(); target = page(); arm(target); top = page()
+            def close_both():
+                app.call('select', tab=low)
+                app.call('sidebar-click', node=target); app.call('sidebar-click', node=top, modifiers=['cmd'])
+                assert set(app.call('selection')) == {target, top}, app.call('selection')
+                app.call('sidebar-menu', node=top, item='Close Tabs')
+            close_both()
+            state = visible(ds); answer(False)
+            ids = {t['id'] for t in app.call('tabs')}
+            kept = target in ids and top in ids
+            close_both()
+            visible(ds); answer()
+            gone = wait(lambda: (lambda ids: target not in ids and top not in ids)({t['id'] for t in app.call('tabs')}), timeout=3, step=.02)
+            return check(state['title'] == 'Leave site?' and kept and bool(gone), state=state, kept=kept, gone=bool(gone))
+        gate('incognito_bulk_archive_asks', lambda: incognito(incognito_bulk_archive))
 
         def wake_after_cache_close():
             # Bug sweep r6 V-03: a page closed outside sleep (here by the hidden-page cache) woke from

@@ -1804,13 +1804,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if pageClosePreflight?(tabIDs, { _ = action() }) == true { return true }
         return action()
     }
-    /// Every tab a removal of these nodes takes (folders, splits and their panes).
-    func tabIDs(under ids: [ItemID]) -> [ItemID] {
+    /// Every tab a removal of these nodes takes (folders, splits and their panes). A deletion
+    /// removes a Live Folder's fetched rows only: its own tabs, folders and splits move to Today
+    /// and keep their pages, so they are not asked (review r1 #7).
+    public func tabIDs(under ids: [ItemID], removingLiveFolders: Bool = false) -> [ItemID] {
         func walk(_ node: SidebarNode) -> [ItemID] {
             switch node {
-            case .tab(let tab): [tab.id]
-            case .split(let split): split.panes.map(\.id)
-            case .folder(let folder): folder.children.flatMap(walk)
+            case .tab(let tab): return [tab.id]
+            case .split(let split): return split.panes.map(\.id)
+            case .folder(let folder) where removingLiveFolders && folder.live != nil:
+                return folder.children.compactMap { child in
+                    if case .tab(let tab) = child, tab.liveItemURL != nil { return tab.id }
+                    return nil
+                }
+            case .folder(let folder): return folder.children.flatMap(walk)
             }
         }
         return ids.flatMap { model.node(id: $0).map(walk) ?? [] }
@@ -1994,7 +2001,7 @@ extension BrowserWindowController {
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed else { return }
-            _ = self.afterPagesAgreeToClose(self.tabIDs(under: ids)) { [weak self] in
+            _ = self.afterPagesAgreeToClose(self.tabIDs(under: ids, removingLiveFolders: true)) { [weak self] in
                 guard let self else { return false }
                 // Read again in the model: the sheet is asynchronous. Every Live Folder the deletion
                 // reaches (also one nested in a selected folder) is removed first, then the rest is
@@ -2025,9 +2032,13 @@ extension BrowserWindowController {
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed else { return }
-            self.keepingSelection { self.model.removeLiveFolder(id: id) }
-            self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey)
-            self.refresh(); self.changed()
+            // Its fetched rows' pages ask first (bug sweep r6 P-01, review r1 #7).
+            _ = self.afterPagesAgreeToClose(self.tabIDs(under: [id], removingLiveFolders: true)) { [weak self] in
+                guard let self, self.model.node(id: id)?.folder?.live != nil else { return false }
+                self.keepingSelection { self.model.removeLiveFolder(id: id) }
+                self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey)
+                self.refresh(); self.changed(); return true
+            }
         }
         if !shown { pendingConfirmation = nil }
         return shown
