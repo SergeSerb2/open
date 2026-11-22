@@ -56,8 +56,7 @@ extension AutomationController {
       // Puts test data on the general pasteboard, as another app's copy would.
       let pb = NSPasteboard.general
       pb.clearContents()
-      if let paths = args["files"] as? [String] { pb.writeObjects(paths.map { URL(fileURLWithPath: $0) as NSURL }) }
-      else if let path = args["file"] as? String { pb.writeObjects([URL(fileURLWithPath: path) as NSURL]) }
+      if let path = args["file"] as? String { pb.writeObjects([URL(fileURLWithPath: path) as NSURL]) }
       else if let path = args["imageData"] as? String, let data = FileManager.default.contents(atPath: path) { pb.setData(data, forType: .png) }
       else if let raw = args["url"] as? String, let url = URL(string: raw) { pb.writeObjects([url as NSURL]); pb.setString(raw, forType: .string) }
       else if let text = args["text"] as? String { pb.setString(text, forType: .string) }
