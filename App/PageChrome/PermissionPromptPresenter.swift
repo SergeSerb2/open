@@ -167,6 +167,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       return
     }
     popover.contentViewController?.view = view
+    // The window that has the keyboard now: only it may get key status back (review round 2).
+    let keyBefore = NSApp.keyWindow
     popover.show(relativeTo: anchor.rect, of: anchor.view, preferredEdge: anchor.edge)
     if let promptWindow = view.window {
       // This NSPopover is ours; its native window class alone cannot prove
@@ -176,8 +178,11 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       // No default button yet: AppKit would send it the Return typed into the page.
       promptWindow.defaultButtonCell = nil
     }
-    // NSPopover can take key status when it shows: the page's window keeps the keyboard.
-    if let parent = anchor.view.window, NSApp.keyWindow !== parent, parent.canBecomeKey { parent.makeKey() }
+    // NSPopover can take key status when it shows. Give it back only when the popover took it
+    // from the requesting page's own window; never move key status from another window, where
+    // the user may be typing (review round 2).
+    if let parent = anchor.view.window, keyBefore === parent, let promptWindow = view.window,
+       NSApp.keyWindow === promptWindow, parent.canBecomeKey { parent.makeKey() }
     announce()
   }
   private func announce() {
@@ -189,9 +194,14 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   private func dropKeyboard() {
     guard view.hasKeyboard else { return }
     view.hasKeyboard = false
-    if card == nil, let window = view.window {
+    guard let window = view.window else { return }
+    if card == nil {
       window.defaultButtonCell = nil
       if window.firstResponder === view { window.makeFirstResponder(nil) }
+    } else if window.firstResponder === view {
+      // Little Open's card: its view would keep swallowing Return and Escape (review round 2).
+      if let page = current?.page, owner?.pageChrome.isVisible(page) == true { page.focusPage() }
+      else { window.makeFirstResponder(nil) }
     }
   }
   func visibilityChanged() {
@@ -305,8 +315,15 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      "keyWindow": NSApp.keyWindow?.windowNumber ?? 0, "promptKey": view.window?.isKeyWindow == true,
      "promptFirstResponder": view.window?.firstResponder === view && (card != nil || view.window?.isKeyWindow == true),
      "promptHasKeyboard": view.hasKeyboard,
+     // Points for a real click, in the prompt's window, top-left origin.
+     "allowPoint": point(in: view.allow), "backgroundPoint": point(in: view, at: CGPoint(x: 24, y: 8)),
      "parent": view.window?.parent?.windowNumber ?? 0, "selectedPage": owner?.selectedContent?.identifier ?? 0,
      "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0]
+  }
+  private func point(in target: NSView, at local: CGPoint? = nil) -> [Double] {
+    guard let window = target.window else { return [] }
+    let p = target.convert(local ?? CGPoint(x: target.bounds.midX, y: target.bounds.midY), to: nil)
+    return [p.x, window.frame.height - p.y]
   }
   isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 }

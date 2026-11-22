@@ -644,6 +644,56 @@ def run(factory, results, tmp, h):
                 for t in (pane_b, pane_a): h['_try'](lambda t=t: app.call('close', tab=t))
         gate('permission_split_pane_return_not_answered', permission_split_pane_return)
 
+        # Review round 2: the prompt is not key when it shows, so the first real click must reach
+        # it. A real mouse click (socket `mouse` action, own-window AppKit events) on Allow answers
+        # it; a click on its background gives it the keyboard, then a typed Return answers it.
+        def permission_real_click_allow():
+            permission_page('click-allow'); target=tab; perm(); state=visible(ps)
+            point=state['allowPoint']
+            app.call('mouse', action='click', window=state['window'], x=point[0], y=point[1])
+            answered=wait(lambda: app.eval(target,'permissionResult')!='pending', timeout=3, step=.05)
+            return check(len(point)==2 and answered and app.eval(target,'permissionResult')=='granted' and not ps()['visible'],
+                         state=state, result=app.eval(target,'permissionResult'))
+        gate('permission_real_click_allow', permission_real_click_allow)
+
+        def permission_real_click_focus_return():
+            permission_page('click-focus'); target=tab; perm(); state=visible(ps)
+            point=state['backgroundPoint']
+            app.call('mouse', action='click', window=state['window'], x=point[0], y=point[1]); time.sleep(.2)
+            held=ps()
+            app.call('key', key='return', asTyped=True)
+            answered=wait(lambda: app.eval(target,'permissionResult')!='pending', timeout=3, step=.05)
+            return check(len(point)==2 and held['visible'] and held['promptHasKeyboard'] and answered
+                         and app.eval(target,'permissionResult')=='granted', state=state, held=held, result=app.eval(target,'permissionResult'))
+        gate('permission_real_click_focus_return', permission_real_click_focus_return)
+
+        def permission_other_window_keeps_key():
+            # Another window (Little Open) has the keyboard when window A's page asks: key status
+            # stays there, and what the user types never reaches A's page.
+            permission_page('other-window'); target=tab
+            browser=app.call('window-state')['number']
+            app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));'
+                     'window.permissionResult="waiting";setTimeout(()=>{window.permissionResult="pending";'
+                     'Notification.requestPermission().then(v=>window.permissionResult=v)},1500);true')
+            before={x['id'] for x in app.call('little-open-state')['sessions']}
+            app.call('little-open-action', action='blank')
+            little=wait(lambda: next((x for x in app.call('little-open-state')['sessions'] if x['id'] not in before), None), timeout=5, step=.05)
+            try:
+                assert little, 'no Little Open window'
+                shown=wait(lambda: (lambda st: st if st.get('visible') else None)(app.call('permission-prompt', window=browser)), timeout=6, step=.05)
+                assert shown, app.call('permission-prompt', window=browser)
+                time.sleep(.3)
+                key_window=app.call('permission-prompt', window=browser)['keyWindow']
+                app.call('key', text='ab', asTyped=True); time.sleep(.3)
+                page_keys=app.eval(target,'promptKeys')
+                return check(key_window==little['window'] and page_keys==[] and app.eval(target,'permissionResult')=='pending',
+                             keyWindow=key_window, littleWindow=little['window'], browserWindow=browser, pageKeys=page_keys, prompt=shown)
+            finally:
+                h['_try'](lambda: app.call('permission-prompt', window=browser, answer='notnow'))
+                if little: h['_try'](lambda: app.call('little-open-action', id=little['id'], action='close'))
+                h['_try'](lambda: app.call('focus', tab=target))
+        gate('permission_other_window_keeps_key', permission_other_window_keeps_key)
+
         for key in ['w','t','l']:
             def permission_keys(key=key):
                 permission_page('keys-' + key); target=tab

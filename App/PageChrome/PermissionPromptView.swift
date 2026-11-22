@@ -23,6 +23,8 @@ final class PermissionPromptView: PageChromePopoverView {
     return resigned
   }
   override var acceptsFirstResponder: Bool { hasKeyboard }
+  /// The prompt's window is not key when it shows: the first click must reach it (review round 2).
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
   override func mouseDown(with event: NSEvent) { onFocusRequest?(); super.mouseDown(with: event) }
   init() {
     super.init(frame: CGRect(x: 0, y: 0, width: 320, height: 156))
@@ -55,5 +57,7 @@ final class PermissionButton: NSButton {
     target = self; action = #selector(pressed)
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+  /// The first click on a prompt that is not key answers it.
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
   @objc private func pressed() { onPress?() }
 }
