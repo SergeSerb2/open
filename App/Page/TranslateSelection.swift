@@ -88,7 +88,7 @@ final class TranslateSelectionController {
     let onScreen = window.convertToScreen(view.convert(target, to: nil))
     let panel = TranslateSelectionPanel(content: content, pointingAt: onScreen, inside: area.insetBy(dx: Self.inset, dy: Self.inset))
     window.addChildWindow(panel, ordered: .above)
-    popover = panel; popoverParent = window
+    popover = panel; popoverParent = window; tabbedOut = false
     last["anchorInPage"] = view !== adapter.factory.controller?.contentView
     last["shown"] = panel.isVisible
     // Transient like a popover: a click elsewhere, Esc or a scroll closes it.
@@ -96,15 +96,33 @@ final class TranslateSelectionController {
       guard let self, let panel = self.popover else { return event }
       if event.type == .keyDown {
         if event.keyCode == 53 { self.closePanel(); return nil }
-        guard event.keyCode == 48, event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
-        // Tab or Shift-Tab in the bubble gives keyboard focus back to the page; the bubble stays.
-        if panel.isKeyWindow { self.returnKeyToPage(); return nil }
+        let plainTab = event.keyCode == 48 && event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+        if panel.isKeyWindow {
+          // Tab or Shift-Tab in the bubble gives keyboard focus back to the page; the bubble stays, and
+          // later Tabs are the page's again (review of #665, round 2 #2).
+          if plainTab { self.tabbedOut = true; self.returnKeyToPage(); return nil }
+          // Space and Return press the focused Copy. Any other key (Cmd+F, Cmd+L, Cmd+W…) is a window
+          // command: the window takes the key back first, so Find and other fields it focuses get the
+          // typing (review of #665, round 2 #1).
+          guard ![49, 36, 76].contains(event.keyCode), let parent = self.popoverParent else { return event }
+          self.returnKeyToPage()
+          // The same key again, now for the browser window: its key path (menus, Find, the command bar)
+          // runs as for a key pressed there.
+          if let again = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: event.modifierFlags,
+              timestamp: event.timestamp, windowNumber: parent.windowNumber, context: nil, characters: event.characters ?? "",
+              charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "", isARepeat: event.isARepeat, keyCode: event.keyCode) {
+            NSApp.postEvent(again, atStart: true); return nil
+          }
+          return event
+        }
         // Tab from the page the bubble belongs to moves keyboard focus into the bubble, onto Copy; it
-        // was out of the keyboard's reach (bug sweep r6, A11Y-10). Only from that page: Tab in the
-        // command bar, Find, another tab or another pane is theirs (review of #665, #4).
-        if !event.modifierFlags.contains(.shift), event.window === panel.parent, !panel.content.copyButton.isHidden,
-           self.pageHasKeyboardFocus(in: panel.parent) {
-          panel.allowsKey = true; panel.makeKey(); panel.makeFirstResponder(panel.content.copyButton); return nil
+        // was out of the keyboard's reach (bug sweep r6, A11Y-10). Only from that page (Tab in the
+        // command bar, Find, another tab or pane is theirs; review of #665, #4) and only until Tab has
+        // brought focus back once.
+        if plainTab, !self.tabbedOut, !event.modifierFlags.contains(.shift), event.window === panel.parent,
+           !panel.content.copyButton.isHidden, self.pageHasKeyboardFocus(in: panel.parent) {
+          panel.allowsKey = true; panel.makeKey(); panel.makeFirstResponder(panel.content.copyButton)
+          self.followWindowFocus(of: panel.parent); return nil
         }
         return event
       }
@@ -126,6 +144,8 @@ final class TranslateSelectionController {
   }
 
   private weak var popoverParent: NSWindow?
+  /// Tab has taken keyboard focus out of this bubble once: Tab stays with the page until a new bubble.
+  private var tabbedOut = false
   /// The page this bubble translates holds keyboard focus in its window.
   private func pageHasKeyboardFocus(in window: NSWindow?) -> Bool {
     guard let window, let pageView = anchorView, let responder = window.firstResponder as? NSView,
@@ -133,12 +153,29 @@ final class TranslateSelectionController {
     return responder === pageView || responder.isDescendant(of: pageView)
   }
   private func returnKeyToPage() {
+    parentFocusObservation = nil
     guard let panel = popover else { return }
     panel.allowsKey = false
     if let parent = popoverParent, parent.isVisible { parent.makeKey() } else { panel.resignKey() }
   }
+  /// While the bubble holds the key, a window command (Cmd+F, Cmd+L…) runs through the App's key
+  /// router before any key monitor and focuses a field in the browser window: the window takes the
+  /// key back then, so that field gets the typing (review of #665, round 2 #1).
+  private var parentFocusObservation: NSKeyValueObservation?
+  private func followWindowFocus(of parent: NSWindow?) {
+    parentFocusObservation = parent?.observe(\.firstResponder, options: [.new]) { [weak self] _, _ in
+      // Not inside the observation's own callback: the hand-back ends this observation.
+      DispatchQueue.main.async { [weak self] in
+        MainActor.assumeIsolated {
+          guard let self, let panel = self.popover, panel.isKeyWindow else { return }
+          self.returnKeyToPage()
+        }
+      }
+    }
+  }
   private func closePanel() {
     if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil
+    parentFocusObservation = nil
     if let panel = popover {
       let wasKey = panel.isKeyWindow
       panel.parent?.removeChildWindow(panel); panel.orderOut(nil)

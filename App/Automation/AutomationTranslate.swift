@@ -45,11 +45,13 @@
       // Tab or Esc through the real event queue (NSApp.postEvent), so the bubble's local key
       // monitor sees it as it sees a key press; `key` (NSApp.sendEvent) would skip monitors.
       case "selection-key":
-        guard let code = a["code"] as? Int, [48, 53].contains(code), let window = NSApp.keyWindow ?? w.window,
-          let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber, context: nil, characters: code == 48 ? "\t" : "\u{1b}",
-            charactersIgnoringModifiers: code == 48 ? "\t" : "\u{1b}", isARepeat: false, keyCode: UInt16(code))
-        else { throw Failure(message: "selection-key needs code 48 (Tab) or 53 (Esc) and a key window") }
+        // 3 is Cmd+F (a window command while the bubble may hold the key).
+        let characters = [48: "\t", 53: "\u{1b}", 3: "f"]
+        guard let code = a["code"] as? Int, let text = characters[code], let window = NSApp.keyWindow ?? w.window,
+          let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: code == 3 ? [.command] : [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: text,
+            charactersIgnoringModifiers: text, isARepeat: false, keyCode: UInt16(code))
+        else { throw Failure(message: "selection-key needs code 48 (Tab), 53 (Esc) or 3 (Cmd+F) and a key window") }
         NSApp.postEvent(event, atStart: false)
         try await Task.sleep(for: .milliseconds(200))
         var state = adapter.selection.state

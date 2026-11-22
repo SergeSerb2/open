@@ -1428,8 +1428,6 @@ extension EngineWebContentHostFactory {
     if let panel = controller?.boostEditor?.panel, candidate === panel || candidate.sheetParent === panel { return true }
     if let panel = controller?.boostEditor?.view?.advancedPopover?.panel, candidate === panel { return true }
     if candidate === controller?.themeEditor?.panel || candidate === controller?.spaceCreationController?.themeEditor?.panel { return true }
-    // The Translate Selection bubble takes the key only by Tab (A11Y-10); it is this window's.
-    if candidate is TranslateSelectionPanel, let window, candidate.parent === window { return true }
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {

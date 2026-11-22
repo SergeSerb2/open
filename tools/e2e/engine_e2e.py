@@ -14584,25 +14584,51 @@ def page_translate_checks(factory, results, tmp):
                   and copy[2] > 0 and copy[1] >= lpf[1] - .5 and copy[1] + copy[3] <= lpf[1] + lpf[3] + .5,
             'panel': lpf, 'content': lca, 'copy': copy, 'chars': len(long_sel.get('text', ''))}
         tabbed = app.call('translate', action='selection-key', code=48)
-        # Review of #665 (#4): Tab in the bubble gives the key back to the page (bubble stays); Tab
-        # while the command bar (not the page) has focus does not enter the bubble.
+        # Review of #665: Tab in the bubble gives the key back to the page (bubble stays); a later Tab is
+        # the page's (round 2 #2).
         back = app.call('translate', action='selection-key', code=48)
+        again = app.call('translate', action='selection-key', code=48)
+        escaped = app.call('translate', action='selection-key', code=53)
+        def open_bubble(node_js):
+            app.call('policy', contextMenu='run-open:' + title)
+            at = select_text(node_js)
+            app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+            shown = wait_until(lambda: (lambda v: v if v.get('state') == 'translated' and v.get('shown') else None)(app.call('translate', action='selection')), timeout=10, step=.1)
+            app.call('policy', contextMenu='')
+            return bool(shown)
+        # Cmd+F with keyboard focus in the bubble: the window takes the key back, so the Find field gets
+        # the typing (round 2 #1).
+        bubble_c = open_bubble("document.getElementById('p1')")
+        into = app.call('translate', action='selection-key', code=48)
+        find_key = app.call('translate', action='selection-key', code=3)
+        find_pane = wait_until(lambda: next((p for p in app.call('find-state').get('panes', []) if p.get('visible') and p.get('focused')), None), timeout=3, step=.05) or {}
+        windows_after = [w for w in app.call('windows') if w.get('class') == 'BrowserWindow' and w.get('visible')]
+        app.call('key', key='escape', route='app')
+        app.call('translate', action='selection-close')
+        # Tab while the command bar (not the page) has focus does not enter the bubble; the bubble must
+        # still be there for that to mean anything (round 2 #3).
+        bubble_b = open_bubble("document.getElementById('p1')")
         app.call('key', key='l', modifiers=['cmd'], route='app')
         bar_open = wait_until(lambda: app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
         from_bar = app.call('translate', action='selection-key', code=48)
         app.call('key', key='escape', route='app')
         wait_until(lambda: not app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
-        escaped = app.call('translate', action='selection-key', code=53)
+        app.call('translate', action='selection-close')
         results['X8_selection_tab_reaches_copy'] = {
             'ok': tabbed.get('shown') is True and tabbed.get('panelKey') is True and tabbed.get('copyFocused') is True
                   and back.get('shown') is True and back.get('panelKey') is False and back.get('parentKey') is True
-                  and bool(bar_open) and from_bar.get('panelKey') is not True
-                  and escaped.get('shown') is False and wait_until(lambda: app.call('windows') and any(w.get('key') for w in app.call('windows') if w.get('class') == 'BrowserWindow') or None, timeout=3, step=.1) is not None,
+                  and again.get('shown') is True and again.get('panelKey') is False and again.get('parentKey') is True
+                  and escaped.get('shown') is False
+                  and bubble_b and bool(bar_open) and from_bar.get('shown') is True and from_bar.get('panelKey') is False
+                  and bubble_c and into.get('panelKey') is True and find_key.get('panelKey') is not True
+                  and bool(find_pane) and any(w.get('key') for w in windows_after),
             'tab': {k: tabbed.get(k) for k in ('shown', 'panelKey', 'copyFocused', 'parentKey')},
             'tabBack': {k: back.get(k) for k in ('shown', 'panelKey', 'parentKey')},
+            'tabAgain': {k: again.get(k) for k in ('shown', 'panelKey', 'parentKey')},
             'tabFromCommandBar': {k: from_bar.get(k) for k in ('shown', 'panelKey', 'parentKey')}, 'barOpen': bool(bar_open),
+            'cmdF': {'into': into.get('panelKey'), 'panelKey': find_key.get('panelKey'), 'parentKey': find_key.get('parentKey'),
+                     'findFocused': bool(find_pane), 'browserKey': any(w.get('key') for w in windows_after)},
             'esc': {k: escaped.get(k) for k in ('shown',)}}
-        app.call('translate', action='selection-close')
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
             and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
         # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
