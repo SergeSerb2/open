@@ -76,7 +76,11 @@ public enum PasswordsCSVReader {
             guard !password.isEmpty else { report.skippedEmptyPassword += 1; continue }
             let user = field(userColumn), note = field(noteColumn)
             guard user.utf8.count <= 16 * 1024, password.utf8.count <= 16 * 1024, note.utf8.count <= 16 * 1024 else { report.skippedOversize += 1; continue }
-            let origin = "\(scheme)://\(host)\(url.port.map { ":\($0)" } ?? "")/"
+            // Chromium's canonical origin is the realm: a lower-case host, IPv6 in brackets, no default port.
+            // A raw host would never match a page's realm (bug sweep r7 Y-07). `URL.host` is already punycode.
+            let canonicalHost = host.contains(":") ? "[\(host.lowercased())]" : host.lowercased()
+            let defaultPort = scheme == "https" ? 443 : 80
+            let origin = "\(scheme)://\(canonicalHost)\(url.port.flatMap { $0 == defaultPort ? nil : ":\($0)" } ?? "")/"
             var record = ImportedLoginRecord(originURLString: origin, actionURLString: nil, username: user, passwordBytes: Array(password.utf8),
                                              signonRealm: origin, dateCreated: Date(), isBlacklisted: false, timesUsed: 0)
             record.noteBytes = Array(note.utf8)
