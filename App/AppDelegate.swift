@@ -994,8 +994,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   #endif
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
+    // A main-model window first: a Blank Window's one-Profile model drops another Profile's
+    // request, and must not take this Profile's (bug sweep r6 WL-12).
     let owner = hostFactories.values.first { $0.isIncognito && $0.incognitoSession?.context === request.context }
-      ?? frontStandardWindowController.flatMap { hostFactories[$0.windowID] }
+      ?? (frontMainModelWindowController ?? frontStandardWindowController).flatMap { hostFactories[$0.windowID] }
     return owner?.adoptUnownedRequest(request)
   }
 
@@ -1021,7 +1023,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     afterPaintTask?.cancel(); afterPaintTask = nil
     noWebStartupTask?.cancel(); noWebStartupTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
-    littleOpenCoordinator?.closeAll()
+    littleOpenCoordinator?.closeAllForShutdown()
     downloadsCenter.closeDetachedPages()
     engineReady = false
     refreshScriptingEngine()

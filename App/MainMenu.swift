@@ -225,6 +225,9 @@ extension EngineWebContentHostFactory {
     if id == "check-for-updates" { return true }
     if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
     if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
+    // A Blank Window has no Pinned section: an empty New Folder would be an invisible folder there
+    // (bug sweep r6 REG-04). New Folder with the selected items stays.
+    if isBlankWindow, id == "new-folder", selectionCommandContext(for: id) == nil { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) {
       return !findCoveredByLibrarySpaces && (selectedContent != nil || selectedNoteHost != nil)
@@ -396,7 +399,9 @@ extension EngineWebContentHostFactory {
           self.model.renameNode(id: tab.id, title: field.stringValue)
         }
       }
-    case "reset-tab": if let tab = selectedTab, let url = tab.pinnedURL { model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
+    case "reset-tab":
+      // A navigation queued behind the tab's wake would replace the reset page (bug sweep r6 REG-05).
+      if let tab = selectedTab, let url = tab.pinnedURL { app.tabSleep.cancelNavigationAfterWake([tab.id]); model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
     case "replace-pinned-url": if let tab = selectedTab { model.replacePinnedURL(id: tab.id) }
     case "clear-unpinned-tabs":
       if let space = focusedSpace, !space.today.isEmpty { model.clearToday(space: space.id); controller?.showClearedToast() }
@@ -422,7 +427,9 @@ extension EngineWebContentHostFactory {
     case "clear-archive":
       app.settingsPresenter.requestClearArchive()
     case "new-space": return controller?.beginSpaceCreation() == true
-    case "new-folder": if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
+    case "new-folder":
+      guard !isBlankWindow else { return false }
+      if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
     case "new-easel": return EaselTab.create(in: self) != nil
     case "reload": selectedContent?.reload()
     case "force-reload": selectedContent?.reloadIgnoringCache()
@@ -468,7 +475,9 @@ extension EngineWebContentHostFactory {
       // Pinned tabs of the focused Space that left their pinned URL (folders and splits
       // included, Favorites excluded); one undo step. Live pages navigate back.
       if let space = focusedSpace {
-        for tabID in model.resetPinnedTabs(spaceID: space.id) { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
+        let reset = model.resetPinnedTabs(spaceID: space.id)
+        app.tabSleep.cancelNavigationAfterWake(Set(reset))
+        for tabID in reset { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
       }
     default: app.performCommand(id)
     }
