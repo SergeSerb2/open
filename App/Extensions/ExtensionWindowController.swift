@@ -86,7 +86,11 @@ extension AppDelegate {
     // A popup that arrives for a closed context, or after its regular Profile left the model (a delete
     // in progress), is not shown: closeAll(in:) already ran for that context.
     let context = browser.context
-    if context.state != .live || (!context.isEphemeral && regularProfile(for: context) == nil) {
+    // Nor during quit, nor for a private context that no live Incognito window's session owns
+    // (bug sweep r5 item 5).
+    if terminationRequested || shutdownPrepared || context.state != .live
+      || (!context.isEphemeral && regularProfile(for: context) == nil)
+      || (context.isEphemeral && !hostFactories.values.contains { $0.incognitoSession?.context === context }) {
       content.close(); browser.close(); return
     }
     let parent = hostFactories.values.first { $0.focusedBrowser?.context === browser.context && $0.window?.isMainWindow == true }?.window

@@ -9,16 +9,20 @@ final class IncognitoDownloads {
   private var closed = false
   private var choices: [UInt32: DownloadDestinationChoice] = [:]
   private var reserved: [UInt32: URL] = [:]
+  /// Bumped by reset(): a choice that started for the previous private context ends without
+  /// a reservation or a sheet (review r1 of #651).
+  private var generation = 0
   func decide(_ download: OEDownload, filename: String, directory: URL?, profile: Profile?, window: NSWindow?,
               completion: @escaping @MainActor (URL?) -> Void) {
     guard !closed else { completion(nil); return }
     let name = filename.isEmpty ? "download" : (filename as NSString).lastPathComponent
     guard !name.isEmpty, ![".", "..", "/"].contains(name), name.utf8.count <= 255 else { completion(nil); return }
+    let started = generation
     Task { @MainActor [weak self, weak window] in
       guard let self else { completion(nil); return }
       do {
         let target = try await files.directory(directory?.path ?? profile?.settings.downloadDirectory ?? "")
-        guard !closed else { completion(nil); return }
+        guard !closed, generation == started else { completion(nil); return }
         if directory == nil, profile?.settings.askWhereToSaveEachFile == true {
           guard let window else { completion(nil); return }
           let key = download.identifier
@@ -28,7 +32,7 @@ final class IncognitoDownloads {
           choices[key] = choice; choice.present(in: window, filename: name, directory: target.url)
         } else {
           let url = try await files.unique(in: target.url, name: name)
-          guard !closed else { await files.release(url); completion(nil); return }
+          guard !closed, generation == started else { await files.release(url); completion(nil); return }
           reserved[download.identifier] = url
           completion(url)
         }
@@ -45,6 +49,12 @@ final class IncognitoDownloads {
   func close() {
     guard !closed else { return }
     closed = true
+    reset()
+  }
+  /// Cancels open choices and releases reservations, and keeps taking new requests: a renewed
+  /// private context numbers its downloads from 1 again (bug sweep r5 item 3).
+  func reset() {
+    generation &+= 1
     let pending = Array(choices.values); choices.removeAll()
     for choice in pending { choice.cancel() }
     let urls = Array(reserved.values); reserved.removeAll()

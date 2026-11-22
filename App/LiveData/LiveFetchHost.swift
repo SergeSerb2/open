@@ -54,6 +54,9 @@ final class LiveFetchHost {
     while content.isLoading || content.url == nil {
       // Closed under the wait (its window or Profile went away): stop now, not at the deadline.
       if content.isLive { wasLive = true } else if wasLive { throw Failure.loadFailed("closed") }
+      // Also before the page is live: its window closing, or its context or Profile going away,
+      // ends the wait now (bug sweep r5 item 2), not at the 20 s deadline.
+      if factory.isClosing || context.state == .closed || app.model.profile(id: profileID) == nil { throw Failure.loadFailed("closed") }
       guard Date() < deadline else { throw Failure.timedOut(loading: content.isLoading, url: content.url?.absoluteString ?? "") }
       try await Task.sleep(for: .milliseconds(100))
     }

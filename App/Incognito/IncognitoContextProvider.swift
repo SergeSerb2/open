@@ -95,7 +95,7 @@ final class IncognitoSession {
       app.extensionPrompts.unregister(context.extensions)
     }
     self.context = nil
-    pipHosts.disabled = []; translateHosts.reset(); developerModeHosts.reset()
+    pipHosts.disabled = []; translateHosts.reset(); developerModeHosts.reset(); downloads.reset()
     start()
     return nil
   }
