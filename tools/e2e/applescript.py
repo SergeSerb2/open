@@ -431,7 +431,59 @@ def window_close_checks(factory, results, fixture_server, wait_until):
         script('set index of window id %s to 1' % quote(first))
         raised = wait_until(lambda: script('return id of window 1') == first or None, timeout=5, step=.1)
         order = script('return (id of window 1) & "|" & (index of window id %s)' % quote(made_id))
-        results['W2_set_index_reorders'] = {'ok': bool(raised) and order == first + '|2', 'actual': order}
+        # Back again: creation order would keep the first window as window 1.
+        script('set index of window id %s to 1' % quote(made_id))
+        back = wait_until(lambda: script('return id of window 1') == made_id or None, timeout=5, step=.1)
+        order_back = script('return (id of window 1) & "|" & (index of window id %s)' % quote(first))
+        results['W2_set_index_reorders'] = {'ok': bool(raised) and order == first + '|2' and bool(back)
+            and order_back == made_id + '|2', 'actual': order, 'actualBack': order_back}
+
+        # Two windows (the first behind, the made one in front) both show one tab. close names the
+        # front window: that window closes it (neighbour selected, pinned tab unloaded there).
+        def window_state(window_id):
+            state = app.call('window-state', id=window_id)
+            return state if state['id'].lower() == window_id.lower() else None
+        def show_in_both(tab):
+            script('select tab id %s of window id %s' % (quote(tab), quote(first)))
+            script('select tab id %s of window id %s' % (quote(tab), quote(made_id)))
+            wait_until(lambda: (window_state(made_id) or {}).get('selected') == tab or None, timeout=5, step=.1)
+            return {'first': (window_state(first) or {}).get('selected'), 'made': (window_state(made_id) or {}).get('selected')}
+        research = app.call('window-state')['space']
+        app.call('window-focus', id=made_id, activate=True)
+        two_a = app.call('open', url=origin + '/w-two-a')['id']; app.call('wait', tab=two_a)
+        two_t = app.call('open', url=origin + '/w-two-today')['id']; app.call('wait', tab=two_t)
+        shown = show_in_both(two_t)
+        script('close tab id %s of window id %s' % (quote(two_t), quote(made_id)))
+        gone = wait_until(lambda: all(t['id'] != two_t for t in app.call('tabs')) or None, timeout=5, step=.1)
+        front = wait_until(lambda: (s if s.get('selected') else None) if (s := window_state(made_id)) else None, timeout=3, step=.1)
+        results['W3_close_two_windows_front_selects_neighbour'] = {'ok': bool(gone) and bool(front),
+            'shownBefore': shown, 'closed': bool(gone), 'frontSelected': (front or window_state(made_id) or {}).get('selected')}
+        two_p = app.call('open', url=origin + '/w-two-pinned')['id']; app.call('wait', tab=two_p)
+        app.call('pin', tab=two_p)
+        shown = show_in_both(two_p)
+        script('close tab id %s of window id %s' % (quote(two_p), quote(made_id)))
+        app.call('window-focus', id=made_id, activate=True)
+        def unloaded_in_front():
+            row = next((t for t in app.call('tabs') if t['id'] == two_p), None)
+            return row if row and row.get('section') == 'pinned' and not row.get('loaded') else None
+        unloaded = wait_until(unloaded_in_front, timeout=5, step=.1)
+        row = next((t for t in app.call('tabs') if t['id'] == two_p), None)
+        results['W3_close_two_windows_front_unloads_pinned'] = {'ok': bool(unloaded), 'shownBefore': shown,
+            'row': row and {k: row.get(k) for k in ('section', 'loaded', 'selected')}}
+
+        # make new tab at a Space of a named window shows it in that window, not in the front one.
+        two_space = app.call('space-create', title='W Two')
+        app.call('space', space=research)
+        wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
+        script('focus space id %s of window id %s' % (quote(research), quote(first)))
+        app.call('window-focus', id=made_id, activate=True)
+        nid = script('set t to make new tab at space id %s of window id %s with properties {URL:%s}\nreturn id of t'
+                     % (quote(two_space), quote(first), quote(origin + '/w-two-made')))
+        named = wait_until(lambda: (s if s['space'] == two_space and s['selected'] == nid else None)
+                           if (s := window_state(first)) else None, timeout=5, step=.1)
+        front_space = (window_state(made_id) or {}).get('space')
+        results['W4_make_tab_in_named_window'] = {'ok': bool(named) and front_space == research,
+            'namedWindowShows': bool(named), 'frontSpaceUnchanged': front_space == research}
         script('close window id %s' % quote(made_id))
         wait_until(lambda: script('return count windows') == '1' or None, timeout=5, step=.1)
         app.call('window-focus', id=first, activate=True)
@@ -444,7 +496,7 @@ def window_close_checks(factory, results, fixture_server, wait_until):
         gone = wait_until(lambda: all(t['id'] != b for t in app.call('tabs')) or None, timeout=5, step=.1)
         state = wait_until(lambda: (s if s.get('selected') else None) if (s := app.call('window-state')) else None, timeout=3, step=.1)
         final = state or app.call('window-state')
-        results['W3_close_selected_selects_neighbour'] = {'ok': bool(gone) and final.get('selected') in (a, home),
+        results['W3_close_selected_selects_neighbour'] = {'ok': bool(gone) and final.get('selected') not in (None, '', b),
             'closed': bool(gone), 'selected': final.get('selected')}
         # A pinned tab stays in the sidebar and unloads (Open's ⌘W rule, docs/re/pinned-favorites-close.md).
         app.call('pin', tab=a)

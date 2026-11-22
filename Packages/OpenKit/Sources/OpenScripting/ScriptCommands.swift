@@ -74,10 +74,29 @@ enum ScriptTarget {
         body()
     }
 
-    /// close tab and delete tab: the window's close path, else (scratch probes) the model.
-    static func closeTab(_ id: ItemID) {
-        if let close = ScriptHost.shared.closeTab, close(id) { return }
-        ScriptHost.shared.model?.closeTab(id: id)
+    /// close tab and delete tab: the close path of the named window, else (scratch probes) the model.
+    /// The cached wrapper goes only when the tab left the model: a pinned tab or Favorite stays,
+    /// and a page's beforeunload can keep its tab.
+    static func closeTab(_ id: ItemID, in window: WindowID?) {
+        if let close = ScriptHost.shared.closeTab, close(id, window) {
+        } else { ScriptHost.shared.model?.closeTab(id: id) }
+        if ScriptHost.shared.model?.tab(id: id) == nil { ScriptHost.shared.tabWrappers[id] = nil }
+    }
+
+    /// The window that `make … at <container>` names (`at space … of window id "…"`), else the key or
+    /// front window. Cocoa keeps the insertion location in the create command's arguments.
+    static func creationWindow() -> BrowserWindowState? {
+        if let location = NSScriptCommand.current()?.arguments?["Location"] as? NSPositionalSpecifier {
+            var current: NSScriptObjectSpecifier? = location.objectSpecifier
+            while let specifier = current {
+                if specifier.key == "appleScriptWindows", specifier.container == nil {
+                    if let named = (specifier.objectsByEvaluatingSpecifier as? ScriptWindow)?.state { return named }
+                    break
+                }
+                current = specifier.container
+            }
+        }
+        return ScriptRead.preferredWindow()
     }
 
     /// The selection after make new tab: the window's own select path (no Undo step, the page
@@ -126,7 +145,7 @@ enum ScriptCreation {
         guard let url = parsedURL(properties["URL"] as? String ?? "about:blank") else { return nil }
         // §5.7 always appends to Today, regardless of a flattened insertion index.
         let tab = model.newTab(in: spaceID, url: url, at: nil)
-        if let window = ScriptRead.preferredWindow() { ScriptTarget.showMadeTab(tab, spaceID: spaceID, window: window, model: model) }
+        if let window = ScriptTarget.creationWindow() { ScriptTarget.showMadeTab(tab, spaceID: spaceID, window: window, model: model) }
         return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
@@ -402,9 +421,12 @@ extension ScriptTab {
     @objc public func close(_ command: NSScriptCommand) -> Any? {
         guard let target = ScriptTarget.tab(from: command, receiver: self) else { return nil }
         _ = target.objectSpecifier
-        if target.isLittleTab { ScriptHost.shared.littleTab?.close(target.tabID) }
-        else { ScriptTarget.closeTab(target.tabID) }
-        ScriptHost.shared.tabWrappers[target.tabID] = nil
+        if target.isLittleTab {
+            ScriptHost.shared.littleTab?.close(target.tabID)
+            ScriptHost.shared.tabWrappers[target.tabID] = nil
+        } else {
+            ScriptTarget.closeTab(target.tabID, in: ScriptTarget.window(for: command)?.id)
+        }
         return nil
     }
 }

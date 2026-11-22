@@ -134,8 +134,7 @@ public final class ScriptWindow: NSObject {
     @objc(removeFromAppleScriptTabsAtIndex:) public func removeFromAppleScriptTabs(at index: Int) {
         guard let tab = objectInAppleScriptTabsAtIndex(index), ScriptHost.shared.model != nil else { return }
         _ = tab.objectSpecifier
-        ScriptTarget.closeTab(tab.tabID)
-        ScriptHost.shared.tabWrappers[tab.tabID] = nil
+        ScriptTarget.closeTab(tab.tabID, in: stateID)
     }
     public override var objectSpecifier: NSScriptObjectSpecifier? {
         guard ScriptThread.isMainThread else { return nil }
