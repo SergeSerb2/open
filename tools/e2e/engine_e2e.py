@@ -2809,7 +2809,6 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     # Bug sweep r6 idle and tab-switch cost rows (tools/e2e/perf_r6.py); OPEN_PERF_R6_ONLY=1 runs only them.
     if os.environ.get("OPEN_PERF_R6_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
-        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "dialog_r6.py"))["run"](app_factory, results, wait_until)
         return
     # Bug sweep r6 appearance and Tab rows (tools/e2e/a11y_r6.py); OPEN_A11Y_R6_ONLY=1 runs only them.
     if os.environ.get("OPEN_A11Y_R6_ONLY") == "1":
@@ -2832,6 +2831,7 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "dialog_r6.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
         sidebar_resize_gesture_checks(app_factory, results, tmp)
         window_chrome_followup_checks(app_factory, results, tmp)
@@ -14584,11 +14584,23 @@ def page_translate_checks(factory, results, tmp):
                   and copy[2] > 0 and copy[1] >= lpf[1] - .5 and copy[1] + copy[3] <= lpf[1] + lpf[3] + .5,
             'panel': lpf, 'content': lca, 'copy': copy, 'chars': len(long_sel.get('text', ''))}
         tabbed = app.call('translate', action='selection-key', code=48)
+        # Review of #665 (#4): Tab in the bubble gives the key back to the page (bubble stays); Tab
+        # while the command bar (not the page) has focus does not enter the bubble.
+        back = app.call('translate', action='selection-key', code=48)
+        app.call('key', key='l', modifiers=['cmd'], route='app')
+        bar_open = wait_until(lambda: app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
+        from_bar = app.call('translate', action='selection-key', code=48)
+        app.call('key', key='escape', route='app')
+        wait_until(lambda: not app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
         escaped = app.call('translate', action='selection-key', code=53)
         results['X8_selection_tab_reaches_copy'] = {
             'ok': tabbed.get('shown') is True and tabbed.get('panelKey') is True and tabbed.get('copyFocused') is True
+                  and back.get('shown') is True and back.get('panelKey') is False and back.get('parentKey') is True
+                  and bool(bar_open) and from_bar.get('panelKey') is not True
                   and escaped.get('shown') is False and wait_until(lambda: app.call('windows') and any(w.get('key') for w in app.call('windows') if w.get('class') == 'BrowserWindow') or None, timeout=3, step=.1) is not None,
             'tab': {k: tabbed.get(k) for k in ('shown', 'panelKey', 'copyFocused', 'parentKey')},
+            'tabBack': {k: back.get(k) for k in ('shown', 'panelKey', 'parentKey')},
+            'tabFromCommandBar': {k: from_bar.get(k) for k in ('shown', 'panelKey', 'parentKey')}, 'barOpen': bool(bar_open),
             'esc': {k: escaped.get(k) for k in ('shown',)}}
         app.call('translate', action='selection-close')
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'

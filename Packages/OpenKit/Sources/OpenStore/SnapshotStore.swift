@@ -90,6 +90,9 @@ public final class SnapshotStore: @unchecked Sendable {
     @MainActor
     private func capturePending(generation: Int) {
         guard generation == saveGeneration, let model = dirtyModel else { return }
+        // This work item has run: a failed prepare must not leave it "pending", or every later
+        // title-only save would wait for it forever (review of #665, #7).
+        lock.withLock { pendingWork = nil }
         do {
             try prepare(model: model)
             let dto = SnapshotMapper.dto(from: model); captureCount += 1
