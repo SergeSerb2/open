@@ -17,7 +17,9 @@ extension EngineWebContentHostFactory {
   /// address (its row's Copy Link is disabled): its internal `open://note/` route is never copied
   /// or shared (bug sweep r7 AB-06).
   private var pageURL: URL? {
-    let url = selectedContent?.url ?? selectedTab?.url
+    // Under a shown Peek, never the tab behind it, also before the Peek's first commit (review r1 #4).
+    let peek = controller.flatMap { $0.hasPeekController && $0.peekController.isShown ? $0.peekController : nil }
+    let url = selectedContent?.url ?? (peek != nil ? peek?.stack.last?.url : selectedTab?.url)
     return NoteTab.matches(url) ? nil : url
   }
   /// The Copy URL family has a page to copy (the menu items' enabled state).
@@ -71,7 +73,8 @@ extension EngineWebContentHostFactory {
     let handle = toasts.show(content) { [weak self, weak offered, offer] handle in
       guard let self else { return }
       guard offer.isShown else { self.shareFromToast(clean, handle: handle); return }
-      if let offered, let offeredURL { self.copyURLQuote(page: offered, url: offeredURL) }
+      // A page that navigated since the offer has another selection: copy nothing (review r1 #5).
+      if let offered, let offeredURL, offered.url == offeredURL { self.copyURLQuote(page: offered, url: offeredURL) }
       handle.dismiss()
     }
     guard offerQuote, Self.sharedQuotesEnabled, let page = offered else { return }

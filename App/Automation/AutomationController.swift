@@ -684,6 +684,15 @@
         // An external drop of `urls` (links or files) on the focused page's list at `index`
         // (optionally in `folder`), or on Favorites at `favoritesIndex`, through the real
         // validate and accept callbacks (bug sweep r7 AB-05).
+        if let raw = a["manager"] as? String {
+          // `manager=<Space ID>`: the Library Space Manager's column for that Space.
+          let (manager, target) = try realSpaceManager()
+          guard let space = app.model.spaces.first(where: { $0.id.description == raw }),
+                let urls = (a["urls"] as? [String])?.compactMap(URL.init(string:)), !urls.isEmpty else { throw Failure(message: "invalid manager url drop") }
+          let info = SplitDraggingInfo(window: target, point: .zero, urls: urls)
+          defer { info.draggingPasteboard.releaseGlobally() }
+          return manager.performExternalDrop(info, spaceID: space.id, childIndex: a["index"] as? Int ?? 0)
+        }
         let controller = try sidebarController(a)
         guard let window = controller.window, let raw = a["urls"] as? [String], !raw.isEmpty else { throw Failure(message: "invalid sidebar url drop") }
         let urls = try raw.map { text -> URL in guard let url = URL(string: text) else { throw Failure(message: "invalid url") }; return url }
@@ -691,6 +700,7 @@
           guard let uuid = UUID(uuidString: text) else { throw Failure(message: "invalid folder") }; return ItemID(rawValue: uuid)
         }
         let info = SplitDraggingInfo(window: window, point: .zero, urls: urls)
+        defer { info.draggingPasteboard.releaseGlobally() }
         return controller.sidebar.performExternalDrop(info, intoFolder: folder, childIndex: a["index"] as? Int ?? 0,
                                                       favoritesIndex: a["favoritesIndex"] as? Int)
       case "sidebar-drop":

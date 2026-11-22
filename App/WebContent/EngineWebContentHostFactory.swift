@@ -2386,7 +2386,7 @@ extension EngineWebContentHostFactory {
     if let space, space.id != focusedSpace?.id { focus(space: space) }
     select(nodeID: id)
     // Also a Blank Window's tab, which is not in the main model (bug sweep r7 AB-02).
-    NotificationClickRouter.shared.pageRequestedActivation(tab: id, url: webContent.url)
+    NotificationClickRouter.shared.pageRequestedActivation(tab: id, url: webContent.url ?? model.tab(id: id)?.url, context: browser.context)
     record("tab-request", webContent, ["request": "activate", "space": space?.id.description ?? ""])
   }
 

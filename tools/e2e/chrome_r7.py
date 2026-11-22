@@ -217,6 +217,33 @@ def run(factory, results, tmp, h):
                          hostsBefore=hosts_before, hostsAfter=hosts_after, lastSelected=last_selected)
         gate('chrome7_multi_url_drop_opens_all', multi_drop)
 
+        def manager_drop():
+            # AB-05 review r1 #1: a multi-item drop on a Library Space Manager column selected, and so
+            # loaded, every new tab.
+            close_others()
+            space = ws()['space']
+            tree = app.call('sidebar-tree')
+            start = 1 + len(tree['pinned']) + (1 if tree['today'] else 0)
+            urls = [origin + '/mgr-%d' % i for i in (1, 2, 3)]
+            app.call('library-open', section='spaces')
+            try:
+                hosts_before = app.call('host-counts')
+                accepted = None
+                deadline = time.time() + 10
+                while accepted is None and time.time() < deadline:
+                    try: accepted = app.call('sidebar-url-drop', manager=space, urls=urls, index=start)
+                    except Exception as error:
+                        if 'unavailable' not in str(error): raise
+                        time.sleep(.2)
+                time.sleep(1); hosts_after = app.call('host-counts')
+            finally:
+                h['_try'](lambda: app.call('library-close'))
+            today = [n.get('url') for n in app.call('sidebar-tree')['today']]
+            close_others()
+            return check(accepted and today[:3] == urls and hosts_after['created'] - hosts_before['created'] <= 1,
+                         accepted=accepted, today=today, hostsBefore=hosts_before, hostsAfter=hosts_after)
+        gate('chrome7_manager_multi_drop_loads_one', manager_drop)
+
         def rebound_tooltips():
             # AB-07: the sidebar toolbar tooltips and the compact More options rows showed the
             # default keys after a rebind, and "Stop loading" showed Reload's ⌘R.

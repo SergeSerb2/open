@@ -138,8 +138,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Page fullscreen is transient and never changes the saved sidebar mode.
     public var isPageFullscreen = false {
         didSet {
-            if isPageFullscreen { dismissSidebarReveal() }
+            // Site Controls anchors to a bar that page fullscreen removes; the bar made again on exit
+            // needs its Site Control state (bug sweep r7 AB-01, review r1 #3).
+            if isPageFullscreen { dismissSidebarReveal(); siteControl?.dismiss(reason: .sourceUnavailable, animated: false) }
             layoutContent()
+            if !isPageFullscreen { refreshSiteControlButtons() }
             if !isPageFullscreen, pendingSpaceCreationOptions != nil {
                 DispatchQueue.main.async { [weak self] in self?.resumePendingSpaceCreation() }
             }
