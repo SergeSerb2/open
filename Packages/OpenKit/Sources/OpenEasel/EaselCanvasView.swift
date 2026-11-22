@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// The Easel page: title, scrolling 1000-pt-wide canvas, floating tool bar, colour popover.
 /// UI only; the App's content host owns loading and saving (`onChange`).
@@ -22,6 +23,11 @@ public final class EaselCanvasView: NSView {
     public var onOpenURL: ((URL) -> Void)?
     /// Stores picture bytes (validated) and returns the object content, or nil.
     public var storeImage: ((Data) -> EaselImage?)?
+    /// Paste and drop store pictures through this when set: reading, hashing and writing run off the
+    /// main thread, and the pictures appear when they are stored (bug sweep r6 T-03).
+    public var storeImageAsync: (@MainActor (EaselImageSource) async -> EaselImage?)?
+    /// Paste or drop picture imports still being stored (automation read-back).
+    public private(set) var pendingImageImports = 0
     /// The canvas keeps its own undo stack, so ⌘Z on the canvas never undoes sidebar edits.
     public let canvasUndoManager = UndoManager()
     public override var undoManager: UndoManager? { canvasUndoManager }
@@ -373,6 +379,31 @@ public final class EaselCanvasView: NSView {
             return true
         }
         let files = (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        if let store = storeImageAsync {
+            // Only the pasteboard reads stay here. Files are picked by name (no disk access); the
+            // bytes are read, checked, hashed and written off the main thread.
+            var sources: [EaselImageSource] = files.prefix(20)
+                .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) == true }.map { .file($0) }
+            if sources.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
+               data.count <= EaselStore.maxImageBytes {
+                sources = [.data(data)]
+            }
+            if !sources.isEmpty {
+                pendingImageImports += 1
+                Task { @MainActor [weak self] in
+                    var images: [EaselImage] = []
+                    for source in sources { if let image = await store(source) { images.append(image) } }
+                    guard let self else { return }
+                    defer { self.pendingImageImports -= 1 }
+                    guard !images.isEmpty else { return }
+                    var ids: [UUID] = []
+                    var at = center
+                    for image in images { ids.append(self.insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
+                    self.setSelection(ids)
+                }
+                return true
+            }
+        }
         var images: [EaselImage] = []
         for file in files.prefix(20) {
             guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,

@@ -57,6 +57,12 @@ final class EaselContentHost: WebContentHost {
     let id = documentID
     canvas.imageURL = { [weak store] file in store?.imageURL(document: id, file: file) }
     canvas.storeImage = { [weak store] data in store?.addImage(data, document: id) }
+    canvas.storeImageAsync = { [weak self, weak store] source in
+      // Never store into an Easel whose tab closed (or that was deleted) while the import ran.
+      guard let self, !self.closed, let directory = store?.imagesDirectory(for: id) else { return nil }
+      let image = await Task.detached(priority: .userInitiated) { EaselStore.storeImage(source, in: directory) }.value
+      return self.closed ? nil : image
+    }
     canvas.onPickImage = { [weak self] in self?.pickImage() }
     canvas.onLink = { [weak self] url, point in self?.addLink(url, at: point) }
     canvas.liveViewProvider = { [weak self] objectID, url in self?.livePage(for: objectID, url: url) }

@@ -97,13 +97,28 @@ public final class EaselStore {
     /// Validates and stores image bytes as `images/<sha256>.<ext>` (deduplicated). Returns the
     /// file name and the pixel size, or nil for data that is not a supported picture.
     public func addImage(_ data: Data, document id: UUID) -> EaselImage? {
-        guard data.count <= Self.maxImageBytes, let info = Self.imageInfo(data) else { return nil }
+        Self.storeImage(.data(data), in: imagesDirectory(for: id))
+    }
+
+    /// `addImage` off the main actor, for paste and drop (bug sweep r6 T-03: up to 20 files of up to
+    /// 50 MiB were read, hashed and written on the main thread). `directory` is `imagesDirectory(for:)`;
+    /// it is created when missing (a new Easel's folder can wait for its first debounced save).
+    public nonisolated static func storeImage(_ source: EaselImageSource, in directory: URL) -> EaselImage? {
+        let data: Data
+        switch source {
+        case .data(let bytes): data = bytes
+        case .file(let file):
+            guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
+                  size <= maxImageBytes, let bytes = try? Data(contentsOf: file) else { return nil }
+            data = bytes
+        }
+        guard data.count <= maxImageBytes, let info = imageInfo(data) else { return nil }
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let file = "\(hash).\(info.ext)"
-        let url = imagesDirectory(for: id).appendingPathComponent(file)
+        let url = directory.appendingPathComponent(file)
         if !FileManager.default.fileExists(atPath: url.path) {
             do {
-                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 try data.write(to: url, options: .atomic)
             } catch { return nil }
         }
@@ -215,4 +230,10 @@ public final class EaselStore {
     nonisolated static var decoder: JSONDecoder {
         let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d
     }
+}
+
+/// Picture bytes for `EaselStore.storeImage`: a file to read, or bytes already in memory.
+public enum EaselImageSource: Sendable {
+    case file(URL)
+    case data(Data)
 }

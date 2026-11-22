@@ -56,7 +56,8 @@ extension AutomationController {
       // Puts test data on the general pasteboard, as another app's copy would.
       let pb = NSPasteboard.general
       pb.clearContents()
-      if let path = args["file"] as? String { pb.writeObjects([URL(fileURLWithPath: path) as NSURL]) }
+      if let paths = args["files"] as? [String] { pb.writeObjects(paths.map { URL(fileURLWithPath: $0) as NSURL }) }
+      else if let path = args["file"] as? String { pb.writeObjects([URL(fileURLWithPath: path) as NSURL]) }
       else if let path = args["imageData"] as? String, let data = FileManager.default.contents(atPath: path) { pb.setData(data, forType: .png) }
       else if let raw = args["url"] as? String, let url = URL(string: raw) { pb.writeObjects([url as NSURL]); pb.setString(raw, forType: .string) }
       else if let text = args["text"] as? String { pb.setString(text, forType: .string) }
@@ -293,6 +294,7 @@ extension AutomationController {
     if let host = factory.easelHosts[tab.id], !host.closed {
       state["shown"] = host.canvas.window != nil && !host.canvas.isHiddenOrHasHiddenAncestor
       state["canvas"] = host.canvas.state()
+      state["pendingImageImports"] = host.canvas.pendingImageImports
       state["recreated"] = host.recreated
       if let window = host.canvas.window {
         state["firstResponder"] = window.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"

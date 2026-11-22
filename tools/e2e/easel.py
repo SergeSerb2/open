@@ -14,14 +14,14 @@ from pathlib import Path
 from loopback_http import LoopbackHTTPServer
 
 
-def make_png(path, width, height, rgb):
-    """A synthetic solid-colour PNG (no image library needed)."""
+def make_png(path, width, height, rgb, level=-1):
+    """A synthetic solid-colour PNG (no image library needed). level=0 stores it uncompressed."""
     import struct, zlib
     raw = b''.join(b'\x00' + bytes(rgb) * width for _ in range(height))
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
     png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) \
-        + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+        + chunk(b'IDAT', zlib.compress(raw, level)) + chunk(b'IEND', b'')
     Path(path).write_bytes(png)
     return path
 
@@ -305,17 +305,39 @@ def run(factory, results, tmp, api):
 
             # E22: a pasted picture file lands at most 400 pt wide, stored once by its hash.
             picture = make_png(Path(tmp) / 'picture.png', 800, 400, (220, 90, 60))
+            def stored():
+                # Paste and drop store pictures off the main thread (bug sweep r6 T-03): wait for them.
+                return api.wait_until(lambda: (lambda x: x if x.get('pendingImageImports', 0) == 0 else None)(easel(tab=e2)), timeout=10, step=.05) or easel(tab=e2)
             app.call('easel', action='pasteboard', file=str(picture))
-            s = easel(action='edit', op='paste', tab=e2)
+            easel(action='edit', op='paste', tab=e2)
+            s = stored()
             imgs = [x for x in objects(s) if x['kind'] == 'image']
             record('E22_paste_image_file', len(imgs) == 1 and imgs[0]['pixelSize'] == [800, 400]
                    and abs(imgs[0]['frame'][2] - 400) < .01 and abs(imgs[0]['frame'][3] - 200) < .01
                    and s['imageFiles'] == [imgs[0]['file']] and canvas(s)['selection'] == [imgs[0]['id']], state=canvas(s), files=s['imageFiles'])
             # E23: the same bytes as picture data reuse the stored file.
             app.call('easel', action='pasteboard', imageData=str(picture))
-            s = easel(action='edit', op='paste', tab=e2)
+            easel(action='edit', op='paste', tab=e2)
+            s = stored()
             record('E23_image_dedup', len([x for x in objects(s) if x['kind'] == 'image']) == 2 and len(s['imageFiles']) == 1,
                    files=s['imageFiles'])
+            # Bug sweep r6 T-03: pasting a 48 MiB picture file read, hashed and wrote it inside the Paste
+            # command, on the main thread (up to 20 such files per paste or drop). Now the Paste reply
+            # comes back with the import still pending and no picture yet; the picture lands after. The
+            # times (Paste less a Select All round trip) and the load are evidence only, not asserted.
+            big = make_png(Path(tmp) / 'large.png', 4096, 4096, (30, 120, 200), level=0)
+            app.call('easel', action='pasteboard', file=str(big))
+            started = time.monotonic(); easel(action='edit', op='selectAll', tab=e2); round_trip = time.monotonic() - started
+            started = time.monotonic(); pasted = easel(action='edit', op='paste', tab=e2); paste = time.monotonic() - started
+            def is_large(x): return x['kind'] == 'image' and x['pixelSize'] == [4096, 4096]
+            deferred = pasted.get('pendingImageImports') == 1 and not any(is_large(x) for x in objects(pasted))
+            s = stored()
+            large = [x for x in objects(s) if is_large(x)]
+            record('E23p_large_paste_off_main_thread', deferred and len(large) == 1 and len(s['imageFiles']) == 2
+                   and canvas(s)['selection'] == [large[0]['id']],
+                   deferred=deferred, bytes=big.stat().st_size, pasteMs=round(paste * 1000, 1),
+                   roundTripMs=round(round_trip * 1000, 1), load=os.getloadavg(), files=s['imageFiles'])
+            if large and canvas(s)['selection'] == [large[0]['id']]: easel(action='edit', op='delete', tab=e2)
 
             # E24: a pasted address makes a link card at once; its metadata and picture follow.
             app.call('easel', action='pasteboard', url=origin + '/page.html')
