@@ -33,6 +33,9 @@ public final class ScriptHost {
     /// have none and change the model only.
     public var selectInWindow: ((WindowID, SpaceID, ItemID) -> Bool)?
     public var focusSpaceInWindow: ((WindowID, SpaceID) -> Bool)?
+    /// The window's own single-tab close (⌘W): beforeunload, the neighbour selection, and
+    /// pinned tabs and Favorites that stay and unload. Scratch probes have none and close in the model.
+    public var closeTab: ((ItemID) -> Bool)?
     public var model: BrowserModel? { modelProvider?() }
     public var lastSetterError: (number: Int, message: String)?
     /// `execute` runs only while this answers true. The App's View ▸ Developer

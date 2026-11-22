@@ -331,9 +331,23 @@ extension AppDelegate {
     host.focusSpaceInWindow = { [weak self] window, space in
       self?.hostFactories[window]?.performSidebar(.switchSpace(space)) == true
     }
+    // ⌘W's close path in the window that holds the page (its beforeunload and its host),
+    // else one that shows the tab or its Space. Only main-model windows: scripts see no other.
+    host.closeTab = { [weak self] id in self?.scriptCloseFactory(for: id)?.performSidebar(.close(nodeID: id)) == true }
     host.littleTab = AppScriptLittleTabs(app: self)
     refreshScriptingEngine()
     host.purgeRemovedWrappers()
+  }
+  /// The main-model window that holds the tab's page, else one that shows the tab or its Space,
+  /// else the front one. Scripts see no Incognito or Blank Window.
+  private func scriptCloseFactory(for id: ItemID) -> EngineWebContentHostFactory? {
+    let factories: [EngineWebContentHostFactory] = windowControllers.compactMap { hostFactories[$0.windowID] }.filter { $0.model === model }
+    if let owner = factories.first(where: { $0.hosts[id] != nil }) { return owner }
+    if let shown = factories.first(where: { $0.visibleTabs.contains { $0.id == id } }) { return shown }
+    for factory in factories {
+      if let focused = factory.focusedSpace?.id, factory.space(for: id)?.id == focused { return factory }
+    }
+    return frontMainModelWindowController.flatMap { hostFactories[$0.windowID] }
   }
   func purgeScriptingWrappers() { ScriptHost.shared.purgeRemovedWrappers() }
   func refreshScriptingEngine() {

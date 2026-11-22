@@ -12,7 +12,10 @@ public final class ScriptWindow: NSObject {
     var nsWindow: NSWindow? { ScriptHost.shared.windowForState?(stateID) }
     private var isCreationPlaceholder = false
     private var pendingMode = "normal"
-    var creationProperties: [String: Any] { ["mode": pendingMode] }
+    /// Cocoa applies `with properties` in no fixed order: a private request on either key wins,
+    /// so `{mode:"normal", incognito:true}` can never make a window that records history.
+    private var incognitoRequested = false
+    var creationProperties: [String: Any] { ["mode": incognitoRequested ? "incognito" : pendingMode] }
     init(state: BrowserWindowState) { stateID = state.id; super.init() }
     public override init() {
         stateID = WindowID()
@@ -62,11 +65,21 @@ public final class ScriptWindow: NSObject {
     }
     @objc public dynamic var isIncognito: Bool {
         get { mode == "incognito" }
-        set { guard !isCreationPlaceholder else { return }; guard liveState() != nil else { return }; rejectModeChange() }
+        set {
+            if isCreationPlaceholder { incognitoRequested = incognitoRequested || newValue; return }
+            guard liveState() != nil else { return }; rejectModeChange()
+        }
     }
     @objc public dynamic var mode: String {
-        get { if isCreationPlaceholder { return pendingMode }; guard liveState() != nil else { return "normal" }; return ScriptHost.shared.windowModes[stateID] ?? "normal" }
-        set { if isCreationPlaceholder { pendingMode = newValue; return }; guard liveState() != nil else { return }; rejectModeChange() }
+        get { if isCreationPlaceholder { return creationProperties["mode"] as? String ?? pendingMode }; guard liveState() != nil else { return "normal" }; return ScriptHost.shared.windowModes[stateID] ?? "normal" }
+        set {
+            if isCreationPlaceholder {
+                pendingMode = newValue
+                incognitoRequested = incognitoRequested || newValue.lowercased() == "incognito"
+                return
+            }
+            guard liveState() != nil else { return }; rejectModeChange()
+        }
     }
     private func rejectModeChange() {
         ScriptFailure.report(ScriptError.modeSetOnce, "mode can be set only once during creation of the window.")
@@ -119,9 +132,9 @@ public final class ScriptWindow: NSObject {
         ScriptCreation.makeSpace()
     }
     @objc(removeFromAppleScriptTabsAtIndex:) public func removeFromAppleScriptTabs(at index: Int) {
-        guard let tab = objectInAppleScriptTabsAtIndex(index), let model = ScriptHost.shared.model else { return }
+        guard let tab = objectInAppleScriptTabsAtIndex(index), ScriptHost.shared.model != nil else { return }
         _ = tab.objectSpecifier
-        model.closeTab(id: tab.tabID)
+        ScriptTarget.closeTab(tab.tabID)
         ScriptHost.shared.tabWrappers[tab.tabID] = nil
     }
     public override var objectSpecifier: NSScriptObjectSpecifier? {

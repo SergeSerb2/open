@@ -15272,6 +15272,7 @@ def main():
             results["applescript"] = CheckedResults(tracker)
             applescript = runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))
             applescript["scope_checks"](factory, results["applescript"], _fixture_server, _restore_defaults, wait_until)
+            applescript["window_close_checks"](factory, results["applescript"], _fixture_server, wait_until)
             applescript["run"](factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
         elif opts.only == "sitedata":
             results["sitedata"] = CheckedResults(tracker)

@@ -74,6 +74,22 @@ enum ScriptTarget {
         body()
     }
 
+    /// close tab and delete tab: the window's close path, else (scratch probes) the model.
+    static func closeTab(_ id: ItemID) {
+        if let close = ScriptHost.shared.closeTab, close(id) { return }
+        ScriptHost.shared.model?.closeTab(id: id)
+    }
+
+    /// The selection after make new tab: the window's own select path (no Undo step, the page
+    /// shown). Scratch probes change the model only, also with no Undo step: make is one step.
+    static func showMadeTab(_ tab: Tab, spaceID: SpaceID, window: BrowserWindowState, model: BrowserModel) {
+        if let select = ScriptHost.shared.selectInWindow, select(window.id, spaceID, tab.id) { return }
+        withoutUndo(model) {
+            if window.focusedSpaceID != spaceID { model.focusSpace(windowID: window.id, spaceID: spaceID) }
+            model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: tab.id)
+        }
+    }
+
     static func bringForward(_ state: BrowserWindowState) {
         // Scratch probes have model windows but no NSWindow. Do not activate another app.
         guard let window = ScriptHost.shared.windowForState?(state.id) else { return }
@@ -110,10 +126,7 @@ enum ScriptCreation {
         guard let url = parsedURL(properties["URL"] as? String ?? "about:blank") else { return nil }
         // §5.7 always appends to Today, regardless of a flattened insertion index.
         let tab = model.newTab(in: spaceID, url: url, at: nil)
-        if let window = ScriptRead.preferredWindow() {
-            model.focusSpace(windowID: window.id, spaceID: spaceID)
-            model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: tab.id)
-        }
+        if let window = ScriptRead.preferredWindow() { ScriptTarget.showMadeTab(tab, spaceID: spaceID, window: window, model: model) }
         return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
@@ -123,7 +136,7 @@ enum ScriptCreation {
         guard model.space(id: state.focusedSpaceID) != nil else { ScriptFailure.missing("space", state.focusedSpaceID.rawValue.uuidString); return nil }
         guard let url = parsedURL(properties["URL"] as? String ?? "about:blank") else { return nil }
         let tab = model.newTab(in: state.focusedSpaceID, url: url, at: nil)
-        model.selectNode(windowID: state.id, spaceID: state.focusedSpaceID, nodeID: tab.id)
+        ScriptTarget.showMadeTab(tab, spaceID: state.focusedSpaceID, window: state, model: model)
         return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
@@ -143,7 +156,14 @@ enum ScriptCreation {
 
     static func makeWindow(properties: [String: Any]) -> ScriptWindow? {
         guard ScriptRead.model() != nil else { return nil }
-        let incognito = properties["mode"] as? String == "incognito"
+        // Only the two documented modes. Any other value (a misspelling, "private") must fail,
+        // never fall back to a normal window that records history.
+        let requested = properties["mode"] as? String ?? "normal"
+        guard ["normal", "incognito"].contains(requested.lowercased()) else {
+            ScriptFailure.report(ScriptError.invalidValue, "\"\(requested)\" is not a window mode. Use normal or incognito.")
+            return nil
+        }
+        let incognito = requested.lowercased() == "incognito"
         guard let id = ScriptHost.shared.makeWindow?(incognito),
               let state = ScriptHost.shared.model?.windows.first(where: { $0.id == id }) else {
             ScriptFailure.report(incognito ? ScriptError.incognitoUnavailable : ScriptError.noWindow,
@@ -383,7 +403,7 @@ extension ScriptTab {
         guard let target = ScriptTarget.tab(from: command, receiver: self) else { return nil }
         _ = target.objectSpecifier
         if target.isLittleTab { ScriptHost.shared.littleTab?.close(target.tabID) }
-        else { ScriptHost.shared.model?.closeTab(id: target.tabID) }
+        else { ScriptTarget.closeTab(target.tabID) }
         ScriptHost.shared.tabWrappers[target.tabID] = nil
         return nil
     }
