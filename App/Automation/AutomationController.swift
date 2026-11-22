@@ -186,7 +186,7 @@
         defer { PeekMotionTrace.mark("socket.end." + traceName) }
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
-        if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
+        if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu", "engine-type", "engine-click-row"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if cmd == "boost-editor", ["key", "type", "tap", "drag"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if cmd == "boost-gallery-ui", args["action"] as? String != "state" { inputCommand = true }
@@ -551,6 +551,22 @@
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
+      case "settings-appearance":
+        // Appearance ▸ Show the toolbar through the Settings model. `key` makes an open Settings window key
+        // again the way a click does (no show(), which re-reads the front window itself).
+        let settings = app.settingsPresenter.settings
+        switch a["action"] as? String ?? "state" {
+        case "key":
+          guard let window = app.settingsPresenter.settingsPresenter.window, window.isVisible else { throw Failure(message: "Settings is not open") }
+          window.makeKeyAndOrderFront(nil)
+        case "toolbar":
+          guard let on = a["on"] as? Bool else { throw Failure(message: "missing on") }
+          settings.appearanceToolbar = on
+        case "state": break
+        default: throw Failure(message: "unknown settings-appearance action")
+        }
+        return ["window": settings.appearanceWindowID?.description ?? "", "toolbar": settings.appearanceToolbar,
+          "key": NSApp.keyWindow === app.settingsPresenter.settingsPresenter.window] as [String: Any]
       case "pasteboard-preserve": return AutomationPasteboard.preserve()
       case "pasteboard-restore": return AutomationPasteboard.restore()
       case "pasteboard":
@@ -1635,7 +1651,7 @@
       case "undo-state":
         if a["clear"] as? Bool == true { app.undoManager.removeAllActions() }
         return ["generation": app.model.undoGeneration, "canUndo": app.undoManager.canUndo,
-          "canRedo": app.undoManager.canRedo] as [String: Any]
+          "canRedo": app.undoManager.canRedo, "undoName": app.undoManager.undoActionName] as [String: Any]
       case "window-interrupt":
         guard let win = w.window else { throw Failure(message: "no window") }
         switch a["kind"] as? String {

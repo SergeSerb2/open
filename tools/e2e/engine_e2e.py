@@ -15218,11 +15218,16 @@ def main():
                 relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
-            # OPEN_COMMANDBAR_NAV4_ONLY=1 runs only the bug sweep round 4 rows (tools/e2e/nav_round4.py).
-            if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
+            # OPEN_COMMANDBAR_NAV4_ONLY=1 runs only the bug sweep round 4 rows (tools/e2e/nav_round4.py);
+            # OPEN_COMMANDBAR_SETCMD6_ONLY=1 only the round 6 rows (tools/e2e/setcmd_round6.py).
+            setcmd6_only = os.environ.get("OPEN_COMMANDBAR_SETCMD6_ONLY") == "1"
+            if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1" and not setcmd6_only:
                 commandbar_checks(factory, results[opts.only], tmp, opts.config)
-            if opts.only == "commandbar":
+            if opts.only == "commandbar" and not setcmd6_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/nav_round4.py"))["run"](
+                    factory, results[opts.only], tmp, sys.modules[__name__])
+            if opts.only == "commandbar" and os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/setcmd_round6.py"))["run"](
                     factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "app-icons":
             # tools/e2e/app_icons.py: picker, cache, reset, relaunch, and the macOS icon grid of every icon.
