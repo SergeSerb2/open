@@ -6,6 +6,7 @@ Loopback pages only; every other host resolves to nothing, so no row reaches a r
 """
 import http.server
 import json
+import os
 import threading
 import time
 import traceback
@@ -46,7 +47,9 @@ def run(factory, results, tmp, h):
         print('win6 %-44s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
         if not ok: print('  ' + json.dumps(evidence, default=str)[:1500], flush=True)
 
+    only = set(filter(None, os.environ.get('OPEN_WIN6_ROWS', '').split(',')))
     def guarded(name, body, cleanup=None):
+        if only and name not in only: return
         try:
             body()
         except Exception as error:  # A failed setup is a FAIL row, never a skipped one.
@@ -221,6 +224,16 @@ def run(factory, results, tmp, h):
             kept = current() is not None
             row('win6_little_open_move_stay_keeps_page', bool(prompted) and kept and len(tabs()) == tabs_before,
                 prompted=bool(prompted), kept=kept, tabsBefore=tabs_before, tabsAfter=len(tabs()))
+            if kept:
+                # Leave: the page moves to the main window at its current URL, and the window closes.
+                app.call('little-open-eval', id=session['id'], js='history.pushState({}, "", "/lomoved");true')
+                app.call('key', window=win, key='o', modifiers=['cmd'])
+                again = wait_until(lambda: app.call('dialog-state', window=win).get('visible'), timeout=4, step=.05)
+                if again: app.call('dialog-button', window=win, accept=True)
+                gone = wait_until(lambda: current() is None, timeout=5, step=.05)
+                moved = wait_until(lambda: any(t['url'].endswith('/lomoved') and t.get('selected') for t in tabs()), timeout=5, step=.05)
+                row('win6_little_open_move_leave_opens_in_space', bool(again) and bool(gone) and bool(moved),
+                    prompted=bool(again), gone=bool(gone), urls=[t['url'] for t in tabs()][-3:])
             if current() is not None:
                 try: app.call('little-open-eval', id=session['id'], js='onbeforeunload=null;true')
                 except Exception: pass
