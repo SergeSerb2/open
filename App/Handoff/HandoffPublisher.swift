@@ -29,10 +29,12 @@ final class HandoffPublisher {
     }
   }
 
-  /// Called from a page change. Only the visible page of the key window matters.
+  /// Called from a page change. Only the visible page of the key window matters: a tab, Space
+  /// or window change reaches Handoff through the menu rebuild. A background tab's title or
+  /// address no longer wakes it while an activity is published (bug sweep r6, PERF-06).
   func pageChanged(_ page: OEWebContent, changes: OEWebContentChange) {
     guard !changes.isDisjoint(with: [.URL, .title]) else { return }
-    if page === currentPage() || activity != nil { setNeedsUpdate() }
+    if page === currentPage() { setNeedsUpdate() }
   }
 
   func currentPage() -> OEWebContent? {

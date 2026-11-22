@@ -203,7 +203,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
-    if !changes.isDisjoint(with: [.URL, .title]) { owner.scheduleSave() }
+    // A new address saves after 1 s; a title alone (often a background tab's live counter) within 10 s (PERF-06).
+    if changes.contains(.URL) { owner.scheduleSave() } else if changes.contains(.title) { owner.scheduleMetadataSave() }
     // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
     if changes.contains(.selection) { owner.translate.syncStatus() }
     // Tab sleep's hard event contract: every change of every page, background tabs included.

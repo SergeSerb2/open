@@ -849,6 +849,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)
   }
+  /// A page title alone changed: saved within 10 s (SnapshotStore.scheduleMetadataSave, PERF-06).
+  func scheduleMetadataSave() {
+    guard let model, (!isFirstRun || firstRunSaved) else { return }
+    snapshotStore.scheduleMetadataSave(model: model)
+  }
 
   /// Called after the message loop returns, before the engine shuts down.
   func saveState() {
