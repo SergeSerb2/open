@@ -2159,6 +2159,9 @@ public final class BrowserModel {
     @ObservationIgnored public var onArchiveError: ((Error) -> Void)?
     /// App policy initialization, including Undo/Redo reinsertion. Must not register Undo.
     @ObservationIgnored public var onProfileCreated: ((Profile) -> Void)?
+    /// App policy for its data folders: Undo of a Profile's creation removed it (`removed` true), or Redo
+    /// brought it back (false). Model commands do no I/O. Must not register Undo.
+    @ObservationIgnored public var onProfileCreationUndone: ((_ profile: Profile, _ removed: Bool) -> Void)?
 
     public var defaultProfile: Profile? { profiles.first { $0.dataDirectoryName == "Default" } ?? profiles.first }
 
@@ -2178,9 +2181,15 @@ public final class BrowserModel {
         unavailableProfileDirectoryNames.insert(profile.dataDirectoryName.lowercased())
         let slot = profiles.count
         insertProfile(profile, at: slot)
-        registerUndo({ model in model.removeProfile(profile.id); return true }, reapply: { model in
+        func undoCreation(_ model: BrowserModel) -> Bool {
+            // A Space that still uses the Profile keeps it (and its folders, which the App would journal).
+            guard model.spaces(using: profile.id).isEmpty else { return false }
+            model.removeProfile(profile.id); model.onProfileCreationUndone?(profile, true); return true
+        }
+        registerUndo(undoCreation, reapply: { model in
             model.insertProfile(profile, at: slot)
-            return { model in model.removeProfile(profile.id); return true }
+            model.onProfileCreationUndone?(profile, false)
+            return undoCreation
         })
         return profile
     }
@@ -2341,12 +2350,16 @@ public final class BrowserModel {
             if let newProfile { model.unavailableProfileDirectoryNames.insert(newProfile.dataDirectoryName.lowercased()) }
             return { model in
                 guard revert(model) else { return false }
-                if let newProfile { model.removeProfile(newProfile.id) }
+                if let newProfile { model.removeProfile(newProfile.id); model.onProfileCreationUndone?(newProfile, true) }
                 return true
             }
         }
         guard let revert = insert(self) else { return nil }
-        registerUndo(revert, reapply: { insert($0) ?? Self.noRevert })
+        registerUndo(revert, reapply: { model in
+            guard let revert = insert(model) else { return Self.noRevert }
+            if let newProfile { model.onProfileCreationUndone?(newProfile, false) }
+            return revert
+        })
         return space
     }
 
