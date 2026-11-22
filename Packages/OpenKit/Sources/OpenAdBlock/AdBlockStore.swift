@@ -118,6 +118,9 @@ public final class AdBlockStore {
     private var operations: [ProfileID: Task<Void, any Error>] = [:]
     private var retirements: [ProfileID: Task<Void, Never>] = [:]
     private var schedules: [ProfileID: Task<Void, Never>] = [:]
+    /// Profiles opened with scheduled updates, and the debug timer scale they use. The schedule
+    /// runs only while ad blocking is on: no list request while the user has turned it off.
+    private var scheduleScales: [ProfileID: Double] = [:]
     private let repository: ListRepository
     private let lease: DirectoryLease
     private let temporaryRoot: TemporaryRoot?
@@ -208,31 +211,37 @@ public final class AdBlockStore {
         if scheduleUpdates {
             let scale = Double(ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE"] ?? "1") ?? 1
             guard scale.isFinite, scale > 0, scale <= 1 else { throw AdBlockError("invalid debug schedule scale") }
-            let first = states[profile].map { initialUpdateDelay($0, scale: scale) } ?? Self.minimumUpdateDelay
-            schedules[profile] = Task { [weak self] in
-                var delay: TimeInterval = Self.minimumUpdateDelay
-                var failures = 0
-                var sleep = first
-                do {
-                    while !Task.isCancelled {
-                        try await Task.sleep(for: .seconds(sleep))
-                        try Task.checkCancellation()
-                        guard self != nil else { return }
-                        let outcome: String
-                        do {
-                            try await self?.updateListsNow(profile: profile)
-                            failures = 0; delay = Self.updateInterval; outcome = "ok"
-                        } catch {
-                            if Task.isCancelled { return }
-                            outcome = (error as? AdBlockError)?.description == "profile operation is in progress" ? "busy" : "failed"
-                            delay = [60.0, 300, 1800, 86400][min(failures, 3)]
-                            failures += 1
-                        }
-                        self?.onScheduledUpdate?(outcome, delay)
-                        sleep = delay * scale
+            scheduleScales[profile] = scale
+            if isEnabled { startSchedule(profile, scale: scale) }
+        }
+    }
+
+    private func startSchedule(_ profile: ProfileID, scale: Double) {
+        schedules[profile]?.cancel()
+        let first = states[profile].map { initialUpdateDelay($0, scale: scale) } ?? Self.minimumUpdateDelay
+        schedules[profile] = Task { [weak self] in
+            var delay: TimeInterval = Self.minimumUpdateDelay
+            var failures = 0
+            var sleep = first
+            do {
+                while !Task.isCancelled {
+                    try await Task.sleep(for: .seconds(sleep))
+                    try Task.checkCancellation()
+                    guard self != nil else { return }
+                    let outcome: String
+                    do {
+                        try await self?.updateListsNow(profile: profile)
+                        failures = 0; delay = Self.updateInterval; outcome = "ok"
+                    } catch {
+                        if Task.isCancelled { return }
+                        outcome = (error as? AdBlockError)?.description == "profile operation is in progress" ? "busy" : "failed"
+                        delay = [60.0, 300, 1800, 86400][min(failures, 3)]
+                        failures += 1
                     }
-                } catch { /* session/profile closed */ }
-            }
+                    self?.onScheduledUpdate?(outcome, delay)
+                    sleep = delay * scale
+                }
+            } catch { /* session/profile closed, or ad blocking turned off */ }
         }
     }
 
@@ -266,7 +275,7 @@ public final class AdBlockStore {
         if retired.contains(profile) { return }
         guard !busy.contains(profile) else { throw AdBlockError("profile operation is in progress") }
         let directory = directories.removeValue(forKey: profile)
-        schedules.removeValue(forKey: profile)?.cancel()
+        schedules.removeValue(forKey: profile)?.cancel(); scheduleScales[profile] = nil
         states.removeValue(forKey: profile); exclusions.removeValue(forKey: profile)
         privateSessions = privateSessions.filter { $0.value.profile != profile }
         lastUpdateResults.removeValue(forKey: profile)
@@ -286,7 +295,7 @@ public final class AdBlockStore {
         privateSessions = privateSessions.filter { $0.value.profile != profile }
         // isProfileOpen becomes false at this barrier, before any IO drain.
         NotificationCenter.default.post(name: Self.didChange, object: self)
-        schedules.removeValue(forKey: profile)?.cancel()
+        schedules.removeValue(forKey: profile)?.cancel(); scheduleScales[profile] = nil
         let operation = operations[profile]
         operation?.cancel()
         let task = Task { @MainActor in
@@ -308,6 +317,15 @@ public final class AdBlockStore {
             try writeJSON(GlobalSettings(nativeAdBlockEnabled: enabled), to: root.appendingPathComponent("adblock-settings.json"))
         }
         isEnabled = enabled
+        // Off: no scheduled list request. On: open Profiles schedule again, first check due as at open.
+        if enabled {
+            for (profile, scale) in scheduleScales where schedules[profile] == nil && isProfileOpen(profile) {
+                startSchedule(profile, scale: scale)
+            }
+        } else {
+            for task in schedules.values { task.cancel() }
+            schedules.removeAll()
+        }
         onEngineEvent?(.enabled(enabled))
         NotificationCenter.default.post(name: Self.didChange, object: self)
     }

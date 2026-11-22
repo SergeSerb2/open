@@ -75,6 +75,15 @@ public struct KeyBindingStore: Sendable, Codable, Hashable {
     public var unknownCommandIDs: [String] {
         bindings.keys.filter { CommandRegistry.byID[$0] == nil }.sorted()
     }
+
+    /// The same bindings without the command IDs this build does not know (a command that a later
+    /// or older build has and this one lacks). The rest still applies (lead ruling, bug sweep r6);
+    /// the file itself is never rewritten on load, so the other build keeps its binding.
+    public var droppingUnknownCommands: KeyBindingStore {
+        var known = self
+        for id in unknownCommandIDs { known.bindings.removeValue(forKey: id) }
+        return known
+    }
 }
 
 /// One shortcut conflict found by `ConflictChecker`.

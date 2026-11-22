@@ -652,7 +652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     factory.attach(controller)
     windowControllers.append(controller)
     updater?.userDriver.attach(controller)
-    if session == nil { media.attach(factory); tabSleep.attach(factory) }
+    if session == nil { media.attach(factory); tabSleep.attach(factory) } else { tabSleep.attachInputProtection(factory) }
     // Off the first-paint path: the media source menu reads one small state file.
     DispatchQueue.main.async { [weak self] in self?.settingsPresenter.syncLibraryMediaSources() }
     activeWindowID = state.id
@@ -831,7 +831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Shell window lifetime and the setup-created Welcome tab are not sidebar
   /// edits. Preserve an
   /// enclosing caller's disabled registration state, including on early return.
-  private func withoutWindowUndo<T>(_ body: () -> T) -> T {
+  func withoutWindowUndo<T>(_ body: () -> T) -> T {
     let wasEnabled = undoManager.isUndoRegistrationEnabled
     if wasEnabled { undoManager.disableUndoRegistration() }
     defer { if wasEnabled { undoManager.enableUndoRegistration() } }
@@ -848,6 +848,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func scheduleSave() {
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)
+  }
+  /// A page title alone changed: saved within 10 s (SnapshotStore.scheduleMetadataSave, PERF-06).
+  func scheduleMetadataSave() {
+    guard let model, (!isFirstRun || firstRunSaved) else { return }
+    snapshotStore.scheduleMetadataSave(model: model)
   }
 
   /// Called after the message loop returns, before the engine shuts down.
@@ -994,9 +999,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   #endif
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
-    let owner = hostFactories.values.first { $0.isIncognito && $0.incognitoSession?.context === request.context }
-      ?? frontStandardWindowController.flatMap { hostFactories[$0.windowID] }
-    return owner?.adoptUnownedRequest(request)
+    if let owner = hostFactories.values.first(where: { $0.isIncognito && $0.incognitoSession?.context === request.context }) {
+      return owner.adoptUnownedRequest(request)
+    }
+    // Only a main-model window: a Blank Window's one-Profile model drops another Profile's request
+    // and must not take this Profile's. Prefer a window that already shows the request's Profile,
+    // so another window is not switched to it; with none open, reopen one (bug sweep r6 WL-12).
+    // No window may open during Quit or engine shutdown (review r2 #2).
+    guard engineReady, !terminationRequested, !shutdownPrepared, let profile = regularProfile(for: request.context),
+      let space = model.mostRecentlyFocusedSpace(profileID: profile.id) ?? model.spaces.first(where: { $0.profileID == profile.id })
+    else { return nil }
+    let mains = windowControllers.filter { hostFactories[$0.windowID].map { !$0.isIncognito && $0.model === model } ?? false }
+    let ordered = NSApp.orderedWindows.compactMap { window in mains.first { $0.window === window } } + mains
+    let showing = ordered.first { hostFactories[$0.windowID]?.focusedSpace?.profileID == profile.id }
+    guard let controller = showing ?? ordered.first ?? makeWindow(focusedSpaceID: space.id) else { return nil }
+    // The request opens a foreground tab: a window behind another or minimized comes forward,
+    // or the page opens where nobody sees it (review r2 #1; as openNewTabInMainWindow).
+    if let window = controller.window, window.isMiniaturized || NSApp.keyWindow !== window {
+      if window.isMiniaturized { window.deminiaturize(nil) }
+      focusWindow(controller.windowID, activate: true)
+    }
+    return hostFactories[controller.windowID]?.adoptUnownedRequest(request)
   }
 
   func engineWillShutDown() {
@@ -1021,7 +1044,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     afterPaintTask?.cancel(); afterPaintTask = nil
     noWebStartupTask?.cancel(); noWebStartupTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
-    littleOpenCoordinator?.closeAll()
+    littleOpenCoordinator?.closeAllForShutdown()
     downloadsCenter.closeDetachedPages()
     engineReady = false
     refreshScriptingEngine()
@@ -1151,7 +1174,7 @@ extension AppDelegate: CommandDispatcher {
       for _ in 0..<40 {
         guard let self, let page, self.engineReady, !self.shutdownPrepared,
               !self.terminationRequested, !Task.isCancelled else { return }
-        let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
+        let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0", userGesture: false)) as? Bool
         if painted == true {
           self.deferredStartupBegan = true
           self.scheduleCloneCleanupAfterPaint()
@@ -1303,7 +1326,10 @@ extension AppDelegate: CommandDispatcher {
     #endif
     let file = options.userDataDirectory.appendingPathComponent("State/keybindings.json")
     do {
-      let loaded = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
+      let stored = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
+      // A command this build does not know drops only its own binding (the file stays as it is).
+      let loaded = stored.droppingUnknownCommands
+      if !stored.unknownCommandIDs.isEmpty { Self.commandLog("Key bindings for unknown commands were ignored: \(stored.unknownCommandIDs.joined(separator: ", "))") }
       guard loaded.isSupported, ConflictChecker.unexpected(ConflictChecker.check(overrides: loaded)).isEmpty else {
         throw CocoaError(.fileReadCorruptFile)
       }
@@ -1314,6 +1340,7 @@ extension AppDelegate: CommandDispatcher {
     }
     for controller in windowControllers { controller.keyBindingOverrides = keyBindings }
     littleOpenCoordinator?.keyBindingsChanged()
+    for factory in hostFactories.values { factory.commandBarSession?.keyBindingsChanged() }
     extensionPrompts.rebuildShortcuts()
     updateLittleOpenHotkey(); scheduleMenuRebuild()
   }

@@ -326,6 +326,7 @@ class OEDevToolsClient;
 /// The delegate declined the dialog: CEF's default dialog takes the callback.
 /// Afterwards completion and dealloc no longer answer it.
 - (void)oe_releaseCallback;
+- (void)oe_setBrowserIdentifier:(NSInteger)identifier;
 @end
 
 @interface OEAuthenticationRequest ()

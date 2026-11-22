@@ -1655,13 +1655,19 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 
 - (void)evaluateJavaScript:(NSString*)script
                 completion:(void (^)(id _Nullable, NSError* _Nullable))completion {
+  [self evaluateJavaScript:script userGesture:YES completion:completion];
+}
+
+- (void)evaluateJavaScript:(NSString*)script
+               userGesture:(BOOL)userGesture
+                completion:(void (^)(id _Nullable, NSError* _Nullable))completion {
   void (^done)(id, NSError*) = [completion copy];
   [self sendDevToolsMethod:@"Runtime.evaluate"
                 parameters:@{
                   @"expression" : script,
                   @"awaitPromise" : @YES,
                   @"returnByValue" : @YES,
-                  @"userGesture" : @YES,
+                  @"userGesture" : @(userGesture),
                 }
                 completion:^(NSDictionary* result, NSError* error) {
                   if (!done) {

@@ -229,7 +229,9 @@ def run(factory, results, tmp, h):
     def open_tabs_import():
         open_sources(); call('settings-source', id='firefox'); settle()
         call('settings-browser-select', bookmarks=False, history=False, passwords=False, openTabs=True)
-        return finish_import().get('settingsOutcome', {})
+        report = finish_import(); last_open_tabs_report.clear(); last_open_tabs_report.update(report)
+        return report.get('settingsOutcome', {})
+    last_open_tabs_report = {}
     legacy_key = 'open.automation.firefoxLegacyOpenTabIDs'
     app.call('defaults', key=legacy_key, value=True)
     try:
@@ -245,8 +247,11 @@ def run(factory, results, tmp, h):
          ('https://pinned.session.example.test/s1', True)]])))
     try:
         reordered = open_tabs_import()
+        scan_on_main = last_open_tabs_report.get('openTabsScanOnMainThread')
     finally:
         session_file.write_bytes(legacy_session)
+    # Bug sweep r6 REG-06: the reordered re-import runs the legacy-ID scan, on a worker.
+    row('firefox_legacy_scan_off_main', scan_on_main is False, scanOnMainThread=scan_on_main)
     row('firefox_reimport_legacy_ids', legacy.get('Open tabs') == 4 and current.get('Open tabs') == 0
         and current.get('Open tab duplicates') == 4 and reordered.get('Open tabs') == 0 and reordered.get('Open tab duplicates') == 4,
         legacy={k: legacy.get(k) for k in ('Open tabs', 'Open tab duplicates')},

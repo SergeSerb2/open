@@ -97,7 +97,9 @@ final class PageDialogPresenter {
           event.modifierFlags.contains(.command) else { return false }
     return ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "")
   }
-  func hasPending(_ page: OEWebContent) -> Bool { entries.contains { $0.page === page } }
+  func hasPending(_ page: OEWebContent, browser: Int? = nil) -> Bool {
+    entries.contains { $0.page === page && (browser == nil || $0.dialog.browserIdentifier == browser) }
+  }
   var pendingDialogs: [OEJavaScriptDialog] { entries.map(\.dialog) }
   @discardableResult
   func answer(accepted: Bool, text: String?) -> Bool {
@@ -114,8 +116,10 @@ final class PageDialogPresenter {
     guard alert.buttons.indices.contains(index) else { return false }
     alert.buttons[index].performClick(nil); return true
   }
-  func cancel(page: OEWebContent) {
-    for entry in entries.filter({ $0.page === page }) { finish(entry, accepted: false, text: nil) }
+  func cancel(page: OEWebContent, browser: Int? = nil) {
+    for entry in entries.filter({ $0.page === page && (browser == nil || $0.dialog.browserIdentifier == browser) }) {
+      finish(entry, accepted: false, text: nil)
+    }
   }
   func close() {
     closed = true
@@ -175,7 +179,7 @@ final class PageDialogPresenter {
   }
   var state: [String: Any] {
     guard let entry = entries.first(where: { $0.alert != nil }) ?? entries.first else { return ["pending": 0, "visible": false] }
-    return ["pending": entries.count, "kind": entry.dialog.kind.rawValue,
+    return ["pending": entries.count, "kind": entry.dialog.kind.rawValue, "browser": entry.dialog.browserIdentifier,
       "visible": entry.alert?.window.isVisible == true, "held": entry.held,
       "title": entry.alert?.messageText ?? Self.title(entry.dialog),
       "informativeText": entry.alert?.informativeText ?? "",

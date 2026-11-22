@@ -223,8 +223,11 @@ extension EngineWebContentHostFactory {
     if id == NewDocumentActions.undoByNameID { return app.undoManager.canUndo }
     if id == NewDocumentActions.redoByNameID { return app.undoManager.canRedo }
     if id == "check-for-updates" { return true }
-    if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
+    if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-media", "view-easels-notes", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
     if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
+    // A Blank Window has no Pinned section: an empty New Folder would be an invisible folder there
+    // (bug sweep r6 REG-04). New Folder with the selected items stays.
+    if isBlankWindow, id == "new-folder", selectionCommandContext(for: id) == nil { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) {
       return !findCoveredByLibrarySpaces && (selectedContent != nil || selectedNoteHost != nil)
@@ -233,7 +236,7 @@ extension EngineWebContentHostFactory {
       // Menu validation runs during first-window composition. No page is
       // editable yet, and it must not initialize Boost services on that path.
       guard app.engineReady, !isIncognito else { return false }
-      return selectedTab.map { app.stores.boosts.canEdit(tabID: $0.id) } ?? false
+      return selectedTab.map { app.stores.boosts.canEdit(tabID: $0.id, in: self) } ?? false
     }
     if id == "boost-gallery" {
       return !isIncognito && (UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true)
@@ -254,6 +257,8 @@ extension EngineWebContentHostFactory {
     if ["pin-unpin-tab", "pin-tab", "unpin-tab"].contains(id), let tab = selectedTab,
       case .splitPane? = model.parent(of: tab.id) { return false }
     if let enabled = isPageToolEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
+    // Both act on the page in the window (a Note, an Easel or Welcome has none): never an enabled no-op.
+    if id == "print" || id == "save-page-as" { return selectedContent != nil }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
@@ -354,9 +359,9 @@ extension EngineWebContentHostFactory {
     case "view-boosts":
       app.settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .list, boostsProfileID: focusedProfile?.id)
     case "new-boost", "new-legacy-boost":
-      guard let tab = selectedTab else { return false }; app.stores.boosts.openEditor(boostID: nil, tabID: tab.id, mode: id == "new-legacy-boost" ? .code(.css) : .simple)
+      guard let tab = selectedTab else { return false }; app.stores.boosts.openEditor(boostID: nil, tabID: tab.id, mode: id == "new-legacy-boost" ? .code(.css) : .simple, in: self)
     case "edit-boost":
-      guard let tab = selectedTab else { return false }; app.stores.boosts.editCurrent(tabID: tab.id)
+      guard let tab = selectedTab else { return false }; app.stores.boosts.editCurrent(tabID: tab.id, in: self)
     case "change-space-icon": return focusedSpace.map { openSpaceIconPicker($0.id) } ?? false
     case "peek-email": return peekEmail()
     case "join-meeting": return joinMeeting()
@@ -396,10 +401,21 @@ extension EngineWebContentHostFactory {
           self.model.renameNode(id: tab.id, title: field.stringValue)
         }
       }
-    case "reset-tab": if let tab = selectedTab, let url = tab.pinnedURL { model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
+    case "reset-tab":
+      if let tab = selectedTab, let url = tab.pinnedURL {
+        model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url)
+        if model === app.model { app.tabSleep.forgetStoredHistory([tab.id]) }
+      }
     case "replace-pinned-url": if let tab = selectedTab { model.replacePinnedURL(id: tab.id) }
     case "clear-unpinned-tabs":
-      if let space = focusedSpace, !space.today.isEmpty { model.clearToday(space: space.id); controller?.showClearedToast() }
+      if let space = focusedSpace, !space.today.isEmpty {
+        // Each live page that asks beforeunload answers first (bug sweep r6 P-01).
+        let clear = { [weak self] in
+          guard let self, self.model.space(id: space.id) != nil else { return }
+          self.model.clearToday(space: space.id); self.controller?.showClearedToast(); self.scheduleSave()
+        }
+        if !askPagesBeforeClosing(flattened(space.today).map(\.id), then: clear) { clear() }
+      }
     case "next-tab", "cycle-tab-forward": cycleTab(by: 1)
     case "previous-tab", "cycle-tab-backward": cycleTab(by: -1)
     case "tab-switcher-forward": showTabSwitcher(by: 1)
@@ -422,7 +438,9 @@ extension EngineWebContentHostFactory {
     case "clear-archive":
       app.settingsPresenter.requestClearArchive()
     case "new-space": return controller?.beginSpaceCreation() == true
-    case "new-folder": if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
+    case "new-folder":
+      guard !isBlankWindow else { return false }
+      if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
     case "new-easel": return EaselTab.create(in: self) != nil
     case "reload": selectedContent?.reload()
     case "force-reload": selectedContent?.reloadIgnoringCache()
@@ -468,7 +486,9 @@ extension EngineWebContentHostFactory {
       // Pinned tabs of the focused Space that left their pinned URL (folders and splits
       // included, Favorites excluded); one undo step. Live pages navigate back.
       if let space = focusedSpace {
-        for tabID in model.resetPinnedTabs(spaceID: space.id) { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
+        let reset = model.resetPinnedTabs(spaceID: space.id)
+        for tabID in reset { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
+        if model === app.model { app.tabSleep.forgetStoredHistory(reset) }
       }
     default: app.performCommand(id)
     }
@@ -503,7 +523,8 @@ extension EngineWebContentHostFactory {
           let result = try await page.sendDevToolsMethod("Page.captureSnapshot", parameters: ["format": "mhtml"])
           guard !Task.isCancelled, !self.isClosing, self.app.engineReady, !self.app.terminationRequested else { return }
           guard let body = result["data"] as? String else { return }
-          try Data(body.utf8).write(to: url, options: .atomic)
+          // A large page is megabytes of MHTML: convert and write off the main thread.
+          try await Task.detached(priority: .userInitiated) { try Data(body.utf8).write(to: url, options: .atomic) }.value
         } catch { AppDelegate.commandLog("Could not save page: \(error)") }
       }
     }

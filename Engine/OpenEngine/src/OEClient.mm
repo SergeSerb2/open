@@ -581,6 +581,7 @@ bool OEClient::OnJSDialog(CefRefPtr<CefBrowser> browser,
                origin:OEURL(origin_url)
              isReload:NO
              callback:callback];
+  [dialog oe_setBrowserIdentifier:browser ? browser->GetIdentifier() : 0];
   return OERunDialog(view, dialog);
 }
 
@@ -606,6 +607,7 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
                origin:view.URL
              isReload:is_reload
              callback:callback];
+  [dialog oe_setBrowserIdentifier:browser ? browser->GetIdentifier() : 0];
   return OERunDialog(view, dialog);
 }
 
@@ -613,9 +615,13 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
 // pending dialog callbacks. The shell removes the sheets still pending.
 // Not filtered by OEIsPageBrowser: a Chrome-style page's Document PiP shares
 // this client, and its dialogs are shown through this page (OnJSDialog).
+// The browser is named, so a PiP's reset cancels only the PiP's dialogs.
 void OEClient::OnResetDialogState(CefRefPtr<CefBrowser> browser) {
   OEWebContent* view = view_;
-  if (view && [view.delegate respondsToSelector:@selector(webContentDidResetDialogState:)]) {
+  if (!view) return;
+  if (browser && [view.delegate respondsToSelector:@selector(webContent:didResetDialogStateForBrowser:)]) {
+    [view.delegate webContent:view didResetDialogStateForBrowser:browser->GetIdentifier()];
+  } else if ([view.delegate respondsToSelector:@selector(webContentDidResetDialogState:)]) {
     [view.delegate webContentDidResetDialogState:view];
   }
 }

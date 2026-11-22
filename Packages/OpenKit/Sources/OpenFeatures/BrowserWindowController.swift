@@ -110,6 +110,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onClose: (() -> Void)?
     /// Cancel window-owned extension consent before AppKit checks attached sheets.
     public var onCloseRequested: (() -> Void)?
+    /// performClose (close button, Close Window): false keeps the window open while its pages
+    /// ask beforeunload; the App closes it after every page agreed (bug sweep r6 WL-04).
+    public var shouldClose: (() -> Bool)?
+    /// A sidebar action that removes many tabs at once asks their live pages first (bug sweep r6
+    /// P-01). True: the pages ask, and the closure runs once each agreed (or never). False:
+    /// no page asks, and the caller acts now.
+    public var pageClosePreflight: ((_ tabIDs: [ItemID], _ action: @escaping () -> Void) -> Bool)?
     /// Ordinary keys, selection and window layout never create switcher state.
     public private(set) var existingTabSwitcher: TabSwitcherController?
     public var tabSwitcher: TabSwitcherController {
@@ -168,6 +175,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public static var constrainsFramesToScreen = true
     private var pointerMonitor: Any?
     private var captureMonitor: Any?
+    /// The pointer left the window (SB-07 part 2): owner of a window-wide tracking area.
+    private let windowExitTracker = WindowExitTracker()
+    private var windowExitArea: NSTrackingArea?
     private var captureStorage: CaptureController?
     /// The Capture tool (page-platform §4.6), made on first use.
     /// The Capture tool's selection overlay came up or went away (page swipes pause meanwhile).
@@ -377,6 +387,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 if self.root.appearance?.name != content.name { self.root.appearance = content }
                 let system: ContentAppearance = self.context.isIncognito ? .dark : ContentAppearance(appearance)
                 if self.context.systemAppearance != system { self.context.systemAppearance = system }
+                // An open New Space form keeps its own copy; a stale one drew the old palette (A11Y-09).
+                if let creation = self.spaceCreationController, creation.creationView.systemAppearance != system {
+                    creation.creationView.systemAppearance = system; creation.updatePreview()
+                }
                 self.refresh()
             }
         }
@@ -437,6 +451,35 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             }
             return accepted ? event : nil
         }
+        // SB-07 part 2: the pointer can leave the window from inside the card (off its top or
+        // bottom edge) with no motion event outside the window, so the card would wait for one.
+        // The window exit gives the reveal a point just past the edge it crossed; a later motion
+        // event still decides as before. An exit into a child window (inside the bounds) is ignored.
+        windowExitTracker.onExit = { [weak self] event in
+            guard let self, let window = self.window, event.window === window, self.reveal.phase != .idle else { return }
+            let point = self.root.convert(event.locationInWindow, from: nil), b = self.root.bounds
+            guard !b.insetBy(dx: 1, dy: 1).contains(point) else { return }
+            // Onto one of this window's own windows past the edge (a hover preview, a child's child
+            // such as the icon picker's tones panel, the theme editor, an owned panel): still here.
+            let screen = window.convertPoint(toScreen: event.locationInWindow)
+            @MainActor func childUnder(_ parent: NSWindow) -> Bool {
+                (parent.childWindows ?? []).contains { $0.isVisible && ($0.frame.contains(screen) || childUnder($0)) }
+            }
+            let owned = NSApp.windows.contains { other in
+                other.isVisible && other.frame.contains(screen) && (other === self.themeEditor?.panel
+                    || other === self.spaceCreationController?.themeEditor?.panel || self.ownsAdditionalKeyWindow?(other) == true)
+            }
+            if childUnder(window) || owned { return }
+            let x = point.x <= b.minX + 1 ? min(point.x, b.minX - 1) : point.x >= b.maxX - 1 ? max(point.x, b.maxX + 1) : point.x
+            // Off the top: past the top-left zone too, which reaches above the window (review r1 #2).
+            let y = point.y <= b.minY + 1 ? min(point.y, b.minY + RevealMetrics.topLeftRange.lowerBound - 1)
+                : point.y >= b.maxY - 1 ? max(point.y, b.maxY + 1) : point.y
+            self.trackSidebarPointer(CGPoint(x: x, y: y))
+        }
+        // The area does not retain its owner; deinit removes it before the tracker goes.
+        let exitArea = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: windowExitTracker, userInfo: nil)
+        root.addTrackingArea(exitArea); windowExitArea = exitArea
         // Cmd+Shift drag to capture (§4.6.2). Returns at once unless the press has exactly
         // Cmd+Shift, or a held press is in progress; the capture controller is made lazily.
         captureMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
@@ -496,7 +539,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         WindowSpeedTrace.mark("controllerInitEnd")
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { if let siteControlToken { siteControlSource?.removeChangeObserver(siteControlToken) }; hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { if let siteControlToken { siteControlSource?.removeChangeObserver(siteControlToken) }; hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let windowExitArea { root.removeTrackingArea(windowExitArea) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
     private func scheduleRefresh() {
         guard !refreshPending else { return }; refreshPending = true
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
@@ -693,8 +736,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                         self.positionTrafficLights()
                     }
                 } }
-                let layers = [sidebar.layer, dimmedLights.motionLayer].compactMap { $0 }
-                    + Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer }
+                let layers = [sidebar.layer, dimmedLights.motionLayer].compactMap { $0 } + movableTrafficLightLayers
                 for (index, layer) in layers.enumerated() {
                     layer.removeAnimation(forKey: "sidebarToggle")
                     layer.setValue(targetOffset, forKeyPath: "transform.translation.x")
@@ -1108,6 +1150,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
     }
 
+    /// The window's own buttons move with the sidebar only outside full screen. In full screen
+    /// AppKit shows them in its title bar at the top of the screen; a slide moved them off the
+    /// screen's left edge (bug sweep r6 WL-06).
+    private var movableTrafficLightLayers: [CALayer] {
+        // Also during the transition: the style mask can change after AppKit's first resize (review r1 #2).
+        guard let window, !fullscreenTransition, !window.styleMask.contains(.fullScreen) else { return [] }
+        return Self.trafficLightKinds.compactMap { window.standardWindowButton($0)?.layer }
+    }
+
     private func positionTrafficLights(placeMoving: Bool = false) {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         observeTrafficLights(window)
@@ -1310,7 +1361,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func slideCard(from: CGFloat, to: CGFloat, generation: Int, completion: (@MainActor () -> Void)?) {
         let layers = [sidebar.layer, cardShadow.layer].compactMap { $0 }
-        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.motionLayer].compactMap { $0 }
+        let buttons = movableTrafficLightLayers + [dimmedLights.motionLayer].compactMap { $0 }
         cardAnimations = [:]
         CATransaction.begin()
         CATransaction.setCompletionBlock {
@@ -1692,9 +1743,25 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             model.setLiveRepository(folderID: id, repository: repository, hidden: hidden); changed(); return true
         case .deleteFolders(let ids, let archiveFolderTabs): return confirmDeleteFolders(ids, archiveFolderTabs: archiveFolderTabs)
         case .clearToday(let space), .clearTodayKeeping(let space, _):
-            let before = model.space(id: space)?.today.count ?? 0
-            guard ModelSidebarActions(context: context).perform(intent) else { return false }
-            if (model.space(id: space)?.today.count ?? 0) < before { showClearedToast() }
+            var keep: Set<ItemID> = []
+            if case .clearTodayKeeping(_, let kept) = intent { keep = kept }
+            // As the model's clear: a folder or split that holds a kept tab stays whole.
+            func retained(_ node: SidebarNode) -> Bool {
+                if keep.contains(node.id) { return true }
+                switch node {
+                case .tab: return false
+                case .folder(let folder): return folder.children.contains(where: retained)
+                case .split(let split): return split.panes.contains { keep.contains($0.id) }
+                }
+            }
+            let cleared = (model.space(id: space)?.today ?? []).filter { !retained($0) }.map(\.id)
+            return afterPagesAgreeToClose(tabIDs(under: cleared)) { [weak self] in
+                guard let self else { return false }
+                let before = self.model.space(id: space)?.today.count ?? 0
+                guard ModelSidebarActions(context: self.context).perform(intent) else { return false }
+                if (self.model.space(id: space)?.today.count ?? 0) < before { self.showClearedToast() }
+                self.refresh(); self.changed(); return true
+            }
         case .openCommandBar(let source): dismissSidebarReveal(); onOpenCommandBar?(source, context.currentTab?.url); return onOpenCommandBar != nil
         case .newSplitView: splitController.addEmptyPane()
         case .addTabToSplit(let id):
@@ -1704,12 +1771,27 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
             if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
+        case .archiveFolder(let id):
+            return afterPagesAgreeToClose(tabIDs(under: [id])) { [weak self] in
+                guard let self, ModelSidebarActions(context: self.context).perform(intent) else { return false }
+                self.refresh(); self.changed(); return true
+            }
         case .close, .archiveNodes:
             // A split's or a multi-selection's archive can take the current item. As Cmd+W and
             // folder Delete do, select the item now in its place instead of leaving a blank page.
-            var accepted = false
-            keepingSelection { accepted = ModelSidebarActions(context: context).perform(intent) }
-            guard accepted else { return false }
+            var nodes: [ItemID] = []
+            switch intent {
+            case .close(let id): nodes = [id]
+            case .archiveNodes(let ids): nodes = ids
+            default: break
+            }
+            return afterPagesAgreeToClose(tabIDs(under: nodes)) { [weak self] in
+                guard let self else { return false }
+                var accepted = false
+                self.keepingSelection { accepted = ModelSidebarActions(context: self.context).perform(intent) }
+                guard accepted else { return false }
+                self.refresh(); self.changed(); return true
+            }
         case .goBack: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
         case .goForward: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }
@@ -1759,6 +1841,31 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         editor.updateAnchor(.sidebarTrailingEdge(sidebarFrameInWindow: frame))
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
+    public func windowShouldClose(_ sender: NSWindow) -> Bool { shouldClose?() ?? true }
+    /// Runs `action` now, or after the live pages of `tabIDs` agreed to close. The result is the
+    /// action's own when it ran now, and true while the pages ask.
+    func afterPagesAgreeToClose(_ tabIDs: [ItemID], _ action: @escaping () -> Bool) -> Bool {
+        if pageClosePreflight?(tabIDs, { _ = action() }) == true { return true }
+        return action()
+    }
+    /// Every tab a removal of these nodes takes (folders, splits and their panes). A deletion
+    /// removes a Live Folder's fetched rows only: its own tabs, folders and splits move to Today
+    /// and keep their pages, so they are not asked (review r1 #7).
+    public func tabIDs(under ids: [ItemID], removingLiveFolders: Bool = false) -> [ItemID] {
+        func walk(_ node: SidebarNode) -> [ItemID] {
+            switch node {
+            case .tab(let tab): return [tab.id]
+            case .split(let split): return split.panes.map(\.id)
+            case .folder(let folder) where removingLiveFolders && folder.live != nil:
+                return folder.children.compactMap { child in
+                    if case .tab(let tab) = child, tab.liveItemURL != nil { return tab.id }
+                    return nil
+                }
+            case .folder(let folder): return folder.children.flatMap(walk)
+            }
+        }
+        return ids.flatMap { model.node(id: $0).map(walk) ?? [] }
+    }
     public func windowWillClose(_ notification: Notification) {
         cancelLibraryPageMotion()
         // The intro's app-wide event monitor must not outlive the window (bug sweep r4 PERF-14).
@@ -1790,7 +1897,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowDidResize(_ notification: Notification) { layoutContent(); existingTabSwitcher?.layout() }
     public func windowDidMove(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
-    public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
+    public func windowWillEnterFullScreen(_ notification: Notification) {
+        saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true
+        // A hidden sidebar left its slide offset on the buttons; AppKit's full-screen title bar shows them in place.
+        for layer in Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
+            layer.removeAnimation(forKey: "sidebarToggle"); layer.removeAnimation(forKey: "reveal")
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            layer.setValue(0, forKeyPath: "transform.translation.x"); CATransaction.commit()
+        }
+    }
     public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true; applyTrafficLightDim(animated: false) }
     public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?(); resumePendingSpaceCreation(); onFullScreenChange?(true) }
     public func windowDidExitFullScreen(_ notification: Notification) {
@@ -1914,9 +2029,11 @@ extension BrowserWindowController {
         let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
             guard let self else { return }
             self.pendingConfirmation = nil
-            guard confirmed, self.model.space(id: id) != nil else { return }
-            if ModelSidebarActions(context: self.context).perform(.deleteSpace(id)) {
-                self.refresh(); restoreKeyboardFocus(); self.changed()
+            guard confirmed, let space = self.model.space(id: id) else { return }
+            _ = self.afterPagesAgreeToClose(self.tabIDs(under: (space.pinned + space.today).map(\.id))) { [weak self] in
+                guard let self, self.model.space(id: id) != nil,
+                      ModelSidebarActions(context: self.context).perform(.deleteSpace(id)) else { return false }
+                self.refresh(); restoreKeyboardFocus(); self.changed(); return true
             }
         }
         if !shown { pendingConfirmation = nil }
@@ -1936,17 +2053,21 @@ extension BrowserWindowController {
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed else { return }
-            // Read again in the model: the sheet is asynchronous. Every Live Folder the deletion
-            // reaches (also one nested in a selected folder) is removed first, then the rest is
-            // archived (BrowserModel.deleteFolders).
-            var archived = 0, removed = 0
-            var archivedFolders = 0
-            self.keepingSelection { (archived, archivedFolders, removed) = self.model.deleteFolders(ids: ids, archiveFolderTabs: archiveFolderTabs) }
-            if removed > 0 { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
-            guard archived > 0 || removed > 0 else { return }
-            self.refresh(); restoreKeyboardFocus(); self.changed()
-            // The toast's Undo covers only the archived rows; a lone Live Folder removal has none.
-            if archivedFolders > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders)) }
+            _ = self.afterPagesAgreeToClose(self.tabIDs(under: ids, removingLiveFolders: true)) { [weak self] in
+                guard let self else { return false }
+                // Read again in the model: the sheet is asynchronous. Every Live Folder the deletion
+                // reaches (also one nested in a selected folder) is removed first, then the rest is
+                // archived (BrowserModel.deleteFolders).
+                var archived = 0, removed = 0
+                var archivedFolders = 0
+                self.keepingSelection { (archived, archivedFolders, removed) = self.model.deleteFolders(ids: ids, archiveFolderTabs: archiveFolderTabs) }
+                if removed > 0 { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
+                guard archived > 0 || removed > 0 else { return false }
+                self.refresh(); restoreKeyboardFocus(); self.changed()
+                // The toast's Undo covers only the archived rows; a lone Live Folder removal has none.
+                if archivedFolders > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders)) }
+                return true
+            }
         }
         if !shown { pendingConfirmation = nil }
         return shown
@@ -1963,9 +2084,13 @@ extension BrowserWindowController {
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed else { return }
-            self.keepingSelection { self.model.removeLiveFolder(id: id) }
-            self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey)
-            self.refresh(); self.changed()
+            // Its fetched rows' pages ask first (bug sweep r6 P-01, review r1 #7).
+            _ = self.afterPagesAgreeToClose(self.tabIDs(under: [id], removingLiveFolders: true)) { [weak self] in
+                guard let self, self.model.node(id: id)?.folder?.live != nil else { return false }
+                self.keepingSelection { self.model.removeLiveFolder(id: id) }
+                self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey)
+                self.refresh(); self.changed(); return true
+            }
         }
         if !shown { pendingConfirmation = nil }
         return shown
@@ -1981,7 +2106,8 @@ extension BrowserWindowController {
                     switch node { case .tab(let tab): [tab.id]; case .folder(let folder): walk(folder.children); case .split(let split): [split.id] }
                 }
             }
-            return walk(space.pinned) + walk(space.today)
+            // Favorites too: a deleted selected Favorite (a Note or Easel) hands on to its neighbour.
+            return (model.profile(id: space.profileID)?.favorites.map(\.id) ?? []) + walk(space.pinned) + walk(space.today)
         }
         let before = tabs(), selected = state.selectedNodeBySpace[space.id]
         let index = selected.flatMap { before.firstIndex(of: $0) }
@@ -2184,4 +2310,11 @@ private final class SidebarPanelShadowView: NSView {
         path.addRect(CGRect(origin: .zero, size: size).insetBy(dx: -24, dy: -24))
         path.addPath(shape(size)); return path
     }
+}
+
+/// Receives the window-wide tracking area's exit (BrowserWindowController, SB-07 part 2).
+@MainActor private final class WindowExitTracker: NSResponder {
+    var onExit: (@MainActor (NSEvent) -> Void)?
+    override func mouseEntered(with event: NSEvent) {}
+    override func mouseExited(with event: NSEvent) { onExit?(event) }
 }
