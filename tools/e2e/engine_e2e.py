@@ -7407,6 +7407,23 @@ def media_checks(factory, results, tmp):
             and dp_moved is True and bool(dp_gone) and dp_back is True and dp_reopened is True and bool(dp_win2) and bool(dp_nav_gone),
             "window": dp_win, "page": dp_page, "innerSize": dp_size, "moved": dp_moved, "level": dp_level, "closed": bool(dp_gone), "elementBack": dp_back,
             "navigationCloses": bool(dp_nav_gone), "videoPiP": pip()["state"]}
+        # Bug sweep r6: closing a Document PiP keeps the page's own pending dialog. The PiP shares the
+        # page's client; its dialog reset now names its browser, and cancelled every page sheet before.
+        app.call("navigate", tab=dp, url=base + "docpip.html"); app.call("wait", tab=dp)
+        dp_opened3 = gesture_eval(dp, "start()")
+        dp_win3 = wait_until(lambda: doc_window(), timeout=3, step=.02)
+        app.call("policy", dialogs="hold")
+        app.eval(dp, "setTimeout(() => alert('R6 page alert'), 0); true")
+        dp_pending = wait_until(lambda: (lambda s: s if s.get("pending") else None)(app.call("dialog-state")), timeout=3, step=.05) or {}
+        app.call("pip-action", action="close")
+        dp_gone3 = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        time.sleep(.5)
+        dp_after = app.call("dialog-state")
+        results["media_document_pip_close_keeps_page_dialog"] = {"ok": dp_opened3 is True and bool(dp_win3) and bool(dp_gone3)
+            and dp_pending.get("message") == "R6 page alert" and dp_after.get("pending") == 1 and dp_after.get("message") == "R6 page alert",
+            "pendingBefore": dp_pending.get("pending"), "after": {k: dp_after.get(k) for k in ("pending", "message")}, "pipClosed": bool(dp_gone3)}
+        if app.call("dialog-state").get("pending"): app.call("dialog", accept=True)
+        app.call("policy", dialogs="")
         close_tab(dp)
 
         # EM-6 + EM-7, the Meet path: a playing page that registers "enterpictureinpicture" gets Chromium's

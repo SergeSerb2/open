@@ -2012,6 +2012,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     pageChrome.engineDismissed(request)
   }
   func webContentDidResetDialogState(_ webContent: OEWebContent) { pageChrome.engineResetDialogs(webContent) }
+  func webContent(_ webContent: OEWebContent, didResetDialogStateForBrowser browser: Int) { pageChrome.engineResetDialogs(webContent, browser: browser) }
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
     pageContextMenu?.cancel()
     let session = PageContextMenuBuilder(request: menu, page: webContent, owner: self)
