@@ -377,10 +377,12 @@ final class MediaCoordinator {
     if let old = pipWindow { old.dismiss(reason: .replaced) }
     let host = EnginePictureInPictureHost(
       pip: pip, tabID: tabID,
-      tabMuted: { [weak self] in self?.app.model.tab(id: tabID)?.isMuted ?? false },
-      setTabMuted: { [weak self] muted in
-        guard let self, let tab = self.app.model.tab(id: tabID), tab.isMuted != muted else { return }
-        _ = self.perform(.toggleMute(tabID))
+      // The tab lives in its window's model: an Incognito or Blank Window has its own, not app.model.
+      tabMuted: { [weak factory] in factory?.model.tab(id: tabID)?.isMuted ?? false },
+      setTabMuted: { [weak self, weak factory] muted in
+        guard let self, let factory, let tab = factory.model.tab(id: tabID), tab.isMuted != muted else { return }
+        if factory.model === self.app.model { _ = self.perform(.toggleMute(tabID)) }
+        else { _ = factory.performSidebar(.toggleMute(tabID)) }  // its window's own path; saves nothing private
       })
     // An Incognito page's "Turn off" / "Open automatically" stay in its session (memory only).
     guard let window = PictureInPictureWindowController(
