@@ -64,11 +64,14 @@ In the App they use the sidebar's own paths (`ScriptHost.selectInWindow` and
 `focusSpaceInWindow`): Expand Current Pane ends, sleeping tabs wake, and no Undo step is
 registered. Scratch probes without these hooks change the model only, also without Undo.
 `make new tab` shows the new tab through the same `selectInWindow` path, so the new tab is
-the only Undo step. `close` (and removing a tab from a window's or Space's tabs) uses the
-window's own single-tab close (`ScriptHost.closeTab`, the same path as ⌘W) in the window
-that holds the page: a page's beforeunload can ask, a closed selected tab hands the
-selection to its neighbour, and a pinned tab or Favorite stays in the sidebar and unloads.
-Scratch probes without the hook close in the model.
+the only Undo step; `make new tab at space … of window id "…"` shows it in that named window.
+`close` (and removing a tab from a window's or Space's tabs) uses the window's own
+single-tab close (`ScriptHost.closeTab(tab, window)`, the same path as ⌘W): in the window
+the reference names when that window shows or holds the tab, else front to back in a window
+that shows it, then one that holds its page, then one that shows its Space. A page's
+beforeunload can ask, a closed selected tab hands the selection to its neighbour, and a
+pinned tab or Favorite stays in the sidebar and unloads. Scratch probes without the hook
+close in the model.
 `window N`, `front window` and `index` follow AppKit's front-to-back order
 (`NSApp.orderedWindows`); minimized and hidden windows follow the on-screen ones.
 JavaScript returns text. H2 converts null/undefined to empty text, primitives to their
@@ -113,7 +116,7 @@ ScriptHost.shared.littleTab: (any LittleTabProviding)?
 ScriptHost.shared.engineBridge: (any ScriptEngineBridge)?
 ScriptHost.shared.selectInWindow: ((WindowID, SpaceID, ItemID) -> Bool)?
 ScriptHost.shared.focusSpaceInWindow: ((WindowID, SpaceID) -> Bool)?
-ScriptHost.shared.closeTab: ((ItemID) -> Bool)?
+ScriptHost.shared.closeTab: ((ItemID, WindowID?) -> Bool)?
 ```
 
 Use weak model capture. `windowStateID` must skip panels and non-browser windows.
