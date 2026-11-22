@@ -2,6 +2,7 @@
 
 #include <crt_externs.h>
 
+#include <map>
 #include <set>
 #include <mach/mach_time.h>
 #include <os/signpost.h>
@@ -98,7 +99,12 @@ NSEventModifierFlags OENavigationModifiersForWindow(NSWindow* window) {
   CefScopedSendingEvent sendingEventScoper;
   if (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseUp) {
     OENoteNavigationInput(event.window, event.modifierFlags);
-  } else if (event.type == NSEventTypeKeyDown) {
+  } else if (event.type == NSEventTypeKeyDown ||
+             event.type == NSEventTypeRightMouseDown ||
+             event.type == NSEventTypeOtherMouseDown) {
+    // A right click (context menu) or a middle click starts a new input: the
+    // modifiers of an earlier left click must not route its navigation
+    // (a stale Command-Option sent a middle-clicked link to Little Open).
     OENoteNavigationInput(nil, 0);
   }
   // App shortcuts that must beat the page. AppKit would otherwise send the
@@ -462,6 +468,11 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   OEBrowserContext* _defaultContext;
   CefRefPtr<OEDefaultClient> _defaultClient;
   BOOL _terminating;
+  // -shutdown started: no new CEF handles (metrics samplers).
+  BOOL _shuttingDown;
+  // Task manager handles of pending -sampleProcessMetricsAfter: calls.
+  std::map<uint64_t, CefRefPtr<CefTaskManager>> _metricsSamplers;
+  uint64_t _nextMetricsSampler;
   BOOL _quitAtDeadline;
   BOOL _quitDeadlineFired;
   NSUInteger _ephemeralCount;
@@ -728,6 +739,8 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   if (!_running) {
     return;
   }
+  _shuttingDown = YES;
+  _metricsSamplers.clear();
   OERemoveAutofillHandler();
   // Also cover retained retired wrappers and private sessions, on both normal
   // quit and the three-second renderer timeout path.
@@ -1064,6 +1077,15 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     NSUUID* token = NSUUID.UUID;
     dispatch_block_t check = ^{
       if (started) return;
+      if (!self->_running || self->_terminating) {
+        // Quit started: do not begin a wipe that CefShutdown would cut off.
+        // The shell's journaled wipe finishes at the next launch.
+        started = YES;
+        [self->_pendingReleases removeObjectForKey:token];
+        done([NSError errorWithDomain:OEErrorDomain code:OEErrorProfileDeletionFailed
+            userInfo:@{NSLocalizedDescriptionKey: @"profile-deletion-interrupted"}]);
+        return;
+      }
       for (OEWebContent* content in self.allWebContents) {
         if ([doomed containsObject:content.context] && content.live) return;
       }
@@ -1319,21 +1341,36 @@ static NSArray* OELiveObjects(NSPointerArray* array) {
 - (void)sampleProcessMetricsAfter:(NSTimeInterval)interval
                        completion:(void (^)(NSArray<OEProcessMetrics*>*))
                                       completion {
-  CefRefPtr<CefTaskManager> manager = CefTaskManager::GetTaskManager();
+  CefRefPtr<CefTaskManager> manager =
+      _running && !_shuttingDown ? CefTaskManager::GetTaskManager() : nullptr;
   if (!manager) {
     completion(@[]);
     return;
   }
   // The first call starts sampling; read after the interval for CPU numbers.
+  // The handle keeps sampling on (it is the task manager's observer), so the
+  // engine holds it, not the timer: -shutdown drops it before CefShutdown,
+  // and a timer that fires later (CefShutdown drains the main queue) reports
+  // an empty sample.
   CefTaskManager::TaskIdList warmup;
   manager->GetTaskIdsList(warmup);
+  const uint64_t sampler = ++_nextMetricsSampler;
+  _metricsSamplers[sampler] = manager;
+  manager = nullptr;
   void (^done)(NSArray<OEProcessMetrics*>*) = [completion copy];
   dispatch_after(
       dispatch_time(DISPATCH_TIME_NOW, (int64_t)(interval * NSEC_PER_SEC)),
       dispatch_get_main_queue(), ^{
         CefTaskManager::TaskIdList ids;
         NSMutableArray* out = [NSMutableArray array];
-        if (manager->GetTaskIdsList(ids)) {
+        CefRefPtr<CefTaskManager> manager;
+        auto held = self->_metricsSamplers.find(sampler);
+        if (held != self->_metricsSamplers.end()) {
+          manager = held->second;
+          self->_metricsSamplers.erase(held);
+        }
+        if (manager && self->_running && !self->_shuttingDown &&
+            manager->GetTaskIdsList(ids)) {
           for (int64_t taskId : ids) {
             CefTaskInfo info;
             if (manager->GetTaskInfo(taskId, info)) {

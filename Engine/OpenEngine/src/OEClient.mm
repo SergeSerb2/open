@@ -78,6 +78,13 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              CefBrowserSettings& settings,
                              CefRefPtr<CefDictionaryValue>& extra_info,
                              bool* no_javascript_access) {
+  // A closing page, or one kept drawn for a pane's collapse (-prepareForClose),
+  // opens nothing: no Document PiP, no popup, and no link routing through the
+  // shell (Little Open, Peek) from a page that is going away. As in
+  // OnOpenURLFromTab, this comes before OECancelNavigation.
+  if (closing_ || close_requested_) {
+    return true;
+  }
   OEWebContent* source = view_;
   NSEventModifierFlags modifiers = OENavigationModifiers(source);
   if ((modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagOption)) ==
@@ -91,11 +98,6 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
     return true;
   }
   id<OEWebContentDelegate> delegate = source.delegate;
-  // A closing page, or one kept drawn for a pane's collapse (-prepareForClose),
-  // opens nothing: no Document PiP and no popup.
-  if (closing_ || close_requested_) {
-    return true;
-  }
   // Document PiP of a Chrome-style page: CEF uses Chromium's default creation,
   // where the fork's EM-7 hook (chromium/0403) shows it through the shell's
   // pictureInPictureDelegate, or Chromium's own window without one. It keeps

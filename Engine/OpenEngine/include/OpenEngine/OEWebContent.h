@@ -315,7 +315,7 @@ OE_EXPORT @interface OEWebContent : NSObject
 @property(nonatomic, readonly, weak, nullable) OEBrowser* browser;
 
 /// Engine identifier: stable for the content's life, unique per process.
-/// 0 until the Chromium browser exists.
+/// 0 until the Chromium browser exists; kept after that browser closes.
 @property(nonatomic, readonly) NSInteger identifier;
 /// The chrome.tabs id, or -1 when Chromium's tab APIs cannot see this page
 /// (not live, or not a tab of an OEBrowser's tab strip).
