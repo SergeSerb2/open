@@ -256,7 +256,9 @@
     host = document.createElement("div"); host.id = "open-zap-overlay-host";
     host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647";
     overlay = attachShadow(host, { mode: "closed" });
-    overlay.innerHTML = `<style>
+    // A page CSP without 'unsafe-inline' style-src blocks a <style> element, here too. A constructed
+    // sheet is not subject to style-src.
+    const overlayCSS = `
       :host { all:initial; } [hidden] { display:none !important; }
       .content-frame { z-index:4;position:fixed;inset:0;box-sizing:border-box;border:3px solid #3139FF;pointer-events:none; }
       .hl,.hl-multi { z-index:0;position:fixed;pointer-events:none;box-sizing:border-box;background:${HOVER_TINT}; }
@@ -271,7 +273,11 @@
       .actions { display:flex;gap:6px;padding:8px; } .actions button { height:38px;border-radius:7px;color:white;padding:0 10px;white-space:nowrap; }
       .this { background:#FF453A; } .related { background:#FF9500;flex:1; } .cancel { background:#999; } .popup.select-mode .this, .popup.select-mode .related { background:#3139FF; }
       .band { background:#F0F0F2;padding:8px;font:11px monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-    </style><div class="content-frame"></div><div class="hl" hidden></div><div class="tag" hidden></div>
+    `;
+    try {
+      const sheet = new CSSStyleSheet(); sheet.replaceSync(overlayCSS); overlay.adoptedStyleSheets = [sheet];
+    } catch (_) { const fallback = document.createElement("style"); fallback.textContent = overlayCSS; overlay.appendChild(fallback); }
+    overlay.innerHTML += `<div class="content-frame"></div><div class="hl" hidden></div><div class="tag" hidden></div>
     <div class="bar"><button class="undo">Undo</button><span class="instruction">Click elements on the page to <span class="accent">Zap</span> them</span><div class="reveals" hidden></div><button class="done">Done</button></div>
     <div class="popup" hidden><div class="actions"><button class="this">Zap this</button><button class="related">Zap all related elements</button><button class="cancel">Cancel</button></div><div class="band"></div></div>`;
     highlight = query(overlay, ".hl"); chip = query(overlay, ".tag"); bar = query(overlay, ".bar");
@@ -317,8 +323,23 @@
       const box = document.createElement("div"); box.className = "hl-multi"; position(box, r); overlay.appendChild(box); arrayPush(multi, box);
     }
   }
+  // Preview elements that a page CSP blocks (a null sheet) get a constructed copy of their rules.
+  const previewSheets = new Map();
+  function dropPreviewSheets() {
+    for (const [root, sheet] of previewSheets) root.adoptedStyleSheets = arrayFilter(root.adoptedStyleSheets, s => s !== sheet);
+    previewSheets.clear();
+  }
+  function adoptBlockedPreview() {
+    for (const [root, style] of previewStyles) {
+      if (style.sheet) continue;
+      try {
+        const sheet = new CSSStyleSheet(); sheet.replaceSync(style.textContent);
+        root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet]; previewSheets.set(root, sheet);
+      } catch (_) {}
+    }
+  }
   function refreshPreview(render = true) {
-    for (const style of previewStyles.values()) style.remove(); previewStyles.clear();
+    for (const style of previewStyles.values()) style.remove(); previewStyles.clear(); dropPreviewSheets();
     for (const entry of session) {
       if (entry.root !== document && !entry.root.host?.isConnected) continue;
       try { queryAll(entry.root, entry.selector); } catch (_) { continue; }
@@ -339,16 +360,17 @@
         style.textContent += `${revealing} { display: revert !important; }`;
       }
     }
+    adoptBlockedPreview();
     if (render) renderReveals();
   }
   function removePreview() {
     clearTimeout(graceTimer); graceTimer = 0;
     window.removeEventListener("open-boosts-applied", removePreview);
-    for (const style of previewStyles.values()) style.remove(); previewStyles.clear();
+    for (const style of previewStyles.values()) style.remove(); previewStyles.clear(); dropPreviewSheets();
   }
   function label(e, selector) { return e.tagName.toLowerCase() + (selector.startsWith("#") ? "#" + e.id : ""); }
   function click(event) {
-    if (arrayIncludes(event.composedPath(), host) || arraySome(event.composedPath(), n => n.hasAttribute?.("data-open-zap-ignore"))) return;
+    if (overlayEvent(event)) return;
     event.preventDefault(); event.stopImmediatePropagation();
     const target = event.composedPath()[0];
     const e = target instanceof Element && !own(target) ? target : elementAt(event.clientX, event.clientY);
@@ -429,6 +451,19 @@
     refreshPreview(); clearMulti();
     post("zap:removed", { boostID: entry.boostID, selector: entry.selector, via: "undo" }); return true;
   }
+  // A pick must not reach the page: menus open on pointerdown, links drag, double-clicks select text.
+  // Window capture runs before the page's own document and element listeners.
+  const PRESS_EVENTS = ["pointerdown", "pointerup", "mousedown", "mouseup", "dblclick", "auxclick", "dragstart"];
+  function overlayEvent(event) {
+    const path = event.composedPath();
+    return arrayIncludes(path, host) || arraySome(path, n => n.hasAttribute?.("data-open-zap-ignore"));
+  }
+  function press(event) {
+    if (overlayEvent(event)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+  }
+  // The page's own context menu handlers do not run; the browser's menu still opens.
+  function contextmenu(event) { if (!overlayEvent(event)) event.stopImmediatePropagation(); }
   function keydown(e) {
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); exitWithReason("esc"); }
     else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); }
@@ -498,7 +533,9 @@
     rootObserver.observe(document, { childList: true, subtree: true });
     ensureOverlay(); host.hidden = false; closePopup(); renderReveals();
     query(overlay, ".undo").hidden = mode === "select";
-    document.addEventListener("mousemove", move, true); document.addEventListener("click", click, true); document.addEventListener("keydown", keydown, true);
+    document.addEventListener("mousemove", move, true); window.addEventListener("click", click, true); document.addEventListener("keydown", keydown, true);
+    for (const type of PRESS_EVENTS) window.addEventListener(type, press, true);
+    window.addEventListener("contextmenu", contextmenu, true);
     window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition);
     window.addEventListener("pagehide", pagehide);
     post("picker:ready", { boostID });
@@ -506,7 +543,9 @@
   function exitWithReason(reason) {
     if (!active) return;
     active = false; rootObserver?.disconnect(); rootObserver = null; invalidateRoots(); pendingList = null;
-    document.removeEventListener("mousemove", move, true); document.removeEventListener("click", click, true); document.removeEventListener("keydown", keydown, true);
+    document.removeEventListener("mousemove", move, true); window.removeEventListener("click", click, true); document.removeEventListener("keydown", keydown, true);
+    for (const type of PRESS_EVENTS) window.removeEventListener(type, press, true);
+    window.removeEventListener("contextmenu", contextmenu, true);
     window.removeEventListener("scroll", reposition, true); window.removeEventListener("resize", reposition);
     window.removeEventListener("pagehide", pagehide);
     cancelAnimationFrame(frame); frame = 0; clearTimeout(flashTimer); clearMulti(); hovered = null; lastMove = null; host.hidden = true;
