@@ -21,7 +21,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   init(app: AppDelegate) { self.app = app }
   @ObservationIgnored private var settingsStorage: SettingsViewModel?
   /// A Profile came or went outside Settings (Undo of New Profile): an existing Settings model rereads them.
-  func refreshProfilesIfLoaded() { settingsStorage?.profiles.refresh() }
+  func refreshProfilesIfLoaded() {
+    guard let settingsStorage else { return }
+    settingsStorage.profiles.refresh(); settingsStorage.adBlock?.refresh(); settingsStorage.refreshLinks(preserveDrafts: true)
+  }
   #if OPEN_AUTOMATION
   var hasSettingsModel: Bool { settingsStorage != nil }
   private(set) var lastSettingsShowMs = 0.0
@@ -155,10 +158,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if let profileID, app.model.profile(id: profileID) != nil { settings.profiles.select(profileID) }
     settings.navigate(to: section, row: row); show()
   }
-  @discardableResult func showSettingsURL(_ url: URL) -> Bool {
+  /// `profileID`: the window the link came from (its Profile, or an Incognito window's parent), as
+  /// Search Settings does; Settings keeps its selection for an unknown or nil Profile.
+  @discardableResult func showSettingsURL(_ url: URL, profileID: ProfileID? = nil) -> Bool {
     guard let target = SettingsSearchIndex.destination(for: url) else { return false }
-    settings.navigate(to: target.section, row: target.row)
-    show(); return true
+    show(section: target.section, row: target.row, profileID: profileID); return true
   }
   func updateStatusDidChange(_ status: String?) { settingsStorage?.updateState = status }
   func showProfileSettings(profileID: ProfileID) {

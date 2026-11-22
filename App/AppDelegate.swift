@@ -452,6 +452,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         FileHandle.standardError.write(Data("Open: Profile folder cleanup list not updated: \(error)\n".utf8))
       }
       settingsPresenter.refreshProfilesIfLoaded()
+      // Adding or removing a Profile emits no tree change, so the save observer below does not run for it.
+      // Without this save, a crash would relaunch with the Profile still listed, and keep its folders.
+      scheduleSave(); scheduleMenuRebuild()
+      if removed {
+        // As Profile deletion does: no window or Little Open session keeps browsing as a Profile that is gone
+        // (its writes would go to folders the next launch wipes). After the Undo, outside its registration.
+        DispatchQueue.main.async { [weak self] in self?.closeWindows(ofUndoneProfile: profile.id) }
+      }
     }
     modelSaveObserver = model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     // Profile creation belongs to the currently installed model, including an import swap.
@@ -850,6 +858,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if wasEnabled { undoManager.disableUndoRegistration() }
     defer { if wasEnabled { undoManager.enableUndoRegistration() } }
     return body()
+  }
+
+  /// Blank Windows, Incognito windows and Little Open sessions of a Profile whose creation was undone
+  /// (the same windows `ProfileTeardown` closes for a deleted Profile). Registers no Undo, so the
+  /// Profile's Redo stays available.
+  private func closeWindows(ofUndoneProfile profileID: ProfileID) {
+    guard model.profile(id: profileID) == nil else { return }
+    withoutWindowUndo {
+      for session in littleOpenCoordinator?.sessions.filter({ $0.profileID == profileID }) ?? [] {
+        littleOpenCoordinator.close(sessionID: session.id, archiveReason: nil)
+      }
+      for controller in windowControllers where hostFactories[controller.windowID].map({
+        $0.incognitoSession?.parent.id == profileID || ($0.isBlankWindow && $0.model.profile(id: profileID) != nil) }) == true {
+        controller.window?.close()
+      }
+    }
   }
 
   /// Live Folder refresh when the app comes to the front (live-data §2.5). Nothing runs (no

@@ -314,7 +314,9 @@ extension EngineWebContentHostFactory {
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
     if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
-    if let url = SettingsSuggestionsProvider.url(for: id) { return app.settingsPresenter.showSettingsURL(url) }
+    if let url = SettingsSuggestionsProvider.url(for: id) {
+      return app.settingsPresenter.showSettingsURL(url, profileID: incognitoSession?.parent.id ?? focusedProfile?.id)
+    }
     #if OPEN_AUTOMATION
     AutomationShortcutTrace.record(id)
     #endif

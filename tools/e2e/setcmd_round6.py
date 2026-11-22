@@ -114,7 +114,8 @@ def run(factory, results, tmp, h):
             app.call('library', action='open', section='downloads'); time.sleep(.3)
             press('f', ['cmd']); time.sleep(.3)
             control = app.call('window-state')
-            row('setcmd6_q02_library_ctrl_cmd_f_full_screen', bool(full) and not control['fullscreen'],
+            row('setcmd6_q02_library_ctrl_cmd_f_full_screen', bool(full) and not control['fullscreen']
+                and control.get('firstResponder') == 'LibrarySearchEditor',
                 fullscreen=bool(full), firstResponderAfterFullScreenKey=observed.get('firstResponder'),
                 controlFirstResponder=control.get('firstResponder'), controlFullscreen=control['fullscreen'])
         if wanted('q02'): guarded('setcmd6_q02_library_ctrl_cmd_f_full_screen', library_full_screen,
@@ -137,13 +138,16 @@ def run(factory, results, tmp, h):
             press('return', ['cmd'])
             changed = wait_until(lambda: next((t for t in app.call('tabs') if t['id'] == pin_id and t['pinnedURL'] == target), None), timeout=5, step=.1)
             after_cmd = state()
+            # The next entry (a different URL, typed over the selected text) still edits the pinned tab.
+            second = origin + '/pinned-c'
+            type_query(second)
             press('return')
             wait_until(lambda: not state().get('presented'), timeout=3, step=.05)
             time.sleep(1.0)
             other_url = app.eval(other, 'location.href')
             pinned = next((t for t in app.call('tabs') if t['id'] == pin_id), {})
             row('setcmd6_q01_pinned_edit_cmd_return_keeps_target', bool(changed) and other_url == origin + '/today-t'
-                and pinned.get('pinnedURL') == target,
+                and pinned.get('pinnedURL') == second,
                 otherURL=other_url, pinnedURL=pinned.get('pinnedURL'),
                 afterCmdReturn={k: after_cmd.get(k) for k in ('presented', 'pinnedEdit', 'text')})
             app.call('close', tab=other)
@@ -175,6 +179,22 @@ def run(factory, results, tmp, h):
             shown = wait_until(lambda: (lambda s: s if s['selectedProfile'] == parent else None)(shell()), timeout=5, step=.1) or shell()
             row('setcmd6_q05_incognito_search_settings_parent', shown['selectedProfile'] == parent,
                 selected=shown['selectedProfile'], parent=parent, other=other)
+            # Review r1 #4: a "Settings: …" row (a Settings link) from the same window also opens the parent.
+            shell(profile=other); shell(action='cancel')
+            app.call('window-focus', id=window['id'], activate=True)
+            close_bar()
+            bar('t'); found = type_query('search engine')
+            rows = found.get('rows', [])
+            index = next((i for i, r in enumerate(rows) if r.get('action') == 'settings-link:search/engine'), None)
+            assert index is not None, [(r.get('title'), r.get('action')) for r in rows]
+            current = found['selected']
+            for _ in range(max(0, index - current)): press('down')
+            for _ in range(max(0, current - index)): press('up')
+            press('return')
+            linked = wait_until(lambda: (lambda s: s if s['selectedProfile'] == parent else None)(shell()), timeout=5, step=.1) or shell()
+            row('setcmd6_q05_incognito_settings_link_parent', linked['selectedProfile'] == parent,
+                selected=linked['selectedProfile'], parent=parent, other=other)
+            shell(action='cancel')
             app.call('window-focus', id=window['id'], activate=True)
             app.call('window-close')
             wait_until(lambda: not any(w['private'] for w in app.call('incognito-state')['windows']) or None, timeout=8, step=.1)
@@ -296,6 +316,17 @@ def run(factory, results, tmp, h):
             profile_dir = os.path.join(app.user_data, 'Profiles', directory)
             on_disk = wait_until(lambda: os.path.isdir(engine_dir) and os.path.isdir(profile_dir) or None, timeout=10, step=.2)
             selected_before = shell()['selectedProfile']
+            # Review r1 #2: a Blank Window and an Incognito window of the new Profile (neither registers Undo).
+            windows_before = len(app.call('shell-windows'))
+            press('n', ['control', 'command'])
+            blank = wait_until(lambda: app.call('blank-window').get('isBlankWindow') or None, timeout=8, step=.1)
+            close_bar(); focus_main()
+            private_before = {w['id'] for w in app.call('incognito-state')['windows'] if w['private']}
+            app.call('menu-perform', id='new-incognito-window')
+            private = wait_until(lambda: next((w for w in app.call('incognito-state')['windows']
+                                               if w['private'] and w['id'] not in private_before), None), timeout=8, step=.1)
+            close_bar(); focus_main()
+            opened = len(app.call('shell-windows'))
             def undo_until(gone):
                 for _ in range(4):
                     if (profile_named('SC6 Undo') is None) == gone: return True
@@ -304,6 +335,11 @@ def run(factory, results, tmp, h):
                     time.sleep(.3)
                 return (profile_named('SC6 Undo') is None) == gone
             removed = undo_until(True)
+            closed = wait_until(lambda: len(app.call('shell-windows')) == windows_before or None, timeout=5, step=.1)
+            row('setcmd6_s01_undo_closes_profile_windows', bool(blank) and bool(private) and opened == windows_before + 2
+                and bool(closed) and not any(w['private'] for w in app.call('incognito-state')['windows']),
+                blankOpened=bool(blank), privateOpened=bool(private), windows=[windows_before, opened, len(app.call('shell-windows'))])
+            focus_main()
             undone = shell()
             ids = [p['id'] for p in undone['profiles']]
             reveal(); app.call('menu-perform', id='redo'); time.sleep(.3)
@@ -311,17 +347,24 @@ def run(factory, results, tmp, h):
             back = profile_named('SC6 Undo') is not None
             reveal(); app.call('menu-perform', id='undo'); time.sleep(.3)
             undone_again = shell()
-            app.call('save'); app.quit()
+            # Review r1 #1: no explicit save and no normal quit. The Undo's own scheduled save (1 s debounce)
+            # must reach disk; then the App dies as in a crash (no quit-time save).
+            time.sleep(3)
+            import signal
+            os.kill(app.pid, signal.SIGKILL)
+            app.quit()
             app = factory(urls=(), extra_args=ENGINE_SWITCHES)
             relaunched = shell()
+            relaunched_profiles = [p['name'] for p in relaunched['profiles']]
             row('setcmd6_s01_undo_new_profile_wipes_folders', bool(on_disk) and removed and back
                 and directory in undone['orphans'] and directory not in redone['orphans'] and directory in undone_again['orphans']
                 and undone['selectedProfile'] in ids
+                and 'SC6 Undo' not in relaunched_profiles
                 and not os.path.isdir(engine_dir) and not os.path.isdir(profile_dir) and not relaunched['orphans'],
                 directory=directory, onDisk=bool(on_disk), removed=removed, redoBack=back, selectedBefore=selected_before,
                 orphans=[undone['orphans'], redone['orphans'], undone_again['orphans'], relaunched['orphans']],
                 selectedAfterUndo=undone['selectedProfile'], profileIDs=ids,
-                afterRelaunch=dict(engine=os.path.isdir(engine_dir), profile=os.path.isdir(profile_dir)))
+                afterRelaunch=dict(engine=os.path.isdir(engine_dir), profile=os.path.isdir(profile_dir), profiles=relaunched_profiles))
         if wanted('s01'): guarded('setcmd6_s01_undo_new_profile_wipes_folders', undo_new_profile)
     finally:
         try:
