@@ -146,10 +146,15 @@ import OpenAdBlock
         let previous = links.drafts
         if let index=links.drafts.firstIndex(where:{$0.id == draft.id}) {links.drafts[index]=draft}
         else {links.drafts.append(draft)}
-        // A blocked save leaves the list as it was: the sheet keeps its own draft, and Cancel must
-        // not leave it behind as an unsaved edit (review r1 #2).
-        guard commitLinks() else { links.drafts = previous; return false }
-        return true
+        if commitLinks() { return true }
+        // Blocked only by other rules' errors (several rules on a deleted Space): keep this explicit
+        // Save in the list and close the sheet. The pane shows what is left; the last repair saves them
+        // all (review r2 #1). An error of this draft, or a failed write, leaves the list as it was, so
+        // the sheet's Cancel leaves nothing behind (review r1 #2).
+        let ownError = links.issues(replacing: draft).contains { $0.ruleID == draft.id && $0.isError }
+        if !ownError, links.issues().contains(where: \.isError) { return true }
+        links.drafts = previous
+        return false
     }
     public var linkTestSummary: String? {
         guard let decision=links.testDecision else {return nil}

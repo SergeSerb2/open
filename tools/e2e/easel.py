@@ -812,6 +812,14 @@ def run(factory, results, tmp, api):
                                          timeout=5, step=.2)
             record('L04c_library_follows_sidebar_rename', bool(b_tab) and bool(renamed) and library().get('open'),
                    tab=b_tab, titles=sorted(r.get('title') or '' for r in library().get('rows', [])))
+            # L04d (review r2 #2): a title typed in the canvas (one row) shows in the open Library too.
+            typed = None
+            if b_tab:
+                easel(action='title', text='Board B typed', tab=b_tab)
+                typed = api.wait_until(lambda: (lambda x: x if any(r.get('title') == 'Board B typed' for r in x.get('rows', [])) else None)(library()),
+                                       timeout=5, step=.2)
+            record('L04d_library_follows_canvas_title', bool(b_tab) and bool(typed) and library().get('open'),
+                   tab=b_tab, titles=sorted(r.get('title') or '' for r in library().get('rows', [])))
             library(action='close')
         finally:
             server.shutdown()

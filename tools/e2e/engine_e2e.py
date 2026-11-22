@@ -322,7 +322,9 @@ class Open:
         self.user_data = user_data
         self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
-        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE")
+        # OPEN_E2E_APP_BUNDLE in the environment: a saved copy of another build for a whole suite
+        # (break-and-revert proof against a parent commit while the tree builds the fix).
+        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE") or os.environ.get("OPEN_E2E_APP_BUNDLE")
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         launched_file = os.stat(app)

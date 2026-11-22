@@ -238,6 +238,21 @@ def run(factory, results, tmp, h):
                  'Yes, make Open my default.' in default_text and 'Not yet.' in default_text), png=default_png, text=default_copy)
         app.call('first-run', action='finish')
         row('F4_finish', not state()['active'] and state()['completed'] and len(app.call('shell-windows')) == 1)
+        # Bug sweep r6 CF-03 (review r2 #3): Undo of the first-run import removes its two Archive rows (the
+        # import's Profile goes in that same Undo), Redo brings them back. Ends redone for the rows below.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        def undo_idle(): h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+        def archive_count(expected):
+            h.wait_until(lambda: archives()['count'] == expected, timeout=10, step=.1)
+            return archives()['count']
+        archives_first = archives()['count']
+        app.call('sidebar-key', key='z', modifiers=['command']); undo_idle()
+        archives_undone = archive_count(0)
+        app.call('sidebar-key', key='z', modifiers=['command', 'shift']); undo_idle()
+        archives_redone = archive_count(2)
+        row('first_run_archive_undo_redo', archives_first == 2 and archives_undone == 0 and archives_redone == 2
+            and {s['title'] for s in app.call('spaces')} == {'Alpha', 'Beta'},
+            first=archives_first, undone=archives_undone, redone=archives_redone, spaces=[s['title'] for s in app.call('spaces')])
         # Never invoke the real system-default setter. Setup automation stubs it.
         # Exercise Profile insertion on the model swapped in by first run,
         # before a relaunch could reinstall a missing onProfileCreated hook.

@@ -144,6 +144,8 @@ extension AppDelegate {
       for host in factory.easelHosts.values where host !== source && host.documentID == doc.id { host.showSaved(doc) }
     }
     guard titleChanged else { return }
+    // The editing row already has the new title (one row: nothing below changes), so post here (review r2 #2).
+    easelsDidChange()
     var models = Set<ObjectIdentifier>(), changed = false
     for factory in hostFactories.values where models.insert(ObjectIdentifier(factory.model)).inserted {
       for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == doc.id && tab.title != doc.displayTitle {
@@ -152,7 +154,6 @@ extension AppDelegate {
     }
     guard changed else { return }
     for factory in hostFactories.values { factory.controller?.refresh(); factory.scheduleSave() }
-    easelsDidChange()  // a title typed in the canvas (review r1 #4)
   }
 
   /// Removes every row of an Easel in every window (no Archive entry) and moves its folder to the
@@ -182,11 +183,21 @@ extension AppDelegate {
 extension AppDelegate {
   /// An Easel or Note changed outside the Library (renamed, deleted, imported): an open Library ▸
   /// Easels & Notes in any window and the command bar's Easel list read them again (bug sweep r6 CF-11).
+  /// Coalesced (review r2 #2): a title typed in a canvas or editor posts on every change, and a reload
+  /// rereads every Easel and Note file, so open panes reload at most once per 0.3 s.
   func easelsDidChange() {
-    for session in settingsPresenter.librarySessions.values where session.controller?.isLibraryOpen == true {
-      session.panel?.reloadEasels()
-    }
     easelSearch.invalidate()
+    guard !easelSearch.libraryReloadPending else { return }
+    easelSearch.libraryReloadPending = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.easelSearch.libraryReloadPending = false
+        for session in self.settingsPresenter.librarySessions.values where session.controller?.isLibraryOpen == true {
+          session.panel?.reloadEasels()
+        }
+      }
+    }
   }
 
   /// Every Easel (sidebar rows first, then documents without a row), for Export All Easels.

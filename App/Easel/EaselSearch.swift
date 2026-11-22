@@ -16,6 +16,8 @@ final class EaselSearch {
 
   /// An Easel was renamed, deleted or imported: the next command bar reads the folder again.
   func invalidate() { lastRefresh = -Double.infinity }
+  /// A coalesced reload of open Library ▸ Easels & Notes panes is queued (AppDelegate.easelsDidChange).
+  var libraryReloadPending = false
 
   func refresh(force: Bool = false) {
     let now = ProcessInfo.processInfo.systemUptime

@@ -30,7 +30,9 @@ extension LibraryViewModel {
         guard let store = histories[profileID] else { return }
         await actions.flushHistoryWrites()
         do {
-            try await store.deleteVisits(); selectedIDs = []; statusText = "History cleared."
+            // All of it, also visits with a future time (a clock that was ahead); pending writes were
+            // flushed just above, and the engine clear below has no end either (review r2 #4).
+            try await store.deleteVisits(through: .distantFuture); selectedIDs = []; statusText = "History cleared."
             // Not only Open's list: the engine keeps its own copy (bug sweep r6 DHR-01).
             await actions.clearEngineHistory(profileID: profileID)
         }
