@@ -208,14 +208,20 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     removeStandaloneFullscreenObservers()
     standaloneFullscreenWindow = window
     for name in [NSWindow.willEnterFullScreenNotification, NSWindow.willExitFullScreenNotification,
-                 NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+                 NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification,
+                 LittleOpenWindowController.fullScreenTransitionDidFail] {
       standaloneFullscreenObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
-        let name = note.name
+        let name = note.name, entering = note.userInfo?["entering"] as? Bool == true
         MainActor.assumeIsolated {
           guard let self else { return }
           switch name {
           case NSWindow.didEnterFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(true)
           case NSWindow.didExitFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(false)
+          // A failed enter leaves a normal window: the page leaves fullscreen too, as in a main
+          // window (windowDidFailToEnterFullScreen). A failed exit only ends the transition.
+          case LittleOpenWindowController.fullScreenTransitionDidFail:
+            self.standaloneFullscreenTransition = false
+            if entering { self.windowFullScreenChanged(false) }
           default: self.standaloneFullscreenTransition = true
           }
         }
@@ -1288,6 +1294,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func closeAll() {
     guard !isClosing else { return }
+    // A Little Open page that took its window into full screen ends here (a Profile switch
+    // replaces it mid-transition too): the window leaves full screen with it (bug sweep r6).
+    if enteredWindowFullscreenForPage, controller == nil { littleOpenController?.leaveFullScreen() }
+    enteredWindowFullscreenForPage = false; exitWindowFullscreenAfterTransition = false
     removeStandaloneFullscreenObservers()
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
