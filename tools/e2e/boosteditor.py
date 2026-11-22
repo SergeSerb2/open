@@ -25,6 +25,10 @@ def run(factory, results, tmp, env):
         import boost_match
         boost_match.run(factory, results, tmp, env)
         return
+    if os.environ.get("OPEN_E2E_BOOST_SWEEP7_ONLY") == "1":
+        import boost_sweep7
+        boost_sweep7.run(factory, results, tmp, env)
+        return
     if os.environ.get("OPEN_E2E_BOOST_ZAP_ONLY") == "1":
         import boost_zap
         boost_zap.run(factory, results, tmp, env)
@@ -636,6 +640,8 @@ def run(factory, results, tmp, env):
             script_update(factory, results, tmp, env)
             from boost_match import run as boost_match
             boost_match(factory, results, tmp, env)
+            from boost_sweep7 import run as boost_sweep7
+            boost_sweep7(factory, results, tmp, env)
         finally:
             if app and not app.closed:
                 try:
