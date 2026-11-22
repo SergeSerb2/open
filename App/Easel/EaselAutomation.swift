@@ -259,6 +259,9 @@ extension AutomationController {
       }
       return ["shown": true, "buttons": all.map(\.title), "texts": labels(content).filter { !$0.isEmpty }]
     case "flush": app.easels.flush()
+    case "import-delay":
+      let ms = args["ms"] as? Int ?? 0
+      EaselContentHost.importDelayForAutomation = ms > 0 ? .milliseconds(ms) : nil
     default: throw Failure(message: "unknown easel action")
     }
     canvas.layoutSubtreeIfNeeded()
@@ -293,6 +296,7 @@ extension AutomationController {
     if let host = factory.easelHosts[tab.id], !host.closed {
       state["shown"] = host.canvas.window != nil && !host.canvas.isHiddenOrHasHiddenAncestor
       state["canvas"] = host.canvas.state()
+      state["pendingImageImports"] = host.canvas.pendingImageImports
       state["recreated"] = host.recreated
       if let window = host.canvas.window {
         state["firstResponder"] = window.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
