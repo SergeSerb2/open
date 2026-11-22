@@ -2968,7 +2968,8 @@ public final class BrowserModel {
 
     /// Earliest Today activity deadline across all Profiles. Pinned and Favorites
     /// are excluded by ancestry; tabs shown in any window are excluded by the
-    /// same visibility rule as the sweep. Read all inputs for Observation.
+    /// same visibility rule as the sweep. Read all inputs for Observation (a shown tab's activity
+    /// is not an input).
     public func nextAutoArchiveExpiry() -> Date? {
         let shown = tabsShownInWindows()
         let thresholds = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0.settings.autoArchiveAfter.seconds) })
@@ -2976,8 +2977,12 @@ public final class BrowserModel {
         for space in spaces {
             let threshold = thresholds[space.profileID] ?? nil
             for tab in space.today.flatMap({ tabs(under: $0) }) {
+                // A shown tab's activity is not read (or observed): it never expires, and it gets a
+                // new stamp when it leaves the screen. Tab sleep's visibility stamp at launch then
+                // schedules no second snapshot save (bug sweep r6, #643 L11).
+                guard shown[tab.id] == nil else { continue }
                 let activity = tab.lastActiveAt
-                guard let threshold, shown[tab.id] == nil else { continue }
+                guard let threshold else { continue }
                 let deadline = activity.addingTimeInterval(threshold)
                 earliest = earliest.map { min($0, deadline) } ?? deadline
             }
