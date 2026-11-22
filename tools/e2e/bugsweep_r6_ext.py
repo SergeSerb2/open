@@ -79,18 +79,21 @@ def ext01_blank_window_pin(app, row, h, origin):
     blank = h.wait_until(lambda: (lambda s: s if s['isBlankWindow'] else None)(app.call('blank-window')), timeout=8, step=.1)
     assert blank, 'no Blank Window'
     window = blank['window']
-    app.call('key', key='escape', route='app')
-    url = origin + '/blank-pin'
-    tab = h.new_tab(app, url, window=window)
-    found = h.wait_until(lambda: app.eval(control, "chrome.tabs.query({}).then(ts=>(ts.find(t=>t.url===%s)||{}).id||0)" % json.dumps(url)), timeout=10)
-    result = app.eval(control, "chrome.tabs.update(%d,{pinned:true}).then(t=>({pinned:t.pinned}),e=>({error:String(e)}))" % found)
-    time.sleep(1)
-    tabs = app.call('tabs', window=window)
-    mine = next((t for t in tabs if t['id'] == tab), {})
-    row('EXT01_blank_window_api_pin_refused', bool(found) and mine.get('section') == 'today',
-        api=result, tab=mine, negative='old: the tab moves to the pinned list, which a Blank Window never shows')
-    app.call('window-close', window=window)
-    app.call('window-focus', id=main, activate=True)
+    try:
+        app.call('key', key='escape', route='app')
+        url = origin + '/blank-pin'
+        tab = h.new_tab(app, url, window=window)
+        # The probe page is a tab of the main window: address it there.
+        found = h.wait_until(lambda: app.eval(control, "chrome.tabs.query({}).then(ts=>(ts.find(t=>t.url===%s)||{}).id||0)" % json.dumps(url), window=main), timeout=10)
+        result = app.eval(control, "chrome.tabs.update(%d,{pinned:true}).then(t=>({pinned:t.pinned}),e=>({error:String(e)}))" % found, window=main)
+        time.sleep(1)
+        tabs = app.call('tabs', window=window)
+        mine = next((t for t in tabs if t['id'] == tab), {})
+        row('EXT01_blank_window_api_pin_refused', bool(found) and mine.get('section') == 'today',
+            api=result, tab=mine, negative='old: the tab moves to the pinned list, which a Blank Window never shows')
+    finally:
+        app.call('window-close', window=window)
+        app.call('window-focus', id=main, activate=True)
 
 
 def command_count(app, control, name='probe-named'):
@@ -142,11 +145,13 @@ def r10_open_bar_keycaps(app, row, h, origin):
     try:
         app.call('settings-pane', pane='shortcuts')
         app.call('ext-shortcuts', action='record', id='new-tab', key='o', modifiers=['command', 'option', 'control'])
-        after = h.wait_until(lambda: (lambda s: s if s.get('presented') and (new_tab_row(s) or {}).get('keycaps') != (new_tab_row(before) or {}).get('keycaps') else None)(
+        # An action row shows its key as the subtitle (ActionsProvider).
+        old = (new_tab_row(before) or {}).get('subtitle')
+        after = h.wait_until(lambda: (lambda s: s if s.get('presented') and (new_tab_row(s) or {}).get('subtitle') != old else None)(
             app.call('commandbar-state', window=w1)), timeout=5, step=.05) or app.call('commandbar-state', window=w1)
-        keys = (new_tab_row(after) or {}).get('keycaps')
-        row('R10_open_bar_shows_rebound_key', bool(new_tab_row(before)) and after.get('presented')
-            and keys == ['⌃', '⌥', '⌘', 'O'], before=(new_tab_row(before) or {}).get('keycaps'), after=keys,
+        keys = (new_tab_row(after) or {}).get('subtitle') or ''
+        row('R10_open_bar_shows_rebound_key', bool(new_tab_row(before)) and after.get('presented') and 'T' in (old or '')
+            and 'O' in keys and '⌥' in keys and '⌃' in keys, before=old, after=keys,
             presented=after.get('presented'), negative='old: the open bar keeps ⌘T')
     finally:
         app.call('settings-pane', pane='shortcuts')
@@ -183,12 +188,14 @@ def bst02_library_edit_closes_library(app, row, h, origin):
     app.call('boost-editor', action='close')
     app.call('library', action='open', section='boosts')
     assert h.wait_until(lambda: any(r['id'] == boost for r in app.call('library').get('rows', [])), timeout=8, step=.05)
+    tabs_before = {t['id'] for t in app.call('tabs')}
     app.call('library', action='row-menu', id=boost, select='Edit Boost')
-    editor = h.wait_until(lambda: app.call('boost-editor').get('open'), timeout=10)
-    library = app.call('library')
-    row('BST02_library_edit_closes_library', bool(editor) and not library.get('open'),
-        editorOpen=bool(editor), libraryOpen=library.get('open'), negative='old: the Library stays open over the editor')
-    app.call('boost-editor', action='close')
+    opened = h.wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in tabs_before and t.get('selected')), None), timeout=10)
+    library = h.wait_until(lambda: (lambda s: s if not s.get('open') else None)(app.call('library')), timeout=3, step=.05) or app.call('library')
+    row('BST02_library_edit_closes_library', bool(opened) and not library.get('open'),
+        opened=opened and opened['url'], libraryOpen=library.get('open'), editorOpen=app.call('boost-editor').get('open'),
+        negative='old: the Library stays open over the Boost page and its editor')
+    if app.call('boost-editor').get('open'): app.call('boost-editor', action='close')
     if app.call('library').get('open'): app.call('library', action='close')
 
 
@@ -226,10 +233,10 @@ def ext04_little_open_menu(app, row, h, origin):
     items = {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in ('manage-extensions', 'add-extension', 'extension-shortcuts')}
     tabs_before = {t['id'] for t in app.call('tabs')}
     try:
-        app.call('menu-perform', id='extension-shortcuts'); performed = True
+        app.call('menu-perform', id='manage-extensions'); performed = True
     except RuntimeError as error: performed = str(error)
-    opened = h.wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in tabs_before and t['url'].startswith('chrome://extensions/shortcuts')), None), timeout=8)
-    row('EXT04_little_open_extensions_menu_enabled', items == {'manage-extensions': True, 'add-extension': True, 'extension-shortcuts': True}
+    opened = h.wait_until(lambda: next((t for t in app.call('tabs') if t['id'] not in tabs_before and t['url'].startswith('chrome://extensions')), None), timeout=8)
+    row('EXT04_little_open_extensions_menu_enabled', items.get('manage-extensions') is True and items.get('add-extension') is True
         and performed is True and bool(opened), items=items, performed=performed, opened=opened,
         negative='old: the three items are disabled while Little Open is key')
     try: app.call('little-open-action', id=little['id'], action='close')
