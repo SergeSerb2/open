@@ -114,11 +114,11 @@ def run(factory, results, tmp, h):
                     'expression': '[window.idleActivation ?? null, navigator.userActivation.hasBeenActive]',
                     'returnByValue': True, 'userGesture': False})
                 return reply['result'].get('value')
-            def probed(target):
+            def probed(target, rgb=(18, 52, 86)):
                 # The page-color probe has answered: proof the load-time probes ran on this page.
                 rows = [p for p in app.call('pages') if p.get('hostTab') == target]
                 color = rows[0].get('pageBackground') if rows else None
-                return bool(color) and color[:3] == [18, 52, 86]
+                return bool(color) and color[:3] == list(rgb)
             def close_with_key(target):
                 # Cmd+W: the tab closes at once, or a "Leave site?" sheet asks (then it is left, so the tab closes).
                 app.call('key', key='w', modifiers=['cmd'])
@@ -137,6 +137,14 @@ def run(factory, results, tmp, h):
             ran = wait(lambda: probed(idle), timeout=5, step=.05)
             untouched = wait(lambda: (lambda v: v if v and v[0] is not None else None)(activation(idle)), timeout=5, step=.05)
             closes, idle_sheet = close_with_key(idle)
+            # An http page too: there the per-load hooks that skip data: pages (theme data, Boosts,
+            # ad block) also run. Its page sets no handler and no script.
+            web = app.call('open', url=origin + '/activation?' + str(time.time_ns()))['id']
+            app.call('wait', tab=web)
+            web_probed = wait(lambda: probed(web, (255, 255, 255)), timeout=5, step=.05)
+            time.sleep(1.0)
+            web_active = (activation(web) or [None, None])[1]
+            app.call('close', tab=web)
             # Positive control: one real (DevTools input) click activates, and Cmd+W then asks.
             clicked = fresh()
             for kind in ('mousePressed', 'mouseReleased'):
@@ -144,9 +152,10 @@ def run(factory, results, tmp, h):
                          params={'type': kind, 'x': 20, 'y': 20, 'button': 'left', 'clickCount': 1})
             active = wait(lambda: (activation(clicked) or [None, False])[1] is True, timeout=3, step=.05)
             asks, sheet = close_with_key(clicked)
-            return check(ran and untouched == [False, False] and closes == 'closed' and active and asks == 'sheet'
-                         and sheet.get('title') == 'Leave site?',
+            return check(ran and untouched == [False, False] and closes == 'closed' and web_probed and web_active is False
+                         and active and asks == 'sheet' and sheet.get('title') == 'Leave site?',
                          probed=ran, untouched=untouched, idleCmdW=closes, idleSheet=idle_sheet,
+                         httpProbed=bool(web_probed), httpActivated=web_active,
                          clickedActive=active, clickedCmdW=asks, sheet=sheet)
         gate('load_probes_no_user_activation', load_probes_no_activation)
         for name, script, accepted, text, expected, kind in [
