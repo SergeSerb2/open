@@ -12611,26 +12611,43 @@ def library_capture_checks(app, require, root, evidence):
     first_png = os.path.join(evidence, 'media-selection-first.png')
     next_png = os.path.join(evidence, 'media-selection-next.png')
     baseline_png = os.path.join(evidence, 'media-selection-baseline.png')
-    key('down'); key('down')
-    app.call('snapshot', path=baseline_png, window=current['window'])
-    key('up'); key('up')
-    app.call('snapshot', path=first_png, window=current['window'])
-    key('down'); down = state()
-    app.call('snapshot', path=next_png, window=current['window'])
-    width, _, first_pixel = read_image(first_png)
-    _, _, next_pixel = read_image(next_png)
-    _, _, baseline_pixel = read_image(baseline_png)
-    scale = width / window_width
+    scale = None
     # Inside the selection plate, clear of the text: the row's middle, 7 pt below its top.
     points = [(panel_frame[0] + r['frame'][0] + r['frame'][2] / 2, panel_frame[1] + r['frame'][1] + 7) for r in listed[:2]]
-    before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
-    after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
-    baseline_pixels = [baseline_pixel(px * scale, py * scale) for px, py in points]
     distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
-    require('library_media_selection_pixels', distance(before_pixels[0], baseline_pixels[0]) >= 5
+    settle_reads = {}
+    def settled_pixels(path):
+        # The row plate's color change is an implicit 0.25 s Core Animation fade. A frame taken
+        # right after the key catches its tail (bug sweep r6: row 0 read 41-42 against a 38
+        # baseline, settled to 38 by +0.3 s; failed 1 of 8 runs at load 90). Read only a frame
+        # after the fade, and one that a second frame confirms (no motion left at either point).
+        nonlocal scale
+        time.sleep(.3)
+        previous, reads, settled = None, 0, False
+        for _ in range(6):
+            app.call('snapshot', path=path, window=current['window'])
+            width, _, pixel = read_image(path)
+            scale = width / window_width
+            sample = [pixel(px * scale, py * scale) for px, py in points]
+            reads += 1
+            if previous and all(distance(a, b) <= 1 for a, b in zip(sample, previous)):
+                settled = True; break
+            previous = sample
+            time.sleep(.1)
+        # A frame no second frame confirmed is not a settled frame: the row fails on it.
+        settle_reads[os.path.basename(path)] = dict(reads=reads, settled=settled)
+        return sample
+    key('down'); key('down')
+    baseline_pixels = settled_pixels(baseline_png)
+    key('up'); key('up')
+    before_pixels = settled_pixels(first_png)
+    key('down'); down = state()
+    after_pixels = settled_pixels(next_png)
+    require('library_media_selection_pixels', all(v['settled'] for v in settle_reads.values()) and len(settle_reads) == 3
+            and distance(before_pixels[0], baseline_pixels[0]) >= 5
             and distance(after_pixels[1], baseline_pixels[1]) >= 5
             and distance(before_pixels[1], baseline_pixels[1]) <= 3 and distance(after_pixels[0], baseline_pixels[0]) <= 3,
-            baseline=baseline_pixels, before=before_pixels, after=after_pixels, points=points, scale=scale,
+            baseline=baseline_pixels, before=before_pixels, after=after_pixels, points=points, scale=scale, settleReads=settle_reads,
             baselinePNG=baseline_png, firstPNG=first_png, nextPNG=next_png)
     key('up'); up = state()
     for _ in range(10): key('down')
