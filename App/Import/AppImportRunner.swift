@@ -351,8 +351,9 @@ final class AppImportRunner: ProfileDataOwner {
       }
     }
     // Arc Notes: write the document of every Note tab that landed. An existing Note
-    // file (an earlier import the user may have edited) is never replaced.
-    if plan.spaces && plan.tabs && !imported.notes.isEmpty {
+    // file (an earlier import the user may have edited) is never replaced. Note tabs also
+    // land without Spaces (into a Space that exists already) and as Favorites (bug sweep r6 CF-04).
+    if (plan.tabs || plan.favorites) && !imported.notes.isEmpty {
       let landed = Set(app.model.allTabsForNotes().compactMap { NoteLink.id(from: $0.url) })
       var written = 0
       for note in imported.notes where landed.contains(note.id) { if app.notes.importIfAbsent(note) { written += 1 } }
@@ -418,7 +419,9 @@ final class AppImportRunner: ProfileDataOwner {
         }
         do {
           try app.directories.ensureProfileDirectories(for: profile)
-          let store = ArchiveStore(fileURL: app.directories.archiveFileURL(for: profile))
+          // The App's own store per Profile (bug sweep r6 CF-03): an open Library ▸ Archive sees the rows,
+          // Profile deletion closes the same handle, and quit flushes its queue.
+          let store = app.archiveSink.store(for: profile.id)
           let mapped = records.map { record in
             var row = record
             // Existing Space profile assignments are authoritative on re-import.
@@ -428,10 +431,10 @@ final class AppImportRunner: ProfileDataOwner {
           // Route each record by its actual target Profile, including reassigned Spaces.
           for (id, batch) in Dictionary(grouping: mapped, by: \.profileID) {
             let destination = id.flatMap { app.model.profile(id: $0) } ?? profile
-            let sink = destination.id == profile.id ? store : ArchiveStore(fileURL: app.directories.archiveFileURL(for: destination))
+            let sink = destination.id == profile.id ? store : app.archiveSink.store(for: destination.id)
             guard !undo.cancelled else { break }
             let write = try await sink.importRecordsWithUndo(batch)
-            undo.append(archive: sink, records: write.undo)
+            undo.append(archive: destination.id, records: write.undo)
             counts[ImportOutcomeKeys.archive, default: 0] += write.inserted
             counts["Archive duplicates", default: 0] += write.duplicates
             counts["Duplicates", default: 0] += write.duplicates
