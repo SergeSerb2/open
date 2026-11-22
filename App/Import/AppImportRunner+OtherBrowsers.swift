@@ -180,9 +180,10 @@ extension AppImportRunner {
     }
     // Up to 500,000 hashes: on a worker, as the session read, not on the main thread (bug sweep r6 REG-06).
     if !unmatched.isEmpty {
-      let scanned = await Task.detached(priority: .utility) { [unmatched, windows, positions, key] () -> [URL: ItemID] in
+      let (scanned, scanOnMain) = await Task.detached(priority: .utility) { [unmatched, windows, positions, key] () -> ([URL: ItemID], Bool) in
         var budget = 500_000, found: [URL: ItemID] = [:]
         for (url, own, ids) in unmatched {
+          guard budget > 0 else { break }
           var perURL = 2_048
           search: for window in [own] + (0..<windows).filter({ $0 != own }) { for index in 0..<positions {
             guard budget > 0, perURL > 0 else { break search }
@@ -191,8 +192,13 @@ extension AppImportRunner {
             if ids.contains(id) { found[url] = id; break search }
           } }
         }
-        return found
+        return (found, pthread_main_np() != 0)
       }.value
+      #if OPEN_AUTOMATION
+      openTabsScanOnMainThread = scanOnMain
+      #else
+      _ = scanOnMain
+      #endif
       // The import may have been cancelled, or its Space or Profile removed, during the scan.
       guard !undo.cancelled, !app.terminationRequested else { return }
       guard app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {

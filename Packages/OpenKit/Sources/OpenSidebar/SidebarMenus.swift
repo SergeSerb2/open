@@ -491,7 +491,7 @@ struct SidebarMenus {
             item("Share Folder…", .share(nodeID: folder.id)),
             .separator(),
             item("New Nested Folder…", .newNestedFolder(parentFolderID: folder.id)),
-            item("Turn “\(folder.title)” into Space", .turnFolderIntoSpace(folderID: folder.id)),
+            item("Turn “\(folder.title)” into Space", enabled: !context.hidesSpaceChrome, .turnFolderIntoSpace(folderID: folder.id)),
         ] + (folder.children.isEmpty ? [] : [
             // S3D: an empty folder has no Copy items; their place with tabs is pending (C3 item 4).
             item("Copy All Links", .copyAllLinks(folderID: folder.id, markdown: false)),

@@ -408,6 +408,12 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     }
     /// Retain the live page through the exit fade. The coordinator has already
     /// removed the session, so a second close cannot schedule another teardown.
+    /// The teardown a running exit fade still owes; `finishClosing()` runs it at once (shutdown).
+    private var pendingCloseFinish: (() -> Void)?
+    /// Called once the page and window are closed.
+    var onClosed: (() -> Void)?
+    /// Runs a pending exit-fade teardown now (review r1 #1: shutdown during the fade). Idempotent.
+    func finishClosing() { let finish = pendingCloseFinish; pendingCloseFinish = nil; finish?() }
     func closeWindow(immediate: Bool = false) {
         let finish = { [self] in
             // Page teardown can take several display intervals. Remove the
@@ -417,10 +423,12 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             CATransaction.flush()
             commandBar.dismiss(reason: .programmatic)
             container.closeAll(); window?.delegate = nil; window?.close()
+            let closed = onClosed; onClosed = nil; closed?()
         }
-        guard !immediate, window?.isVisible == true, !Motion.reducesMotion else { finish(); return }
+        pendingCloseFinish = finish
+        guard !immediate, window?.isVisible == true, !Motion.reducesMotion else { finishClosing(); return }
         let view = presentationView()
-        guard let layer = view.layer else { finish(); return }
+        guard let layer = view.layer else { finishClosing(); return }
         window?.ignoresMouseEvents = true
         let start = layer.presentation()?.opacity ?? layer.opacity
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -434,7 +442,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
            }) {
             (next.attachedSheet ?? next).makeKey(); next.makeMain()
         }
-        CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { self.finishClosing() } }
         layer.removeAnimation(forKey: "littleOpen.opacity")
         view.alphaValue = 0
         layer.opacity = 0

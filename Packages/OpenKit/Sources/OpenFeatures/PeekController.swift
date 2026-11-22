@@ -69,6 +69,9 @@ public final class PeekController {
     public private(set) var isPromotionHandoff = false
     /// The tab a promotion hands its expansion card to, and whether `promote` is still running.
     private var promotionTabID: ItemID?
+    /// The destination host the handoff waits for. A different host for the tab (a Profile
+    /// change rebuilt it) never finishes the handoff (review r1 #4).
+    private weak var promotionHost: (any WebContentHost)?
     private var promoting = false
     public private(set) var isPreparingOpening = false
     @ObservationIgnored private var openingLoadStarted = false
@@ -232,7 +235,8 @@ public final class PeekController {
             // The handoff waits for the promoted tab's page. A tab closed, replaced or left meanwhile
             // never finishes it: end the card now, or it covers the window (bug sweep r6 WL-01).
             guard !promoting, let id = promotionTabID, model.tab(id: id) == nil
-                    || splitController.container.host(for: id) == nil || splitController.focusedTab?.id != id else { return }
+                    || splitController.container.host(for: id) == nil || splitController.focusedTab?.id != id
+                    || (promotionHost != nil && splitController.container.host(for: id) !== promotionHost) else { return }
             cancelPromotionHandoff()
         }
         if pruneOrphanedItems() { return }
@@ -261,7 +265,7 @@ public final class PeekController {
     }
     private func cancelPromotionHandoff() {
         motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
-        isPromotionHandoff = false; promotionTabID = nil
+        isPromotionHandoff = false; promotionTabID = nil; promotionHost = nil
         overlay.resetMotion()
     }
     /// A Peek whose source tab left this window's model (closed, archived, moved to a Blank
@@ -477,6 +481,7 @@ public final class PeekController {
             // Alloy Peek pages can be replaced by a Chrome destination. The
             // old host closes during adopt; only the destination can finish
             // this handoff. Its normal container callbacks remain untouched.
+            promotionHost = host
             finishPromotionHandoff(host, tabID: tab.id, generation: motionGeneration, waitsForLoad: host !== item.host)
         } else { isPromotionHandoff = false; overlay.resetMotion(); refresh() }
         if stack.isEmpty { removeKeys() }; onChange?(); return true
@@ -506,7 +511,7 @@ public final class PeekController {
             if let image { self.overlay.expansionImage?.contents = image }
             self.overlay.afterSnapshotCommit(card) { [weak self] in
                 guard let self, self.motionGeneration == generation, self.isPromotionHandoff else { return }
-                self.isPromotionHandoff = false; self.overlay.resetMotion(); self.refresh(); self.onChange?()
+                self.isPromotionHandoff = false; self.promotionHost = nil; self.overlay.resetMotion(); self.refresh(); self.onChange?()
             }
         }
     }

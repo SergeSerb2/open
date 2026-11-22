@@ -133,6 +133,22 @@ def run(factory, results, tmp, h):
                 made=made['id'], after=after['id'], tabsBefore=len(before), tabsAfter=len(ids), selected=selected())
         guarded('win6_add_split_single_undo', add_split_one_undo, unsplit)
 
+        # Review r1 #3: New Note (in Split) is one Undo step too.
+        def note_split_one_undo():
+            a = new_tab(url('noteundo'))
+            app.call('select', tab=a)
+            before = [t['id'] for t in tabs()]
+            app.call('menu-perform', id='new-note-in-split')
+            made = wait_until(lambda: (lambda v: v if v['id'] and len(v['panes']) == 2 else None)(split()), timeout=3, step=.05)
+            assert made, split()
+            time.sleep(.4)
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
+            time.sleep(.6)
+            after = split(); ids = [t['id'] for t in tabs()]
+            row('win6_note_split_single_undo', not after['id'] and sorted(ids) == sorted(before),
+                made=made['id'], after=after['id'], tabsBefore=len(before), tabsAfter=len(ids))
+        guarded('win6_note_split_single_undo', note_split_one_undo, unsplit)
+
         # WL-02: "Open in Split View" on a closing nested Peek must not wedge the Peek under it.
         def split_during_dismiss():
             source = new_tab(url('psrc'))

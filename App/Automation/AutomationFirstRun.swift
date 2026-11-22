@@ -213,6 +213,7 @@ extension AutomationController {
         state["settingsCounts"] = wizard.counts
         state["settingsOutcome"] = wizard.outcome?.counts ?? [:]
         state["openTabsReadOnMainThread"] = app.importRunner.openTabsReadOnMainThread ?? NSNull()
+        state["openTabsScanOnMainThread"] = app.importRunner.openTabsScanOnMainThread ?? NSNull()
         state["settingsError"] = wizard.outcome?.errorText ?? ""
         state["secretsEnabled"] = wizard.canImportPasswordsAndCookies
         let copy = wizard.passwordsCopy

@@ -1111,7 +1111,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// AppKit shows them in its title bar at the top of the screen; a slide moved them off the
     /// screen's left edge (bug sweep r6 WL-06).
     private var movableTrafficLightLayers: [CALayer] {
-        guard let window, !window.styleMask.contains(.fullScreen) else { return [] }
+        // Also during the transition: the style mask can change after AppKit's first resize (review r1 #2).
+        guard let window, !fullscreenTransition, !window.styleMask.contains(.fullScreen) else { return [] }
         return Self.trafficLightKinds.compactMap { window.standardWindowButton($0)?.layer }
     }
 

@@ -2602,7 +2602,10 @@ public final class BrowserModel {
         return { model in
             // Auto-archive dissolved the split meanwhile: its survivors stay where they are.
             guard model.index[split.id] != nil else { return false }
-            for (slot, tabID) in reselected { model.restoreSelection([slot], from: split.id, to: tabID) }
+            // Only a tab that goes back to its row (auto-archive may have taken one).
+            for (slot, tabID) in reselected where model.parentByID[tabID] == .splitPane(split.id) {
+                model.restoreSelection([slot], from: split.id, to: tabID)
+            }
             // Reverse order puts every tab back at the exact index it left from.
             for origin in origins.reversed() where model.parentByID[origin.tab.id] == .splitPane(split.id) {
                 _ = model.removeChild(origin.tab.id, from: .splitPane(split.id))

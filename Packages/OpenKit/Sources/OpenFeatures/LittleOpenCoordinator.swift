@@ -56,6 +56,8 @@ public final class LittleOpenCoordinator {
     @ObservationIgnored public var requestPageClose: ((WindowID, @escaping (Bool) -> Void) -> Bool)?
     @ObservationIgnored public var onOpenInMain: ((WindowID, ItemID, (any WebContentHost)?) -> Void)?
     @ObservationIgnored public var confirmProfileSwitch: ((ProfileID, @escaping (Bool) -> Void) -> Void)?
+    /// Controllers whose window is in its exit fade (their page closes when it ends).
+    @ObservationIgnored private var closing: [WindowID: LittleOpenWindowController] = [:]
     @ObservationIgnored public var defaults = UserDefaults.standard
     public init(model: BrowserModel, archiveSink: (any ArchiveSink)?,
                 screenProvider: @escaping () -> LittleOpenScreen = { LittleOpenScreen.pointerScreen() },
@@ -176,7 +178,13 @@ public final class LittleOpenCoordinator {
         if let reason = archiveReason { archiveSink?.archive([ArchiveEntry(tab: session.tab, reason: reason, originalLocation: "littleOpen:\(session.id)", spaceID: nil, profileID: session.profileID, archivedAt: now)]) }
         session.windowIsVisible = false
         sessions.removeAll { $0.id == sessionID }
-        if let controller = controllers.removeValue(forKey: sessionID) { controller.prepareToClose(); controller.closeWindow(immediate: immediate) }
+        if let controller = controllers.removeValue(forKey: sessionID) {
+            // A window in its exit fade still owns its page until the fade ends: keep it reachable
+            // so shutdown can finish it (review r1 #1).
+            closing[sessionID] = controller
+            controller.onClosed = { [weak self] in self?.closing[sessionID] = nil }
+            controller.prepareToClose(); controller.closeWindow(immediate: immediate)
+        }
         onChange?()
     }
     public func showAll() { for session in Array(sessions.reversed()) { resurface(session.id) } }
@@ -185,6 +193,7 @@ public final class LittleOpenCoordinator {
     /// it) and no exit fade, so no Little Open Browser outlives shutdown preparation (bug sweep r6 WL-13).
     public func closeAllForShutdown() {
         for session in Array(sessions) { close(sessionID: session.id, archiveReason: nil, now: Date(), preflight: false, immediate: true) }
+        for controller in Array(closing.values) { controller.finishClosing() }
     }
     /// No polling timer: the App's ExpirySweeper schedules this deadline and observes onChange.
     public func nextExpiry(now: Date) -> Date? {

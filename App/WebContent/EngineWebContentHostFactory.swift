@@ -1478,10 +1478,13 @@ extension EngineWebContentHostFactory {
   func openFromCommandBarInSplit(_ url: URL) -> Bool {
     guard !WelcomeTab.isInternal(url), let splits = controller?.splitController, let current = splits.focusedTab else { return false }
     guard splits.canAddPane else { navigateFromCommandBar(url, current: true); return true }
-    guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
-    _ = ensureContent(for: tab)
-    splits.openInSplit(tab.id)
-    return true
+    // The new tab and its split are one Undo step (review r1 #3, WL-10).
+    return model.asOneUndoStep { () -> Bool in
+      guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
+      _ = ensureContent(for: tab)
+      splits.openInSplit(tab.id)
+      return true
+    }
   }
   private func finishCommandBarNavigation(_ page: OEWebContent) {
     guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }
