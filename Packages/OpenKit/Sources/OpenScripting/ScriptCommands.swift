@@ -56,15 +56,19 @@ enum ScriptTarget {
 
     /// The window a command's specifier names (`… of window 2`), else the key or front window.
     static func window(for command: NSScriptCommand) -> BrowserWindowState? {
+        namedWindow(for: command) ?? ScriptRead.preferredWindow()
+    }
+
+    /// Only the window the specifier itself names; nil when the reference names none.
+    static func namedWindow(for command: NSScriptCommand) -> BrowserWindowState? {
         var current = command.directParameter as? NSScriptObjectSpecifier ?? command.receiversSpecifier
         while let specifier = current {
             if specifier.key == "appleScriptWindows", specifier.container == nil {
-                if let named = (specifier.objectsByEvaluatingSpecifier as? ScriptWindow)?.state { return named }
-                break
+                return (specifier.objectsByEvaluatingSpecifier as? ScriptWindow)?.state
             }
             current = specifier.container
         }
-        return ScriptRead.preferredWindow()
+        return nil
     }
 
     /// Model-only fallback for scratch probes: a script selection is not an Undo step.
@@ -72,6 +76,41 @@ enum ScriptTarget {
         let undo = model.undoManager
         undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }
         body()
+    }
+
+    /// close tab and delete tab: the close path of the named window, else (scratch probes) the model.
+    /// The cached wrapper goes only when the tab left the model: a pinned tab or Favorite stays,
+    /// and a page's beforeunload can keep its tab.
+    static func closeTab(_ id: ItemID, in window: WindowID?) {
+        if let close = ScriptHost.shared.closeTab, close(id, window) {
+        } else { ScriptHost.shared.model?.closeTab(id: id) }
+        if ScriptHost.shared.model?.tab(id: id) == nil { ScriptHost.shared.tabWrappers[id] = nil }
+    }
+
+    /// The window that `make … at <container>` names (`at space … of window id "…"`), else the key or
+    /// front window. Cocoa keeps the insertion location in the create command's arguments.
+    static func creationWindow() -> BrowserWindowState? {
+        if let location = NSScriptCommand.current()?.arguments?["Location"] as? NSPositionalSpecifier {
+            var current: NSScriptObjectSpecifier? = location.objectSpecifier
+            while let specifier = current {
+                if specifier.key == "appleScriptWindows", specifier.container == nil {
+                    if let named = (specifier.objectsByEvaluatingSpecifier as? ScriptWindow)?.state { return named }
+                    break
+                }
+                current = specifier.container
+            }
+        }
+        return ScriptRead.preferredWindow()
+    }
+
+    /// The selection after make new tab: the window's own select path (no Undo step, the page
+    /// shown). Scratch probes change the model only, also with no Undo step: make is one step.
+    static func showMadeTab(_ tab: Tab, spaceID: SpaceID, window: BrowserWindowState, model: BrowserModel) {
+        if let select = ScriptHost.shared.selectInWindow, select(window.id, spaceID, tab.id) { return }
+        withoutUndo(model) {
+            if window.focusedSpaceID != spaceID { model.focusSpace(windowID: window.id, spaceID: spaceID) }
+            model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: tab.id)
+        }
     }
 
     static func bringForward(_ state: BrowserWindowState) {
@@ -110,10 +149,7 @@ enum ScriptCreation {
         guard let url = parsedURL(properties["URL"] as? String ?? "about:blank") else { return nil }
         // §5.7 always appends to Today, regardless of a flattened insertion index.
         let tab = model.newTab(in: spaceID, url: url, at: nil)
-        if let window = ScriptRead.preferredWindow() {
-            model.focusSpace(windowID: window.id, spaceID: spaceID)
-            model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: tab.id)
-        }
+        if let window = ScriptTarget.creationWindow() { ScriptTarget.showMadeTab(tab, spaceID: spaceID, window: window, model: model) }
         return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
@@ -123,7 +159,7 @@ enum ScriptCreation {
         guard model.space(id: state.focusedSpaceID) != nil else { ScriptFailure.missing("space", state.focusedSpaceID.rawValue.uuidString); return nil }
         guard let url = parsedURL(properties["URL"] as? String ?? "about:blank") else { return nil }
         let tab = model.newTab(in: state.focusedSpaceID, url: url, at: nil)
-        model.selectNode(windowID: state.id, spaceID: state.focusedSpaceID, nodeID: tab.id)
+        ScriptTarget.showMadeTab(tab, spaceID: state.focusedSpaceID, window: state, model: model)
         return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
@@ -143,7 +179,14 @@ enum ScriptCreation {
 
     static func makeWindow(properties: [String: Any]) -> ScriptWindow? {
         guard ScriptRead.model() != nil else { return nil }
-        let incognito = properties["mode"] as? String == "incognito"
+        // Only the two documented modes. Any other value (a misspelling, "private") must fail,
+        // never fall back to a normal window that records history.
+        let requested = properties["mode"] as? String ?? "normal"
+        guard ["normal", "incognito"].contains(requested.lowercased()) else {
+            ScriptFailure.report(ScriptError.invalidValue, "\"\(requested)\" is not a window mode. Use normal or incognito.")
+            return nil
+        }
+        let incognito = requested.lowercased() == "incognito"
         guard let id = ScriptHost.shared.makeWindow?(incognito),
               let state = ScriptHost.shared.model?.windows.first(where: { $0.id == id }) else {
             ScriptFailure.report(incognito ? ScriptError.incognitoUnavailable : ScriptError.noWindow,
@@ -382,9 +425,12 @@ extension ScriptTab {
     @objc public func close(_ command: NSScriptCommand) -> Any? {
         guard let target = ScriptTarget.tab(from: command, receiver: self) else { return nil }
         _ = target.objectSpecifier
-        if target.isLittleTab { ScriptHost.shared.littleTab?.close(target.tabID) }
-        else { ScriptHost.shared.model?.closeTab(id: target.tabID) }
-        ScriptHost.shared.tabWrappers[target.tabID] = nil
+        if target.isLittleTab {
+            ScriptHost.shared.littleTab?.close(target.tabID)
+            ScriptHost.shared.tabWrappers[target.tabID] = nil
+        } else {
+            ScriptTarget.closeTab(target.tabID, in: ScriptTarget.namedWindow(for: command)?.id)
+        }
         return nil
     }
 }

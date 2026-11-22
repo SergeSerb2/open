@@ -23,8 +23,39 @@ extension AutomationController {
       guard let host=args["host"] as? String,host.utf8.count <= 253 else {throw Failure(message:"expected a site host")}
       adapter.settings.adBlock?.setExcluded(host,excluded:true)
     case "create":
-      guard let name=args["name"] as? String, name.utf8.count <= 1024, vm.create(name:name) != nil else { throw Failure(message:"could not create fixture Profile") }
+      // `spaces`: the Space IDs ticked in the New Profile sheet (they move to the new Profile).
+      let spaces = Set(((args["spaces"] as? [String]) ?? []).prefix(64).compactMap { UUID(uuidString:$0).map(SpaceID.init(rawValue:)) })
+      guard let name=args["name"] as? String, name.utf8.count <= 1024, vm.create(name:name,spaces:spaces) != nil else { throw Failure(message:"could not create fixture Profile") }
     case "notice-ok":app.missingProfileNotice?.buttons.first?.performClick(nil)
+    case "engines-open":
+      adapter.show(pane:.advanced); adapter.settings.showsSearchEngines=true
+    case "engine-type":
+      // The Search Engines sheet's fields, top to bottom (name, keyword, URL): real key events.
+      guard let index=args["field"] as? Int, let text=args["text"] as? String, text.utf8.count <= 1024,
+        let sheet=adapter.settingsPresenter.window?.attachedSheet, let content=sheet.contentView else { throw Failure(message:"Search Engines sheet not open") }
+      var fields:[NSTextField]=[]
+      func collect(_ view:NSView) {
+        if let field=view as? NSTextField, field.isEditable, !field.isHiddenOrHasHiddenAncestor { fields.append(field) }
+        for child in view.subviews { collect(child) }
+      }
+      collect(content)
+      fields.sort { $0.convert($0.bounds,to:nil).maxY > $1.convert($1.bounds,to:nil).maxY }
+      guard fields.indices.contains(index) else { throw Failure(message:"engine field not found") }
+      sheet.makeFirstResponder(fields[index]); fields[index].selectText(nil)
+      _=try await sendKey(["window":sheet.windowNumber,"text":text,"route":"app"],app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
+    case "engine-click-row":
+      // A real click on the engine's list row (the list stays selectable while a form is open).
+      guard let id=args["engine"] as? String, let row=vm.engines.firstIndex(where:{$0.id == id}),
+        let sheet=adapter.settingsPresenter.window?.attachedSheet, let content=sheet.contentView else { throw Failure(message:"engine row not found") }
+      func table(_ view:NSView)->NSTableView? {
+        if let table=view as? NSTableView { return table }
+        for child in view.subviews { if let found=table(child) { return found } }
+        return nil
+      }
+      guard let list=table(content), row < list.numberOfRows else { throw Failure(message:"engine list not found") }
+      list.scrollRowToVisible(row); list.layoutSubtreeIfNeeded()
+      let rect=list.rect(ofRow:row), point=list.convert(CGPoint(x:rect.midX,y:rect.midY),to:nil)
+      _=try await mouse(["action":"click","window":sheet.windowNumber,"x":Double(point.x),"y":Double(sheet.frame.height-point.y),"queued":true],try window)
     case "cancel":
       vm.confirmsDelete=false;vm.confirmsUnused=false;vm.showsCreate=false;vm.showsSuggestNotice=false
       adapter.profileIconPicker?.close()
@@ -138,7 +169,10 @@ extension AutomationController {
       "managerSheet":managerSheet?.windowNumber ?? 0,"managerSheetText":managerSheet.map(windowText) ?? [],
       "managerSheetParent":managerSheet?.sheetParent?.windowNumber ?? 0,
       "undoName":app.undoManager.undoActionName,
-      "error":vm.errorText,"canUndo":app.undoManager.canUndo,
+      "error":vm.errorText,"canUndo":app.undoManager.canUndo,"canRedo":app.undoManager.canRedo,
+      "selectedProfile":adapter.settings.selectedProfileID.description,
+      "customEngines":(vm.profile?.settings.customSearchEngines ?? []).map { ["id":$0.id,"name":$0.name,"keyword":$0.keywords.first ?? "","url":$0.searchURLTemplate] },
+      "orphans":ProfileTeardown.journaledOrphans(directories:app.directories),
       "adblockReady":adapter.settings.adBlock?.isReady ?? false,
       "adblockUpdating":adapter.settings.adBlock.map { $0.store.isUpdating(adapter.settings.selectedProfileID) } ?? false,
       "adblockDomains":adapter.settings.adBlock?.domains ?? [],

@@ -184,6 +184,8 @@ extension AppDelegate {
     switch id {
     case "open-in-current-space": return controller.state == .page && controller.pillSpaceID != nil
     case "open-command-bar", "archive-tab", "close-window": return true
+    // performLittleOpenCommand runs these for the Little Open window's Profile.
+    case "manage-extensions", "add-extension", "extension-shortcuts": return littleOpenExtensionFactory() != nil
     case "reload", "go-back", "go-forward", "copy-url": return controller.state == .page
     default: return nil
     }

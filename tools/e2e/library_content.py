@@ -317,6 +317,8 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             state(action='boost-layout',name='Gallery');check('boost_gallery',state()['boostsLayout']=='Gallery');capture('boosts-gallery')
             state(action='search',text='no-such-boost');check('boost_search_empty',wait(lambda:not rows()));state(action='search',text='');assert wait(lambda:row(boost))
             menu(boost,'Edit Boost');check('boost_edit_row',wait(lambda:app.call('boost-editor').get('open')));app.call('boost-editor',action='close')
+            # Edit Boost closes the Library so the editor and its page show (bug sweep r6 BST-02, #655).
+            check('boost_edit_closes_library',wait(lambda:not state()['open']));state(action='open',section='boosts');assert wait(lambda:row(boost))
             state(action='row-action',id=boost,name='Delete');app.call('alert',window='library',button='Cancel')
             check('boost_delete_cancel',any(b['id']==boost for b in app.call('boosts',profile=profile)))
             # Space Manager uses its real model, outline, menus and reorder handle.

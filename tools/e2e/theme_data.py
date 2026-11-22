@@ -83,6 +83,41 @@ def run(output, config='Release'):
                 live = wait_until(lambda: (lambda p: p if p and p == themed else None)(page()), timeout=5, step=.1)
                 check('themed_space_palette_live', bool(themed) and len(themed) == 26 and bool(live)
                       and themed.get('--arc-background-simple-color') == themed.get('--arc-palette-foregroundPrimary'), expected=themed, page=page())
+                # Bug sweep r6 T-02: a theme-editor drag writes the Space theme once per display frame, and
+                # each write re-applied the variables to every live page of every Space. Now only the shown
+                # pages of the edited Space follow the drag; its hidden pages get the final value when the
+                # drag ends, and other Spaces' pages get nothing.
+                def page_of(t): return app.eval(t, READ % json.dumps(all_names))
+                def values_of(t): return app.call('theme-data-state', tab=t)['variables']
+                space_a = app.call('window-state')['space']
+                hidden_a = new_tab(app, origin + '/hidden-a', background=True)
+                app.call('space-create', title='Theme B')
+                other_b = new_tab(app, origin + '/other-b')
+                b_values = wait_until(lambda: (lambda p: p if p and p == values_of(other_b) else None)(page_of(other_b)), timeout=5, step=.1)
+                app.call('space', space=space_a); app.call('select', tab=tab)
+                hidden_ready = wait_until(lambda: page_of(hidden_a) == themed, timeout=5, step=.1)
+                app.call('editor-open', kind='theme', space=space_a)
+                def editor(): return app.call('editor-state')
+                knob = editor()['controls']['knob']
+                start = [knob[0] + knob[2] / 2 + 13, knob[1] + knob[3] / 2 + 13]
+                applies, previews = app.call('theme-data-state', tab=tab)['applies'], editor()['previews']
+                app.call('editor-act', action='drag', **{'from': start, 'to': [105, 235], 'steps': 16})
+                wait_until(lambda: editor()['displayLinks'] == 0, timeout=3, step=.02)
+                final = values_of(tab)
+                shown_live = wait_until(lambda: page_of(tab) == final, timeout=5, step=.1)
+                hidden_final = wait_until(lambda: page_of(hidden_a) == final, timeout=5, step=.1)
+                b_kept = page_of(other_b) == b_values
+                frames = editor()['previews'] - previews
+                sent = app.call('theme-data-state', tab=tab)['applies'] - applies
+                app.call('editor-close')
+                check('theme_drag_applies_edited_space_only', bool(b_values) and bool(hidden_ready) and final != themed
+                      and bool(shown_live) and bool(hidden_final) and b_kept and frames >= 4 and frames <= sent <= frames + 4,
+                      previews=frames, scriptsSent=sent, shownLive=bool(shown_live), hiddenFinal=bool(hidden_final),
+                      otherSpaceKept=b_kept, hiddenReady=bool(hidden_ready))
+                app.call('close', tab=hidden_a); app.call('close', tab=other_b)
+                # Back to the themed Space style for the next row.
+                app.call('theme-set', style=gold)
+                wait_until(lambda: page() == themed, timeout=5, step=.1)
                 # A Favorite belongs to the Profile and shows in its focused Space: it reads that Space's values
                 # too (before the fix its pages had none, because only pinned and Today tabs had a Space).
                 app.call('favorite', tab=tab)

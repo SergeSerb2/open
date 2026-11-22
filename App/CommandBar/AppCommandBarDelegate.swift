@@ -59,6 +59,17 @@ final class AppCommandBarSession: CommandBarDelegate {
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
 
   var isPresented: Bool { controller?.isPresented == true }
+  /// Settings changed a shortcut: an open bar shows the new keycaps now (Little Open's bar does
+  /// the same in refreshKeyBindings). Its engine may be shared and already rekeyed by another window.
+  func keyBindingsChanged() {
+    guard let bar = controller, bar.isPresented else { return }
+    let bindings = factory.app.keyBindings
+    if (suggestActionBindings.object(forKey: bar.engine)?.store ?? .empty) != bindings {
+      bar.engine.setActions(CommandRegistry.makeSuggestRegistry(overrides: bindings))
+      suggestActionBindings.setObject(SuggestActionBindings(bindings), forKey: bar.engine)
+    }
+    bar.refreshResults()
+  }
   /// True when the user opened the current presentation (Cmd+T / Cmd+L, menu, sidebar): only then a second key closes it.
   private(set) var openedByUser = false
   func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
@@ -177,10 +188,13 @@ final class AppCommandBarSession: CommandBarDelegate {
   func commandBar(_ commandBar: CommandBarController, perform intent: CommandBarIntent) {
     if let id = pinnedEditTabID {
       // Edit Pinned URL: a page or a search becomes the tab's pinned URL; any other row acts as usual.
-      pinnedEditTabID = nil
       switch intent {
-      case .open(let url, _, _), .search(_, let url, _, _, _): factory.updatePinnedURL(id, to: url); return
-      default: break
+      case .open(let url, _, _), .search(_, let url, _, _, _):
+        // Cmd+Return keeps the bar open: it still edits the pinned tab, so its next Return must not
+        // navigate the selected tab instead. Return has already dismissed it.
+        if !commandBar.isPresented { pinnedEditTabID = nil }
+        factory.updatePinnedURL(id, to: url); return
+      default: pinnedEditTabID = nil
       }
     }
     // Over a Peek, Cmd+L edits the Peek's page: the Welcome tab behind it does not count.
@@ -212,9 +226,11 @@ final class AppCommandBarSession: CommandBarDelegate {
       factory.controller?.toasts.show(ToastContent(title: "Copied"))
     case .openSearchSettings(let profile):
       // Open keeps search engines per Profile: Settings ▸ Profiles for the bar's Profile (CC-42 "Search Settings…").
-      factory.app.performCommand("search-settings", payload: (profile ?? factory.focusedProfile?.id)?.description)
+      // An Incognito window's Profile is a stand-in that Settings does not list: use its parent.
+      factory.app.performCommand("search-settings", payload: (factory.incognitoSession?.parent.id ?? profile ?? factory.focusedProfile?.id)?.description)
     case .runExtensionAction(let id):
-      factory.focusedBrowser?.executeExtensionAction(id, source: .menuEntry)
+      // The window's own run path: it clears an earlier click's popup anchor and keeps its guards.
+      factory.extensions.run(id, source: .menuEntry)
     case .extensionOmnibox(let id, let content, let destination, let modifiers):
       let disposition: OEOmniboxDisposition = modifiers.contains(.command) ? .newBackgroundTab
         : destination == .currentTab ? .currentTab : .newForegroundTab
@@ -250,7 +266,9 @@ final class AppCommandBarSession: CommandBarDelegate {
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "engineID": String(describing: ObjectIdentifier(bar.engine)),
       "firstSnapshotURLs": firstSnapshotURLs,
-      "drawn": bar.rows.map { ["id": $0.id, "title": $0.title, "subtitle": $0.subtitle] },
+      "drawn": bar.rows.map { row -> [String: Any] in
+        let keys: [String] = if case .keys(let keys) = row.accessory { keys } else { [] }
+        return ["id": row.id, "title": row.title, "subtitle": row.subtitle, "keys": keys] },
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",

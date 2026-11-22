@@ -196,6 +196,8 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     #endif
     pendingURL = nil
     host?.historyRecorder.flushBeforeClose()
+    // Before a download can defer finishClose (review of #665, #5).
+    factory.leaveWindowFullScreenStartedByPage()
     factory.standaloneSurface = nil
     factory.standaloneSurfaceVisibilityChanged()
     app.littleOpenHosts[tabID] = nil

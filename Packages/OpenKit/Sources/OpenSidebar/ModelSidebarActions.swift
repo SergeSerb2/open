@@ -127,7 +127,10 @@ public struct ModelSidebarActions {
             return model.asOneUndoStep { () -> Bool in
                 switch parent {
                 case .spacePinned(let s), .spaceToday(let s):
-                    let tab = model.newTab(in: s, url: url, title: url.host() ?? url.absoluteString, at: index)
+                    // A link dropped on another Space's icon opens there in the background: unread
+                    // until selected, as a tab moved to another Space (lead Q11; bug sweep r6 P-03).
+                    let tab = model.newTab(in: s, url: url, title: url.host() ?? url.absoluteString, at: index,
+                                           unread: s != context.focusedSpace?.id)
                     if case .spacePinned = parent { return model.moveNode(id: tab.id, to: parent, at: index) }
                 case .folder, .favorites:
                     guard let space = context.focusedSpace else { return false }

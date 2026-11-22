@@ -2802,6 +2802,18 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if os.environ.get("OPEN_WINDOW_OFFSCREEN_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
         return
+    # Bug sweep r6 dialog reset row (tools/e2e/dialog_r6.py); OPEN_DIALOG_R6_ONLY=1 runs only it.
+    if os.environ.get("OPEN_DIALOG_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "dialog_r6.py"))["run"](app_factory, results, wait_until)
+        return
+    # Bug sweep r6 idle and tab-switch cost rows (tools/e2e/perf_r6.py); OPEN_PERF_R6_ONLY=1 runs only them.
+    if os.environ.get("OPEN_PERF_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
+        return
+    # Bug sweep r6 appearance and Tab rows (tools/e2e/a11y_r6.py); OPEN_A11Y_R6_ONLY=1 runs only them.
+    if os.environ.get("OPEN_A11Y_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
+        return
     # Bug sweep r5 VoiceOver rows (tools/e2e/a11y_r5.py); OPEN_A11Y_R5_ONLY=1 runs only them.
     if os.environ.get("OPEN_A11Y_R5_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
@@ -2810,6 +2822,17 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if os.environ.get("OPEN_A11Y_R4_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
         return
+    # Bug sweep r6: OPEN_WINDOW_REVEAL_ONLY=1 runs only the hover-reveal card rows, in a fresh App.
+    if os.environ.get("OPEN_WINDOW_REVEAL_ONLY") == "1":
+        app = app_factory(urls=(white_fixture("Reveal card"),), fresh=True)
+        try:
+            wid = app.call("window-state")["id"]
+            app.call("window-focus", id=wid, activate=True)
+            place_away_from_cursor(app, 1280, 800)
+            reveal_card_window_checks(app, results, wid)
+        finally:
+            app.quit()
+        return
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
@@ -2817,6 +2840,9 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "dialog_r6.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
         sidebar_resize_gesture_checks(app_factory, results, tmp)
         window_chrome_followup_checks(app_factory, results, tmp)
@@ -3631,6 +3657,30 @@ def reveal_card_window_checks(app, results, wid):
         "otherWindow": bool(other), "revealed": away["revealed"], "reveal": away.get("reveal")}
     if other:
         app.call("window-close"); state_when(app, lambda st: st["id"] == wid)
+    # Bug sweep r6 (SB-07 part 2): the pointer leaves the window off its top edge from inside the
+    # card. WindowServer then sends the window's tracking-area exit and no motion event outside the
+    # window (the `exit` pointer action). The card used to stay, waiting for a motion event.
+    ensure_key(app, wid)
+    if state()["sidebarMode"] != "hidden":
+        app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_hidden(app)
+    card = reveal_card_and_wait(app)
+    app.call("mouse", action="hover", x=100, y=400)
+    held = state()["revealed"]
+    exited = app.call("mouse", action="exit", x=100, y=-4)
+    left = wait_until(lambda: (lambda st: st if not st["revealed"] else None)(state()), timeout=2, step=.05) or state()
+    # Review r1 #2: off the top above the traffic lights (x < 40), where the top-left zone reaches
+    # 15 pt above the window. The exit point must land past that zone too.
+    app.call("mouse", action="move", x=700, y=400)
+    corner_card = wait_card(app, False) and reveal_card_and_wait(app)
+    app.call("mouse", action="hover", x=20, y=400)
+    corner_held = state()["revealed"]
+    app.call("mouse", action="exit", x=20, y=-4)
+    corner = wait_until(lambda: (lambda st: st if not st["revealed"] else None)(state()), timeout=2, step=.05) or state()
+    results["reveal_card_window_exit_from_card"] = {
+        "ok": bool(card) and held and not left["revealed"] and bool(corner_card) and corner_held and not corner["revealed"],
+        "heldInCard": held, "revealed": left["revealed"], "reveal": left.get("reveal"), "exited": exited.get("exited"),
+        "topLeft": {"held": corner_held, "revealed": corner["revealed"], "zone": corner.get("reveal", {}).get("zone")}}
+    app.call("mouse", action="move", x=700, y=400)
     ensure_key(app, wid)
     if state()["sidebarMode"] == "hidden":
         app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_anchored(app)
@@ -5085,6 +5135,9 @@ def page_commands_checks(factory, results, tmp):
 
 
 def sidebar_checks(factory, results, tmp):
+    # Bug sweep r6 sidebar rows (tools/e2e/sidebar_r6.py); OPEN_SIDEBAR_R6_ONLY=1 runs only them.
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_r6.py"))["run"](factory, results, wait_until, tmp)
+    if os.environ.get("OPEN_SIDEBAR_R6_ONLY") == "1": return
     app = factory(urls=(), fresh=True)
     confirm_key = 'open.profiles.confirmInterProfileMove'
     saved = {confirm_key: app.call('defaults', key=confirm_key)}
@@ -6829,6 +6882,9 @@ def media_checks(factory, results, tmp):
     """media-pip §8.4 E-M1…E-M15 in the real App (phase 1: Chromium's own PiP window)."""
     server, port = _media_server()
     base = "http://127.0.0.1:%d/" % port
+    # Bug sweep r6 media rows (tools/e2e/media_r6.py); OPEN_MEDIA_R6_ONLY=1 runs only them.
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "media_r6.py"))["run"](factory, results, wait_until, base)
+    if os.environ.get("OPEN_MEDIA_R6_ONLY") == "1": server.shutdown(); return
     # Chromium's fake capture devices (recording card): no system camera or microphone is opened, so
     # macOS shows no permission prompt. The permission itself goes through Open's real request path
     # (automation policy "grant"); Chromium's fake permission UI would skip the capture indicator.
@@ -7397,6 +7453,23 @@ def media_checks(factory, results, tmp):
             and dp_moved is True and bool(dp_gone) and dp_back is True and dp_reopened is True and bool(dp_win2) and bool(dp_nav_gone),
             "window": dp_win, "page": dp_page, "innerSize": dp_size, "moved": dp_moved, "level": dp_level, "closed": bool(dp_gone), "elementBack": dp_back,
             "navigationCloses": bool(dp_nav_gone), "videoPiP": pip()["state"]}
+        # Bug sweep r6: closing a Document PiP keeps the page's own pending dialog. The PiP shares the
+        # page's client; its dialog reset now names its browser, and cancelled every page sheet before.
+        app.call("navigate", tab=dp, url=base + "docpip.html"); app.call("wait", tab=dp)
+        dp_opened3 = gesture_eval(dp, "start()")
+        dp_win3 = wait_until(lambda: doc_window(), timeout=3, step=.02)
+        app.call("policy", dialogs="hold")
+        app.eval(dp, "setTimeout(() => alert('R6 page alert'), 0); true")
+        dp_pending = wait_until(lambda: (lambda s: s if s.get("pending") else None)(app.call("dialog-state")), timeout=3, step=.05) or {}
+        app.call("pip-action", action="close")
+        dp_gone3 = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        time.sleep(.5)
+        dp_after = app.call("dialog-state")
+        results["media_document_pip_close_keeps_page_dialog"] = {"ok": dp_opened3 is True and bool(dp_win3) and bool(dp_gone3)
+            and dp_pending.get("message") == "R6 page alert" and dp_after.get("pending") == 1 and dp_after.get("message") == "R6 page alert",
+            "pendingBefore": dp_pending.get("pending"), "after": {k: dp_after.get(k) for k in ("pending", "message")}, "pipClosed": bool(dp_gone3)}
+        if app.call("dialog-state").get("pending"): app.call("dialog", accept=True)
+        app.call("policy", dialogs="")
         close_tab(dp)
 
         # EM-6 + EM-7, the Meet path: a playing page that registers "enterpictureinpicture" gets Chromium's
@@ -9559,6 +9632,19 @@ def routing_checks(factory, results, tmp):
                and 'atc_default=1' in default_cookies and work_context not in (None, 'Default'),
                workContext=work_context, workCookiePresent='atc_work=1' in work_cookies,
                defaultIsolated='atc_work=' not in default_cookies)
+
+        # A link that opens in another Space is one Undo step, as ⌘T is: the Space switch is not one.
+        undo_url = origin + '/undo-space-link'
+        app.call('undo-state', clear=True)
+        sent = deliver(undo_url)
+        reached = landed(undo_url)
+        app.call('menu-perform', id='reveal-tab-in-sidebar'); app.call('menu-perform', id='undo')
+        removed = wait_until(lambda: not any(t['url'] == undo_url for t in app.call('tabs')), timeout=3, step=.05)
+        undo = app.call('undo-state')
+        record('routing_space_link_one_undo_step', sent.returncode == 0 and reached and removed and not undo['canUndo'],
+               removed=bool(removed), undo=undo)
+        app.call('space', space=seed['spaces'][0]['id'])
+        app.call('select', tab=default_tab)
 
         profile_url = origin + '/profile-little-initial'
         sent = deliver(profile_url)
@@ -12611,26 +12697,43 @@ def library_capture_checks(app, require, root, evidence):
     first_png = os.path.join(evidence, 'media-selection-first.png')
     next_png = os.path.join(evidence, 'media-selection-next.png')
     baseline_png = os.path.join(evidence, 'media-selection-baseline.png')
-    key('down'); key('down')
-    app.call('snapshot', path=baseline_png, window=current['window'])
-    key('up'); key('up')
-    app.call('snapshot', path=first_png, window=current['window'])
-    key('down'); down = state()
-    app.call('snapshot', path=next_png, window=current['window'])
-    width, _, first_pixel = read_image(first_png)
-    _, _, next_pixel = read_image(next_png)
-    _, _, baseline_pixel = read_image(baseline_png)
-    scale = width / window_width
+    scale = None
     # Inside the selection plate, clear of the text: the row's middle, 7 pt below its top.
     points = [(panel_frame[0] + r['frame'][0] + r['frame'][2] / 2, panel_frame[1] + r['frame'][1] + 7) for r in listed[:2]]
-    before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
-    after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
-    baseline_pixels = [baseline_pixel(px * scale, py * scale) for px, py in points]
     distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
-    require('library_media_selection_pixels', distance(before_pixels[0], baseline_pixels[0]) >= 5
+    settle_reads = {}
+    def settled_pixels(path):
+        # The row plate's color change is an implicit 0.25 s Core Animation fade. A frame taken
+        # right after the key catches its tail (bug sweep r6: row 0 read 41-42 against a 38
+        # baseline, settled to 38 by +0.3 s; failed 1 of 8 runs at load 90). Read only a frame
+        # after the fade, and one that a second frame confirms (no motion left at either point).
+        nonlocal scale
+        time.sleep(.3)
+        previous, reads, settled = None, 0, False
+        for _ in range(6):
+            app.call('snapshot', path=path, window=current['window'])
+            width, _, pixel = read_image(path)
+            scale = width / window_width
+            sample = [pixel(px * scale, py * scale) for px, py in points]
+            reads += 1
+            if previous and all(distance(a, b) <= 1 for a, b in zip(sample, previous)):
+                settled = True; break
+            previous = sample
+            time.sleep(.1)
+        # A frame no second frame confirmed is not a settled frame: the row fails on it.
+        settle_reads[os.path.basename(path)] = dict(reads=reads, settled=settled)
+        return sample
+    key('down'); key('down')
+    baseline_pixels = settled_pixels(baseline_png)
+    key('up'); key('up')
+    before_pixels = settled_pixels(first_png)
+    key('down'); down = state()
+    after_pixels = settled_pixels(next_png)
+    require('library_media_selection_pixels', all(v['settled'] for v in settle_reads.values()) and len(settle_reads) == 3
+            and distance(before_pixels[0], baseline_pixels[0]) >= 5
             and distance(after_pixels[1], baseline_pixels[1]) >= 5
             and distance(before_pixels[1], baseline_pixels[1]) <= 3 and distance(after_pixels[0], baseline_pixels[0]) <= 3,
-            baseline=baseline_pixels, before=before_pixels, after=after_pixels, points=points, scale=scale,
+            baseline=baseline_pixels, before=before_pixels, after=after_pixels, points=points, scale=scale, settleReads=settle_reads,
             baselinePNG=baseline_png, firstPNG=first_png, nextPNG=next_png)
     key('up'); up = state()
     for _ in range(10): key('down')
@@ -14536,6 +14639,67 @@ def page_translate_checks(factory, results, tmp):
         app.call('policy', contextMenu='')
         app.call('translate', action='selection-close')
         results['X8_selection_same_language'] = {'ok': same.get('state') == 'failed' and 'already in' in same.get('message', ''), 'state': same}
+        # Bug sweep r6 A11Y-10: a long selection keeps the bubble inside the content area with Copy
+        # shown (the text scrolls), and Tab moves keyboard focus onto Copy; Esc gives the key back.
+        app.eval(spa_tab, "document.body.insertAdjacentHTML('beforeend', '<p id=\"long-x8\"></p>'); "
+                 "document.getElementById('long-x8').textContent = (document.getElementById('p1').textContent + ' ').repeat(400).slice(0, 4900); true")
+        app.call('policy', contextMenu='run-open:' + title)
+        at = select_text("document.getElementById('long-x8')")
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        long_sel = wait_until(lambda: (lambda v: v if v.get('state') == 'translated' and v.get('shown') else None)(app.call('translate', action='selection')), timeout=10, step=.1) \
+            or app.call('translate', action='selection')
+        app.call('policy', contextMenu='')
+        lpf, lca, copy = long_sel.get('panelFrame', [0, 0, 0, 0]), long_sel.get('contentArea', [0, 0, 0, 0]), long_sel.get('copyFrame') or [0, 0, 0, 0]
+        results['X8_long_selection_capped'] = {
+            'ok': long_sel.get('state') == 'translated' and lpf[3] > 0 and lpf[1] >= lca[1] + 8 - .5 and lpf[1] + lpf[3] <= lca[1] + lca[3] - 8 + .5
+                  and copy[2] > 0 and copy[1] >= lpf[1] - .5 and copy[1] + copy[3] <= lpf[1] + lpf[3] + .5,
+            'panel': lpf, 'content': lca, 'copy': copy, 'chars': len(long_sel.get('text', ''))}
+        tabbed = app.call('translate', action='selection-key', code=48)
+        # Review of #665: Tab in the bubble gives the key back to the page (bubble stays); a later Tab is
+        # the page's (round 2 #2).
+        back = app.call('translate', action='selection-key', code=48)
+        again = app.call('translate', action='selection-key', code=48)
+        escaped = app.call('translate', action='selection-key', code=53)
+        def open_bubble(node_js):
+            app.call('policy', contextMenu='run-open:' + title)
+            at = select_text(node_js)
+            app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+            shown = wait_until(lambda: (lambda v: v if v.get('state') == 'translated' and v.get('shown') else None)(app.call('translate', action='selection')), timeout=10, step=.1)
+            app.call('policy', contextMenu='')
+            return bool(shown)
+        # Cmd+F with keyboard focus in the bubble: the window takes the key back, so the Find field gets
+        # the typing (round 2 #1).
+        bubble_c = open_bubble("document.getElementById('p1')")
+        into = app.call('translate', action='selection-key', code=48)
+        find_key = app.call('translate', action='selection-key', code=3)
+        find_pane = wait_until(lambda: next((p for p in app.call('find-state').get('panes', []) if p.get('visible') and p.get('focused')), None), timeout=3, step=.05) or {}
+        windows_after = [w for w in app.call('windows') if w.get('class') == 'BrowserWindow' and w.get('visible')]
+        app.call('key', key='escape', route='app')
+        app.call('translate', action='selection-close')
+        # Tab while the command bar (not the page) has focus does not enter the bubble; the bubble must
+        # still be there for that to mean anything (round 2 #3).
+        bubble_b = open_bubble("document.getElementById('p1')")
+        app.call('key', key='l', modifiers=['cmd'], route='app')
+        bar_open = wait_until(lambda: app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
+        from_bar = app.call('translate', action='selection-key', code=48)
+        app.call('key', key='escape', route='app')
+        wait_until(lambda: not app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
+        app.call('translate', action='selection-close')
+        results['X8_selection_tab_reaches_copy'] = {
+            'ok': tabbed.get('shown') is True and tabbed.get('panelKey') is True and tabbed.get('copyFocused') is True
+                  and back.get('shown') is True and back.get('panelKey') is False and back.get('parentKey') is True
+                  and again.get('shown') is True and again.get('panelKey') is False and again.get('parentKey') is True
+                  and escaped.get('shown') is False
+                  and bubble_b and bool(bar_open) and from_bar.get('shown') is True and from_bar.get('panelKey') is False
+                  and bubble_c and into.get('panelKey') is True and find_key.get('panelKey') is not True
+                  and bool(find_pane) and any(w.get('key') for w in windows_after),
+            'tab': {k: tabbed.get(k) for k in ('shown', 'panelKey', 'copyFocused', 'parentKey')},
+            'tabBack': {k: back.get(k) for k in ('shown', 'panelKey', 'parentKey')},
+            'tabAgain': {k: again.get(k) for k in ('shown', 'panelKey', 'parentKey')},
+            'tabFromCommandBar': {k: from_bar.get(k) for k in ('shown', 'panelKey', 'parentKey')}, 'barOpen': bool(bar_open),
+            'cmdF': {'into': into.get('panelKey'), 'panelKey': find_key.get('panelKey'), 'parentKey': find_key.get('parentKey'),
+                     'findFocused': bool(find_pane), 'browserKey': any(w.get('key') for w in windows_after)},
+            'esc': {k: escaped.get(k) for k in ('shown',)}}
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
             and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
         # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
@@ -15160,6 +15324,11 @@ def main():
             results["notes-export"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_export.py"))["run"](
                 factory, results["notes-export"], tmp, sys.modules[__name__])
+        elif opts.only == "blank-window" and os.environ.get("OPEN_EXT_R6_ONLY") == "1":
+            # Bug sweep r6 EXT6 rows (tools/e2e/bugsweep_r6_ext.py); OPEN_EXT_R6_ONLY=1 runs only them.
+            results["blank-window"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/bugsweep_r6_ext.py"))["run"](
+                factory, results["blank-window"], tmp, sys.modules[__name__])
         elif opts.only == "blank-window":
             results["blank-window"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/blank_window.py"))["run"](
@@ -15204,7 +15373,11 @@ def main():
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results["split"] = CheckedResults(tracker)
-            module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
+            # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1":
+                module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
+                factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
@@ -15212,17 +15385,30 @@ def main():
             space_header.run(factory, results["shell"], wait_until)
         elif opts.only == "relaunch":
             results["relaunch"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
-                factory, results["relaunch"], tmp, sys.modules[__name__], opts.config)
-            if os.environ.get('OPEN_RELAUNCH_SETTINGS_ONLY') != '1':
+            # Bug sweep r6 seed 8 (tools/e2e/relaunch_saves.py); OPEN_RELAUNCH_SAVES_ONLY=1 runs only it.
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/relaunch_saves.py'))['run'](
+                factory, results["relaunch"], sys.modules[__name__])
+            if os.environ.get('OPEN_RELAUNCH_SAVES_ONLY') != '1':
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
+                    factory, results["relaunch"], tmp, sys.modules[__name__], opts.config)
+            if os.environ.get('OPEN_RELAUNCH_SETTINGS_ONLY') != '1' and os.environ.get('OPEN_RELAUNCH_SAVES_ONLY') != '1':
                 relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
-            # OPEN_COMMANDBAR_NAV4_ONLY=1 runs only the bug sweep round 4 rows (tools/e2e/nav_round4.py).
-            if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
+            # OPEN_COMMANDBAR_NAV4_ONLY=1 runs only the bug sweep round 4 rows (tools/e2e/nav_round4.py);
+            # OPEN_COMMANDBAR_SETCMD6_ONLY=1 only the round 6 rows (tools/e2e/setcmd_round6.py);
+            # OPEN_COMMANDBAR_R6_KEYS_ONLY=1 only bug sweep r6 seed 7 (tools/e2e/keybindings_r6.py).
+            setcmd6_only = os.environ.get("OPEN_COMMANDBAR_SETCMD6_ONLY") == "1"
+            keys6_only = os.environ.get("OPEN_COMMANDBAR_R6_KEYS_ONLY") == "1"
+            if opts.only == "commandbar" and not setcmd6_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/keybindings_r6.py"))["run"](factory, results[opts.only])
+            if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1" and not setcmd6_only and not keys6_only:
                 commandbar_checks(factory, results[opts.only], tmp, opts.config)
-            if opts.only == "commandbar":
+            if opts.only == "commandbar" and not setcmd6_only and not keys6_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/nav_round4.py"))["run"](
+                    factory, results[opts.only], tmp, sys.modules[__name__])
+            if opts.only == "commandbar" and os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1" and not keys6_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/setcmd_round6.py"))["run"](
                     factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "app-icons":
             # tools/e2e/app_icons.py: picker, cache, reset, relaunch, and the macOS icon grid of every icon.
@@ -15275,6 +15461,7 @@ def main():
             results["applescript"] = CheckedResults(tracker)
             applescript = runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))
             applescript["scope_checks"](factory, results["applescript"], _fixture_server, _restore_defaults, wait_until)
+            applescript["window_close_checks"](factory, results["applescript"], _fixture_server, wait_until)
             applescript["run"](factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
         elif opts.only == "sitedata":
             results["sitedata"] = CheckedResults(tracker)
@@ -15324,7 +15511,11 @@ def main():
             littleopen_checks(factory, results["littleopen"], tmp)
         elif opts.only == "routing":
             results["routing"] = CheckedResults(tracker)
-            routing_checks(factory, results["routing"], tmp)
+            # OPEN_ROUTING_ENG6_ONLY=1 runs only the bug sweep round 6 engine rows (tools/e2e/engine_round6.py).
+            if os.environ.get("OPEN_ROUTING_ENG6_ONLY") != "1":
+                routing_checks(factory, results["routing"], tmp)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_round6.py"))["run"](
+                factory, results["routing"], tmp, sys.modules[__name__])
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
