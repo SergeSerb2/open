@@ -2802,6 +2802,10 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if os.environ.get("OPEN_WINDOW_OFFSCREEN_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
         return
+    # Bug sweep r6 idle and tab-switch cost rows (tools/e2e/perf_r6.py); OPEN_PERF_R6_ONLY=1 runs only them.
+    if os.environ.get("OPEN_PERF_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
+        return
     # Bug sweep r6 appearance and Tab rows (tools/e2e/a11y_r6.py); OPEN_A11Y_R6_ONLY=1 runs only them.
     if os.environ.get("OPEN_A11Y_R6_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
@@ -2822,6 +2826,7 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
         sidebar_resize_gesture_checks(app_factory, results, tmp)
         window_chrome_followup_checks(app_factory, results, tmp)

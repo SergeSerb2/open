@@ -77,7 +77,18 @@ def run(factory, results, wait_until):
         boosts = tab_walk()
         reached = sorted(set(boosts) & {'boosts.layout.list', 'boosts.layout.gallery', 'boosts.profile', 'Turn On'})
         results['a11y_library_tab_reaches_boosts_controls'] = {'ok': bool(reached), 'reached': reached, 'tabOrder': boosts}
+        # A control in the new loop holding focus must not keep the closed panel alive
+        # (library_content `closed_view_released` guards the same for the rail).
+        focused = ''
+        for _ in range(24):
+            if focused in ('boosts.profile', 'boosts.layout.gallery', 'boosts.layout.list'): break
+            app.call('key', key='tab', route='app'); focused = app.call('library').get('firstResponderLabel', '')
+        app.call('library', action='release-delay', seconds=.6)
         app.call('library', action='close')
+        released = wait_until(lambda: (lambda v: v if not v.get('panelCreated', True) and not v.get('releasedPanelAlive', True) else None)(app.call('library')),
+                              timeout=15, step=.2)
+        results['a11y_library_tab_focus_released'] = {'ok': focused.startswith('boosts.') and bool(released), 'focused': focused,
+                                                      'state': {k: (released or app.call('library')).get(k) for k in ('panelCreated', 'releasedPanelAlive')}}
     finally:
         try: app.call('appearance', name='system')
         except Exception: pass
