@@ -36,12 +36,13 @@ final class AppLinkExecutor: LinkDestinationExecutor {
       // makeWindow reuses the retained final standard state. Set its Space
       // before composition, so it cannot create a page in the old Space first.
       if app.frontMainModelWindowController == nil, let retained = app.model.windows.first(where: { $0.style == .standard }) {
-        app.model.focusSpace(windowID: retained.id, spaceID: spaceID)
+        app.withoutWindowUndo { app.model.focusSpace(windowID: retained.id, spaceID: spaceID) }
       }
       controller = app.makeWindow(focusedSpaceID: spaceID)
     }
     guard let controller, let factory = app.hostFactories[controller.windowID] else { return }
-    app.model.focusSpace(windowID: controller.windowID, spaceID: spaceID)
+    // Only the new tab is an Undo step, as with ⌘T: a Space switch is not one.
+    app.withoutWindowUndo { app.model.focusSpace(windowID: controller.windowID, spaceID: spaceID) }
     let tab = app.model.newTab(in: spaceID, url: url, at: 0)
     // Selection must make the tab live and attach its page, just like Cmd+T.
     factory.select(nodeID: tab.id)

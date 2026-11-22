@@ -215,7 +215,9 @@ extension AutomationController {
   }
 
   private func mediaTab(_ a: [String: Any]) throws -> Tab {
-    guard let s = a["tab"] as? String, let uuid = UUID(uuidString: s), let tab = app.model.tab(id: ItemID(rawValue: uuid)) else {
+    // An Incognito or Blank Window tab is in its window's own model.
+    guard let s = a["tab"] as? String, let uuid = UUID(uuidString: s),
+          let tab = app.model.tab(id: ItemID(rawValue: uuid)) ?? app.hostFactories.values.lazy.compactMap({ $0.model.tab(id: ItemID(rawValue: uuid)) }).first else {
       throw Failure(message: "missing or unknown tab")
     }
     return tab

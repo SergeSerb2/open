@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import OpenModel
 
 struct LibraryRowText: Sendable { let title:String; let subtitle:String }
 /// These objects are immutable after construction; CoreText supports worker
@@ -63,6 +64,12 @@ final class LibrarySectionHost {
     var storeVersion = ""
     var storeWatch: Task<Void,Never>?
     var loaded = false
+    /// Its list still shows rows of a Profile the filter has left: hidden until the new
+    /// Profile's rows load (bug sweep r6).
+    var showsOldProfile = false
+    /// The History/Boosts Profile this host was last retired for: the content observer does not
+    /// retire (and restart) it a second time for the same change (review of #665, #3).
+    var retiredFor: ProfileID?
     var provider: Task<Void,Never>?
     var providerGeneration = 0
     var wasWarmed = false

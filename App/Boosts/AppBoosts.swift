@@ -163,17 +163,26 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
       store.allBoosts().map { BoostItemSnapshot(id:$0.id.description,name:$0.name,domain:$0.siteMatch.domain,pathPrefix:$0.siteMatch.pathPrefix,isEnabled:$0.isEnabled) }
     }.value
   }
-  func factory(for id: ItemID) -> EngineWebContentHostFactory? {
-    app.hostFactories.values.first { $0.hosts[id] != nil }
+  /// The window whose page of the tab the Boost Editor works on. All standard windows share one
+  /// model, so a tab (a Favorite, a pinned tab) can show in two windows, each with its own page:
+  /// the invoking window when known (only its own page: none when it has no page for the tab),
+  /// else the window whose editor is bound to the tab, else the frontmost window that shows it.
+  func factory(for id: ItemID, preferring preferred: EngineWebContentHostFactory? = nil) -> EngineWebContentHostFactory? {
+    if let preferred { return preferred.hosts[id] != nil ? preferred : nil }
+    let hosting = app.hostFactories.values.filter { $0.hosts[id] != nil }
+    guard hosting.count > 1 else { return hosting.first }
+    let editing = hosting.filter { $0.controller?.boostEditor?.session?.context.tabID == id }
+    let candidates = editing.isEmpty ? hosting : editing
+    return NSApp.orderedWindows.lazy.compactMap { window in candidates.first { $0.window === window } }.first ?? candidates.first
   }
-  func canEdit(tabID: ItemID, committedURL: URL? = nil) -> Bool {
-    guard let factory = factory(for: tabID), !factory.isIncognito, factory.controller != nil, let host = factory.hosts[tabID], !host.closed,
+  func canEdit(tabID: ItemID, committedURL: URL? = nil, in preferred: EngineWebContentHostFactory? = nil) -> Bool {
+    guard let factory = factory(for: tabID, preferring: preferred), !factory.isIncognito, factory.controller != nil, let host = factory.hosts[tabID], !host.closed,
           !host.content.context.isEphemeral, !isRetired(host.profileID), let url = committedURL ?? host.content.url,
           ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { return false }
     return true
   }
-  func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode, committedURL: URL? = nil) {
-    guard canEdit(tabID: tabID, committedURL: committedURL), let factory = factory(for: tabID), let host = factory.hosts[tabID],
+  func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode, committedURL: URL? = nil, in preferred: EngineWebContentHostFactory? = nil) {
+    guard canEdit(tabID: tabID, committedURL: committedURL, in: preferred), let factory = factory(for: tabID, preferring: preferred), let host = factory.hosts[tabID],
           let controller = factory.controller, let window = controller.window, let url = committedURL ?? host.content.url else { return }
     let editor = controller.boostEditor ?? BoostEditorController(host: editorHost)
     controller.boostEditor = editor
@@ -187,9 +196,9 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
       editor.view?.codeView?.select(tab == .js ? .js : .css)
     }
   }
-  func editCurrent(tabID: ItemID) {
-    guard let factory = factory(for: tabID), let host = factory.hosts[tabID], let url = host.content.url else { return }
-    openEditor(boostID: matchingBoosts(url: url, profileID: host.profileID).first?.id, tabID: tabID, mode: .simple)
+  func editCurrent(tabID: ItemID, in preferred: EngineWebContentHostFactory? = nil) {
+    guard let factory = factory(for: tabID, preferring: preferred), let host = factory.hosts[tabID], let url = host.content.url else { return }
+    openEditor(boostID: matchingBoosts(url: url, profileID: host.profileID).first?.id, tabID: tabID, mode: .simple, in: factory)
   }
   func pageCommitted(_ host: EngineWebContentHost, url: URL, newDocument: Bool = false) {
     adapter.committed(host, url: url, newDocument: newDocument)
@@ -198,9 +207,12 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     // The engine's commit delegate precedes its URL-property notification.
     // Validate and present against that committed address; consuming the
     // request while content.url is nil loses Library Edit permanently.
-    if let id = pendingEditors[host.tabID], canEdit(tabID: host.tabID, committedURL: url) {
+    if let id = pendingEditors[host.tabID], canEdit(tabID: host.tabID, committedURL: url, in: host.owner) {
       pendingEditors[host.tabID] = nil
-      openEditor(boostID: id, tabID: host.tabID, mode: .simple, committedURL: url)
+      // The user may have moved to another tab before this one committed: never open the
+      // floating editor over a page it does not edit.
+      guard host.owner?.selectedTab?.id == host.tabID else { return }
+      openEditor(boostID: id, tabID: host.tabID, mode: .simple, committedURL: url, in: host.owner)
     }
   }
   func hostClosed(_ host: EngineWebContentHost) {
@@ -220,6 +232,10 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
           // Space nor an editable page for the Boost (canEdit refuses both).
           let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: space.id),
           let factory = app.hostFactories[controller.windowID] else { return nil }
+    // As Library ▸ Easels and Notes do: the page and its editor show in the window, not under the Library.
+    app.settingsPresenter.closeLibrary()
+    // From a Blank Window's Library the edit happens in the standard window behind it: bring it forward.
+    app.focusWindow(controller.windowID, activate: true)
     factory.focus(space: space)
     if let tab = factory.openNewTab(url: url, background: false) { pendingEditors[tab.id] = id }
     return nil

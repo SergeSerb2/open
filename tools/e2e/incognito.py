@@ -218,6 +218,11 @@ def checks(factory, results, tmp, harness):
         check('menu_private_chrome', view['private'] and not view['modelIsNormal'] and not view['modelArchiveSink']
               and view['header'] == 'Incognito' and view['appearance'] == 'NSAppearanceNameDarkAqua'
               and all(view['chrome'].values()) and one['title'] == 'Incognito', state=view)
+        # Every Library entry point is off in a private window: each opens the regular window's Library.
+        library_items = ('view-library', 'view-archive', 'view-history', 'view-downloads', 'view-media',
+                         'view-easels-notes', 'view-boosts', 'manage-spaces')
+        menus = {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in library_items}
+        check('menu_private_library_entries_disabled', set(menus) == set(library_items) and not any(menus.values()), menus=menus)
         tab = open_page('/one'); first = state()
         check('off_the_record_context', first['ephemeral'], context=first['context'])
         check('cookie_normal_absent_private', 'normalOnly' not in app.eval(tab, 'document.cookie'))

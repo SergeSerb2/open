@@ -11,7 +11,12 @@ extension NSApplication {
             // Pre-App fallback required by plan §5.2 for the scratch probes.
             return model.windows.map { ScriptHost.shared.windowWrapper(for: $0) }
         }
-        return windows.compactMap { window in
+        // window 1, front window and index follow AppKit's front-to-back order (NSApp.windows is
+        // not z-order). Minimized and hidden windows are not in orderedWindows: they follow, so
+        // their IDs still resolve.
+        let ordered = orderedWindows
+        let rest = windows.filter { window in !ordered.contains { $0 === window } }
+        return (ordered + rest).compactMap { window in
             guard let id = stateID(window), let state = model.windows.first(where: { $0.id == id }) else { return nil }
             return ScriptHost.shared.windowWrapper(for: state)
         }

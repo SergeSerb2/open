@@ -50,6 +50,7 @@ final class LibraryFilterEditor: NSView {
             self.groups.append((label,buttons))
         }
         for button in [done,self.clear] { button.foreground = foreground; button.overlay = overlay }
+        linkKeyViews()
         needsLayout = true; layoutSubtreeIfNeeded()
         if let focused, let control = chips[focused] { window?.makeFirstResponder(control) }
     }
@@ -70,6 +71,17 @@ final class LibraryFilterEditor: NSView {
         }
         if hasClear { clear.frame = CGRect(x:8,y:y,width:180,height:30); y += 42 }
         if contentHeight != y { contentHeight = y; onHeight?(y) }
+    }
+    /// Tab order inside the drawer: Done, each chip in reading order, Clear History…, then the
+    /// panel's next control. The chips are rebuilt on each update, so the loop is relinked there.
+    var firstKeyView: NSView { done }
+    var lastKeyView: NSView { clear }
+    /// Linked here too: a drawer never configured (no update yet) must still pass Tab on.
+    var nextKeyViewAfterDrawer: NSView? { didSet { linkKeyViews() } }
+    private func linkKeyViews() {
+        let order: [NSView] = [done] + groups.flatMap(\.1) + [clear]
+        for (a,b) in zip(order,order.dropFirst()) { a.nextKeyView = b }
+        clear.nextKeyView = nextKeyViewAfterDrawer
     }
     @discardableResult func toggle(_ id:String) -> Bool { guard let chip = chips[id] else { return false }; chip.performClick(nil); return true }
     func state(in root:NSView) -> [[String:Any]] {

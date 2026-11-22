@@ -35,6 +35,16 @@ final class NoteContentHost: WebContentHost {
   /// with its own editor: an edit in one reloads the others, so none keeps an older copy that
   /// its next keystroke would write over the file.
   private static let openHosts = NSHashTable<NoteContentHost>.weakObjects()
+  /// Automatic follows a live system Light/Dark switch, not only View ▸ Appearance
+  /// (bug sweep r6, A11Y-09). One app-wide observation serves every open Note.
+  private static var systemAppearanceObservation: NSKeyValueObservation?
+  private static func observeSystemAppearance() {
+    guard systemAppearanceObservation == nil else { return }
+    systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { _, _ in
+      // assumeIsolated requires every NSApp.appearance write to run on the main thread.
+      MainActor.assumeIsolated { for host in openHosts.allObjects where !host.closed { host.updateAppearance() } }
+    }
+  }
   static func open(noteID: UUID) -> [NoteContentHost] { openHosts.allObjects.filter { $0.noteID == noteID && !$0.closed } }
 
   /// The stored Note changed outside this editor: every other open editor shows it. With
@@ -60,6 +70,7 @@ final class NoteContentHost: WebContentHost {
     unreadable = store.isUnreadable(noteID)
     editor.setContent(title: note.title, body: Self.body(of: note, store: store))
     Self.openHosts.add(self)
+    Self.observeSystemAppearance()
     if unreadable {
       // Arc's error title (STR). Never overwrite a file we could not read.
       editor.titleView.placeholder = "Can't load this note"

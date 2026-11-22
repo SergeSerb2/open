@@ -119,7 +119,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     refreshPageBackground(); observeMute()
   }
   func close() {
-    guard !closed else { return }; closed = true; generation += 1; muteObservation += 1
+    guard !closed else { return }
+    owner?.app.tabSleep.pageWillClose(self)
+    closed = true; generation += 1; muteObservation += 1
     historyRecorder.close()
     cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
@@ -203,7 +205,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
-    if !changes.isDisjoint(with: [.URL, .title]) { owner.scheduleSave() }
+    // A new address saves after 1 s; a title alone (often a background tab's live counter) within 10 s (PERF-06).
+    if changes.contains(.URL) { owner.scheduleSave() } else if changes.contains(.title) { owner.scheduleMetadataSave() }
     // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
     if changes.contains(.selection) { owner.translate.syncStatus() }
     // Tab sleep's hard event contract: every change of every page, background tabs included.
@@ -263,7 +266,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       await owner.app.deferAsyncEngineWorkForAutomation()
       guard !Task.isCancelled, !self.closed, !owner.app.terminationRequested else { return }
       owner.app.noteAsyncEngineCall("faviconOwnership")
-      let document = try? await page.evaluateJavaScript(script) as? [String]
+      // No user gesture: an Open probe must not give the page user activation (bug sweep r6 T-01).
+      let document = try? await page.evaluateJavaScript(script, userGesture: false) as? [String]
       guard !Task.isCancelled, !self.closed, self.generation == token,
             self.faviconDocumentRevision == revision, page.url == url,
             page.favicon === image, page.faviconURL == iconURL,
@@ -310,7 +314,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
         return [255,255,255,255]; })()
       """
       self.owner?.app.noteAsyncEngineCall("pageBackground")
-      let values = try? await self.content.evaluateJavaScript(script) as? [Double]
+      let values = try? await self.content.evaluateJavaScript(script, userGesture: false) as? [Double]
       guard !Task.isCancelled, !self.closed, self.owner?.app.engineReady == true,
             self.owner?.app.terminationRequested == false,
             self.generation == token, self.backgroundGeneration == revision,
@@ -345,7 +349,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if additionalKeyHandler?(event, false) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
-    if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }
+    if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID, model: owner?.model) }
     return false
   }
   func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
@@ -370,6 +374,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if !closed { owner?.pageChrome.engineDismissed(request) }
   }
   func webContentDidResetDialogState(_ page: OEWebContent) { if !closed { owner?.pageChrome.engineResetDialogs(page) } }
+  func webContent(_ page: OEWebContent, didResetDialogStateForBrowser browser: Int) {
+    if !closed { owner?.pageChrome.engineResetDialogs(page, browser: browser) }
+  }
   func webContent(_ page: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
     if !closed, owner?.webContent(page, showContextMenu: menu) == true { return true }
     menu.cancel(); return true

@@ -564,10 +564,13 @@ public final class BrowserModel {
         // Every move of a fetched row out of its Live Folder (a drag, New Folder with N Items, a
         // new Space) keeps it out: hidden from refreshes and a normal tab. The revert restores it.
         let live = source == destination ? nil : noteLiveRowLeaving(id, to: destination)
-        guard let removed = removeChild(id, from: source, at: knownPosition) else { live?(); return nil }
+        // One Live Folder per Space: a Live Folder (or a folder holding one) moved into a Space that
+        // has one becomes a plain folder that keeps its rows, as Export Space into Folder does.
+        let demoted = source == destination ? nil : demoteIncomingLiveFolders(id, from: source, to: destination)
+        guard let removed = removeChild(id, from: source, at: knownPosition) else { demoted?.restore(); live?(); return nil }
         guard let toIndex = insertChild(removed.node, into: destination, at: position) else {
             _ = insertChild(removed.node, into: source, at: removed.index)
-            live?()
+            demoted?.restore(); live?()
             return nil
         }
         let cleared = source == destination ? nil : clearPeek(in: source, removing: id)
@@ -577,7 +580,10 @@ public final class BrowserModel {
         emit(.move(fromParent: source, fromIndex: removed.index, toParent: destination, toIndex: toIndex, nodeID: id))
         let fromIndex = removed.index
         return { model in
-            guard model.relocate(id, to: source, at: fromIndex, restoringPeek: cleared) != nil else { return false }
+            // A demoted Live Folder is live again before the move back emits: the sidebar draws the
+            // row (badge, 10-row cap) from that event and does not observe `live` (review r1 #1).
+            demoted?.restore()
+            guard model.relocate(id, to: source, at: fromIndex, restoringPeek: cleared) != nil else { demoted?.redo(); return false }
             Self.restore(prior)
             live?()
             return true
@@ -1055,7 +1061,8 @@ public final class BrowserModel {
 
     public func unpinTab(id: ItemID) {
         guard let parent = parentByID[id], case .spacePinned(let s)? = section(of: parent) else { return }
-        moveNode(id: id, to: .spaceToday(s), at: nil)
+        // The top of Today, as a selection's Unpin (`pinMany`) does (bug sweep r6 P-05).
+        moveNode(id: id, to: .spaceToday(s), at: 0)
     }
 
     /// Moves a tab (same ID, same object) into a profile's Favorites. A nil `pinnedURL`
@@ -1387,16 +1394,19 @@ public final class BrowserModel {
               source.owner(of: parent).profile == owner(of: destination).profile else { return false }
         if case .splitPane = parent { return false }
         if case .splitPane = destination { return false }
-        guard let removed = source.removeChild(id, from: parent) else { return false }
+        // A fetched row leaving its Live Folder for another window stays out of the source's
+        // folder (hidden from refreshes) and is a normal tab there, as the reload fallback's close.
+        let live = source.noteLiveRowLeaving(id, to: destination)
+        guard let removed = source.removeChild(id, from: parent) else { live?(); return false }
         guard let inserted = insertChild(node, into: destination, at: position) else {
-            _ = source.insertChild(node, into: parent, at: removed.index); return false
+            _ = source.insertChild(node, into: parent, at: removed.index); live?(); return false
         }
         source.unregister(node); register(node, under: destination)
         let pinned = applyPinnedRule(to: node, from: source.section(of: parent), to: section(of: destination))
         guard adopt() else {
             Self.restore(pinned); _ = removeChild(id, from: destination, at: inserted)
             unregister(node); _ = source.insertChild(node, into: parent, at: removed.index)
-            source.register(node, under: parent); return false
+            source.register(node, under: parent); live?(); return false
         }
         _ = source.clearPeek(in: parent, removing: id)
         // Both graphs and the external owner are final before either callback.
@@ -1981,6 +1991,39 @@ public final class BrowserModel {
 
     typealias LiveRowRestore = @MainActor () -> Void
 
+    /// A move of `id` from `source` into another Space that already has a Live Folder: every Live
+    /// Folder the moved node holds (itself or nested) becomes a plain folder whose fetched rows are
+    /// normal tabs (lead ruling, round 6; the `turnSpaceIntoFolder` rule). Returns `restore` (live
+    /// again) and `redo` (plain again, for a failed revert), or nil when nothing changed.
+    private func demoteIncomingLiveFolders(_ id: ItemID, from source: NodeParent, to destination: NodeParent)
+        -> (restore: LiveRowRestore, redo: LiveRowRestore)? {
+        guard let moved = index[id]?.folder, let to = owner(of: destination).space, to != owner(of: source).space,
+              let existing = liveFolder(in: to) else { return nil }
+        var incoming: [Folder] = []
+        func walk(_ folder: Folder) {
+            if folder.live != nil, folder !== existing { incoming.append(folder) }
+            for case .folder(let nested) in folder.children { walk(nested) }
+        }
+        walk(moved)
+        guard !incoming.isEmpty else { return nil }
+        let demoted = incoming.compactMap { folder -> (Folder, LiveFolderConfig, [(Tab, URL)])? in
+            guard let live = folder.live else { return nil }
+            let rows = folder.children.compactMap(\.tab).compactMap { tab in tab.liveItemURL.map { (tab, $0) } }
+            return (folder, live, rows)
+        }
+        func plain() {
+            for (folder, _, rows) in demoted { folder.live = nil; for (tab, _) in rows { tab.liveItemURL = nil } }
+        }
+        plain()
+        return (restore: {
+            for (folder, live, rows) in demoted {
+                folder.live = live
+                // Only rows still in the folder (auto-archive can take a Today row with no Undo step).
+                for (tab, url) in rows where folder.children.contains(where: { $0.id == tab.id }) { tab.liveItemURL = url }
+            }
+        }, redo: plain)
+    }
+
     /// Runs `restores` after `revert` puts the nodes back.
     private static func restoringLive(_ revert: @escaping Revert, _ restores: [LiveRowRestore?]) -> Revert {
         let restores = restores.compactMap { $0 }
@@ -2120,6 +2163,9 @@ public final class BrowserModel {
     @ObservationIgnored public var onArchiveError: ((Error) -> Void)?
     /// App policy initialization, including Undo/Redo reinsertion. Must not register Undo.
     @ObservationIgnored public var onProfileCreated: ((Profile) -> Void)?
+    /// App policy for its data folders: Undo of a Profile's creation removed it (`removed` true), or Redo
+    /// brought it back (false). Model commands do no I/O. Must not register Undo.
+    @ObservationIgnored public var onProfileCreationUndone: ((_ profile: Profile, _ removed: Bool) -> Void)?
 
     public var defaultProfile: Profile? { profiles.first { $0.dataDirectoryName == "Default" } ?? profiles.first }
 
@@ -2139,9 +2185,15 @@ public final class BrowserModel {
         unavailableProfileDirectoryNames.insert(profile.dataDirectoryName.lowercased())
         let slot = profiles.count
         insertProfile(profile, at: slot)
-        registerUndo({ model in model.removeProfile(profile.id); return true }, reapply: { model in
+        func undoCreation(_ model: BrowserModel) -> Bool {
+            // A Space that still uses the Profile keeps it (and its folders, which the App would journal).
+            guard model.spaces(using: profile.id).isEmpty else { return false }
+            model.removeProfile(profile.id); model.onProfileCreationUndone?(profile, true); return true
+        }
+        registerUndo(undoCreation, reapply: { model in
             model.insertProfile(profile, at: slot)
-            return { model in model.removeProfile(profile.id); return true }
+            model.onProfileCreationUndone?(profile, false)
+            return undoCreation
         })
         return profile
     }
@@ -2302,12 +2354,16 @@ public final class BrowserModel {
             if let newProfile { model.unavailableProfileDirectoryNames.insert(newProfile.dataDirectoryName.lowercased()) }
             return { model in
                 guard revert(model) else { return false }
-                if let newProfile { model.removeProfile(newProfile.id) }
+                if let newProfile { model.removeProfile(newProfile.id); model.onProfileCreationUndone?(newProfile, true) }
                 return true
             }
         }
         guard let revert = insert(self) else { return nil }
-        registerUndo(revert, reapply: { insert($0) ?? Self.noRevert })
+        registerUndo(revert, reapply: { model in
+            guard let revert = insert(model) else { return Self.noRevert }
+            if let newProfile { model.onProfileCreationUndone?(newProfile, false) }
+            return revert
+        })
         return space
     }
 
@@ -2598,6 +2654,9 @@ public final class BrowserModel {
             moved.append((tab, parent, removed.index, pinned, live))
             if !changed.contains(parent) { changed.append(parent) }
         }
+        // A window that selected an absorbed tab now shows the split: a pane selected as a plain
+        // tab hides the other panes (sidebar multi-select, another window's split).
+        let reselected = moved.flatMap { origin in retargetSelection(from: origin.tab.id, to: split.id).map { ($0, origin.tab.id) } }
         for parent in changed { emit(.reload(parent: parent)) }
         let origins = moved
         let parents = changed
@@ -2605,6 +2664,10 @@ public final class BrowserModel {
         return { model in
             // Auto-archive dissolved the split meanwhile: its survivors stay where they are.
             guard model.index[split.id] != nil else { return false }
+            // Only a tab that goes back to its row (auto-archive may have taken one).
+            for (slot, tabID) in reselected where model.parentByID[tabID] == .splitPane(split.id) {
+                model.restoreSelection([slot], from: split.id, to: tabID)
+            }
             // Reverse order puts every tab back at the exact index it left from.
             for origin in origins.reversed() where model.parentByID[origin.tab.id] == .splitPane(split.id) {
                 _ = model.removeChild(origin.tab.id, from: .splitPane(split.id))
@@ -2646,11 +2709,14 @@ public final class BrowserModel {
         parentByID[tabID] = .splitPane(splitID)
         split.fractions = Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
         split.focusedPaneID = tabID
+        // A window that selected the added tab shows the split it joined.
+        let reselected = retargetSelection(from: tabID, to: splitID)
         let changed = source == home ? [home] : [source, home]
         for parent in changed { emit(.reload(parent: parent)) }
         return { model in
             guard model.parentByID[tabID] == .splitPane(splitID), model.index[splitID]?.split === split,
                   model.insertChild(.tab(tab), into: source, at: removed.index) != nil else { return false }
+            model.restoreSelection(reselected, from: splitID, to: tabID)
             split.panes.removeAll { $0.id == tabID }
             model.parentByID[tabID] = source
             split.fractions = oldFractions; split.focusedPaneID = oldFocus
@@ -2939,7 +3005,8 @@ public final class BrowserModel {
 
     /// Earliest Today activity deadline across all Profiles. Pinned and Favorites
     /// are excluded by ancestry; tabs shown in any window are excluded by the
-    /// same visibility rule as the sweep. Read all inputs for Observation.
+    /// same visibility rule as the sweep. Read all inputs for Observation (a shown tab's activity
+    /// is not an input).
     public func nextAutoArchiveExpiry() -> Date? {
         let shown = tabsShownInWindows()
         let thresholds = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0.settings.autoArchiveAfter.seconds) })
@@ -2947,8 +3014,12 @@ public final class BrowserModel {
         for space in spaces {
             let threshold = thresholds[space.profileID] ?? nil
             for tab in space.today.flatMap({ tabs(under: $0) }) {
+                // A shown tab's activity is not read (or observed): it never expires, and it gets a
+                // new stamp when it leaves the screen. Tab sleep's visibility stamp at launch then
+                // schedules no second snapshot save (bug sweep r6, #643 L11).
+                guard shown[tab.id] == nil else { continue }
                 let activity = tab.lastActiveAt
-                guard let threshold, shown[tab.id] == nil else { continue }
+                guard let threshold else { continue }
                 let deadline = activity.addingTimeInterval(threshold)
                 earliest = earliest.map { min($0, deadline) } ?? deadline
             }
