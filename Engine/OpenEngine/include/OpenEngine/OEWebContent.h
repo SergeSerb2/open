@@ -196,6 +196,14 @@ NS_SWIFT_UI_ACTOR
 - (void)webContentDidResetDialogState:(OEWebContent*)webContent
     NS_SWIFT_NAME(webContentDidResetDialogState(_:));
 
+/// The same reset, naming the engine browser it came from: the page's own, or
+/// a Chrome-style Document PiP that shares the page's client. Only dialogs
+/// with that `browserIdentifier` were cancelled. Preferred over
+/// webContentDidResetDialogState: when implemented.
+- (void)webContent:(OEWebContent*)webContent
+    didResetDialogStateForBrowser:(NSInteger)browserIdentifier
+    NS_SWIFT_NAME(webContent(_:didResetDialogStateForBrowser:));
+
 /// HTTP/proxy authentication, on the main thread. Retain and answer the
 /// request to show shell UI. NO (or no implementation) cancels the challenge.
 /// Chromium's own login dialog is never shown.
@@ -656,6 +664,10 @@ OE_EXPORT @interface OEJavaScriptDialog : NSObject
 @property(nonatomic, readonly, copy) NSString* defaultPromptText;
 @property(nonatomic, readonly, copy, nullable) NSURL* originURL;
 @property(nonatomic, readonly) BOOL isReload;
+/// The engine browser that opened the dialog: the page's own, or its
+/// Document PiP (the PiP shares the page's client and shows dialogs through
+/// the page). Compared with a reset's browser identifier.
+@property(nonatomic, readonly) NSInteger browserIdentifier;
 /// Call exactly once. `text` is used for prompt(). A dialog that is never
 /// completed is cancelled when it is deallocated.
 - (void)completeWithAccepted:(BOOL)accepted

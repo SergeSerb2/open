@@ -80,6 +80,14 @@ struct SettingsNavigation: NSViewRepresentable {
         window?.title = section.title
         needsDisplay = true
     }
+    /// SwiftUI does not run updateNSView for a system Light/Dark switch: the buttons keep
+    /// the old appearance's accent unless it is chosen again here (bug sweep r6, A11Y-09).
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        let accent = SettingsTokens.Redesign.accessibleAccent(model.settingsAccentSource, dark: contentAppearance == .dark)
+        for button in buttons { button.accent = accent; button.needsDisplay = true }
+        needsDisplay = true
+    }
     override func layout() {
         super.layout()
         search.frame = .init(x: 34, y: 51, width: 146, height: 19)

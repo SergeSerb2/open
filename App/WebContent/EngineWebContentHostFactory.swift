@@ -79,6 +79,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Section 12's read-only private-state hook (lead ruling 16:12).
   var isIncognito: Bool { incognitoSession != nil }
   func scheduleSave() { if !isIncognito { app.scheduleSave() } }
+  func scheduleMetadataSave() { if !isIncognito { app.scheduleMetadataSave() } }
   private lazy var privateSuggest: SuggestEngine = {
     let engine = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
     engine.providers.append(SettingsSuggestionsProvider())
@@ -202,20 +203,30 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private weak var standaloneFullscreenWindow: NSWindow?
   private var standaloneFullscreenObservers: [any NSObjectProtocol] = []
   private var standaloneFullscreenTransition = false
-  private var isChangingWindowFullScreen: Bool { controller?.isChangingFullScreen ?? standaloneFullscreenTransition }
+  /// A Little Open window's controller also sees transitions that began before this factory observed
+  /// the window (the user's own Enter Full Screen) and failed ones (review of #665, #5).
+  private var isChangingWindowFullScreen: Bool {
+    controller?.isChangingFullScreen ?? (standaloneFullscreenTransition || littleOpenController?.isChangingFullScreen == true)
+  }
   private func observeStandaloneFullScreen(_ window: NSWindow) {
     guard controller == nil, standaloneFullscreenWindow !== window else { return }
     removeStandaloneFullscreenObservers()
     standaloneFullscreenWindow = window
     for name in [NSWindow.willEnterFullScreenNotification, NSWindow.willExitFullScreenNotification,
-                 NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+                 NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification,
+                 LittleOpenWindowController.fullScreenTransitionDidFail] {
       standaloneFullscreenObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
-        let name = note.name
+        let name = note.name, entering = note.userInfo?["entering"] as? Bool == true
         MainActor.assumeIsolated {
           guard let self else { return }
           switch name {
           case NSWindow.didEnterFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(true)
           case NSWindow.didExitFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(false)
+          // A failed enter leaves a normal window: the page leaves fullscreen too, as in a main
+          // window (windowDidFailToEnterFullScreen). A failed exit only ends the transition.
+          case LittleOpenWindowController.fullScreenTransitionDidFail:
+            self.standaloneFullscreenTransition = false
+            if entering { self.windowFullScreenChanged(false) }
           default: self.standaloneFullscreenTransition = true
           }
         }
@@ -1286,8 +1297,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // name the row by the pinned host until the page loads, never by the page it left or blank.
     tab.title = controller?.container.pinnedPageTitles[id] ?? pinned.host ?? pinned.absoluteString
   }
+  /// A Little Open page that took its window into full screen is ending (closed, or replaced by a
+  /// Profile switch, also mid-transition): the window leaves full screen with it, now. Its factory may
+  /// close much later (a download keeps the page), when the window belongs to the next page (bug sweep r6).
+  func leaveWindowFullScreenStartedByPage() {
+    if enteredWindowFullscreenForPage, controller == nil { littleOpenController?.leaveFullScreen() }
+    enteredWindowFullscreenForPage = false; exitWindowFullscreenAfterTransition = false
+  }
   func closeAll() {
     guard !isClosing else { return }
+    leaveWindowFullScreenStartedByPage()
     removeStandaloneFullscreenObservers()
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
@@ -1999,6 +2018,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     pageChrome.engineDismissed(request)
   }
   func webContentDidResetDialogState(_ webContent: OEWebContent) { pageChrome.engineResetDialogs(webContent) }
+  func webContent(_ webContent: OEWebContent, didResetDialogStateForBrowser browser: Int) { pageChrome.engineResetDialogs(webContent, browser: browser) }
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
     pageContextMenu?.cancel()
     let session = PageContextMenuBuilder(request: menu, page: webContent, owner: self)

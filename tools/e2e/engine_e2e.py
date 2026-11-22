@@ -2802,6 +2802,18 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if os.environ.get("OPEN_WINDOW_OFFSCREEN_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
         return
+    # Bug sweep r6 dialog reset row (tools/e2e/dialog_r6.py); OPEN_DIALOG_R6_ONLY=1 runs only it.
+    if os.environ.get("OPEN_DIALOG_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "dialog_r6.py"))["run"](app_factory, results, wait_until)
+        return
+    # Bug sweep r6 idle and tab-switch cost rows (tools/e2e/perf_r6.py); OPEN_PERF_R6_ONLY=1 runs only them.
+    if os.environ.get("OPEN_PERF_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
+        return
+    # Bug sweep r6 appearance and Tab rows (tools/e2e/a11y_r6.py); OPEN_A11Y_R6_ONLY=1 runs only them.
+    if os.environ.get("OPEN_A11Y_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
+        return
     # Bug sweep r5 VoiceOver rows (tools/e2e/a11y_r5.py); OPEN_A11Y_R5_ONLY=1 runs only them.
     if os.environ.get("OPEN_A11Y_R5_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
@@ -2828,6 +2840,9 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "perf_r6.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "dialog_r6.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
         sidebar_resize_gesture_checks(app_factory, results, tmp)
         window_chrome_followup_checks(app_factory, results, tmp)
@@ -7432,6 +7447,23 @@ def media_checks(factory, results, tmp):
             and dp_moved is True and bool(dp_gone) and dp_back is True and dp_reopened is True and bool(dp_win2) and bool(dp_nav_gone),
             "window": dp_win, "page": dp_page, "innerSize": dp_size, "moved": dp_moved, "level": dp_level, "closed": bool(dp_gone), "elementBack": dp_back,
             "navigationCloses": bool(dp_nav_gone), "videoPiP": pip()["state"]}
+        # Bug sweep r6: closing a Document PiP keeps the page's own pending dialog. The PiP shares the
+        # page's client; its dialog reset now names its browser, and cancelled every page sheet before.
+        app.call("navigate", tab=dp, url=base + "docpip.html"); app.call("wait", tab=dp)
+        dp_opened3 = gesture_eval(dp, "start()")
+        dp_win3 = wait_until(lambda: doc_window(), timeout=3, step=.02)
+        app.call("policy", dialogs="hold")
+        app.eval(dp, "setTimeout(() => alert('R6 page alert'), 0); true")
+        dp_pending = wait_until(lambda: (lambda s: s if s.get("pending") else None)(app.call("dialog-state")), timeout=3, step=.05) or {}
+        app.call("pip-action", action="close")
+        dp_gone3 = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        time.sleep(.5)
+        dp_after = app.call("dialog-state")
+        results["media_document_pip_close_keeps_page_dialog"] = {"ok": dp_opened3 is True and bool(dp_win3) and bool(dp_gone3)
+            and dp_pending.get("message") == "R6 page alert" and dp_after.get("pending") == 1 and dp_after.get("message") == "R6 page alert",
+            "pendingBefore": dp_pending.get("pending"), "after": {k: dp_after.get(k) for k in ("pending", "message")}, "pipClosed": bool(dp_gone3)}
+        if app.call("dialog-state").get("pending"): app.call("dialog", accept=True)
+        app.call("policy", dialogs="")
         close_tab(dp)
 
         # EM-6 + EM-7, the Meet path: a playing page that registers "enterpictureinpicture" gets Chromium's
@@ -14588,6 +14620,67 @@ def page_translate_checks(factory, results, tmp):
         app.call('policy', contextMenu='')
         app.call('translate', action='selection-close')
         results['X8_selection_same_language'] = {'ok': same.get('state') == 'failed' and 'already in' in same.get('message', ''), 'state': same}
+        # Bug sweep r6 A11Y-10: a long selection keeps the bubble inside the content area with Copy
+        # shown (the text scrolls), and Tab moves keyboard focus onto Copy; Esc gives the key back.
+        app.eval(spa_tab, "document.body.insertAdjacentHTML('beforeend', '<p id=\"long-x8\"></p>'); "
+                 "document.getElementById('long-x8').textContent = (document.getElementById('p1').textContent + ' ').repeat(400).slice(0, 4900); true")
+        app.call('policy', contextMenu='run-open:' + title)
+        at = select_text("document.getElementById('long-x8')")
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        long_sel = wait_until(lambda: (lambda v: v if v.get('state') == 'translated' and v.get('shown') else None)(app.call('translate', action='selection')), timeout=10, step=.1) \
+            or app.call('translate', action='selection')
+        app.call('policy', contextMenu='')
+        lpf, lca, copy = long_sel.get('panelFrame', [0, 0, 0, 0]), long_sel.get('contentArea', [0, 0, 0, 0]), long_sel.get('copyFrame') or [0, 0, 0, 0]
+        results['X8_long_selection_capped'] = {
+            'ok': long_sel.get('state') == 'translated' and lpf[3] > 0 and lpf[1] >= lca[1] + 8 - .5 and lpf[1] + lpf[3] <= lca[1] + lca[3] - 8 + .5
+                  and copy[2] > 0 and copy[1] >= lpf[1] - .5 and copy[1] + copy[3] <= lpf[1] + lpf[3] + .5,
+            'panel': lpf, 'content': lca, 'copy': copy, 'chars': len(long_sel.get('text', ''))}
+        tabbed = app.call('translate', action='selection-key', code=48)
+        # Review of #665: Tab in the bubble gives the key back to the page (bubble stays); a later Tab is
+        # the page's (round 2 #2).
+        back = app.call('translate', action='selection-key', code=48)
+        again = app.call('translate', action='selection-key', code=48)
+        escaped = app.call('translate', action='selection-key', code=53)
+        def open_bubble(node_js):
+            app.call('policy', contextMenu='run-open:' + title)
+            at = select_text(node_js)
+            app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+            shown = wait_until(lambda: (lambda v: v if v.get('state') == 'translated' and v.get('shown') else None)(app.call('translate', action='selection')), timeout=10, step=.1)
+            app.call('policy', contextMenu='')
+            return bool(shown)
+        # Cmd+F with keyboard focus in the bubble: the window takes the key back, so the Find field gets
+        # the typing (round 2 #1).
+        bubble_c = open_bubble("document.getElementById('p1')")
+        into = app.call('translate', action='selection-key', code=48)
+        find_key = app.call('translate', action='selection-key', code=3)
+        find_pane = wait_until(lambda: next((p for p in app.call('find-state').get('panes', []) if p.get('visible') and p.get('focused')), None), timeout=3, step=.05) or {}
+        windows_after = [w for w in app.call('windows') if w.get('class') == 'BrowserWindow' and w.get('visible')]
+        app.call('key', key='escape', route='app')
+        app.call('translate', action='selection-close')
+        # Tab while the command bar (not the page) has focus does not enter the bubble; the bubble must
+        # still be there for that to mean anything (round 2 #3).
+        bubble_b = open_bubble("document.getElementById('p1')")
+        app.call('key', key='l', modifiers=['cmd'], route='app')
+        bar_open = wait_until(lambda: app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
+        from_bar = app.call('translate', action='selection-key', code=48)
+        app.call('key', key='escape', route='app')
+        wait_until(lambda: not app.call('commandbar-state').get('presented') or None, timeout=3, step=.05)
+        app.call('translate', action='selection-close')
+        results['X8_selection_tab_reaches_copy'] = {
+            'ok': tabbed.get('shown') is True and tabbed.get('panelKey') is True and tabbed.get('copyFocused') is True
+                  and back.get('shown') is True and back.get('panelKey') is False and back.get('parentKey') is True
+                  and again.get('shown') is True and again.get('panelKey') is False and again.get('parentKey') is True
+                  and escaped.get('shown') is False
+                  and bubble_b and bool(bar_open) and from_bar.get('shown') is True and from_bar.get('panelKey') is False
+                  and bubble_c and into.get('panelKey') is True and find_key.get('panelKey') is not True
+                  and bool(find_pane) and any(w.get('key') for w in windows_after),
+            'tab': {k: tabbed.get(k) for k in ('shown', 'panelKey', 'copyFocused', 'parentKey')},
+            'tabBack': {k: back.get(k) for k in ('shown', 'panelKey', 'parentKey')},
+            'tabAgain': {k: again.get(k) for k in ('shown', 'panelKey', 'parentKey')},
+            'tabFromCommandBar': {k: from_bar.get(k) for k in ('shown', 'panelKey', 'parentKey')}, 'barOpen': bool(bar_open),
+            'cmdF': {'into': into.get('panelKey'), 'panelKey': find_key.get('panelKey'), 'parentKey': find_key.get('parentKey'),
+                     'findFocused': bool(find_pane), 'browserKey': any(w.get('key') for w in windows_after)},
+            'esc': {k: escaped.get(k) for k in ('shown',)}}
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
             and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
         # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's

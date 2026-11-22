@@ -380,6 +380,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 if self.root.appearance?.name != content.name { self.root.appearance = content }
                 let system: ContentAppearance = self.context.isIncognito ? .dark : ContentAppearance(appearance)
                 if self.context.systemAppearance != system { self.context.systemAppearance = system }
+                // An open New Space form keeps its own copy; a stale one drew the old palette (A11Y-09).
+                if let creation = self.spaceCreationController, creation.creationView.systemAppearance != system {
+                    creation.creationView.systemAppearance = system; creation.updatePreview()
+                }
                 self.refresh()
             }
         }

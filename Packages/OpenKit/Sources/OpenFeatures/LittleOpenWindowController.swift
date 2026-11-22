@@ -441,6 +441,32 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     public func windowShouldClose(_ sender: NSWindow) -> Bool { coordinator?.close(sessionID: session.id, archiveReason: nil); return false }
     func updateVisibility() { session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
+    /// AppKit gave up a full-screen transition: no did-enter/did-exit notification follows, only this
+    /// delegate call. The page factory hears it here, or its transition flag (and a page fullscreen
+    /// waiting on it) stayed set (bug sweep r6). userInfo "entering": which transition failed.
+    public static let fullScreenTransitionDidFail = Notification.Name("LittleOpenWindowController.fullScreenTransitionDidFail")
+    public private(set) var isChangingFullScreen = false
+    private var leaveFullScreenAfterTransition = false
+    public func windowWillEnterFullScreen(_ notification: Notification) { isChangingFullScreen = true }
+    public func windowWillExitFullScreen(_ notification: Notification) { isChangingFullScreen = true }
+    public func windowDidEnterFullScreen(_ notification: Notification) {
+        isChangingFullScreen = false
+        if leaveFullScreenAfterTransition { leaveFullScreenAfterTransition = false; leaveFullScreen() }
+    }
+    public func windowDidExitFullScreen(_ notification: Notification) { isChangingFullScreen = false; leaveFullScreenAfterTransition = false }
+    public func windowDidFailToEnterFullScreen(_ window: NSWindow) { fullScreenTransitionFailed(window, entering: true) }
+    public func windowDidFailToExitFullScreen(_ window: NSWindow) { fullScreenTransitionFailed(window, entering: false) }
+    private func fullScreenTransitionFailed(_ window: NSWindow, entering: Bool) {
+        isChangingFullScreen = false; leaveFullScreenAfterTransition = false
+        NotificationCenter.default.post(name: Self.fullScreenTransitionDidFail, object: window, userInfo: ["entering": entering])
+    }
+    /// The page that took this window into full screen is gone (a Profile switch replaces it): leave
+    /// full screen now, or when the running transition ends (AppKit ignores a toggle during one).
+    public func leaveFullScreen() {
+        guard let window, window.isVisible else { return }
+        if isChangingFullScreen { leaveFullScreenAfterTransition = true; return }
+        if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+    }
     public func windowDidBecomeKey(_ notification: Notification) { refreshKeyBindings(); updateVisibility(); coordinator?.recordActivity(session.id) }
     public func windowDidResignKey(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidMiniaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
