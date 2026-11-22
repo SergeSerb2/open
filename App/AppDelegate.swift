@@ -1174,7 +1174,7 @@ extension AppDelegate: CommandDispatcher {
       for _ in 0..<40 {
         guard let self, let page, self.engineReady, !self.shutdownPrepared,
               !self.terminationRequested, !Task.isCancelled else { return }
-        let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
+        let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0", userGesture: false)) as? Bool
         if painted == true {
           self.deferredStartupBegan = true
           self.scheduleCloneCleanupAfterPaint()

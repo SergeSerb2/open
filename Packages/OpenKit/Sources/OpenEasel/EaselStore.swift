@@ -22,6 +22,8 @@ public final class EaselStore {
     /// Bumped by `save` and `discard`: a failed write is queued again only while no newer copy was
     /// saved (and possibly written) and the document was not discarded since.
     private var generations: [UUID: Int] = [:]
+    /// Bumped by `discard` only (picture writes check it; edits do not change it).
+    private var discards: [UUID: Int] = [:]
     /// Failed writes of background flushes, confined to `queue`. Every reader of the disk state
     /// (`load`, a waiting flush) and the flush's own main-thread callback drain it first, so a quit
     /// or a reopen that comes before that callback cannot drop or bypass a failed edit.
@@ -97,17 +99,50 @@ public final class EaselStore {
     /// Validates and stores image bytes as `images/<sha256>.<ext>` (deduplicated). Returns the
     /// file name and the pixel size, or nil for data that is not a supported picture.
     public func addImage(_ data: Data, document id: UUID) -> EaselImage? {
-        guard data.count <= Self.maxImageBytes, let info = Self.imageInfo(data) else { return nil }
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        let file = "\(hash).\(info.ext)"
-        let url = imagesDirectory(for: id).appendingPathComponent(file)
-        if !FileManager.default.fileExists(atPath: url.path) {
-            do {
-                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try data.write(to: url, options: .atomic)
-            } catch { return nil }
+        guard let prepared = Self.prepareImage(.data(data)) else { return nil }
+        return Self.writePrepared(prepared, in: imagesDirectory(for: id)) ? prepared.image : nil
+    }
+
+    /// Paste and drop (bug sweep r6 T-03): picture bytes read, checked and hashed off the main thread.
+    public struct PreparedImage: Sendable {
+        public let image: EaselImage
+        let data: Data
+    }
+    /// Reads and checks a picture and computes its stored name. File work only: call it off the main thread.
+    public nonisolated static func prepareImage(_ source: EaselImageSource) -> PreparedImage? {
+        let data: Data
+        switch source {
+        case .data(let bytes): data = bytes
+        case .file(let file):
+            guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
+                  size <= maxImageBytes, let bytes = try? Data(contentsOf: file) else { return nil }
+            data = bytes
         }
-        return EaselImage(file: file, width: info.width, height: info.height)
+        guard data.count <= maxImageBytes, let info = imageInfo(data) else { return nil }
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return PreparedImage(image: EaselImage(file: "\(hash).\(info.ext)", width: info.width, height: info.height), data: data)
+    }
+    /// The discard count of a document: an image prepared before a later discard is not written.
+    public func discardToken(_ id: UUID) -> Int { discards[id, default: 0] }
+    /// Writes a prepared picture on the document write queue, after every write queued before it.
+    /// Refused when the Easel was discarded (deleted, or replaced by an import) since `token`: a
+    /// delete flushes this queue before it trashes the folder, so a late write cannot recreate it.
+    public func writeImage(_ prepared: PreparedImage, document id: UUID, token: Int) async -> EaselImage? {
+        guard discards[id, default: 0] == token else { return nil }
+        let directory = imagesDirectory(for: id)
+        let written = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            queue.async { done.resume(returning: Self.writePrepared(prepared, in: directory)) }
+        }
+        return written ? prepared.image : nil
+    }
+    nonisolated static func writePrepared(_ prepared: PreparedImage, in directory: URL) -> Bool {
+        let url = directory.appendingPathComponent(prepared.image.file)
+        if FileManager.default.fileExists(atPath: url.path) { return true }
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try prepared.data.write(to: url, options: .atomic)
+            return true
+        } catch { return false }
     }
 
     nonisolated static func imageInfo(_ data: Data) -> (ext: String, width: Int, height: Int)? {
@@ -160,6 +195,7 @@ public final class EaselStore {
     public func discard(_ id: UUID) {
         pending[id] = nil
         generations[id, default: 0] += 1
+        discards[id, default: 0] += 1
     }
 
     /// Writes every pending document. `wait` blocks until the bytes are on disk (quit).
@@ -220,4 +256,10 @@ public final class EaselStore {
     nonisolated static var decoder: JSONDecoder {
         let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d
     }
+}
+
+/// Picture bytes for `EaselStore.storeImage`: a file to read, or bytes already in memory.
+public enum EaselImageSource: Sendable {
+    case file(URL)
+    case data(Data)
 }

@@ -266,7 +266,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       await owner.app.deferAsyncEngineWorkForAutomation()
       guard !Task.isCancelled, !self.closed, !owner.app.terminationRequested else { return }
       owner.app.noteAsyncEngineCall("faviconOwnership")
-      let document = try? await page.evaluateJavaScript(script) as? [String]
+      // No user gesture: an Open probe must not give the page user activation (bug sweep r6 T-01).
+      let document = try? await page.evaluateJavaScript(script, userGesture: false) as? [String]
       guard !Task.isCancelled, !self.closed, self.generation == token,
             self.faviconDocumentRevision == revision, page.url == url,
             page.favicon === image, page.faviconURL == iconURL,
@@ -313,7 +314,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
         return [255,255,255,255]; })()
       """
       self.owner?.app.noteAsyncEngineCall("pageBackground")
-      let values = try? await self.content.evaluateJavaScript(script) as? [Double]
+      let values = try? await self.content.evaluateJavaScript(script, userGesture: false) as? [Double]
       guard !Task.isCancelled, !self.closed, self.owner?.app.engineReady == true,
             self.owner?.app.terminationRequested == false,
             self.generation == token, self.backgroundGeneration == revision,
