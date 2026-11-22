@@ -365,8 +365,12 @@ def checks(factory, results, tmp, config, harness):
         key = start('/slow?name=theme-mark.txt')
         capture_root = Path(os.environ.get('OPEN_DOWNLOADS_CAPTURE_DIR', str(root)))
         capture_root.mkdir(parents=True, exist_ok=True)
+        progress = {}
         def ink(label):
-            wait(lambda: item(key).get('received', 0) > 0)
+            # The ring's arc is the only ink sampled. At the first byte it is ~0.6 pt long: under one
+            # 1x pixel, so no fully inked pixel exists (the M5 failure). 6% draws ~3.4 pt (56.5 pt round).
+            wait(lambda: (lambda v: v.get('total') and v.get('received', 0) >= .06 * v['total'])(item(key)))
+            progress[label] = (lambda v: round(v.get('received', 0) / (v.get('total') or 1), 3))(item(key))
             path = capture_root / ('mark-theme-' + label + '.png')
             app.call('snapshot', path=str(path))
             # Window snapshots carry the display's ICC profile (Display P3 on
@@ -394,7 +398,7 @@ def checks(factory, results, tmp, config, harness):
             app.call('theme-set', space=space, style=dict(keyColor=dict(red=.93,green=.24,blue=.31,alpha=1),colorCount=3,appearance='light',noiseFactor=0,intensityFactor=.8))
             # Read real rendered pixels, not the model's requested theme.
             changed = wait(lambda: (lambda color: color if color[0] > color[1]+60 and color[0] > color[2]+60 else None)(ink('red')))
-            check('captured_mark_theme_accent', before[2] > before[0]+60 and before[2] > before[1]+60 and changed and changed != before, default=before, themed=ink('red'))
+            check('captured_mark_theme_accent', before[2] > before[0]+60 and before[2] > before[1]+60 and changed and changed != before, default=before, themed=ink('red'), progress=progress)
         finally:
             app.call('theme-set', space=space, style=original)
             library(); menu(key, 'Cancel Download'); wait(lambda: item(key).get('state') == 'cancelled'); dismiss_library()

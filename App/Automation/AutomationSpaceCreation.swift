@@ -47,7 +47,8 @@ extension AutomationController {
         "otherWindowsMatchModel": app.windowControllers.filter { $0 !== browser }.allSatisfy { controller in
           controller.context.focusedSpace.map { controller.background.targetStyle == controller.context.style(for: $0) } ?? true
         },
-        "nameFocused": form.nameField.currentEditor() != nil] as [String: Any]
+        "nameFocused": form.nameField.currentEditor() != nil,
+        "systemAppearance": form.systemAppearance.rawValue, "formAppearance": form.appearance?.name.rawValue ?? ""] as [String: Any]
     case "creation-act":
       guard let creation = browser.spaceCreationController else { throw Failure(message: "no creation form") }
       let form = creation.creationView

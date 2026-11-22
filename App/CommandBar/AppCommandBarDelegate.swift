@@ -59,6 +59,17 @@ final class AppCommandBarSession: CommandBarDelegate {
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
 
   var isPresented: Bool { controller?.isPresented == true }
+  /// Settings changed a shortcut: an open bar shows the new keycaps now (Little Open's bar does
+  /// the same in refreshKeyBindings). Its engine may be shared and already rekeyed by another window.
+  func keyBindingsChanged() {
+    guard let bar = controller, bar.isPresented else { return }
+    let bindings = factory.app.keyBindings
+    if (suggestActionBindings.object(forKey: bar.engine)?.store ?? .empty) != bindings {
+      bar.engine.setActions(CommandRegistry.makeSuggestRegistry(overrides: bindings))
+      suggestActionBindings.setObject(SuggestActionBindings(bindings), forKey: bar.engine)
+    }
+    bar.refreshResults()
+  }
   /// True when the user opened the current presentation (Cmd+T / Cmd+L, menu, sidebar): only then a second key closes it.
   private(set) var openedByUser = false
   func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
@@ -218,7 +229,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       // An Incognito window's Profile is a stand-in that Settings does not list: use its parent.
       factory.app.performCommand("search-settings", payload: (factory.incognitoSession?.parent.id ?? profile ?? factory.focusedProfile?.id)?.description)
     case .runExtensionAction(let id):
-      factory.focusedBrowser?.executeExtensionAction(id, source: .menuEntry)
+      // The window's own run path: it clears an earlier click's popup anchor and keeps its guards.
+      factory.extensions.run(id, source: .menuEntry)
     case .extensionOmnibox(let id, let content, let destination, let modifiers):
       let disposition: OEOmniboxDisposition = modifiers.contains(.command) ? .newBackgroundTab
         : destination == .currentTab ? .currentTab : .newForegroundTab

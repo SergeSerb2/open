@@ -305,9 +305,15 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         updateEmptyCopy()
         let ordered = sections.compactMap { tiles[$0] }
         for (a,b) in zip(ordered,ordered.dropFirst()) { a.nextKeyView = b }
+        // One loop through every control a section or the Filter drawer can show. AppKit skips a
+        // hidden or disabled one (canBecomeKeyView), so Tab reaches the Filter drawer, the Boosts
+        // controls and the Easels card too; the old fixed loop skipped them (bug sweep r6, A11Y-11).
+        let chain: [NSView] = [searchField,filter,filterEditor.firstKeyView,filterEditor.lastKeyView,
+            boostList,boostGallery,boostsProfile,boostTurnOn,easelsCard.button,listView.table,back]
         ordered.last?.nextKeyView = section == .spaces ? back : searchField
-        searchField.nextKeyView = section.hasFilter ? filter : listView.table
-        filter.nextKeyView = listView.table; listView.table.nextKeyView = back; back.nextKeyView = ordered.first
+        for (a,b) in zip(chain,chain.dropFirst()) where a !== filterEditor.firstKeyView { a.nextKeyView = b }
+        filterEditor.nextKeyViewAfterDrawer = boostList
+        back.nextKeyView = ordered.first
         renderRows()
         needsDisplay = true
     }
@@ -513,7 +519,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             "profiles":["history":viewModel.historyProfileID.description,"downloads":viewModel.downloadProfileFilter?.description ?? "all"],
             "dragSession":listView.dragSession,"search":searchText,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "statusLabel":statusLabel.isHidden ? "" : statusLabel.stringValue, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden,"bodyFrame":rect(emptyBody),"buttonFrame":rect(emptyButton),"bodyNeededHeight":ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:emptyBody.frame.width,height:200),options:[.usesLineFragmentOrigin,.usesFontLeading]).height),"buttonToolTip":emptyButton.toolTip ?? "","buttonHelp":emptyButton.accessibilityHelp() ?? ""],
             "easels":easelsState, "notes":noteItems.count,
-            "menuOpen":listView.activeMenu != nil,"menuLifecycle":listView.menuLifecycle,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? ""]
+            "menuOpen":listView.activeMenu != nil,"menuLifecycle":listView.menuLifecycle,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? "",
+            "listVisible":!listView.isHiddenOrHasHiddenAncestor,"firstResponderLabel":(window?.firstResponder as? NSView).map { $0.identifier?.rawValue ?? $0.accessibilityLabel() ?? "" } ?? ""]
     }
     public func hoverTile(_ section: LibraryPanelSection, hovered: Bool) { tiles[section]?.hovered=hovered }
     public func pressBack() { back.performClick(nil) }

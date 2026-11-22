@@ -70,16 +70,16 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
             }
         }
         view.panel.onBoostEnabled = { [weak self] id, enabled in
-            guard let self, let tabID = self.tabID else { return }
+            guard let self, let tabID = self.tabID, self.panelShowsLiveSite(tabID) else { return }
             self.actions.setBoostEnabled(id, enabled: enabled, tabID: tabID)
         }
         view.panel.onEdit = { [weak self] id in
-            guard let self, let tabID = self.tabID else { return }
+            guard let self, let tabID = self.tabID, self.panelShowsLiveSite(tabID) else { return }
             self.dismiss(reason: .action, animated: false)
             self.actions.openEditor(boostID: id, tabID: tabID, mode: .simple)
         }
         view.panel.onSection = { [weak self] section in
-            guard let self, let tabID = self.tabID else { return }
+            guard let self, let tabID = self.tabID, section != "settings" || self.panelShowsLiveSite(tabID) else { return }
             self.dismiss(reason: .action, animated: false)
             if section == "settings" { self.openSiteSettings(tabID: tabID) }
             else { self.actions.perform(command: section == "boosts" ? "view-boosts" : "manage-extensions", tabID: tabID, anchor: nil) }
@@ -94,7 +94,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
             self.actions.perform(command: "add-extension",tabID: tabID,anchor: nil)
         }
         view.panel.onSecurity = { [weak self] in
-            guard let self, let tabID = self.tabID else { return }
+            guard let self, let tabID = self.tabID, self.panelShowsLiveSite(tabID) else { return }
             self.dismiss(reason: .action, animated: false)
             self.actions.showSecurityDetails(tabID: tabID)
         }
@@ -365,8 +365,16 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         url.queryItems = [URLQueryItem(name: "site", value: origin.string)]
         if let url = url.url { actions.openURLInNewTab(url, tabID: tabID) }
     }
+    /// Site-scoped controls act only on the site the panel shows: a redirect can land in the tab
+    /// before `observeChanges` refreshes the panel (keyboard or accessibility activation). As
+    /// `menuAction`: on a mismatch, show the live site and do nothing.
+    private func panelShowsLiveSite(_ tabID: ItemID) -> Bool {
+        guard let displayed = view.panel.snapshot?.context, let live = source.snapshot(for: tabID),
+              live.context.showsSameSite(as: displayed) else { refreshView(animated: true); return false }
+        return true
+    }
     private func performAction(_ id: String, rect: NSRect) {
-        guard let tabID else { return }
+        guard let tabID, id != "newBoost" || panelShowsLiveSite(tabID) else { return }
         dismiss(reason: .action, animated: false)
         if id == "newBoost" { actions.openEditor(boostID: nil, tabID: tabID, mode: .simple); return }
         let commands = ["share": "share-page", "capture": "capture-page", "captureFull": "capture-full-page"]

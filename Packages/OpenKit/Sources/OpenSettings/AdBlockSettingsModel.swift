@@ -68,8 +68,17 @@ import OpenAdBlock
     public var validHostDraft: Bool { validHost(hostDraft) }
     private func validHost(_ value: String) -> Bool {
         let host = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !host.isEmpty, !host.contains(where: \.isWhitespace), !host.contains(":"), !host.contains("/"), !host.contains("?"), !host.contains("#"), !host.contains("@") else { return false }
+        guard Self.isHostOnly(host) else { return false }
         return (try? AdBlockSites.shared.registrableDomain(host)) != nil
+    }
+    /// A host without scheme, port, path, query, fragment or user. ":" only in an IPv6 literal
+    /// (bracketed or not), which Site Control can save as an allowed site (`SiteRules.normalize`).
+    private static func isHostOnly(_ host: String) -> Bool {
+        guard !host.isEmpty, !host.contains(where: \.isWhitespace), !host.contains("/"), !host.contains("?"), !host.contains("#"), !host.contains("@") else { return false }
+        guard host.contains(":") else { return true }
+        let raw = host.hasPrefix("[") && host.hasSuffix("]") ? String(host.dropFirst().dropLast()) : host
+        var address = in6_addr()
+        return raw.withCString { inet_pton(AF_INET6, $0, &address) == 1 }
     }
     public func listSourceStatus(_ list: BlockList) -> String {
         let source = list.infoURL.host() ?? list.displayName
@@ -80,7 +89,7 @@ import OpenAdBlock
         guard isReady else {errorText=unavailableText;return}
         // Validate host-only before the store normalizes it to a registrable domain.
         let host = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !host.isEmpty, !host.contains(where: \.isWhitespace), !host.contains(":"), !host.contains("/"), !host.contains("?"), !host.contains("#"), !host.contains("@") else { errorText = "Enter a host only, such as example.com."; return }
+        guard Self.isHostOnly(host) else { errorText = "Enter a host only, such as example.com."; return }
         do { _ = try AdBlockSites.shared.registrableDomain(host) }
         catch { errorText = String(describing:error).contains("resource unavailable") ? "Allowed sites could not be checked. Try again when ad blocking is ready." : "Enter a valid site host."; return }
         do { try store.setExcluded(host, excluded: excluded, profile: profileID); revision &+= 1; root.actions.setAdBlockExcludedDomains(store.excludedDomains(for: profileID), profileID: profileID); errorText = ""; hostDraft = "" }
