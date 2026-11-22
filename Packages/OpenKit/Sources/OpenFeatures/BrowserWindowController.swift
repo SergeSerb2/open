@@ -168,6 +168,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public static var constrainsFramesToScreen = true
     private var pointerMonitor: Any?
     private var captureMonitor: Any?
+    /// The pointer left the window (SB-07 part 2): owner of a window-wide tracking area.
+    private let windowExitTracker = WindowExitTracker()
+    private var windowExitArea: NSTrackingArea?
     private var captureStorage: CaptureController?
     /// The Capture tool (page-platform §4.6), made on first use.
     /// The Capture tool's selection overlay came up or went away (page swipes pause meanwhile).
@@ -437,6 +440,25 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             }
             return accepted ? event : nil
         }
+        // SB-07 part 2: the pointer can leave the window from inside the card (off its top or
+        // bottom edge) with no motion event outside the window, so the card would wait for one.
+        // The window exit gives the reveal a point just past the edge it crossed; a later motion
+        // event still decides as before. An exit into a child window (inside the bounds) is ignored.
+        windowExitTracker.onExit = { [weak self] event in
+            guard let self, let window = self.window, event.window === window, self.reveal.phase != .idle else { return }
+            let point = self.root.convert(event.locationInWindow, from: nil), b = self.root.bounds
+            guard !b.insetBy(dx: 1, dy: 1).contains(point) else { return }
+            // Onto one of this window's own child windows (a hover preview past the edge): still here.
+            let screen = window.convertPoint(toScreen: event.locationInWindow)
+            if window.childWindows?.contains(where: { $0.isVisible && $0.frame.contains(screen) }) == true { return }
+            let x = point.x <= b.minX + 1 ? min(point.x, b.minX - 1) : point.x >= b.maxX - 1 ? max(point.x, b.maxX + 1) : point.x
+            let y = point.y <= b.minY + 1 ? min(point.y, b.minY - 1) : point.y >= b.maxY - 1 ? max(point.y, b.maxY + 1) : point.y
+            self.trackSidebarPointer(CGPoint(x: x, y: y))
+        }
+        // The area does not retain its owner; deinit removes it before the tracker goes.
+        let exitArea = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: windowExitTracker, userInfo: nil)
+        root.addTrackingArea(exitArea); windowExitArea = exitArea
         // Cmd+Shift drag to capture (§4.6.2). Returns at once unless the press has exactly
         // Cmd+Shift, or a held press is in progress; the capture controller is made lazily.
         captureMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
@@ -496,7 +518,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         WindowSpeedTrace.mark("controllerInitEnd")
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { if let siteControlToken { siteControlSource?.removeChangeObserver(siteControlToken) }; hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { if let siteControlToken { siteControlSource?.removeChangeObserver(siteControlToken) }; hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let windowExitArea { root.removeTrackingArea(windowExitArea) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
     private func scheduleRefresh() {
         guard !refreshPending else { return }; refreshPending = true
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
@@ -2184,4 +2206,11 @@ private final class SidebarPanelShadowView: NSView {
         path.addRect(CGRect(origin: .zero, size: size).insetBy(dx: -24, dy: -24))
         path.addPath(shape(size)); return path
     }
+}
+
+/// Receives the window-wide tracking area's exit (BrowserWindowController, SB-07 part 2).
+@MainActor private final class WindowExitTracker: NSResponder {
+    var onExit: ((NSEvent) -> Void)?
+    override func mouseEntered(with event: NSEvent) {}
+    override func mouseExited(with event: NSEvent) { onExit?(event) }
 }
