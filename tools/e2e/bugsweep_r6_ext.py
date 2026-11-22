@@ -43,7 +43,8 @@ def run(factory, results, tmp, h):
     probe = Path(tmp) / 'action-probe-r6'
     shutil.rmtree(probe, ignore_errors=True)
     shutil.copytree(Path(h.ROOT) / 'tools/e2e/fixtures/action-probe', probe)
-    ext_args = ['--load-extension=' + str(probe), '--disable-features=DisableLoadExtensionCommandLineSwitch']
+    ext_args = ['--load-extension=' + str(probe), '--disable-features=DisableLoadExtensionCommandLineSwitch',
+                '--host-resolver-rules=MAP *.r6.test 127.0.0.1']
     try:
         app = factory(urls=(origin + '/main',), fresh=True, extra_args=ext_args)
         try:
@@ -54,6 +55,7 @@ def run(factory, results, tmp, h):
             guarded('R1', lambda: r1_bar_keeps_own_extension_source(app, row, h, origin))
             guarded('R10', lambda: r10_open_bar_keycaps(app, row, h, origin))
             guarded('R5', lambda: r5_delete_selected_note(app, row, h, origin))
+            guarded('BST01', lambda: bst01_editor_uses_invoking_window(app, row, h, origin))
             guarded('BST02', lambda: bst02_library_edit_closes_library(app, row, h, origin))
             guarded('ADB01', lambda: adb01_ipv6_allowed_site(app, row, h))
             guarded('EXT04', lambda: ext04_little_open_menu(app, row, h, origin))
@@ -177,6 +179,44 @@ def r5_delete_selected_note(app, row, h, origin):
     selected = h.wait_until(lambda: [t['id'] for t in app.call('tabs') if t.get('selected')] or None, timeout=3, step=.05) or []
     row('R5_delete_selected_note_selects_neighbour', bool(gone) and bool(selected) and selected[0] != note,
         selected=selected, page=page, negative='old: the deleted Note stays the window selection; nothing shows')
+
+
+def bst01_editor_uses_invoking_window(app, row, h, origin):
+    """BST-01: one pinned tab shows in two windows, each with its own page (a.r6.test, b.r6.test).
+    New Boost in each window edits that window's page. Old: both resolved to the same window (the
+    first in an unordered dictionary), so one window's editor opened in, and for, the other."""
+    port = origin.rsplit(':', 1)[1]
+    a_url, b_url = 'http://a.r6.test:%s/one' % port, 'http://b.r6.test:%s/two' % port
+    w1 = app.call('window-state')['id']
+    tab = h.new_tab(app, a_url)
+    app.call('pin', tab=tab)
+    app.call('menu-perform', id='new-window')
+    w2 = h.wait_until(lambda: (lambda s: s['id'] if s['id'] != w1 else None)(app.call('window-state')), timeout=5)
+    assert w2, 'no second window'
+    def editor(window): return app.call('boost-editor', window=window)
+    def domain(state): return ((state.get('boost') or {}).get('siteMatch') or {}).get('domain')
+    try:
+        if app.call('commandbar-state', window=w2).get('presented'): app.call('key', key='escape', window=w2, route='app')
+        app.call('select', tab=tab, window=w2)
+        h.wait_until(lambda: any(t['id'] == tab and t.get('selected') for t in app.call('tabs', window=w2)), timeout=5)
+        app.call('navigate', tab=tab, url=b_url, window=w2); app.call('wait', tab=tab, window=w2)
+        shown = {w: app.eval(tab, 'location.host', window=w) for w in (w1, w2)}
+        seen = {}
+        for window in (w1, w2):
+            app.call('window-focus', id=window, activate=True)
+            app.call('menu-perform', id='new-boost')
+            state = h.wait_until(lambda: (lambda s: s if s.get('open') else None)(editor(window)), timeout=8, step=.05) or editor(window)
+            seen[window] = {'open': state.get('open'), 'domain': domain(state)}
+            for other in (w1, w2):
+                if editor(other).get('open'): app.call('boost-editor', action='close', window=other)
+        row('BST01_new_boost_edits_invoking_windows_page', shown == {w1: 'a.r6.test:' + port, w2: 'b.r6.test:' + port}
+            and seen[w1] == {'open': True, 'domain': 'a.r6.test'} and seen[w2] == {'open': True, 'domain': 'b.r6.test'},
+            pages=shown, editors=seen, negative='old: one window\'s New Boost opened in the other window, for its site')
+    finally:
+        app.call('window-close', window=w2)
+        app.call('window-focus', id=w1, activate=True)
+        try: app.call('pin', tab=tab, window=w1)  # unpin
+        except RuntimeError: pass
 
 
 def bst02_library_edit_closes_library(app, row, h, origin):
