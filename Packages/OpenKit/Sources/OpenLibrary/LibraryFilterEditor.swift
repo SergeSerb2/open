@@ -76,7 +76,8 @@ final class LibraryFilterEditor: NSView {
     /// panel's next control. The chips are rebuilt on each update, so the loop is relinked there.
     var firstKeyView: NSView { done }
     var lastKeyView: NSView { clear }
-    var nextKeyViewAfterDrawer: NSView? { didSet { clear.nextKeyView = nextKeyViewAfterDrawer } }
+    /// Linked here too: a drawer never configured (no update yet) must still pass Tab on.
+    var nextKeyViewAfterDrawer: NSView? { didSet { linkKeyViews() } }
     private func linkKeyViews() {
         let order: [NSView] = [done] + groups.flatMap(\.1) + [clear]
         for (a,b) in zip(order,order.dropFirst()) { a.nextKeyView = b }
