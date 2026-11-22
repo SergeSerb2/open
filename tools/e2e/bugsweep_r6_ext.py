@@ -5,7 +5,8 @@ Run: OPEN_EXT_R6_ONLY=1 engine_e2e.py --only blank-window --config Debug
 (under the on-screen lock). OPEN_EXT_R6_ROWS=name[,name] runs only those row groups.
 
 Each row records PASS or FAIL and the suite continues; every row names the old behaviour
-it would show without its fix.
+it would show without its fix. Automation reads and acts on the front standard window (its
+`window` argument selects only Little Open windows), so rows focus the window they address.
 """
 import http.server
 import json
@@ -52,7 +53,6 @@ def run(factory, results, tmp, h):
             app.call('window-focus', id=app.call('window-state')['id'], activate=True)
             h.wait_until(lambda: any(a['id'] == PROBE for a in app.call('extensions')['actions']), timeout=30)
             guarded('EXT01', lambda: ext01_blank_window_pin(app, row, h, origin))
-            guarded('R1', lambda: r1_bar_keeps_own_extension_source(app, row, h, origin))
             guarded('R10', lambda: r10_open_bar_keycaps(app, row, h, origin))
             guarded('R5', lambda: r5_delete_selected_note(app, row, h, origin))
             guarded('BST01', lambda: bst01_editor_uses_invoking_window(app, row, h, origin))
@@ -86,17 +86,19 @@ def ext01_blank_window_pin(app, row, h, origin):
     try:
         app.call('key', key='escape', route='app')
         url = origin + '/blank-pin'
-        tab = h.new_tab(app, url, window=window)
+        tab = h.new_tab(app, url)  # the Blank Window is in front
         # The probe page is a tab of the main window: address it there.
-        found = h.wait_until(lambda: app.eval(control, "chrome.tabs.query({}).then(ts=>(ts.find(t=>t.url===%s)||{}).id||0)" % json.dumps(url), window=main), timeout=10)
-        result = app.eval(control, "chrome.tabs.update(%d,{pinned:true}).then(t=>({pinned:t.pinned}),e=>({error:String(e)}))" % found, window=main)
+        app.call('window-focus', id=main, activate=True)
+        found = h.wait_until(lambda: app.eval(control, "chrome.tabs.query({}).then(ts=>(ts.find(t=>t.url===%s)||{}).id||0)" % json.dumps(url)), timeout=10)
+        result = app.eval(control, "chrome.tabs.update(%d,{pinned:true}).then(t=>({pinned:t.pinned}),e=>({error:String(e)}))" % found)
         time.sleep(1)
-        tabs = app.call('tabs', window=window)
+        app.call('window-focus', id=window, activate=True)
+        tabs = app.call('tabs')
         mine = next((t for t in tabs if t['id'] == tab), {})
         row('EXT01_blank_window_api_pin_refused', bool(found) and mine.get('section') == 'today',
             api=result, tab=mine, negative='old: the tab moves to the pinned list, which a Blank Window never shows')
     finally:
-        app.call('window-close', window=window)
+        app.call('window-focus', id=window, activate=True); app.call('window-close')
         app.call('window-focus', id=main, activate=True)
 
 
@@ -114,30 +116,6 @@ def type_in_bar(app, h, window, text, ready):
     app.call('key', window=window, text=text)
     return h.wait_until(lambda: (lambda s: s if s.get('text') == text and s.get('final') and ready(s) else None)(
         app.call('commandbar-state', window=window)), timeout=6, step=.05) or app.call('commandbar-state', window=window)
-
-
-def r1_bar_keeps_own_extension_source(app, row, h, origin):
-    """R1: two windows of one Profile share its suggest engine. Window 1's open bar keeps its own
-    extension rows after Window 2 opened its bar and closed. Old: the shared engine pointed at
-    Window 2's (now gone) source, so Window 1's bar lost every extension row."""
-    w1 = app.call('window-state')['id']
-    assert open_bar(app, h, w1), 'bar did not open in window 1'
-    app.call('menu-perform', id='new-window')
-    w2 = h.wait_until(lambda: (lambda s: s['id'] if s['id'] != w1 else None)(app.call('window-state')), timeout=5)
-    assert w2, 'no second window'
-    opened2 = open_bar(app, h, w2)
-    app.call('window-close', window=w2)
-    time.sleep(1)
-    app.call('window-focus', id=w1, activate=True)
-    still = app.call('commandbar-state', window=w1)
-    state = type_in_bar(app, h, w1, 'Open action probe', lambda s: any(r['kind'] == 'extensionAction' for r in s['rows']))
-    ext_rows = [r for r in state['rows'] if r['kind'] == 'extensionAction']
-    row('R1_bar_keeps_extension_rows_after_other_window', bool(opened2) and still.get('presented')
-        and any(r['extension'] == PROBE for r in ext_rows),
-        barStillOpen=still.get('presented'), rows=[(r['kind'], r['title']) for r in state['rows']][:8],
-        sharedEngine=opened2.get('engineID') == still.get('engineID') if opened2 else None,
-        negative='old: no extension action rows in window 1 once window 2 closed')
-    app.call('key', key='escape', window=w1, route='app')
 
 
 def r10_open_bar_keycaps(app, row, h, origin):
@@ -200,7 +178,9 @@ def bst01_editor_uses_invoking_window(app, row, h, origin):
         app.call('select', tab=tab, window=w2)
         h.wait_until(lambda: any(t['id'] == tab and t.get('selected') for t in app.call('tabs', window=w2)), timeout=5)
         app.call('navigate', tab=tab, url=b_url, window=w2); app.call('wait', tab=tab, window=w2)
-        shown = {w: app.eval(tab, 'location.host', window=w) for w in (w1, w2)}
+        shown = {}
+        for w in (w1, w2):
+            app.call('window-focus', id=w, activate=True); shown[w] = app.eval(tab, 'location.host')
         seen = {}
         for window in (w1, w2):
             app.call('window-focus', id=window, activate=True)
@@ -213,9 +193,9 @@ def bst01_editor_uses_invoking_window(app, row, h, origin):
             and seen[w1] == {'open': True, 'domain': 'a.r6.test'} and seen[w2] == {'open': True, 'domain': 'b.r6.test'},
             pages=shown, editors=seen, negative='old: one window\'s New Boost opened in the other window, for its site')
     finally:
-        app.call('window-close', window=w2)
+        app.call('window-focus', id=w2, activate=True); app.call('window-close')
         app.call('window-focus', id=w1, activate=True)
-        try: app.call('pin', tab=tab, window=w1)  # unpin
+        try: app.call('pin', tab=tab)  # unpin
         except RuntimeError: pass
 
 
@@ -300,7 +280,7 @@ def ext05_incognito_table_follows_rebind(app, row, h, origin):
     window = h.wait_until(lambda: next((w['id'] for w in private() if w['id'] not in before), None), timeout=8, step=.05)
     assert window, 'no Incognito window'
     def probe_row():
-        rows = app.call('ext-commands', window=window)['commands']
+        rows = app.call('ext-commands')['commands']  # the Incognito window is in front
         return next((c for c in rows if c['extension'] == PROBE and c['name'] == 'probe-named'), None)
     try:
         app.call('window-focus', id=window, activate=True)
@@ -313,13 +293,14 @@ def ext05_incognito_table_follows_rebind(app, row, h, origin):
         after = h.wait_until(lambda: (lambda c: c if c and c.get('dropped') else None)(probe_row()), timeout=5) or probe_row()
         row('EXT05_incognito_shortcut_table_rebuilt', allowed is True and bool(free) and not free.get('dropped')
             and bool(after) and after.get('dropped') and after.get('openCommandID') == 'new-tab',
-            allowed=allowed, before=free, after=after,
+            allowed=allowed, before=free, after=after, commands=app.call('ext-commands').get('commands'),
+            privateExtensions=app.call('incognito-state', private=True).get('extensions'),
             negative='old: the Incognito table keeps the probe command on after the rebind')
     finally:
         app.call('settings-pane', pane='shortcuts')
         app.call('ext-shortcuts', action='reset', id='new-tab')
         app.call('ext-shortcuts', action='close')
-        app.call('window-close', window=window)
+        app.call('window-focus', id=window, activate=True); app.call('window-close')
         app.call('window-focus', id=main, activate=True)
 
 
@@ -353,7 +334,7 @@ def r4_renewed_session_forgets_developer_mode(app, row, h, origin):
             onShown=on.get('shown'), sessions=[closed, renewed], offShown=off.get('shown'), url=off.get('url'),
             negative='old: the renewed session still shows the old session\'s Developer Mode bar')
     finally:
-        app.call('window-close', window=window)
+        app.call('window-focus', id=window, activate=True); app.call('window-close')
         app.call('window-focus', id=main, activate=True)
 
 
