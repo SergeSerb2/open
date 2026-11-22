@@ -406,9 +406,10 @@ public final class CommandBarController: NSObject {
         appliedSequence = -1
         isSnapshotFinal = false
         queriedText = text
+        // Before the keyword hint: the delegate may point a shared engine at this bar's sources.
+        onQueryStarted?(text)
         updateSiteHint(text)
         streamTask?.cancel()
-        onQueryStarted?(text)
         var receiveInitial: ((SuggestionSnapshot) -> Void)?
         if applyInitialImmediately {
             receiveInitial = { [weak self] snapshot in
