@@ -995,7 +995,8 @@
         // The theme variables the App sets for a tab (setting on), or none.
         let tab = try modelTab(a, w)
         let values = ThemeData.variables(tabID: tab.id, factory: w) ?? []
-        return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x })] as [String: Any]
+        return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x }),
+                "applies": ThemeData.applyCount] as [String: Any]
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
       case "handoff-state", "handoff-continue", "deep-link-state", "mailto-state":
