@@ -252,7 +252,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   }
   func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode) {
     guard snapshot(for: tabID)?.canCreateBoost == true else { return }
-    boostProvider?.openEditor(boostID: boostID, tabID: tabID, mode: mode)
+    // This window's page of the tab: another window can show the same tab with another page.
+    if let boosts = boostProvider as? AppBoosts { boosts.openEditor(boostID: boostID, tabID: tabID, mode: mode, in: factory) }
+    else { boostProvider?.openEditor(boostID: boostID, tabID: tabID, mode: mode) }
   }
   func perform(command: String, tabID: ItemID, anchor: NSRect?) {
     guard let factory, factory.selectedTab?.id == tabID,
@@ -289,7 +291,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     #if OPEN_AUTOMATION
     openAdBlockSettingsCallCount += 1
     #endif
-    factory?.app.settingsPresenter.show(section: .adBlocking, row: "lists", profileID: factory?.focusedProfile?.id)
+    // An Incognito window's Profile is a stand-in: its ad-block settings are the parent Profile's.
+    factory?.app.settingsPresenter.show(section: .adBlocking, row: "lists",
+      profileID: factory?.incognitoSession?.parent.id ?? factory?.focusedProfile?.id)
   }
 
   private static func canExcludeAdBlockSite(_ host: String) -> Bool {

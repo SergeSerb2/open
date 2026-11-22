@@ -17,8 +17,12 @@ enum DeveloperMode {
   @MainActor final class SessionHosts {
     fileprivate var added: Set<String> = []
     fileprivate var removed: Set<String> = []
-    /// A new private session forgets the old one's choices.
-    func reset() { added = []; removed = [] }
+    /// A new private session forgets the old one's choices. True when it had any: the caller then
+    /// posts `didChange`, so windows stop showing the old session's Developer Mode state.
+    @discardableResult func reset() -> Bool {
+      defer { added = []; removed = [] }
+      return !added.isEmpty || !removed.isEmpty
+    }
   }
 
   static var hosts: Set<String> { Set(stored) }

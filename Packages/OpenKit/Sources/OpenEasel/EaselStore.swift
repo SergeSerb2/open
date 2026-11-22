@@ -140,7 +140,10 @@ public final class EaselStore {
     }
 
     public func exists(_ id: UUID) -> Bool {
-        pending[id] != nil || FileManager.default.fileExists(atPath: fileURL(for: id).path)
+        if pending[id] != nil { return true }
+        // As `load`: a new document's first write may still be queued (or failed and comes back).
+        drainFailedWrites()
+        return pending[id] != nil || FileManager.default.fileExists(atPath: fileURL(for: id).path)
     }
 
     public func save(_ doc: EaselDocument) {
@@ -201,12 +204,14 @@ public final class EaselStore {
             failedWrites.items.removeAll(); failedWrites.clean = false
             return result
         }
-        if taken.isEmpty, clean { lastError = nil }
+        // A failure of a copy that a newer save replaced is not a current error.
+        var kept = false
         for (doc, generation, message) in taken {
             guard pending[doc.id] == nil, generations[doc.id, default: 0] == generation else { continue }
             pending[doc.id] = doc
-            lastError = message
+            lastError = message; kept = true
         }
+        if !kept, clean { lastError = nil }
     }
 
     public nonisolated static var encoder: JSONEncoder {

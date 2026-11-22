@@ -236,7 +236,7 @@ extension EngineWebContentHostFactory {
       // Menu validation runs during first-window composition. No page is
       // editable yet, and it must not initialize Boost services on that path.
       guard app.engineReady, !isIncognito else { return false }
-      return selectedTab.map { app.stores.boosts.canEdit(tabID: $0.id) } ?? false
+      return selectedTab.map { app.stores.boosts.canEdit(tabID: $0.id, in: self) } ?? false
     }
     if id == "boost-gallery" {
       return !isIncognito && (UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true)
@@ -357,9 +357,9 @@ extension EngineWebContentHostFactory {
     case "view-boosts":
       app.settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .list, boostsProfileID: focusedProfile?.id)
     case "new-boost", "new-legacy-boost":
-      guard let tab = selectedTab else { return false }; app.stores.boosts.openEditor(boostID: nil, tabID: tab.id, mode: id == "new-legacy-boost" ? .code(.css) : .simple)
+      guard let tab = selectedTab else { return false }; app.stores.boosts.openEditor(boostID: nil, tabID: tab.id, mode: id == "new-legacy-boost" ? .code(.css) : .simple, in: self)
     case "edit-boost":
-      guard let tab = selectedTab else { return false }; app.stores.boosts.editCurrent(tabID: tab.id)
+      guard let tab = selectedTab else { return false }; app.stores.boosts.editCurrent(tabID: tab.id, in: self)
     case "change-space-icon": return focusedSpace.map { openSpaceIconPicker($0.id) } ?? false
     case "peek-email": return peekEmail()
     case "join-meeting": return joinMeeting()
