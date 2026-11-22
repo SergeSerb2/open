@@ -5135,6 +5135,9 @@ def page_commands_checks(factory, results, tmp):
 
 
 def sidebar_checks(factory, results, tmp):
+    # Bug sweep r6 sidebar rows (tools/e2e/sidebar_r6.py); OPEN_SIDEBAR_R6_ONLY=1 runs only them.
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_r6.py"))["run"](factory, results, wait_until, tmp)
+    if os.environ.get("OPEN_SIDEBAR_R6_ONLY") == "1": return
     app = factory(urls=(), fresh=True)
     confirm_key = 'open.profiles.confirmInterProfileMove'
     saved = {confirm_key: app.call('defaults', key=confirm_key)}
@@ -6879,6 +6882,9 @@ def media_checks(factory, results, tmp):
     """media-pip §8.4 E-M1…E-M15 in the real App (phase 1: Chromium's own PiP window)."""
     server, port = _media_server()
     base = "http://127.0.0.1:%d/" % port
+    # Bug sweep r6 media rows (tools/e2e/media_r6.py); OPEN_MEDIA_R6_ONLY=1 runs only them.
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "media_r6.py"))["run"](factory, results, wait_until, base)
+    if os.environ.get("OPEN_MEDIA_R6_ONLY") == "1": server.shutdown(); return
     # Chromium's fake capture devices (recording card): no system camera or microphone is opened, so
     # macOS shows no permission prompt. The permission itself goes through Open's real request path
     # (automation policy "grant"); Chromium's fake permission UI would skip the capture indicator.

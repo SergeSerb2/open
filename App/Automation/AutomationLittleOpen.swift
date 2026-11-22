@@ -51,7 +51,7 @@ extension AutomationController {
         "visibilityProtected": visibility.littleOpen.contains(controller.session.tab.id),
         "tabID": controller.session.tab.id.description, "sidebarTab": app.model.tab(id: controller.session.tab.id) != nil,
         "content": page?.identifier ?? 0, "runtimeStyle": page.map { $0.runtimeStyle == .alloy ? "alloy" : "chrome" } as Any? ?? NSNull(),
-        "loading": page?.isLoading ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
+        "loading": page?.isLoading ?? false, "muted": page?.isMuted ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
         "barPresented": controller.commandBar.isPresented, "barInput": controller.urlField.stringValue,
         "barFinal": controller.commandBar.isSnapshotFinal,
         "barRows": controller.commandBar.suggestions.map { ["kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,

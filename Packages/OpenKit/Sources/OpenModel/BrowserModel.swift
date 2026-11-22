@@ -1057,7 +1057,8 @@ public final class BrowserModel {
 
     public func unpinTab(id: ItemID) {
         guard let parent = parentByID[id], case .spacePinned(let s)? = section(of: parent) else { return }
-        moveNode(id: id, to: .spaceToday(s), at: nil)
+        // The top of Today, as a selection's Unpin (`pinMany`) does (bug sweep r6 P-05).
+        moveNode(id: id, to: .spaceToday(s), at: 0)
     }
 
     /// Moves a tab (same ID, same object) into a profile's Favorites. A nil `pinnedURL`

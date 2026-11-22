@@ -827,21 +827,123 @@ def run(factory, results, tmp, h):
             return check(state['question']=='Allow midi.localhost to access your MIDI devices?' and state['kinds'] & 32, state=state)
         gate('permission_midi_real_request', midi)
 
-        for key in ['escape','return','w','t','l']:
+        # Bug sweep r6 V-05: the prompt does not take the keyboard when it shows, so a plain Return
+        # or Escape typed into the page goes to the page; it never answers the prompt (a page could
+        # time a prompt so the user's Enter grants it). Keys are sent `asTyped`: to the window that
+        # is key now, with no window made key first. After a click into the prompt (the socket's
+        # focus op) the key answers it; after focus goes back to the page, the key is the page's.
+        for key in ['escape','return']:
+            def permission_page_key(key=key):
+                permission_page('pagekey-' + key); target=tab; name={'return':'Enter','escape':'Escape'}[key]
+                browser=app.call('window-state')['number']
+                app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
+                perm(); state=visible(ps)
+                app.call('key', key=key, asTyped=True); time.sleep(.4)
+                first=dict(prompt=ps(), result=app.eval(target,'permissionResult'), keys=app.eval(target,'promptKeys'))
+                # A click into the prompt, then back into the page: the prompt gives up its keys.
+                focused=app.call('permission-prompt', focus=True); held=ps()
+                app.call('focus', tab=target); time.sleep(.2)
+                app.call('key', key=key, asTyped=True); time.sleep(.4)
+                second=dict(prompt=ps(), result=app.eval(target,'permissionResult'), keys=app.eval(target,'promptKeys'))
+                # A click into the prompt again; now the key answers it.
+                refocused=app.call('permission-prompt', focus=True)
+                app.call('key', key=key, asTyped=True)
+                closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
+                actual=app.eval(target,'permissionResult')
+                return check(state['keyWindow']==browser and not state['promptFirstResponder'] and not state['promptHasKeyboard']
+                             and first['prompt']['visible'] and first['result']=='pending' and first['keys']==[name]
+                             and focused and held['promptHasKeyboard']
+                             and second['prompt']['visible'] and not second['prompt']['promptHasKeyboard']
+                             and second['result']=='pending' and second['keys']==[name, name]
+                             and refocused and closed and actual==('granted' if key=='return' else 'denied'),
+                             browserWindow=browser, state=state, first=first, focused=focused, held=held, second=second,
+                             refocused=refocused, result=actual)
+            gate('permission_native_' + key, permission_page_key)
+
+        def permission_split_pane_return():
+            # The prompt belongs to pane A; Return typed into pane B goes to B and leaves A's prompt.
+            permission_page('split-a'); pane_a=tab
+            pane_b=page(); panes=[t['id'] for t in app.call('split')]; time.sleep(.5)
+            try:
+                assert sorted(panes)==sorted([pane_a,pane_b]), panes
+                app.eval(pane_b,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
+                app.call('select', tab=pane_a); app.call('focus', tab=pane_a); perm(target=pane_a)
+                state=wait(lambda: (lambda s: s if s.get('visible') else None)(ps()), timeout=5, step=.02)
+                assert state, dict(prompt=ps(), result=app.eval(pane_a,'permissionResult'), split=app.call('split', op='state'),
+                                   url=app.eval(pane_a,'location.href'))
+                app.call('select', tab=pane_b); app.call('focus', tab=pane_b); time.sleep(.3)
+                app.call('key', key='return', asTyped=True); time.sleep(.4)
+                after=ps(); pending=app.eval(pane_a,'permissionResult'); keys_b=app.eval(pane_b,'promptKeys')
+                focused=app.call('split', op='state')['focused']
+                return check(focused==pane_b and after['visible'] and pending=='pending' and keys_b==['Enter'],
+                             state=state, after=after, pending=pending, paneBKeys=keys_b, focusedPane=focused)
+            finally:
+                h['_try'](lambda: app.call('permission-prompt', answer='notnow'))
+                for t in (pane_b, pane_a): h['_try'](lambda t=t: app.call('close', tab=t))
+        gate('permission_split_pane_return_not_answered', permission_split_pane_return)
+
+        # Review round 2: the prompt is not key when it shows, so the first real click must reach
+        # it. A real mouse click (socket `mouse` action, own-window AppKit events) on Allow answers
+        # it; a click on its background gives it the keyboard, then a typed Return answers it.
+        def permission_real_click_allow():
+            permission_page('click-allow'); target=tab; perm(); state=visible(ps)
+            point=state['allowPoint']
+            app.call('mouse', action='click', window=state['window'], x=point[0], y=point[1])
+            answered=wait(lambda: app.eval(target,'permissionResult')!='pending', timeout=3, step=.05)
+            return check(len(point)==2 and answered and app.eval(target,'permissionResult')=='granted' and not ps()['visible'],
+                         state=state, result=app.eval(target,'permissionResult'))
+        gate('permission_real_click_allow', permission_real_click_allow)
+
+        def permission_real_click_focus_return():
+            permission_page('click-focus'); target=tab; perm(); state=visible(ps)
+            point=state['backgroundPoint']
+            app.call('mouse', action='click', window=state['window'], x=point[0], y=point[1]); time.sleep(.2)
+            held=ps()
+            app.call('key', key='return', asTyped=True)
+            answered=wait(lambda: app.eval(target,'permissionResult')!='pending', timeout=3, step=.05)
+            return check(len(point)==2 and held['visible'] and held['promptHasKeyboard'] and answered
+                         and app.eval(target,'permissionResult')=='granted', state=state, held=held, result=app.eval(target,'permissionResult'))
+        gate('permission_real_click_focus_return', permission_real_click_focus_return)
+
+        def permission_other_window_keeps_key():
+            # Another window (Little Open) has the keyboard when window A's page asks: key status
+            # stays there, and what the user types never reaches A's page.
+            permission_page('other-window'); target=tab
+            browser=app.call('window-state')['number']
+            app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));'
+                     'window.permissionResult="waiting";setTimeout(()=>{window.permissionResult="pending";'
+                     'Notification.requestPermission().then(v=>window.permissionResult=v)},1500);true')
+            before={x['id'] for x in app.call('little-open-state')['sessions']}
+            app.call('little-open-action', action='blank')
+            little=wait(lambda: next((x for x in app.call('little-open-state')['sessions'] if x['id'] not in before), None), timeout=5, step=.05)
+            try:
+                assert little, 'no Little Open window'
+                shown=wait(lambda: (lambda st: st if st.get('visible') else None)(app.call('permission-prompt', window=browser)), timeout=6, step=.05)
+                assert shown, app.call('permission-prompt', window=browser)
+                time.sleep(.3)
+                key_window=app.call('permission-prompt', window=browser)['keyWindow']
+                app.call('key', text='ab', asTyped=True); time.sleep(.3)
+                page_keys=app.eval(target,'promptKeys')
+                return check(key_window==little['window'] and page_keys==[] and app.eval(target,'permissionResult')=='pending',
+                             keyWindow=key_window, littleWindow=little['window'], browserWindow=browser, pageKeys=page_keys, prompt=shown)
+            finally:
+                h['_try'](lambda: app.call('permission-prompt', window=browser, answer='notnow'))
+                if little: h['_try'](lambda: app.call('little-open-action', id=little['id'], action='close'))
+                h['_try'](lambda: app.call('focus', tab=target))
+        gate('permission_other_window_keeps_key', permission_other_window_keeps_key)
+
+        for key in ['w','t','l']:
             def permission_keys(key=key):
                 permission_page('keys-' + key); target=tab
                 app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
                 perm(); state=visible(ps)
                 app.call('key', key=key, **({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
                 closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
-                if key in ['escape','return']:
-                    actual=app.eval(target,'permissionResult')
-                    good=actual==('granted' if key=='return' else 'denied') and app.eval(target,'promptKeys')==[]
-                elif key=='w': good=all(t['id']!=target for t in app.call('tabs'))
+                if key=='w': good=all(t['id']!=target for t in app.call('tabs'))
                 else:
                     bar=app.call('commandbar-state'); good=bar.get('presented') and bar['mode']==('newTab' if key=='t' else 'editCurrentURL')
                     app.call('key',key='escape')
-                return check((closed if key in ['escape','return','w'] else True) and good,state=state)
+                return check((closed if key=='w' else True) and good,state=state)
             gate('permission_native_' + key, permission_keys)
 
         if only and 'permission_remember_relaunch' not in only: return
