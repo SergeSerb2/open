@@ -185,12 +185,12 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     // and it must not show the Profile of a Space the window has left.
     if let owner = controller.context.focusedSpace?.profileID {
       let historyProfile = (target == .boosts ? boostsProfileID : nil) ?? owner
-      session.panel?.profileFiltersWillChange(history: session.model.historyProfileID != historyProfile,
+      session.panel?.profileFiltersWillChange(historyProfile: session.model.historyProfileID != historyProfile ? historyProfile : nil,
                                               downloads: session.model.downloadProfileFilter != owner)
       if session.model.downloadProfileFilter != owner { session.model.downloadProfileFilter = owner }
       if session.model.historyProfileID != historyProfile { session.model.historyProfileID = historyProfile }
     } else if target == .boosts, let boostsProfileID, session.model.historyProfileID != boostsProfileID {
-      session.panel?.profileFiltersWillChange(history: true, downloads: false)
+      session.panel?.profileFiltersWillChange(historyProfile: boostsProfileID, downloads: false)
       session.model.historyProfileID = boostsProfileID
     }
     session.show(section: section)

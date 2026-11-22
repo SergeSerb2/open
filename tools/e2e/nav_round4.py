@@ -194,11 +194,31 @@ def run(factory, results, tmp, h):
             app.call('space', space=space_a['id'])
             opened = app.call('library', action='open', section='history')
             drawn = [r.get('subtitle', '') for r in opened.get('rows', [])] if opened.get('listVisible') else []
-            later = wait_until(lambda: (lambda r: r if page_a in [x['url'] for x in r['rows']] else None)(
-                app.call('library-history-state')), timeout=5, step=.1) or app.call('library-history-state')
+            # Review of #665 (#2): also every later turn until Profile A's rows are drawn (provider done,
+            # rows still being prepared): the list never shows Profile B's row.
+            stale, shown_a, deadline = [], False, time.time() + 6
+            while time.time() < deadline and not shown_a:
+                state = app.call('library')
+                visible = [r.get('subtitle', '') for r in state.get('rows', [])] if state.get('listVisible') else []
+                if any(page_b in text for text in visible): stale.append(visible)
+                shown_a = any(page_a in text for text in visible)
+                time.sleep(.03)
             row('nav6_library_profile_switch_no_stale_rows', opened.get('section') == 'history'
-                and not any(page_b in text for text in drawn) and page_a in [x['url'] for x in later['rows']],
-                listVisible=opened.get('listVisible'), drawn=drawn, profiles=opened.get('profiles'))
+                and not any(page_b in text for text in drawn) and not stale and shown_a,
+                listVisible=opened.get('listVisible'), drawn=drawn, staleSamples=stale[:3], shownA=shown_a, profiles=opened.get('profiles'))
+            # In-panel switch (Filter ▸ Profile chip, review of #665 #3): from the chip's own turn until
+            # Profile B's rows are drawn, the list never shows Profile A's row.
+            chipped = app.call('library', action='chip', id='profile:' + profile_b)
+            first = [r.get('subtitle', '') for r in chipped.get('rows', [])] if chipped.get('listVisible') else []
+            stale_b, shown_b, deadline = [], False, time.time() + 6
+            while time.time() < deadline and not shown_b:
+                state = app.call('library')
+                visible = [r.get('subtitle', '') for r in state.get('rows', [])] if state.get('listVisible') else []
+                if any(page_a in text for text in visible): stale_b.append(visible)
+                shown_b = any(page_b in text for text in visible)
+                time.sleep(.03)
+            row('nav6_library_profile_chip_no_stale_rows', not any(page_a in text for text in first) and not stale_b and shown_b,
+                firstTurn=first, staleSamples=stale_b[:3], shownB=shown_b)
         guarded('nav6_library_profile_switch_no_stale_rows', library_profile_same_turn,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
 
