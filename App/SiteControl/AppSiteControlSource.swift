@@ -289,7 +289,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     #if OPEN_AUTOMATION
     openAdBlockSettingsCallCount += 1
     #endif
-    factory?.app.settingsPresenter.show(section: .adBlocking, row: "lists", profileID: factory?.focusedProfile?.id)
+    // An Incognito window's Profile is a stand-in: its ad-block settings are the parent Profile's.
+    factory?.app.settingsPresenter.show(section: .adBlocking, row: "lists",
+      profileID: factory?.incognitoSession?.parent.id ?? factory?.focusedProfile?.id)
   }
 
   private static func canExcludeAdBlockSite(_ host: String) -> Bool {
