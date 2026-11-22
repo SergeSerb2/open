@@ -382,7 +382,7 @@ final class MediaCoordinator {
       setTabMuted: { [weak self, weak factory] muted in
         guard let self, let factory, let tab = factory.model.tab(id: tabID), tab.isMuted != muted else { return }
         if factory.model === self.app.model { _ = self.perform(.toggleMute(tabID)) }
-        else { _ = factory.performSidebar(.toggleMute(tabID)) }  // its window's own path; saves nothing private
+        else { _ = factory.performSidebar(.toggleMute(tabID: tabID)) }  // its window's own path; saves nothing private
       })
     // An Incognito page's "Turn off" / "Open automatically" stay in its session (memory only).
     guard let window = PictureInPictureWindowController(
