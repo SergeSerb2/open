@@ -564,10 +564,13 @@ public final class BrowserModel {
         // Every move of a fetched row out of its Live Folder (a drag, New Folder with N Items, a
         // new Space) keeps it out: hidden from refreshes and a normal tab. The revert restores it.
         let live = source == destination ? nil : noteLiveRowLeaving(id, to: destination)
-        guard let removed = removeChild(id, from: source, at: knownPosition) else { live?(); return nil }
+        // One Live Folder per Space: a Live Folder (or a folder holding one) moved into a Space that
+        // has one becomes a plain folder that keeps its rows, as Export Space into Folder does.
+        let demoted = source == destination ? nil : demoteIncomingLiveFolders(id, from: source, to: destination)
+        guard let removed = removeChild(id, from: source, at: knownPosition) else { demoted?(); live?(); return nil }
         guard let toIndex = insertChild(removed.node, into: destination, at: position) else {
             _ = insertChild(removed.node, into: source, at: removed.index)
-            live?()
+            demoted?(); live?()
             return nil
         }
         let cleared = source == destination ? nil : clearPeek(in: source, removing: id)
@@ -579,7 +582,7 @@ public final class BrowserModel {
         return { model in
             guard model.relocate(id, to: source, at: fromIndex, restoringPeek: cleared) != nil else { return false }
             Self.restore(prior)
-            live?()
+            demoted?(); live?()
             return true
         }
     }
@@ -1383,16 +1386,19 @@ public final class BrowserModel {
               source.owner(of: parent).profile == owner(of: destination).profile else { return false }
         if case .splitPane = parent { return false }
         if case .splitPane = destination { return false }
-        guard let removed = source.removeChild(id, from: parent) else { return false }
+        // A fetched row leaving its Live Folder for another window stays out of the source's
+        // folder (hidden from refreshes) and is a normal tab there, as the reload fallback's close.
+        let live = source.noteLiveRowLeaving(id, to: destination)
+        guard let removed = source.removeChild(id, from: parent) else { live?(); return false }
         guard let inserted = insertChild(node, into: destination, at: position) else {
-            _ = source.insertChild(node, into: parent, at: removed.index); return false
+            _ = source.insertChild(node, into: parent, at: removed.index); live?(); return false
         }
         source.unregister(node); register(node, under: destination)
         let pinned = applyPinnedRule(to: node, from: source.section(of: parent), to: section(of: destination))
         guard adopt() else {
             Self.restore(pinned); _ = removeChild(id, from: destination, at: inserted)
             unregister(node); _ = source.insertChild(node, into: parent, at: removed.index)
-            source.register(node, under: parent); return false
+            source.register(node, under: parent); live?(); return false
         }
         _ = source.clearPeek(in: parent, removing: id)
         // Both graphs and the external owner are final before either callback.
@@ -1976,6 +1982,35 @@ public final class BrowserModel {
     }
 
     typealias LiveRowRestore = @MainActor () -> Void
+
+    /// A move of `id` from `source` into another Space that already has a Live Folder: every Live
+    /// Folder the moved node holds (itself or nested) becomes a plain folder whose fetched rows are
+    /// normal tabs (lead ruling, round 6; the `turnSpaceIntoFolder` rule). Returns the closure that
+    /// makes them live again, or nil when nothing changed.
+    private func demoteIncomingLiveFolders(_ id: ItemID, from source: NodeParent, to destination: NodeParent) -> LiveRowRestore? {
+        guard let moved = index[id]?.folder, let to = owner(of: destination).space, to != owner(of: source).space,
+              let existing = liveFolder(in: to) else { return nil }
+        var incoming: [Folder] = []
+        func walk(_ folder: Folder) {
+            if folder.live != nil, folder !== existing { incoming.append(folder) }
+            for case .folder(let nested) in folder.children { walk(nested) }
+        }
+        walk(moved)
+        guard !incoming.isEmpty else { return nil }
+        let demoted = incoming.compactMap { folder -> (Folder, LiveFolderConfig, [(Tab, URL)])? in
+            guard let live = folder.live else { return nil }
+            let rows = folder.children.compactMap(\.tab).compactMap { tab in tab.liveItemURL.map { (tab, $0) } }
+            folder.live = nil
+            for (tab, _) in rows { tab.liveItemURL = nil }
+            return (folder, live, rows)
+        }
+        return {
+            for (folder, live, rows) in demoted {
+                folder.live = live
+                for (tab, url) in rows { tab.liveItemURL = url }
+            }
+        }
+    }
 
     /// Runs `restores` after `revert` puts the nodes back.
     private static func restoringLive(_ revert: @escaping Revert, _ restores: [LiveRowRestore?]) -> Revert {

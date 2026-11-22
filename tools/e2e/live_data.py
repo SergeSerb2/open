@@ -566,6 +566,39 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and live_folders_in(home['id']) == 1 and after_export.get('id') == home_lf.get('id'),
             'exported': exported, 'liveFolders': live_folders_in(home['id']), 'homeTitle': home_title,
             'homeFolder': home_lf.get('id'), 'after': after_export.get('id')}
+        # Bug sweep round 6 (seed 1): a drag of another Space's Live Folder into this Space, or Move to ▸
+        # this Space for a folder that holds one, made a second Live Folder. The incoming one is now a
+        # plain folder (lead ruling, the Export rule above); this Space's own stays the live one.
+        def plain_folder_in(space_id, folder_id):
+            snapshot = json.loads(Path(app.call('save')).read_text())
+            def find(value):
+                if isinstance(value, dict):
+                    if value.get('id') == folder_id and 'children' in value: return value
+                    return next((f for f in map(find, value.values()) if f is not None), None)
+                if isinstance(value, list): return next((f for f in map(find, value) if f is not None), None)
+                return None
+            found = find([sp for sp in snapshot.get('spaces', []) if sp.get('id') == space_id])
+            return found is not None and not isinstance(found.get('live'), dict)
+        r6 = {}
+        for how in ('drag', 'moveTo'):
+            src = app.call('space-create', title='LF R6 %s' % how); app.call('space', space=src)
+            app.call('sidebar-menu', item='Live Folders/GitHub')
+            src_lf = app.call('live-folder-state', wait=True, space=src)
+            moved = src_lf.get('id')
+            try:
+                if how == 'drag':
+                    done = app.call('sidebar-drop', nodes=[moved], parent={'kind': 'pinned', 'id': home['id']}, index=0)
+                else:
+                    wrap = app.call('folder', tabs=[new_tab(app, 'about:blank')], title='R6 wrap', section='pinned')
+                    app.call('sidebar-drop', nodes=[moved], parent={'kind': 'folder', 'id': wrap}, index=0)
+                    done = app.call('sidebar-menu', node=wrap, items=['Move to', home_title])
+            except RuntimeError as error:
+                done = str(error)
+            r6[how] = {'moved': done, 'liveFolders': live_folders_in(home['id']), 'plain': plain_folder_in(home['id'], moved),
+                       'homeLive': app.call('live-folder-state', space=home['id']).get('id') == home_lf.get('id')}
+        app.call('space', space=home['id'])
+        results['live_folder_move_into_space_keeps_one'] = {'ok': all(r['moved'] is True and r['liveFolders'] == 1
+            and r['plain'] and r['homeLive'] for r in r6.values()), 'moves': r6}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:
