@@ -203,7 +203,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private weak var standaloneFullscreenWindow: NSWindow?
   private var standaloneFullscreenObservers: [any NSObjectProtocol] = []
   private var standaloneFullscreenTransition = false
-  private var isChangingWindowFullScreen: Bool { controller?.isChangingFullScreen ?? standaloneFullscreenTransition }
+  /// A Little Open window's controller also sees transitions that began before this factory observed
+  /// the window (the user's own Enter Full Screen) and failed ones (review of #665, #5).
+  private var isChangingWindowFullScreen: Bool {
+    controller?.isChangingFullScreen ?? (standaloneFullscreenTransition || littleOpenController?.isChangingFullScreen == true)
+  }
   private func observeStandaloneFullScreen(_ window: NSWindow) {
     guard controller == nil, standaloneFullscreenWindow !== window else { return }
     removeStandaloneFullscreenObservers()
@@ -1293,12 +1297,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // name the row by the pinned host until the page loads, never by the page it left or blank.
     tab.title = controller?.container.pinnedPageTitles[id] ?? pinned.host ?? pinned.absoluteString
   }
-  func closeAll() {
-    guard !isClosing else { return }
-    // A Little Open page that took its window into full screen ends here (a Profile switch
-    // replaces it mid-transition too): the window leaves full screen with it (bug sweep r6).
+  /// A Little Open page that took its window into full screen is ending (closed, or replaced by a
+  /// Profile switch, also mid-transition): the window leaves full screen with it, now. Its factory may
+  /// close much later (a download keeps the page), when the window belongs to the next page (bug sweep r6).
+  func leaveWindowFullScreenStartedByPage() {
     if enteredWindowFullscreenForPage, controller == nil { littleOpenController?.leaveFullScreen() }
     enteredWindowFullscreenForPage = false; exitWindowFullscreenAfterTransition = false
+  }
+  func closeAll() {
+    guard !isClosing else { return }
+    leaveWindowFullScreenStartedByPage()
     removeStandaloneFullscreenObservers()
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
