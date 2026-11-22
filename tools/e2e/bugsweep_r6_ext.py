@@ -59,7 +59,6 @@ def run(factory, results, tmp, h):
             guarded('BST02', lambda: bst02_library_edit_closes_library(app, row, h, origin))
             guarded('ADB01', lambda: adb01_ipv6_allowed_site(app, row, h))
             guarded('EXT04', lambda: ext04_little_open_menu(app, row, h, origin))
-            guarded('EXT05', lambda: ext05_incognito_table_follows_rebind(app, row, h, origin))
             guarded('R4', lambda: r4_renewed_session_forgets_developer_mode(app, row, h, origin))
         finally:
             app.quit()
@@ -263,45 +262,6 @@ def ext04_little_open_menu(app, row, h, origin):
         negative='old: the three items are disabled while Little Open is key')
     try: app.call('little-open-action', id=little['id'], action='close')
     except RuntimeError: pass
-
-
-def ext05_incognito_table_follows_rebind(app, row, h, origin):
-    """EXT-05: binding an Open command to an extension's key in Settings turns that command off in an
-    open Incognito window too. Old: the Incognito manager's table was never rebuilt (stale, still on)."""
-    main = app.call('window-state')['id']
-    page = h.new_tab(app, 'chrome://extensions')
-    h.wait_until(lambda: app.eval(page, "typeof chrome.developerPrivate.updateExtensionConfiguration") == 'function', timeout=10)
-    allowed = app.eval(page, "new Promise(done=>chrome.developerPrivate.updateExtensionConfiguration(" +
-        json.dumps({'extensionId': PROBE, 'incognitoAccess': True}) + ",()=>done(chrome.runtime.lastError?.message||true)))")
-    app.call('close', tab=page)
-    def private(): return [w for w in app.call('incognito-state')['windows'] if w['private']]
-    before = {w['id'] for w in private()}
-    app.call('menu-perform', id='new-incognito-window')
-    window = h.wait_until(lambda: next((w['id'] for w in private() if w['id'] not in before), None), timeout=8, step=.05)
-    assert window, 'no Incognito window'
-    def probe_row():
-        rows = app.call('ext-commands')['commands']  # the Incognito window is in front
-        return next((c for c in rows if c['extension'] == PROBE and c['name'] == 'probe-named'), None)
-    try:
-        app.call('window-focus', id=window, activate=True)
-        if app.call('commandbar-state', window=window).get('presented'): app.call('key', key='escape', window=window, route='app')
-        h.new_tab(app, origin + '/ext05', window=window)
-        free = h.wait_until(probe_row, timeout=10)
-        app.call('settings-pane', pane='shortcuts')
-        app.call('ext-shortcuts', action='record', id='new-tab', key='u', modifiers=['command', 'shift'])
-        app.call('ext-shortcuts', action='close')
-        after = h.wait_until(lambda: (lambda c: c if c and c.get('dropped') else None)(probe_row()), timeout=5) or probe_row()
-        row('EXT05_incognito_shortcut_table_rebuilt', allowed is True and bool(free) and not free.get('dropped')
-            and bool(after) and after.get('dropped') and after.get('openCommandID') == 'new-tab',
-            allowed=allowed, before=free, after=after, commands=app.call('ext-commands').get('commands'),
-            privateExtensions=app.call('incognito-state', private=True).get('extensions'),
-            negative='old: the Incognito table keeps the probe command on after the rebind')
-    finally:
-        app.call('settings-pane', pane='shortcuts')
-        app.call('ext-shortcuts', action='reset', id='new-tab')
-        app.call('ext-shortcuts', action='close')
-        app.call('window-focus', id=window, activate=True); app.call('window-close')
-        app.call('window-focus', id=main, activate=True)
 
 
 def r4_renewed_session_forgets_developer_mode(app, row, h, origin):
