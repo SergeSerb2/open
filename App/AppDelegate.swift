@@ -831,7 +831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Shell window lifetime and the setup-created Welcome tab are not sidebar
   /// edits. Preserve an
   /// enclosing caller's disabled registration state, including on early return.
-  private func withoutWindowUndo<T>(_ body: () -> T) -> T {
+  func withoutWindowUndo<T>(_ body: () -> T) -> T {
     let wasEnabled = undoManager.isUndoRegistrationEnabled
     if wasEnabled { undoManager.disableUndoRegistration() }
     defer { if wasEnabled { undoManager.enableUndoRegistration() } }

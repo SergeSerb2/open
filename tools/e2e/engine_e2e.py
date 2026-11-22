@@ -9560,6 +9560,19 @@ def routing_checks(factory, results, tmp):
                workContext=work_context, workCookiePresent='atc_work=1' in work_cookies,
                defaultIsolated='atc_work=' not in default_cookies)
 
+        # A link that opens in another Space is one Undo step, as ⌘T is: the Space switch is not one.
+        undo_url = origin + '/undo-space-link'
+        app.call('undo-state', clear=True)
+        sent = deliver(undo_url)
+        reached = landed(undo_url)
+        app.call('menu-perform', id='reveal-tab-in-sidebar'); app.call('menu-perform', id='undo')
+        removed = wait_until(lambda: not any(t['url'] == undo_url for t in app.call('tabs')), timeout=3, step=.05)
+        undo = app.call('undo-state')
+        record('routing_space_link_one_undo_step', sent.returncode == 0 and reached and removed and not undo['canUndo'],
+               removed=bool(removed), undo=undo)
+        app.call('space', space=seed['spaces'][0]['id'])
+        app.call('select', tab=default_tab)
+
         profile_url = origin + '/profile-little-initial'
         sent = deliver(profile_url)
         def little_page(url, profile):
