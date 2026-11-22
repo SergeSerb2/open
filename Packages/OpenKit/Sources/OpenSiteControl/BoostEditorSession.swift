@@ -40,6 +40,9 @@ public final class BoostEditorSession {
     private var sampleTask: Task<Double?, Never>?
     private var sampleGeneration = 0
     private var deleted = false
+    private var finishing = false
+    /// Finishing or deleting its Boost. A store refresh during that must not close the editor again.
+    public var isEnding: Bool { deleted || finishing }
     /// The exact configured delays of pending native edits; cleared when flushed.
     public private(set) var pendingCodeSaveDelays: [BoostCodeLanguage: TimeInterval] = [:]
     private var codeWork: [BoostCodeLanguage: DispatchWorkItem] = [:]
@@ -269,14 +272,24 @@ public final class BoostEditorSession {
     public func showAllBoosts() { host.showBoostsLibrary(profileID: context.profileID) }
     public func delete() {
         guard isEditable else { return }
-        codeWork.values.forEach { $0.cancel() };codeWork.removeAll();pendingCodeSaveDelays.removeAll();codeDrafts.removeAll();codeBefore.removeAll()
-        previewWork?.cancel(); sampleTask?.cancel(); deleted = true
-        previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
+        dropPendingEdits()
         _ = store.delete(id: boost.id); store.saveNow(); host.refresh(profile: context.profileID)
         onDelete?()
     }
+    /// Another path removed this Boost from the store (Undo Import from Arc). Drop pending code
+    /// drafts and gestures, so closing the editor cannot write the Boost back.
+    public func boostWasRemoved() {
+        guard isEditable, !isEnding else { return }
+        dropPendingEdits()
+    }
+    private func dropPendingEdits() {
+        codeWork.values.forEach { $0.cancel() };codeWork.removeAll();pendingCodeSaveDelays.removeAll();codeDrafts.removeAll();codeBefore.removeAll()
+        previewWork?.cancel(); sampleTask?.cancel(); deleted = true
+        previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
+    }
     public func finish() {
-        guard !isClosed else { return }
+        guard !isClosed, !finishing else { return }
+        finishing = true
         if interactiveBefore != nil { endInteractive() }
         flushCode()
         previewWork?.cancel(); previewWork = nil; sampleTask?.cancel()
@@ -286,7 +299,9 @@ public final class BoostEditorSession {
         if isNew && boost.isEmpty && !deleted {
             _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)
         }
-        store.saveNow()
+        // Close is durable (103-1). With no unwritten change, only wait for a write in flight:
+        // closing an unchanged editor does not write the whole file again on the main thread.
+        if store.hasPendingSave { store.saveNow() } else { store.flush() }
         undoManager.removeAllActions()
         isClosed = true
     }
