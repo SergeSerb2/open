@@ -2810,6 +2810,17 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if os.environ.get("OPEN_A11Y_R4_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
         return
+    # Bug sweep r6: OPEN_WINDOW_REVEAL_ONLY=1 runs only the hover-reveal card rows, in a fresh App.
+    if os.environ.get("OPEN_WINDOW_REVEAL_ONLY") == "1":
+        app = app_factory(urls=(white_fixture("Reveal card"),), fresh=True)
+        try:
+            wid = app.call("window-state")["id"]
+            app.call("window-focus", id=wid, activate=True)
+            place_away_from_cursor(app, 1280, 800)
+            reveal_card_window_checks(app, results, wid)
+        finally:
+            app.quit()
+        return
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
@@ -3631,6 +3642,21 @@ def reveal_card_window_checks(app, results, wid):
         "otherWindow": bool(other), "revealed": away["revealed"], "reveal": away.get("reveal")}
     if other:
         app.call("window-close"); state_when(app, lambda st: st["id"] == wid)
+    # Bug sweep r6 (SB-07 part 2): the pointer leaves the window off its top edge from inside the
+    # card. WindowServer then sends the window's tracking-area exit and no motion event outside the
+    # window (the `exit` pointer action). The card used to stay, waiting for a motion event.
+    ensure_key(app, wid)
+    if state()["sidebarMode"] != "hidden":
+        app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_hidden(app)
+    card = reveal_card_and_wait(app)
+    app.call("mouse", action="hover", x=100, y=400)
+    held = state()["revealed"]
+    exited = app.call("mouse", action="exit", x=100, y=-4)
+    left = wait_until(lambda: (lambda st: st if not st["revealed"] else None)(state()), timeout=2, step=.05) or state()
+    results["reveal_card_window_exit_from_card"] = {
+        "ok": bool(card) and held and not left["revealed"],
+        "heldInCard": held, "revealed": left["revealed"], "reveal": left.get("reveal"), "exited": exited.get("exited")}
+    app.call("mouse", action="move", x=700, y=400)
     ensure_key(app, wid)
     if state()["sidebarMode"] == "hidden":
         app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_anchored(app)
@@ -15212,16 +15238,23 @@ def main():
             space_header.run(factory, results["shell"], wait_until)
         elif opts.only == "relaunch":
             results["relaunch"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
-                factory, results["relaunch"], tmp, sys.modules[__name__], opts.config)
-            if os.environ.get('OPEN_RELAUNCH_SETTINGS_ONLY') != '1':
+            # Bug sweep r6 seed 8 (tools/e2e/relaunch_saves.py); OPEN_RELAUNCH_SAVES_ONLY=1 runs only it.
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/relaunch_saves.py'))['run'](
+                factory, results["relaunch"], sys.modules[__name__])
+            if os.environ.get('OPEN_RELAUNCH_SAVES_ONLY') != '1':
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
+                    factory, results["relaunch"], tmp, sys.modules[__name__], opts.config)
+            if os.environ.get('OPEN_RELAUNCH_SETTINGS_ONLY') != '1' and os.environ.get('OPEN_RELAUNCH_SAVES_ONLY') != '1':
                 relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
-            # OPEN_COMMANDBAR_NAV4_ONLY=1 runs only the bug sweep round 4 rows (tools/e2e/nav_round4.py).
-            if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
-                commandbar_checks(factory, results[opts.only], tmp, opts.config)
             if opts.only == "commandbar":
+                # Bug sweep r6 seed 7 (tools/e2e/keybindings_r6.py); OPEN_COMMANDBAR_R6_KEYS_ONLY=1 runs only it.
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/keybindings_r6.py"))["run"](factory, results[opts.only])
+            # OPEN_COMMANDBAR_NAV4_ONLY=1 runs only the bug sweep round 4 rows (tools/e2e/nav_round4.py).
+            if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1" and os.environ.get("OPEN_COMMANDBAR_R6_KEYS_ONLY") != "1":
+                commandbar_checks(factory, results[opts.only], tmp, opts.config)
+            if opts.only == "commandbar" and os.environ.get("OPEN_COMMANDBAR_R6_KEYS_ONLY") != "1":
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/nav_round4.py"))["run"](
                     factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "app-icons":
