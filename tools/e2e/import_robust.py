@@ -191,7 +191,9 @@ def run(factory, results, tmp, h):
         data = json.loads(sidebar_file.read_text()); graph = data['sidebar']['containers'][1]
         def key(name): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/r7/'+name)).upper()
         # Y-04: an unreached folder and its child, with the child first in the file.
-        child, folder = key('orphan-child'), key('orphan-folder')
+        # Review r1 #1: an unreached container (a removed Space) lists the folder, ahead of both in the file.
+        child, folder, removed = key('orphan-child'), key('orphan-folder'), key('removed-container')
+        graph['items'] += [removed, dict(id=removed, parentID=None, childrenIds=[folder], data={'itemContainer': {}})]
         graph['items'] += [child, dict(id=child, parentID=folder, childrenIds=[], data={'tab': {
             'savedURL': 'https://example.com/r7-orphan-child', 'savedTitle': 'Example orphan child'}}),
             folder, dict(id=folder, parentID=None, title='Example orphan folder', childrenIds=[child], data={'list': {}})]
@@ -205,11 +207,13 @@ def run(factory, results, tmp, h):
         extension = 'cdefghijklmnopabcdefghijklmnopab'
         version = r7/'User Data/Default/Extensions'/extension/'1.0_0'
         (version/'_locales/en').mkdir(parents=True)
-        manifest = {'manifest_version': 3, 'name': '__MSG_extName__', 'default_locale': 'en', 'version': '1.0'}
+        # Review r1 #4: two tokens in one name, and Preferences naming a version folder that is gone.
+        manifest = {'manifest_version': 3, 'name': '__MSG_extName__ __MSG_edition__', 'default_locale': 'en', 'version': '1.0'}
         (version/'manifest.json').write_text(json.dumps(manifest))
-        (version/'_locales/en/messages.json').write_text(json.dumps({'extName': {'message': 'Example Localized Extension'}}))
+        (version/'_locales/en/messages.json').write_text(json.dumps({'extName': {'message': 'Example Localized Extension'},
+                                                                     'Edition': {'message': 'Preview'}}))
         (r7/'User Data/Default/Secure Preferences').write_text(json.dumps({'extensions': {'settings': {extension: {
-            'path': extension+'/1.0_0', 'from_webstore': True, 'manifest': manifest}}}}))
+            'path': extension+'/0.9_0', 'from_webstore': True, 'manifest': manifest}}}}))
         def stored(): return json.loads(Path(app.call('save')).read_text())
         def tabs_under(nodes):
             found = []
@@ -245,7 +249,7 @@ def run(factory, results, tmp, h):
             and 'Search settings' not in outcome.get('settingsReportCategories', [])
             and not outcome.get('settingsOutcome', {}).get('Search settings'),
             before=engine_before, after=engine_after, categories=outcome.get('settingsReportCategories'))
-        row('r7_Y06_localized_extension_name', 'example localized extension' in rendered and '__msg' not in rendered,
+        row('r7_Y06_localized_extension_name', 'example localized extension preview' in rendered and '__msg' not in rendered,
             extensions=outcome.get('settingsExtensions'), localizedShown='example localized extension' in rendered,
             rawShown='__msg' in rendered, inspectFailed=rendered.startswith('inspect failed'))
         data = stored()

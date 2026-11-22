@@ -391,14 +391,16 @@ def run(factory, results, tmp, h):
     # Bug sweep r7 Y-07: a CSV URL with upper-case letters and the default port is saved under Chromium's
     # canonical realm. The same login written in lower case is then a duplicate, not a second login.
     realm_outcomes, before_logins = [], logins()
-    for name, url in (('Passwords-case.csv', 'https://R7Case.Example.COM:443/login'), ('Passwords-lower.csv', 'https://r7case.example.com/')):
+    # Review r1 #5: the shared canonical origin also keeps IPv6 brackets (Firefox logins use the same helper).
+    for name, url in (('Passwords-case.csv', 'https://R7Case.Example.COM:443/login'), ('Passwords-lower.csv', 'https://r7case.example.com/'),
+                      ('Passwords-ipv6.csv', 'https://[2001:DB8::1]:8443/login')):
         (files/name).write_text('Title,URL,Username,Password\nCase,%s,example-case,fixture-case\n' % url)
         open_sources(); call('settings-source', id='safari'); settle()
         call('settings-passwords-file', path=str(files/name)); settle()
         call('settings-browser-select', bookmarks=False, history=False, passwords=True); settle()
         realm_outcomes.append({k: v for k, v in finish_import().get('settingsOutcome', {}).items() if k.startswith(('Password', 'Skipped'))})
     row('safari_csv_realm_canonical', realm_outcomes[0].get('Passwords') == 1 and realm_outcomes[1].get('Password duplicates') == 1
-        and not realm_outcomes[1].get('Passwords') and logins() - before_logins == 1,
+        and not realm_outcomes[1].get('Passwords') and realm_outcomes[2].get('Passwords') == 1 and logins() - before_logins == 2,
         outcomes=realm_outcomes, logins=logins() - before_logins)
 
     # A fresh Safari profile has no Bookmarks.plist: Bookmarks shows "Not found", is unticked and disabled, and the
