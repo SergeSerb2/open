@@ -369,7 +369,15 @@ final class MediaCoordinator {
     for controller in app.windowControllers where controller.hasPeekController {
       pages += controller.peekController.stack.compactMap { ($0.host as? EngineWebContentHost).flatMap { $0.closed ? nil : $0.content } }
     }
-    pages = pages.filter { $0.isMuted != muted }
+    // Popup panels (window.open) and extension popups, of browser windows and Little Open.
+    var factories = Array(app.hostFactories.values)
+    for owner in app.littleOpenHosts.values.compactMap(\.owner) where !factories.contains(where: { $0 === owner }) { factories.append(owner) }
+    for factory in factories {
+      pages += factory.auxiliaryPages.map(\.content)
+      if let popup = factory.focusedBrowser?.extensionPopup { pages.append(popup) }
+    }
+    var seen = Set<ObjectIdentifier>()
+    pages = pages.filter { $0.isMuted != muted && seen.insert(ObjectIdentifier($0)).inserted }
     guard !changes.isEmpty || !pages.isEmpty else { return }
     // A private model registers on its own Undo manager; each manager gets one group.
     let managers = Dictionary(changes.compactMap { change in change.model.undoManager.map { (ObjectIdentifier($0), $0) } },

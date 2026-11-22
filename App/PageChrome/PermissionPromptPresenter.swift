@@ -42,11 +42,22 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     view.allow.onPress = { [weak self] in self?.finish(.allow) }
     view.notNow.onPress = { [weak self] in self?.finish(.block) }
     view.onFocusRequest = { [weak self] in self?.focusPrompt() }
+    view.onFocusLost = { [weak self] in self?.dropKeyboard() }
     for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification, NSWindow.didEndSheetNotification] {
-      observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-        MainActor.assumeIsolated { self?.presentPending() }
+      observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+        let window = note.object as? NSWindow
+        MainActor.assumeIsolated {
+          // Another window took the keyboard (a click into the page's window): the prompt has
+          // no keys any more (bug sweep r6 V-05 review).
+          if let self, let window, window !== self.view.window { self.dropKeyboard() }
+          self?.presentPending()
+        }
       })
     }
+    observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] note in
+      let window = note.object as? NSWindow
+      MainActor.assumeIsolated { if let self, let window, window === self.view.window, self.card == nil { self.dropKeyboard() } }
+    })
   }
   func request(_ request: OEPermissionRequest, page: OEWebContent) {
     guard !closed, let owner, !owner.isClosing else { request.dismiss(); return }
@@ -149,11 +160,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     // The prompt does not take the keyboard when it shows (bug sweep r6 V-05): a page could time
     // a request so the Return the user types into it grants. A click into the prompt gives it the
     // keyboard; then Return and Escape answer it. VoiceOver no longer follows a focus change, so
-    // the question is announced.
-    NSAccessibility.post(element: view, notification: .announcementRequested,
-                         userInfo: [.announcement: view.question.stringValue, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    // the question is announced once the prompt is on screen.
     if standalone {
       card = PermissionPromptCard(prompt: view, root: anchor.view)
+      announce()
       return
     }
     popover.contentViewController?.view = view
@@ -165,6 +175,23 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
       // No default button yet: AppKit would send it the Return typed into the page.
       promptWindow.defaultButtonCell = nil
+    }
+    // NSPopover can take key status when it shows: the page's window keeps the keyboard.
+    if let parent = anchor.view.window, NSApp.keyWindow !== parent, parent.canBecomeKey { parent.makeKey() }
+    announce()
+  }
+  private func announce() {
+    NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                         userInfo: [.announcement: view.question.stringValue, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+  }
+  /// Focus left the prompt (a click into the page, another window became key): Return and
+  /// Escape go back to the page, so the prompt drops its key equivalents and default button.
+  private func dropKeyboard() {
+    guard view.hasKeyboard else { return }
+    view.hasKeyboard = false
+    if card == nil, let window = view.window {
+      window.defaultButtonCell = nil
+      if window.firstResponder === view { window.makeFirstResponder(nil) }
     }
   }
   func visibilityChanged() {
@@ -201,10 +228,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   private func promptHasKeyboard(_ event: NSEvent) -> Bool {
     if let card {
-      guard let window = card.window, event.window === window, let responder = window.firstResponder as? NSView else { return false }
+      guard view.hasKeyboard, let window = card.window, event.window === window, let responder = window.firstResponder as? NSView else { return false }
       return responder === card || responder.isDescendant(of: card)
     }
-    return event.window != nil && event.window === view.window
+    return view.hasKeyboard && event.window != nil && event.window === view.window && view.window?.firstResponder === view
   }
   func owns(_ window: NSWindow) -> Bool { isShown && presentedWindow === window }
   private func finish(_ decision: OEPermissionState?) {
@@ -277,6 +304,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      "origin": current?.request.origin.absoluteString ?? "", "anchor": anchorState,
      "keyWindow": NSApp.keyWindow?.windowNumber ?? 0, "promptKey": view.window?.isKeyWindow == true,
      "promptFirstResponder": view.window?.firstResponder === view && (card != nil || view.window?.isKeyWindow == true),
+     "promptHasKeyboard": view.hasKeyboard,
      "parent": view.window?.parent?.windowNumber ?? 0, "selectedPage": owner?.selectedContent?.identifier ?? 0,
      "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0]
   }

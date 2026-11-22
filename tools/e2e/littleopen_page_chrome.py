@@ -157,18 +157,30 @@ def run(factory, results, tmp, h):
             def keys(key=key):
                 page(host='little-key-'+key); request(); state=visible(ps)
                 ev('window.pageKeys=[];document.onkeydown=e=>pageKeys.push(e.key);true')
-                app.call('key',window=row['window'],key=key,**({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
+                if key in ['escape','return']: app.call('key',key=key,asTyped=True)
+                else: app.call('key',window=row['window'],key=key,**({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
                 if key=='w': good=wait(lambda:current() is None,timeout=3)
                 elif key in ['escape','return']:
                     # Bug sweep r6 V-05: the card does not take the keyboard when it shows; the
-                    # key goes to the page. After a click into the card (focus op), it answers.
+                    # key goes to the page. After a click into the card (focus op) it answers;
+                    # after focus goes back to the page, the key is the page's again.
+                    name={'return':'Enter','escape':'Escape'}[key]
                     time.sleep(.4)
-                    page_first=ps()['visible'] and ev('permissionResult')=='pending' and ev('pageKeys')==[{'return':'Enter','escape':'Escape'}[key]]
+                    page_first=ps()['visible'] and ev('permissionResult')=='pending' and ev('pageKeys')==[name]
                     focused=call('permission-prompt', focus=True)
-                    app.call('key',window=row['window'],key=key)
-                    good=page_first and focused and wait(lambda:not ps()['visible'],timeout=3) and ev('permissionResult')==('granted' if key=='return' else 'denied')
-                    app.call('key',window=row['window'],key='x')
-                    good = good and ev('pageKeys') == [{'return':'Enter','escape':'Escape'}[key], 'x']
+                    app.call('focus', tab=current()['content']); time.sleep(.2)
+                    app.call('key',key=key,asTyped=True); time.sleep(.4)
+                    page_second=ps()['visible'] and not ps()['promptHasKeyboard'] and ev('permissionResult')=='pending' and ev('pageKeys')==[name, name]
+                    call('events')
+                    refocused=call('permission-prompt', focus=True)
+                    app.call('key',key=key,asTyped=True)
+                    answered=wait(lambda:ev('permissionResult')!='pending',timeout=3)
+                    answers=[e.get('decision') for e in call('events') if e['type']=='permissionAnswer']
+                    good=page_first and focused and page_second and refocused and bool(answered) and not ps()['visible'] and ev('permissionResult')==('granted' if key=='return' else 'denied')
+                    app.call('key',key='x',asTyped=True)
+                    good = good and ev('pageKeys') == [name, name, 'x']
+                    state = dict(state, r6=dict(pageFirst=page_first, focused=focused, pageSecond=page_second, refocused=refocused,
+                                                result=ev('permissionResult'), answers=answers, pageKeys=ev('pageKeys'), prompt=ps()))
                 elif key=='t':
                     good=wait(lambda:app.call('commandbar-state').get('presented'),timeout=3)
                     app.call('key',key='escape')

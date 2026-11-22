@@ -49,6 +49,19 @@ def _rows(app, results, wait_until, tmp):
     check('r6_move_to_space_selects_neighbour', target and after['space'] == a and after['selected'] == keep
           and keep in after['shownPages'], items=items, state={k: after[k] for k in ('space', 'selected', 'shownPages')}, keep=keep, moved=moved)
 
+    # P-04, review round 1: with three tabs the moving window picks the neighbour, not the
+    # previously selected tab, and its title follows. Today: T3 T2 T1 Keep; T1 then T3 selected.
+    t1 = opened('T1'); t2 = opened('T2'); t3 = opened('T3')
+    app.call('select', tab=t1); settle(); app.call('select', tab=t3); settle()
+    app.call('sidebar-menu', node=t3, item='Move to/' + (target or 'R6 B')); settle()
+    after = state()
+    title = next((w['title'] for w in app.call('shell-windows') if w['id'] == window), None)
+    check('r6_move_to_space_neighbour_not_history', after['space'] == a and after['selected'] == t2 and t2 in after['shownPages']
+          and title == 'R6 T2', state={k: after[k] for k in ('space', 'selected', 'shownPages')}, title=title, t1=t1, t2=t2, t3=t3)
+    app.call('select', tab=keep); settle()
+    for t in (t1, t2): app.call('close', tab=t)
+    settle()
+
     # P-04 Space-icon drop of the current tab (released before the spring-load switch).
     dropped = opened('Dot Dropped'); app.call('select', tab=dropped); settle()
     drop = app.call('space-dot-drop', space=b, nodes=[dropped]); settle()
@@ -64,7 +77,8 @@ def _rows(app, results, wait_until, tmp):
     app.call('space', space=b); settle()
     drop2 = app.call('sidebar-drop', window=second, nodes=[crossed], parent={'kind': 'today', 'id': b}, index=0); settle()
     first = state(window)
-    check('r6_cross_window_drop_keeps_source_selection', drop2 and second and first['space'] == a and first['selected'] == keep,
+    check('r6_cross_window_drop_keeps_source_selection', drop2 and second and first['space'] == a and first['selected'] == keep
+          and keep in first['shownPages'],
           drop=drop2, first={k: first[k] for k in ('space', 'selected', 'shownPages')}, keep=keep, crossed=crossed)
     if second:
         app.call('window-focus', id=second); app.call('window-close'); settle()

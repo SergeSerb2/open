@@ -873,14 +873,21 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nil) }
     }
     // The selected node moved out of this Space (another window's drop or Move to): it cannot show
-    // here. Return to this window's newest earlier selection that the Space still shows, not a
-    // blank page (bug sweep r6 P-04). The window that moved it picks its neighbour itself.
-    if let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id], model.node(id: id) != nil,
-       model.selectedNode(in: space, window: windowState) == nil {
+    // here. Return to this window's newest earlier selection that the Space still shows, else its
+    // first row, not a blank page (bug sweep r6 P-04). The window that moved it picks its
+    // neighbour itself (keepingSelection).
+    var reselected = false
+    if controller?.isKeepingSelection != true, let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id],
+       model.node(id: id) != nil, model.selectedNode(in: space, window: windowState) == nil {
       let previous = selectionHistory[space.id]?.last { $0 != id && model.isSelectable($0, in: space) }
+        ?? (flattened(space.pinned) + flattened(space.today)).lazy.compactMap { self.model.sidebarSelectionID(for: $0.id) }
+          .first { $0 != id && self.model.isSelectable($0, in: space) }
       withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: previous) }
+      reselected = true
     }
-    if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
+    // A new selection wakes its page and updates the title, media and page chrome.
+    if reselected { showSelection(focus: false) }
+    else if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
     else { controller?.refresh(); mirror.sync() }
     controller?.container.prunePinnedPageTitles()
   }

@@ -15,6 +15,13 @@ final class PermissionPromptView: PageChromePopoverView {
   }
   /// A click on the prompt's background (not a button) asks for the keyboard.
   var onFocusRequest: (() -> Void)?
+  /// The prompt lost first responder (a click into the page): it gives up its keys.
+  var onFocusLost: (() -> Void)?
+  override func resignFirstResponder() -> Bool {
+    let resigned = super.resignFirstResponder()
+    if resigned { onFocusLost?() }
+    return resigned
+  }
   override var acceptsFirstResponder: Bool { hasKeyboard }
   override func mouseDown(with event: NSEvent) { onFocusRequest?(); super.mouseDown(with: event) }
   init() {

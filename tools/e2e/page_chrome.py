@@ -591,24 +591,35 @@ def run(factory, results, tmp, h):
 
         # Bug sweep r6 V-05: the prompt does not take the keyboard when it shows, so a plain Return
         # or Escape typed into the page goes to the page; it never answers the prompt (a page could
-        # time a prompt so the user's Enter grants it). After a click into the prompt (the socket's
-        # focus op), the same key answers it.
+        # time a prompt so the user's Enter grants it). Keys are sent `asTyped`: to the window that
+        # is key now, with no window made key first. After a click into the prompt (the socket's
+        # focus op) the key answers it; after focus goes back to the page, the key is the page's.
         for key in ['escape','return']:
             def permission_page_key(key=key):
-                permission_page('pagekey-' + key); target=tab
+                permission_page('pagekey-' + key); target=tab; name={'return':'Enter','escape':'Escape'}[key]
+                browser=app.call('window-state')['number']
                 app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
                 perm(); state=visible(ps)
-                app.call('key', key=key); time.sleep(.4)
-                after=ps(); pending=app.eval(target,'permissionResult'); page_keys=app.eval(target,'promptKeys')
-                focused=app.call('permission-prompt', focus=True)
-                app.call('key', key=key)
+                app.call('key', key=key, asTyped=True); time.sleep(.4)
+                first=dict(prompt=ps(), result=app.eval(target,'permissionResult'), keys=app.eval(target,'promptKeys'))
+                # A click into the prompt, then back into the page: the prompt gives up its keys.
+                focused=app.call('permission-prompt', focus=True); held=ps()
+                app.call('focus', tab=target); time.sleep(.2)
+                app.call('key', key=key, asTyped=True); time.sleep(.4)
+                second=dict(prompt=ps(), result=app.eval(target,'permissionResult'), keys=app.eval(target,'promptKeys'))
+                # A click into the prompt again; now the key answers it.
+                refocused=app.call('permission-prompt', focus=True)
+                app.call('key', key=key, asTyped=True)
                 closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
                 actual=app.eval(target,'permissionResult')
-                return check(not state['promptFirstResponder'] and after['visible'] and pending=='pending'
-                             and page_keys==[{'return':'Enter','escape':'Escape'}[key]]
-                             and focused and closed and actual==('granted' if key=='return' else 'denied'),
-                             state=state, afterPageKey=after, pendingAfterPageKey=pending, pageKeys=page_keys,
-                             focused=focused, result=actual)
+                return check(state['keyWindow']==browser and not state['promptFirstResponder'] and not state['promptHasKeyboard']
+                             and first['prompt']['visible'] and first['result']=='pending' and first['keys']==[name]
+                             and focused and held['promptHasKeyboard']
+                             and second['prompt']['visible'] and not second['prompt']['promptHasKeyboard']
+                             and second['result']=='pending' and second['keys']==[name, name]
+                             and refocused and closed and actual==('granted' if key=='return' else 'denied'),
+                             browserWindow=browser, state=state, first=first, focused=focused, held=held, second=second,
+                             refocused=refocused, result=actual)
             gate('permission_native_' + key, permission_page_key)
 
         def permission_split_pane_return():
@@ -623,7 +634,7 @@ def run(factory, results, tmp, h):
                 assert state, dict(prompt=ps(), result=app.eval(pane_a,'permissionResult'), split=app.call('split', op='state'),
                                    url=app.eval(pane_a,'location.href'))
                 app.call('select', tab=pane_b); app.call('focus', tab=pane_b); time.sleep(.3)
-                app.call('key', key='return'); time.sleep(.4)
+                app.call('key', key='return', asTyped=True); time.sleep(.4)
                 after=ps(); pending=app.eval(pane_a,'permissionResult'); keys_b=app.eval(pane_b,'promptKeys')
                 focused=app.call('split', op='state')['focused']
                 return check(focused==pane_b and after['visible'] and pending=='pending' and keys_b==['Enter'],

@@ -11,6 +11,9 @@ import OpenWeb
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
+    /// True while `keepingSelection` runs its removal: the window picks the replacement itself
+    /// (its neighbour), so the factory's tree-change repair leaves this window alone.
+    public internal(set) var isKeepingSelection = false
     public var contentView: NSView { root }
     public let windowID: WindowID
     /// Setup can prepare engine hosts without allowing its hidden browser to activate.
@@ -1997,15 +2000,20 @@ extension BrowserWindowController {
         let outlineFocused = outline.map { outline in
             (window?.firstResponder as? NSView).map { $0 === outline || $0.isDescendant(of: outline) } ?? false
         } ?? false
+        let wasKeeping = isKeepingSelection
+        isKeepingSelection = true
         removal()
+        isKeepingSelection = wasKeeping
         // Gone from the model, or moved to another Space: either way this Space cannot show it.
-        guard let selected, !model.isSelectable(selected, in: space), let index else { return }
+        guard let selected, !model.isSelectable(selected, in: space) else { return }
         // The model can hand the selection on by itself (a split that collapses to its last
         // pane selects that pane). Keep that choice; its Undo restores the split's selection.
         if model.selectedNode(in: space, window: state) != nil { return }
         let remaining = Set(tabs())
         guard !remaining.isEmpty else { return }
-        let next = before.suffix(from: index).first(where: remaining.contains) ?? before.prefix(index).last(where: remaining.contains)
+        // The neighbour; a selection outside the Space's rows (a Favorite moved away) takes the first.
+        let next = index.map { before.suffix(from: $0).first(where: remaining.contains) ?? before.prefix($0).last(where: remaining.contains) }
+            ?? before.first(where: remaining.contains)
         guard let next else { return }
         // The removal is the undo step; moving the selection is not. Detach the manager:
         // disabled registration would still leave an empty per-command group on top.
