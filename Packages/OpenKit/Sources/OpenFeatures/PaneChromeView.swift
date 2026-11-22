@@ -121,8 +121,9 @@ public final class PaneChromeView: NSView {
                 b.contentTintColor = dark ? NSColor.white.withAlphaComponent(alpha + 0.2) : NSColor.black.withAlphaComponent(alpha)
             }
             label.textColor = dark ? NSColor.white.withAlphaComponent(0.8) : NSColor.black.withAlphaComponent(0.6)
-            // Extension buttons resolve their ink from the appearance; light pages keep the inherited one.
-            extensionStrip?.appearance = dark ? NSAppearance(named: .darkAqua) : nil
+            // Extension buttons resolve their ink from the appearance. A light bar in a dark window
+            // needs the light one too: the inherited dark ink drew white on white (bug sweep r6 REG-03).
+            extensionStrip?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         }
         let text = host?.currentURL?.absoluteString == "open://welcome" ? "Welcome to Open"
             : role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
@@ -156,7 +157,7 @@ public final class PaneChromeView: NSView {
             let strip = ExtensionStripView(style: stripStyle, context: extensionsUI)
             strip.onVisibilityChange = { [weak self] in self?.needsLayout = true }
             addSubview(strip); extensionStrip = strip
-            if drawsOnDark { strip.appearance = NSAppearance(named: .darkAqua) }
+            strip.appearance = NSAppearance(named: drawsOnDark ? .darkAqua : .aqua)
         }
         if let strip = extensionStrip {
             strip.frame = bounds; strip.isFocused = isFocused || role == .toolbar; strip.hasPage = host != nil

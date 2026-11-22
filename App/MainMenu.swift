@@ -225,6 +225,9 @@ extension EngineWebContentHostFactory {
     if id == "check-for-updates" { return true }
     if isIncognito, ["new-easel", "pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split", "export-notes", "import-arc-notes"].contains(id) { return false }
     if isBlankWindow, Self.blankWindowRefusedCommands.contains(id) { return false }
+    // A Blank Window has no Pinned section: an empty New Folder would be an invisible folder there
+    // (bug sweep r6 REG-04). New Folder with the selected items stays.
+    if isBlankWindow, id == "new-folder", selectionCommandContext(for: id) == nil { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) {
       return !findCoveredByLibrarySpaces && (selectedContent != nil || selectedNoteHost != nil)
@@ -422,7 +425,9 @@ extension EngineWebContentHostFactory {
     case "clear-archive":
       app.settingsPresenter.requestClearArchive()
     case "new-space": return controller?.beginSpaceCreation() == true
-    case "new-folder": if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
+    case "new-folder":
+      guard !isBlankWindow else { return false }
+      if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
     case "new-easel": return EaselTab.create(in: self) != nil
     case "reload": selectedContent?.reload()
     case "force-reload": selectedContent?.reloadIgnoringCache()

@@ -999,9 +999,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   #endif
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
-    let owner = hostFactories.values.first { $0.isIncognito && $0.incognitoSession?.context === request.context }
-      ?? frontStandardWindowController.flatMap { hostFactories[$0.windowID] }
-    return owner?.adoptUnownedRequest(request)
+    if let owner = hostFactories.values.first(where: { $0.isIncognito && $0.incognitoSession?.context === request.context }) {
+      return owner.adoptUnownedRequest(request)
+    }
+    // Only a main-model window: a Blank Window's one-Profile model drops another Profile's request
+    // and must not take this Profile's. Prefer a window that already shows the request's Profile,
+    // so another window is not switched to it; with none open, reopen one (bug sweep r6 WL-12).
+    // No window may open during Quit or engine shutdown (review r2 #2).
+    guard engineReady, !terminationRequested, !shutdownPrepared, let profile = regularProfile(for: request.context),
+      let space = model.mostRecentlyFocusedSpace(profileID: profile.id) ?? model.spaces.first(where: { $0.profileID == profile.id })
+    else { return nil }
+    let mains = windowControllers.filter { hostFactories[$0.windowID].map { !$0.isIncognito && $0.model === model } ?? false }
+    let ordered = NSApp.orderedWindows.compactMap { window in mains.first { $0.window === window } } + mains
+    let showing = ordered.first { hostFactories[$0.windowID]?.focusedSpace?.profileID == profile.id }
+    guard let controller = showing ?? ordered.first ?? makeWindow(focusedSpaceID: space.id) else { return nil }
+    // The request opens a foreground tab: a window behind another or minimized comes forward,
+    // or the page opens where nobody sees it (review r2 #1; as openNewTabInMainWindow).
+    if let window = controller.window, window.isMiniaturized || NSApp.keyWindow !== window {
+      if window.isMiniaturized { window.deminiaturize(nil) }
+      focusWindow(controller.windowID, activate: true)
+    }
+    return hostFactories[controller.windowID]?.adoptUnownedRequest(request)
   }
 
   func engineWillShutDown() {
@@ -1026,7 +1044,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     afterPaintTask?.cancel(); afterPaintTask = nil
     noWebStartupTask?.cancel(); noWebStartupTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
-    littleOpenCoordinator?.closeAll()
+    littleOpenCoordinator?.closeAllForShutdown()
     downloadsCenter.closeDetachedPages()
     engineReady = false
     refreshScriptingEngine()

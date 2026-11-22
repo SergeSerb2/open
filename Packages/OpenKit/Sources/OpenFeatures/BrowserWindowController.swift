@@ -729,8 +729,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                         self.positionTrafficLights()
                     }
                 } }
-                let layers = [sidebar.layer, dimmedLights.motionLayer].compactMap { $0 }
-                    + Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer }
+                let layers = [sidebar.layer, dimmedLights.motionLayer].compactMap { $0 } + movableTrafficLightLayers
                 for (index, layer) in layers.enumerated() {
                     layer.removeAnimation(forKey: "sidebarToggle")
                     layer.setValue(targetOffset, forKeyPath: "transform.translation.x")
@@ -1144,6 +1143,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
     }
 
+    /// The window's own buttons move with the sidebar only outside full screen. In full screen
+    /// AppKit shows them in its title bar at the top of the screen; a slide moved them off the
+    /// screen's left edge (bug sweep r6 WL-06).
+    private var movableTrafficLightLayers: [CALayer] {
+        // Also during the transition: the style mask can change after AppKit's first resize (review r1 #2).
+        guard let window, !fullscreenTransition, !window.styleMask.contains(.fullScreen) else { return [] }
+        return Self.trafficLightKinds.compactMap { window.standardWindowButton($0)?.layer }
+    }
+
     private func positionTrafficLights(placeMoving: Bool = false) {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         observeTrafficLights(window)
@@ -1346,7 +1354,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func slideCard(from: CGFloat, to: CGFloat, generation: Int, completion: (@MainActor () -> Void)?) {
         let layers = [sidebar.layer, cardShadow.layer].compactMap { $0 }
-        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.motionLayer].compactMap { $0 }
+        let buttons = movableTrafficLightLayers + [dimmedLights.motionLayer].compactMap { $0 }
         cardAnimations = [:]
         CATransaction.begin()
         CATransaction.setCompletionBlock {
@@ -1826,7 +1834,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowDidResize(_ notification: Notification) { layoutContent(); existingTabSwitcher?.layout() }
     public func windowDidMove(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
-    public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
+    public func windowWillEnterFullScreen(_ notification: Notification) {
+        saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true
+        // A hidden sidebar left its slide offset on the buttons; AppKit's full-screen title bar shows them in place.
+        for layer in Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
+            layer.removeAnimation(forKey: "sidebarToggle"); layer.removeAnimation(forKey: "reveal")
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            layer.setValue(0, forKeyPath: "transform.translation.x"); CATransaction.commit()
+        }
+    }
     public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true; applyTrafficLightDim(animated: false) }
     public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?(); resumePendingSpaceCreation(); onFullScreenChange?(true) }
     public func windowDidExitFullScreen(_ notification: Notification) {

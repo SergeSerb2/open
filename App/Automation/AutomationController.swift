@@ -1606,6 +1606,9 @@
           "key": win.isKeyWindow, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "urlFieldText": controller.sidebar.urlFieldText,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
+          "trafficLightOffsets": [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { kind -> Double in
+            let layer = win.standardWindowButton(kind)?.layer
+            return ((layer?.presentation() ?? layer)?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? 0 },
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
             "card": rect(reveal.card), "pageBlur": controller.cardDrawsPageBlur] as [String: Any],

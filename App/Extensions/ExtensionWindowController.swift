@@ -133,13 +133,9 @@ extension AppDelegate {
     guard let profileID, let space = model.mostRecentlyFocusedSpace(profileID: profileID) else { return "no-profile-space" }
     var controller = linkExecutor.orderedControllers.first { $0.context.focusedSpace?.profileID == profileID }
     if controller == nil {
-      // makeWindow can reuse the retained final main window. Set its Space
-      // before composition, so no page is created in a different Profile.
-      // An Incognito or Blank Window does not count: makeWindow reuses the retained state whenever no
-      // main-model window is open.
-      if frontMainModelWindowController == nil, let retained = model.windows.first(where: { $0.style == .standard }) {
-        model.focusSpace(windowID: retained.id, spaceID: space.id)
-      }
+      // makeWindow reuses the retained final main window and sets its Space before composition,
+      // without an Undo step (SB-03), so no page is created in a different Profile. A Space switch
+      // here registered Undo and made makeWindow's own switch a no-op (bug sweep r6 REG-07).
       controller = makeWindow(focusedSpaceID: space.id)
     }
     guard let controller, controller.context.focusedSpace?.profileID == profileID,

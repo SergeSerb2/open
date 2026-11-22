@@ -75,7 +75,9 @@ extension AutomationController {
         "profileIconImage": controller.titleBar.profileIconImage?.tiffRepresentation?.base64EncodedString() ?? "",
         "pickerWindow": controller.spacePicker?.view.window?.windowNumber ?? 0,
         "pickerSpaces": controller.spacePicker?.filteredSpaces.map(\.id.description) ?? [],
-        "intro": controller.showsIntro]
+        "intro": controller.showsIntro, "pageFullscreen": controller.isPageFullscreen,
+        "fullscreen": window.styleMask.contains(.fullScreen), "titleBarHidden": controller.titleBar.isHidden,
+        "cornerRadius": controller.contentView.layer?.cornerRadius ?? -1]
     }
     let count = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "open_idle_count").map {
       unsafeBitCast($0, to: (@convention(c) (Int32) -> UInt64).self)
