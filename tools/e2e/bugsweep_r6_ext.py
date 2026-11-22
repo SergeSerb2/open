@@ -210,10 +210,16 @@ def r5_delete_selected_favorite_note(app, row, h, origin):
     favorite = app.call('favorite', tab=note)
     app.call('select', tab=note)
     selected_before = [t['id'] for t in app.call('tabs') if t.get('selected')]
-    app.call('sidebar-menu', node=note, item='Delete Note')
+    note_id = next(t['url'] for t in app.call('tabs') if t['id'] == note).rsplit('/', 1)[-1].lower()
+    # A Favorite's row menu has no Delete Note: delete it from Library ▸ Easels & Notes (Arc's card "Delete").
+    app.call('defaults', key='libraryShowsEasels', value=True)
+    app.call('library', action='open', section='easels')
+    h.wait_until(lambda: any(r['id'] == note_id for r in app.call('library').get('rows', [])), timeout=8, step=.1)
+    app.call('library', action='row-menu', id=note_id, select='Delete')
     h.wait_until(lambda: (lambda s: s if s.get('shown') else None)(app.call('note', action='sheet')), timeout=5, step=.05)
     app.call('note', action='sheet', press='Delete')
     gone = h.wait_until(lambda: all(t['id'] != note for t in app.call('tabs')) or None, timeout=5, step=.05)
+    app.call('library', action='close')
     selected = h.wait_until(lambda: [t['id'] for t in app.call('tabs') if t.get('selected')] or None, timeout=3, step=.05) or []
     row('R5F_delete_selected_favorite_note_selects_neighbour', favorite.get('section') == 'favorites' and selected_before == [note]
         and bool(gone) and bool(selected) and note not in selected,
