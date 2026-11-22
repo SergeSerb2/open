@@ -12623,17 +12623,19 @@ def library_capture_checks(app, require, root, evidence):
         # after the fade, and one that a second frame confirms (no motion left at either point).
         nonlocal scale
         time.sleep(.3)
-        previous, reads = None, 0
+        previous, reads, settled = None, 0, False
         for _ in range(6):
             app.call('snapshot', path=path, window=current['window'])
             width, _, pixel = read_image(path)
             scale = width / window_width
             sample = [pixel(px * scale, py * scale) for px, py in points]
             reads += 1
-            if previous and all(distance(a, b) <= 1 for a, b in zip(sample, previous)): break
+            if previous and all(distance(a, b) <= 1 for a, b in zip(sample, previous)):
+                settled = True; break
             previous = sample
             time.sleep(.1)
-        settle_reads[os.path.basename(path)] = reads
+        # A frame no second frame confirmed is not a settled frame: the row fails on it.
+        settle_reads[os.path.basename(path)] = dict(reads=reads, settled=settled)
         return sample
     key('down'); key('down')
     baseline_pixels = settled_pixels(baseline_png)
@@ -12641,7 +12643,8 @@ def library_capture_checks(app, require, root, evidence):
     before_pixels = settled_pixels(first_png)
     key('down'); down = state()
     after_pixels = settled_pixels(next_png)
-    require('library_media_selection_pixels', distance(before_pixels[0], baseline_pixels[0]) >= 5
+    require('library_media_selection_pixels', all(v['settled'] for v in settle_reads.values()) and len(settle_reads) == 3
+            and distance(before_pixels[0], baseline_pixels[0]) >= 5
             and distance(after_pixels[1], baseline_pixels[1]) >= 5
             and distance(before_pixels[1], baseline_pixels[1]) <= 3 and distance(after_pixels[0], baseline_pixels[0]) <= 3,
             baseline=baseline_pixels, before=before_pixels, after=after_pixels, points=points, scale=scale, settleReads=settle_reads,
