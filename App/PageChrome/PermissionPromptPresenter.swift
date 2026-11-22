@@ -148,7 +148,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     anchorState = ["name": anchor.name, "frame": [screen.minX, screen.minY, screen.width, screen.height], "edge": anchor.edge.rawValue]
     // The prompt does not take the keyboard when it shows (bug sweep r6 V-05): a page could time
     // a request so the Return the user types into it grants. A click into the prompt gives it the
-    // keyboard; then Return and Escape answer it.
+    // keyboard; then Return and Escape answer it. VoiceOver no longer follows a focus change, so
+    // the question is announced.
+    NSAccessibility.post(element: view, notification: .announcementRequested,
+                         userInfo: [.announcement: view.question.stringValue, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     if standalone {
       card = PermissionPromptCard(prompt: view, root: anchor.view)
       return
