@@ -9,6 +9,7 @@ BST7-F2: a pushState that lands while the page is still loading re-plans Boosts 
 BST7-F3: a Boost whose JavaScript does not parse does not stop another Boost's JavaScript on the page.
 BST7-F8: on a page whose CSP has style-src 'self', the Boost CSS, the Zap overlay and the Zap preview apply.
 BST7-F4: Undo Import from Arc closes an editor that is open on an imported Boost; no later edit brings it back.
+  F4b: the same with the editor on a tab the import created and a JS draft inside its debounce.
 BST7-F6: Zap cancels pointerdown, mousedown, mouseup and dblclick as well as click.
 BST7-F9: opening the editor again on the Boost it already shows keeps a usable Boost and the last code edit.
 Synthetic pages on a loopback server only.
@@ -319,6 +320,36 @@ def run_f4(factory, results, tmp, env):
                                 editAfterUndo=edited, storedAfterEdit=after,
                                 negative='Undo deleted the imported Boosts but left the editor open; its next edit wrote the Boost back')
             print(key, 'PASS' if results[key]['ok'] else 'FAIL', json.dumps(results[key])[:600], flush=True)
+            # Review round 2 nit 1: the editor is on a tab that the import created and has a JS draft
+            # inside its 0.5 s debounce. Undo removes that tab, and closing it must not flush the draft.
+            draft_key = 'BST7_F4b_undo_import_imported_tab_draft'
+            try:
+                app.call('window-focus', id=window, activate=True)
+                app.call('sidebar-key', key='z', modifiers=['command', 'shift'])
+                assert wait(lambda: not app.call('first-run')['importUndoInProgress'], timeout=30, step=.02)
+                assert wait(lambda: len(app.call('boosts')) > 0, timeout=10, step=.05), 'Redo did not restore the Boosts'
+                enabled = next(b for b in app.call('boosts') if b['isEnabled'])
+                imported = [t for t in app.call('tabs') if (t.get('url') or '').startswith('https://example.com')]
+                assert imported, 'no imported example.com tab: ' + json.dumps([t.get('url') for t in app.call('tabs')])
+                app.call('select', tab=imported[0]['id'])
+                assert wait(lambda: next(t for t in app.call('tabs') if t['id'] == imported[0]['id']).get('hasWebContent'), timeout=10, step=.05)
+                # The imported address has no TLS server here: load the loopback fixture in that same tab.
+                app.call('navigate', tab=imported[0]['id'], url=origin); app.call('wait', tab=imported[0]['id'])
+                app.call('boost-editor', action='open', tab=imported[0]['id'], boost=enabled['id'], mode='code')
+                app.call('boost-editor', action='tap', id='editor.code.js')
+                app.call('boost-editor', action='type', text='window.bst7Draft = 1;')
+                app.call('window-focus', id=window, activate=True)
+                app.call('sidebar-key', key='z', modifiers=['command'])
+                assert wait(lambda: not app.call('first-run')['importUndoInProgress'], timeout=30, step=.02)
+                time.sleep(1.0)  # past the draft's debounce
+                left = [b['id'] for b in app.call('boosts')]
+                tab_gone = all(t['id'] != imported[0]['id'] for t in app.call('tabs'))
+                results[draft_key] = dict(ok=not left and tab_gone, load=list(os.getloadavg()), storedAfterUndo=left,
+                                          importedTabRemoved=tab_gone, editorOpenAfterUndo=app.call('boost-editor')['open'],
+                                          negative='closing the imported tab finished the editor, whose pending JS draft wrote the undone Boost back')
+            except Exception as error:
+                results[draft_key] = dict(ok=False, error=repr(error), load=list(os.getloadavg()))
+            print(draft_key, 'PASS' if results[draft_key]['ok'] else 'FAIL', json.dumps(results[draft_key])[:600], flush=True)
     except Exception as error:
         results[key] = dict(ok=False, error=repr(error), load=list(os.getloadavg()))
         print(key, 'FAIL', repr(error), flush=True)
