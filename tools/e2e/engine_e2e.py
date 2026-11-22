@@ -2802,6 +2802,10 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if os.environ.get("OPEN_WINDOW_OFFSCREEN_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
         return
+    # Bug sweep r6 appearance and Tab rows (tools/e2e/a11y_r6.py); OPEN_A11Y_R6_ONLY=1 runs only them.
+    if os.environ.get("OPEN_A11Y_R6_ONLY") == "1":
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
+        return
     # Bug sweep r5 VoiceOver rows (tools/e2e/a11y_r5.py); OPEN_A11Y_R5_ONLY=1 runs only them.
     if os.environ.get("OPEN_A11Y_R5_ONLY") == "1":
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
@@ -2817,6 +2821,7 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "window_offscreen.py"))["run"](app_factory, results)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r4.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r5.py"))["run"](app_factory, results, wait_until)
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "a11y_r6.py"))["run"](app_factory, results, wait_until)
         runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
         sidebar_resize_gesture_checks(app_factory, results, tmp)
         window_chrome_followup_checks(app_factory, results, tmp)
@@ -14536,6 +14541,29 @@ def page_translate_checks(factory, results, tmp):
         app.call('policy', contextMenu='')
         app.call('translate', action='selection-close')
         results['X8_selection_same_language'] = {'ok': same.get('state') == 'failed' and 'already in' in same.get('message', ''), 'state': same}
+        # Bug sweep r6 A11Y-10: a long selection keeps the bubble inside the content area with Copy
+        # shown (the text scrolls), and Tab moves keyboard focus onto Copy; Esc gives the key back.
+        app.eval(spa_tab, "document.body.insertAdjacentHTML('beforeend', '<p id=\"long-x8\"></p>'); "
+                 "document.getElementById('long-x8').textContent = (document.getElementById('p1').textContent + ' ').repeat(400).slice(0, 4900); true")
+        app.call('policy', contextMenu='run-open:' + title)
+        at = select_text("document.getElementById('long-x8')")
+        app.call('rightclick', tab=spa_tab, x=at[0], y=at[1])
+        long_sel = wait_until(lambda: (lambda v: v if v.get('state') == 'translated' and v.get('shown') else None)(app.call('translate', action='selection')), timeout=10, step=.1) \
+            or app.call('translate', action='selection')
+        app.call('policy', contextMenu='')
+        lpf, lca, copy = long_sel.get('panelFrame', [0, 0, 0, 0]), long_sel.get('contentArea', [0, 0, 0, 0]), long_sel.get('copyFrame') or [0, 0, 0, 0]
+        results['X8_long_selection_capped'] = {
+            'ok': long_sel.get('state') == 'translated' and lpf[3] > 0 and lpf[1] >= lca[1] + 8 - .5 and lpf[1] + lpf[3] <= lca[1] + lca[3] - 8 + .5
+                  and copy[2] > 0 and copy[1] >= lpf[1] - .5 and copy[1] + copy[3] <= lpf[1] + lpf[3] + .5,
+            'panel': lpf, 'content': lca, 'copy': copy, 'chars': len(long_sel.get('text', ''))}
+        tabbed = app.call('translate', action='selection-key', code=48)
+        escaped = app.call('translate', action='selection-key', code=53)
+        results['X8_selection_tab_reaches_copy'] = {
+            'ok': tabbed.get('shown') is True and tabbed.get('panelKey') is True and tabbed.get('copyFocused') is True
+                  and escaped.get('shown') is False and wait_until(lambda: app.call('windows') and any(w.get('key') for w in app.call('windows') if w.get('class') == 'BrowserWindow') or None, timeout=3, step=.1) is not None,
+            'tab': {k: tabbed.get(k) for k in ('shown', 'panelKey', 'copyFocused', 'parentKey')},
+            'esc': {k: escaped.get(k) for k in ('shown',)}}
+        app.call('translate', action='selection-close')
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
             and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
         # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
