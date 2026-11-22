@@ -67,6 +67,9 @@ public final class PeekController {
     @ObservationIgnored private var motionGeneration = 0
     @ObservationIgnored private var snapshotTask: Task<Void, Never>?
     public private(set) var isPromotionHandoff = false
+    /// The tab a promotion hands its expansion card to, and whether `promote` is still running.
+    private var promotionTabID: ItemID?
+    private var promoting = false
     public private(set) var isPreparingOpening = false
     @ObservationIgnored private var openingLoadStarted = false
     @ObservationIgnored private weak var openingFocus: NSResponder?
@@ -225,7 +228,14 @@ public final class PeekController {
     public func refresh() {
         PeekMotionTrace.mark("refresh.begin")
         defer { PeekMotionTrace.mark("refresh.end") }
-        if isPromotionHandoff { return }
+        if isPromotionHandoff {
+            // The handoff waits for the promoted tab's page. A tab closed, replaced or left meanwhile
+            // never finishes it: end the card now, or it covers the window (bug sweep r6 WL-01).
+            guard !promoting, let id = promotionTabID, model.tab(id: id) == nil
+                    || splitController.container.host(for: id) == nil || splitController.focusedTab?.id != id else { return }
+            cancelPromotionHandoff()
+        }
+        if pruneOrphanedItems() { return }
         guard let item = stack.last else { overlay.isHidden = true; overlay.clearHost(); return }
         let sourceIsVisible: Bool
         if let space = item.librarySpaceID {
@@ -248,6 +258,28 @@ public final class PeekController {
             }
         }
         overlay.needsLayout = true
+    }
+    private func cancelPromotionHandoff() {
+        motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil
+        isPromotionHandoff = false; promotionTabID = nil
+        overlay.resetMotion()
+    }
+    /// A Peek whose source tab left this window's model (closed, archived, moved to a Blank
+    /// Window) can never show again: close its page instead of keeping it live until the window
+    /// closes (bug sweep r6 WL-05). Library previews have no source tab. Returns true when it
+    /// changed the stack; `onChange` then refreshes again.
+    private func pruneOrphanedItems() -> Bool {
+        let orphaned = Set(stack.filter { $0.librarySpaceID == nil && model.tab(id: $0.sourceTabID) == nil }.map(\.id))
+        guard !orphaned.isEmpty else { return false }
+        if orphaned.count == stack.count { dismissAll(); return true }
+        if let top = stack.last, orphaned.contains(top.id) {
+            motionGeneration += 1; snapshotTask?.cancel(); snapshotTask = nil; isPreparingOpening = false
+            expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
+            overlay.resetMotion(); overlay.clearHost()
+        }
+        for item in stack where orphaned.contains(item.id) { item.host?.close() }
+        stack.removeAll { orphaned.contains($0.id) }
+        onChange?(); return true
     }
     /// The sidebar row a Peek belongs to, read now: the split that holds the source tab,
     /// else the tab. A split made from the source tab, or dissolved, moves it.
@@ -393,7 +425,8 @@ public final class PeekController {
         }
     }
     @discardableResult public func openInSplitTop() -> Bool {
-        guard let item = stack.last, let space = splitController.space, !isExpanding else { return false }
+        // A closing Peek cannot also move: its dismissal would never clear `isDismissing` (WL-02).
+        guard let item = stack.last, let space = splitController.space, !isExpanding, !isDismissing else { return false }
         // GUESS: the alert beeps on refused Peek actions here are not captured (C9; features-advanced SE-2).
         guard splitController.canAddPane else { NSSound.beep(); return false }
         // Guess: PK split semantics, confirmed by lead decision Q4.
@@ -404,28 +437,33 @@ public final class PeekController {
         // Favorites cannot be split, even when another tab is now selected.
         if split, case .favorites? = model.parent(of: item.sourceTabID) { NSSound.beep(); return false }
         isPromotionHandoff = !split && overlay.expansionCard != nil
+        promoting = true; defer { promoting = false }
         let currentURL = item.host?.currentURL ?? item.url
-        let tab = model.newTab(in: target, url: currentURL, title: item.host?.title ?? "", at: 0); tab.live.sleepPhase = .live
-        if split {
-            let succeeded: Bool
-            if let existing = splitController.split {
-                succeeded = model.addPane(splitID: existing.id, tabID: tab.id)
-                // The new pane takes focus; Expand Current Pane would keep it hidden.
-                if succeeded { splitController.clearMaximizedPane(unless: tab.id) }
-            } else if let made = model.makeSplit(tabIDs: [item.sourceTabID, tab.id]) {
-                model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: made.id)
-                model.focusSplitPane(splitID: made.id, tabID: tab.id); succeeded = true
-            } else { succeeded = false }
-            guard succeeded else {
-                model.closeTab(id: tab.id); NSSound.beep(); return false
+        // The new tab, its split and its selection are one Undo step (bug sweep r6 WL-10).
+        let promoted = model.asOneUndoStep { () -> Tab? in
+            let tab = model.newTab(in: target, url: currentURL, title: item.host?.title ?? "", at: 0); tab.live.sleepPhase = .live
+            if split {
+                let succeeded: Bool
+                if let existing = splitController.split {
+                    succeeded = model.addPane(splitID: existing.id, tabID: tab.id)
+                    // The new pane takes focus; Expand Current Pane would keep it hidden.
+                    if succeeded { splitController.clearMaximizedPane(unless: tab.id) }
+                } else if let made = model.makeSplit(tabIDs: [item.sourceTabID, tab.id]) {
+                    model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: made.id)
+                    model.focusSplitPane(splitID: made.id, tabID: tab.id); succeeded = true
+                } else { succeeded = false }
+                guard succeeded else { model.closeTab(id: tab.id); return nil }
+            } else {
+                // The promoted tab leaves any split: end Expand Current Pane (this selection does
+                // not pass through the window's select, which ends it for other selections).
+                splitController.clearMaximizedPane(unless: nil)
+                model.focusSpace(windowID: splitController.windowID, spaceID: target)
+                model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
             }
-        } else {
-            // The promoted tab leaves any split: end Expand Current Pane (this selection does
-            // not pass through the window's select, which ends it for other selections).
-            splitController.clearMaximizedPane(unless: nil)
-            model.focusSpace(windowID: splitController.windowID, spaceID: target)
-            model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
+            return tab
         }
+        guard let tab = promoted else { NSSound.beep(); return false }
+        promotionTabID = isPromotionHandoff ? tab.id : nil
         stack.removeLast(); item.host?.view.removeFromSuperview()
         // Bind before show, so showing a new tab cannot create and load a replacement host.
         if let host = item.host {
