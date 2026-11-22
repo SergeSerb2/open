@@ -20,6 +20,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
   @ObservationIgnored private var settingsStorage: SettingsViewModel?
+  /// A Profile came or went outside Settings (Undo of New Profile): an existing Settings model rereads them.
+  func refreshProfilesIfLoaded() { settingsStorage?.profiles.refresh() }
   #if OPEN_AUTOMATION
   var hasSettingsModel: Bool { settingsStorage != nil }
   private(set) var lastSettingsShowMs = 0.0

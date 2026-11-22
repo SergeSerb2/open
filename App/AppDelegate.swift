@@ -451,7 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       } catch {
         FileHandle.standardError.write(Data("Open: Profile folder cleanup list not updated: \(error)\n".utf8))
       }
-      if settingsPresenter.hasSettingsModel { settingsPresenter.settings.profiles.refresh() }
+      settingsPresenter.refreshProfilesIfLoaded()
     }
     modelSaveObserver = model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     // Profile creation belongs to the currently installed model, including an import swap.
