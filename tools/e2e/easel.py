@@ -803,6 +803,15 @@ def run(factory, results, tmp, api):
             fav_left = [t['id'] for t in app.call('tabs') if t['url'] == fav_url]
             record('L04b_library_favorite_easel', opened_rows == [fav] and selected == fav and not fav_left and not fav_folder.exists(),
                    opened=opened_rows, selected=selected, left=fav_left, folderExists=fav_folder.exists())
+            # L04c (bug sweep r6 CF-11): a sidebar rename while Library ▸ Easels is open shows in it at once.
+            b_tab = next((t['id'] for t in app.call('tabs') if t['url'] == b_url), None)
+            renamed = None
+            if b_tab:
+                easel(action='rename', text='Board B renamed', tab=b_tab)
+                renamed = api.wait_until(lambda: (lambda x: x if any(r.get('title') == 'Board B renamed' for r in x.get('rows', [])) else None)(library()),
+                                         timeout=5, step=.2)
+            record('L04c_library_follows_sidebar_rename', bool(b_tab) and bool(renamed) and library().get('open'),
+                   tab=b_tab, titles=sorted(r.get('title') or '' for r in library().get('rows', [])))
             library(action='close')
         finally:
             server.shutdown()
