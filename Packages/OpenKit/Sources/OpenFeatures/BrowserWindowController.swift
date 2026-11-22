@@ -110,9 +110,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onClose: (() -> Void)?
     /// Cancel window-owned extension consent before AppKit checks attached sheets.
     public var onCloseRequested: (() -> Void)?
-    /// The close button and Close Window ask this first: false keeps the window while its pages
-    /// answer beforeunload (the owner closes it again when every page accepts).
-    public var shouldClose: (() -> Bool)?
     /// Ordinary keys, selection and window layout never create switcher state.
     public private(set) var existingTabSwitcher: TabSwitcherController?
     public var tabSwitcher: TabSwitcherController {
@@ -1769,7 +1766,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         editor.updateAnchor(.sidebarTrailingEdge(sidebarFrameInWindow: frame))
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
-    public func windowShouldClose(_ sender: NSWindow) -> Bool { shouldClose?() ?? true }
     public func windowWillClose(_ notification: Notification) {
         cancelLibraryPageMotion()
         // The intro's app-wide event monitor must not outlive the window (bug sweep r4 PERF-14).

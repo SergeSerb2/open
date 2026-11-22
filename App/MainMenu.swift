@@ -399,9 +399,7 @@ extension EngineWebContentHostFactory {
           self.model.renameNode(id: tab.id, title: field.stringValue)
         }
       }
-    case "reset-tab":
-      // A navigation queued behind the tab's wake would replace the reset page (bug sweep r6 REG-05).
-      if let tab = selectedTab, let url = tab.pinnedURL { app.tabSleep.cancelNavigationAfterWake([tab.id]); model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
+    case "reset-tab": if let tab = selectedTab, let url = tab.pinnedURL { model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
     case "replace-pinned-url": if let tab = selectedTab { model.replacePinnedURL(id: tab.id) }
     case "clear-unpinned-tabs":
       if let space = focusedSpace, !space.today.isEmpty { model.clearToday(space: space.id); controller?.showClearedToast() }
@@ -475,9 +473,7 @@ extension EngineWebContentHostFactory {
       // Pinned tabs of the focused Space that left their pinned URL (folders and splits
       // included, Favorites excluded); one undo step. Live pages navigate back.
       if let space = focusedSpace {
-        let reset = model.resetPinnedTabs(spaceID: space.id)
-        app.tabSleep.cancelNavigationAfterWake(Set(reset))
-        for tabID in reset { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
+        for tabID in model.resetPinnedTabs(spaceID: space.id) { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
       }
     default: app.performCommand(id)
     }

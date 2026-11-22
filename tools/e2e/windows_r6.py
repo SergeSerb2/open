@@ -272,33 +272,6 @@ def run(factory, results, tmp, h):
             app.call('window-focus', id=main_window)
         guarded('win6_blank_window_no_hidden_folder', blank_folder)
 
-        # WL-04: closing a browser window runs beforeunload; Stay keeps the window.
-        def window_close_unload():
-            app.call('command', id='new-window')
-            assert wait_until(lambda: len(windows()) == 2, timeout=5, step=.05), windows()
-            second = next(w for w in windows() if w['id'] != main_window)
-            app.call('window-focus', id=second['id'])
-            app.call('key', key='escape', route='app')
-            tid = new_tab(url('wclose', '/wclose'))
-            app.call('click', tab=tid, selector='#arm')
-            assert wait_until(lambda: app.call('engine-sleep', tab=tid)['unloadHandlers'], timeout=3)
-            app.call('window-close')
-            prompted = wait_until(lambda: app.call('dialog-state').get('visible'), timeout=4, step=.05)
-            if prompted:
-                app.call('dialog-button', accept=False)
-                wait_until(lambda: not app.call('dialog-state').get('pending'), timeout=3, step=.05)
-            time.sleep(.5)
-            stayed = len(windows()) == 2
-            row('win6_window_close_runs_beforeunload_stay', bool(prompted) and stayed, prompted=bool(prompted), windows=len(windows()))
-            if stayed:
-                app.call('window-focus', id=second['id'])
-                app.call('window-close')
-                again = wait_until(lambda: app.call('dialog-state').get('visible'), timeout=4, step=.05)
-                if again: app.call('dialog-button', accept=True)
-                gone = wait_until(lambda: len(windows()) == 1, timeout=5, step=.05)
-                row('win6_window_close_runs_beforeunload_leave', bool(again) and bool(gone), prompted=bool(again), windows=len(windows()))
-            app.call('window-focus', id=main_window)
-        guarded('win6_window_close_runs_beforeunload_stay', window_close_unload, answer_dialogs)
 
         # WL-06: in native full screen, hiding the sidebar must not slide AppKit's title-bar buttons
         # off the screen edge.

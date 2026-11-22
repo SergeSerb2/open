@@ -131,10 +131,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var commandBarNavigationFocus: Set<ItemID> = []
   private var typedNavigationTabs: Set<ItemID> = []
   private(set) var isClosing = false
-  /// Window close preflight (bug sweep r6 WL-04): the pages still to ask, the selection to restore.
-  private var windowClosePages: [OEWebContent]?
-  private var windowCloseSelection: (SpaceID, [SpaceID: ItemID])?
-  private var windowCloseAccepted = false
   var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
   var pendingSaveChoice: ((URL?) -> Void)?
   var findController: FindController?
@@ -190,7 +186,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let onPinnedPage = tab.url.host == old.host && tab.url.path == old.path
     guard model.setPinnedURL(id: id, url: url) else { return }
     if onPinnedPage {
-      app.tabSleep.cancelNavigationAfterWake([id])
       if let content = hosts[id]?.content { content.load(url) } else { tab.url = url }
     }
     controller?.refresh(); mirror.sync(); scheduleSave()
@@ -401,7 +396,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let self, let window = self.window else { return }
       self.app.extensionPrompts.cancel(window: window)
     }
-    controller.shouldClose = { [weak self] in self?.windowShouldClose() ?? true }
     controller.onExtensionShortcut = { [weak self] event in
       guard let self, let browser = self.focusedBrowser else { return false }
       return self.app.extensionPrompts.table(browser.context.extensions).handle(event, factory: self)
@@ -710,55 +704,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let id = tabID(for: page), model.tab(id: id) != nil, let space = space(containing: id) else { return }
     if focusedSpace?.id != space.id { focus(space: space) }
     if selectedTab?.id != id { select(nodeID: id) }
-  }
-  /// Closing the window (close button, Close Window) runs beforeunload on each of its live pages
-  /// first, as Cmd+W and Quit do; "Stay" keeps the window. A Blank or Incognito window's tabs end
-  /// with it, and a normal window's pages lose their unsaved state (bug sweep r6 WL-04).
-  /// Returns true when the window may close now.
-  func windowShouldClose() -> Bool {
-    if windowCloseAccepted || isClosing || app.terminationRequested { return true }
-    #if OPEN_AUTOMATION
-    if AutomationOwnerWatch.quittingWithoutPrompts { return true }
-    #endif
-    if windowClosePages != nil { return false }
-    let pages = contents.values.filter { $0.crashState == .none && $0.hasUnloadHandlers }
-    guard !pages.isEmpty else { return true }
-    windowClosePages = Array(pages)
-    windowCloseSelection = (windowState.focusedSpaceID, windowState.selectedNodeBySpace)
-    askNextWindowClosePage()
-    return false
-  }
-  private func askNextWindowClosePage() {
-    guard var remaining = windowClosePages else { return }
-    guard !remaining.isEmpty else {
-      // Every page accepted. Put back the selection the questions changed, so a reopened
-      // window shows what it showed, then close for real.
-      if let (space, selection) = windowCloseSelection {
-        windowState.selectedNodeBySpace = selection.filter { model.space(id: $0.key) != nil && model.node(id: $0.value) != nil }
-        if model.space(id: space) != nil { windowState.focusedSpaceID = space }
-      }
-      windowClosePages = nil; windowCloseSelection = nil; windowCloseAccepted = true
-      window?.performClose(nil)
-      // A window that stayed open (AppKit refused the close) asks again next time.
-      windowCloseAccepted = false
-      return
-    }
-    let page = remaining.removeFirst(); windowClosePages = remaining
-    guard !isClosing, contents.values.contains(where: { $0 === page }) else { askNextWindowClosePage(); return }
-    // A page showing a dialog cannot run beforeunload yet: keep the window and show the dialog.
-    if pageChrome.closeBlockedByDialog(page) {
-      windowClosePages = nil; windowCloseSelection = nil
-      revealPageForClose(page); pageChrome.showDialogsOffscreen(page); return
-    }
-    revealPageForClose(page)
-    let waits = pageChrome.requestClose(page) { [weak self, weak page] accepted in
-      guard let self, self.windowClosePages != nil else { return }
-      guard accepted else { self.windowClosePages = nil; self.windowCloseSelection = nil; return }
-      // Page.close destroyed the page: drop its host, as Quit does; a reopened window rebuilds it.
-      if let page, let id = self.tabID(for: page) { self.controller?.container.closeHost(for: id) }
-      self.askNextWindowClosePage()
-    }
-    if !waits { askNextWindowClosePage() }
   }
   /// A dead renderer answers nothing: its sheets and permission prompts close, and the window
   /// leaves the fullscreen it started (bug sweep r4 WC-07, WC-01).
@@ -1992,12 +1937,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         if let url = request.url { openNewTab(url: url, background: request.disposition == .newBackgroundTab, opener: nil, in: request.context) }
         return nil
       }
-      // A page with no sidebar Space (a popup panel) opens its tab in a Space of its own Profile
-      // when the window now shows another Profile; it was dropped (bug sweep r6 REG-02, as WC-11).
-      let requestProfile = profile(for: request.context)?.id
-      let fallback = focusedSpace.flatMap { $0.profileID == requestProfile ? $0 : nil }
-        ?? (isIncognito ? nil : requestProfile.flatMap { space(forProfile: $0) })
-      guard let space = source ?? fallback, space.profileID == requestProfile else { return nil }
+      guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
                              unread: request.disposition == .newBackgroundTab)
       tab.openerID = opener

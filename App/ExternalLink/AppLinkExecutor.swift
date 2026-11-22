@@ -33,8 +33,11 @@ final class AppLinkExecutor: LinkDestinationExecutor {
     guard app.model.space(id: spaceID) != nil else { return }
     var controller = orderedControllers.first
     if controller == nil {
-      // makeWindow reuses the retained final standard state and sets its Space before composition
-      // (without Undo), so it cannot create a page in the old Space first (bug sweep r6 REG-07).
+      // makeWindow reuses the retained final standard state. Set its Space
+      // before composition, so it cannot create a page in the old Space first.
+      if app.frontMainModelWindowController == nil, let retained = app.model.windows.first(where: { $0.style == .standard }) {
+        app.model.focusSpace(windowID: retained.id, spaceID: spaceID)
+      }
       controller = app.makeWindow(focusedSpaceID: spaceID)
     }
     guard let controller, let factory = app.hostFactories[controller.windowID] else { return }
