@@ -114,9 +114,11 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     }
     if let window = prompt.webContent?.view.window { return window }
     if let window = prompt.browser?.window { return window }
-    if let key = NSApp.keyWindow, let factory = app.factory(forKeyWindow: key), factory.focusedBrowser?.context === manager.context { return factory.window }
+    // A Blank Window shows the real Profile's context but is never a page-less prompt's host (below).
+    if let key = NSApp.keyWindow, let factory = app.factory(forKeyWindow: key), !factory.isBlankWindow,
+      factory.focusedBrowser?.context === manager.context { return factory.window }
     let ordered = NSApp.orderedWindows.compactMap { app.factory(forKeyWindow: $0) }
-    if let window = ordered.first(where: { $0.focusedBrowser?.context === manager.context })?.window { return window }
+    if let window = ordered.first(where: { !$0.isBlankWindow && $0.focusedBrowser?.context === manager.context })?.window { return window }
     // A prompt without a page (install, repair, re-enable, permissions) belongs to its Profile:
     // only a regular window that shows a Space of that Profile may host it. Never an Incognito
     // window, a Blank Window (its stand-in Profile has the real Profile's ID; it closes with its
