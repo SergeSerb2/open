@@ -2117,6 +2117,8 @@
       // that native motion just armed; its duplicate enter cannot re-arm it.
       if exitingOnly {
         let leaving = hoveredOwners.filter { inside[$0.key] == nil }
+        // An owner gets one exit: a second `exit` or a later `hover` does not repeat it.
+        for key in leaving.keys { hoveredOwners.removeValue(forKey: key) }
         if let exit = enterExit(.mouseExited) { for owner in leaving.values { owner.mouseExited(with: exit) } }
         return ["exited": leaving.values.map { String(describing: type(of: $0)) }.sorted()]
       }
@@ -2588,6 +2590,12 @@
         target.layoutIfNeeded()
         let type: NSEvent.EventType = action == "down" ? .leftMouseDown : action == "drag" ? .leftMouseDragged : .leftMouseUp
         if let e = event(type, point) { NSApp.sendEvent(e) }
+      } else if action == "exit" {
+        // What WindowServer sends when the pointer leaves the window fast: the tracking-area
+        // exits at the new point and no motion event (bug sweep r6, SB-07 part 2).
+        let location = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+        BrowserWindowController.automationPointer = (number, location)
+        return hover(target, at: location, exitingOnly: true)
       } else if action == "move" || action == "hover" {
         // Local event monitors run on AppKit's native dequeue path. Queue
         // motion just like real input, including after a Space transition.

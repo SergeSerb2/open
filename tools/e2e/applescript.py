@@ -292,14 +292,17 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
         app.call('undo-state', clear=True)
         script('select tab id %s of window 1' % quote(favorite))
         no_undo['other_profile_favorite'] = not app.call('undo-state')['canUndo']
-        # Model state only: L1 (cross-Profile animated switch host) is a separate open bug.
         state = wait_until(lambda: (s if s['space'] == work and s['selected'] == favorite else None)
                            if (s := app.call('window-state')) else None, timeout=5, step=.1)
         final = state or app.call('window-state')
         active = script('try\nreturn id of active tab of window 1\non error\nreturn "none"\nend try')
-        results['S2_select_other_profile_favorite'] = {'ok': bool(state) and active == favorite,
+        # Bug sweep r6 seed 10: the cross-Profile animated switch (L1, fixed in #642) also shows the
+        # Favorite's page once the switch settles; it used to leave the tab without a page.
+        shown = wait_until(lambda: favorite in (app.call('window-state').get('shownPages') or []) or None, timeout=8, step=.1)
+        results['S2_select_other_profile_favorite'] = {'ok': bool(state) and active == favorite and bool(shown),
             'spaceIsWorkProfile': final['space'] == work, 'selectedIsFavorite': final['selected'] == favorite,
-            'activeTabIsFavorite': active == favorite}
+            'activeTabIsFavorite': active == favorite, 'pageShown': bool(shown),
+            'sleepPhase': app.call('tab-state', tab=favorite).get('sleepPhase')}
         app.call('space', space=research)
         wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
         app.call('undo-state', clear=True)
