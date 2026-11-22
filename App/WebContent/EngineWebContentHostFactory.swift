@@ -1066,7 +1066,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     switch intent {
     case .customizePage(let id):
       guard canCustomizePage(id) else { return false }
-      app.stores.boosts.editCurrent(tabID: id); return true
+      app.stores.boosts.editCurrent(tabID: id, in: self); return true
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
       guard model.profile(id: id) != nil else { return false }
@@ -2077,7 +2077,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 
   private func canCustomizePage(_ id: ItemID) -> Bool {
     !isIncognito && model.tab(id: id)?.live.hasLoadedInThisLaunch == true
-      && app.stores.boosts.canEdit(tabID: id)
+      && app.stores.boosts.canEdit(tabID: id, in: self)
   }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {

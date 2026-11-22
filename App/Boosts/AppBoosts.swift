@@ -165,10 +165,10 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
   }
   /// The window whose page of the tab the Boost Editor works on. All standard windows share one
   /// model, so a tab (a Favorite, a pinned tab) can show in two windows, each with its own page:
-  /// the invoking window when known, else the window whose editor is bound to the tab, else the
-  /// frontmost window that shows it.
+  /// the invoking window when known (only its own page: none when it has no page for the tab),
+  /// else the window whose editor is bound to the tab, else the frontmost window that shows it.
   func factory(for id: ItemID, preferring preferred: EngineWebContentHostFactory? = nil) -> EngineWebContentHostFactory? {
-    if let preferred, preferred.hosts[id] != nil { return preferred }
+    if let preferred { return preferred.hosts[id] != nil ? preferred : nil }
     let hosting = app.hostFactories.values.filter { $0.hosts[id] != nil }
     guard hosting.count > 1 else { return hosting.first }
     let editing = hosting.filter { $0.controller?.boostEditor?.session?.context.tabID == id }
@@ -234,6 +234,8 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
           let factory = app.hostFactories[controller.windowID] else { return nil }
     // As Library ▸ Easels and Notes do: the page and its editor show in the window, not under the Library.
     app.settingsPresenter.closeLibrary()
+    // From a Blank Window's Library the edit happens in the standard window behind it: bring it forward.
+    app.focusWindow(controller.windowID, activate: true)
     factory.focus(space: space)
     if let tab = factory.openNewTab(url: url, background: false) { pendingEditors[tab.id] = id }
     return nil
