@@ -85,9 +85,10 @@ def rows(factory, results, tmp, h, origin):
         row('persist_z05_snapshot_write_failure_toast', bool(toast) and counters.get('dirty') is True and not on_disk and bool(saved),
             toast=toast, counters=counters, writtenWhileRefused=on_disk, savedAfter=bool(saved))
 
-        # Z-06: a selected page changes its address and title every 200 ms. A Space created meanwhile
-        # still reaches browser.json within the maximum wait (10 s) plus the 1 s debounce, with no
-        # automation save.
+        # Z-06: the selected page changes its address and title every 200 ms. Another tab pinned
+        # meanwhile (the page stays in front, so it keeps ticking) still reaches browser.json within the
+        # maximum wait (10 s) plus the 1 s debounce, with no automation save.
+        marker = h.new_tab(app, origin + '/z06-pinned')
         ticker_tab = h.new_tab(app, origin + '/z06-ticker')
         app.call('select', tab=ticker_tab)
         app.eval(ticker_tab, "let n=0;setInterval(()=>{n++;document.title='t'+n;history.replaceState(null,'','#'+n)},200);1")
@@ -95,13 +96,19 @@ def rows(factory, results, tmp, h, origin):
         # Start from a saved model: the maximum wait counts from the first change after this save.
         app.call('save')
         before = app.call('frame-save-counters')
-        app.call('space-create', title='R7 Starve Check')
+        app.call('pin', tab=marker)
         started = time.monotonic()
-        landed = wait(lambda: 'R7 Starve Check' in snapshot.read_text() or None, timeout=16, step=.25)
+
+        def pinned_on_disk():
+            spaces = json.loads(snapshot.read_text())['spaces']
+            return any('/z06-pinned' in json.dumps(s.get('pinned', [])) for s in spaces) or None
+        landed = wait(pinned_on_disk, timeout=16, step=.25)
         elapsed = time.monotonic() - started
         after = app.call('frame-save-counters')
+        selected = next((t['id'] for t in app.call('tabs') if t.get('selected')), None)
         row('persist_z06_save_not_starved_by_changing_page', bool(landed) and elapsed <= 13
-            and after['scheduled'] - before['scheduled'] >= 20,
+            and after['scheduled'] - before['scheduled'] >= 20 and selected == ticker_tab,
+            selectedTicker=selected == ticker_tab,
             elapsed=round(elapsed, 2), maximumWait=10, load=os.getloadavg(), before=before, after=after)
 
     def z08():
