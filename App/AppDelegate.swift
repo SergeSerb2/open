@@ -845,11 +845,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Shell window lifetime and the setup-created Welcome tab are not sidebar
   /// edits. Preserve an
   /// enclosing caller's disabled registration state, including on early return.
-  private func withoutWindowUndo<T>(_ body: () throws -> T) rethrows -> T {
+  private func withoutWindowUndo<T>(_ body: () -> T) -> T {
     let wasEnabled = undoManager.isUndoRegistrationEnabled
     if wasEnabled { undoManager.disableUndoRegistration() }
     defer { if wasEnabled { undoManager.enableUndoRegistration() } }
-    return try body()
+    return body()
   }
 
   /// Live Folder refresh when the app comes to the front (live-data §2.5). Nothing runs (no
@@ -902,8 +902,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     assert(imported || model === firstRunDefaultModel, "A fresh finish must keep the original default model")
     let priorBlocker = stores.adBlock?.isEnabled
     do {
-      // The chosen Favorites and theme are setup, not edits: the first Undo stays the import's.
-      try withoutWindowUndo { try onboardingWindowController?.steps?.applyChoices() }
+      // The chosen Favorites and theme are setup, not edits: the first Undo stays the import's
+      // (as withoutWindowUndo below, which takes no throwing body).
+      do {
+        let undoWasEnabled = undoManager.isUndoRegistrationEnabled
+        if undoWasEnabled { undoManager.disableUndoRegistration() }
+        defer { if undoWasEnabled { undoManager.enableUndoRegistration() } }
+        try onboardingWindowController?.steps?.applyChoices()
+      }
       try snapshotStore.saveNow(model: model)
       // Save the choices first, then insert Welcome before any browser is built.
       // Retain its ID across a failed second save so retry cannot add a duplicate.
