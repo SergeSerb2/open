@@ -145,10 +145,14 @@ def run(factory, results, tmp, wait_until):
                 'go-to-space-1': {'shortcuts': [{'key': '1', 'modifiers': ['option', 'control']}]}}}))
             app.call('reload-keybindings'); time.sleep(.2)
             custom = space_item()
+            bindings.write_text(json.dumps({'version': 1, 'bindings': {'go-to-space-1': {'shortcuts': []}}}))
+            app.call('reload-keybindings'); time.sleep(.2)
+            removed = space_item()
             # NSEvent.ModifierFlags: control 1<<18, option 1<<19. The item kept a fixed ⌃1.
             check('R7_W04_space_menu_key_follows_binding', default.get('key') == '1' and default.get('modifierMask') == 1 << 18
-                  and custom.get('key') == '1' and custom.get('modifierMask') == (1 << 18) | (1 << 19),
-                  default={k: default.get(k) for k in ('key', 'modifierMask')}, custom={k: custom.get(k) for k in ('key', 'modifierMask')})
+                  and custom.get('key') == '1' and custom.get('modifierMask') == (1 << 18) | (1 << 19) and removed.get('key') == '',
+                  default={k: default.get(k) for k in ('key', 'modifierMask')}, custom={k: custom.get(k) for k in ('key', 'modifierMask')},
+                  removed={k: removed.get(k) for k in ('key', 'modifierMask')})
         finally:
             bindings.unlink(missing_ok=True); _try(lambda: app.call('reload-keybindings'))
 
@@ -160,7 +164,9 @@ def run(factory, results, tmp, wait_until):
         app.call('space', space=first)
         def title(): return next((w['title'] for w in app.call('shell-windows')), '')
         def tab_items(): return {n['payload'] for n in app.call('menu-state') if n['id'].startswith('dynamic-tab-')}
-        assert wait_until(lambda: title() == 'R7 alpha' and alpha in tab_items(), timeout=5, step=.05), \
+        # The Tabs menu decides the row. The window title is evidence only: the page container also
+        # reports its title when it shows another page, so it can update without the focus path.
+        assert wait_until(lambda: alpha in tab_items() and beta not in tab_items(), timeout=10, step=.05), \
             (title(), tab_items(), app.call('spaces'), first, second)
         open_library('spaces'); time.sleep(.3)
         items = app.call('space-manager-menu', space=second, item='?')
@@ -170,8 +176,7 @@ def run(factory, results, tmp, wait_until):
         time.sleep(.4)
         menus = tab_items()
         # The editor's own Space switch skipped the window's focus path (menus, extensions' active tab).
-        check('R7_W01_edit_theme_switch_updates_window_menus', switched and editor.get('open') and title() == 'R7 beta'
-              and beta in menus and alpha not in menus,
+        check('R7_W01_edit_theme_switch_updates_window_menus', switched and editor.get('open') and beta in menus and alpha not in menus,
               title=title(), editorOpen=editor.get('open'), tabMenu=sorted(menus), alpha=alpha, beta=beta)
         app.call('editor-close')
 

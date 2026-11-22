@@ -78,6 +78,9 @@ final class LibrarySectionHost {
     var worker: Task<[LibraryPreparedRow], Never>?
     var append: Task<Void, Never>?
     var phaseMilliseconds: [String:Double] = [:]
+    /// The panel presentation (`LibraryPanelView.presentations`) whose rows this list shows; -1 when
+    /// they were applied while the panel was closed (prebuild).
+    var appliedPresentation = -1
     func cancel() { preparation?.cancel(); worker?.cancel(); append?.cancel(); preparation = nil; worker = nil; append = nil }
     isolated deinit { provider?.cancel(); preparation?.cancel(); worker?.cancel(); append?.cancel(); storeWatch?.cancel() }
 }

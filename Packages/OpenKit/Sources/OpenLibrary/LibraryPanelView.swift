@@ -31,9 +31,11 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public var onIdleRefresh: (() -> Void)?
     public internal(set) var prebuiltReady = false
     var preparing = false
+    /// Counts the panel's presentations (opens).
+    var presentations = 0
     var contentActive: Bool { isPresented || preparing }
     public var isPresented = false {
-        didSet { guard isPresented != oldValue else { return }; if isPresented { if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
+        didSet { guard isPresented != oldValue else { return }; if isPresented { presentations += 1; if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
     }
     public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
     let rail = NSScrollView()
