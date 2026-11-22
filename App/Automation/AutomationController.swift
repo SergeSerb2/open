@@ -2117,6 +2117,8 @@
       // that native motion just armed; its duplicate enter cannot re-arm it.
       if exitingOnly {
         let leaving = hoveredOwners.filter { inside[$0.key] == nil }
+        // An owner gets one exit: a second `exit` or a later `hover` does not repeat it.
+        for key in leaving.keys { hoveredOwners.removeValue(forKey: key) }
         if let exit = enterExit(.mouseExited) { for owner in leaving.values { owner.mouseExited(with: exit) } }
         return ["exited": leaving.values.map { String(describing: type(of: $0)) }.sorted()]
       }

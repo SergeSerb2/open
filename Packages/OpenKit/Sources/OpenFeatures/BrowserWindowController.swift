@@ -448,11 +448,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let self, let window = self.window, event.window === window, self.reveal.phase != .idle else { return }
             let point = self.root.convert(event.locationInWindow, from: nil), b = self.root.bounds
             guard !b.insetBy(dx: 1, dy: 1).contains(point) else { return }
-            // Onto one of this window's own child windows (a hover preview past the edge): still here.
+            // Onto one of this window's own windows past the edge (a hover preview, a child's child
+            // such as the icon picker's tones panel, the theme editor, an owned panel): still here.
             let screen = window.convertPoint(toScreen: event.locationInWindow)
-            if window.childWindows?.contains(where: { $0.isVisible && $0.frame.contains(screen) }) == true { return }
+            func childUnder(_ parent: NSWindow) -> Bool {
+                (parent.childWindows ?? []).contains { $0.isVisible && ($0.frame.contains(screen) || childUnder($0)) }
+            }
+            let owned = NSApp.windows.contains { other in
+                other.isVisible && other.frame.contains(screen) && (other === self.themeEditor?.panel
+                    || other === self.spaceCreationController?.themeEditor?.panel || self.ownsAdditionalKeyWindow?(other) == true)
+            }
+            if childUnder(window) || owned { return }
             let x = point.x <= b.minX + 1 ? min(point.x, b.minX - 1) : point.x >= b.maxX - 1 ? max(point.x, b.maxX + 1) : point.x
-            let y = point.y <= b.minY + 1 ? min(point.y, b.minY - 1) : point.y >= b.maxY - 1 ? max(point.y, b.maxY + 1) : point.y
+            // Off the top: past the top-left zone too, which reaches above the window (review r1 #2).
+            let y = point.y <= b.minY + 1 ? min(point.y, b.minY + RevealMetrics.topLeftRange.lowerBound - 1)
+                : point.y >= b.maxY - 1 ? max(point.y, b.maxY + 1) : point.y
             self.trackSidebarPointer(CGPoint(x: x, y: y))
         }
         // The area does not retain its owner; deinit removes it before the tracker goes.

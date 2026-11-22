@@ -567,10 +567,10 @@ public final class BrowserModel {
         // One Live Folder per Space: a Live Folder (or a folder holding one) moved into a Space that
         // has one becomes a plain folder that keeps its rows, as Export Space into Folder does.
         let demoted = source == destination ? nil : demoteIncomingLiveFolders(id, from: source, to: destination)
-        guard let removed = removeChild(id, from: source, at: knownPosition) else { demoted?(); live?(); return nil }
+        guard let removed = removeChild(id, from: source, at: knownPosition) else { demoted?.restore(); live?(); return nil }
         guard let toIndex = insertChild(removed.node, into: destination, at: position) else {
             _ = insertChild(removed.node, into: source, at: removed.index)
-            demoted?(); live?()
+            demoted?.restore(); live?()
             return nil
         }
         let cleared = source == destination ? nil : clearPeek(in: source, removing: id)
@@ -580,9 +580,12 @@ public final class BrowserModel {
         emit(.move(fromParent: source, fromIndex: removed.index, toParent: destination, toIndex: toIndex, nodeID: id))
         let fromIndex = removed.index
         return { model in
-            guard model.relocate(id, to: source, at: fromIndex, restoringPeek: cleared) != nil else { return false }
+            // A demoted Live Folder is live again before the move back emits: the sidebar draws the
+            // row (badge, 10-row cap) from that event and does not observe `live` (review r1 #1).
+            demoted?.restore()
+            guard model.relocate(id, to: source, at: fromIndex, restoringPeek: cleared) != nil else { demoted?.redo(); return false }
             Self.restore(prior)
-            demoted?(); live?()
+            live?()
             return true
         }
     }
@@ -1985,9 +1988,10 @@ public final class BrowserModel {
 
     /// A move of `id` from `source` into another Space that already has a Live Folder: every Live
     /// Folder the moved node holds (itself or nested) becomes a plain folder whose fetched rows are
-    /// normal tabs (lead ruling, round 6; the `turnSpaceIntoFolder` rule). Returns the closure that
-    /// makes them live again, or nil when nothing changed.
-    private func demoteIncomingLiveFolders(_ id: ItemID, from source: NodeParent, to destination: NodeParent) -> LiveRowRestore? {
+    /// normal tabs (lead ruling, round 6; the `turnSpaceIntoFolder` rule). Returns `restore` (live
+    /// again) and `redo` (plain again, for a failed revert), or nil when nothing changed.
+    private func demoteIncomingLiveFolders(_ id: ItemID, from source: NodeParent, to destination: NodeParent)
+        -> (restore: LiveRowRestore, redo: LiveRowRestore)? {
         guard let moved = index[id]?.folder, let to = owner(of: destination).space, to != owner(of: source).space,
               let existing = liveFolder(in: to) else { return nil }
         var incoming: [Folder] = []
@@ -2000,16 +2004,19 @@ public final class BrowserModel {
         let demoted = incoming.compactMap { folder -> (Folder, LiveFolderConfig, [(Tab, URL)])? in
             guard let live = folder.live else { return nil }
             let rows = folder.children.compactMap(\.tab).compactMap { tab in tab.liveItemURL.map { (tab, $0) } }
-            folder.live = nil
-            for (tab, _) in rows { tab.liveItemURL = nil }
             return (folder, live, rows)
         }
-        return {
+        func plain() {
+            for (folder, _, rows) in demoted { folder.live = nil; for (tab, _) in rows { tab.liveItemURL = nil } }
+        }
+        plain()
+        return (restore: {
             for (folder, live, rows) in demoted {
                 folder.live = live
-                for (tab, url) in rows { tab.liveItemURL = url }
+                // Only rows still in the folder (auto-archive can take a Today row with no Undo step).
+                for (tab, url) in rows where folder.children.contains(where: { $0.id == tab.id }) { tab.liveItemURL = url }
             }
-        }
+        }, redo: plain)
     }
 
     /// Runs `restores` after `revert` puts the nodes back.
