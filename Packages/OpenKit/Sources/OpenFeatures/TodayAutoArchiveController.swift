@@ -33,16 +33,25 @@ public final class TodayAutoArchiveController {
     public func stopObserving() {
         observing = false; generation += 1
     }
+    /// The earliest Today deadline the last observation saw.
+    private var trackedExpiry: Date?
+    /// Schedule invalidations sent (automation evidence for PERF-07).
+    public private(set) var invalidationCount = 0
     private func track() {
         guard observing else { return }
         let current = generation
-        withObservationTracking {
+        trackedExpiry = withObservationTracking {
             // This query reads every structural/activity input, even after finding a minimum.
-            _ = model.nextAutoArchiveExpiry()
+            model.nextAutoArchiveExpiry()
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.observing, self.generation == current else { return }
+                let previous = self.trackedExpiry
                 self.track()
+                // A tab switch stamps the tab it leaves, which is rarely the earliest deadline: an
+                // unchanged deadline keeps the armed timer, with no second scan (bug sweep r6, PERF-07).
+                guard self.trackedExpiry != previous else { return }
+                self.invalidationCount += 1
                 self.onScheduleInvalidated?()
             }
         }

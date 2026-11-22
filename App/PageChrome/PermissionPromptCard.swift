@@ -34,7 +34,9 @@ final class PermissionPromptCard: NSView {
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
   private func applyColors() {
     let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-    layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+    // A dynamic color's cgColor resolves against the current drawing appearance, which is not
+    // this view's during viewDidChangeEffectiveAppearance (A11Y-09).
+    effectiveAppearance.performAsCurrentDrawingAppearance { layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor }
     layer?.shadowColor = NSColor(displayP3Red: 0.082, green: 0.110, blue: 0.196, alpha: 1).cgColor
     layer?.shadowOpacity = dark ? 0.80 : 0.30
   }

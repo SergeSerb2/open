@@ -67,7 +67,11 @@ import OpenDesign
     public var downloadDirectory: String { get { profile?.settings.downloadDirectory ?? "~/Downloads" } set { update { $0.downloadDirectory = newValue } } }
     public var askWhereToSave: Bool { get { profile?.settings.askWhereToSaveEachFile ?? false } set { update { $0.askWhereToSaveEachFile = newValue } } }
     public func nextDownloadSettings() -> (directory: String, ask: Bool) { (downloadDirectory.isEmpty ? "~/Downloads" : downloadDirectory, askWhereToSave) }
-    public func refresh() { dataModel.refresh(from: root.model) }
+    public func refresh() {
+        // Undo of New Profile can remove the selected Profile: per-Profile edits would then go nowhere.
+        if root.model.profile(id: root.selectedProfileID) == nil, let first = root.model.defaultProfile { root.selectedProfileID = first.id }
+        dataModel.refresh(from: root.model)
+    }
     public func select(_ id: ProfileID) { root.selectedProfileID = id; refresh(); showsSuggestNotice=false; presentSuggestNotice() }
     public func update(_ change: (inout ProfileSettings) -> Void) {
         guard let profile else { return }; var settings = profile.settings; change(&settings)

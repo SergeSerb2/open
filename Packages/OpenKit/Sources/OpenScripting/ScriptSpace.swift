@@ -55,10 +55,9 @@ public final class ScriptSpace: NSObject {
         _ = ScriptCreation.makeTab(inSpace: spaceID, atIndex: index, properties: tab.creationProperties)
     }
     @objc(removeFromAppleScriptTabsAtIndex:) public func removeFromAppleScriptTabs(at index: Int) {
-        guard let tab = objectInAppleScriptTabsAtIndex(index), let model = ScriptHost.shared.model else { return }
+        guard let tab = objectInAppleScriptTabsAtIndex(index), ScriptHost.shared.model != nil else { return }
         _ = tab.objectSpecifier
-        model.closeTab(id: tab.tabID)
-        ScriptHost.shared.tabWrappers[tab.tabID] = nil
+        ScriptTarget.closeTab(tab.tabID, in: nil)
     }
     // Foundation declares this override nonisolated. Apple-event evaluation is main-thread only.
     public override var objectSpecifier: NSScriptObjectSpecifier? {

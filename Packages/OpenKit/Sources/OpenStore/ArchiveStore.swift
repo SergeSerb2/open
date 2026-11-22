@@ -483,11 +483,13 @@ public final class ArchiveStore: ArchiveSink {
         }
     }
 
-    public func recent(limit: Int = 100) async -> [ArchivedTabRecord] {
-        await withCheckedContinuation { continuation in
+    /// Newest first. `excluding` leaves out one reason's rows (a typed enum value, not user text).
+    public func recent(limit: Int = 100, excluding reason: ArchiveReason? = nil) async -> [ArchivedTabRecord] {
+        let filter = reason.map { " WHERE reason<>'\($0.rawValue)'" } ?? ""
+        return await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: []); return }
-                let rows = self.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind FROM archived_tabs ORDER BY archived_at DESC LIMIT ?", limit: limit, likeText: nil, exactID: nil)
+                let rows = self.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind FROM archived_tabs\(filter) ORDER BY archived_at DESC LIMIT ?", limit: limit, likeText: nil, exactID: nil)
                 continuation.resume(returning: rows)
             }
         }

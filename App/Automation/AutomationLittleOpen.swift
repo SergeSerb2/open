@@ -51,7 +51,7 @@ extension AutomationController {
         "visibilityProtected": visibility.littleOpen.contains(controller.session.tab.id),
         "tabID": controller.session.tab.id.description, "sidebarTab": app.model.tab(id: controller.session.tab.id) != nil,
         "content": page?.identifier ?? 0, "runtimeStyle": page.map { $0.runtimeStyle == .alloy ? "alloy" : "chrome" } as Any? ?? NSNull(),
-        "loading": page?.isLoading ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
+        "loading": page?.isLoading ?? false, "muted": page?.isMuted ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
         "barPresented": controller.commandBar.isPresented, "barInput": controller.urlField.stringValue,
         "barFinal": controller.commandBar.isSnapshotFinal,
         "barRows": controller.commandBar.suggestions.map { ["kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
@@ -75,7 +75,9 @@ extension AutomationController {
         "profileIconImage": controller.titleBar.profileIconImage?.tiffRepresentation?.base64EncodedString() ?? "",
         "pickerWindow": controller.spacePicker?.view.window?.windowNumber ?? 0,
         "pickerSpaces": controller.spacePicker?.filteredSpaces.map(\.id.description) ?? [],
-        "intro": controller.showsIntro]
+        "intro": controller.showsIntro, "pageFullscreen": controller.isPageFullscreen,
+        "fullscreen": window.styleMask.contains(.fullScreen), "titleBarHidden": controller.titleBar.isHidden,
+        "cornerRadius": controller.contentView.layer?.cornerRadius ?? -1]
     }
     let count = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "open_idle_count").map {
       unsafeBitCast($0, to: (@convention(c) (Int32) -> UInt64).self)

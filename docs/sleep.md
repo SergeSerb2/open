@@ -12,7 +12,13 @@ Profile creation, and Settings edits reconcile the profile field without an
 extra Undo step, saving only changed values. Never (`off`) blocks freeze,
 discard, pressure eviction, and 24 h shell destruction. It also exempts loaded
 pages from the eight-hidden-host cache cap. The cache otherwise closes real
-loaded pages, not just unused host wrappers.
+loaded pages, not just unused host wrappers. Its close is a forced close that
+runs no `beforeunload`, so it never closes a page with unload handlers or with
+typing in the last 5 minutes (the form gate's window); it closes the next oldest
+page instead, and the cache may hold more than eight such pages (bug sweep r6 V-01).
+A page closed outside sleep (this cap, a window close, critical pressure) whose
+tab already has a stored back list writes its own list over that row, and a
+pinned tab or Favorite reset to its pinned URL drops its row (r6 V-02, V-03).
 Schema version remains 1; `TabDTO` is unchanged. Old profile settings without
 a sleep mode load as balanced. Quiet pinned tabs and favorites sleep like
 other tabs. Pin state alone does not protect them.
@@ -133,7 +139,8 @@ window factories' existing hosts; never a second page per tab), and
 - `chrome.tabs.discard` of a hosted tab runs debug sleep and honors every
   gate; the visible tab and protected tabs are refused.
 - The window's hidden-host cache (8 per window) skips pages a gate protects,
-  so keep-alive and audible pages are not closed by the cap.
+  so keep-alive and audible pages are not closed by the cap. It also skips
+  pages with unload handlers or recent typing, and may exceed 8 for them.
 - Quit: `applicationShouldTerminate` answers cancel once, awaits
   `captureAllForQuit()` (bounded at 3 s; a save error is logged and quit goes
   on), then terminates again: snapshot save, archive flush, engine shutdown.

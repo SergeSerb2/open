@@ -20,6 +20,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
   @ObservationIgnored private var settingsStorage: SettingsViewModel?
+  /// A Profile came or went outside Settings (Undo of New Profile): an existing Settings model rereads them.
+  func refreshProfilesIfLoaded() {
+    guard let settingsStorage else { return }
+    settingsStorage.profiles.refresh(); settingsStorage.adBlock?.refresh(); settingsStorage.refreshLinks(preserveDrafts: true)
+  }
   #if OPEN_AUTOMATION
   var hasSettingsModel: Bool { settingsStorage != nil }
   private(set) var lastSettingsShowMs = 0.0
@@ -30,6 +35,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
+    vm.frontBrowserWindowID = { [unowned app] in app.frontMainModelWindowController?.windowID }
     // Command services can create Settings before its window is shown. An
     // unsupported engine must not open a Profile or schedule list updates then.
     if (!app.isFirstRun || app.firstRunSaved) && app.adBlockEngineAdapter.isSupported {
@@ -152,10 +158,16 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if let profileID, app.model.profile(id: profileID) != nil { settings.profiles.select(profileID) }
     settings.navigate(to: section, row: row); show()
   }
-  @discardableResult func showSettingsURL(_ url: URL) -> Bool {
+  /// `profileID`: the window the link came from (its Profile, or an Incognito window's parent), as
+  /// Search Settings does; Settings keeps its selection for an unknown or nil Profile.
+  @discardableResult func showSettingsURL(_ url: URL, profileID: ProfileID? = nil) -> Bool {
     guard let target = SettingsSearchIndex.destination(for: url) else { return false }
-    settings.navigate(to: target.section, row: target.row)
-    show(); return true
+    // Only Search shows the search-suggestion notice; `profiles.select` would raise it over any section.
+    if target.section == .search { show(section: target.section, row: target.row, profileID: profileID); return true }
+    if let profileID, app.model.profile(id: profileID) != nil, settings.selectedProfileID != profileID {
+      settings.selectedProfileID = profileID; settings.profiles.refresh()
+    }
+    show(section: target.section, row: target.row); return true
   }
   func updateStatusDidChange(_ status: String?) { settingsStorage?.updateState = status }
   func showProfileSettings(profileID: ProfileID) {
@@ -184,10 +196,13 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     // Both filters follow the owner: the rail can switch to the other section without a new entry,
     // and it must not show the Profile of a Space the window has left.
     if let owner = controller.context.focusedSpace?.profileID {
-      if session.model.downloadProfileFilter != owner { session.model.downloadProfileFilter = owner }
       let historyProfile = (target == .boosts ? boostsProfileID : nil) ?? owner
+      session.panel?.profileFiltersWillChange(historyProfile: session.model.historyProfileID != historyProfile ? historyProfile : nil,
+                                              downloads: session.model.downloadProfileFilter != owner)
+      if session.model.downloadProfileFilter != owner { session.model.downloadProfileFilter = owner }
       if session.model.historyProfileID != historyProfile { session.model.historyProfileID = historyProfile }
     } else if target == .boosts, let boostsProfileID, session.model.historyProfileID != boostsProfileID {
+      session.panel?.profileFiltersWillChange(historyProfile: boostsProfileID, downloads: false)
       session.model.historyProfileID = boostsProfileID
     }
     session.show(section: section)

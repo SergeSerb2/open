@@ -251,6 +251,33 @@ extension AutomationController {
     }
 }
 
+extension AutomationController {
+    /// A drop on a bottom-bar Space icon, released before its 0.5 s spring-load switch: `url`
+    /// (an external link) or `nodes` (sidebar rows). The icon's real destination callbacks run;
+    /// only the WindowServer drag loop is skipped.
+    func spaceDotDrop(_ args: [String: Any]) throws -> [String: Any] {
+        let controller = try sidebarController(args)
+        guard let raw = args["space"] as? String, let uuid = UUID(uuidString: raw),
+              let view = controller.sidebar.spaceSwitcher(spaceID: SpaceID(rawValue: uuid)), let window = view.window
+        else { throw Failure(message: "unknown Space icon") }
+        let info = SplitDraggingInfo(window: window, source: controller.sidebar,
+                                     point: view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil), node: "")
+        defer { info.draggingPasteboard.releaseGlobally() }
+        info.draggingPasteboard.clearContents()
+        if let text = args["url"] as? String, let url = URL(string: text), url.scheme != nil {
+            info.draggingPasteboard.writeObjects([url as NSURL])
+        } else if let nodes = args["nodes"] as? [String], !nodes.isEmpty, nodes.count <= 500, nodes.allSatisfy({ UUID(uuidString: $0) != nil }) {
+            info.draggingPasteboard.writeObjects(nodes.map { node in
+                let item = NSPasteboardItem(); item.setString(node, forType: .init("com.open.sidebar.node")); return item
+            })
+        } else { throw Failure(message: "space-dot-drop needs url or nodes") }
+        let entered = view.draggingEntered(info)
+        let accepted = view.prepareForDragOperation(info) && view.performDragOperation(info)
+        view.concludeDragOperation(info)
+        return ["entered": entered.rawValue, "accepted": accepted]
+    }
+}
+
 /// The only substituted object is drag transport. The live App's pasteboard decoding,
 /// zone hit testing, overlay, model mutation, host ownership and persistence all run.
 @MainActor

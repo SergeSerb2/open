@@ -39,7 +39,7 @@ final class SidebarRowView: NSTableRowView {
             if isKeyboardFocused, keyboardRing == nil {
                 let ring = CAShapeLayer()
                 ring.fillColor = nil
-                ring.strokeColor = NSColor.keyboardFocusIndicatorColor.cgColor
+                effectiveAppearance.performAsCurrentDrawingAppearance { ring.strokeColor = NSColor.keyboardFocusIndicatorColor.cgColor }
                 ring.lineWidth = 2
                 layer?.addSublayer(ring)
                 keyboardRing = ring
@@ -131,6 +131,10 @@ final class SidebarRowView: NSTableRowView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        // The focus ring's cgColor was resolved once, for the appearance it was made in (A11Y-09).
+        if let ring = keyboardRing {
+            effectiveAppearance.performAsCurrentDrawingAppearance { ring.strokeColor = NSColor.keyboardFocusIndicatorColor.cgColor }
+        }
         updateFill(animated: false)
     }
 
