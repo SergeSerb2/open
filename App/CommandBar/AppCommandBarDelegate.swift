@@ -111,11 +111,8 @@ final class AppCommandBarSession: CommandBarDelegate {
               let command = CommandRegistry.byID[mode == .newTab ? "new-tab" : "open-command-bar"] else { return false }
         return self.factory.app.keyBindings.effectiveShortcuts(for: command).contains(shortcut)
       }
-      bar.onQueryStarted = { [weak self, weak bar] _ in
+      bar.onQueryStarted = { [weak self] _ in
         guard let self else { return }
-        // The engine is shared by every window of the Profile: another window's bar may have
-        // pointed it at its own extension source (and that window may be gone). Take it back.
-        if let engine = bar?.engine, engine.extensionSource !== self.extensionSource { engine.extensionSource = self.extensionSource }
         self.queryAt = LaunchTiming.shared.elapsedMilliseconds
         self.queryRevision += 1; self.firstResultsMilliseconds = nil
       }
