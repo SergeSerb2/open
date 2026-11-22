@@ -244,7 +244,7 @@ def adb03_no_list_fetch_while_off(factory, row, h):
         def do_GET(self):
             hits.append(self.path); self.send_response(404); self.end_headers()
         def log_message(self, *args): pass
-    lists = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    lists = h.LoopbackHTTPServer(Handler)
     threading.Thread(target=lists.serve_forever, daemon=True).start()
     app = None
     try:
