@@ -1981,7 +1981,8 @@ extension BrowserWindowController {
                     switch node { case .tab(let tab): [tab.id]; case .folder(let folder): walk(folder.children); case .split(let split): [split.id] }
                 }
             }
-            return walk(space.pinned) + walk(space.today)
+            // Favorites too: a deleted selected Favorite (a Note or Easel) hands on to its neighbour.
+            return (model.profile(id: space.profileID)?.favorites.map(\.id) ?? []) + walk(space.pinned) + walk(space.today)
         }
         let before = tabs(), selected = state.selectedNodeBySpace[space.id]
         let index = selected.flatMap { before.firstIndex(of: $0) }

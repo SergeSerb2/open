@@ -100,6 +100,9 @@ extension AppDelegate {
   }
 
   func deleteNoteEverywhere(_ noteID: UUID) {
+    // Every window's editor of the Note, first: windows share one model, so after the first window
+    // removes the row the others no longer find it, and an open editor could save the file again.
+    for host in NoteContentHost.open(noteID: noteID) { host.owner?.controller?.container.closeHost(for: host.tabID); host.close() }
     keepingSelectionInEveryWindow {
       for factory in hostFactories.values {
         for tab in factory.model.allTabsForNotes() where NoteLink.id(from: tab.url) == noteID {
