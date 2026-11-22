@@ -133,7 +133,8 @@ public struct ArcExtensionsReader: Sendable {
                               let data = try? boundedData(file, maximum: 1024 * 1024),
                               let messages = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
                         let entry = messages.first { $0.key.lowercased() == key }?.value as? [String: Any]
-                        if let message = entry?["message"] as? String, !message.isEmpty { name = message }
+                        // A message over the name limit is ignored, so it cannot fail the whole Profile read.
+                        if let message = entry?["message"] as? String, !message.isEmpty, message.utf8.count <= 1024 { name = message }
                         break
                     }
                 }
