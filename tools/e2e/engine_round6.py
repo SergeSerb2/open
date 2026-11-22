@@ -255,9 +255,10 @@ def run(factory, results, tmp, h):
             littleOpenAfterCmdOption=bool(little), opened=opened, littleSessions=[little_before, len(sessions())], auxButtons=aux)
     guarded('eng6_oe12_middle_click_after_cmd_option_click', oe12)
 
-    # Quit with DevTools, a popup panel and an Incognito window open, right after a metrics
-    # sample (OE-01, OE-04, OE-06 shutdown paths): the quit finishes before the three-second
-    # deadline, kills every owned process and leaves no crash report.
+    # Quit with DevTools, a popup panel and an Incognito window open, after one completed
+    # metrics sample (OE-01 reproduction): the quit finishes before the three-second deadline,
+    # kills every owned process and leaves no crash report. The sample has finished before the
+    # quit, so this row does not cover the OE-04 or OE-06 shutdown ordering (code-path proofs).
     def quit_open_tools():
         app = launch(urls=(origin + '/opener',))
         tab = app.call('tabs')[0]['id']

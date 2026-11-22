@@ -1514,7 +1514,14 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     if (flags & 2) modifiers |= NSEventModifierFlagControl;
     if (flags & 4) modifiers |= NSEventModifierFlagCommand;
     if (flags & 8) modifiers |= NSEventModifierFlagShift;
-    OENoteNavigationInput(self.view.window, modifiers);
+    // As in OEApplication -sendEvent:, a middle or right press records no
+    // modifiers and clears the earlier ones (bug sweep r6 OE-12).
+    id button = parameters[@"button"];
+    if ([button isEqual:@"middle"] || [button isEqual:@"right"]) {
+      OENoteNavigationInput(nil, 0);
+    } else {
+      OENoteNavigationInput(self.view.window, modifiers);
+    }
   } else if ([method isEqualToString:@"Input.dispatchKeyEvent"]) {
     OENoteNavigationInput(nil, 0);
   }

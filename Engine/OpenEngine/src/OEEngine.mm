@@ -1077,7 +1077,7 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     NSUUID* token = NSUUID.UUID;
     dispatch_block_t check = ^{
       if (started) return;
-      if (!self->_running || self->_terminating) {
+      if (!self->_running || self->_terminating || self->_shuttingDown) {
         // Quit started: do not begin a wipe that CefShutdown would cut off.
         // The shell's journaled wipe finishes at the next launch.
         started = YES;
