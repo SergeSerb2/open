@@ -451,7 +451,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // Onto one of this window's own windows past the edge (a hover preview, a child's child
             // such as the icon picker's tones panel, the theme editor, an owned panel): still here.
             let screen = window.convertPoint(toScreen: event.locationInWindow)
-            func childUnder(_ parent: NSWindow) -> Bool {
+            @MainActor func childUnder(_ parent: NSWindow) -> Bool {
                 (parent.childWindows ?? []).contains { $0.isVisible && ($0.frame.contains(screen) || childUnder($0)) }
             }
             let owned = NSApp.windows.contains { other in
@@ -2220,7 +2220,7 @@ private final class SidebarPanelShadowView: NSView {
 
 /// Receives the window-wide tracking area's exit (BrowserWindowController, SB-07 part 2).
 @MainActor private final class WindowExitTracker: NSResponder {
-    var onExit: ((NSEvent) -> Void)?
+    var onExit: (@MainActor (NSEvent) -> Void)?
     override func mouseEntered(with event: NSEvent) {}
     override func mouseExited(with event: NSEvent) { onExit?(event) }
 }
