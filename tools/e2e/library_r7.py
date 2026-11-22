@@ -85,6 +85,26 @@ def run(factory, results, tmp, wait_until):
               before={k: before.get(k) for k in ('id', 'selected', 'frame')},
               after={k: after.get(k) for k in ('id', 'selected', 'drawnSelected', 'realized', 'frame')}, moved=moved,
               selected=[r['title'] for r in rows('history') if r['selected']])
+        # The same on a prebuilt open: the idle prebuild applied the rows while the Library was closed
+        # (review of #669 #1).
+        close_library()
+        prebuilt = wait_until(lambda: (lambda p: p if p.get('ready') and p.get('section') == 'history' else None)(lib(action='prebuild-state')),
+                              timeout=20, step=.2)
+        open_library('history')
+        opened_prebuilt = lib().get('prebuiltReady')
+        assert wait_until(lambda: len(rows('history')) >= 100, timeout=10, step=.05), len(rows('history'))
+        target = rows('history')[80]
+        lib(action='row-select', id=target['id'])
+        before = next(r for r in rows('history') if r['id'] == target['id'])
+        app.call('history-record', url=base + '/r7-new-visit-2', title='R7 new visit 2', ago=0)
+        grew = wait_until(lambda: any(r['title'] == 'R7 new visit 2' for r in rows('history')), timeout=10, step=.05)
+        time.sleep(.4)
+        after = next((r for r in rows('history') if r['id'] == target['id']), {})
+        moved = after['frame'][1] - before['frame'][1] if after else None
+        check('R7_X01_prebuilt_open_keeps_selection_and_position', bool(prebuilt) and grew and after.get('selected')
+              and (after.get('drawnSelected') or not after.get('realized')) and moved is not None and 0 <= moved <= 60,
+              prebuilt=prebuilt, openedPrebuilt=opened_prebuilt, moved=moved,
+              after={k: after.get(k) for k in ('id', 'selected', 'drawnSelected', 'realized', 'frame')})
 
     def x02():
         app.call('history-record', url=base + '/r7-guide', title='React Hooks Guide', ago=5)
@@ -96,6 +116,12 @@ def run(factory, results, tmp, wait_until):
         # The History store matched both words; the panel's own filter wanted one phrase.
         check('R7_X02_history_search_words_any_order', found and not state.get('emptyVisible'),
               titles=[r['title'] for r in rows('history')][:5], empty=state.get('emptyState', {}).get('title'))
+        # Punctuation alone, with spaces around it: the store trims and matches "?" (review of #669 #6).
+        app.call('history-record', url=base + '/r7-query?r7=1', title='R7 query page', ago=6)
+        lib(action='search', text='')
+        lib(action='search', text=' ? ')
+        punct = wait_until(lambda: any(r['title'] == 'R7 query page' for r in rows('history')), timeout=8, step=.05)
+        check('R7_X02_history_search_punctuation_trimmed', punct, titles=[r['title'] for r in rows('history')][:5])
         lib(action='search', text='')
 
     def x03():
@@ -122,8 +148,10 @@ def run(factory, results, tmp, wait_until):
                 and app.call('window-state').get('sidebarVisible') else None
         shown = wait_until(form, timeout=5, step=.05)
         creation = app.call('creation-state')
+        close_mode = lib().get('motion', {}).get('closeMode')
         # The form was built in the sidebar the Library hides, and took the typing out of sight.
-        check('R7_W02_new_space_closes_library', shown, libraryOpen=lib().get('open'),
+        # Closed at once, so no Library close animation runs under the sidebar's (review of #669 #5).
+        check('R7_W02_new_space_closes_library', shown and close_mode == 'immediate', closeMode=close_mode, libraryOpen=lib().get('open'),
               sidebarVisible=app.call('window-state').get('sidebarVisible'),
               creation={k: creation.get(k) for k in ('open', 'visible', 'nameFocused')})
         app.call('editor-close')
@@ -172,11 +200,14 @@ def run(factory, results, tmp, wait_until):
         items = app.call('space-manager-menu', space=second, item='?')
         app.call('space-manager-menu', space=second, item=next(i for i in items if i.startswith('Edit Theme')))
         switched = wait_until(lambda: focused_space() == second, timeout=5, step=.05)
-        editor = app.call('editor-state')
         time.sleep(.4)
+        editor = app.call('editor-state')
+        key_window = app.call('window-state').get('keyWindow')
         menus = tab_items()
         # The editor's own Space switch skipped the window's focus path (menus, extensions' active tab).
-        check('R7_W01_edit_theme_switch_updates_window_menus', switched and editor.get('open') and beta in menus and alpha not in menus,
+        # The editor keeps the keyboard: the switch does not focus the page behind it (review of #669 #4).
+        check('R7_W01_edit_theme_switch_updates_window_menus', switched and editor.get('open') and beta in menus and alpha not in menus
+              and key_window == editor.get('window'), keyWindow=key_window, editorWindow=editor.get('window'),
               title=title(), editorOpen=editor.get('open'), tabMenu=sorted(menus), alpha=alpha, beta=beta)
         app.call('editor-close')
 
@@ -224,8 +255,20 @@ def run(factory, results, tmp, wait_until):
         wait_until(shown, timeout=10, step=.1); time.sleep(.5)
         again = lib().get('easelThumbnailRenders', 0)
         # Each configure, prefetch and open read the document and drew the whole canvas again.
-        check('R7_X04_easel_thumbnails_drawn_once', 3 <= opened <= 3 and again == opened,
-              rendersFirstOpen=opened, rendersAfterReopen=again,
+        # A new appearance draws again (a dark canvas), once (review of #669 #2).
+        close_library()
+        try:
+            system = app.call('appearance', name='system')
+            app.call('appearance', name='light' if 'Dark' in system else 'dark'); time.sleep(.6)
+            open_library('easels'); wait_until(shown, timeout=10, step=.1); time.sleep(.5)
+            switched = lib().get('easelThumbnailRenders', 0)
+            close_library(); open_library('easels'); wait_until(shown, timeout=10, step=.1); time.sleep(.5)
+            switched_again = lib().get('easelThumbnailRenders', 0)
+        finally:
+            _try(lambda: app.call('appearance', name='system'))
+        check('R7_X04_easel_thumbnails_drawn_once', 3 <= opened <= 3 and again == opened
+              and switched == opened + 3 and switched_again == switched,
+              rendersFirstOpen=opened, rendersAfterReopen=again, rendersNewAppearance=switched, rendersNewAppearanceReopen=switched_again,
               rows=[{k: r.get(k) for k in ('title', 'realized', 'iconLoaded')} for r in first.get('rows', []) if r['kind'] == 'easel'])
 
     def x07():
@@ -258,8 +301,8 @@ def run(factory, results, tmp, wait_until):
 
     rows_by_key = [
         ('X06', x06, ['R7_X06_archive_empty_has_no_dead_button']),
-        ('X01', x01, ['R7_X01_refresh_keeps_selection_and_position']),
-        ('X02', x02, ['R7_X02_history_search_words_any_order']),
+        ('X01', x01, ['R7_X01_refresh_keeps_selection_and_position', 'R7_X01_prebuilt_open_keeps_selection_and_position']),
+        ('X02', x02, ['R7_X02_history_search_words_any_order', 'R7_X02_history_search_punctuation_trimmed']),
         ('X03', x03, ['R7_X03_restore_status_not_stale_on_reopen']),
         ('W02', w02, ['R7_W02_new_space_closes_library', 'R7_W02_rename_space_with_library_asks']),
         ('W04', w04, ['R7_W04_space_menu_key_follows_binding']),

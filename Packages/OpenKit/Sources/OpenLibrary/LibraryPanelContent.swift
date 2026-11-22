@@ -277,9 +277,9 @@ extension LibraryPanelView {
         let rebuild = host.dirty
         // A refresh of the list the user is reading (a new History page, a download's progress, a
         // new visit) keeps the rows it shows: the 60-row first page dropped a selection below row 60
-        // and shrank the list under the scroll position (bug sweep r7 X-01). A new open keeps the
-        // fast 60-row first page.
-        let sameList = host.identity == identity && isPresented && host.appliedPresentation == presentations
+        // and shrank the list under the scroll position (bug sweep r7 X-01). This includes an open:
+        // the list still shows the rows of the prebuild or of the last open (review of #669 #1).
+        let sameList = host.identity == identity && isPresented
         host.identity = identity; host.dirty = false
         if rebuild {
             let started = ProcessInfo.processInfo.systemUptime
@@ -313,7 +313,9 @@ extension LibraryPanelView {
             host.phaseMilliseconds["prepareBackground"] = (ProcessInfo.processInfo.systemUptime-prepareStart)*1000
             let filterStart = ProcessInfo.processInfo.systemUptime
             let filter = Task.detached(priority:.userInitiated) {
-                let key = query.folding(options:[.caseInsensitive,.diacriticInsensitive],locale:.current)
+                // The store trims the query first (review of #669 #6: " ? " is the text "?").
+                let key = (matchesWords ? query.trimmingCharacters(in:.whitespacesAndNewlines) : query)
+                    .folding(options:[.caseInsensitive,.diacriticInsensitive],locale:.current)
                 // The store's words: split on what is not a letter or digit. Punctuation alone has no
                 // word, and the store then matches the text itself.
                 let words = matchesWords ? key.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init) : []
@@ -328,7 +330,6 @@ extension LibraryPanelView {
             host.phaseMilliseconds["filterBackground"] = (ProcessInfo.processInfo.systemUptime-filterStart)*1000
             let first = min(filtered.count, sameList ? max(60, host.list.sources.count) : 60)
             self.applyPage(host,target:target,count:first)
-            host.appliedPresentation = self.isPresented ? self.presentations : -1
             host.preparation = nil; host.worker = nil
             // Append idle slices. They contain lazy sources, never formatted rows.
             host.append = Task { @MainActor [weak self,weak host] in
