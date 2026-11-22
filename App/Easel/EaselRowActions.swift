@@ -153,19 +153,34 @@ extension AppDelegate {
     for factory in hostFactories.values { factory.controller?.refresh(); factory.scheduleSave() }
   }
 
+  /// Runs a removal that can take the selected tab of any window (standard windows share one
+  /// model): each window then selects the tab that took its place, as the sidebar's Close does.
+  func keepingSelectionInEveryWindow(_ removal: () -> Void) {
+    let controllers = hostFactories.values.compactMap(\.controller)
+    withoutActuallyEscaping(removal) { removal in
+      func run(_ index: Int) {
+        guard index < controllers.count else { removal(); return }
+        controllers[index].keepingSelection { run(index + 1) }
+      }
+      run(0)
+    }
+  }
+
   /// Removes every row of an Easel in every window (no Archive entry) and moves its folder to the
   /// Trash once, after every canvas of it has closed and written.
   func deleteEaselEverywhere(_ documentID: UUID) {
     closeEaselHosts(documentID: documentID)
-    for factory in hostFactories.values {
-      for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == documentID {
-        // Removal is not an Archive entry: the content is gone.
-        let undo = factory.model.undoManager; undo?.disableUndoRegistration()
-        factory.model.closeTab(id: tab.id)
-        undo?.enableUndoRegistration()
-        factory.model.archiveSink?.discardArchived(ids: [tab.id])
+    keepingSelectionInEveryWindow {
+      for factory in hostFactories.values {
+        for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == documentID {
+          // Removal is not an Archive entry: the content is gone.
+          let undo = factory.model.undoManager; undo?.disableUndoRegistration()
+          factory.model.closeTab(id: tab.id)
+          undo?.enableUndoRegistration()
+          factory.model.archiveSink?.discardArchived(ids: [tab.id])
+        }
+        factory.controller?.refresh(); factory.scheduleSave()  // the tree change syncs the tab mirror
       }
-      factory.controller?.refresh(); factory.scheduleSave()  // the tree change syncs the tab mirror
     }
     easels.flush()
     // A copy whose write failed is queued again; it must not bring the trashed folder back.

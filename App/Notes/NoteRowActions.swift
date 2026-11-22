@@ -100,15 +100,17 @@ extension AppDelegate {
   }
 
   func deleteNoteEverywhere(_ noteID: UUID) {
-    for factory in hostFactories.values {
-      for tab in factory.model.allTabsForNotes() where NoteLink.id(from: tab.url) == noteID {
-        if let host = factory.noteHosts[tab.id] { factory.controller?.container.closeHost(for: tab.id); host.close() }
-        let undo = factory.model.undoManager; undo?.disableUndoRegistration()
-        factory.model.closeTab(id: tab.id)
-        undo?.enableUndoRegistration()
-        factory.model.archiveSink?.discardArchived(ids: [tab.id])
+    keepingSelectionInEveryWindow {
+      for factory in hostFactories.values {
+        for tab in factory.model.allTabsForNotes() where NoteLink.id(from: tab.url) == noteID {
+          if let host = factory.noteHosts[tab.id] { factory.controller?.container.closeHost(for: tab.id); host.close() }
+          let undo = factory.model.undoManager; undo?.disableUndoRegistration()
+          factory.model.closeTab(id: tab.id)
+          undo?.enableUndoRegistration()
+          factory.model.archiveSink?.discardArchived(ids: [tab.id])
+        }
+        factory.controller?.refresh(); factory.scheduleSave()
       }
-      factory.controller?.refresh(); factory.scheduleSave()
     }
     notes.delete(noteID)
     discardArchivedRows(url: NoteLink.url(for: noteID))
