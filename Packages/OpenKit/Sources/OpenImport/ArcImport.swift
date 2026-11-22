@@ -904,7 +904,13 @@ public struct ArcImporter {
         // child first. A Dictionary's order changes per process, so an orphaned folder could lose
         // its child to the orphan list in some runs (bug sweep r7 Y-04). Every ID is still visited once.
         let unreachedIDs = sourceOrder.filter { !reachedArcIDs.contains($0) && nodeByArcID[$0] == nil }
-        let nestedInUnreached = Set(unreachedIDs.flatMap { (itemsByID[$0]?["childrenIds"] as? [String]) ?? [] })
+        // Only a folder or a split builds its children. An unreached container (a removed Space) does not,
+        // so its children stay orphan roots (review r1 #1).
+        let nestedInUnreached = Set(unreachedIDs.flatMap { id -> [String] in
+            guard let item = itemsByID[id], let kind = (item["data"] as? [String: Any])?.keys.first,
+                  kind == "list" || kind == "splitView" else { return [] }
+            return (item["childrenIds"] as? [String]) ?? []
+        })
         let orphanOrder = sourceOrder.filter { !nestedInUnreached.contains($0) } + sourceOrder.filter { nestedInUnreached.contains($0) }
         for arcID in orphanOrder {
             guard let item = itemsByID[arcID] else { continue }
