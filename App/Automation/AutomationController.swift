@@ -978,7 +978,7 @@
       case "tab-strip":
         return w.tabStripState()
       case "frame-save-counters":
-        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount,
+        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount, "metadataScheduled": app.snapshotStore.metadataScheduleCount,
           "prepares": app.snapshotStore.prepareCount,
           "dirty": app.snapshotStore.isDirty, "treeChanges": w.treeChangeCount, "mirrorSyncs": w.mirrorSyncCount] as [String: Any]
       case "space-profile":
@@ -996,7 +996,8 @@
         // The theme variables the App sets for a tab (setting on), or none.
         let tab = try modelTab(a, w)
         let values = ThemeData.variables(tabID: tab.id, factory: w) ?? []
-        return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x })] as [String: Any]
+        return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x }),
+                "applies": ThemeData.applyCount] as [String: Any]
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
       case "handoff-state", "handoff-continue", "deep-link-state", "mailto-state":
@@ -1607,6 +1608,9 @@
           "key": win.isKeyWindow, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "urlFieldText": controller.sidebar.urlFieldText,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
+          "trafficLightOffsets": [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { kind -> Double in
+            let layer = win.standardWindowButton(kind)?.layer
+            return ((layer?.presentation() ?? layer)?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? 0 },
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
             "card": rect(reveal.card), "pageBlur": controller.cardDrawsPageBlur] as [String: Any],
@@ -1884,6 +1888,11 @@
       case "translate": return try await translateCommand(a)
       case "calendar": return try await calendarCommand(a)
       case "sidebar-unload":
+        // `folder`: a pinned folder's Unload ("−" on its row), the intent its button sends.
+        if let raw = a["folder"] as? String {
+          guard let uuid = UUID(uuidString: raw), w.model.node(id: ItemID(rawValue: uuid))?.folder != nil else { throw Failure(message: "unknown folder") }
+          return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadFolder(folderID: ItemID(rawValue: uuid))) == true
+        }
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadTab(try modelTab(a, w).id)) == true
       default:
         throw Failure(message: "unknown command \(cmd)")
@@ -2120,6 +2129,8 @@
       // that native motion just armed; its duplicate enter cannot re-arm it.
       if exitingOnly {
         let leaving = hoveredOwners.filter { inside[$0.key] == nil }
+        // An owner gets one exit: a second `exit` or a later `hover` does not repeat it.
+        for key in leaving.keys { hoveredOwners.removeValue(forKey: key) }
         if let exit = enterExit(.mouseExited) { for owner in leaving.values { owner.mouseExited(with: exit) } }
         return ["exited": leaving.values.map { String(describing: type(of: $0)) }.sorted()]
       }
@@ -2591,6 +2602,12 @@
         target.layoutIfNeeded()
         let type: NSEvent.EventType = action == "down" ? .leftMouseDown : action == "drag" ? .leftMouseDragged : .leftMouseUp
         if let e = event(type, point) { NSApp.sendEvent(e) }
+      } else if action == "exit" {
+        // What WindowServer sends when the pointer leaves the window fast: the tracking-area
+        // exits at the new point and no motion event (bug sweep r6, SB-07 part 2).
+        let location = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+        BrowserWindowController.automationPointer = (number, location)
+        return hover(target, at: location, exitingOnly: true)
       } else if action == "move" || action == "hover" {
         // Local event monitors run on AppKit's native dequeue path. Queue
         // motion just like real input, including after a Space transition.

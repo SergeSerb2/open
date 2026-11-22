@@ -30,26 +30,30 @@ enum NoteTab {
     let current = factory.selectedTab
     // Settings ▸ Profiles ▸ New documents: a web document app opens its "new" page instead.
     let target = DocumentApp.resolve(factory.focusedProfile?.settings.defaultDocumentApp)
-    let tab: Tab
-    if let url = target.url {
-      tab = model.newTab(in: space.id, url: url, title: "", at: 0)
-    } else {
-      tab = model.newTab(in: space.id, url: NoteLink.url(for: UUID()), title: untitled, at: 0)
-      tab.live.faviconPNG = faviconPNG
-    }
-    var selectID = tab.id
-    if split, let current, current.id != tab.id {
-      if case .splitPane(let splitID)? = model.parent(of: current.id),
-        let existing = model.node(id: splitID)?.split, existing.panes.count < 4 {
-        let index = (existing.panes.firstIndex { $0.id == current.id } ?? existing.panes.count - 1) + 1
-        if model.addPane(splitID: splitID, tabID: tab.id, at: index) {
-          // Select the new pane, not the split: the factory then focuses it and ends Expand
-          // Current Pane, which would keep the new Note hidden behind the expanded pane.
-          model.focusSplitPane(splitID: splitID, tabID: tab.id); selectID = tab.id
-        }
-      } else if let made = model.makeSplit(tabIDs: [current.id, tab.id]) {
-        model.focusSplitPane(splitID: made.id, tabID: tab.id); selectID = made.id
+    // The new tab and its split are one Undo step (review r1 #3, WL-10).
+    let (tab, selectID) = model.asOneUndoStep { () -> (Tab, ItemID) in
+      let tab: Tab
+      if let url = target.url {
+        tab = model.newTab(in: space.id, url: url, title: "", at: 0)
+      } else {
+        tab = model.newTab(in: space.id, url: NoteLink.url(for: UUID()), title: untitled, at: 0)
+        tab.live.faviconPNG = faviconPNG
       }
+      var selectID = tab.id
+      if split, let current, current.id != tab.id {
+        if case .splitPane(let splitID)? = model.parent(of: current.id),
+          let existing = model.node(id: splitID)?.split, existing.panes.count < 4 {
+          let index = (existing.panes.firstIndex { $0.id == current.id } ?? existing.panes.count - 1) + 1
+          if model.addPane(splitID: splitID, tabID: tab.id, at: index) {
+            // Select the new pane, not the split: the factory then focuses it and ends Expand
+            // Current Pane, which would keep the new Note hidden behind the expanded pane.
+            model.focusSplitPane(splitID: splitID, tabID: tab.id); selectID = tab.id
+          }
+        } else if let made = model.makeSplit(tabIDs: [current.id, tab.id]) {
+          model.focusSplitPane(splitID: made.id, tabID: tab.id); selectID = made.id
+        }
+      }
+      return (tab, selectID)
     }
     factory.select(nodeID: selectID)
     factory.scheduleSave()

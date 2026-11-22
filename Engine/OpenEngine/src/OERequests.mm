@@ -101,6 +101,10 @@
   _callback = nullptr;
 }
 
+- (void)oe_setBrowserIdentifier:(NSInteger)identifier {
+  _browserIdentifier = identifier;
+}
+
 - (void)dealloc {
   // An unanswered dialog would hang the page; treat it as cancelled.
   if (_callback) {
