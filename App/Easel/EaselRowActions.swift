@@ -157,13 +157,11 @@ extension AppDelegate {
   /// model): each window then selects the tab that took its place, as the sidebar's Close does.
   func keepingSelectionInEveryWindow(_ removal: () -> Void) {
     let controllers = hostFactories.values.compactMap(\.controller)
-    withoutActuallyEscaping(removal) { removal in
-      func run(_ index: Int) {
-        guard index < controllers.count else { removal(); return }
-        controllers[index].keepingSelection { run(index + 1) }
-      }
-      run(0)
+    func run(_ index: Int) {
+      guard index < controllers.count else { removal(); return }
+      controllers[index].keepingSelection { run(index + 1) }
     }
+    run(0)
   }
 
   /// Removes every row of an Easel in every window (no Archive entry) and moves its folder to the
