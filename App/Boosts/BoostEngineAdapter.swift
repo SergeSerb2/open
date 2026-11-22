@@ -246,7 +246,7 @@ final class BoostEngineAdapter {
   /// query and fragment), so a string compare fails on such pages. Both sides go through one encoder for
   /// the part after the authority; the authority keeps its IPv6 brackets.
   static func locationIs(_ url: URL) -> String {
-    #"((n) => n(location.href) === n(\#(json(url.absoluteString))))((s) => { const m = /^([a-z][a-z0-9+.-]*:\/\/[^\/?#]*)([^#]*)(#.*)?$/i.exec(s); if (!m) return s; const e = (t) => t.replace(/[^A-Za-z0-9\-._~:\/?@!$&'()*+,;=%]/g, (c) => encodeURIComponent(c)); return m[1] + e(m[2]) + (m[3] === undefined ? '' : '#' + e(m[3].slice(1))); })"#
+    #"((n) => n(location.href) === n(\#(json(url.absoluteString))))((s) => { const m = /^([a-z][a-z0-9+.-]*:\/\/[^\/?#]*)([^#]*)(#.*)?$/i.exec(s); if (!m) return s; const e = (t) => t.replace(/[^A-Za-z0-9\-._~:\/?@!$&'()*+,;=%]/gu, (c) => encodeURIComponent(c)); return m[1] + e(m[2]) + (m[3] === undefined ? '' : '#' + e(m[3].slice(1))); })"#
   }
   static func json(_ value: Any) -> String {
     guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed]) else { return "null" }

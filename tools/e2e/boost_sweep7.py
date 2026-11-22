@@ -217,7 +217,10 @@ def run(factory, results, tmp, env):
                 flow.pick('h1', '.this')
                 wait(lambda: editor()['zapCount'] == 1, timeout=5, step=.05)
                 # The applier's sheet and the picker's preview sheet both hide the pick.
-                preview = app.eval(tab, "[...document.adoptedStyleSheets].filter(s => [...s.cssRules].some(r => r.style?.display === 'none')).length", world='open')
+                hiding = "[...document.adoptedStyleSheets].filter(s => [...s.cssRules].some(r => r.style?.display === 'none')).length"
+                # The applier's sheet arrives with the asynchronous store refresh: poll for it.
+                wait(lambda: app.eval(tab, hiding, world='open') >= 2, timeout=5, step=.05)
+                preview = app.eval(tab, hiding, world='open')
             finally:
                 editor('close')
             record('BST7_F8_strict_style_src', applied and bar == 56 and preview >= 2, color=color(), styleElement=element,

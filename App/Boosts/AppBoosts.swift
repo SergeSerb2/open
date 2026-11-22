@@ -206,7 +206,8 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     openEditor(boostID: matchingBoosts(url: url, profileID: host.profileID).first?.id, tabID: tabID, mode: .simple, in: factory)
   }
   func pageCommitted(_ host: EngineWebContentHost, url: URL, newDocument: Bool = false) {
-    plannedURLs[ObjectIdentifier(host)] = url
+    // Private pages have no Boosts; keep their addresses out of this shared owner.
+    if !host.content.context.isEphemeral, host.owner?.isIncognito != true { plannedURLs[ObjectIdentifier(host)] = url }
     adapter.committed(host, url: url, newDocument: newDocument)
     host.owner?.controller?.boostEditor?.pageDidNavigate(tabID: host.tabID, url: url)
     if newDocument { host.owner?.controller?.boostEditor?.boundPageDidCommit(tabID: host.tabID) }
@@ -225,8 +226,18 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
   /// commit). A pushState or replaceState during the load also lands there: plan for the address
   /// the page has when the load ends, when it is not the one Boosts last saw.
   func pageLoadEnded(_ host: EngineWebContentHost, url: URL) {
-    guard plannedURLs[ObjectIdentifier(host)] != url else { return }
+    guard !host.content.context.isEphemeral, host.owner?.isIncognito != true, plannedURLs[ObjectIdentifier(host)] != url else { return }
     pageCommitted(host, url: url)
+  }
+  /// Undo Import from Arc is about to delete these Boosts. Close their editors first, after
+  /// dropping pending drafts and gestures: a later close (the imported tab or Profile goes away,
+  /// or a draft's debounce fires while the delete runs) would otherwise write a Boost back.
+  func boostsWillBeRemoved(_ ids: Set<BoostID>, profileID: ProfileID) {
+    for factory in app.hostFactories.values {
+      guard let editor = factory.controller?.boostEditor, let session = editor.session,
+            session.context.profileID == profileID, ids.contains(session.boost.id) else { continue }
+      session.boostWasRemoved(); editor.close(returnFocus: false)
+    }
   }
   func hostClosed(_ host: EngineWebContentHost) {
     plannedURLs[ObjectIdentifier(host)] = nil
