@@ -78,8 +78,11 @@ public final class NoteStore {
     public func importIfAbsent(_ note: NoteDocument) -> Bool {
         guard !FileManager.default.fileExists(atPath: fileURL(for: note.id).path), cache[note.id] == nil else { return false }
         cache[note.id] = note; dirty.insert(note.id); flush(notify: false, only: note.id)
-        if oversized.contains(note.id) { cache[note.id] = nil; oversized.remove(note.id); return false }
-        return !dirty.contains(note.id)
+        let refused = oversized.remove(note.id) != nil
+        guard refused || dirty.contains(note.id) else { return true }
+        // Refused for size, or the write failed: nothing of the rejected import stays to be written later.
+        cache[note.id] = nil; dirty.remove(note.id)
+        return false
     }
 
     /// Deletes a Note: its file and image folder move to the Trash (removed when no Trash exists).
