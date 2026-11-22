@@ -459,6 +459,46 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         results['live_folder_drag_out_stays_out'] = {'ok': bool(dragged_ok) and len(r4_rows) == 2 and not copies
             and dragged.get('live') in after_drag.get('hiddenItems', []) and app.tab(dragged['id'])['section'] == 'today',
             'dragged': dragged.get('live'), 'copies': len(copies), 'hidden': after_drag.get('hiddenItems'), 'rows': len(after_drag.get('rows', []))}
+        # Bug sweep round 5 (item 2): New Folder with a PR row and a split with a PR row also take it
+        # out for good (they moved it without the Live Folder note, so a refresh added it back).
+        gh['prs'] = {'created': trio}
+        r5_rows = refreshed('success') and app.call('live-folder-state').get('rows', [])
+        r5_out = {}
+        if len(r5_rows) >= 2:
+            app.call('folder', tabs=[r5_rows[0]['id']], title='R5 out')
+            holder5 = new_tab(app, 'about:blank'); app.call('select', tab=holder5)
+            x, y, w, height = app.call('split', op='state')['container']
+            r5_split = app.call('split', op='drop', node=r5_rows[1]['id'], point=[x+w-12, y+height/2]).get('accepted')
+            refreshed('success')
+            after5 = app.call('live-folder-state')
+            for label, row in (('newFolder', r5_rows[0]), ('split', r5_rows[1])):
+                r5_out[label] = dict(live=row['live'], copies=len([r for r in after5.get('rows', []) if r.get('live') == row['live']]),
+                                     hidden=row['live'] in after5.get('hiddenItems', []))
+            r5_out['splitAccepted'] = r5_split
+            app.call('split', op='menu', item='Separate All Tabs') if app.call('split', op='state')['id'] else None
+            app.call('close', tab=holder5)
+        results['live_folder_new_folder_and_split_take_row_out'] = {'ok': len(r5_rows) >= 2 and r5_out.get('splitAccepted') is True
+            and all(r5_out[k]['copies'] == 0 and r5_out[k]['hidden'] for k in ('newFolder', 'split')), 'rows': len(r5_rows), 'out': r5_out}
+        # Bug sweep round 5 (item 1): deleting a regular folder that holds the Live Folder removes the
+        # Live Folder (not archived with the folder) and turns automatic creation off.
+        app.call('defaults', key='open.liveFolders.githubAutoCreate', value=True)
+        r5_lf = app.call('live-folder-state')['id']
+        r5_wrap_tab = new_tab(app, 'about:blank')
+        r5_wrap = app.call('folder', tabs=[r5_wrap_tab], title='R5 wrapper')
+        r5_nested = app.call('sidebar-drop', nodes=[r5_lf], parent={'kind': 'folder', 'id': r5_wrap}, index=0)
+        app.call('sidebar-menu', node=r5_wrap, item='Delete')
+        time.sleep(.5)
+        try: app.call('alert', button='Delete Folder')
+        except RuntimeError: pass
+        time.sleep(.3)
+        r5_gone = app.call('live-folder-state').get('exists') is False
+        r5_auto = app.call('defaults', key='open.liveFolders.githubAutoCreate')
+        results['live_folder_nested_delete_removes_live_folder'] = {'ok': bool(r5_nested) and r5_gone and r5_auto is False,
+            'nested': r5_nested, 'gone': r5_gone, 'autoCreate': r5_auto}
+        app.call('defaults', key='open.liveFolders.githubAutoCreate', value=None)
+        gh['prs'] = {'created': trio[:2]}
+        if r5_gone: app.call('sidebar-menu', item='Live Folders/GitHub'); app.call('live-folder-state', wait=True)
+        refreshed('success')
         # SB-04: keyboard Delete on the focused Live Folder row is Delete Live Folder: its alert, no
         # Archive rows, and automatic creation turns off. It was the plain folder delete (archived).
         app.call('defaults', key='open.liveFolders.githubAutoCreate', value=True)

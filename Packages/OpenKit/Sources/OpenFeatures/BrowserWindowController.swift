@@ -1928,39 +1928,25 @@ extension BrowserWindowController {
     func confirmDeleteFolders(_ ids: [ItemID], archiveFolderTabs: Bool = false) -> Bool {
         // A Live Folder is never archived (keyboard Delete and a selection's Delete come here, not
         // through its row menu): alone, it is Delete Live Folder; in a selection it is removed.
-        let live = ids.filter { model.node(id: $0)?.folder?.live != nil }
-        if ids.count == 1, let id = live.first { return confirmDeleteLiveFolder(id) }
+        if ids.count == 1, model.node(id: ids[0])?.folder?.live != nil { return confirmDeleteLiveFolder(ids[0]) }
         guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids, quoteTitle: archiveFolderTabs) else { return false }
-        let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
         let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
         pendingConfirmation = alert
         let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed else { return }
-            // Read again: the sheet is asynchronous. Delete Live Folder has no Undo step (as from
-            // its row menu), so the rest is archived first (one Undo step, its own toast) and the
-            // Live Folders go after it. Rows inside a removed Live Folder go with it.
-            let live = ids.filter { self.model.node(id: $0)?.folder?.live != nil }
-            @MainActor func insideLive(_ id: ItemID) -> Bool {
-                var parent = self.model.parent(of: id)
-                while case .folder(let folder)? = parent {
-                    if live.contains(folder) { return true }
-                    parent = self.model.parent(of: folder)
-                }
-                return false
-            }
-            let rest = ids.filter { !live.contains($0) && !insideLive($0) }
+            // Read again in the model: the sheet is asynchronous. Every Live Folder the deletion
+            // reaches (also one nested in a selected folder) is removed first, then the rest is
+            // archived (BrowserModel.deleteFolders).
             var archived = 0, removed = 0
-            self.keepingSelection {
-                archived = rest.isEmpty ? 0 : self.model.archiveNodes(ids: rest, archiveFolderTabs: archiveFolderTabs)
-                for id in live where self.model.node(id: id)?.folder?.live != nil { self.model.removeLiveFolder(id: id); removed += 1 }
-            }
+            var archivedFolders = 0
+            self.keepingSelection { (archived, archivedFolders, removed) = self.model.deleteFolders(ids: ids, archiveFolderTabs: archiveFolderTabs) }
             if removed > 0 { self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey) }
             guard archived > 0 || removed > 0 else { return }
             self.refresh(); restoreKeyboardFocus(); self.changed()
             // The toast's Undo covers only the archived rows; a lone Live Folder removal has none.
-            if archived > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: max(1, folders - removed))) }
+            if archivedFolders > 0 { self.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders)) }
         }
         if !shown { pendingConfirmation = nil }
         return shown

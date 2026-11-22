@@ -264,7 +264,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         guard let factory, let controller = factory.controller, let space = self.spaceID(containing: id) else { return false }
         if controller.context.focusedSpace?.id != space, factory.performSidebar(.switchSpace(space)) != true { return false }
         return controller.sidebar(controller.sidebar, didRequest: intent)
-      case .deleteSpace, .deleteFolder, .deleteFolders:
+      case .deleteSpace, .deleteFolder, .deleteFolders, .deleteLiveFolder:
         // The Manager's "…" ▸ Delete, folder Delete, and selection Delete confirm first,
         // with a sheet on the Library window (completion §3.3).
         return self.confirmManagerDelete(intent, context: context, factory: factory)
@@ -336,27 +336,37 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     case .deleteSpace(let id): alert = SidebarConfirmations.deleteSpaceAlert(model: model, spaceID: id); ids = []
     case .deleteFolder(let id): ids = [id]; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
     case .deleteFolders(let selection, _): ids = selection; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
+    // The Live Folder row menu's Delete Live Folder (its alert is chosen below).
+    case .deleteLiveFolder(let id): ids = [id]; alert = nil
     default: return false
     }
-    guard let alert else { return false }
+    // A Live Folder alone gets its own alert, as in the sidebar; it is never archived (below).
+    let loneLive = ids.count == 1 && model.node(id: ids[0])?.folder?.live != nil
+    let shownAlert = loneLive ? SidebarConfirmations.deleteLiveFolderAlert() : alert
+    guard let alert = shownAlert else { return false }
     let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
     let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
     return SidebarConfirmations.present(alert, on: window) { [weak self, weak context] confirmed in
       guard let self, let context, confirmed else { return }
       let accepted: Bool
+      var archivedFolders = folders
       if case .deleteSpace(let id) = intent { accepted = ModelSidebarActions(context: context).perform(.deleteSpace(id)) }
       else {
-        var archived = 0
-        let removal = { archived = model.archiveNodes(ids: ids) }
+        // Live Folders the deletion reaches are removed, not archived (BrowserModel.deleteFolders).
+        var archived = 0, removed = 0, folderCount = 0
+        let removal = { (archived, folderCount, removed) = model.deleteFolders(ids: ids) }
         if let controller = self.app.hostFactories[context.windowID]?.controller { controller.keepingSelection(removal) } else { removal() }
-        accepted = archived > 0
+        if removed > 0 { UserDefaults.standard.set(false, forKey: BrowserWindowController.liveFolderAutoCreateKey) }
+        accepted = archived > 0 || removed > 0
+        archivedFolders = folderCount
       }
       guard accepted else { return }
       restoreKeyboardFocus()
       if case .deleteSpace = intent, let panel = self.activeLibrarySession?.panel, panel.isPresented { panel.focusRail() }
       self.app.scheduleSave(); self.app.scheduleMenuRebuild()
-      if folders > 0 {
-        self.app.hostFactories[context.windowID]?.controller?.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
+      // Only archived rows have an Undo step (a removed Live Folder has none).
+      if archivedFolders > 0 {
+        self.app.hostFactories[context.windowID]?.controller?.showModelUndoToast(SidebarConfirmations.folderToast(count: archivedFolders))
       }
     }
   }

@@ -45,7 +45,9 @@ struct SidebarMenus {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
         if context.isWindowOnly {
             // A Blank Window's tab moves into one of the browser's Spaces (the App handles the intent).
-            parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, .moveToSpace(nodeID: nodeID, space: $0.id)) })
+            // Only a tab moves out of a Blank Window (a folder or split has no such move).
+            let isTab = context.model.node(id: nodeID)?.tab != nil
+            parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, enabled: isTab, .moveToSpace(nodeID: nodeID, space: $0.id)) })
             return parent
         }
         let current = context.model.parent(of: nodeID).flatMap(spaceID(of:))
