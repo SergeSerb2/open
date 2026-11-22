@@ -568,7 +568,7 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             'homeFolder': home_lf.get('id'), 'after': after_export.get('id')}
         # Bug sweep r6 CF-02: a Live Folder dragged into Today keeps its fetched rows through auto-archive
         # and Clear Today. They were archived as tabs (and fetched again: a new Archive entry each time).
-        def pull_archive(): return sum('/pull/' in r['url'] for r in app.call('archive-list').get('rows', []))
+        def archive_ids(): return {r['id']: r['url'] for r in app.call('archive-list').get('rows', [])}
         gh['prs'] = {'created': trio[:2]}
         try:
             today_refresh = refreshed('success')
@@ -576,21 +576,25 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             gh['prs'] = {'created': []}
         lf = app.call('live-folder-state', space=home['id'])
         moved = app.call('sidebar-drop', nodes=[lf['id']], parent={'kind': 'today', 'id': home['id']}, index=0)
-        rows_before = len(app.call('live-folder-state', space=home['id']).get('rows', []))
-        archived_before = pull_archive()
+        folder_rows = app.call('live-folder-state', space=home['id']).get('rows', [])
+        rows_before = len(folder_rows)
+        row_urls = {r.get('live') for r in folder_rows} | {r.get('url') for r in folder_rows}
+        row_urls -= {None, ''}
+        archived_before = archive_ids()
         app.call('archive-sweep', offsetSeconds=40 * 86400)
         app.call('archive-clock', reset=True)
         after_sweep = app.call('live-folder-state', space=home['id'])
         app.call('menu-perform', id='clear-unpinned-tabs')
         after_clear = app.call('live-folder-state', space=home['id'])
-        archived_after = pull_archive()
+        # Only the folder's own rows count: the sweep and Clear rightly archive the other Today tabs.
+        archived_rows = sorted(url for id, url in archive_ids().items() if id not in archived_before and url in row_urls)
         results['live_folder_in_today_keeps_rows'] = {'ok': bool(moved) and today_refresh.get('outcome') == 'success' and rows_before == 2
             and after_sweep.get('exists') and len(after_sweep.get('rows', [])) == 2
             and after_clear.get('exists') and after_clear.get('id') == lf.get('id') and len(after_clear.get('rows', [])) == 2
-            and archived_after == archived_before,
+            and bool(row_urls) and archived_rows == [],
             'moved': moved, 'rowsBefore': rows_before, 'afterSweep': len(after_sweep.get('rows', [])),
             'afterClear': {k: after_clear.get(k) for k in ('exists', 'id')}, 'clearRows': len(after_clear.get('rows', [])),
-            'archivedPulls': [archived_before, archived_after]}
+            'archivedFolderRows': archived_rows, 'rowURLs': sorted(row_urls)}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:
