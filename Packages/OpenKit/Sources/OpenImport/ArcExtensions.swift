@@ -25,6 +25,23 @@ public struct ArcExtensionsReader: Sendable {
     public let profileDirectory: URL
     public init(profileDirectory: URL) { self.profileDirectory = profileDirectory }
 
+    /// Replaces every `__MSG_key__` token (case-insensitive key). Nil when a key is unknown, or the result is
+    /// empty or over the 1024-byte name limit (ignored, so it cannot fail the whole Profile read).
+    static func localizedName(_ raw: String, messages: [String: Any]) -> String? {
+        var lookup: [String: String] = [:]
+        for (key, value) in messages { if let message = (value as? [String: Any])?["message"] as? String { lookup[key.lowercased()] = message } }
+        guard let pattern = try? NSRegularExpression(pattern: "__MSG_([A-Za-z0-9_@]+?)__") else { return nil }
+        var result = "", cursor = raw.startIndex
+        for match in pattern.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)) {
+            guard let whole = Range(match.range, in: raw), let key = Range(match.range(at: 1), in: raw),
+                  let message = lookup[raw[key].lowercased()] else { return nil }
+            result += raw[cursor..<whole.lowerBound] + message
+            cursor = whole.upperBound
+        }
+        result += raw[cursor...]
+        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed.contains("__MSG_") || trimmed.utf8.count > 1024 ? nil : trimmed
+    }
     private func boundedData(_ file: URL, maximum: Int) throws -> Data {
         let handle = try FileHandle(forReadingFrom: file)
         defer { try? handle.close() }
@@ -115,26 +132,25 @@ public struct ArcExtensionsReader: Sendable {
                 || path.hasPrefix("/Applications/") || (path.isEmpty && folders[id] == nil)
                 || (entry == nil && manifest == nil)
             var name = manifest?["name"] as? String
-            // A localized name (`__MSG_key__`) comes from the default locale's messages.json, as Chromium
-            // resolves it. Unresolved, the record has no name and the list shows the ID (bug sweep r7 Y-06).
-            if let raw = name, raw.hasPrefix("__MSG_"), raw.hasSuffix("__"), raw.count > 8 {
+            // A localized name holds `__MSG_key__` tokens, resolved from the default locale's messages.json as
+            // Chromium does (every token, anywhere in the name). An unknown key leaves no name, so the list shows
+            // the ID (bug sweep r7 Y-06, review r1 #4).
+            if let raw = name, raw.contains("__MSG_") {
                 name = nil
-                let key = raw.dropFirst(6).dropLast(2).lowercased()
                 let locale = (manifest?["default_locale"] as? String) ?? ""
                 let pathParts = path.split(separator: "/")
                 if let folder = folders[id], !locale.isEmpty, !locale.contains("/"), !locale.contains("..") {
-                    let versions = pathParts.count == 2 && pathParts[0] == Substring(id)
-                        ? [folder.appendingPathComponent(String(pathParts[1]), isDirectory: true)]
-                        : ((try? children(folder, maximum: 256)) ?? [])
-                            .sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedDescending }
-                    for version in versions where safeDirectory(version) {
+                    // The version Preferences names first; a stale path falls back to the newest folder on disk.
+                    let named = pathParts.count == 2 && pathParts[0] == Substring(id)
+                        ? [folder.appendingPathComponent(String(pathParts[1]), isDirectory: true)] : []
+                    let scanned = ((try? children(folder, maximum: 256)) ?? [])
+                        .sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedDescending }
+                    for version in named + scanned where safeDirectory(version) {
                         let file = version.appendingPathComponent("_locales/\(locale)/messages.json")
                         guard file.resolvingSymlinksInPath().path.hasPrefix(rootPath), fm.fileExists(atPath: file.path),
                               let data = try? boundedData(file, maximum: 1024 * 1024),
                               let messages = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-                        let entry = messages.first { $0.key.lowercased() == key }?.value as? [String: Any]
-                        // A message over the name limit is ignored, so it cannot fail the whole Profile read.
-                        if let message = entry?["message"] as? String, !message.isEmpty, message.utf8.count <= 1024 { name = message }
+                        name = Self.localizedName(raw, messages: messages)
                         break
                     }
                 }
