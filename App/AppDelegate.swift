@@ -1303,7 +1303,10 @@ extension AppDelegate: CommandDispatcher {
     #endif
     let file = options.userDataDirectory.appendingPathComponent("State/keybindings.json")
     do {
-      let loaded = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
+      let stored = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
+      // A command this build does not know drops only its own binding (the file stays as it is).
+      let loaded = stored.droppingUnknownCommands
+      if !stored.unknownCommandIDs.isEmpty { Self.commandLog("Key bindings for unknown commands were ignored: \(stored.unknownCommandIDs.joined(separator: ", "))") }
       guard loaded.isSupported, ConflictChecker.unexpected(ConflictChecker.check(overrides: loaded)).isEmpty else {
         throw CocoaError(.fileReadCorruptFile)
       }
