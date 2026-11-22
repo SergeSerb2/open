@@ -220,10 +220,12 @@ def run(factory, results, tmp, h):
         def manager_drop():
             # AB-05 review r1 #1: a multi-item drop on a Library Space Manager column selected, and so
             # loaded, every new tab.
-            close_others()
+            close_others(); page('/mgr-anchor')
             space = ws()['space']
             tree = app.call('sidebar-tree')
-            start = 1 + len(tree['pinned']) + (1 if tree['today'] else 0)
+            # The Manager's outline has no New Tab row: with Today non-empty, Today starts right
+            # after the Today divider (an empty Today maps this index to Pinned).
+            start = 1 + len(tree['pinned']) + 1
             urls = [origin + '/mgr-%d' % i for i in (1, 2, 3)]
             app.call('library-open', section='spaces')
             try:
