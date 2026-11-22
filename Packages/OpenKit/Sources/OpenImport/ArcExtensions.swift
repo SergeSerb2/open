@@ -114,7 +114,30 @@ public struct ArcExtensionsReader: Sendable {
             let isInternal = location == 5 || location == 10 || entry?["was_installed_by_default"] as? Bool == true
                 || path.hasPrefix("/Applications/") || (path.isEmpty && folders[id] == nil)
                 || (entry == nil && manifest == nil)
-            let name = manifest?["name"] as? String
+            var name = manifest?["name"] as? String
+            // A localized name (`__MSG_key__`) comes from the default locale's messages.json, as Chromium
+            // resolves it. Unresolved, the record has no name and the list shows the ID (bug sweep r7 Y-06).
+            if let raw = name, raw.hasPrefix("__MSG_"), raw.hasSuffix("__"), raw.count > 8 {
+                name = nil
+                let key = raw.dropFirst(6).dropLast(2).lowercased()
+                let locale = (manifest?["default_locale"] as? String) ?? ""
+                let pathParts = path.split(separator: "/")
+                if let folder = folders[id], !locale.isEmpty, !locale.contains("/"), !locale.contains("..") {
+                    let versions = pathParts.count == 2 && pathParts[0] == Substring(id)
+                        ? [folder.appendingPathComponent(String(pathParts[1]), isDirectory: true)]
+                        : ((try? children(folder, maximum: 256)) ?? [])
+                            .sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedDescending }
+                    for version in versions where safeDirectory(version) {
+                        let file = version.appendingPathComponent("_locales/\(locale)/messages.json")
+                        guard file.resolvingSymlinksInPath().path.hasPrefix(rootPath), fm.fileExists(atPath: file.path),
+                              let data = try? boundedData(file, maximum: 1024 * 1024),
+                              let messages = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                        let entry = messages.first { $0.key.lowercased() == key }?.value as? [String: Any]
+                        if let message = entry?["message"] as? String, !message.isEmpty { name = message }
+                        break
+                    }
+                }
+            }
             guard id.utf8.count <= 256, (name?.utf8.count ?? 0) <= 1024 else { throw ArcExtensionsReadError.exceedsLimit }
             records.append(ArcExtensionRecord(extensionID: id, manifestName: name, version: manifest?["version"] as? String,
                                                manifestVersion: manifest?["manifest_version"] as? Int,
