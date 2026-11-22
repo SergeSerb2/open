@@ -255,6 +255,37 @@ def run(factory, results, tmp, h):
             littleOpenAfterCmdOption=bool(little), opened=opened, littleSessions=[little_before, len(sessions())], auxButtons=aux)
     guarded('eng6_oe12_middle_click_after_cmd_option_click', oe12)
 
+    # Quit with DevTools, a popup panel and an Incognito window open, right after a metrics
+    # sample (OE-01, OE-04, OE-06 shutdown paths): the quit finishes before the three-second
+    # deadline, kills every owned process and leaves no crash report.
+    def quit_open_tools():
+        app = launch(urls=(origin + '/opener',))
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        popup = open_popup(app, tab)
+        app.call('select', tab=tab)
+        app.call('command', id='javascript-console')
+        devtools = wait_until(lambda: _try(lambda: app.call('devtools-frontend', tab=tab, js='1')) == 1, timeout=20, step=.5)
+        app.call('menu-perform', id='new-incognito-window')
+        private = wait_until(lambda: next((w for w in app.call('incognito-state')['windows'] if w.get('private')), None),
+                             timeout=8, step=.1)
+        sample = app.call('metrics', interval=0.5)
+        reports = os.path.expanduser('~/Library/Logs/DiagnosticReports')
+        started = time.time()
+        app.quit()
+        crashes = [f for f in (os.listdir(reports) if os.path.isdir(reports) else [])
+                   if f.startswith('Open') and os.path.getmtime(os.path.join(reports, f)) >= started - 1]
+        log = open(app.launch_log_path, errors='replace').read() if os.path.exists(app.launch_log_path) else ''
+        shutdown = [line for line in log.splitlines() if 'OpenEngine: shutdown contexts=' in line]
+        report = app.quit_report
+        row('eng6_quit_with_devtools_popup_incognito_open',
+            bool(devtools) and bool(popup) and bool(private) and len(sample.get('tasks', [])) > 0
+            and report.get('ok') is True and not report.get('forced') and not crashes
+            and len(shutdown) == 1 and 'deadline=0' in shutdown[0],
+            devtools=bool(devtools), incognito=bool(private), metricsTasks=len(sample.get('tasks', [])),
+            quit={k: report.get(k) for k in ('ok', 'forced', 'error')}, crashReports=crashes, shutdown=shutdown)
+    guarded('eng6_quit_with_devtools_popup_incognito_open', quit_open_tools)
+
     server.shutdown()
     server.server_close()
 
