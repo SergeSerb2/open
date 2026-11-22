@@ -205,6 +205,24 @@ def run(factory, results, tmp, wait_until):
         finally:
             gh_server.shutdown()
 
+    def x04():
+        for _ in range(3): app.call('menu-perform', id='new-easel')
+        def shown():
+            state = lib()
+            easels = [r for r in state.get('rows', []) if r['kind'] == 'easel']
+            return state if len(easels) >= 3 and all(r['iconLoaded'] for r in easels if r['realized']) else None
+        open_library('easels')
+        first = wait_until(shown, timeout=10, step=.1) or lib()
+        time.sleep(.5)  # Prefetch slices are done.
+        opened = lib().get('easelThumbnailRenders', 0)
+        close_library(); open_library('easels')
+        wait_until(shown, timeout=10, step=.1); time.sleep(.5)
+        again = lib().get('easelThumbnailRenders', 0)
+        # Each configure, prefetch and open read the document and drew the whole canvas again.
+        check('R7_X04_easel_thumbnails_drawn_once', 3 <= opened <= 3 and again == opened,
+              rendersFirstOpen=opened, rendersAfterReopen=again,
+              rows=[{k: r.get(k) for k in ('title', 'realized', 'iconLoaded')} for r in first.get('rows', []) if r['kind'] == 'easel'])
+
     def x07():
         import downloads
         # Quit cancels a transfer the old build hid (no row left to cancel it from).
@@ -242,6 +260,7 @@ def run(factory, results, tmp, wait_until):
         ('W04', w04, ['R7_W04_space_menu_key_follows_binding']),
         ('W01', w01, ['R7_W01_edit_theme_switch_updates_window_menus']),
         ('W03', w03, ['R7_W03_delete_space_skips_live_rows']),
+        ('X04', x04, ['R7_X04_easel_thumbnails_drawn_once']),
         ('X07', x07, ['R7_X07_cmd_delete_keeps_running_download']),
     ]
     try:
@@ -252,6 +271,9 @@ def run(factory, results, tmp, wait_until):
                 for name in names:
                     if name not in results: check(name, False, error='%s: %s' % (type(error).__name__, error))
             finally:
+                # A sheet a failed row left open (rename, delete confirmation) is answered here.
+                for window in (None, 'library'):
+                    _try(lambda: app.call('alert', button='Cancel', **({'window': window} if window else {})))
                 _try(lambda: app.call('editor-close')); close_library()
     finally:
         server.shutdown()
