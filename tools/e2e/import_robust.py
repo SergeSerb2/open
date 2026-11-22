@@ -293,8 +293,8 @@ def run(factory, results, tmp, h):
             app.call('profiles-shell', action='show', profile=old['name'])
             time.sleep(.15)
             app.press_profile_delete()
-            assert h.wait_until(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5, step=.05), 'no delete sheet'
-            evidence['deleteNames'] = app.call('profiles-shell').get('deleteNames')
+            assert h.wait_until(lambda: app.call('profiles-shell')['sheet'] > 0 and app.call('profiles-shell')['deleteNames'] == [old['name']],
+                                timeout=5, step=.05), 'no delete sheet for the Work Profile'
             app.call('profiles-shell', action='type-delete', text=old['name'])
             evidence['deleteEnabled'] = app.call('profiles-shell').get('deleteEnabled')
             app.call('profiles-shell', action='press', label='Delete')
@@ -308,15 +308,15 @@ def run(factory, results, tmp, h):
             settings_import(r7)
             again = work_profiles()
             evidence.update(oldID=old['id'], againIDs=[p['id'] for p in again])
-            try:
-                evidence['adblock'] = app.call('settings-adblock-lifecycle', profile=again[0]['id'])
-            except Exception as error:
-                evidence['adblockError'] = str(error)
+            # The ad-block store keeps a per-process retired set by Profile ID (Release-safe readout).
+            # The deleted ID must read retired, so a False for the new ID is not a missing store.
+            evidence['adblockRetired'] = {which: app.call('profiles-shell', adblockProfile=pid)['adblockProfileRetired']
+                                          for which, pid in (('old', old['id']), ('again', again[0]['id']))}
             settings_import(r7)
             third = work_profiles()
             evidence['thirdIDs'] = [p['id'] for p in third]
             ok = (len(again) == 1 and again[0]['id'] != old['id'] and evidence['thirdIDs'] == evidence['againIDs']
-                  and evidence.get('adblock', {}).get('retired') is False)
+                  and evidence['adblockRetired'] == {'old': True, 'again': False})
         except Exception as error:
             ok = False; evidence['error'] = str(error)
         row('r7_Y02_reimport_after_delete_new_id', ok, **evidence)
