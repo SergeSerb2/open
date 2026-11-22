@@ -5,6 +5,22 @@ import OpenDesign
 /// Rows come from `SidebarMenus.plus()`, so the menu stays the one list of items, titles, keys
 /// and enabled rules. Opens with the last row ("New Tab") highlighted; ↓ and ↑ move and wrap,
 /// Return runs the row, Esc or a click outside closes.
+/// One drawn row of the "+" popover as a VoiceOver menu item. The popover refreshes these values
+/// (on the main actor) each time VoiceOver asks for its children.
+/// Sendable: its plain values are written only by the popover on the main actor.
+final class PlusPopoverRowElement: NSAccessibilityElement, @unchecked Sendable {
+    nonisolated(unsafe) var title = "", enabled = false, selected = false, screenFrame = NSRect.zero
+    nonisolated(unsafe) var press: (@MainActor () -> Bool)?
+    override func accessibilityLabel() -> String? { title }
+    override func isAccessibilityEnabled() -> Bool { enabled }
+    override func isAccessibilitySelected() -> Bool { selected }
+    override func accessibilityFrame() -> NSRect { screenFrame }
+    override func accessibilityPerformPress() -> Bool {
+        let press = press
+        return MainActor.assumeIsolated { press?() ?? false }
+    }
+}
+
 @MainActor
 final class PlusPopoverView: NSView {
     struct Row { var item: NSMenuItem; var frame: CGRect; var symbol: String }
@@ -13,7 +29,41 @@ final class PlusPopoverView: NSView {
     let sourceMenu: NSMenu
     private var separators: [CGRect] = []
     var colors: PlusPopoverColors { didSet { needsDisplay = true } }
-    var highlighted: Int? { didSet { if highlighted != oldValue { needsDisplay = true } } }
+    var highlighted: Int? { didSet { if highlighted != oldValue {
+        needsDisplay = true; refreshRowElements(); NSAccessibility.post(element: self, notification: .selectedChildrenChanged)
+    } } }
+    /// The rows are drawn, not views: VoiceOver reads one menu item element per row (A11Y-07).
+    private lazy var rowElements: [PlusPopoverRowElement] = rows.indices.map { index in
+        let element = PlusPopoverRowElement()
+        element.setAccessibilityRole(.menuItem); element.setAccessibilityParent(self)
+        element.press = { [weak self] in
+            guard let self, index < self.rows.count, self.rows[index].item.isEnabled else { return false }
+            self.onRun?(self.rows[index].item); return true
+        }
+        return element
+    }
+    /// Element values follow the rows and the highlight (an AX client may hold an element).
+    private func refreshRowElements() {
+        for (index, element) in rowElements.enumerated() where index < rows.count {
+            let row = rows[index]
+            element.title = row.item.title; element.enabled = row.item.isEnabled; element.selected = highlighted == index
+            element.screenFrame = window.map { $0.convertToScreen(convert(row.frame, to: nil)) } ?? .zero
+        }
+    }
+    override func accessibilityChildren() -> [Any]? { refreshRowElements(); return rowElements }
+    /// The rows have no views: a pointer location (screen coordinates) resolves to its row element.
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        // Nonisolated in AppKit; called on the main thread.
+        let row: PlusPopoverRowElement? = MainActor.assumeIsolated {
+            refreshRowElements()
+            return rowElements.first { $0.screenFrame.contains(point) }
+        }
+        return row ?? self
+    }
+    override func accessibilitySelectedChildren() -> [Any]? {
+        guard let highlighted, let children = accessibilityChildren(), highlighted < children.count else { return [] }
+        return [children[highlighted]]
+    }
     var onRun: ((NSMenuItem) -> Void)?
     /// Arrow tip x in this view's coordinates.
     var arrowX: CGFloat = 0 { didSet { needsDisplay = true } }
@@ -45,7 +95,7 @@ final class PlusPopoverView: NSView {
         let body = m.bodyHeight(rows: rows.count, groups: separators.count + 1)
         frame = CGRect(x: 0, y: 0, width: m.bodyWidth + 2 * m.margin, height: body + 2 * m.margin + m.arrowSize.height)
         highlighted = rows.lastIndex { $0.item.isEnabled }
-        setAccessibilityRole(.popover); setAccessibilityLabel("New")
+        setAccessibilityElement(true); setAccessibilityRole(.popover); setAccessibilityLabel("New")
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 

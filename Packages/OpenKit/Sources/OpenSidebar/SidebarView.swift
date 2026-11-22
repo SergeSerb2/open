@@ -912,7 +912,12 @@ extension SidebarView {
         let view = bottomBar.plusPopover.view
         return ["shown": bottomBar.plusPopover.isShown, "highlighted": view?.highlighted.map { view!.rows[$0].item.title } ?? "",
                 "rows": view?.rows.map { ["title": $0.item.title, "enabled": $0.item.isEnabled, "frame": [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height]] as [String: Any] } ?? [],
-                "size": view.map { [$0.frame.width, $0.frame.height] } ?? [], "closeGlyph": bottomBar.plus.glyphView.glyph == .rowClose]
+                "size": view.map { [$0.frame.width, $0.frame.height] } ?? [], "closeGlyph": bottomBar.plus.glyphView.glyph == .rowClose,
+                "axElement": view?.isAccessibilityElement() ?? false,
+                "axSelected": (view?.accessibilitySelectedChildren() ?? []).compactMap { ($0 as? NSAccessibilityElement)?.accessibilityLabel() },
+                "axRows": (view?.accessibilityChildren() ?? []).compactMap { $0 as? NSAccessibilityElement }.map {
+                    ["role": $0.accessibilityRole()?.rawValue ?? "", "label": $0.accessibilityLabel() ?? "", "enabled": $0.isAccessibilityEnabled(),
+                     "selected": $0.isAccessibilitySelected()] as [String: Any] }]
     }
     /// The popover's content alone, for offscreen renders (`sidebar-render plus-popover`).
     public func makePlusPopoverView() -> NSView? {

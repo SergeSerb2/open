@@ -632,7 +632,7 @@
         }
         return ["created": true, "monitoringModifiers": switcher.isMonitoringModifiers, "presented": switcher.isPresented, "active": switcher.isActive, "selected": switcher.selectedID?.description ?? "",
           "items": switcher.items.map { $0.id.description }, "visible": switcher.visibleIDs.map(\.description),
-          "viewCount": switcher.view == nil ? 0 : 1] as [String: Any]
+          "viewCount": switcher.view == nil ? 0 : 1, "announcement": switcher.lastAnnouncement ?? ""] as [String: Any]
       case "sound-effect":
         // The App's SoundEffects path: plays only with open.advanced.playSoundEffects on.
         guard let raw = a["effect"] as? String, let effect = SoundEffects.Effect(rawValue: raw) else { throw Failure(message: "unknown sound effect") }
@@ -1723,6 +1723,7 @@
           guard depth < 48, elements.count < 4000, !view.isHiddenOrHasHiddenAncestor else { return }
           if view.isAccessibilityElement() {
             elements.append(["role": view.accessibilityRole()?.rawValue ?? "", "label": view.accessibilityLabel() ?? "",
+              "value": (view.accessibilityValue() as? String) ?? "",
               "selected": view.isAccessibilitySelected(), "actions": (view.accessibilityCustomActions() ?? []).map(\.name),
               "class": String(describing: type(of: view))])
           }
