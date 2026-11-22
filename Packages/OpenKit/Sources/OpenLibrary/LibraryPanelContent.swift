@@ -119,6 +119,9 @@ extension LibraryPanelView {
         guard let profile = viewModel.model.profiles.first(where: { $0.name == name }) else { return false }
         // A status line describes the previous Profile's Boosts (for example why Edit could not open).
         viewModel.statusText = ""
+        // Retire on this turn: the old Profile's rows must not draw, and the observer must not restart
+        // the provider started here (review of #665, #3).
+        if viewModel.historyProfileID != profile.id { profileFiltersWillChange(historyProfile: profile.id, downloads: false) }
         viewModel.historyProfileID = profile.id; hosts[section]?.loaded = false; hosts[section]?.dirty = true; refreshData(); renderRows(); return true
     }
     func showBoostProfiles() {
@@ -220,10 +223,8 @@ extension LibraryPanelView {
                     if (target == .history || target == .boosts), historyProfile != self.viewModel.historyProfileID {
                         // Profile changes alone retire the old subscription and
                         // provider. Ordinary opens and list updates keep both.
-                        if let host = self.hosts[target] {
-                            host.storeWatch?.cancel(); host.storeWatch = nil
-                            host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1
-                            host.loaded = false; host.wasWarmed = false
+                        if let host = self.hosts[target], host.retiredFor != self.viewModel.historyProfileID {
+                            self.retireProfileRows(host, for: self.viewModel.historyProfileID)
                         }
                         storeChanged = true
                     }
@@ -333,6 +334,8 @@ extension LibraryPanelView {
         }
         host.list.gallery = target == .boosts && viewModel.boostsPresentation == .gallery
         host.list.update(sources)
+        // The new Profile's rows are on the list now: it may show again (review of #665, #2).
+        host.showsOldProfile = false
         host.phaseMilliseconds["apply"] = (ProcessInfo.processInfo.systemUptime-started)*1000
         if section == target {
             if let reveal = pendingReveal, reveal.section == target, selectRow(reveal.id) { pendingReveal = nil }
@@ -346,7 +349,7 @@ extension LibraryPanelView {
         if section == .media, viewModel.captures.loadFailed { emptyTitle.stringValue = "Could not load media"; emptyBody.stringValue = "Close the Library and try again." }
         statusLabel.stringValue = section == .downloads && !viewModel.downloads.downloadHistoryError.isEmpty ? viewModel.downloads.downloadHistoryError : viewModel.statusText
         statusLabel.isHidden = statusLabel.stringValue.isEmpty || section == .spaces
-        for (target,host) in hosts { host.list.isHidden = target != section || (host.loaded && host.list.rowCount == 0) || section == .spaces }
+        for (target,host) in hosts { host.list.isHidden = target != section || host.showsOldProfile || (host.loaded && host.list.rowCount == 0) || section == .spaces }
         layoutActiveList()
         content.isHidden = !rowsEmpty || (section == .spaces && manager != nil) || (section != .spaces && hosts[section]?.loaded != true)
         manager?.isHidden = section != .spaces
@@ -630,6 +633,31 @@ extension LibraryPanelView {
         default: false
         }
     }
+    /// A section's rows belong to a Profile the filter has left: drop its provider and hide its
+    /// list until the new Profile's rows load.
+    /// The list stays hidden until the new Profile's first page is applied (applyPage), and an
+    /// old row preparation still running cannot apply its rows.
+    func retireProfileRows(_ host:LibrarySectionHost, for profile:ProfileID?) {
+        host.storeWatch?.cancel(); host.storeWatch = nil
+        host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1
+        hideOldProfileRows(host)
+        host.loaded = false; host.wasWarmed = false; host.retiredFor = profile
+    }
+    func hideOldProfileRows(_ host:LibrarySectionHost) {
+        host.cancel(); host.generation += 1
+        host.dirty = true; host.showsOldProfile = true
+    }
+    /// An outside entry (Library opened from a window of another Profile) changes the Profile
+    /// filters. Call before show(section:): it draws on this turn, and the content observer that
+    /// also retires the old rows runs only on the next one, so the old Profile's cached rows were
+    /// drawn meanwhile (bug sweep r6; review of #646, #7).
+    public func profileFiltersWillChange(historyProfile:ProfileID?, downloads:Bool) {
+        if let historyProfile {
+            for target in [LibraryPanelSection.history,.boosts] { if let host = hosts[target] { retireProfileRows(host, for: historyProfile) } }
+        }
+        // Downloads rows are filtered at render: hide the old filter's rows until the new ones apply.
+        if downloads, let host = hosts[.downloads] { hideOldProfileRows(host) }
+    }
     public func setFilterOpen(_ value:Bool) {
         filterOpen = value
         if value { configureFilter() }
@@ -658,8 +686,13 @@ extension LibraryPanelView {
         case "profile":
             guard let uuid = UUID(uuidString:parts[1]),viewModel.model.profile(id:ProfileID(rawValue:uuid)) != nil else { return false }
             let profile = ProfileID(rawValue:uuid)
-            if section == .downloads { viewModel.downloadProfileFilter = viewModel.downloadProfileFilter == profile ? nil : profile }
-            else if section == .history { viewModel.historyProfileID = profile } else { return false }
+            if section == .downloads {
+                profileFiltersWillChange(historyProfile: nil, downloads: true)
+                viewModel.downloadProfileFilter = viewModel.downloadProfileFilter == profile ? nil : profile
+            } else if section == .history {
+                if viewModel.historyProfileID != profile { profileFiltersWillChange(historyProfile: profile, downloads: false) }
+                viewModel.historyProfileID = profile
+            } else { return false }
         case "reason": toggle(parts[1],in:&archiveReasonChips)
         case "space": toggle(parts[1],in:&archiveSpaceChips)
         case "when": toggle(parts[1],in:&historyWhenChips)

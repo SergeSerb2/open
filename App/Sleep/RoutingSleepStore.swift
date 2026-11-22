@@ -23,10 +23,16 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   var onError: ((String) -> Void)?
   /// Tabs with a stored back/forward list (this launch's saves plus the rows found at start).
   private(set) var knownStored: Set<ItemID> = []
+  /// Rows deleted (a pinned reset) while the start-up scan runs: its older answer must not add
+  /// them back (review r1 #9). Nil when no scan runs.
+  private var deletedDuringLoad: Set<ItemID>?
   func loadKnownStored() async {
+    deletedDuringLoad = []
+    defer { deletedDuringLoad = nil }
     for profile in model.profiles {
       let name = profile.dataDirectoryName
-      guard let ids = await store(named: name)?.allTabIDs(), !retired.contains(name.lowercased()) else { continue }
+      guard var ids = await store(named: name)?.allTabIDs(), !retired.contains(name.lowercased()) else { continue }
+      if let deleted = deletedDuringLoad, !deleted.isEmpty { ids.removeAll { deleted.contains($0) } }
       // A Profile deleted while this query ran keeps nothing.
       knownStored.formUnion(ids)
       for id in ids {
@@ -81,6 +87,7 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
     savedIn[tabID] = name
     storedIn[tabID, default: []].insert(name)
     knownStored.insert(tabID)
+    deletedDuringLoad?.remove(tabID)
   }
 
   func flush() async throws {
@@ -109,6 +116,7 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
     for name in names { store(named: name)?.delete(tabID: tabID) }
     savedIn[tabID] = nil; storedIn[tabID] = nil
     knownStored.remove(tabID)
+    deletedDuringLoad?.insert(tabID)
   }
 
   /// Every stored row of every Profile's store (automation evidence).

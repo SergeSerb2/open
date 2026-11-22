@@ -178,6 +178,10 @@ def run(factory, results, tmp, h):
         app.call('key', key='return')
         handoff = state(); until(lambda: not state()['active'] and not state()['dim']['exists'])
         final = state(); stored = json.loads(snapshot().read_text())
+        # Bug sweep r6 S-04: the chosen Favorites and theme are setup, not edits. After Start Fresh,
+        # the browser has nothing to undo.
+        setup_undo = app.call('undo-state')
+        results['steps_choices_not_undoable'] = dict(ok=not setup_undo['canUndo'], undo=setup_undo, load=os.getloadavg())
         until(lambda: 'retainedObjects' in state())
         released = state()
         results['steps_artwork_released'] = dict(ok=not any(released['retainedObjects'].values()),
@@ -242,8 +246,13 @@ def run(factory, results, tmp, h):
         action('next'); after_import = screen('theme')
         gate('import_skips_favorites', lambda s: s.get('screen')=='theme', after_import, favorites)
         results['steps_import_report'] = dict(ok=report['outcome'].get('Favorites')==1 and report['outcome'].get('Imported tabs')==7 and not report['completed'], load=os.getloadavg(), outcome=report['outcome'])
+        # S-04: a theme chosen after the import is setup too; the first Undo stays the import's.
+        action('set-theme', preset=5); action('next')
         skip_to_ready(); action('get-started')
         until(lambda: not state()['active'] and not state()['dim']['exists'])
+        import_undo = app.call('undo-state')
+        results['steps_import_undo_first'] = dict(ok=import_undo['canUndo'] and import_undo['undoName'].startswith('Import from'),
+            undo=import_undo, load=os.getloadavg())
         revealed = [w for w in app.call('windows') if w['class']=='BrowserWindow']
         gate('import_browser_hidden', hidden_browser, prepared, revealed)
         gate('import_browser_revealed', lambda ws: bool(ws) and any(w['visible'] and w['alpha']==1 and w['key'] for w in ws), revealed, prepared)

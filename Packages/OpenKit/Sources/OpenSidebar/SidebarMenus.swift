@@ -153,7 +153,7 @@ struct SidebarMenus {
             // The same rows as Cmd+D: a split in the selection is skipped, never pinned.
             let pinnable = context.pinnableSelectionIDs(ids), unpin = context.selectionPinUnpins(ids)
             items += [item("Duplicate", .duplicateNodes(ids: ids)),
-                      alternate(item(unpin ? "Unpin Tabs" : "Pin Tabs", enabled: !pinnable.isEmpty, .setPinned(ids: pinnable, pinned: !unpin)))]
+                      alternate(item(unpin ? "Unpin Tabs" : "Pin Tabs", enabled: !pinnable.isEmpty && !context.hidesSpaceChrome, .setPinned(ids: pinnable, pinned: !unpin)))]
         }
         items += [moveTo(ids), item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)), .separator()]
         if !tabs.isEmpty && !archiveFolderTabs {
@@ -491,7 +491,7 @@ struct SidebarMenus {
             item("Share Folder…", .share(nodeID: folder.id)),
             .separator(),
             item("New Nested Folder…", .newNestedFolder(parentFolderID: folder.id)),
-            item("Turn “\(folder.title)” into Space", .turnFolderIntoSpace(folderID: folder.id)),
+            item("Turn “\(folder.title)” into Space", enabled: !context.hidesSpaceChrome, .turnFolderIntoSpace(folderID: folder.id)),
         ] + (folder.children.isEmpty ? [] : [
             // S3D: an empty folder has no Copy items; their place with tabs is pending (C3 item 4).
             item("Copy All Links", .copyAllLinks(folderID: folder.id, markdown: false)),
@@ -655,8 +655,10 @@ struct SidebarMenus {
             row.keyEquivalent = key; row.keyEquivalentModifierMask = modifiers; return row
         }
         return menu([
-            item("New Space", .newSpace),
-            space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? ClosureMenuItem("New Folder", enabled: false) {},
+            // A Blank or Incognito window refuses both: no Space edits, and no Pinned section to hold
+            // the folder (bug sweep r6 REG-04).
+            item("New Space", enabled: !context.hidesSpaceChrome, .newSpace),
+            space.map { item("New Folder", enabled: !context.hidesSpaceChrome, .newFolder(in: .spacePinned($0.id))) } ?? ClosureMenuItem("New Folder", enabled: false) {},
             .separator(),
             keyed(item("New Easel", enabled: !context.isIncognito, .newEasel), "e", [.control, .shift]),
             item("New Boost", enabled: !context.isIncognito && context.currentTab != nil, .performCommand("new-boost")),

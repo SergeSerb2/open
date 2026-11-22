@@ -30,17 +30,54 @@ enum ThemeData {
   }
 
   private static var watching = false
-  /// While the setting is on, a Space theme edit re-applies to every live page (Space is @Observable).
+  /// The theme each Space's pages last received, and Spaces whose hidden pages wait for a drag to end.
+  private static var appliedThemes: [SpaceID: SpaceTheme] = [:]
+  private static var deferredSpaces: Set<SpaceID> = []
+  /// Scripts sent to pages (automation read-back for the theme-drag cost row).
+  private(set) static var applyCount = 0
+  /// While the setting is on, a Space theme edit re-applies to that Space's live pages (Space and the
+  /// preview registry are @Observable). Bug sweep r6 T-02: during a theme-editor drag (one model write
+  /// per display frame) only the shown pages of the edited Space follow live; its other pages get the
+  /// final value when the drag ends. Before, every frame re-applied to every live page of every Space.
   static func watchThemes(app: AppDelegate) {
     guard enabled, !watching else { return }
     watching = true
+    // A normal launch never runs `refreshAll` (no setting change): take the baseline here, or the
+    // first theme edit would count every Space as changed and re-apply to every live page.
+    if !seeded { snapshotThemes(app: app) }
     withObservationTracking {
       for space in app.model.spaces { _ = space.theme }
+      _ = ThemePreviewRegistry.shared.livePreviewSpaces
     } onChange: {
       Task { @MainActor [weak app] in
         watching = false
         guard let app, enabled else { return }
-        refreshAll(app: app); watchThemes(app: app)
+        refreshChanged(app: app); watchThemes(app: app)
+      }
+    }
+  }
+  private static var seeded = false
+  private static func snapshotThemes(app: AppDelegate) {
+    seeded = true
+    appliedThemes = Dictionary(app.model.spaces.map { ($0.id, $0.theme) }, uniquingKeysWith: { a, _ in a })
+    deferredSpaces = []
+  }
+  private static func refreshChanged(app: AppDelegate) {
+    let live = ThemePreviewRegistry.shared.livePreviewSpaces
+    var changed: Set<SpaceID> = deferredSpaces.subtracting(live)
+    for space in app.model.spaces where appliedThemes[space.id] != space.theme {
+      changed.insert(space.id); appliedThemes[space.id] = space.theme
+    }
+    let present = Set(app.model.spaces.map(\.id))
+    appliedThemes = appliedThemes.filter { present.contains($0.key) }
+    deferredSpaces = deferredSpaces.intersection(live).union(changed.intersection(live)).intersection(present)
+    guard !changed.isEmpty else { return }
+    for factory in app.hostFactories.values {
+      let shown = Set(factory.visibleTabs.map(\.id))
+      for (tabID, host) in factory.hosts where !host.closed {
+        guard let space = factory.space(containing: tabID), changed.contains(space.id),
+              !live.contains(space.id) || shown.contains(tabID) else { continue }
+        apply(variables(tabID: tabID, factory: factory), to: host.content)
       }
     }
   }
@@ -122,11 +159,13 @@ enum ThemeData {
           let setText = String(data: setJSON, encoding: .utf8), let namesText = String(data: namesJSON, encoding: .utf8) else { return }
     let source = "(() => { const s = document.documentElement && document.documentElement.style; if (!s) return false;"
       + " const set = \(setText); for (const n of \(namesText)) { if (n in set) s.setProperty(n, set[n]); else s.removeProperty(n); } return true; })()"
+    applyCount += 1
     Task { @MainActor in _ = try? await page.evaluateJavaScript(source, inWorld: .open) }
   }
 
   /// Re-applies to every live page of every window (setting change, theme change).
   static func refreshAll(app: AppDelegate) {
+    snapshotThemes(app: app)
     for factory in app.hostFactories.values {
       for (tabID, host) in factory.hosts where !host.closed { apply(variables(tabID: tabID, factory: factory), to: host.content) }
     }

@@ -14,14 +14,14 @@ from pathlib import Path
 from loopback_http import LoopbackHTTPServer
 
 
-def make_png(path, width, height, rgb):
-    """A synthetic solid-colour PNG (no image library needed)."""
+def make_png(path, width, height, rgb, level=-1):
+    """A synthetic solid-colour PNG (no image library needed). level=0 stores it uncompressed."""
     import struct, zlib
     raw = b''.join(b'\x00' + bytes(rgb) * width for _ in range(height))
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
     png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) \
-        + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+        + chunk(b'IDAT', zlib.compress(raw, level)) + chunk(b'IEND', b'')
     Path(path).write_bytes(png)
     return path
 
@@ -305,17 +305,84 @@ def run(factory, results, tmp, api):
 
             # E22: a pasted picture file lands at most 400 pt wide, stored once by its hash.
             picture = make_png(Path(tmp) / 'picture.png', 800, 400, (220, 90, 60))
+            def stored():
+                # Paste and drop store pictures off the main thread (bug sweep r6 T-03): wait for them.
+                return api.wait_until(lambda: (lambda x: x if x.get('pendingImageImports', 0) == 0 else None)(easel(tab=e2)), timeout=10, step=.05) or easel(tab=e2)
             app.call('easel', action='pasteboard', file=str(picture))
-            s = easel(action='edit', op='paste', tab=e2)
+            easel(action='edit', op='paste', tab=e2)
+            s = stored()
             imgs = [x for x in objects(s) if x['kind'] == 'image']
             record('E22_paste_image_file', len(imgs) == 1 and imgs[0]['pixelSize'] == [800, 400]
                    and abs(imgs[0]['frame'][2] - 400) < .01 and abs(imgs[0]['frame'][3] - 200) < .01
                    and s['imageFiles'] == [imgs[0]['file']] and canvas(s)['selection'] == [imgs[0]['id']], state=canvas(s), files=s['imageFiles'])
             # E23: the same bytes as picture data reuse the stored file.
             app.call('easel', action='pasteboard', imageData=str(picture))
-            s = easel(action='edit', op='paste', tab=e2)
+            easel(action='edit', op='paste', tab=e2)
+            s = stored()
             record('E23_image_dedup', len([x for x in objects(s) if x['kind'] == 'image']) == 2 and len(s['imageFiles']) == 1,
                    files=s['imageFiles'])
+            # Bug sweep r6 T-03: pasting a 48 MiB picture file read, hashed and wrote it inside the Paste
+            # command, on the main thread (up to 20 such files per paste or drop). This row proves the
+            # Paste reply comes back before the picture is read (import pending, no picture yet) and
+            # that the picture lands after. That the read and hash run off the main thread is a code-path
+            # proof (Task.detached in EaselContentHost); as evidence, one more automation call is timed
+            # while the import is pending. The times and the load are printed only, not asserted.
+            big = make_png(Path(tmp) / 'large.png', 4096, 4096, (30, 120, 200), level=0)
+            app.call('easel', action='pasteboard', file=str(big))
+            started = time.monotonic(); easel(action='edit', op='selectAll', tab=e2); round_trip = time.monotonic() - started
+            started = time.monotonic(); pasted = easel(action='edit', op='paste', tab=e2); paste = time.monotonic() - started
+            def is_large(x): return x['kind'] == 'image' and x['pixelSize'] == [4096, 4096]
+            deferred = pasted.get('pendingImageImports') == 1 and not any(is_large(x) for x in objects(pasted))
+            started = time.monotonic(); probe = easel(tab=e2); probe_ms = round((time.monotonic() - started) * 1000, 1)
+            probe_pending = probe.get('pendingImageImports')
+            s = stored()
+            large = [x for x in objects(s) if is_large(x)]
+            record('E23p_large_paste_off_main_thread', deferred and len(large) == 1 and len(s['imageFiles']) == 2
+                   and canvas(s)['selection'] == [large[0]['id']],
+                   deferred=deferred, bytes=big.stat().st_size, pasteMs=round(paste * 1000, 1),
+                   roundTripMs=round(round_trip * 1000, 1), probeWhilePendingMs=probe_ms, probePending=probe_pending,
+                   load=os.getloadavg(), files=s['imageFiles'])
+            if large and canvas(s)['selection'] == [large[0]['id']]: easel(action='edit', op='delete', tab=e2)
+            # Review r1 #3 / r2 #1 (bug sweep r6): a picture lands while the user types in a new text box.
+            # The box stays open and keeps the selection, typing goes on, and ending the box keeps both
+            # the picture and all the text. Undo removes the text, then the picture, and never brings back
+            # an empty box. Before r1, ending the box put back the document from before the box and
+            # dropped the picture; in r1 the landing picture ended the box mid-typing. The import is held
+            # 1.5 s so the box opens first.
+            tinted = make_png(Path(tmp) / 'tinted.png', 300, 200, (40, 160, 90))
+            def is_tinted(x): return x['kind'] == 'image' and x['pixelSize'] == [300, 200]
+            easel(action='import-delay', ms=1500, tab=e2)
+            try:
+                app.call('easel', action='pasteboard', file=str(tinted))
+                held = easel(action='edit', op='paste', tab=e2).get('pendingImageImports') == 1
+                easel(action='tool', tool='text', tab=e2); easel(action='click', at=[120, 560], tab=e2)
+                easel(action='type', text='During ', tab=e2)
+                box = canvas(easel(tab=e2))
+                editing_while_held = box['editingText'] is not None and easel(tab=e2)['pendingImageImports'] == 1
+                landed = stored()
+                still_open = canvas(landed)['editingText'] == box['editingText'] and canvas(landed)['selection'] == box['selection'] \
+                    and any(is_tinted(x) for x in objects(landed))
+                try:
+                    easel(action='type', text='import', tab=e2)
+                    typed_after = True
+                except RuntimeError:
+                    typed_after = False  # the landing picture ended the box (round-1 behaviour)
+                easel(action='click', at=[960, 150], tab=e2)
+                s = easel(tab=e2)
+            finally:
+                easel(action='import-delay', ms=0, tab=e2)
+            tinted_rows = [x for x in objects(s) if is_tinted(x)]
+            typed_rows = [x for x in objects(s) if x['kind'] == 'text' and x.get('text') == 'During import']
+            texts_before = len([x for x in objects(s) if x['kind'] == 'text'])
+            u1 = easel(action='undo', tab=e2)
+            text_undone = len([x for x in objects(u1) if x['kind'] == 'text']) == texts_before - 1 and any(is_tinted(x) for x in objects(u1))
+            u2 = easel(action='undo', tab=e2)
+            image_undone = not any(is_tinted(x) for x in objects(u2)) and len([x for x in objects(u2) if x['kind'] == 'text']) == texts_before - 1
+            easel(action='redo', tab=e2); easel(action='redo', tab=e2)
+            record('E23t_text_box_during_image_import', held and editing_while_held and still_open and typed_after and len(tinted_rows) == 1
+                   and len(typed_rows) == 1 and canvas(s)['editingText'] is None and text_undone and image_undone,
+                   held=held, editingWhileHeld=editing_while_held, stillOpenAfterLanding=still_open, typedAfterLanding=typed_after, images=len(tinted_rows),
+                   texts=len(typed_rows), textUndone=text_undone, imageUndone=image_undone, state=canvas(s))
 
             # E24: a pasted address makes a link card at once; its metadata and picture follow.
             app.call('easel', action='pasteboard', url=origin + '/page.html')

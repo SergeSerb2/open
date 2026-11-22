@@ -292,14 +292,17 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
         app.call('undo-state', clear=True)
         script('select tab id %s of window 1' % quote(favorite))
         no_undo['other_profile_favorite'] = not app.call('undo-state')['canUndo']
-        # Model state only: L1 (cross-Profile animated switch host) is a separate open bug.
         state = wait_until(lambda: (s if s['space'] == work and s['selected'] == favorite else None)
                            if (s := app.call('window-state')) else None, timeout=5, step=.1)
         final = state or app.call('window-state')
         active = script('try\nreturn id of active tab of window 1\non error\nreturn "none"\nend try')
-        results['S2_select_other_profile_favorite'] = {'ok': bool(state) and active == favorite,
+        # Bug sweep r6 seed 10: the cross-Profile animated switch (L1, fixed in #642) also shows the
+        # Favorite's page once the switch settles; it used to leave the tab without a page.
+        shown = wait_until(lambda: favorite in (app.call('window-state').get('shownPages') or []) or None, timeout=8, step=.1)
+        results['S2_select_other_profile_favorite'] = {'ok': bool(state) and active == favorite and bool(shown),
             'spaceIsWorkProfile': final['space'] == work, 'selectedIsFavorite': final['selected'] == favorite,
-            'activeTabIsFavorite': active == favorite}
+            'activeTabIsFavorite': active == favorite, 'pageShown': bool(shown),
+            'sleepPhase': app.call('tab-state', tab=favorite).get('sleepPhase')}
         app.call('space', space=research)
         wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
         app.call('undo-state', clear=True)
@@ -375,6 +378,197 @@ def scope_checks(factory, results, fixture_server, restore_defaults, wait_until)
         finally:
             app.quit()
             server.shutdown(); server.server_close()
+
+
+def window_close_checks(factory, results, fixture_server, wait_until):
+    """W1–W4 on their own App: they add windows, Spaces and pinned tabs that would change the A-row counts.
+
+    W1: `incognito:true` never makes a normal window (it records history and the session).
+    W2: window 1, front window and index follow front-to-back order, not creation order.
+    W3: close tab takes the window's close path (neighbour selection, pinned tabs stay).
+    W4: make new tab is one Undo step (the selection is the window's own, no-Undo path)."""
+    server, origin = fixture_server('AppleScript')
+    app = factory(urls=(origin + '/w-home',), fresh=True)
+    try:
+        script = Scripts(app)
+        home = app.call('tabs')[0]['id']
+        app.call('wait', tab=home)
+        first = script('return id of window 1')
+
+        # W1: a private request fails (1010) and opens no window; incognito:false is a normal window.
+        for label, props in (('incognito_true', '{incognito:true}'), ('mode_normal_incognito_true', '{mode:"normal", incognito:true}')):
+            before = script('return count windows')
+            reply = script.error('make new window with properties ' + props, 1010,
+                                 'Incognito windows are not available in this build.')
+            after = script('return count windows')
+            shells = len(app.call('incognito-state')['windows'])
+            results['W1_make_window_' + label] = dict(reply, ok=reply['ok'] and before == after and shells == int(before),
+                windowsBefore=before, windowsAfter=after, shellWindows=shells)
+            if after != before:  # Unfixed code made a normal window: close it for the next rows.
+                for row in app.call('incognito-state')['windows']:
+                    if row['id'].lower() != first.lower():
+                        script('close window id %s' % quote(row['id']))
+        # A mode is normal or incognito in any case; any other value fails and makes no window.
+        for label, props, number, message in (
+                ('mode_capitalised', '{mode:"Incognito"}', 1010, 'Incognito windows are not available in this build.'),
+                ('mode_unknown', '{mode:"private"}', 1002, '"private" is not a window mode. Use normal or incognito.')):
+            before = script('return count windows')
+            reply = script.error('make new window with properties ' + props, number, message)
+            after = script('return count windows')
+            results['W1_make_window_' + label] = dict(reply, ok=reply['ok'] and before == after, windowsBefore=before, windowsAfter=after)
+            if after != before:
+                for row in app.call('incognito-state')['windows']:
+                    if row['id'].lower() != first.lower():
+                        script('close window id %s' % quote(row['id']))
+        made = script('set w to make new window with properties {incognito:false}\nreturn (id of w) & "|" & (mode of w) & "|" & (incognito of w)')
+        made_id = made.split('|')[0]
+        results['W1_make_window_incognito_false'] = {'ok': made.endswith('|normal|false') and script('return count windows') == '2',
+                                                    'reply': made}
+
+        # W2: the made window is in front: it is window 1 and front window; the first window is index 2.
+        wait_until(lambda: app.call('window-state')['id'].lower() == made_id.lower() or None, timeout=5, step=.1)
+        order = script('return (id of window 1) & "|" & (id of front window) & "|" & (index of window id %s) & "|" & (index of window id %s)'
+                       % (quote(first), quote(made_id)))
+        results['W2_window_order_front_to_back'] = {'ok': order == '%s|%s|2|1' % (made_id, made_id), 'actual': order,
+                                                   'made': made_id, 'first': first}
+        script('set index of window id %s to 1' % quote(first))
+        raised = wait_until(lambda: script('return id of window 1') == first or None, timeout=5, step=.1)
+        order = script('return (id of window 1) & "|" & (index of window id %s)' % quote(made_id))
+        # Back again: creation order would keep the first window as window 1.
+        script('set index of window id %s to 1' % quote(made_id))
+        back = wait_until(lambda: script('return id of window 1') == made_id or None, timeout=5, step=.1)
+        order_back = script('return (id of window 1) & "|" & (index of window id %s)' % quote(first))
+        results['W2_set_index_reorders'] = {'ok': bool(raised) and order == first + '|2' and bool(back)
+            and order_back == made_id + '|2', 'actual': order, 'actualBack': order_back}
+
+        # Two windows (the first behind, the made one in front) both show one tab. close names the
+        # front window: that window closes it (neighbour selected, pinned tab unloaded there).
+        def window_state(window_id):
+            state = app.call('window-state', id=window_id)
+            return state if state['id'].lower() == window_id.lower() else None
+        def show_in_both(tab):
+            script('select tab id %s of window id %s' % (quote(tab), quote(first)))
+            script('select tab id %s of window id %s' % (quote(tab), quote(made_id)))
+            wait_until(lambda: (window_state(made_id) or {}).get('selected') == tab or None, timeout=5, step=.1)
+            return {'first': (window_state(first) or {}).get('selected'), 'made': (window_state(made_id) or {}).get('selected')}
+        research = app.call('window-state')['space']
+        app.call('window-focus', id=made_id, activate=True)
+        two_a = app.call('open', url=origin + '/w-two-a')['id']; app.call('wait', tab=two_a)
+        two_t = app.call('open', url=origin + '/w-two-today')['id']; app.call('wait', tab=two_t)
+        shown = show_in_both(two_t)
+        script('close tab id %s of window id %s' % (quote(two_t), quote(made_id)))
+        gone = wait_until(lambda: all(t['id'] != two_t for t in app.call('tabs')) or None, timeout=5, step=.1)
+        front = wait_until(lambda: (s if s.get('selected') else None) if (s := window_state(made_id)) else None, timeout=3, step=.1)
+        results['W3_close_two_windows_front_selects_neighbour'] = {'ok': bool(gone) and bool(front),
+            'shownBefore': shown, 'closed': bool(gone), 'frontSelected': (front or window_state(made_id) or {}).get('selected')}
+        two_p = app.call('open', url=origin + '/w-two-pinned')['id']; app.call('wait', tab=two_p)
+        app.call('pin', tab=two_p)
+        shown = show_in_both(two_p)
+        script('close tab id %s of window id %s' % (quote(two_p), quote(made_id)))
+        app.call('window-focus', id=made_id, activate=True)
+        def unloaded_in_front():
+            row = next((t for t in app.call('tabs') if t['id'] == two_p), None)
+            return row if row and row.get('section') == 'pinned' and not row.get('loaded') else None
+        unloaded = wait_until(unloaded_in_front, timeout=5, step=.1)
+        row = next((t for t in app.call('tabs') if t['id'] == two_p), None)
+        results['W3_close_two_windows_front_unloads_pinned'] = {'ok': bool(unloaded), 'shownBefore': shown,
+            'row': row and {k: row.get(k) for k in ('section', 'loaded', 'selected')}}
+
+        # Both windows show pinned P and the reference names the BACK window: that window closes it
+        # (P unloads there), not the front one.
+        back_p = app.call('open', url=origin + '/w-back-pinned')['id']; app.call('wait', tab=back_p)
+        app.call('pin', tab=back_p)
+        shown = show_in_both(back_p)
+        script('close tab id %s of window id %s' % (quote(back_p), quote(first)))
+        app.call('window-focus', id=first, activate=True)
+        wait_until(lambda: app.call('window-state')['id'].lower() == first.lower() or None, timeout=5, step=.1)
+        def unloaded_in_back():
+            row = next((t for t in app.call('tabs') if t['id'] == back_p), None)
+            return row if row and row.get('section') == 'pinned' and not row.get('loaded') else None
+        unloaded = wait_until(unloaded_in_back, timeout=5, step=.1)
+        row = next((t for t in app.call('tabs') if t['id'] == back_p), None)
+        results['W3_close_two_windows_named_back_unloads_pinned'] = {'ok': bool(unloaded), 'shownBefore': shown,
+            'row': row and {k: row.get(k) for k in ('section', 'loaded', 'selected')}}
+
+        # The named BACK window only holds T (it showed T, then another tab); the front window shows T.
+        # The window that shows T must close it: a close in the back window blanked the front one
+        # and skipped its page's beforeunload.
+        held_t = app.call('open', url=origin + '/w-held-today')['id']; app.call('wait', tab=held_t)
+        script('select tab id %s of window id %s' % (quote(held_t), quote(first)))
+        wait_until(lambda: (window_state(first) or {}).get('selected') == held_t or None, timeout=5, step=.1)
+        script('select tab id %s of window id %s' % (quote(two_a), quote(first)))
+        script('select tab id %s of window id %s' % (quote(held_t), quote(made_id)))
+        wait_until(lambda: (window_state(made_id) or {}).get('selected') == held_t or None, timeout=5, step=.1)
+        before = {'first': (window_state(first) or {}).get('selected'), 'made': (window_state(made_id) or {}).get('selected'),
+                  'front': script('return id of window 1')}
+        script('close tab id %s of window id %s' % (quote(held_t), quote(first)))
+        gone = wait_until(lambda: all(t['id'] != held_t for t in app.call('tabs')) or None, timeout=5, step=.1)
+        shower = wait_until(lambda: (s if s.get('selected') else None) if (s := window_state(made_id)) else None, timeout=3, step=.1)
+        results['W3_close_named_back_holder_closes_in_shower'] = {'ok': bool(gone) and bool(shower)
+            and before['first'] == two_a and before['made'] == held_t and before['front'] == made_id,
+            'before': before, 'closed': bool(gone), 'showerSelected': (shower or window_state(made_id) or {}).get('selected')}
+        app.call('window-focus', id=made_id, activate=True)
+
+        # make new tab at a Space of a named window shows it in that window, not in the front one.
+        two_space = app.call('space-create', title='W Two')
+        app.call('space', space=research)
+        wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
+        script('focus space id %s of window id %s' % (quote(research), quote(first)))
+        app.call('window-focus', id=made_id, activate=True)
+        nid = script('set t to make new tab at space id %s of window id %s with properties {URL:%s}\nreturn id of t'
+                     % (quote(two_space), quote(first), quote(origin + '/w-two-made')))
+        named = wait_until(lambda: (s if s['space'] == two_space and s['selected'] == nid else None)
+                           if (s := window_state(first)) else None, timeout=5, step=.1)
+        front_space = (window_state(made_id) or {}).get('space')
+        results['W4_make_tab_in_named_window'] = {'ok': bool(named) and front_space == research,
+            'namedWindowShows': bool(named), 'frontSpaceUnchanged': front_space == research}
+        script('close window id %s' % quote(made_id))
+        wait_until(lambda: script('return count windows') == '1' or None, timeout=5, step=.1)
+        app.call('window-focus', id=first, activate=True)
+
+        # W3: closing the selected Today tab selects its neighbour, as ⌘W does; never a blank window.
+        a = app.call('open', url=origin + '/w-a')['id']; app.call('wait', tab=a)
+        b = app.call('open', url=origin + '/w-b')['id']; app.call('wait', tab=b)
+        app.call('select', tab=b)
+        script('close active tab of window 1')
+        gone = wait_until(lambda: all(t['id'] != b for t in app.call('tabs')) or None, timeout=5, step=.1)
+        state = wait_until(lambda: (s if s.get('selected') else None) if (s := app.call('window-state')) else None, timeout=3, step=.1)
+        final = state or app.call('window-state')
+        results['W3_close_selected_selects_neighbour'] = {'ok': bool(gone) and final.get('selected') not in (None, '', b),
+            'closed': bool(gone), 'selected': final.get('selected')}
+        # A pinned tab stays in the sidebar and unloads (Open's ⌘W rule, docs/re/pinned-favorites-close.md).
+        app.call('pin', tab=a)
+        app.call('select', tab=a)
+        script('close tab id %s of window 1' % quote(a))
+        def unloaded_pinned():
+            row = next((t for t in app.call('tabs') if t['id'] == a), None)
+            return row if row and row.get('section') == 'pinned' and not row.get('loaded') else None
+        kept = wait_until(unloaded_pinned, timeout=5, step=.1)
+        row = next((t for t in app.call('tabs') if t['id'] == a), None)
+        results['W3_close_pinned_keeps_row'] = {'ok': bool(kept),
+            'row': row and {k: row.get(k) for k in ('id', 'section', 'loaded')}}
+
+        # W4: make new tab in another Space, then one Undo removes it (no extra selection or focus steps).
+        research = app.call('window-state')['space']
+        other = app.call('space-create', title='W Other')
+        app.call('space', space=research)
+        wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
+        for label, container in (('space', 'space id %s of window 1' % quote(other)), ('window', 'window 1')):
+            app.call('undo-state', clear=True)
+            nid = script('set t to make new tab at %s with properties {URL:%s}\nreturn id of t' % (container, quote(origin + '/w-made-' + label)))
+            shown = wait_until(lambda: (s if s['selected'] == nid else None) if (s := app.call('window-state')) else None, timeout=5, step=.1)
+            # The page must not take the Undo command (engine_e2e duplicate_single_undo).
+            app.call('menu-perform', id='reveal-tab-in-sidebar')
+            app.call('menu-perform', id='undo')
+            removed = wait_until(lambda: all(t['id'] != nid for t in app.call('tabs')) or None, timeout=3, step=.1)
+            undo = app.call('undo-state')
+            results['W4_make_tab_one_undo_step_' + label] = {'ok': bool(shown) and bool(removed) and not undo['canUndo'],
+                'selectedNew': bool(shown), 'oneUndoRemoves': bool(removed), 'canUndoAfter': undo['canUndo']}
+            app.call('space', space=research)
+            wait_until(lambda: app.call('window-state')['space'] == research or None, timeout=5, step=.1)
+    finally:
+        app.quit()
+        server.shutdown(); server.server_close()
 
 
 def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):

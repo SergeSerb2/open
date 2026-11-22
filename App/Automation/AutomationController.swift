@@ -186,7 +186,7 @@
         defer { PeekMotionTrace.mark("socket.end." + traceName) }
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
-        if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
+        if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu", "engine-type", "engine-click-row"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if cmd == "boost-editor", ["key", "type", "tap", "drag"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if cmd == "boost-gallery-ui", args["action"] as? String != "state" { inputCommand = true }
@@ -551,6 +551,22 @@
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
+      case "settings-appearance":
+        // Appearance ▸ Show the toolbar through the Settings model. `key` makes an open Settings window key
+        // again the way a click does (no show(), which re-reads the front window itself).
+        let settings = app.settingsPresenter.settings
+        switch a["action"] as? String ?? "state" {
+        case "key":
+          guard let window = app.settingsPresenter.settingsPresenter.window, window.isVisible else { throw Failure(message: "Settings is not open") }
+          window.makeKeyAndOrderFront(nil)
+        case "toolbar":
+          guard let on = a["on"] as? Bool else { throw Failure(message: "missing on") }
+          settings.appearanceToolbar = on
+        case "state": break
+        default: throw Failure(message: "unknown settings-appearance action")
+        }
+        return ["window": settings.appearanceWindowID?.description ?? "", "toolbar": settings.appearanceToolbar,
+          "key": NSApp.keyWindow === app.settingsPresenter.settingsPresenter.window] as [String: Any]
       case "pasteboard-preserve": return AutomationPasteboard.preserve()
       case "pasteboard-restore": return AutomationPasteboard.restore()
       case "pasteboard":
@@ -682,6 +698,7 @@
         }
         return controller.context.performNodeDrop(ids: ids, to: destination, index: index)
       case "sidebar-drag": return try sidebarDrag(a)
+      case "space-dot-drop": return try spaceDotDrop(a)
       case "sidebar-clear-state":
         let controller = try sidebarController(a)
         controller.contentView.layoutSubtreeIfNeeded()
@@ -977,7 +994,7 @@
       case "tab-strip":
         return w.tabStripState()
       case "frame-save-counters":
-        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount,
+        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount, "metadataScheduled": app.snapshotStore.metadataScheduleCount,
           "prepares": app.snapshotStore.prepareCount,
           "dirty": app.snapshotStore.isDirty, "treeChanges": w.treeChangeCount, "mirrorSyncs": w.mirrorSyncCount] as [String: Any]
       case "space-profile":
@@ -995,7 +1012,8 @@
         // The theme variables the App sets for a tab (setting on), or none.
         let tab = try modelTab(a, w)
         let values = ThemeData.variables(tabID: tab.id, factory: w) ?? []
-        return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x })] as [String: Any]
+        return ["enabled": ThemeData.enabled, "variables": Dictionary(values, uniquingKeysWith: { x, _ in x }),
+                "applies": ThemeData.applyCount] as [String: Any]
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
       case "handoff-state", "handoff-continue", "deep-link-state", "mailto-state":
@@ -1606,6 +1624,9 @@
           "key": win.isKeyWindow, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "urlFieldText": controller.sidebar.urlFieldText,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
+          "trafficLightOffsets": [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { kind -> Double in
+            let layer = win.standardWindowButton(kind)?.layer
+            return ((layer?.presentation() ?? layer)?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? 0 },
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
             "card": rect(reveal.card), "pageBlur": controller.cardDrawsPageBlur] as [String: Any],
@@ -1635,7 +1656,7 @@
       case "undo-state":
         if a["clear"] as? Bool == true { app.undoManager.removeAllActions() }
         return ["generation": app.model.undoGeneration, "canUndo": app.undoManager.canUndo,
-          "canRedo": app.undoManager.canRedo] as [String: Any]
+          "canRedo": app.undoManager.canRedo, "undoName": app.undoManager.undoActionName] as [String: Any]
       case "window-interrupt":
         guard let win = w.window else { throw Failure(message: "no window") }
         switch a["kind"] as? String {
@@ -1770,6 +1791,8 @@
         return w.pageChrome.dialogs.press(accepted: a["accept"] as? Bool ?? true, text: a["text"] as? String, suppress: a["suppress"] as? Bool ?? false)
       case "permission-prompt":
         if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
+        // A click into the prompt: it takes the keyboard (the prompt never takes it by itself).
+        if a["focus"] as? Bool == true { return w.pageChrome.permissions.focusPrompt() }
         return w.pageChrome.permissions.state
       case "permission-decisions":
         guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
@@ -1881,6 +1904,11 @@
       case "translate": return try await translateCommand(a)
       case "calendar": return try await calendarCommand(a)
       case "sidebar-unload":
+        // `folder`: a pinned folder's Unload ("−" on its row), the intent its button sends.
+        if let raw = a["folder"] as? String {
+          guard let uuid = UUID(uuidString: raw), w.model.node(id: ItemID(rawValue: uuid))?.folder != nil else { throw Failure(message: "unknown folder") }
+          return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadFolder(folderID: ItemID(rawValue: uuid))) == true
+        }
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadTab(try modelTab(a, w).id)) == true
       default:
         throw Failure(message: "unknown command \(cmd)")
@@ -2117,6 +2145,8 @@
       // that native motion just armed; its duplicate enter cannot re-arm it.
       if exitingOnly {
         let leaving = hoveredOwners.filter { inside[$0.key] == nil }
+        // An owner gets one exit: a second `exit` or a later `hover` does not repeat it.
+        for key in leaving.keys { hoveredOwners.removeValue(forKey: key) }
         if let exit = enterExit(.mouseExited) { for owner in leaving.values { owner.mouseExited(with: exit) } }
         return ["exited": leaving.values.map { String(describing: type(of: $0)) }.sorted()]
       }
@@ -2588,6 +2618,12 @@
         target.layoutIfNeeded()
         let type: NSEvent.EventType = action == "down" ? .leftMouseDown : action == "drag" ? .leftMouseDragged : .leftMouseUp
         if let e = event(type, point) { NSApp.sendEvent(e) }
+      } else if action == "exit" {
+        // What WindowServer sends when the pointer leaves the window fast: the tracking-area
+        // exits at the new point and no motion event (bug sweep r6, SB-07 part 2).
+        let location = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+        BrowserWindowController.automationPointer = (number, location)
+        return hover(target, at: location, exitingOnly: true)
       } else if action == "move" || action == "hover" {
         // Local event monitors run on AppKit's native dequeue path. Queue
         // motion just like real input, including after a Space transition.
@@ -2638,9 +2674,24 @@
         let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
         // A click happens where the pointer is.
         BrowserWindowController.automationPointer = (number, point)
+        // `button`: "left" (default), "middle" or "right"; the same own-window sendEvent path.
+        let button = a["button"] as? String ?? "left"
+        guard ["left", "middle", "right"].contains(button) else { throw Failure(message: "invalid mouse button") }
         func click(_ type: NSEvent.EventType) -> NSEvent? {
-          NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: number, context: nil, eventNumber: 0, clickCount: a["clickCount"] as? Int ?? 1, pressure: type == .leftMouseDown ? 1 : 0)
+          let type: NSEvent.EventType = switch (button, type) {
+            case ("middle", .leftMouseDown): .otherMouseDown
+            case ("middle", .leftMouseUp): .otherMouseUp
+            case ("right", .leftMouseDown): .rightMouseDown
+            case ("right", .leftMouseUp): .rightMouseUp
+            default: type
+          }
+          let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: number, context: nil, eventNumber: 0, clickCount: a["clickCount"] as? Int ?? 1,
+            pressure: type == .leftMouseDown || type == .otherMouseDown || type == .rightMouseDown ? 1 : 0)
+          // Other-mouse events need the middle button's number (2); Chromium reads buttonNumber.
+          guard button == "middle", let cg = event?.cgEvent else { return event }
+          cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+          return NSEvent(cgEvent: cg) ?? event
         }
         // Real input arrives after the display cycle has laid the window out (the window
         // buttons are placed at its end); run that pass before hit-testing.
@@ -2653,7 +2704,7 @@
           // Controls that read NSApp.currentEvent (Option-click pane Close) need
           // native dequeue, not a direct sendEvent with an unrelated current event.
           let delivered = Mutex(false)
-          let monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+          let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp, .otherMouseUp, .rightMouseUp]) { event in
             if event.windowNumber == number && event.locationInWindow == point { delivered.withLock { $0 = true } }
             return event
           }
@@ -2751,10 +2802,17 @@
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
     func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
+      // `asTyped`: like a hardware key, to whatever window is key now. No window is made key first
+      // (the default path activates its target, which can hide a window that took the keyboard).
+      if a["asTyped"] as? Bool == true {
+        guard NSApp.isActive, let key = NSApp.keyWindow else { throw Failure(message: "no key window for a typed key") }
+        var typed = a; typed["asTyped"] = nil; typed["window"] = key.windowNumber; typed["noActivate"] = true
+        return try await sendKey(typed, w)
+      }
       guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
         (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
-      try await activateForInput(target)
+      if a["noActivate"] as? Bool != true { try await activateForInput(target) }
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).

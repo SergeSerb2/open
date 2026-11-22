@@ -101,15 +101,20 @@ extension AppDelegate {
   }
 
   func deleteNoteEverywhere(_ noteID: UUID) {
-    for factory in hostFactories.values {
-      for tab in factory.model.allTabsForNotes() where NoteLink.id(from: tab.url) == noteID {
-        if let host = factory.noteHosts[tab.id] { factory.controller?.container.closeHost(for: tab.id); host.close() }
-        let undo = factory.model.undoManager; undo?.disableUndoRegistration()
-        factory.model.closeTab(id: tab.id)
-        undo?.enableUndoRegistration()
-        factory.model.archiveSink?.discardArchived(ids: [tab.id])
+    // Every window's editor of the Note, first: windows share one model, so after the first window
+    // removes the row the others no longer find it, and an open editor could save the file again.
+    for host in NoteContentHost.open(noteID: noteID) { host.owner?.controller?.container.closeHost(for: host.tabID); host.close() }
+    keepingSelectionInEveryWindow {
+      for factory in hostFactories.values {
+        for tab in factory.model.allTabsForNotes() where NoteLink.id(from: tab.url) == noteID {
+          if let host = factory.noteHosts[tab.id] { factory.controller?.container.closeHost(for: tab.id); host.close() }
+          let undo = factory.model.undoManager; undo?.disableUndoRegistration()
+          factory.model.closeTab(id: tab.id)
+          undo?.enableUndoRegistration()
+          factory.model.archiveSink?.discardArchived(ids: [tab.id])
+        }
+        factory.controller?.refresh(); factory.scheduleSave()
       }
-      factory.controller?.refresh(); factory.scheduleSave()
     }
     notes.delete(noteID)
     discardArchivedRows(url: NoteLink.url(for: noteID))

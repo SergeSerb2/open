@@ -32,6 +32,9 @@ import OpenAdBlock
     public var sectionBack: [SettingsSection] = []
     public var sectionForward: [SettingsSection] = []
     public var appearanceWindowID: WindowID?
+    /// The browser window in front now. Settings that is already open edits the window the user used last
+    /// (Appearance ▸ Show the toolbar, the accent), so this is read again whenever Settings becomes key.
+    @ObservationIgnored public var frontBrowserWindowID: (@MainActor () -> WindowID?)?
     public var showsControlsKit = false
     public var focusedSettingID: String?
     public var showsLegacyAdBlock = false
@@ -202,7 +205,9 @@ import OpenAdBlock
             profiles: model.profiles.map { RoutingProfileOption(id: $0.id, name: $0.name) },
             isDefaultBrowser: actions.isDefaultBrowser(), defaults: defaults, snapshotProvider: snapshotProvider)
     }
-    public func refreshExternalState() { general.refresh(); profiles.refresh(); adBlock?.refresh(); refreshLinks(preserveDrafts: true) }
+    public func refreshExternalState() {
+        if let id = frontBrowserWindowID?(), id != appearanceWindowID { appearanceWindowID = id }
+        general.refresh(); profiles.refresh(); adBlock?.refresh(); refreshLinks(preserveDrafts: true) }
     public func save() { snapshot.scheduleSave(model: model) }
     public func flush() throws { try snapshot.saveNow(model: model) }
 }

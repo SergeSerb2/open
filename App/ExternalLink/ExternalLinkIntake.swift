@@ -18,7 +18,8 @@ final class ExternalLinkIntake {
   private let evaluator = RoutingEvaluator()
   private let executor: any LinkDestinationExecutor
   private let snapshot: () -> RoutingSnapshot
-  private var pending: [RoutingRequest] = []
+  /// Queued until ready, with the Profile the URL belongs to (see `handle`).
+  private var pending: [(request: RoutingRequest, profile: ProfileID?)] = []
   private var recent: [String: TimeInterval] = [:]
   private(set) var ready = false
   private(set) var duplicatesDropped = 0
@@ -51,7 +52,7 @@ final class ExternalLinkIntake {
       if recent[key] != nil { duplicatesDropped += 1; continue }
       recent[key] = now
       if ready { route(request, profile: profile) }
-      else { pending.append(request); queuedCount += 1 }
+      else { pending.append((request, profile)); queuedCount += 1 }
     }
   }
 
@@ -59,7 +60,7 @@ final class ExternalLinkIntake {
     guard !ready else { return }
     ready = true
     let queued = pending; pending.removeAll()
-    for request in queued { route(request); drainedCount += 1 }
+    for entry in queued { route(entry.request, profile: entry.profile); drainedCount += 1 }
   }
 
   private func route(_ request: RoutingRequest, afterBootstrap: Bool = false, profile: ProfileID? = nil) {
@@ -69,16 +70,19 @@ final class ExternalLinkIntake {
     defer { didRoute?(request.url) }
     let routing = snapshot()
     let decision = evaluator.evaluate(request, in: routing)
-    decisionLog.record(decision)
     var resolved = decision.resolved
     if let profile, case .space(_, let other)? = resolved, other != profile, !decision.via.isRule {
       // The same order as the evaluator's most recent Space: front standard window, then any Space.
       let spaces = routing.windows.filter { $0.kind == .standard }.compactMap { window in
         routing.spaces.first { $0.id == window.focusedSpaceID } } + routing.spaces
       if let space = spaces.first(where: { $0.profileID == profile }) { resolved = .space(spaceID: space.id, profileID: profile) }
+      // A Profile with no Space: its own Little Open, never another Profile's Space and cookies.
+      else { resolved = .littleOpen(profileHint: profile) }
     } else if let profile, case .littleOpen? = resolved, !decision.via.isRule {
       resolved = .littleOpen(profileHint: profile)
     }
+    // The log shows where the link goes: after the Profile override, before it opens.
+    var logged = decision; logged.resolved = resolved; decisionLog.record(logged)
     switch resolved {
     case .space(let id, _): executor.openInSpace(request.url, spaceID: id)
     case .littleOpen(let hint): executor.openInLittleOpen(request.url, profileHint: hint)

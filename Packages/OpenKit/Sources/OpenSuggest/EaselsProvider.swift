@@ -42,8 +42,16 @@ public struct EaselsProvider: SuggestProvider {
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
         // ⌘T only: the Tabs and Actions scopes have their own rows, and ⌘L edits the current tab.
         guard input.context.mode == .newTab, input.siteSearch == nil, input.query.bytes.count >= 2 else { return [] }
-        let inSidebar = Set(input.tabs.tabs.map(\.url))
-        let hits = catalog.matches(input.query).filter { !inSidebar.contains($0.0.url) }
+        let matches = catalog.matches(input.query)
+        guard !matches.isEmpty else { return [] }
+        // Only this Profile's tabs come as Switch to Tab rows (TabsProvider), so only they replace an Easel row.
+        // An Easel whose row is in another Profile's Space stays findable here.
+        var inSidebar = Set<URL>()
+        let ordinals = input.tabs.profileOrdinals
+        for (i, tab) in input.tabs.tabs.enumerated() where input.profileOrdinal.map({ ordinals[i] == Int32($0) }) ?? true {
+            inSidebar.insert(tab.url)
+        }
+        let hits = matches.filter { !inSidebar.contains($0.0.url) }
             .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.modifiedAt > $1.0.modifiedAt }.prefix(maxRows)
         return hits.map { entry, quality in
             Suggestion(id: "easel:" + entry.url.absoluteString, kind: .navigate, title: entry.title, subtitle: "Easel",

@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// The Easel page: title, scrolling 1000-pt-wide canvas, floating tool bar, colour popover.
 /// UI only; the App's content host owns loading and saving (`onChange`).
@@ -22,6 +23,11 @@ public final class EaselCanvasView: NSView {
     public var onOpenURL: ((URL) -> Void)?
     /// Stores picture bytes (validated) and returns the object content, or nil.
     public var storeImage: ((Data) -> EaselImage?)?
+    /// Paste and drop store pictures through this when set: reading, hashing and writing run off the
+    /// main thread, and the pictures appear when they are stored (bug sweep r6 T-03).
+    public var storeImageAsync: (@MainActor (EaselImageSource) async -> EaselImage?)?
+    /// Paste or drop picture imports still being stored (automation read-back).
+    public private(set) var pendingImageImports = 0
     /// The canvas keeps its own undo stack, so ⌘Z on the canvas never undoes sidebar edits.
     public let canvasUndoManager = UndoManager()
     public override var undoManager: UndoManager? { canvasUndoManager }
@@ -378,22 +384,42 @@ public final class EaselCanvasView: NSView {
             return true
         }
         let files = (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
-        var images: [EaselImage] = []
-        for file in files.prefix(20) {
-            guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
-                  size <= EaselStore.maxImageBytes, let data = try? Data(contentsOf: file), let image = storeImage?(data) else { continue }
-            images.append(image)
-        }
-        if images.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
-           data.count <= EaselStore.maxImageBytes, let image = storeImage?(data) {
-            images.append(image)
-        }
-        if !images.isEmpty {
-            var ids: [UUID] = []
-            var at = center
-            for image in images { ids.append(insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
-            setSelection(ids)
-            return true
+        if storeImageAsync != nil {
+            // Only the pasteboard reads stay here. Files are picked by name (no disk access), with
+            // the picture types the store keeps; the bytes are read, checked, hashed and written off
+            // the main thread. With no picture here, paste goes on to a web address or text: nothing
+            // is read from disk on the main thread.
+            var sources: [EaselImageSource] = files.prefix(20)
+                .filter { file in UTType(filenameExtension: file.pathExtension).map { type in Self.pictureTypes.contains { type.conforms(to: $0) } } == true }
+                .map { .file($0) }
+            // Pasted bytes are already in memory: their header (type and pixel size, no decode) is
+            // checked here, so data the store would refuse still falls back to a link card or text.
+            if sources.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
+               data.count <= EaselStore.maxImageBytes, EaselStore.imageInfo(data) != nil {
+                sources = [.data(data)]
+            }
+            if !sources.isEmpty {
+                importImages(sources, at: center, name: name)
+                return true
+            }
+        } else {
+            var images: [EaselImage] = []
+            for file in files.prefix(20) {
+                guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
+                      size <= EaselStore.maxImageBytes, let data = try? Data(contentsOf: file), let image = storeImage?(data) else { continue }
+                images.append(image)
+            }
+            if images.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
+               data.count <= EaselStore.maxImageBytes, let image = storeImage?(data) {
+                images.append(image)
+            }
+            if !images.isEmpty {
+                var ids: [UUID] = []
+                var at = center
+                for image in images { ids.append(insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
+                setSelection(ids)
+                return true
+            }
         }
         if let url = Self.webURL(in: pb) { onLink?(url, center); return onLink != nil }
         if let string = pb.string(forType: .string), !string.isEmpty, string.utf16.count <= EaselDocument.maxTextLength {
@@ -411,6 +437,51 @@ public final class EaselCanvasView: NSView {
             + [pb.string(forType: .string).flatMap { URL(string: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }].compactMap { $0 }
         return candidates.first { ["http", "https"].contains($0.scheme?.lowercased() ?? "") && $0.host() != nil
             && $0.absoluteString.utf16.count <= EaselDocument.maxURLLength }
+    }
+
+    /// The picture types the store keeps (`EaselStore.imageInfo`, the Image tool's panel).
+    static let pictureTypes: [UTType] = [.png, .jpeg, .gif, .webP, .heic, .tiff]
+
+    /// Stores pictures one by one through `storeImageAsync`, then inserts them together. The whole
+    /// batch is dropped when the host closes meanwhile (it clears `storeImageAsync`).
+    private func importImages(_ sources: [EaselImageSource], at center: CGPoint, name: String) {
+        pendingImageImports += 1
+        Task { @MainActor [weak self] in
+            var images: [EaselImage] = []
+            var aborted = false
+            for source in sources {
+                guard let store = self?.storeImageAsync else { aborted = true; break }
+                if let image = await store(source) { images.append(image) }
+            }
+            guard let self else { return }
+            defer { self.pendingImageImports -= 1 }
+            guard !aborted, self.storeImageAsync != nil, !images.isEmpty else { return }
+            let ids = self.insertLandedImages(images, at: center, name: name)
+            // A text box being typed in stays open and keeps the selection (review r2 #1).
+            if self.textEditor == nil { self.setSelection(ids) }
+        }
+    }
+
+    /// Inserts stored pictures into the current document as one undo step. An open text box is not
+    /// touched. When it is a new box, its placeholder is left out of the undo snapshot, so undoing
+    /// the pictures never brings back an empty box (`endTextEditing` merges onto this document).
+    private func insertLandedImages(_ images: [EaselImage], at center: CGPoint, name: String) -> [UUID] {
+        var next = document
+        var at = center
+        var ids: [UUID] = []
+        for image in images {
+            let w = min(400, CGFloat(image.width)), h = w * CGFloat(image.height) / CGFloat(image.width)
+            let object = EaselObject(frame: Self.clamped(CGRect(x: at.x - w / 2, y: max(0, at.y - h / 2), width: w, height: h)),
+                                     zIndex: next.maxZ + 1, content: .image(image))
+            next.objects.append(object); ids.append(object.id)
+            at.x += 24; at.y += 24
+        }
+        next.modifiedAt = Date()
+        var old = document
+        if let editor = textEditor, editor.undoBase != nil, let i = old.index(of: editor.objectID) { old.objects.remove(at: i) }
+        apply(next)
+        registerUndo(restoring: old, name: name)
+        return ids
     }
 
     /// Pictures land at most 400 document points wide (GUESS — capture pending), keeping
@@ -511,20 +582,23 @@ public final class EaselCanvasView: NSView {
         // Typed or pasted text over the stored limit would make the next load refuse the Easel.
         let typed = EaselDocument.clipped(editor.textView.string, utf16: EaselDocument.maxTextLength)
         let empty = typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if let base = editor.undoBase {
-            // A new box: one "Add Text" step from the document before the box, or nothing.
-            var next = base
+        if editor.undoBase != nil, let index = document.index(of: id) {
+            // A new box: one "Add Text" step, or nothing. Merged onto the current document, not the
+            // one from before the box: pictures (or link details) that landed while the box was open
+            // stay (review r2 #1).
+            var withoutBox = document
+            withoutBox.objects.remove(at: index)
             if commit, !empty {
                 text.string = typed
                 text.paragraphStyle = editor.style.paragraphStyle; text.fontFamily = editor.style.fontFamily
                 var o = object; o.content = .text(text); o.frame.size.height = max(object.frame.height, editor.neededDocHeight(for: typed))
-                next.objects.append(o)
+                var next = document
+                next.objects[index] = o
                 next.modifiedAt = Date()
                 apply(next)
-                registerUndo(restoring: base, name: "Add Text")
+                registerUndo(restoring: withoutBox, name: "Add Text")
             } else {
-                next.modifiedAt = document.modifiedAt
-                apply(next)
+                apply(withoutBox)
                 setSelection([])
             }
             return

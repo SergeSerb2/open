@@ -566,6 +566,74 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and live_folders_in(home['id']) == 1 and after_export.get('id') == home_lf.get('id'),
             'exported': exported, 'liveFolders': live_folders_in(home['id']), 'homeTitle': home_title,
             'homeFolder': home_lf.get('id'), 'after': after_export.get('id')}
+        # Bug sweep round 6 (seed 1): a drag of another Space's Live Folder into this Space, or Move to ▸
+        # this Space for a folder that holds one, made a second Live Folder. The incoming one is now a
+        # plain folder (lead ruling, the Export rule above); this Space's own stays the live one.
+        def plain_folder_in(space_id, folder_id):
+            snapshot = json.loads(Path(app.call('save')).read_text())
+            def find(value):
+                if isinstance(value, dict):
+                    if value.get('id') == folder_id and 'children' in value: return value
+                    return next((f for f in map(find, value.values()) if f is not None), None)
+                if isinstance(value, list): return next((f for f in map(find, value) if f is not None), None)
+                return None
+            found = find([sp for sp in snapshot.get('spaces', []) if sp.get('id') == space_id])
+            return found is not None and not isinstance(found.get('live'), dict)
+        def plain_rows_in(space_id, folder_id):
+            """Tabs of the folder when it is a plain folder in the Space (no `live`, no row `liveItemURL`), else None."""
+            snapshot = json.loads(Path(app.call('save')).read_text())
+            def find(value):
+                if isinstance(value, dict):
+                    if value.get('id') == folder_id and 'children' in value: return value
+                    return next((f for f in map(find, value.values()) if f is not None), None)
+                if isinstance(value, list): return next((f for f in map(find, value) if f is not None), None)
+                return None
+            folder = find([sp for sp in snapshot.get('spaces', []) if sp.get('id') == space_id])
+            if folder is None or isinstance(folder.get('live'), dict): return None
+            tabs = []
+            def collect(value):
+                if isinstance(value, dict):
+                    if 'url' in value and 'children' not in value: tabs.append(value)
+                    for v in value.values(): collect(v)
+                elif isinstance(value, list):
+                    for v in value: collect(v)
+            collect(folder.get('children', []))
+            return None if any(t.get('liveItemURL') for t in tabs) else len(tabs)
+        r6 = {}
+        for how in ('drag', 'moveTo'):
+            src = app.call('space-create', title='LF R6 %s' % how); app.call('space', space=src)
+            app.call('sidebar-menu', item='Live Folders/GitHub')
+            src_lf = app.call('live-folder-state', wait=True, space=src)
+            moved = src_lf.get('id')
+            undo = {}
+            try:
+                if how == 'drag':
+                    # Review r1 #6: the dragged Live Folder has PR rows; they stay as plain tabs, and
+                    # Cmd+Z brings the folder back to its Space as a live folder with live rows.
+                    gh['prs'] = {'created': trio[:2]}
+                    fetched = refreshed('success') and app.call('live-folder-state', space=src).get('rows', [])
+                    done = app.call('sidebar-drop', nodes=[moved], parent={'kind': 'pinned', 'id': home['id']}, index=0)
+                    undo['rowsBefore'] = len(fetched or [])
+                    undo['plainRows'] = plain_rows_in(home['id'], moved)
+                    app.call('sidebar-key', key='z', modifiers=['cmd'])
+                    back = app.call('live-folder-state', space=src)
+                    undo['backLive'] = back.get('id') == moved
+                    undo['liveRowsAfterUndo'] = len([r for r in back.get('rows', []) if r.get('live')])
+                    gh['prs'] = {'created': []}
+                else:
+                    wrap = app.call('folder', tabs=[new_tab(app, 'about:blank')], title='R6 wrap', section='pinned')
+                    app.call('sidebar-drop', nodes=[moved], parent={'kind': 'folder', 'id': wrap}, index=0)
+                    done = app.call('sidebar-menu', node=wrap, items=['Move to', home_title])
+            except RuntimeError as error:
+                done = str(error)
+            r6[how] = {'moved': done, 'liveFolders': live_folders_in(home['id']),
+                       'plain': undo['plainRows'] is not None if undo else plain_folder_in(home['id'], moved),
+                       'homeLive': app.call('live-folder-state', space=home['id']).get('id') == home_lf.get('id'), **undo}
+        app.call('space', space=home['id'])
+        drag = r6.get('drag', {})
+        results['live_folder_move_into_space_keeps_one'] = {'ok': all(r['moved'] is True and r['liveFolders'] == 1
+            and r['plain'] and r['homeLive'] for r in r6.values()) and drag.get('rowsBefore') == 2
+            and drag.get('plainRows') == 2 and drag.get('backLive') is True and drag.get('liveRowsAfterUndo') == 2, 'moves': r6}
         # Bug sweep r6 CF-02: a Live Folder dragged into Today keeps its fetched rows through auto-archive
         # and Clear Today. They were archived as tabs (and fetched again: a new Archive entry each time).
         def archive_ids(): return {r['id']: r['url'] for r in app.call('archive-list').get('rows', [])}

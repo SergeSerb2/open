@@ -25,6 +25,8 @@ final class AppImportRunner: ProfileDataOwner {
   #if OPEN_AUTOMATION
   /// e2e (bug sweep r4 F-10): whether the last Firefox open-tabs read ran on the main thread.
   var openTabsReadOnMainThread: Bool?
+  /// Where the last Firefox legacy-ID scan ran (bug sweep r6 REG-06; automation evidence).
+  var openTabsScanOnMainThread: Bool?
   #endif
   /// First run, browser import: the transactional sidebar commit already wrote this run's snapshot.
   var firstRunMergeSaved = false
