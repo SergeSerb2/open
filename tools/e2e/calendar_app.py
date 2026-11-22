@@ -568,6 +568,8 @@ def meet_route_checks(app, results, wait_until, cal):
     def landed(url): return wait_until(lambda: [t for t in app.call('tabs') if t['url'].startswith(url)], timeout=8, step=.05)
     def meet_toasts(): return [t for t in app.call('toasts')['toasts'] if t['coalescingKey'] == 'meet-route' and not t['exiting']]
     before = meet_rules()
+    # Bug sweep r6 DHR-05: Settings exists (its Links drafts read the rules) before the Meet route adds one.
+    app.call('settings-state')
     first = 'https://meet.google.com/abc-defg-hij'
     deliver(first)
     tab = landed(first)
@@ -587,6 +589,11 @@ def meet_route_checks(app, results, wait_until, cal):
         'rules': added, 'toast': toast[:1], 'tab': tab[:1] if tab else tab, 'state': {k: state.get(k) for k in ('meetRouteDone', 'meetRouteAnnounced')}}
     results['cal_meet_route_once'] = {'ok': again.get('meetRouteAnnounced') == 1 and len(meet_rules()) == 1,
         'announced': again.get('meetRouteAnnounced'), 'rules': len(meet_rules())}
+    # Showing Settings ▸ Links, then any Links change, keeps that rule (stale drafts used to overwrite it).
+    app.call('settings-pane', pane='links')
+    toggled = [app.call('settings-toggle', name='external'), app.call('settings-toggle', name='external')]
+    results['cal_meet_route_survives_settings_links'] = {'ok': toggled == [True, True] and len(meet_rules()) == 1,
+        'saved': toggled, 'rules': meet_rules()}
 
 
 FAVORITE_KEYS = ('open.favorites.twitterBadgeEnabled', 'open.favorites.whatsAppBadgeEnabled',
