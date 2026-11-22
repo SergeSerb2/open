@@ -261,6 +261,9 @@ class OEDockBrowserViewDelegate : public CefBrowserViewDelegate {
 
 - (void)dealloc {
   [NSNotificationCenter.defaultCenter removeObserver:self];
+  // The window delegate and its CefWindow hold each other: close the window,
+  // or it stays up with no owner.
+  [self close];
 }
 
 @end

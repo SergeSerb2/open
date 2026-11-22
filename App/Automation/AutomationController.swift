@@ -2655,9 +2655,24 @@
         let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
         // A click happens where the pointer is.
         BrowserWindowController.automationPointer = (number, point)
+        // `button`: "left" (default), "middle" or "right"; the same own-window sendEvent path.
+        let button = a["button"] as? String ?? "left"
+        guard ["left", "middle", "right"].contains(button) else { throw Failure(message: "invalid mouse button") }
         func click(_ type: NSEvent.EventType) -> NSEvent? {
-          NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: number, context: nil, eventNumber: 0, clickCount: a["clickCount"] as? Int ?? 1, pressure: type == .leftMouseDown ? 1 : 0)
+          let type: NSEvent.EventType = switch (button, type) {
+            case ("middle", .leftMouseDown): .otherMouseDown
+            case ("middle", .leftMouseUp): .otherMouseUp
+            case ("right", .leftMouseDown): .rightMouseDown
+            case ("right", .leftMouseUp): .rightMouseUp
+            default: type
+          }
+          let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: number, context: nil, eventNumber: 0, clickCount: a["clickCount"] as? Int ?? 1,
+            pressure: type == .leftMouseDown || type == .otherMouseDown || type == .rightMouseDown ? 1 : 0)
+          // Other-mouse events need the middle button's number (2); Chromium reads buttonNumber.
+          guard button == "middle", let cg = event?.cgEvent else { return event }
+          cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+          return NSEvent(cgEvent: cg) ?? event
         }
         // Real input arrives after the display cycle has laid the window out (the window
         // buttons are placed at its end); run that pass before hit-testing.
@@ -2670,7 +2685,7 @@
           // Controls that read NSApp.currentEvent (Option-click pane Close) need
           // native dequeue, not a direct sendEvent with an unrelated current event.
           let delivered = Mutex(false)
-          let monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+          let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp, .otherMouseUp, .rightMouseUp]) { event in
             if event.windowNumber == number && event.locationInWindow == point { delivered.withLock { $0 = true } }
             return event
           }
