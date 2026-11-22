@@ -385,6 +385,15 @@ OE_EXPORT @interface OEWebContent : NSObject
                 completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(
                                id _Nullable result,
                                NSError* _Nullable error))completion;
+/// The same evaluation with the caller's choice of gesture. Open's own probes pass NO:
+/// a DevTools gesture gives the page user activation (sticky: unmuted autoplay and the
+/// beforeunload sheet; transient: popups) that no user input earned.
+- (void)evaluateJavaScript:(NSString*)script
+               userGesture:(BOOL)userGesture
+                completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(
+                               id _Nullable result,
+                               NSError* _Nullable error))completion
+    NS_SWIFT_NAME(evaluateJavaScript(_:userGesture:completion:));
 /// Sends a raw DevTools protocol command; the result is the decoded JSON.
 - (void)sendDevToolsMethod:(NSString*)method
                 parameters:(nullable NSDictionary<NSString*, id>*)parameters

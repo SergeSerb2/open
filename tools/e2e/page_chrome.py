@@ -98,6 +98,57 @@ def run(factory, results, tmp, h):
                          and batch['remaining'] == 0 and batch['milliseconds'] < 1000 and answered and renderer < 1000,
                          batch=batch, rendererMilliseconds=renderer, answered=answered)
         gate('user_script_batch_linear', script_batch)
+
+        def load_probes_no_activation():
+            # Bug sweep r6 T-01: Open's own load-time probes (page color, favicon owner, first paint)
+            # ran page-world JS with a DevTools user gesture, so every page got sticky user activation
+            # with no input: unmuted autoplay, popups, and a "Leave site?" sheet on Cmd+W. Reads go
+            # through raw DevTools with userGesture false, so the check itself grants nothing.
+            from urllib.parse import quote
+            html = ('<!doctype html><title>Activation probe</title><body style="background:#123456">'
+                    '<script>onbeforeunload=e=>{e.preventDefault();e.returnValue="unsaved"};'
+                    'addEventListener("load",()=>setTimeout(()=>{window.idleActivation=navigator.userActivation.hasBeenActive},1500))'
+                    '</script>')
+            def activation(target):
+                reply = app.call('devtools', tab=target, method='Runtime.evaluate', params={
+                    'expression': '[window.idleActivation ?? null, navigator.userActivation.hasBeenActive]',
+                    'returnByValue': True, 'userGesture': False})
+                return reply['result'].get('value')
+            def probed(target):
+                # The page-color probe has answered: proof the load-time probes ran on this page.
+                rows = [p for p in app.call('pages') if p.get('hostTab') == target]
+                color = rows[0].get('pageBackground') if rows else None
+                return bool(color) and color[:3] == [18, 52, 86]
+            def close_with_key(target):
+                # Cmd+W: the tab closes at once, or a "Leave site?" sheet asks (then it is left, so the tab closes).
+                app.call('key', key='w', modifiers=['cmd'])
+                outcome = wait(lambda: 'sheet' if ds().get('visible') else 'closed' if all(t['id'] != target for t in app.call('tabs')) else None,
+                               timeout=3, step=.05)
+                sheet = ds() if outcome == 'sheet' else None
+                if sheet: answer(True)
+                return outcome, sheet
+            def fresh():
+                # No page() here: the automation focus command reads document.hasFocus() through
+                # the gestured page-world eval, which would grant the activation under test.
+                target = app.call('open', url='data:text/html,' + quote(html))['id']
+                app.call('wait', tab=target)
+                return target
+            idle = fresh()
+            ran = wait(lambda: probed(idle), timeout=5, step=.05)
+            untouched = wait(lambda: (lambda v: v if v and v[0] is not None else None)(activation(idle)), timeout=5, step=.05)
+            closes, idle_sheet = close_with_key(idle)
+            # Positive control: one real (DevTools input) click activates, and Cmd+W then asks.
+            clicked = fresh()
+            for kind in ('mousePressed', 'mouseReleased'):
+                app.call('devtools', tab=clicked, method='Input.dispatchMouseEvent',
+                         params={'type': kind, 'x': 20, 'y': 20, 'button': 'left', 'clickCount': 1})
+            active = wait(lambda: (activation(clicked) or [None, False])[1] is True, timeout=3, step=.05)
+            asks, sheet = close_with_key(clicked)
+            return check(ran and untouched == [False, False] and closes == 'closed' and active and asks == 'sheet'
+                         and sheet.get('title') == 'Leave site?',
+                         probed=ran, untouched=untouched, idleCmdW=closes, idleSheet=idle_sheet,
+                         clickedActive=active, clickedCmdW=asks, sheet=sheet)
+        gate('load_probes_no_user_activation', load_probes_no_activation)
         for name, script, accepted, text, expected, kind in [
             ('alert', '(alert("page message"),"done")', True, None, 'done', 0),
             ('confirm_ok', 'confirm("page message")', True, None, True, 1),
