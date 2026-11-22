@@ -286,8 +286,14 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         switch intent {
         case .open(let url, _, _), .search(_, let url, _, _, _):
             commandBar.dismiss(reason: .programmatic)
+            // An internal open:// address (or no page) starts no load, so no load end would
+            // bring the bar back: keep the bar, or the window is left with no input or close
+            // control (bug sweep r6 REG-01).
+            guard let host = container.host(for: session.tab.id), url.scheme?.lowercased() != "open" else {
+                restoreEmbeddedBarIfNeeded(); return
+            }
             if state == .bar { barLoadPending = true; barLoadStarted = false }
-            container.host(for: session.tab.id)?.load(url)
+            host.load(url)
         case .switchToTab(let id, let spaceID):
             // The callback may close this session itself. close is idempotent and all state is Swift-owned.
             let coordinator = coordinator
@@ -391,7 +397,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     }
     /// Retain the live page through the exit fade. The coordinator has already
     /// removed the session, so a second close cannot schedule another teardown.
-    func closeWindow() {
+    func closeWindow(immediate: Bool = false) {
         let finish = { [self] in
             // Page teardown can take several display intervals. Remove the
             // finished window first. Still cancel deferred host creation on
@@ -401,7 +407,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             commandBar.dismiss(reason: .programmatic)
             container.closeAll(); window?.delegate = nil; window?.close()
         }
-        guard window?.isVisible == true, !Motion.reducesMotion else { finish(); return }
+        guard !immediate, window?.isVisible == true, !Motion.reducesMotion else { finish(); return }
         let view = presentationView()
         guard let layer = view.layer else { finish(); return }
         window?.ignoresMouseEvents = true

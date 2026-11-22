@@ -80,7 +80,12 @@ public final class LittleOpenCoordinator {
         return true
     }
     private var defaultProfile: ProfileID? {
-        model.windows.compactMap { model.space(id: $0.focusedSpaceID)?.profileID }.first ?? model.profiles.first?.id
+        // The most recently focused standard window, as Open in Space picks it (F-11); the
+        // creation order named the oldest window's Profile (bug sweep r6 WL-11).
+        let standard = model.windows.filter { $0.style == .standard }
+        let recent = standard.max { ($0.lastFocusedAt ?? .distantPast) < ($1.lastFocusedAt ?? .distantPast) }
+        return (recent ?? model.windows.first).flatMap { model.space(id: $0.focusedSpaceID)?.profileID }
+            ?? model.windows.compactMap { model.space(id: $0.focusedSpaceID)?.profileID }.first ?? model.profiles.first?.id
     }
     public func open(url: URL, profileHint: ProfileID?) {
         guard let profile = profileHint.flatMap({ model.profile(id: $0)?.id }) ?? defaultProfile else { return }
@@ -122,8 +127,20 @@ public final class LittleOpenCoordinator {
         sessions.first { $0.id == id }?.lastActiveAt = Date()
         sessions.sort { $0.lastActiveAt > $1.lastActiveAt }; onChange?()
     }
-    public func moveToSpace(sessionID: WindowID, spaceID: SpaceID) {
-        guard let session = sessions.first(where: { $0.id == sessionID }), let space = model.space(id: spaceID), let controller = controllers[sessionID] else { return }
+    public func moveToSpace(sessionID: WindowID, spaceID: SpaceID) { moveToSpace(sessionID: sessionID, spaceID: spaceID, preflight: true) }
+    private func moveToSpace(sessionID: WindowID, spaceID: SpaceID, preflight: Bool) {
+        guard let session = sessions.first(where: { $0.id == sessionID }), model.space(id: spaceID) != nil, let controller = controllers[sessionID] else { return }
+        // The page leaves this window: its beforeunload runs before the main window changes. "Stay"
+        // keeps the page and adds no tab; a page reload no longer drops its state unasked (bug sweep r6 WL-08).
+        if preflight, requestPageClose?(sessionID, { [weak self] allowed in
+            if allowed { self?.moveToSpace(sessionID: sessionID, spaceID: spaceID, preflight: false) }
+        }) == true { return }
+        // One Undo step for the new tab and the window's Space and selection.
+        model.asOneUndoStep { moveToMain(session, controller: controller, spaceID: spaceID) }
+        close(sessionID: sessionID, archiveReason: nil, now: Date(), preflight: false)
+    }
+    private func moveToMain(_ session: LittleOpenSession, controller: LittleOpenWindowController, spaceID: SpaceID) {
+        guard let space = model.space(id: spaceID) else { return }
         let url = controller.currentURL ?? session.tab.url
         func tabs(_ nodes: [SidebarNode]) -> [Tab] {
             nodes.flatMap { node in switch node { case .tab(let t): [t]; case .folder(let f): tabs(f.children); case .split(let s): s.panes } }
@@ -147,12 +164,11 @@ public final class LittleOpenCoordinator {
         onOpenInMain?(main.id, tab.id, host)
         // With no App target, no recipient exists; release the detached host explicitly.
         if onOpenInMain == nil { host?.close() }
-        close(sessionID: sessionID, archiveReason: nil)
     }
     public func close(sessionID: WindowID, archiveReason: ArchiveReason?) {
         close(sessionID: sessionID, archiveReason: archiveReason, now: Date())
     }
-    private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date, preflight: Bool = true) {
+    private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date, preflight: Bool = true, immediate: Bool = false) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         if preflight, archiveReason == nil, requestPageClose?(sessionID, { [weak self] allowed in
             if allowed { self?.close(sessionID: sessionID, archiveReason: archiveReason, now: now, preflight: false) }
@@ -160,11 +176,16 @@ public final class LittleOpenCoordinator {
         if let reason = archiveReason { archiveSink?.archive([ArchiveEntry(tab: session.tab, reason: reason, originalLocation: "littleOpen:\(session.id)", spaceID: nil, profileID: session.profileID, archivedAt: now)]) }
         session.windowIsVisible = false
         sessions.removeAll { $0.id == sessionID }
-        if let controller = controllers.removeValue(forKey: sessionID) { controller.prepareToClose(); controller.closeWindow() }
+        if let controller = controllers.removeValue(forKey: sessionID) { controller.prepareToClose(); controller.closeWindow(immediate: immediate) }
         onChange?()
     }
     public func showAll() { for session in Array(sessions.reversed()) { resurface(session.id) } }
     public func closeAll() { for session in Array(sessions) { close(sessionID: session.id, archiveReason: nil) } }
+    /// Engine shutdown: every page closes now, with no beforeunload preflight (Quit already ran
+    /// it) and no exit fade, so no Little Open Browser outlives shutdown preparation (bug sweep r6 WL-13).
+    public func closeAllForShutdown() {
+        for session in Array(sessions) { close(sessionID: session.id, archiveReason: nil, now: Date(), preflight: false, immediate: true) }
+    }
     /// No polling timer: the App's ExpirySweeper schedules this deadline and observes onChange.
     public func nextExpiry(now: Date) -> Date? {
         sessions.compactMap { session in
