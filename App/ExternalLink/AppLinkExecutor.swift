@@ -11,9 +11,11 @@ final class AppLinkExecutor: LinkDestinationExecutor {
   /// standard windows participate in most-recent-Space resolution.
   var orderedControllers: [BrowserWindowController] {
     let standardIDs = Set(app.model.windows.filter { $0.style == .standard }.map(\.id))
-    return NSApp.orderedWindows.compactMap { window in
-      app.windowControllers.first { $0.window === window && standardIDs.contains($0.windowID) }
-    }
+    let standard = app.windowControllers.filter { standardIDs.contains($0.windowID) }
+    let onScreen = NSApp.orderedWindows.compactMap { window in standard.first { $0.window === window } }
+    // `orderedWindows` lists on-screen windows only. A minimized window, or every window of a hidden
+    // App, still has its Space and must take the link, not a new window (bug sweep r6 DHR-03).
+    return onScreen + standard.filter { controller in !onScreen.contains { $0 === controller } }
   }
 
   func snapshot() -> RoutingSnapshot {

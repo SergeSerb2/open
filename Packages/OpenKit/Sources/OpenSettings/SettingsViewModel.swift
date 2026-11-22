@@ -99,6 +99,15 @@ import OpenAdBlock
         links = Self.makeLinks(model: model, actions: actions, defaults: defaults, snapshotProvider: nil)
         refreshLinks()
     }
+    /// The Links rules and default destination as last loaded from, or saved to, the model.
+    /// Drafts that still equal it hold no unsaved edit (bug sweep r6 DHR-05).
+    private struct LinksDraftState: Equatable {
+        var drafts: [RuleDraft]; var kind: RuleDraft.DestinationKind; var space: SpaceID?; var profile: ProfileID?
+        @MainActor init(_ links: LinksSettingsModel) {
+            drafts = links.drafts; kind = links.defaultDestinationKind; space = links.defaultSpaceID; profile = links.defaultProfileID
+        }
+    }
+    @ObservationIgnored private var syncedLinks: LinksDraftState?
     @ObservationIgnored private var keyBindingStamp = "unread"
     @ObservationIgnored private var cachedKeyBindings = KeyBindingStore.empty
     @ObservationIgnored public private(set) var keyBindingLoadCount = 0
@@ -129,7 +138,7 @@ import OpenAdBlock
         }
         let oldRules=model.routingRules,oldDestination=model.defaultDestination
         let copy=links.currentRouting();model.routingRules=copy.rules;model.defaultDestination=copy.defaultDestination
-        do {try snapshot.saveNow(model:model);linksError="";return true}
+        do {try snapshot.saveNow(model:model);linksError="";syncedLinks=LinksDraftState(links);return true}
         catch {model.routingRules=oldRules;model.defaultDestination=oldDestination;linksError="Routes could not be saved. Try again when your data folder is available.";return false}
     }
     /// The sheet keeps its local draft open if another rule or the durable save fails.
@@ -159,9 +168,15 @@ import OpenAdBlock
         links.littleOpenHotkeyEnabled = bool("open.links.littleOpenHotkeyEnabled")
         links.optionCommandClickLittleOpen = bool("open.links.optionCommandClickLittleOpen")
         links.littleOpenAutoArchiveAfter = model.profile(id: selectedProfileID)?.settings.littleOpenAutoArchiveAfter ?? .sixHours
+        // Keep drafts only when they hold an edit not yet saved. Otherwise the model wins: a rule added
+        // while Settings was closed (the Meet route) or an Undo would be hidden, then overwritten.
+        let unsaved = syncedLinks.map { LinksDraftState(previous) != $0 } ?? false
+        syncedLinks = LinksDraftState(links)
         if preserveDrafts {
-            links.drafts = previous.drafts; links.defaultDestinationKind = previous.defaultDestinationKind; links.defaultSpaceID = previous.defaultSpaceID
-            links.defaultProfileID = previous.defaultProfileID
+            if unsaved {
+                links.drafts = previous.drafts; links.defaultDestinationKind = previous.defaultDestinationKind; links.defaultSpaceID = previous.defaultSpaceID
+                links.defaultProfileID = previous.defaultProfileID
+            }
             links.testURLString = previous.testURLString; links.testSourceBundleID = previous.testSourceBundleID; links.testMostRecentSpaceID = previous.testMostRecentSpaceID
             if previous.testDecision != nil { links.runTest() }
         }

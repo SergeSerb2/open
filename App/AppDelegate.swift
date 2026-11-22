@@ -183,6 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
     LaunchTiming.shared.phase("settingsRegistered")
+    // Runs at each activation that finds a new default-browser state; reads only (no Settings load).
+    defaultBrowserService.onChange = { [weak self] state in self?.settingsPresenter.defaultBrowserDidChange(state) }
     _ = importRunner.unfinishedSecretsImportAtLaunch
     importRunner.sweepStaleImportCopiesAfterLaunch()
     NSApp.mainMenu = MainMenu.build()
@@ -270,6 +272,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if engineReady, !shutdownPrepared, !pageQuit.shouldTerminate() {
       // Page replies retry the quit when every page allows it; a "Stay" resets the attempt.
       quitWarning.markRetryPending()
+      return .terminateCancel
+    }
+    // The quit is committed only now: approved transfers stop here, not at the downloads alert,
+    // and the retry's history step writes their cancelled rows (bug sweep r6 DHR-04).
+    if downloadsCenter.cancelTransfersForQuit() {
+      quitWarning.markRetryPending()
+      Task { @MainActor in NSApp.terminate(nil) }
       return .terminateCancel
     }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
@@ -756,7 +765,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return
     }
     didFocusWindow(id)
-    windowControllers.first { $0.windowID == id }?.window?.makeKeyAndOrderFront(nil)
+    let window = windowControllers.first { $0.windowID == id }?.window
+    if window?.isMiniaturized == true { window?.deminiaturize(nil) }
+    window?.makeKeyAndOrderFront(nil)
     if activate { NSApp.activate() }
   }
 
