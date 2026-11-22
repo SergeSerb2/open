@@ -24,8 +24,10 @@ struct SettingsSuggestionsProvider: SuggestProvider {
         (entry.label + " " + entry.help + " " + entry.synonyms + " " + entry.section.title).localizedCaseInsensitiveContains(String(word))
       }
     }.prefix(6)).map { entry in
+      // No subtitle: an action row draws its subtitle as shortcut keycaps (RowPresentation), and a
+      // Settings row has no shortcut. The title already names the area.
       Suggestion(id: "settings:" + entry.id, kind: .action, title: "Settings: " + entry.label,
-        subtitle: entry.section.title, actionID: Self.prefix + entry.id, icon: .symbol("gearshape"),
+        actionID: Self.prefix + entry.id, icon: .symbol("gearshape"),
         provider: id, scoreDetail: ScoreDetail(quality: entry.label.lowercased().hasPrefix(query) ? MatchQuality.prefix : MatchQuality.substring, weight: Ranking.weight(.action)))
     }
   }

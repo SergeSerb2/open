@@ -79,6 +79,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Section 12's read-only private-state hook (lead ruling 16:12).
   var isIncognito: Bool { incognitoSession != nil }
   func scheduleSave() { if !isIncognito { app.scheduleSave() } }
+  func scheduleMetadataSave() { if !isIncognito { app.scheduleMetadataSave() } }
   private lazy var privateSuggest: SuggestEngine = {
     let engine = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
     engine.providers.append(SettingsSuggestionsProvider())
@@ -187,6 +188,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard model.setPinnedURL(id: id, url: url) else { return }
     if onPinnedPage {
       if let content = hosts[id]?.content { content.load(url) } else { tab.url = url }
+      // A stored back list on the old pinned page would wake over the new URL (review r1 #6).
+      if model === app.model { app.tabSleep.forgetStoredHistory([id]) }
     }
     controller?.refresh(); mirror.sync(); scheduleSave()
   }
@@ -202,20 +205,30 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private weak var standaloneFullscreenWindow: NSWindow?
   private var standaloneFullscreenObservers: [any NSObjectProtocol] = []
   private var standaloneFullscreenTransition = false
-  private var isChangingWindowFullScreen: Bool { controller?.isChangingFullScreen ?? standaloneFullscreenTransition }
+  /// A Little Open window's controller also sees transitions that began before this factory observed
+  /// the window (the user's own Enter Full Screen) and failed ones (review of #665, #5).
+  private var isChangingWindowFullScreen: Bool {
+    controller?.isChangingFullScreen ?? (standaloneFullscreenTransition || littleOpenController?.isChangingFullScreen == true)
+  }
   private func observeStandaloneFullScreen(_ window: NSWindow) {
     guard controller == nil, standaloneFullscreenWindow !== window else { return }
     removeStandaloneFullscreenObservers()
     standaloneFullscreenWindow = window
     for name in [NSWindow.willEnterFullScreenNotification, NSWindow.willExitFullScreenNotification,
-                 NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+                 NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification,
+                 LittleOpenWindowController.fullScreenTransitionDidFail] {
       standaloneFullscreenObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
-        let name = note.name
+        let name = note.name, entering = note.userInfo?["entering"] as? Bool == true
         MainActor.assumeIsolated {
           guard let self else { return }
           switch name {
           case NSWindow.didEnterFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(true)
           case NSWindow.didExitFullScreenNotification: self.standaloneFullscreenTransition = false; self.windowFullScreenChanged(false)
+          // A failed enter leaves a normal window: the page leaves fullscreen too, as in a main
+          // window (windowDidFailToEnterFullScreen). A failed exit only ends the transition.
+          case LittleOpenWindowController.fullScreenTransitionDidFail:
+            self.standaloneFullscreenTransition = false
+            if entering { self.windowFullScreenChanged(false) }
           default: self.standaloneFullscreenTransition = true
           }
         }
@@ -458,6 +471,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onClose = { [weak self] in
       guard let self else { return }; self.closeAll(); self.app.windowDidClose(self.windowState.id)
     }
+    controller.shouldClose = { [weak self] in self?.windowShouldClose() ?? true }
+    controller.pageClosePreflight = { [weak self] ids, action in self?.askPagesBeforeClosing(ids, then: action) ?? false }
   }
   func engineDidBecomeReady() {
     #if OPEN_AUTOMATION
@@ -598,7 +613,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func retireProfile(_ id: ProfileID, directory: String) {
     for (tab, host) in hosts where host.content.context.identifier == directory {
+      controller?.container.closeHost(for: tab)
       host.close(); hosts.removeValue(forKey:tab); modelHostIDs.remove(tab); queuedNavigations.removeValue(forKey:tab)
+    }
+    // Popup panels of the Profile go too: the engine's context deletion would close their pages
+    // and leave the panels on screen, blank (bug sweep r6 OE-07).
+    for page in auxiliaryPages where page.content.context.identifier == directory {
+      closeAuxiliary(page); page.panel.close()
     }
     mirror.retireProfile(id)
   }
@@ -872,7 +893,22 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id], model.node(id: id) == nil {
       withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nil) }
     }
-    if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
+    // The selected node moved out of this Space (another window's drop or Move to): it cannot show
+    // here. Return to this window's newest earlier selection that the Space still shows, else its
+    // first row, not a blank page (bug sweep r6 P-04). The window that moved it picks its
+    // neighbour itself (keepingSelection).
+    var reselected = false
+    if controller?.isKeepingSelection != true, let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id],
+       model.node(id: id) != nil, model.selectedNode(in: space, window: windowState) == nil {
+      let previous = selectionHistory[space.id]?.last { $0 != id && model.isSelectable($0, in: space) }
+        ?? (flattened(space.pinned) + flattened(space.today)).lazy.compactMap { self.model.sidebarSelectionID(for: $0.id) }
+          .first { $0 != id && self.model.isSelectable($0, in: space) }
+      withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: previous) }
+      reselected = true
+    }
+    // A new selection wakes its page and updates the title, media and page chrome.
+    if reselected { showSelection(focus: false) }
+    else if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
     else { controller?.refresh(); mirror.sync() }
     controller?.container.prunePinnedPageTitles()
   }
@@ -1033,13 +1069,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState, .newEasel, .exportEasel, .deleteEasel, .exportNote, .deleteNote: return false
       // Same removal rules as before; keepingSelection selects the neighbour when the
       // removal took the current item, as in a normal window (no blank page).
+      // Their live pages ask beforeunload first, as in a normal window (review r1 #4).
       case .archiveNodes(let ids):
-        var count = 0
-        keepingSelection { count = model.archiveNodes(ids: ids) }
-        return count > 0
+        let archive = { [weak self] () -> Bool in
+          guard let self else { return false }
+          var count = 0
+          self.keepingSelection { count = self.model.archiveNodes(ids: ids) }
+          return count > 0
+        }
+        if askPagesBeforeClosing(controller?.tabIDs(under: ids) ?? [], then: { _ = archive() }) { return true }
+        return archive()
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
-        keepingSelection { model.closeTab(id: id) }; return true
+        let close = { [weak self] in
+          guard let self, self.model.node(id: id) != nil else { return }
+          self.keepingSelection { self.model.closeTab(id: id) }
+        }
+        if !askPagesBeforeClosing(controller?.tabIDs(under: [id]) ?? [], then: close) { close() }
+        return true
       case .move(_, let parent, _), .moveNodes(_, let parent, _), .openURL(_, let parent, _):
         guard case .spaceToday(let id) = parent, id == focusedSpace?.id else { return false }
       default: break
@@ -1053,6 +1100,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .editSpaceTheme, .setSpaceProfile, .exportSpaceIntoFolder, .deleteSpace, .moveSpace,
            .moveNodesToNewSpace, .moveToNewSpace, .turnFolderIntoSpace, .setPinnedCollapsed,
            .resetToPinnedURL, .replacePinnedURL, .editPinnedURL, .toggleLiveFolder, .refreshLiveFolder, .openLiveFolderState: return false
+      // Its Pinned section is hidden: a folder made there could never be seen (bug sweep r6 REG-04).
+      case .newFolder(in: .spacePinned): return false
       // Only tabs leave a Blank Window (a folder or split here has no move to the browser's Spaces).
       case .moveNodesToSpace(let ids, _) where !ids.allSatisfy({ model.node(id: $0)?.tab != nil }): return false
       // A selection moves into one of the browser's Spaces, one tab at a time, keeping its order.
@@ -1066,7 +1115,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     switch intent {
     case .customizePage(let id):
       guard canCustomizePage(id) else { return false }
-      app.stores.boosts.editCurrent(tabID: id); return true
+      app.stores.boosts.editCurrent(tabID: id, in: self); return true
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
       guard model.profile(id: id) != nil else { return false }
@@ -1109,14 +1158,22 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
           }
         }
       }
-      let ids = Set(collect(folder.children))
-      app.tabSleep.cancelNavigationAfterWake(ids)
-      let loaded = ids.filter { hosts[$0] != nil || controller?.container.host(for: $0) != nil }
-      guard !loaded.isEmpty else { return true }
-      for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
-      if let selected = selectedTab?.id, ids.contains(selected) {
-        select(nodeID: model.sidebarSelectionID(for: orderedTabs.first { !ids.contains($0.id) }?.id))
-      } else { controller?.refresh(); mirror.sync(); scheduleSave() }
+      let order = collect(folder.children), ids = Set(order)
+      func loaded() -> Set<ItemID> { ids.filter { hosts[$0] != nil || controller?.container.host(for: $0) != nil } }
+      guard !loaded().isEmpty else { return true }
+      let unload = { [weak self] in
+        guard let self else { return }
+        self.app.tabSleep.cancelNavigationAfterWake(ids)
+        // No early return when nothing is loaded now: the pages that asked have already closed,
+        // and the selection must still leave the folder, or it would load the page again (review r1 #2).
+        let loaded = ids.filter { self.hosts[$0] != nil || self.controller?.container.host(for: $0) != nil }
+        for id in loaded { self.controller?.container.closeHost(for: id); self.hosts[id]?.close() }
+        if let selected = self.selectedTab?.id, ids.contains(selected) {
+          self.select(nodeID: self.model.sidebarSelectionID(for: self.orderedTabs.first { !ids.contains($0.id) }?.id))
+        } else { self.controller?.refresh(); self.mirror.sync(); self.scheduleSave() }
+      }
+      // Unload of one tab asks beforeunload (closeTab); a folder's Unload asks each page too (bug sweep r6 P-01).
+      if !askPagesBeforeClosing(order, then: unload) { unload() }
       return true
     case .goBack: guard let page = selectedContent, page.canGoBack else { return false }; page.goBack(); return true
     case .goForward: guard let page = selectedContent, page.canGoForward else { return false }; page.goForward(); return true
@@ -1127,9 +1184,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .toggleMute(let id):
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; scheduleSave(); return true
     case .media(let intent): return app.media.perform(intent)
+    case .separateFromPinned(let id):
+      // The pinned tab goes back to its pinned URL, unloaded; its live page moves to the new tab.
+      // Its stored back list is the page it left: drop it, as a reset does (review r1 #6).
+      if model === app.model, model.tab(id: id)?.pinnedURL != nil { app.tabSleep.forgetStoredHistory([id]) }
+      return nil
     case .resetToPinnedURL(let id):
       guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }
-      app.tabSleep.cancelNavigationAfterWake([id]); model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
+      app.tabSleep.cancelNavigationAfterWake([id]); model.resetPinnedTab(id: id); hosts[id]?.load(url)
+      if model === app.model { app.tabSleep.forgetStoredHistory([id]) }
+      scheduleSave(); return true
     case .renameSpace(let id, let title):
       guard let space = model.space(id: id) else { return false }
       let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1146,7 +1210,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         let before = Set(model.index.keys)
         guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
           let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
-        select(nodeID: tab.id); return true
+        // A link dropped on another Space's icon opens there in the background. Selecting it here
+        // stored a selection this Space cannot show: a blank page (bug sweep r6 P-03).
+        if let space = focusedSpace, model.isSelectable(tab.id, in: space) { select(nodeID: tab.id) }
+        return true
       }
     case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
       return copyEaselLink(tabID: id)
@@ -1219,6 +1286,42 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return controller?.beginSpaceCreation(options: SpaceCreationOptions(moving: ids, placement: .preserveSection)) == true
   }
 
+  private var closeBatch: PageCloseBatch?
+  /// A close of many pages at once (a sidebar bulk archive or delete, a window close) asks each
+  /// live page with a beforeunload handler first (bug sweep r6 P-01, WL-04). False: no page
+  /// asks, and the caller acts now. True: `action` runs once every page agreed, or never.
+  func askPagesBeforeClosing(_ ids: [ItemID], restoresSelection: Bool = true, then action: @escaping () -> Void) -> Bool {
+    guard !isClosing, !app.terminationRequested, !app.quitWarning.withoutPrompts else { return false }
+    #if OPEN_AUTOMATION
+    // A dead runner cannot answer a sheet (as Quit and Little Open's close).
+    if AutomationOwnerWatch.quittingWithoutPrompts { return false }
+    #endif
+    let asking = PageCloseBatch.asking(ids, in: self)
+    guard !asking.isEmpty else { return false }
+    // One round at a time, also before the scheduled batch started: a second action while
+    // pages still ask is refused, not merged (review r1 #8).
+    if closeBatch != nil { NSSound.beep(); return true }
+    let batch = PageCloseBatch(owner: self, ids: asking, restoresSelection: restoresSelection) { [weak self] in
+      // The restored selection's title, page and menus (the action's refresh does not set them).
+      action(); if restoresSelection, let self, !self.isClosing { self.showSelection(focus: false) }
+    }
+    closeBatch = batch
+    // On the next turn: a confirmation sheet (Delete Folder, Delete Space) may still be ending.
+    DispatchQueue.main.async { [weak batch] in batch?.start() }
+    return true
+  }
+  func closeBatchEnded(_ batch: PageCloseBatch) { if closeBatch === batch { closeBatch = nil } }
+  /// The window's close button, Close Window (Shift-Cmd-W) and every other performClose: each
+  /// live page with a beforeunload handler asks first; "Stay" keeps the window open (WL-04).
+  func windowShouldClose() -> Bool {
+    if closeBatch != nil { NSSound.beep(); return false }
+    // Sidebar order: the shown Space first, then the other Spaces.
+    let tabs = orderedTabs + model.profiles.flatMap(\.favorites) + model.spaces.flatMap { flattened($0.pinned) + flattened($0.today) }
+    var order: [ItemID: Int] = [:]
+    for (index, tab) in tabs.enumerated() where order[tab.id] == nil { order[tab.id] = index }
+    let ids = hosts.keys.sorted { (order[$0] ?? .max, $0.rawValue.uuidString) < (order[$1] ?? .max, $1.rawValue.uuidString) }
+    return !askPagesBeforeClosing(ids, restoresSelection: false) { [weak self] in self?.window?.close() }
+  }
   /// One close rule for Cmd-W, the sidebar, window.close() and
   /// chrome.tabs.remove: pinned tabs and favorites stay in the sidebar and
   /// unload; Today tabs close (archived).
@@ -1245,6 +1348,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     var inSplit = false, splitSelected = false
     if case .splitPane(let splitID)? = model.parent(of: id) { inSplit = true; splitSelected = selectedNodeID == splitID }
     if isPinned || isFavorite {
+      // Before the page closes: the close keeps a stored back list current (bug sweep r6 V-03),
+      // and this reset must not leave one behind (V-02).
+      if model === app.model { app.tabSleep.forgetStoredHistory([id]) }
       controller?.container.closeHost(for: id); hosts[id]?.close()
       returnToPinnedURL(id)
     } else { model.closeTab(id: id) }
@@ -1286,8 +1392,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // name the row by the pinned host until the page loads, never by the page it left or blank.
     tab.title = controller?.container.pinnedPageTitles[id] ?? pinned.host ?? pinned.absoluteString
   }
+  /// A Little Open page that took its window into full screen is ending (closed, or replaced by a
+  /// Profile switch, also mid-transition): the window leaves full screen with it, now. Its factory may
+  /// close much later (a download keeps the page), when the window belongs to the next page (bug sweep r6).
+  func leaveWindowFullScreenStartedByPage() {
+    if enteredWindowFullscreenForPage, controller == nil { littleOpenController?.leaveFullScreen() }
+    enteredWindowFullscreenForPage = false; exitWindowFullscreenAfterTransition = false
+  }
   func closeAll() {
     guard !isClosing else { return }
+    leaveWindowFullScreenStartedByPage()
     removeStandaloneFullscreenObservers()
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
@@ -1302,6 +1416,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     developerModeObserver = nil; swipeActivationObserver = nil
     savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
+    // A bulk close or window close still asking ends here; its action never runs (review r1 #1).
+    closeBatch?.cancel(); closeBatch = nil
     pageChrome.close()
     // The session owns private reservations (it closes them when it ends); a Save panel on this
     // window cancels itself when the window closes.
@@ -1476,10 +1592,13 @@ extension EngineWebContentHostFactory {
   func openFromCommandBarInSplit(_ url: URL) -> Bool {
     guard !WelcomeTab.isInternal(url), let splits = controller?.splitController, let current = splits.focusedTab else { return false }
     guard splits.canAddPane else { navigateFromCommandBar(url, current: true); return true }
-    guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
-    _ = ensureContent(for: tab)
-    splits.openInSplit(tab.id)
-    return true
+    // The new tab and its split are one Undo step (review r1 #3, WL-10).
+    return model.asOneUndoStep { () -> Bool in
+      guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
+      _ = ensureContent(for: tab)
+      splits.openInSplit(tab.id)
+      return true
+    }
   }
   private func finishCommandBarNavigation(_ page: OEWebContent) {
     guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }
@@ -1584,7 +1703,9 @@ extension EngineWebContentHostFactory {
       // item is back in the sidebar, so a window that closed meanwhile loses nothing.
       // A row that cannot come back (an undecodable folder, no Space to return to) is
       // kept and skipped, or it would stop every later press; the next row restores.
-      let records = await store.recent(limit: 50)
+      // Only rows the user archived: a later auto-archive sweep is not the last closed tab
+      // (bug sweep r6 P-02).
+      let records = await store.recent(limit: 50, excluding: .autoArchived)
       guard !self.isClosing, !self.app.terminationRequested else { return }
       // Staged like the Library's Restore: the snapshot holding the item is written first, and
       // only then is the Archive row deleted. A failed write rolls the item back and keeps the row.
@@ -1935,7 +2056,14 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         if let url = request.url { openNewTab(url: url, background: request.disposition == .newBackgroundTab, opener: nil, in: request.context) }
         return nil
       }
-      guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
+      // A popup panel (no sidebar tab) of another Profile than the focused Space's opens its tab in
+      // a Space of its own Profile, not nowhere (bug sweep r6 OE-09).
+      let requestProfile = profile(for: request.context)
+      let ownSpace = source == nil && focusedSpace?.profileID != requestProfile?.id
+        ? requestProfile.flatMap { profile in
+            model === app.model ? space(forProfile: profile.id) : model.spaces.first { $0.profileID == profile.id } }
+        : nil
+      guard let space = source ?? ownSpace ?? focusedSpace, space.profileID == requestProfile?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
                              unread: request.disposition == .newBackgroundTab)
       tab.openerID = opener
@@ -1999,6 +2127,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     pageChrome.engineDismissed(request)
   }
   func webContentDidResetDialogState(_ webContent: OEWebContent) { pageChrome.engineResetDialogs(webContent) }
+  func webContent(_ webContent: OEWebContent, didResetDialogStateForBrowser browser: Int) { pageChrome.engineResetDialogs(webContent, browser: browser) }
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
     pageContextMenu?.cancel()
     let session = PageContextMenuBuilder(request: menu, page: webContent, owner: self)
@@ -2026,6 +2155,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
     controller?.isPageFullscreen = true
+    littleOpenController?.isPageFullscreen = true
     // Also for a window already in full screen: its exit must end the page's fullscreen.
     if let window { observeStandaloneFullScreen(window) }
     if let window, !window.styleMask.contains(.fullScreen) {
@@ -2050,6 +2180,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func endPageFullscreen() {
     fullscreenPage = nil
     if controller?.isPageFullscreen == true { controller?.isPageFullscreen = false }
+    if littleOpenController?.isPageFullscreen == true { littleOpenController?.isPageFullscreen = false }
     guard enteredWindowFullscreenForPage else { return }
     // AppKit ignores a toggle during a transition: finish when the window has entered.
     if isChangingWindowFullScreen { exitWindowFullscreenAfterTransition = true; return }
@@ -2077,7 +2208,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 
   private func canCustomizePage(_ id: ItemID) -> Bool {
     !isIncognito && model.tab(id: id)?.live.hasLoadedInThisLaunch == true
-      && app.stores.boosts.canEdit(tabID: id)
+      && app.stores.boosts.canEdit(tabID: id, in: self)
   }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
@@ -2290,10 +2421,15 @@ extension EngineWebContentHostFactory {
 
   /// chrome.tabs.update({pinned}): pin or unpin the tab. Favorites are
   /// pinned tabs to Chromium and stay Favorites: both are no-ops for them.
+  /// A Blank Window has no pinned list (its sidebar shows Today only), so it refuses, as its menus do.
   @objc(browser:requestsPinned:forWebContent:)
   func browser(_ browser: OEBrowser, requestsPinned pinned: Bool, for webContent: OEWebContent) {
     defer { mirror.sync() }
     guard !isIncognito, let id = requestTabID(for: webContent), let parent = model.parent(of: id) else { return }
+    if isBlankWindow {
+      record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
+      return
+    }
     if case .favorites = parent {
       record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
       return

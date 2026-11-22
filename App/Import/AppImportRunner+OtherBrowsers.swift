@@ -168,20 +168,9 @@ extension AppImportRunner {
     // 500,000 per import. The scans run after every exact match, so tabs of the user's own with the
     // same URL cannot take the budget from them. A tab past these bounds gets one new copy.
     let windows = min(16, (read.tabs.map(\.window).max() ?? 0) + 5), positions = min(1024, read.tabs.count * 2 + 32)
-    var budget = 500_000
     func candidates(_ url: URL, current: ItemID) -> Set<ItemID>? {
       let ids = Set(existing[url] ?? [])
       return ids.isEmpty || ids.contains(current) ? nil : ids
-    }
-    func scan(_ url: URL, window own: Int, _ candidates: Set<ItemID>) -> ItemID? {
-      var perURL = 2_048
-      for window in [own] + (0..<windows).filter({ $0 != own }) { for index in 0..<positions {
-        guard budget > 0, perURL > 0 else { return nil }
-        budget -= 1; perURL -= 1
-        let id = legacyID(url, window: window, index: index)
-        if candidates.contains(id) { return id }
-      } }
-      return nil
     }
     var chosen: [URL: ItemID] = [:], unmatched: [(URL, Int, Set<ItemID>)] = []
     var seenURLs = Set<URL>()
@@ -192,7 +181,34 @@ extension AppImportRunner {
       let exact = legacyID(tab.url, window: tab.window, index: index)
       if ids.contains(exact) { chosen[tab.url] = exact } else { chosen[tab.url] = current; unmatched.append((tab.url, tab.window, ids)) }
     }
-    for (url, window, ids) in unmatched { if let found = scan(url, window: window, ids) { chosen[url] = found } }
+    // Up to 500,000 hashes: on a worker, as the session read, not on the main thread (bug sweep r6 REG-06).
+    if !unmatched.isEmpty {
+      let (scanned, scanOnMain) = await Task.detached(priority: .utility) { [unmatched, windows, positions, key] () -> ([URL: ItemID], Bool) in
+        var budget = 500_000, found: [URL: ItemID] = [:]
+        for (url, own, ids) in unmatched {
+          guard budget > 0 else { break }
+          var perURL = 2_048
+          search: for window in [own] + (0..<windows).filter({ $0 != own }) { for index in 0..<positions {
+            guard budget > 0, perURL > 0 else { break search }
+            budget -= 1; perURL -= 1
+            let id = ImportedBookmarksFolder.itemID(sourceKey: key, sourceID: "open-tab:\(window):\(index):" + url.absoluteString)
+            if ids.contains(id) { found[url] = id; break search }
+          } }
+        }
+        return (found, pthread_main_np() != 0)
+      }.value
+      #if OPEN_AUTOMATION
+      openTabsScanOnMainThread = scanOnMain
+      #else
+      _ = scanOnMain
+      #endif
+      // The import may have been cancelled, or its Space or Profile removed, during the scan.
+      guard !undo.cancelled, !app.terminationRequested else { return }
+      guard app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {
+        result.failures["Open tabs"] = "Could not be saved"; return
+      }
+      chosen.merge(scanned) { _, found in found }
+    }
     var seen = Set<URL>()
     for tab in read.tabs where seen.insert(tab.url).inserted {
       let id = chosen[tab.url] ?? BrowserBookmarksImport.openTabID(sourceKey: key, url: tab.url)

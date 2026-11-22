@@ -77,9 +77,12 @@ public final class NoteStore {
     @discardableResult
     public func importIfAbsent(_ note: NoteDocument) -> Bool {
         guard !FileManager.default.fileExists(atPath: fileURL(for: note.id).path), cache[note.id] == nil else { return false }
-        cache[note.id] = note; dirty.insert(note.id); flush(notify: false)
-        if oversized.contains(note.id) { cache[note.id] = nil; oversized.remove(note.id); return false }
-        return !dirty.contains(note.id)
+        cache[note.id] = note; dirty.insert(note.id); flush(notify: false, only: note.id)
+        let refused = oversized.remove(note.id) != nil
+        guard refused || dirty.contains(note.id) else { return true }
+        // Refused for size, or the write failed: nothing of the rejected import stays to be written later.
+        cache[note.id] = nil; dirty.remove(note.id)
+        return false
     }
 
     /// Deletes a Note: its file and image folder move to the Trash (removed when no Trash exists).
@@ -94,10 +97,15 @@ public final class NoteStore {
     /// over the size limit: the previous Note (the placeholder) stays, in memory and on disk.
     @discardableResult
     public func replace(_ note: NoteDocument) -> Bool {
-        let previous = cache[note.id]
-        cache[note.id] = note; dirty.insert(note.id); flush(notify: false)
-        guard oversized.remove(note.id) == nil else { cache[note.id] = previous; return false }
-        return !dirty.contains(note.id)
+        let previous = cache[note.id], wasDirty = dirty.contains(note.id)
+        cache[note.id] = note; dirty.insert(note.id); flush(notify: false, only: note.id)
+        let refused = oversized.remove(note.id) != nil
+        guard refused || dirty.contains(note.id) else { return true }
+        // Refused for size, or the write failed: the previous Note stays, and no later flush may
+        // write the rejected import over it. Its own unsaved edits (if any) stay queued.
+        cache[note.id] = previous
+        if wasDirty { dirty.insert(note.id) } else { dirty.remove(note.id) }
+        return false
     }
 
     // MARK: Images
@@ -133,10 +141,13 @@ public final class NoteStore {
     /// refused Note itself (no editor toast).
     public func flush() { flush(notify: true) }
 
-    private func flush(notify: Bool) {
-        saveTimer?.invalidate(); saveTimer = nil
-        guard !dirty.isEmpty else { return }
-        let ids = dirty; dirty.removeAll()
+    /// `only`: write that Note alone (an import). Other changed Notes keep waiting for their
+    /// debounced save, which reports a refused Note to its editor.
+    private func flush(notify: Bool, only: UUID? = nil) {
+        if only == nil { saveTimer?.invalidate(); saveTimer = nil }
+        let ids: Set<UUID> = only.map { dirty.contains($0) ? [$0] : [] } ?? dirty
+        guard !ids.isEmpty else { return }
+        dirty.subtract(ids)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])

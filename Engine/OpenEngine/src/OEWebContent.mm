@@ -394,6 +394,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   OEWebContentView* _view;
   CefRefPtr<OEClient> _client;
   CefRefPtr<CefBrowser> _browser;
+  // The browser's identifier, kept after it closes: the header promises one
+  // identifier for the content's life (the shell matches closed pages by it).
+  NSInteger _identifier;
   NSURL* _pendingURL;
   NSString* _browserCreationURL;
   BOOL _hasNavigationAfterCreationSnapshot;
@@ -498,6 +501,22 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 - (void)dealloc {
   [_frameRequest cancel];
   _client->Detach();
+  // Released without -close: oe_browserClosed never runs for this object, so
+  // answer its pending requests here (an awaiting Swift caller would hang),
+  // on a later turn so no callback runs inside dealloc.
+  NSArray<OEDevToolsCompletion>* devTools = _devToolsCallbacks.allValues;
+  NSArray<OEOpenWorldCompletion>* openWorld = _openWorldCallbacks.allValues;
+  if (devTools.count || openWorld.count) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSError* closed = [NSError errorWithDomain:OEErrorDomain
+                                            code:OEErrorWebContentClosed
+                                        userInfo:nil];
+      for (OEDevToolsCompletion done in devTools) done(nil, closed);
+      for (OEOpenWorldCompletion done in openWorld) done(nil, closed);
+    });
+  }
+  [_devToolsDock unregisterForBrowser:_browser];
+  [_devToolsDock close];
   if (_browser) {
     _client->SetClosing();
     if (_configuration.runtimeStyle == OERuntimeStyleAlloy ||
@@ -548,7 +567,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 }
 
 - (NSInteger)identifier {
-  return _browser ? _browser->GetIdentifier() : 0;
+  return _browser ? _browser->GetIdentifier() : _identifier;
 }
 
 - (NSInteger)chromeTabIdentifier {
@@ -675,7 +694,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
                       ? CefString()
                       : OECef(_pendingURL.absoluteString ?: @"about:blank");
   _browserCreationURL = OEString(url);
-  _hasNavigationAfterCreationSnapshot = NO;
+  // A restored page keeps a load requested before this point (-loadURL:);
+  // its creation URL is empty, so oe_browserCreated: loads it after the restore.
+  if (!_restoreHistory) _hasNavigationAfterCreationSnapshot = NO;
 #if DEBUG
   // As with the App's OPEN_AUTOMATION slow-start fixture, keep this hook
   // out of Release. Yield after the snapshot so a real loadURL: can arrive.
@@ -740,9 +761,16 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
                   CefRect(0, 0, (int)b.size.width, (int)b.size.height));
   info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
   _creatingSelf = self;
-  CefBrowserHost::CreateBrowser(info, _client.get(), url,
-                                [self oe_browserSettings],
-                                [self oe_extraInfo], context);
+  if (!CefBrowserHost::CreateBrowser(info, _client.get(), url,
+                                     [self oe_browserSettings],
+                                     [self oe_extraInfo], context)) {
+    // CEF refused (for example during shutdown): OnAfterCreated never runs.
+    // Without this the keep-alive retained this page for good.
+    _creating = NO;
+    OEWebContent* keepAlive = _creatingSelf;
+    _creatingSelf = nil;
+    (void)keepAlive;
+  }
 }
 
 // Fork patch P1: a Chrome style page that is in an OEBrowser becomes a tab of
@@ -845,6 +873,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 
 - (void)oe_browserCreated:(CefRefPtr<CefBrowser>)browser {
   _browser = browser;
+  _identifier = browser->GetIdentifier();
   _creating = NO;
   _awaitingPopup = NO;
   // Popups/adopted views have no creation snapshot. An ordinary initial
@@ -1263,7 +1292,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   }
   if (!_browser) {
     _pendingURL = URL;
-    if (_browserCreationURL) _hasNavigationAfterCreationSnapshot = YES;
+    // A restored page creates its browser with no URL (the history comes
+    // first): a load before that snapshot must still run after the restore.
+    if (_browserCreationURL || _restoreHistory) _hasNavigationAfterCreationSnapshot = YES;
     return;
   }
   _browser->GetMainFrame()->LoadURL(OECef(URL.absoluteString));
@@ -1483,7 +1514,14 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     if (flags & 2) modifiers |= NSEventModifierFlagControl;
     if (flags & 4) modifiers |= NSEventModifierFlagCommand;
     if (flags & 8) modifiers |= NSEventModifierFlagShift;
-    OENoteNavigationInput(self.view.window, modifiers);
+    // As in OEApplication -sendEvent:, a middle or right press records no
+    // modifiers and clears the earlier ones (bug sweep r6 OE-12).
+    id button = parameters[@"button"];
+    if ([button isEqual:@"middle"] || [button isEqual:@"right"]) {
+      OENoteNavigationInput(nil, 0);
+    } else {
+      OENoteNavigationInput(self.view.window, modifiers);
+    }
   } else if ([method isEqualToString:@"Input.dispatchKeyEvent"]) {
     OENoteNavigationInput(nil, 0);
   }
@@ -1617,13 +1655,19 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 
 - (void)evaluateJavaScript:(NSString*)script
                 completion:(void (^)(id _Nullable, NSError* _Nullable))completion {
+  [self evaluateJavaScript:script userGesture:YES completion:completion];
+}
+
+- (void)evaluateJavaScript:(NSString*)script
+               userGesture:(BOOL)userGesture
+                completion:(void (^)(id _Nullable, NSError* _Nullable))completion {
   void (^done)(id, NSError*) = [completion copy];
   [self sendDevToolsMethod:@"Runtime.evaluate"
                 parameters:@{
                   @"expression" : script,
                   @"awaitPromise" : @YES,
                   @"returnByValue" : @YES,
-                  @"userGesture" : @YES,
+                  @"userGesture" : @(userGesture),
                 }
                 completion:^(NSDictionary* result, NSError* error) {
                   if (!done) {

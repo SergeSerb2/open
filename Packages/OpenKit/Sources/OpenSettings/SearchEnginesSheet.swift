@@ -9,11 +9,14 @@ public struct SearchEnginesSheet:View {
     @State private var keyword=""
     @State private var template=""
     @State private var editing=false
+    /// The engine that Save replaces (nil: a new one). The list selection stays live while editing.
+    @State private var editingID:String?
     public init(model:ProfilesViewModel,editingEngineID:String?=nil) {
         self.model=model
         if let engine=model.profile?.settings.customSearchEngines.first(where:{$0.id == editingEngineID}) {
             _selectedID=State(initialValue:engine.id);_name=State(initialValue:engine.name)
             _keyword=State(initialValue:engine.keywords.first ?? "");_template=State(initialValue:engine.searchURLTemplate);_editing=State(initialValue:true)
+            _editingID=State(initialValue:engine.id)
         }
     }
     private var valid:Bool {model.engineIssue(name:name,keyword:keyword,template:template) == nil}
@@ -35,10 +38,10 @@ public struct SearchEnginesSheet:View {
         HStack(spacing:8) {
             if editing {
                 Button("Cancel Edit"){editing=false}
-                Button("Save engine"){if model.saveEngine(id:selectedID,name:name,keyword:keyword,template:template){editing=false}}.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!valid)
+                Button("Save engine"){if model.saveEngine(id:editingID,name:name,keyword:keyword,template:template){editing=false}}.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!valid)
             } else {
-                Button("Add"){selectedID=nil;name="";keyword="";template="";editing=true}
-                Button("Edit"){if let engine=selectedCustom {name=engine.name;keyword=engine.keywords.first ?? "";template=engine.searchURLTemplate;editing=true}}.disabled(selectedCustom == nil)
+                Button("Add"){selectedID=nil;editingID=nil;name="";keyword="";template="";editing=true}
+                Button("Edit"){if let engine=selectedCustom {editingID=engine.id;name=engine.name;keyword=engine.keywords.first ?? "";template=engine.searchURLTemplate;editing=true}}.disabled(selectedCustom == nil)
                 Button("Remove"){if let selectedID {model.removeEngine(selectedID);self.selectedID=nil}}.disabled(selectedCustom == nil)
             }
             Spacer(minLength:0)

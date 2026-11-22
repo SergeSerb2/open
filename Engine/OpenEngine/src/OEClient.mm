@@ -78,6 +78,13 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              CefBrowserSettings& settings,
                              CefRefPtr<CefDictionaryValue>& extra_info,
                              bool* no_javascript_access) {
+  // A closing page, or one kept drawn for a pane's collapse (-prepareForClose),
+  // opens nothing: no Document PiP, no popup, and no link routing through the
+  // shell (Little Open, Peek) from a page that is going away. As in
+  // OnOpenURLFromTab, this comes before OECancelNavigation.
+  if (closing_ || close_requested_) {
+    return true;
+  }
   OEWebContent* source = view_;
   NSEventModifierFlags modifiers = OENavigationModifiers(source);
   if ((modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagOption)) ==
@@ -91,11 +98,6 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
     return true;
   }
   id<OEWebContentDelegate> delegate = source.delegate;
-  // A closing page, or one kept drawn for a pane's collapse (-prepareForClose),
-  // opens nothing: no Document PiP and no popup.
-  if (closing_ || close_requested_) {
-    return true;
-  }
   // Document PiP of a Chrome-style page: CEF uses Chromium's default creation,
   // where the fork's EM-7 hook (chromium/0403) shows it through the shell's
   // pictureInPictureDelegate, or Chromium's own window without one. It keeps
@@ -579,6 +581,7 @@ bool OEClient::OnJSDialog(CefRefPtr<CefBrowser> browser,
                origin:OEURL(origin_url)
              isReload:NO
              callback:callback];
+  [dialog oe_setBrowserIdentifier:browser ? browser->GetIdentifier() : 0];
   return OERunDialog(view, dialog);
 }
 
@@ -604,6 +607,7 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
                origin:view.URL
              isReload:is_reload
              callback:callback];
+  [dialog oe_setBrowserIdentifier:browser ? browser->GetIdentifier() : 0];
   return OERunDialog(view, dialog);
 }
 
@@ -611,9 +615,13 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
 // pending dialog callbacks. The shell removes the sheets still pending.
 // Not filtered by OEIsPageBrowser: a Chrome-style page's Document PiP shares
 // this client, and its dialogs are shown through this page (OnJSDialog).
+// The browser is named, so a PiP's reset cancels only the PiP's dialogs.
 void OEClient::OnResetDialogState(CefRefPtr<CefBrowser> browser) {
   OEWebContent* view = view_;
-  if (view && [view.delegate respondsToSelector:@selector(webContentDidResetDialogState:)]) {
+  if (!view) return;
+  if (browser && [view.delegate respondsToSelector:@selector(webContent:didResetDialogStateForBrowser:)]) {
+    [view.delegate webContent:view didResetDialogStateForBrowser:browser->GetIdentifier()];
+  } else if ([view.delegate respondsToSelector:@selector(webContentDidResetDialogState:)]) {
     [view.delegate webContentDidResetDialogState:view];
   }
 }

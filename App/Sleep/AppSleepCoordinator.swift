@@ -88,6 +88,9 @@ final class AppSleepCoordinator {
     controller.onWakeFinished = { [weak self] in self?.finishWake($0) }
     adapter.controller = controller
     self.adapter = adapter; self.store = store; self.controller = controller
+    // Resets before the store existed: their rows go before the known-row scan reads them.
+    for id in pendingForget { store.deleteSleepHistory(tabID: id) }
+    pendingForget.removeAll()
     Task { await store.loadKnownStored() }
     // Pages made before the controller existed (selected tabs at T4, automation pages).
     for factory in app.hostFactories.values {
@@ -183,6 +186,21 @@ final class AppSleepCoordinator {
     controller.tabClosed(tabID)
   }
 
+  /// A sidebar tab's page is about to close outside sleep (hidden-page cache, window close,
+  /// memory pressure, Unload of a pinned folder). A row stored by an earlier sleep or Quit is
+  /// older than this page, and the next selection woke that older page: the newer navigation
+  /// was lost, also from Forward (bug sweep r6 V-03). Store this page's list in its place. A
+  /// tab with no stored row gets none; a page with nothing to capture keeps the old row.
+  func pageWillClose(_ host: EngineWebContentHost) {
+    guard let store, let adapter, !adapter.closingForSleep, !quitting, !app.terminationRequested,
+          !app.shutdownPrepared, store.knownStored.contains(host.tabID), let owner = host.owner,
+          owner.model === app.model, let tab = app.model.tab(id: host.tabID),
+          owner.profile(for: tab.id)?.id == host.profileID,
+          let envelope = adapter.captureHistory(host: host, tab: tab) else { return }
+    // The store's serial queue takes this write before a wake queued later reads the row.
+    Task { @MainActor in try? await store.save(tabID: tab.id, envelope: envelope) }
+  }
+
   /// Every engine change of a sidebar tab's page, after the container updated the model.
   func pageChanged(_ host: EngineWebContentHost, changes: OEWebContentChange) {
     guard let controller, let tab = app.model.tab(id: host.tabID) else { return }
@@ -201,9 +219,10 @@ final class AppSleepCoordinator {
     if tab.live.devToolsOpen != page.hasDevTools { tab.live.devToolsOpen = page.hasDevTools; controller.setNeedsPass() }
   }
 
-  /// Keys typed into a page: the form proxy until P-MEM-06 reports real edit state.
-  func pageKeyDown(tabID: ItemID) {
-    guard controller != nil, let tab = app.model.tab(id: tabID) else { return }
+  /// Keys typed into a page: the form proxy until P-MEM-06 reports real edit state. An Incognito
+  /// or Blank Window tab lives in its window's own model; the hidden-page cache reads it there.
+  func pageKeyDown(tabID: ItemID, model: BrowserModel? = nil) {
+    guard let tab = app.model.tab(id: tabID) ?? model?.tab(id: tabID) else { return }
     tab.live.lastFormInteractionAt = Date().addingTimeInterval(clock.offset)
   }
 
@@ -299,17 +318,49 @@ final class AppSleepCoordinator {
     next.factory?.navigateAfterWake(tabID: id, to: next.url, profileID: next.profileID)
   }
 
+  /// Pinned tabs and Favorites that went back to their pinned address (Cmd+W, Unload, Reset Tab,
+  /// Reset All Tabs): a stored back list is the page they left, and the next selection woke
+  /// that old page instead of the pinned address (bug sweep r6 V-02). The rows go at once, also
+  /// for a tab whose row the start-up scan has not listed yet.
+  func forgetStoredHistory(_ ids: some Sequence<ItemID>) {
+    for id in ids {
+      if let store { store.deleteSleepHistory(tabID: id) } else { pendingForget.insert(id) }
+    }
+  }
+  private var pendingForget: Set<ItemID> = []
+
   /// Settings or another input changed a Profile's sleep mode.
   func modeChanged() { controller?.setNeedsPass() }
 
   /// The hidden-host cache keeps pages the sleep gates protect.
-  func protects(_ id: ItemID) -> Bool {
+  func protects(_ id: ItemID, in factory: EngineWebContentHostFactory? = nil) -> Bool {
     // The cache cap closes loaded pages, including before the controller starts at T5.
     if UserDefaults.standard.string(forKey: "open.advanced.tabSleepMode") == "never" { return true }
+    if protectsInput(id, in: factory) { return true }
     guard let controller else { return false }
     switch controller.blockingGate(tabID: id, forDiscard: false) {
     case nil, .visible?, .loading?: return false
     default: return true
+    }
+  }
+
+  /// The cap's close is a forced close: no beforeunload runs. A page with unload handlers, or
+  /// with typing in the form-protection window, would lose its input without a prompt. Keep
+  /// it, and let the cache exceed its cap; the cap closes the next oldest page instead (bug
+  /// sweep r6 V-01). Read the page itself: the controller's unload answer is cached per tab.
+  func protectsInput(_ id: ItemID, in factory: EngineWebContentHostFactory?) -> Bool {
+    if let factory, let host = factory.hosts[id], !host.closed, host.content.crashState == .none,
+       host.content.hasUnloadHandlers { return true }
+    if let typed = (app.model.tab(id: id) ?? factory?.model.tab(id: id))?.live.lastFormInteractionAt,
+       Date().addingTimeInterval(clock.offset).timeIntervalSince(typed) < SleepPolicy().formProtection { return true }
+    return false
+  }
+
+  /// An Incognito window has no tab sleep, but its hidden-page cache keeps pages that would lose
+  /// input, as a normal window's does (review r1 #3). Its pages stay in memory only.
+  func attachInputProtection(_ factory: EngineWebContentHostFactory) {
+    factory.controller?.container.retainsHiddenHost = { [weak self, weak factory] id in
+      self?.protectsInput(id, in: factory) == true
     }
   }
 
@@ -364,7 +415,7 @@ final class AppSleepCoordinator {
   /// controller at once. Runs before the controller exists; the hooks check it on use.
   func attach(_ factory: EngineWebContentHostFactory) {
     guard let window = factory.controller else { return }
-    window.container.retainsHiddenHost = { [weak self] id in self?.protects(id) == true }
+    window.container.retainsHiddenHost = { [weak self, weak factory] id in self?.protects(id, in: factory) == true }
     let previous = window.onVisibilityChange
     window.onVisibilityChange = { [weak self] in previous?(); self?.visibilityChanged() }
   }
