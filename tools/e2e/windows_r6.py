@@ -7,6 +7,7 @@ Loopback pages only; every other host resolves to nothing, so no row reaches a r
 import http.server
 import json
 import os
+import subprocess
 import threading
 import time
 import traceback
@@ -75,6 +76,16 @@ def run(factory, results, tmp, h):
         tid = app.call('open', url=target)['id']
         app.call('wait', tab=tid)
         return tid
+
+    def answer_dialogs():
+        # A failed row must not leave a beforeunload sheet on screen (review checklist 4).
+        for w in [None] + [s['window'] for s in app.call('little-open-state')['sessions']]:
+            args = {'window': w} if w else {}
+            for _ in range(3):
+                try:
+                    if not app.call('dialog-state', **args).get('pending'): break
+                    app.call('dialog-button', accept=True, **args)
+                except Exception: break
 
     def reset_peek():
         app.call('peek-close')
@@ -238,7 +249,7 @@ def run(factory, results, tmp, h):
                 try: app.call('little-open-eval', id=session['id'], js='onbeforeunload=null;true')
                 except Exception: pass
                 app.call('little-open-action', id=session['id'], action='close')
-        guarded('win6_little_open_move_stay_keeps_page', little_move_stay)
+        guarded('win6_little_open_move_stay_keeps_page', little_move_stay, answer_dialogs)
 
         # REG-04: a Blank Window has no Pinned section: New Folder and New Space are not offered.
         def blank_folder():
@@ -248,11 +259,14 @@ def run(factory, results, tmp, h):
             app.call('window-focus', id=blank['id'])
             plus = {r['title']: r['enabled'] for r in app.call('split', op='plus') if r['title']}
             state_before = json.dumps(app.call('blank-window'), sort_keys=True)
+            pinned_before = len(app.call('sidebar-tree').get('pinned', []))
             try: app.call('menu-perform', id='new-folder')
             except Exception as error: print('win6 blank new-folder refused: %r' % (error,), flush=True)
             state_after = json.dumps(app.call('blank-window'), sort_keys=True)
+            pinned_after = len(app.call('sidebar-tree').get('pinned', []))
             row('win6_blank_window_no_hidden_folder', not plus.get('New Folder') and not plus.get('New Space')
-                and state_before == state_after, plus=plus, changed=state_before != state_after)
+                and state_before == state_after and pinned_before == pinned_after, plus=plus,
+                changed=state_before != state_after, pinned=[pinned_before, pinned_after])
             app.call('window-close')
             wait_until(lambda: len(windows()) == 1, timeout=5, step=.05)
             app.call('window-focus', id=main_window)
@@ -284,7 +298,7 @@ def run(factory, results, tmp, h):
                 gone = wait_until(lambda: len(windows()) == 1, timeout=5, step=.05)
                 row('win6_window_close_runs_beforeunload_leave', bool(again) and bool(gone), prompted=bool(again), windows=len(windows()))
             app.call('window-focus', id=main_window)
-        guarded('win6_window_close_runs_beforeunload_stay', window_close_unload)
+        guarded('win6_window_close_runs_beforeunload_stay', window_close_unload, answer_dialogs)
 
         # WL-06: in native full screen, hiding the sidebar must not slide AppKit's title-bar buttons
         # off the screen edge.
@@ -303,6 +317,64 @@ def run(factory, results, tmp, h):
                 app.call('window-fullscreen')
                 wait_until(lambda: (lambda s: not s['fullscreen'] and not s['fullscreenTransition'])(app.call('window-state')), timeout=6, step=.1)
         guarded('win6_fullscreen_sidebar_keeps_title_bar_buttons', fullscreen_lights, leave_fullscreen)
+
+        # WL-07: a Little Open page in HTML fullscreen fills the window (no title bar or corners).
+        def little_fullscreen():
+            before = {s['id'] for s in app.call('little-open-state')['sessions']}
+            app.call('little-open-action', action='blank')
+            session = next(s for s in app.call('little-open-state')['sessions'] if s['id'] not in before)
+            win = session['window']
+            app.call('key', window=win, text=url('lofull', '/lofull') + '\r')
+            def current(): return next((s for s in app.call('little-open-state')['sessions'] if s['id'] == session['id']), None)
+            try:
+                assert wait_until(lambda: (lambda s: s and s['state'] == 'page' and s['content'] and not s['loading'])(current()), timeout=12), current()
+                request = app.call('eval', window=win, tab=current()['content'], js='document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+                full = wait_until(lambda: (lambda s: s if s['fullscreen'] and s['pageFullscreen'] else None)(current()), timeout=8, step=.1)
+                time.sleep(.5); s = current()
+                filled = abs(s['contentFrame'][3] - s['frame'][3]) <= 1 and s['titleBarHidden'] and s['cornerRadius'] == 0
+                row('win6_little_open_page_fullscreen_fills_window', bool(full) and filled, request=request,
+                    contentFrame=s['contentFrame'], frame=s['frame'], titleBarHidden=s['titleBarHidden'], corner=s['cornerRadius'])
+                app.call('eval', window=win, tab=s['content'], js='document.exitFullscreen().then(() => "ok", e => e.message)')
+                wait_until(lambda: (lambda s: s and not s['fullscreen'] and not s['pageFullscreen'])(current()), timeout=8, step=.1)
+                time.sleep(.5); s = current()
+                row('win6_little_open_page_fullscreen_restores_chrome', not s['titleBarHidden'] and s['cornerRadius'] > 0
+                    and s['contentFrame'][3] < s['frame'][3] - 40, contentFrame=s['contentFrame'], frame=s['frame'], corner=s['cornerRadius'])
+            finally:
+                if current(): app.call('little-open-action', id=session['id'], action='close')
+                wait_until(lambda: current() is None, timeout=8, step=.1)
+        guarded('win6_little_open_page_fullscreen_fills_window', little_fullscreen)
+
+        # WL-09 (parts 3 and 4): a minimized Little Open window comes back when resurfaced; an external
+        # link with only a minimized browser window reuses it (no second window).
+        def minimized_more():
+            before = {s['id'] for s in app.call('little-open-state')['sessions']}
+            app.call('little-open-action', action='blank')
+            session = next(s for s in app.call('little-open-state')['sessions'] if s['id'] not in before)
+            app.call('key', window=session['window'], text=url('lomin', '/lomin') + '\r')
+            def current(): return next((s for s in app.call('little-open-state')['sessions'] if s['id'] == session['id']), None)
+            assert wait_until(lambda: (lambda s: s and s['state'] == 'page')(current()), timeout=12), current()
+            app.call('little-open-action', id=session['id'], action='miniaturize')
+            assert wait_until(lambda: current()['miniaturized'], timeout=5, step=.1)
+            app.call('little-open-action', id=session['id'], action='focus')
+            shown = wait_until(lambda: not current()['miniaturized'], timeout=4, step=.1)
+            row('win6_minimized_little_open_resurface_shows_it', bool(shown))
+            app.call('little-open-action', id=session['id'], action='close')
+            wait_until(lambda: current() is None, timeout=8, step=.1)
+            app.call('routing-rules', hostEquals='extmin.localhost')
+            app.call('window-focus', id=main_window)
+            app.call('window-miniaturize')
+            assert wait_until(lambda: app.call('window-state')['miniaturized'], timeout=5, step=.1)
+            count = len(windows()); link = url('extmin', '/extmin')
+            sent = subprocess.run(['/usr/bin/open', '-a', app.bundle, link], capture_output=True, text=True, timeout=15)
+            landed = wait_until(lambda: any(t['url'] == link for t in tabs()), timeout=8, step=.1)
+            time.sleep(.5)
+            row('win6_external_link_reuses_minimized_window', sent.returncode == 0 and bool(landed) and len(windows()) == count,
+                windowsBefore=count, windowsAfter=len(windows()), landed=bool(landed), stderr=sent.stderr[-300:])
+            for extra in [w for w in windows() if w['id'] != main_window]:
+                app.call('window-focus', id=extra['id']); app.call('window-close')
+            app.call('window-focus', id=main_window, activate=True)
+            if app.call('window-state')['miniaturized']: app.call('window-deminiaturize')
+        guarded('win6_minimized_little_open_resurface_shows_it', minimized_more)
 
         # WL-11: New Little Open Window takes the Profile of the most recently focused window.
         def little_profile():
