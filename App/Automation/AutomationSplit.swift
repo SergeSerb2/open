@@ -251,9 +251,6 @@ extension AutomationController {
     }
 }
 
-/// The only substituted object is drag transport. The live App's pasteboard decoding,
-/// zone hit testing, overlay, model mutation, host ownership and persistence all run.
-@MainActor
 extension AutomationController {
     /// A drop on a bottom-bar Space icon, released before its 0.5 s spring-load switch: `url`
     /// (an external link) or `nodes` (sidebar rows). The icon's real destination callbacks run;
@@ -281,6 +278,9 @@ extension AutomationController {
     }
 }
 
+/// The only substituted object is drag transport. The live App's pasteboard decoding,
+/// zone hit testing, overlay, model mutation, host ownership and persistence all run.
+@MainActor
 final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
     let draggingDestinationWindow: NSWindow?
     let draggingSource: Any?
