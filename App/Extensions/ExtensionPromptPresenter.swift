@@ -76,7 +76,10 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     let table = ExtensionShortcutTable(); table.rebuild(manager, overrides: app.keyBindings); tables[key] = table; return table
   }
   func rebuildShortcuts() {
-    for context in OEEngine.shared.contexts { table(context.extensions).rebuild(context.extensions, overrides: app.keyBindings) }
+    // OEEngine.contexts lists regular Profiles only: drop every snapshot so an Incognito
+    // manager's table is built again (table(_:)) at its next key event or Settings read.
+    tables.removeAll()
+    for context in OEEngine.shared.contexts { _ = table(context.extensions) }
   }
   func extensionManager(_ manager: OEExtensionManager, show prompt: OEExtensionPrompt) {
     let key = ObjectIdentifier(prompt)
@@ -111,15 +114,21 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     }
     if let window = prompt.webContent?.view.window { return window }
     if let window = prompt.browser?.window { return window }
-    if let key = NSApp.keyWindow, let factory = app.factory(forKeyWindow: key), factory.focusedBrowser?.context === manager.context { return factory.window }
+    // A Blank Window or Little Open window shows the Profile's context but closes on its own: never
+    // a page-less prompt's host (below), or closing it would cancel the prompt.
+    if let key = NSApp.keyWindow, let factory = app.factory(forKeyWindow: key), !factory.isBlankWindow,
+      factory.standaloneSurface == nil, factory.littleOpenController == nil,
+      factory.focusedBrowser?.context === manager.context { return factory.window }
     let ordered = NSApp.orderedWindows.compactMap { app.factory(forKeyWindow: $0) }
-    if let window = ordered.first(where: { $0.focusedBrowser?.context === manager.context })?.window { return window }
+    if let window = ordered.first(where: { !$0.isBlankWindow && $0.standaloneSurface == nil && $0.littleOpenController == nil
+      && $0.focusedBrowser?.context === manager.context })?.window { return window }
     // A prompt without a page (install, repair, re-enable, permissions) belongs to its Profile:
     // only a regular window that shows a Space of that Profile may host it. Never an Incognito
-    // window or another Profile's window; with none, the caller cancels the prompt.
+    // window, a Blank Window (its stand-in Profile has the real Profile's ID; it closes with its
+    // last tab) or another Profile's window; with none, the caller cancels the prompt.
     guard let context = manager.context, !context.isEphemeral else { return nil }
     return ordered.first(where: { factory in
-      !factory.isIncognito && factory.standaloneSurface == nil && factory.littleOpenController == nil
+      !factory.isIncognito && !factory.isBlankWindow && factory.standaloneSurface == nil && factory.littleOpenController == nil
         && factory.focusedProfile.map { $0.id == factory.profile(for: context)?.id } == true
     })?.window
   }

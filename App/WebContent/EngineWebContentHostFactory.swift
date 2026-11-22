@@ -1079,7 +1079,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     switch intent {
     case .customizePage(let id):
       guard canCustomizePage(id) else { return false }
-      app.stores.boosts.editCurrent(tabID: id); return true
+      app.stores.boosts.editCurrent(tabID: id, in: self); return true
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
       guard model.profile(id: id) != nil else { return false }
@@ -2104,7 +2104,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 
   private func canCustomizePage(_ id: ItemID) -> Bool {
     !isIncognito && model.tab(id: id)?.live.hasLoadedInThisLaunch == true
-      && app.stores.boosts.canEdit(tabID: id)
+      && app.stores.boosts.canEdit(tabID: id, in: self)
   }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
@@ -2317,10 +2317,15 @@ extension EngineWebContentHostFactory {
 
   /// chrome.tabs.update({pinned}): pin or unpin the tab. Favorites are
   /// pinned tabs to Chromium and stay Favorites: both are no-ops for them.
+  /// A Blank Window has no pinned list (its sidebar shows Today only), so it refuses, as its menus do.
   @objc(browser:requestsPinned:forWebContent:)
   func browser(_ browser: OEBrowser, requestsPinned pinned: Bool, for webContent: OEWebContent) {
     defer { mirror.sync() }
     guard !isIncognito, let id = requestTabID(for: webContent), let parent = model.parent(of: id) else { return }
+    if isBlankWindow {
+      record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
+      return
+    }
     if case .favorites = parent {
       record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
       return
