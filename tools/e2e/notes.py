@@ -76,12 +76,19 @@ def run(factory, results, tmp, h):
         # Print… and Save Page As… act on a web page only: on a Note they are disabled, not enabled no-ops.
         page_items = ('print', 'save-page-as')
         on_note = {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in page_items}
+        # ⌘P through the App's real key path on the Note: no Print command runs, the Note is unchanged.
+        windows_before = len(app.call('shell-windows'))
+        pressed = app.call('key', key='p', modifiers=['cmd'], route='app', observeCommands=True)
+        note_after = app.call('note')
+        key_ok = ('print' not in pressed['commands'] and not any('print' in m for m in pressed['menuActions'])
+                  and note_after['tab'] == first and note_after['body'] == 'Milk\nEggs'
+                  and len(app.call('shell-windows')) == windows_before)
         app.call('select', tab=web)
         h.wait_until(lambda: app.call('note')['tab'] == web, timeout=5, step=.05)
         on_page = h.wait_until(lambda: (lambda m: m if all(m.get(i) for i in page_items) else None)(
             {r['id']: r['enabled'] for r in app.call('menu-state') if r['id'] in page_items}), timeout=5, step=.05)
-        row('page_commands_disabled_on_note', len(on_note) == 2 and not any(on_note.values()) and bool(on_page),
-            onNote=on_note, onPage=on_page)
+        row('page_commands_disabled_on_note', len(on_note) == 2 and not any(on_note.values()) and bool(on_page) and key_ok,
+            onNote=on_note, onPage=on_page, commandP={k: pressed[k] for k in ('commands', 'menuActions', 'firstResponder')})
 
         # 5. ⌃⌥N beside a web page: a Split with the page and a new Note.
         app.call('select', tab=web)

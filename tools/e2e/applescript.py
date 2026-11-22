@@ -450,10 +450,13 @@ def window_close_checks(factory, results, fixture_server, wait_until):
         app.call('pin', tab=a)
         app.call('select', tab=a)
         script('close tab id %s of window 1' % quote(a))
-        time.sleep(.5)
+        def unloaded_pinned():
+            row = next((t for t in app.call('tabs') if t['id'] == a), None)
+            return row if row and row.get('section') == 'pinned' and not row.get('loaded') else None
+        kept = wait_until(unloaded_pinned, timeout=5, step=.1)
         row = next((t for t in app.call('tabs') if t['id'] == a), None)
-        results['W3_close_pinned_keeps_row'] = {'ok': bool(row) and row.get('section') == 'pinned',
-            'row': row and {k: row.get(k) for k in ('id', 'section')}}
+        results['W3_close_pinned_keeps_row'] = {'ok': bool(kept),
+            'row': row and {k: row.get(k) for k in ('id', 'section', 'loaded')}}
 
         # W4: make new tab in another Space, then one Undo removes it (no extra selection or focus steps).
         research = app.call('window-state')['space']
