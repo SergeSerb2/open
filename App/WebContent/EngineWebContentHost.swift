@@ -119,7 +119,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     refreshPageBackground(); observeMute()
   }
   func close() {
-    guard !closed else { return }; closed = true; generation += 1; muteObservation += 1
+    guard !closed else { return }
+    owner?.app.tabSleep.pageWillClose(self)
+    closed = true; generation += 1; muteObservation += 1
     historyRecorder.close()
     cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
@@ -346,7 +348,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if additionalKeyHandler?(event, false) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
-    if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }
+    if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID, model: owner?.model) }
     return false
   }
   func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {

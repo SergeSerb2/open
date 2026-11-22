@@ -1884,6 +1884,11 @@
       case "translate": return try await translateCommand(a)
       case "calendar": return try await calendarCommand(a)
       case "sidebar-unload":
+        // `folder`: a pinned folder's Unload ("−" on its row), the intent its button sends.
+        if let raw = a["folder"] as? String {
+          guard let uuid = UUID(uuidString: raw), w.model.node(id: ItemID(rawValue: uuid))?.folder != nil else { throw Failure(message: "unknown folder") }
+          return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadFolder(folderID: ItemID(rawValue: uuid))) == true
+        }
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadTab(try modelTab(a, w).id)) == true
       default:
         throw Failure(message: "unknown command \(cmd)")
