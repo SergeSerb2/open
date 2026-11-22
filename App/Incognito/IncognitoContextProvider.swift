@@ -128,4 +128,12 @@ final class IncognitoSessions {
   }
   func closeAll() { for session in sessions.values { session.end() }; sessions.removeAll() }
   func hasSession(parent: ProfileID) -> Bool { sessions[parent] != nil }
+  /// A private transfer in progress (or waiting for its save sheet): quitting cancels it, so the
+  /// quit warning counts it (bug sweep r6 DHR-08). Read from the engine; nothing is recorded.
+  var hasRunningDownloads: Bool {
+    sessions.values.contains { session in
+      session.downloads.hasOpenChoices
+        || (session.context?.downloads.contains { $0.state == .pending || $0.state == .inProgress } ?? false)
+    }
+  }
 }

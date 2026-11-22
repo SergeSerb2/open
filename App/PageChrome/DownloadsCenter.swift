@@ -215,7 +215,10 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     }
   }
   func id(_ download: OEDownload, _ context: OEBrowserContext) -> String { "\(sessionID):\(context.identifier):\(download.identifier)" }
-  var hasRunning: Bool { entries.values.contains { $0.snapshot.state == .inProgress || $0.snapshot.state == .paused } || !choices.isEmpty }
+  var hasRunning: Bool {
+    entries.values.contains { $0.snapshot.state == .inProgress || $0.snapshot.state == .paused } || !choices.isEmpty
+      || app.incognitoSessions.hasRunningDownloads
+  }
   func decide(_ download: OEDownload, context: OEBrowserContext, filename: String, window: NSWindow?, directoryOverride: URL? = nil, completion: @escaping @MainActor (URL?) -> Void) {
     guard let profile = profile(for: context) else { completion(nil); return }
     let key = id(download, context)
@@ -726,8 +729,18 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   }
   /// A new quit attempt asks again (AppDelegate calls this at each fresh attempt).
   func resetQuitApproval() { quitApproved = false }
+  /// The user accepted the alert (or the quit asks nothing). Transfers keep running until the quit is
+  /// committed: a page's beforeunload "Stay" can still end this attempt (bug sweep r6 DHR-04).
   private func approveQuit() {
     quitApproved = true
+    for choice in choices.values { choice.cancel() }
+    schedulePublish()
+  }
+  /// Every page allowed the quit: cancel the approved transfers now. True when a cancellation was
+  /// recorded; the App then flushes the download history before the engine stops.
+  func cancelTransfersForQuit() -> Bool {
+    guard quitApproved else { return false }
+    var recorded = false
     // Model the user's cancellation before asking the engine, as Pause/Resume
     // already do. The quit flush then covers cancellations even if Chromium's
     // terminal callback arrives during shutdown. A final Complete callback wins.
@@ -736,9 +749,10 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       entries[key]?.snapshot = item
       if !entry.hidden, let profile = app.model.profile(id: item.profileID) { persist(item, profile: profile) }
       entry.download.cancel()
+      recorded = true
     }
-    for choice in choices.values { choice.cancel() }
-    schedulePublish()
+    if recorded { schedulePublish() }
+    return recorded
   }
   var queued: Bool { publishQueued }
 }
