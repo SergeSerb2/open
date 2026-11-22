@@ -207,6 +207,8 @@ def r5_delete_selected_favorite_note(app, row, h, origin):
     app.call('menu-perform', id='new-note')
     note = h.wait_until(lambda: next((t['id'] for t in app.call('tabs') if t['url'].startswith('open://note/') and t.get('selected')), None), timeout=5, step=.05)
     assert note, 'no selected Note'
+    app.call('key', text='Favorite R5F')  # Library lists only saved Notes
+    app.call('note', action='flush')
     favorite = app.call('favorite', tab=note)
     app.call('select', tab=note)
     selected_before = [t['id'] for t in app.call('tabs') if t.get('selected')]
