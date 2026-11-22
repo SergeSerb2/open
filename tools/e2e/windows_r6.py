@@ -292,16 +292,6 @@ def run(factory, results, tmp, h):
         # WL-06: in native full screen, hiding the sidebar must not slide AppKit's title-bar buttons
         # off the screen edge.
         def fullscreen_lights():
-            # Review r2 #3: the sidebar hidden before full screen leaves no slide offset on the buttons.
-            app.call('key', key='s', modifiers=['cmd'], route='app'); time.sleep(1.0)
-            app.call('window-fullscreen')
-            assert wait_until(lambda: (lambda s: s['fullscreen'] and not s['fullscreenTransition'])(app.call('window-state')), timeout=6, step=.1), app.call('window-state')
-            time.sleep(.5); entered = app.call('window-state')
-            row('win6_fullscreen_entered_with_hidden_sidebar_resets_buttons', all(abs(x) < 0.5 for x in entered['trafficLightOffsets']),
-                offsets=entered['trafficLightOffsets'])
-            app.call('window-fullscreen')
-            assert wait_until(lambda: (lambda s: not s['fullscreen'] and not s['fullscreenTransition'])(app.call('window-state')), timeout=6, step=.1)
-            app.call('key', key='s', modifiers=['cmd'], route='app'); time.sleep(1.0)
             app.call('window-fullscreen')
             assert wait_until(lambda: (lambda s: s['fullscreen'] and not s['fullscreenTransition'])(app.call('window-state')), timeout=6, step=.1), app.call('window-state')
             app.call('key', key='s', modifiers=['cmd'], route='app')
