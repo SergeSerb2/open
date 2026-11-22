@@ -260,6 +260,8 @@ def run(factory, results, tmp, env):
                 gallery(); ui('press', id='boosts.' + first + '.edit', **({'profileBeforePress': profile_b} if queued else {}))
                 assert wait(lambda: editor().get('open') and editor().get('boost', {}).get('id') == first, timeout=15), {'editor': editor(), 'tabs': app.call('tabs'), 'library': state()}
                 assert editor()['profile'] == profile_a
+                # Bug sweep r6 CF-10: like every other Library item, Edit closes the Library over the page and editor.
+                assert wait(lambda: not app.call('library').get('open'), timeout=5), app.call('library')
                 if queued: assert state()['boostsProfile'] == profile_b
                 target = editor()['tab']; app.call('wait', tab=target)
                 assert app.eval(target, 'document.querySelector("h1").textContent') == 'Gallery fixture heading'

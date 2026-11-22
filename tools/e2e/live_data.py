@@ -566,6 +566,31 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
             and live_folders_in(home['id']) == 1 and after_export.get('id') == home_lf.get('id'),
             'exported': exported, 'liveFolders': live_folders_in(home['id']), 'homeTitle': home_title,
             'homeFolder': home_lf.get('id'), 'after': after_export.get('id')}
+        # Bug sweep r6 CF-02: a Live Folder dragged into Today keeps its fetched rows through auto-archive
+        # and Clear Today. They were archived as tabs (and fetched again: a new Archive entry each time).
+        def pull_archive(): return sum('/pull/' in r['url'] for r in app.call('archive-list').get('rows', []))
+        gh['prs'] = {'created': trio[:2]}
+        try:
+            today_refresh = refreshed('success')
+        finally:
+            gh['prs'] = {'created': []}
+        lf = app.call('live-folder-state', space=home['id'])
+        moved = app.call('sidebar-drop', nodes=[lf['id']], parent={'kind': 'today', 'id': home['id']}, index=0)
+        rows_before = len(app.call('live-folder-state', space=home['id']).get('rows', []))
+        archived_before = pull_archive()
+        app.call('archive-sweep', offsetSeconds=40 * 86400)
+        app.call('archive-clock', reset=True)
+        after_sweep = app.call('live-folder-state', space=home['id'])
+        app.call('menu-perform', id='clear-unpinned-tabs')
+        after_clear = app.call('live-folder-state', space=home['id'])
+        archived_after = pull_archive()
+        results['live_folder_in_today_keeps_rows'] = {'ok': bool(moved) and today_refresh.get('outcome') == 'success' and rows_before == 2
+            and after_sweep.get('exists') and len(after_sweep.get('rows', [])) == 2
+            and after_clear.get('exists') and after_clear.get('id') == lf.get('id') and len(after_clear.get('rows', [])) == 2
+            and archived_after == archived_before,
+            'moved': moved, 'rowsBefore': rows_before, 'afterSweep': len(after_sweep.get('rows', [])),
+            'afterClear': {k: after_clear.get(k) for k in ('exists', 'id')}, 'clearRows': len(after_clear.get('rows', [])),
+            'archivedPulls': [archived_before, archived_after]}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:

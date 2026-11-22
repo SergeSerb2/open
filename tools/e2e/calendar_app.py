@@ -305,6 +305,10 @@ def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
         'ok': before.get('phase') == 'needsAccess' and before.get('access') == 'Allow Calendar Access' and asked_on_hover == 0
             and cal().get('requests') == 1 and after.get('phase') == 'timeline' and (after.get('join') or {}).get('event') == 'soon',
         'before': before, 'after': after}
+    # Bug sweep r6 CF-05: the tile appeared before access was granted; the card's grant starts Live Calendar.
+    started = wait_until(lambda: (lambda s: s if s.get('active') else None)(cal(action='live')), timeout=5, step=.05) or cal(action='live')
+    results['cal_card_access_starts_live_calendar'] = {'ok': started.get('active') is True and bool(started.get('tiles')),
+        'live': {k: started.get(k) for k in ('active', 'fetches', 'tiles')}}
 
     cal(action='fixture', access='denied', events=[])
     hover(calendar)
@@ -396,10 +400,12 @@ def live_checks(app, results, wait_until, new_tab, cal, fav):
     gear_checks(app, results, wait_until, cal, fav, live)
 
     # Without a calendar Favorite the coordinator stops: no tiles, no timer.
+    # Bug sweep r6 CF-13: the next wake after the last calendar Favorite went asks EventKit nothing.
+    fetches = live().get('fetches')
     app.call('sidebar-menu', node=fav, item='Remove Favorite')
-    stopped = at(0)
+    stopped = at(60)
     results['cal_live_stops_without_favorite'] = {'ok': stopped.get('active') is False and stopped.get('nextFireIn') is None
-        and not stopped.get('tiles'), 'state': stopped}
+        and not stopped.get('tiles') and stopped.get('fetches') == fetches, 'state': stopped, 'fetchesBefore': fetches}
 
 
 def gear_checks(app, results, wait_until, cal, fav, live):
