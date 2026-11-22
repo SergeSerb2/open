@@ -85,13 +85,14 @@ def rows(factory, results, tmp, h, origin):
         row('persist_z05_snapshot_write_failure_toast', bool(toast) and counters.get('dirty') is True and not on_disk and bool(saved),
             toast=toast, counters=counters, writtenWhileRefused=on_disk, savedAfter=bool(saved))
 
-        # Z-06: the selected page changes its address and title every 200 ms. Another tab pinned
+        # Z-06: the selected page changes its address every 200 ms. Another tab pinned
         # meanwhile (the page stays in front, so it keeps ticking) still reaches browser.json within the
         # maximum wait (10 s) plus the 1 s debounce, with no automation save.
         marker = h.new_tab(app, origin + '/z06-pinned')
         ticker_tab = h.new_tab(app, origin + '/z06-ticker')
         app.call('select', tab=ticker_tab)
-        app.eval(ticker_tab, "let n=0;setInterval(()=>{n++;document.title='t'+n;history.replaceState(null,'','#'+n)},200);1")
+        # Address only: a title-only change takes its own 10 s path once #665 is in (PERF-06).
+        app.eval(ticker_tab, "let n=0;setInterval(()=>{n++;history.replaceState(null,'','#'+n)},200);1")
         time.sleep(1.5)
         # Start from a saved model: the maximum wait counts from the first change after this save.
         app.call('save')
