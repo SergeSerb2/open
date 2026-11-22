@@ -133,16 +133,31 @@ def run(factory, results, h, tmp):
         idle = app.call('downloads-state')['running']
         app.call('menu-perform', id='new-incognito-window')
         private = wait_until(lambda: next((v for v in app.call('incognito-state')['windows'] if v['private']), None), timeout=10, step=.1)
-        running = None
+        running = alerted = kept_open = None
         if private:
             app.call('window-focus', id=private['id'], activate=True)
             app.call('download-dir', path=downloads_dir)
             app.call('open', url=base + '/slow')
             running = wait_until(lambda: app.call('downloads-state')['running'] or None, timeout=10, step=.1)
+            # A real quit attempt with only this private transfer running shows the downloads alert;
+            # "Keep browsing" (the policy below) keeps Open running (review r1 nit).
+            if running:
+                def download_alerts():
+                    with open(app.launch_log_path, errors='replace') as stream:
+                        return stream.read().count('downloads-quit-alert-presented')
+                alerts_before = download_alerts()
+                app.call('download-policy', quit='keep')
+                app.call('quit-warning', button='cancel', request=True)
+                alerted = wait_until(lambda: download_alerts() > alerts_before or None, timeout=10, step=.1)
+                time.sleep(.5)
+                kept_open = bool(app.process_path(app.pid))
+                h._try(lambda: app.call('download-policy', quit='close'))
             h._try(lambda: app.call('window-close'))
         after_close = wait_until(lambda: not app.call('downloads-state')['running'] or None, timeout=10, step=.1)
-        record('r6_downloads_incognito_transfer_is_running', idle is False and bool(private) and bool(running) and bool(after_close),
-               idle=idle, private=bool(private), running=bool(running), afterClose=bool(after_close))
+        record('r6_downloads_incognito_transfer_is_running', idle is False and bool(private) and bool(running) and bool(after_close)
+               and bool(alerted) and kept_open is True,
+               idle=idle, private=bool(private), running=bool(running), afterClose=bool(after_close),
+               quitAlert=bool(alerted), keptOpen=kept_open)
 
         # DHR-07 after a relaunch: the completed data: download is still a history row.
         app.quit()

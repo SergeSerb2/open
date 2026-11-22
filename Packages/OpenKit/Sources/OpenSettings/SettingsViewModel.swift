@@ -143,9 +143,13 @@ import OpenAdBlock
     }
     /// The sheet keeps its local draft open if another rule or the durable save fails.
     @discardableResult public func saveLinkRule(_ draft: RuleDraft) -> Bool {
+        let previous = links.drafts
         if let index=links.drafts.firstIndex(where:{$0.id == draft.id}) {links.drafts[index]=draft}
         else {links.drafts.append(draft)}
-        return commitLinks()
+        // A blocked save leaves the list as it was: the sheet keeps its own draft, and Cancel must
+        // not leave it behind as an unsaved edit (review r1 #2).
+        guard commitLinks() else { links.drafts = previous; return false }
+        return true
     }
     public var linkTestSummary: String? {
         guard let decision=links.testDecision else {return nil}

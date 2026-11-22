@@ -359,6 +359,7 @@ final class AppImportRunner: ProfileDataOwner {
       for note in imported.notes where landed.contains(note.id) { if app.notes.importIfAbsent(note) { written += 1 } }
       counts["Notes"] = report.importedNotes; counts["Note placeholders"] = report.notePlaceholders
       counts["Notes written"] = written
+      if written > 0 { app.easelsDidChange() }  // review r1 #4
     }
     // Resolve metadata only after the live model has landed. Destination
     // directory collision suffixes must never be used to read the Arc source.

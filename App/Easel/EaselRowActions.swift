@@ -152,6 +152,7 @@ extension AppDelegate {
     }
     guard changed else { return }
     for factory in hostFactories.values { factory.controller?.refresh(); factory.scheduleSave() }
+    easelsDidChange()  // a title typed in the canvas (review r1 #4)
   }
 
   /// Removes every row of an Easel in every window (no Archive entry) and moves its folder to the

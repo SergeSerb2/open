@@ -115,6 +115,7 @@ enum NoteImporter {
         // A Note over the store's size limit is not written: the placeholder stays.
         guard store.replace(parsed.note) else { outcome.unreadable += 1; continue }
         placeholders[id] = nil
+        present.insert(parsed.note.title + "\u{0}" + parsed.note.text)
         outcome.filled += 1
         refresh(noteID: id, title: parsed.note.title, factory: factory)
       } else {

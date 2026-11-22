@@ -52,6 +52,7 @@ final class NoteContentHost: WebContentHost {
     }
     guard changed else { return }
     for factory in app.hostFactories.values { factory.controller?.refresh(); factory.scheduleSave() }
+    app.easelsDidChange()  // a title typed in the Note editor (review r1 #4)
   }
 
   init(tabID: ItemID, noteID: UUID, store: NoteStore, owner: EngineWebContentHostFactory) {

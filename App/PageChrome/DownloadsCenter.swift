@@ -742,6 +742,8 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   /// committed: a page's beforeunload "Stay" can still end this attempt (bug sweep r6 DHR-04).
   private func approveQuit() {
     quitApproved = true
+    // Open save sheets still close here: a sheet left on a window would block that window's
+    // beforeunload sheet (one sheet per window), so the quit could not ask the page.
     for choice in choices.values { choice.cancel() }
     schedulePublish()
   }

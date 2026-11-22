@@ -126,15 +126,18 @@ final class AppImportUndo {
             store.saveNow()
           }.value
         }
+        // Before the model Undo, like the Boosts above: this Undo can remove the Profile (a new one,
+        // or first run's Arc Default that gives the folder back to the bootstrap Default). A Profile
+        // the user deleted earlier is skipped, so its folder is never opened again (review r1 #1).
+        for (profileID, records) in archives.reversed() {
+          guard let store = archiveStore(profileID) else { continue }
+          try await store.delete(ids: records.map(\.id))
+        }
         applyModel(undoing: true)
         applyDefaults(undoing: true)
         for (profileID, _, _) in boosts { app.stores.boosts.refresh(profile: profileID) }
         for (store, receipt) in histories.reversed() {
           guard await store.removeImportedHistory(receipt) else { throw UndoFailure.store }
-        }
-        for (profileID, records) in archives.reversed() {
-          guard let store = archiveStore(profileID) else { continue }
-          try await store.delete(ids: records.map(\.id))
         }
         let orphans = createdProfiles.filter { created in
           app.model.profile(id: created.id) == nil
