@@ -196,6 +196,14 @@ NS_SWIFT_UI_ACTOR
 - (void)webContentDidResetDialogState:(OEWebContent*)webContent
     NS_SWIFT_NAME(webContentDidResetDialogState(_:));
 
+/// The same reset, naming the engine browser it came from: the page's own, or
+/// a Chrome-style Document PiP that shares the page's client. Only dialogs
+/// with that `browserIdentifier` were cancelled. Preferred over
+/// webContentDidResetDialogState: when implemented.
+- (void)webContent:(OEWebContent*)webContent
+    didResetDialogStateForBrowser:(NSInteger)browserIdentifier
+    NS_SWIFT_NAME(webContent(_:didResetDialogStateForBrowser:));
+
 /// HTTP/proxy authentication, on the main thread. Retain and answer the
 /// request to show shell UI. NO (or no implementation) cancels the challenge.
 /// Chromium's own login dialog is never shown.
@@ -315,7 +323,7 @@ OE_EXPORT @interface OEWebContent : NSObject
 @property(nonatomic, readonly, weak, nullable) OEBrowser* browser;
 
 /// Engine identifier: stable for the content's life, unique per process.
-/// 0 until the Chromium browser exists.
+/// 0 until the Chromium browser exists; kept after that browser closes.
 @property(nonatomic, readonly) NSInteger identifier;
 /// The chrome.tabs id, or -1 when Chromium's tab APIs cannot see this page
 /// (not live, or not a tab of an OEBrowser's tab strip).
@@ -385,6 +393,15 @@ OE_EXPORT @interface OEWebContent : NSObject
                 completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(
                                id _Nullable result,
                                NSError* _Nullable error))completion;
+/// The same evaluation with the caller's choice of gesture. Open's own probes pass NO:
+/// a DevTools gesture gives the page user activation (sticky: unmuted autoplay and the
+/// beforeunload sheet; transient: popups) that no user input earned.
+- (void)evaluateJavaScript:(NSString*)script
+               userGesture:(BOOL)userGesture
+                completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(
+                               id _Nullable result,
+                               NSError* _Nullable error))completion
+    NS_SWIFT_NAME(evaluateJavaScript(_:userGesture:completion:));
 /// Sends a raw DevTools protocol command; the result is the decoded JSON.
 - (void)sendDevToolsMethod:(NSString*)method
                 parameters:(nullable NSDictionary<NSString*, id>*)parameters
@@ -656,6 +673,10 @@ OE_EXPORT @interface OEJavaScriptDialog : NSObject
 @property(nonatomic, readonly, copy) NSString* defaultPromptText;
 @property(nonatomic, readonly, copy, nullable) NSURL* originURL;
 @property(nonatomic, readonly) BOOL isReload;
+/// The engine browser that opened the dialog: the page's own, or its
+/// Document PiP (the PiP shares the page's client and shows dialogs through
+/// the page). Compared with a reset's browser identifier.
+@property(nonatomic, readonly) NSInteger browserIdentifier;
 /// Call exactly once. `text` is used for prompt(). A dialog that is never
 /// completed is cancelled when it is deallocated.
 - (void)completeWithAccepted:(BOOL)accepted

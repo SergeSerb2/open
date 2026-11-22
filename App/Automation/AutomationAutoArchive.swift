@@ -41,7 +41,8 @@ extension AutomationController {
                 "countsByReason": state.countsByReason, "lastReason": state.lastReason?.rawValue ?? NSNull(),
                 "lastSweep": report.map { ["now": archiveISO($0.now), "archivedCount": $0.archivedCount,
                                           "affectedSpaces": $0.affectedSpaceIDs.map(\.description).sorted()] as [String: Any] } ?? NSNull(),
-                "educationRequested": app.todayAutoArchive?.educationRequested ?? false]
+                "educationRequested": app.todayAutoArchive?.educationRequested ?? false,
+                "invalidations": app.todayAutoArchive?.invalidationCount ?? 0]
     }
     private func archiveBannerController(_ args: [String: Any]) throws -> BrowserWindowController {
         if let raw = args["window"] {

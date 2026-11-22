@@ -98,6 +98,66 @@ def run(factory, results, tmp, h):
                          and batch['remaining'] == 0 and batch['milliseconds'] < 1000 and answered and renderer < 1000,
                          batch=batch, rendererMilliseconds=renderer, answered=answered)
         gate('user_script_batch_linear', script_batch)
+
+        def load_probes_no_activation():
+            # Bug sweep r6 T-01: Open's own load-time probes (page color, favicon owner, first paint)
+            # ran page-world JS with a DevTools user gesture, so every page got sticky user activation
+            # with no input: unmuted autoplay, popups, and a "Leave site?" sheet on Cmd+W. Reads go
+            # through raw DevTools with userGesture false, so the check itself grants nothing.
+            from urllib.parse import quote
+            html = ('<!doctype html><title>Activation probe</title><body style="background:#123456">'
+                    '<script>onbeforeunload=e=>{e.preventDefault();e.returnValue="unsaved"};'
+                    'addEventListener("load",()=>setTimeout(()=>{window.idleActivation=navigator.userActivation.hasBeenActive},1500))'
+                    '</script>')
+            def activation(target):
+                reply = app.call('devtools', tab=target, method='Runtime.evaluate', params={
+                    'expression': '[window.idleActivation ?? null, navigator.userActivation.hasBeenActive]',
+                    'returnByValue': True, 'userGesture': False})
+                return reply['result'].get('value')
+            def probed(target, rgb=(18, 52, 86)):
+                # The page-color probe has answered: proof the load-time probes ran on this page.
+                rows = [p for p in app.call('pages') if p.get('hostTab') == target]
+                color = rows[0].get('pageBackground') if rows else None
+                return bool(color) and color[:3] == list(rgb)
+            def close_with_key(target):
+                # Cmd+W: the tab closes at once, or a "Leave site?" sheet asks (then it is left, so the tab closes).
+                app.call('key', key='w', modifiers=['cmd'])
+                outcome = wait(lambda: 'sheet' if ds().get('visible') else 'closed' if all(t['id'] != target for t in app.call('tabs')) else None,
+                               timeout=3, step=.05)
+                sheet = ds() if outcome == 'sheet' else None
+                if sheet: answer(True)
+                return outcome, sheet
+            def fresh():
+                # No page() here: the automation focus command reads document.hasFocus() through
+                # the gestured page-world eval, which would grant the activation under test.
+                target = app.call('open', url='data:text/html,' + quote(html))['id']
+                app.call('wait', tab=target)
+                return target
+            idle = fresh()
+            ran = wait(lambda: probed(idle), timeout=5, step=.05)
+            untouched = wait(lambda: (lambda v: v if v and v[0] is not None else None)(activation(idle)), timeout=5, step=.05)
+            closes, idle_sheet = close_with_key(idle)
+            # An http page too: there the per-load hooks that skip data: pages (theme data, Boosts,
+            # ad block) also run. Its page sets no handler and no script.
+            web = app.call('open', url=origin + '/activation?' + str(time.time_ns()))['id']
+            app.call('wait', tab=web)
+            web_probed = wait(lambda: probed(web, (255, 255, 255)), timeout=5, step=.05)
+            time.sleep(1.0)
+            web_active = (activation(web) or [None, None])[1]
+            app.call('close', tab=web)
+            # Positive control: one real (DevTools input) click activates, and Cmd+W then asks.
+            clicked = fresh()
+            for kind in ('mousePressed', 'mouseReleased'):
+                app.call('devtools', tab=clicked, method='Input.dispatchMouseEvent',
+                         params={'type': kind, 'x': 20, 'y': 20, 'button': 'left', 'clickCount': 1})
+            active = wait(lambda: (activation(clicked) or [None, False])[1] is True, timeout=3, step=.05)
+            asks, sheet = close_with_key(clicked)
+            return check(ran and untouched == [False, False] and closes == 'closed' and web_probed and web_active is False
+                         and active and asks == 'sheet' and sheet.get('title') == 'Leave site?',
+                         probed=ran, untouched=untouched, idleCmdW=closes, idleSheet=idle_sheet,
+                         httpProbed=bool(web_probed), httpActivated=web_active,
+                         clickedActive=active, clickedCmdW=asks, sheet=sheet)
+        gate('load_probes_no_user_activation', load_probes_no_activation)
         for name, script, accepted, text, expected, kind in [
             ('alert', '(alert("page message"),"done")', True, None, 'done', 0),
             ('confirm_ok', 'confirm("page message")', True, None, True, 1),
@@ -356,6 +416,184 @@ def run(factory, results, tmp, h):
             return check(kept and state['title'] == 'Leave site?' and gone, kept=kept, state=state)
         gate('dialog_close_pending_dialog', close_with_pending_dialog)
 
+        def tab_row(target): return next((t for t in app.call('tabs') if t['id'] == target), {})
+        def bulk_archive():
+            # Bug sweep r6 P-01: a bulk archive (here Archive Tabs Above) force-closed a page with a
+            # beforeunload handler, with no prompt. Each such page asks now; "Stay" keeps every tab
+            # of the action; "Leave" archives them all and keeps the user's own selection.
+            low = page(); target = page(); arm(target); top = page()
+            app.call('select', tab=low)
+            app.call('sidebar-menu', node=low, item='Archive Tabs Above', alternate=True)
+            state = visible(ds); shown = app.call('window-state')['selected']
+            answer(False)
+            ids = {t['id'] for t in app.call('tabs')}
+            kept = target in ids and top in ids and tab_row(target).get('loaded')
+            app.call('select', tab=low)
+            app.call('sidebar-menu', node=low, item='Archive Tabs Above', alternate=True)
+            visible(ds); answer()
+            gone = wait(lambda: (lambda ids: target not in ids and top not in ids)({t['id'] for t in app.call('tabs')}), timeout=3, step=.02)
+            selected = app.call('window-state')['selected']
+            return check(state['title'] == 'Leave site?' and shown == target and kept and gone and selected == low,
+                         state=state, shown=shown, target=target, kept=kept, gone=bool(gone), selected=selected, low=low)
+        gate('dialog_beforeunload_bulk_archive', bulk_archive)
+
+        def bulk_archive_leave_then_stay():
+            # Bug sweep r6 P-01, lead ruling (b): pages ask in turn. "Leave" on the first and "Stay"
+            # on the second cancels the action: both tabs stay. The first page has closed; its tab
+            # wakes from the back list stored before it asked.
+            assert wait(lambda: app.call('sleep-state').get('started'), timeout=10, step=.1)
+            low = page(); second = page(); arm(second)
+            first = page(); app.call('navigate', tab=first, url=origin + '/leave-b?' + str(time.time_ns())); app.call('wait', tab=first); arm(first)
+            app.call('select', tab=low)
+            app.call('sidebar-menu', node=low, item='Archive Tabs Above', alternate=True)
+            asked_first = visible(ds); shown_first = app.call('window-state')['selected']; answer()
+            asked_second = visible(ds); shown_second = app.call('window-state')['selected']; answer(False)
+            ids = {t['id'] for t in app.call('tabs')}
+            kept = first in ids and second in ids
+            first_closed = not tab_row(first).get('loaded')
+            app.call('select', tab=first)
+            woke = wait(lambda: (lambda t: t if t.get('loaded') and not t.get('loading') else None)(tab_row(first)), timeout=8, step=.05) or {}
+            length = app.eval(first, 'history.length') if woke.get('loaded') else 0
+            return check(asked_first['title'] == 'Leave site?' and asked_second['title'] == 'Leave site?'
+                         and shown_first == first and shown_second == second and kept and first_closed and length >= 2,
+                         titles=[asked_first['title'], asked_second['title']],
+                         shownFirst=shown_first, shownSecond=shown_second, first=first, second=second,
+                         kept=kept, firstClosed=first_closed, historyLength=length)
+        gate('dialog_beforeunload_bulk_leave_then_stay', bulk_archive_leave_then_stay)
+
+        def folder_delete():
+            # Bug sweep r6 P-01: Delete Folder confirms first; the page in it then asks on the next
+            # turn, after the confirmation sheet ended. "Stay" keeps the folder and the tab.
+            inner = page(); arm(inner); other = page()
+            folder = app.call('folder', tabs=[inner], title='Unload folder')
+            app.call('select', tab=other)
+            app.call('sidebar-menu', node=folder, item='Delete')
+            assert wait(lambda: h['_try'](lambda: app.call('alert', button='Delete Folder')) is not None, timeout=3, step=.05)
+            state = visible(ds); answer(False)
+            kept = any(t['id'] == inner for t in app.call('tabs'))
+            app.call('select', tab=other)
+            app.call('sidebar-menu', node=folder, item='Delete')
+            assert wait(lambda: h['_try'](lambda: app.call('alert', button='Delete Folder')) is not None, timeout=3, step=.05)
+            visible(ds); answer()
+            gone = wait(lambda: all(t['id'] != inner for t in app.call('tabs')), timeout=3, step=.02)
+            return check(state['title'] == 'Leave site?' and kept and bool(gone), state=state, kept=kept, gone=bool(gone))
+        gate('dialog_beforeunload_folder_delete', folder_delete)
+
+        def pinned_folder_unload():
+            # Review r1 #2: Unload ("−") of a pinned folder whose only loaded page asks, while that
+            # page is selected. After "Leave" the page stays unloaded and the selection leaves the
+            # folder; it used to load the page again at once.
+            other = page(); inner = page(); arm(inner)
+            folder = app.call('folder', tabs=[inner], section='pinned', title='Pinned unload')
+            app.call('select', tab=inner)
+            assert wait(lambda: app.call('window-state')['selected'] == inner, timeout=3, step=.02)
+            app.call('sidebar-unload', folder=folder)
+            state = visible(ds); answer()
+            left = wait(lambda: app.call('window-state')['selected'] != inner and not tab_row(inner).get('loaded'), timeout=3, step=.02)
+            time.sleep(1.0)
+            stays_unloaded = not tab_row(inner).get('loaded') and app.call('window-state')['selected'] != inner
+            return check(state['title'] == 'Leave site?' and bool(left) and stays_unloaded,
+                         state=state, left=bool(left), staysUnloaded=stays_unloaded, tab=tab_row(inner), selected=app.call('window-state')['selected'])
+        gate('dialog_beforeunload_pinned_folder_unload', pinned_folder_unload)
+
+
+        def window_close():
+            # Bug sweep r6 WL-04: closing a window (its close button, Close Window) destroyed its
+            # pages without beforeunload; a Blank Window loses its tabs with it. "Stay" keeps the
+            # window; "Leave" closes it.
+            def windows(): return len(app.call('shell-windows'))
+            before = windows()
+            app.call('key', key='n', modifiers=['control', 'command'], route='app')
+            assert wait(lambda: windows() == before + 1, timeout=8, step=.1), app.call('shell-windows')
+            try:
+                if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
+                target = page(); arm(target)
+                app.call('window-close'); state = visible(ds); answer(False)
+                stays = windows() == before + 1 and any(t['id'] == target for t in app.call('tabs'))
+                app.call('window-close'); visible(ds); answer()
+                closed = wait(lambda: windows() == before, timeout=5, step=.05)
+                return check(state['title'] == 'Leave site?' and stays and bool(closed), state=state, stays=stays, closed=bool(closed))
+            finally:
+                if windows() > before:
+                    app.call('policy', dialogs='accept'); app.call('window-close')
+                    wait(lambda: windows() == before, timeout=5, step=.05); app.call('policy', dialogs='')
+        gate('dialog_beforeunload_window_close', window_close)
+
+        def cache_keeps_unload_page():
+            # Bug sweep r6 V-01: the 8-page hidden-page cache force-closed a background page with a
+            # beforeunload handler (no prompt; its input was lost). Such a page stays past the cap.
+            # Liveness is read from the tab list: an eval of an evicted tab would make a new page.
+            target = page(); arm(target); app.eval(target, 'window.keptMarker=42;true')
+            for _ in range(10): page()
+            loaded = tab_row(target).get('loaded')
+            marker = app.eval(target, 'window.keptMarker') if loaded else None
+            return check(loaded and marker == 42, loaded=loaded, marker=marker)
+        gate('cache_keeps_beforeunload_page', cache_keeps_unload_page)
+
+        def incognito(fn):
+            # Runs `fn` in a new Incognito window, then closes that window (its pages agree).
+            def windows(): return len(app.call('shell-windows'))
+            before = windows()
+            app.call('menu-perform', id='new-incognito-window')
+            assert wait(lambda: windows() == before + 1, timeout=8, step=.1), app.call('shell-windows')
+            try:
+                if app.call('commandbar-state').get('presented'): app.call('key', key='escape', route='app')
+                return fn()
+            finally:
+                if windows() > before:
+                    app.call('policy', dialogs='accept'); app.call('window-close')
+                    wait(lambda: windows() == before, timeout=5, step=.05); app.call('policy', dialogs='')
+        # Review r1 #3: an Incognito window's hidden-page cache keeps a page that asks beforeunload.
+        gate('incognito_cache_keeps_beforeunload_page', lambda: incognito(cache_keeps_unload_page))
+
+        def incognito_bulk_archive():
+            # Review r1 #4: an Incognito window's bulk close (a selection's Close Tabs) asks first too.
+            low = page(); target = page(); arm(target); top = page()
+            def close_both():
+                app.call('select', tab=low)
+                app.call('sidebar-click', node=target); app.call('sidebar-click', node=top, modifiers=['cmd'])
+                assert set(app.call('selection')) == {target, top}, app.call('selection')
+                app.call('sidebar-menu', node=top, item='Close Tabs')
+            close_both()
+            state = visible(ds); answer(False)
+            ids = {t['id'] for t in app.call('tabs')}
+            kept = target in ids and top in ids
+            close_both()
+            visible(ds); answer()
+            gone = wait(lambda: (lambda ids: target not in ids and top not in ids)({t['id'] for t in app.call('tabs')}), timeout=3, step=.02)
+            return check(state['title'] == 'Leave site?' and kept and bool(gone), state=state, kept=kept, gone=bool(gone))
+        gate('incognito_bulk_archive_asks', lambda: incognito(incognito_bulk_archive))
+
+        def wake_after_cache_close():
+            # Bug sweep r6 V-03: a page closed outside sleep (here by the hidden-page cache) woke from
+            # an older stored back list, so its newer navigation was lost. The stored row follows the
+            # page's own list now. The tab is selected again at once, without a wait.
+            assert wait(lambda: app.call('sleep-state').get('started'), timeout=10, step=.1)
+            stamp = str(time.time_ns())
+            first, second, third = (origin + '/v3-' + n + '?' + stamp for n in 'abc')
+            def sleep_tab(t): return app.call('sleep-state', tab=t)['tabs'][0]
+            try:
+                target = page(first)
+                app.call('navigate', tab=target, url=second); app.call('wait', tab=target)
+                page()
+                app.call('sleep-clock', advance=15.0); app.call('sleep-now', tab=target)
+                app.call('sleep-clock', advance=86400.0); app.call('sleep-tick')
+                assert wait(lambda: (lambda t: not t['content'] and t['hosts'] == 0)(sleep_tab(target)), timeout=8, step=.1), sleep_tab(target)
+                app.call('sleep-clock', reset=True)
+                app.call('select', tab=target)
+                assert wait(lambda: (lambda t: t.get('loaded') and t.get('url') == second and not t.get('loading'))(tab_row(target)), timeout=8, step=.05), tab_row(target)
+                app.call('navigate', tab=target, url=third); app.call('wait', tab=target)
+                for _ in range(10): page()
+                evicted = not tab_row(target).get('loaded')
+                app.call('select', tab=target)
+                woke = wait(lambda: (lambda t: t if t.get('loaded') and not t.get('loading') else None)(tab_row(target)), timeout=8, step=.05) or tab_row(target)
+                href = app.eval(target, 'location.href') if woke.get('loaded') else ''
+                length = app.eval(target, 'history.length') if woke.get('loaded') else 0
+                return check(evicted and href == third and length >= 3, evicted=evicted, href=href, historyLength=length, tab=woke)
+            finally:
+                app.call('sleep-clock', reset=True)
+        gate('wake_after_cache_close_keeps_navigation', wake_after_cache_close)
+
         def quit_buried_peek():
             # WC-02: a beforeunload page under another Peek used to hang Quit for good.
             source = page()
@@ -589,21 +827,123 @@ def run(factory, results, tmp, h):
             return check(state['question']=='Allow midi.localhost to access your MIDI devices?' and state['kinds'] & 32, state=state)
         gate('permission_midi_real_request', midi)
 
-        for key in ['escape','return','w','t','l']:
+        # Bug sweep r6 V-05: the prompt does not take the keyboard when it shows, so a plain Return
+        # or Escape typed into the page goes to the page; it never answers the prompt (a page could
+        # time a prompt so the user's Enter grants it). Keys are sent `asTyped`: to the window that
+        # is key now, with no window made key first. After a click into the prompt (the socket's
+        # focus op) the key answers it; after focus goes back to the page, the key is the page's.
+        for key in ['escape','return']:
+            def permission_page_key(key=key):
+                permission_page('pagekey-' + key); target=tab; name={'return':'Enter','escape':'Escape'}[key]
+                browser=app.call('window-state')['number']
+                app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
+                perm(); state=visible(ps)
+                app.call('key', key=key, asTyped=True); time.sleep(.4)
+                first=dict(prompt=ps(), result=app.eval(target,'permissionResult'), keys=app.eval(target,'promptKeys'))
+                # A click into the prompt, then back into the page: the prompt gives up its keys.
+                focused=app.call('permission-prompt', focus=True); held=ps()
+                app.call('focus', tab=target); time.sleep(.2)
+                app.call('key', key=key, asTyped=True); time.sleep(.4)
+                second=dict(prompt=ps(), result=app.eval(target,'permissionResult'), keys=app.eval(target,'promptKeys'))
+                # A click into the prompt again; now the key answers it.
+                refocused=app.call('permission-prompt', focus=True)
+                app.call('key', key=key, asTyped=True)
+                closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
+                actual=app.eval(target,'permissionResult')
+                return check(state['keyWindow']==browser and not state['promptFirstResponder'] and not state['promptHasKeyboard']
+                             and first['prompt']['visible'] and first['result']=='pending' and first['keys']==[name]
+                             and focused and held['promptHasKeyboard']
+                             and second['prompt']['visible'] and not second['prompt']['promptHasKeyboard']
+                             and second['result']=='pending' and second['keys']==[name, name]
+                             and refocused and closed and actual==('granted' if key=='return' else 'denied'),
+                             browserWindow=browser, state=state, first=first, focused=focused, held=held, second=second,
+                             refocused=refocused, result=actual)
+            gate('permission_native_' + key, permission_page_key)
+
+        def permission_split_pane_return():
+            # The prompt belongs to pane A; Return typed into pane B goes to B and leaves A's prompt.
+            permission_page('split-a'); pane_a=tab
+            pane_b=page(); panes=[t['id'] for t in app.call('split')]; time.sleep(.5)
+            try:
+                assert sorted(panes)==sorted([pane_a,pane_b]), panes
+                app.eval(pane_b,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
+                app.call('select', tab=pane_a); app.call('focus', tab=pane_a); perm(target=pane_a)
+                state=wait(lambda: (lambda s: s if s.get('visible') else None)(ps()), timeout=5, step=.02)
+                assert state, dict(prompt=ps(), result=app.eval(pane_a,'permissionResult'), split=app.call('split', op='state'),
+                                   url=app.eval(pane_a,'location.href'))
+                app.call('select', tab=pane_b); app.call('focus', tab=pane_b); time.sleep(.3)
+                app.call('key', key='return', asTyped=True); time.sleep(.4)
+                after=ps(); pending=app.eval(pane_a,'permissionResult'); keys_b=app.eval(pane_b,'promptKeys')
+                focused=app.call('split', op='state')['focused']
+                return check(focused==pane_b and after['visible'] and pending=='pending' and keys_b==['Enter'],
+                             state=state, after=after, pending=pending, paneBKeys=keys_b, focusedPane=focused)
+            finally:
+                h['_try'](lambda: app.call('permission-prompt', answer='notnow'))
+                for t in (pane_b, pane_a): h['_try'](lambda t=t: app.call('close', tab=t))
+        gate('permission_split_pane_return_not_answered', permission_split_pane_return)
+
+        # Review round 2: the prompt is not key when it shows, so the first real click must reach
+        # it. A real mouse click (socket `mouse` action, own-window AppKit events) on Allow answers
+        # it; a click on its background gives it the keyboard, then a typed Return answers it.
+        def permission_real_click_allow():
+            permission_page('click-allow'); target=tab; perm(); state=visible(ps)
+            point=state['allowPoint']
+            app.call('mouse', action='click', window=state['window'], x=point[0], y=point[1])
+            answered=wait(lambda: app.eval(target,'permissionResult')!='pending', timeout=3, step=.05)
+            return check(len(point)==2 and answered and app.eval(target,'permissionResult')=='granted' and not ps()['visible'],
+                         state=state, result=app.eval(target,'permissionResult'))
+        gate('permission_real_click_allow', permission_real_click_allow)
+
+        def permission_real_click_focus_return():
+            permission_page('click-focus'); target=tab; perm(); state=visible(ps)
+            point=state['backgroundPoint']
+            app.call('mouse', action='click', window=state['window'], x=point[0], y=point[1]); time.sleep(.2)
+            held=ps()
+            app.call('key', key='return', asTyped=True)
+            answered=wait(lambda: app.eval(target,'permissionResult')!='pending', timeout=3, step=.05)
+            return check(len(point)==2 and held['visible'] and held['promptHasKeyboard'] and answered
+                         and app.eval(target,'permissionResult')=='granted', state=state, held=held, result=app.eval(target,'permissionResult'))
+        gate('permission_real_click_focus_return', permission_real_click_focus_return)
+
+        def permission_other_window_keeps_key():
+            # Another window (Little Open) has the keyboard when window A's page asks: key status
+            # stays there, and what the user types never reaches A's page.
+            permission_page('other-window'); target=tab
+            browser=app.call('window-state')['number']
+            app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));'
+                     'window.permissionResult="waiting";setTimeout(()=>{window.permissionResult="pending";'
+                     'Notification.requestPermission().then(v=>window.permissionResult=v)},1500);true')
+            before={x['id'] for x in app.call('little-open-state')['sessions']}
+            app.call('little-open-action', action='blank')
+            little=wait(lambda: next((x for x in app.call('little-open-state')['sessions'] if x['id'] not in before), None), timeout=5, step=.05)
+            try:
+                assert little, 'no Little Open window'
+                shown=wait(lambda: (lambda st: st if st.get('visible') else None)(app.call('permission-prompt', window=browser)), timeout=6, step=.05)
+                assert shown, app.call('permission-prompt', window=browser)
+                time.sleep(.3)
+                key_window=app.call('permission-prompt', window=browser)['keyWindow']
+                app.call('key', text='ab', asTyped=True); time.sleep(.3)
+                page_keys=app.eval(target,'promptKeys')
+                return check(key_window==little['window'] and page_keys==[] and app.eval(target,'permissionResult')=='pending',
+                             keyWindow=key_window, littleWindow=little['window'], browserWindow=browser, pageKeys=page_keys, prompt=shown)
+            finally:
+                h['_try'](lambda: app.call('permission-prompt', window=browser, answer='notnow'))
+                if little: h['_try'](lambda: app.call('little-open-action', id=little['id'], action='close'))
+                h['_try'](lambda: app.call('focus', tab=target))
+        gate('permission_other_window_keeps_key', permission_other_window_keeps_key)
+
+        for key in ['w','t','l']:
             def permission_keys(key=key):
                 permission_page('keys-' + key); target=tab
                 app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
                 perm(); state=visible(ps)
                 app.call('key', key=key, **({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
                 closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
-                if key in ['escape','return']:
-                    actual=app.eval(target,'permissionResult')
-                    good=actual==('granted' if key=='return' else 'denied') and app.eval(target,'promptKeys')==[]
-                elif key=='w': good=all(t['id']!=target for t in app.call('tabs'))
+                if key=='w': good=all(t['id']!=target for t in app.call('tabs'))
                 else:
                     bar=app.call('commandbar-state'); good=bar.get('presented') and bar['mode']==('newTab' if key=='t' else 'editCurrentURL')
                     app.call('key',key='escape')
-                return check((closed if key in ['escape','return','w'] else True) and good,state=state)
+                return check((closed if key=='w' else True) and good,state=state)
             gate('permission_native_' + key, permission_keys)
 
         if only and 'permission_remember_relaunch' not in only: return

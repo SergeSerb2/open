@@ -95,8 +95,11 @@ final class IncognitoSession {
       app.extensionPrompts.unregister(context.extensions)
     }
     self.context = nil
-    pipHosts.disabled = []; translateHosts.reset(); developerModeHosts.reset(); downloads.reset()
+    pipHosts.disabled = []; translateHosts.reset(); downloads.reset()
+    let developerModeChanged = developerModeHosts.reset()
     start()
+    // After the renewal began: observers (the window's URL field and Developer Mode bar) re-read now.
+    if developerModeChanged { NotificationCenter.default.post(name: DeveloperMode.didChange, object: nil) }
     return nil
   }
   func end() {

@@ -249,7 +249,8 @@ within 24 h are not checked or reloaded at launch. Later checks repeat at 24 h.
 Busy or failed scheduled updates retry after 1 min, 5 min, 30 min,
 then 24 h. A successful attempt resets the ladder. `onScheduledUpdate` reports
 the outcome and the next nominal delay. Closing a Profile cancels its schedule; store destruction cancels remaining
-schedules. A failed update keeps old inputs and saves its error for Settings.
+schedules. While Ad Blocking is off (the global switch), no schedule runs and no list is requested; turning it
+on starts each open Profile's schedule again, with its first check due as at open (never earlier than 60 s). A failed update keeps old inputs and saves its error for Settings.
 
 Allowlist mutations accept hosts only, with optional `*.`. They share
 `OpenRouting.HostNormalizer.canonicalHostName`: percent-decoded UTF-8, Unicode

@@ -1295,7 +1295,11 @@ keeps the checkpoint's refusal behavior pending the lead's resolution.
 Permission requests use an application-defined AppKit popover. Allow stores
 the engine Profile setting. Not Now resolves only this request and restores
 its previous setting after Chromium's synchronous decision callback. A tab
-switch, navigation, or close dismisses the request. Notification Allow keeps
+switch, navigation, or close dismisses the request. The prompt (the popover and
+Little Open's card) does not take the keyboard when it shows: Return and Escape
+typed into a page, in any Split pane, go to that page. After a click into the
+prompt, Return answers Allow and Escape answers Not Now (bug sweep r6 V-05).
+Notification Allow keeps
 the system authorization and tab-sleep notification hooks. No macOS location
 prompt is suppressed. Layout width 320 pt and the final anchor edge are the
 lead's stated guesses, not measured Arc visuals.
