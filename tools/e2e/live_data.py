@@ -578,23 +578,23 @@ def live_folder_checks(holder, results, wait_until, factory, new_tab):
         moved = app.call('sidebar-drop', nodes=[lf['id']], parent={'kind': 'today', 'id': home['id']}, index=0)
         folder_rows = app.call('live-folder-state', space=home['id']).get('rows', [])
         rows_before = len(folder_rows)
-        row_urls = {r.get('live') for r in folder_rows} | {r.get('url') for r in folder_rows}
-        row_urls -= {None, ''}
+        row_ids = {r['id'] for r in folder_rows}
         archived_before = archive_ids()
         app.call('archive-sweep', offsetSeconds=40 * 86400)
         app.call('archive-clock', reset=True)
         after_sweep = app.call('live-folder-state', space=home['id'])
         app.call('menu-perform', id='clear-unpinned-tabs')
         after_clear = app.call('live-folder-state', space=home['id'])
-        # Only the folder's own rows count: the sweep and Clear rightly archive the other Today tabs.
-        archived_rows = sorted(url for id, url in archive_ids().items() if id not in archived_before and url in row_urls)
+        # Only the folder's own rows (by tab ID) count: the sweep and Clear rightly archive other Today
+        # tabs, also ones with the same pull request address (rows dragged out of the folder earlier).
+        archived_rows = sorted(url for id, url in archive_ids().items() if id not in archived_before and id in row_ids)
         results['live_folder_in_today_keeps_rows'] = {'ok': bool(moved) and today_refresh.get('outcome') == 'success' and rows_before == 2
             and after_sweep.get('exists') and len(after_sweep.get('rows', [])) == 2
             and after_clear.get('exists') and after_clear.get('id') == lf.get('id') and len(after_clear.get('rows', [])) == 2
-            and bool(row_urls) and archived_rows == [],
+            and bool(row_ids) and archived_rows == [],
             'moved': moved, 'rowsBefore': rows_before, 'afterSweep': len(after_sweep.get('rows', [])),
             'afterClear': {k: after_clear.get(k) for k in ('exists', 'id')}, 'clearRows': len(after_clear.get('rows', [])),
-            'archivedFolderRows': archived_rows, 'rowURLs': sorted(row_urls)}
+            'archivedFolderRows': archived_rows, 'rowIDs': sorted(row_ids)}
         app.call('sidebar-menu', item='Live Folders/GitHub')
         return app
     finally:
