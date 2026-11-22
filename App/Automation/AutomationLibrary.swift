@@ -146,6 +146,7 @@ extension AutomationController {
     state["panelCreated"]=session.panel != nil
     state["releasedPanelAlive"]=session.releasedPanel != nil
     state["panelGeneration"]=session.panelGeneration
+    state["easelThumbnailRenders"]=session.easelsProvider?.thumbnailRenders ?? 0
     state["releaseDelay"]=session.releaseDelay
     state["releaseClock"] = ["scheduledAt":session.releaseScheduledAt,"firedAt":session.releaseFiredAt,"pending":session.releasePending] as [String:Any]
     state["key"]=controller.window?.isKeyWindow ?? false
