@@ -16,6 +16,17 @@ public final class SnapshotStore: @unchecked Sendable {
     @MainActor public private(set) var captureCount = 0
     @MainActor public private(set) var scheduleCount = 0
     @MainActor public var isDirty: Bool { dirtyModel != nil }
+    /// The first unsaved change since the last capture (bug sweep r7 Z-06: the maximum wait).
+    @MainActor private var dirtySince: Date?
+    /// A change waits at most this long for its save, even while later changes keep arriving.
+    public static let maximumSaveWait: TimeInterval = 10
+    /// The model of the last debounced capture: a failed write marks it dirty again.
+    @MainActor private weak var capturedModel: BrowserModel?
+    /// Called on the main actor once for each run of failed background writes (a full disk, a
+    /// read-only folder); a later successful write ends the run (bug sweep r7 Z-05).
+    @MainActor public var onSaveFailure: ((String) -> Void)?
+    /// Guarded by `lock`: true while the background writes fail.
+    private var writeFailing = false
 
     private func holdRootLock() throws {
         try lock.withLock {
@@ -55,6 +66,16 @@ public final class SnapshotStore: @unchecked Sendable {
     public func scheduleSave(model: BrowserModel) {
         // Scheduling never walks the model or opens files. Frame drags can
         // mark dirty repeatedly; only the final debounced turn captures a DTO.
+        let now = Date()
+        // Each change restarts the 1 s wait, up to `maximumSaveWait` after the first unsaved change.
+        // Past that, a pending save is kept, not replaced: it runs within 1 s and captures this change
+        // too, so a page whose address or title keeps changing cannot hold the save back until quit.
+        if let since = dirtySince, now.timeIntervalSince(since) >= Self.maximumSaveWait,
+           lock.withLock({ pendingWork.map { !$0.isCancelled } ?? false }) {
+            dirtyModel = model; scheduleCount += 1
+            return
+        }
+        if dirtyModel == nil || dirtySince == nil { dirtySince = now }
         dirtyModel = model; saveGeneration += 1; scheduleCount += 1
         let generation = saveGeneration
         lock.lock()
@@ -72,10 +93,12 @@ public final class SnapshotStore: @unchecked Sendable {
         do {
             try prepare(model: model)
             let dto = SnapshotMapper.dto(from: model); captureCount += 1
-            dirtyModel = nil
+            dirtyModel = nil; dirtySince = nil; capturedModel = model
             lock.withLock { pendingWork = nil }
-            queue.async { [weak self] in self?.writeReportingFailure(dto: dto) }
+            queue.async { [weak self] in self?.writeReportingFailure(dto: dto, generation: generation) }
         } catch {
+            // This work item has run: the maximum wait must not keep waiting for it.
+            lock.withLock { pendingWork = nil }
             FileHandle.standardError.write(Data("SnapshotStore prepare failed: \(error)\n".utf8))
         }
     }
@@ -86,8 +109,15 @@ public final class SnapshotStore: @unchecked Sendable {
         saveGeneration += 1
         lock.withLock { pendingWork?.cancel(); pendingWork = nil }
         try prepare(model: model)
-        let dto = SnapshotMapper.dto(from: model); captureCount += 1; dirtyModel = nil
-        try queue.sync { try write(dto: dto) }
+        let dto = SnapshotMapper.dto(from: model); captureCount += 1; dirtyModel = nil; dirtySince = nil
+        do {
+            try queue.sync { try write(dto: dto) }
+            lock.withLock { writeFailing = false }
+        } catch {
+            // Still unsaved: a later change, flush or quit tries again.
+            dirtyModel = model; dirtySince = Date()
+            throw error
+        }
     }
 
     /// Captures dirty state synchronously, then waits for writes already queued.
@@ -99,9 +129,24 @@ public final class SnapshotStore: @unchecked Sendable {
         } else { queue.sync {} }
     }
 
-    private func writeReportingFailure(dto: SnapshotFileDTO) {
-        do { try write(dto: dto) }
-        catch { FileHandle.standardError.write(Data("SnapshotStore write failed: \(error)\n".utf8)) }
+    private func writeReportingFailure(dto: SnapshotFileDTO, generation: Int) {
+        do {
+            try write(dto: dto)
+            lock.withLock { writeFailing = false }
+        } catch {
+            FileHandle.standardError.write(Data("SnapshotStore write failed: \(error)\n".utf8))
+            let first = lock.withLock { () -> Bool in defer { writeFailing = true }; return !writeFailing }
+            let message = error.localizedDescription
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // The captured state never reached the disk: keep it unsaved, so the next change,
+                // flush or quit writes it again. A newer schedule or save already covers it.
+                if generation == self.saveGeneration, self.dirtyModel == nil, let model = self.capturedModel {
+                    self.dirtyModel = model; self.dirtySince = Date()
+                }
+                if first { self.onSaveFailure?(message) }
+            }
+        }
     }
 
     private func write(dto: SnapshotFileDTO) throws {

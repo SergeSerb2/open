@@ -34,6 +34,33 @@ final class SQLiteDB: @unchecked Sendable {
 
     deinit { if let db { sqlite3_close(db) } }
 
+    /// True when the file is not a database or its schema cannot be read (SQLITE_NOTADB or
+    /// SQLITE_CORRUPT). SQLite opens such a file without an error and fails every later statement.
+    /// Reads only the schema page; a busy or locked file is not damaged.
+    var isDamaged: Bool {
+        var statement: OpaquePointer?
+        let prepared = sqlite3_prepare_v2(db, "SELECT count(*) FROM sqlite_master", -1, &statement, nil)
+        defer { sqlite3_finalize(statement) }
+        let code = (prepared == SQLITE_OK ? sqlite3_step(statement) : prepared) & 0xff
+        return code == SQLITE_NOTADB || code == SQLITE_CORRUPT
+    }
+
+    /// Opens the store. A damaged file and its -wal/-shm are moved aside as
+    /// `<name>.damaged-<time>[-wal|-shm]` (kept, never deleted) and a fresh store is opened in its
+    /// place, as the session snapshot keeps `browser.unreadable-*.json` (bug sweep r7 Z-02).
+    static func openSettingAsideDamage(path: String, open: (String) throws -> SQLiteDB) throws -> SQLiteDB {
+        do {
+            let first = try open(path)
+            if !first.isDamaged { return first }
+        }
+        let stamp = Int(Date().timeIntervalSince1970)
+        for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: path + suffix) {
+            try FileManager.default.moveItem(atPath: path + suffix, toPath: path + ".damaged-\(stamp)" + suffix)
+        }
+        FileHandle.standardError.write(Data("Open: damaged store kept as \((path as NSString).lastPathComponent).damaged-\(stamp); starting a new one\n".utf8))
+        return try open(path)
+    }
+
     @discardableResult
     func exec(_ sql: String) -> Bool {
         sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK

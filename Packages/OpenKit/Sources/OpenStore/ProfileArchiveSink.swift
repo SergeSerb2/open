@@ -7,6 +7,8 @@ public final class ProfileArchiveSink: ArchiveSink {
     private let directories: ProfileDirectories
     private let directoryNameFor: @MainActor (ProfileID?) -> String
     private var stores: [String: ArchiveStore] = [:]
+    /// Passed to each Profile's store: a closed tab could not be written (bug sweep r7 Z-02).
+    public var onWriteFailure: (@MainActor @Sendable () -> Void)?
 
     public init(directories: ProfileDirectories, directoryNameFor: @escaping @MainActor (ProfileID?) -> String) {
         self.directories = directories
@@ -17,6 +19,7 @@ public final class ProfileArchiveSink: ArchiveSink {
         let name = directoryNameFor(profileID)
         if let store = stores[name] { return store }
         let store = ArchiveStore(fileURL: directories.archiveFileURL(dataDirectoryName: name))
+        store.onWriteFailure = onWriteFailure
         stores[name] = store
         return store
     }
