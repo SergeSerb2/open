@@ -179,7 +179,7 @@ final class PageDialogPresenter {
   }
   var state: [String: Any] {
     guard let entry = entries.first(where: { $0.alert != nil }) ?? entries.first else { return ["pending": 0, "visible": false] }
-    return ["pending": entries.count, "kind": entry.dialog.kind.rawValue,
+    return ["pending": entries.count, "kind": entry.dialog.kind.rawValue, "browser": entry.dialog.browserIdentifier,
       "visible": entry.alert?.window.isVisible == true, "held": entry.held,
       "title": entry.alert?.messageText ?? Self.title(entry.dialog),
       "informativeText": entry.alert?.informativeText ?? "",
