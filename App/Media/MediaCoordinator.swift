@@ -347,23 +347,38 @@ final class MediaCoordinator {
   }
 
   /// "Mute All Tabs": every tab with a live page, app-wide; "Unmute All Tabs": every muted tab.
-  /// One undo step (media-pip §4.8, Q10).
+  /// One undo step (media-pip §4.8, Q10). Every window's model counts: an Incognito window or a
+  /// Blank Window keeps its tabs in its own model. Pages with no sidebar tab (Little Open, Peek)
+  /// are muted on the page alone (bug sweep r6 V-06).
   func muteAll(_ muted: Bool) {
-    var ids: [ItemID]
-    if muted {
-      ids = app.hostFactories.values.flatMap { factory in
-        factory.hosts.compactMap { id, host in !host.closed && self.app.model.tab(id: id) != nil ? id : nil }
+    var models: [ObjectIdentifier: BrowserModel] = [ObjectIdentifier(app.model): app.model]
+    for factory in app.hostFactories.values { models[ObjectIdentifier(factory.model)] = factory.model }
+    var changes: [(model: BrowserModel, id: ItemID)] = []
+    for model in models.values {
+      var ids: Set<ItemID>
+      if muted {
+        ids = Set(app.hostFactories.values.filter { $0.model === model }.flatMap { factory in
+          factory.hosts.compactMap { id, host in !host.closed && model.tab(id: id) != nil ? id : nil }
+        })
+      } else {
+        ids = Set(model.index.values.compactMap { node in node.tab.flatMap { $0.isMuted ? $0.id : nil } })
       }
-    } else {
-      ids = app.model.index.values.compactMap { node in node.tab.flatMap { $0.isMuted ? $0.id : nil } }
+      changes += ids.filter { model.tab(id: $0)?.isMuted != muted }.map { (model, $0) }
     }
-    ids = ids.filter { app.model.tab(id: $0)?.isMuted != muted }
-    guard !ids.isEmpty else { return }
-    let undo = app.undoManager
-    undo.beginUndoGrouping()
-    for id in ids { app.model.setMuted(tabID: id, muted: muted) }
-    undo.endUndoGrouping()
-    for id in ids { if let host = host(id) { host.content.isMuted = muted; sync(host) } }
+    var pages: [OEWebContent] = app.littleOpenHosts.values.filter { !$0.closed }.map(\.content)
+    for controller in app.windowControllers where controller.hasPeekController {
+      pages += controller.peekController.stack.compactMap { ($0.host as? EngineWebContentHost).flatMap { $0.closed ? nil : $0.content } }
+    }
+    pages = pages.filter { $0.isMuted != muted }
+    guard !changes.isEmpty || !pages.isEmpty else { return }
+    // A private model registers on its own Undo manager; each manager gets one group.
+    let managers = Dictionary(changes.compactMap { change in change.model.undoManager.map { (ObjectIdentifier($0), $0) } },
+                              uniquingKeysWith: { first, _ in first })
+    managers.values.forEach { $0.beginUndoGrouping() }
+    for change in changes { change.model.setMuted(tabID: change.id, muted: muted) }
+    managers.values.forEach { $0.endUndoGrouping() }
+    for change in changes { if let host = host(change.id) { host.content.isMuted = muted; sync(host) } }
+    for page in pages { page.isMuted = muted }
     app.scheduleSave()
   }
 
@@ -372,7 +387,13 @@ final class MediaCoordinator {
   fileprivate func pictureInPictureDidOpen(_ pip: OEPictureInPicture) {
     guard let content = pip.webContent,
           let factory = app.hostFactories.values.first(where: { $0.tabID(for: content) != nil }),
-          let tabID = factory.tabID(for: content) else { return }
+          let tabID = factory.tabID(for: content) else {
+      // A page with no window tab (Little Open, a popup panel, an extension popup): Open's PiP
+      // window follows a tab. End the PiP so the page gets its video back; it vanished into a
+      // window that never showed (bug sweep r6 V-04). As the Document PiP failure path does.
+      DispatchQueue.main.async { pip.close(pausingVideo: false) }
+      return
+    }
     if pip.kind == .document { openDocumentPictureInPicture(pip, openerTabID: tabID, factory: factory); return }
     if let old = pipWindow { old.dismiss(reason: .replaced) }
     let host = EnginePictureInPictureHost(
