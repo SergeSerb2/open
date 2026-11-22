@@ -598,7 +598,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func retireProfile(_ id: ProfileID, directory: String) {
     for (tab, host) in hosts where host.content.context.identifier == directory {
+      controller?.container.closeHost(for: tab)
       host.close(); hosts.removeValue(forKey:tab); modelHostIDs.remove(tab); queuedNavigations.removeValue(forKey:tab)
+    }
+    // Popup panels of the Profile go too: the engine's context deletion would close their pages
+    // and leave the panels on screen, blank (bug sweep r6 OE-07).
+    for page in auxiliaryPages where page.content.context.identifier == directory {
+      closeAuxiliary(page); page.panel.close()
     }
     mirror.retireProfile(id)
   }
@@ -1935,7 +1941,14 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         if let url = request.url { openNewTab(url: url, background: request.disposition == .newBackgroundTab, opener: nil, in: request.context) }
         return nil
       }
-      guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
+      // A popup panel (no sidebar tab) of another Profile than the focused Space's opens its tab in
+      // a Space of its own Profile, not nowhere (bug sweep r6 OE-09).
+      let requestProfile = profile(for: request.context)
+      let ownSpace = source == nil && focusedSpace?.profileID != requestProfile?.id
+        ? requestProfile.flatMap { profile in
+            model === app.model ? space(forProfile: profile.id) : model.spaces.first { $0.profileID == profile.id } }
+        : nil
+      guard let space = source ?? ownSpace ?? focusedSpace, space.profileID == requestProfile?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
                              unread: request.disposition == .newBackgroundTab)
       tab.openerID = opener
