@@ -815,6 +815,12 @@ def run(factory, results, tmp, api):
             # L04d (review r2 #2): a title typed in the canvas (one row) shows in the open Library too.
             typed = None
             if b_tab:
+                # The canvas must be on screen to type in it: show Board B, then open the Library over it.
+                library(action='close')
+                app.call('select', tab=b_tab)
+                api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=b_tab)), timeout=8, step=.1)
+                library(action='open', section='easels')
+                api.wait_until(lambda: (lambda x: x if x.get('open') and x.get('rows') else None)(library()), timeout=8, step=.2)
                 easel(action='title', text='Board B typed', tab=b_tab)
                 typed = api.wait_until(lambda: (lambda x: x if any(r.get('title') == 'Board B typed' for r in x.get('rows', [])) else None)(library()),
                                        timeout=5, step=.2)
