@@ -12,6 +12,12 @@ final class EaselContentHost: WebContentHost {
   weak var owner: EngineWebContentHostFactory?
   let canvas: EaselCanvasView
   private(set) var closed = false
+  /// Set by `close` once its own last edits are saved.
+  private var savesEnded = false
+  #if OPEN_AUTOMATION
+  /// Holds each picture import this long before it reads (the e2e text-box-during-import row).
+  static var importDelayForAutomation: Duration?
+  #endif
   /// True when the file was missing and a fresh document was made for this tab.
   let recreated: Bool
   var view: NSView { canvas }
@@ -45,7 +51,9 @@ final class EaselContentHost: WebContentHost {
     }
     canvas = EaselCanvasView(document: document!)
     canvas.onChange = { [weak self] doc in
-      guard let self, !self.showingSaved, let owner = self.owner else { return }
+      // After close has committed its last edits, nothing saves: a late change (an import that
+      // finished) must not bring back a deleted or replaced Easel.
+      guard let self, !self.savesEnded, !self.showingSaved, let owner = self.owner else { return }
       owner.app.easels.save(doc)
       let titleChanged = owner.model.tab(id: self.tabID).map { $0.title != doc.displayTitle } ?? false
       if titleChanged {
@@ -58,9 +66,15 @@ final class EaselContentHost: WebContentHost {
     canvas.imageURL = { [weak store] file in store?.imageURL(document: id, file: file) }
     canvas.storeImage = { [weak store] data in store?.addImage(data, document: id) }
     canvas.storeImageAsync = { [weak self, weak store] source in
-      // Never store into an Easel whose tab closed (or that was deleted) while the import ran.
-      guard let self, !self.closed, let directory = store?.imagesDirectory(for: id) else { return nil }
-      let image = await Task.detached(priority: .userInitiated) { EaselStore.storeImage(source, in: directory) }.value
+      // Read, check and hash off the main thread; the write goes through the store's queue and is
+      // refused once the Easel was deleted or replaced. Never for a host that closed meanwhile.
+      guard let self, !self.closed, let token = store?.discardToken(id) else { return nil }
+      #if OPEN_AUTOMATION
+      if let delay = Self.importDelayForAutomation { try? await Task.sleep(for: delay) }
+      #endif
+      let prepared = await Task.detached(priority: .userInitiated) { EaselStore.prepareImage(source) }.value
+      guard let prepared, !self.closed, let store else { return nil }
+      let image = await store.writeImage(prepared, document: id, token: token)
       return self.closed ? nil : image
     }
     canvas.onPickImage = { [weak self] in self?.pickImage() }
@@ -174,6 +188,8 @@ final class EaselContentHost: WebContentHost {
     for id in Array(livePages.keys) { releaseLivePage(id) }
     owner?.app.easels.flush(wait: false)
     canvas.removeFromSuperview()
+    // Ends picture imports still running (their batch is dropped) and any later save.
+    savesEnded = true; canvas.storeImageAsync = nil; canvas.onChange = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil; shouldNavigate = nil
     if owner?.easelHosts[tabID] === self { owner?.easelHosts[tabID] = nil }

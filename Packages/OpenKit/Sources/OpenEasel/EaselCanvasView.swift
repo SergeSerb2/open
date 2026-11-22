@@ -379,47 +379,40 @@ public final class EaselCanvasView: NSView {
             return true
         }
         let files = (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
-        if let store = storeImageAsync {
-            // Only the pasteboard reads stay here. Files are picked by name (no disk access); the
-            // bytes are read, checked, hashed and written off the main thread.
+        if storeImageAsync != nil {
+            // Only the pasteboard reads stay here. Files are picked by name (no disk access), with
+            // the picture types the store keeps; the bytes are read, checked, hashed and written off
+            // the main thread. With no picture here, paste goes on to a web address or text: nothing
+            // is read from disk on the main thread.
             var sources: [EaselImageSource] = files.prefix(20)
-                .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) == true }.map { .file($0) }
+                .filter { file in UTType(filenameExtension: file.pathExtension).map { type in Self.pictureTypes.contains { type.conforms(to: $0) } } == true }
+                .map { .file($0) }
             if sources.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
                data.count <= EaselStore.maxImageBytes {
                 sources = [.data(data)]
             }
             if !sources.isEmpty {
-                pendingImageImports += 1
-                Task { @MainActor [weak self] in
-                    var images: [EaselImage] = []
-                    for source in sources { if let image = await store(source) { images.append(image) } }
-                    guard let self else { return }
-                    defer { self.pendingImageImports -= 1 }
-                    guard !images.isEmpty else { return }
-                    var ids: [UUID] = []
-                    var at = center
-                    for image in images { ids.append(self.insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
-                    self.setSelection(ids)
-                }
+                importImages(sources, at: center, name: name)
                 return true
             }
-        }
-        var images: [EaselImage] = []
-        for file in files.prefix(20) {
-            guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
-                  size <= EaselStore.maxImageBytes, let data = try? Data(contentsOf: file), let image = storeImage?(data) else { continue }
-            images.append(image)
-        }
-        if images.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
-           data.count <= EaselStore.maxImageBytes, let image = storeImage?(data) {
-            images.append(image)
-        }
-        if !images.isEmpty {
-            var ids: [UUID] = []
-            var at = center
-            for image in images { ids.append(insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
-            setSelection(ids)
-            return true
+        } else {
+            var images: [EaselImage] = []
+            for file in files.prefix(20) {
+                guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
+                      size <= EaselStore.maxImageBytes, let data = try? Data(contentsOf: file), let image = storeImage?(data) else { continue }
+                images.append(image)
+            }
+            if images.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
+               data.count <= EaselStore.maxImageBytes, let image = storeImage?(data) {
+                images.append(image)
+            }
+            if !images.isEmpty {
+                var ids: [UUID] = []
+                var at = center
+                for image in images { ids.append(insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
+                setSelection(ids)
+                return true
+            }
         }
         if let url = Self.webURL(in: pb) { onLink?(url, center); return onLink != nil }
         if let string = pb.string(forType: .string), !string.isEmpty, string.utf16.count <= EaselDocument.maxTextLength {
@@ -437,6 +430,33 @@ public final class EaselCanvasView: NSView {
             + [pb.string(forType: .string).flatMap { URL(string: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }].compactMap { $0 }
         return candidates.first { ["http", "https"].contains($0.scheme?.lowercased() ?? "") && $0.host() != nil
             && $0.absoluteString.utf16.count <= EaselDocument.maxURLLength }
+    }
+
+    /// The picture types the store keeps (`EaselStore.imageInfo`, the Image tool's panel).
+    static let pictureTypes: [UTType] = [.png, .jpeg, .gif, .webP, .heic, .tiff]
+
+    /// Stores pictures one by one through `storeImageAsync`, then inserts them together. The whole
+    /// batch is dropped when the host closes meanwhile (it clears `storeImageAsync`).
+    private func importImages(_ sources: [EaselImageSource], at center: CGPoint, name: String) {
+        pendingImageImports += 1
+        Task { @MainActor [weak self] in
+            var images: [EaselImage] = []
+            var aborted = false
+            for source in sources {
+                guard let store = self?.storeImageAsync else { aborted = true; break }
+                if let image = await store(source) { images.append(image) }
+            }
+            guard let self else { return }
+            defer { self.pendingImageImports -= 1 }
+            guard !aborted, self.storeImageAsync != nil, !images.isEmpty else { return }
+            // A text box opened while the pictures were stored would, when it ends, put back the
+            // document from before the box (its undo base) and drop them: end it first.
+            self.endTextEditing(commit: true)
+            var ids: [UUID] = []
+            var at = center
+            for image in images { ids.append(self.insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
+            self.setSelection(ids)
+        }
     }
 
     /// Pictures land at most 400 document points wide (GUESS — capture pending), keeping

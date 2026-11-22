@@ -338,6 +338,28 @@ def run(factory, results, tmp, api):
                    deferred=deferred, bytes=big.stat().st_size, pasteMs=round(paste * 1000, 1),
                    roundTripMs=round(round_trip * 1000, 1), load=os.getloadavg(), files=s['imageFiles'])
             if large and canvas(s)['selection'] == [large[0]['id']]: easel(action='edit', op='delete', tab=e2)
+            # Review r1 #3 (bug sweep r6): a text box opened while a pasted picture is stored. The picture
+            # lands, and ending the box keeps both. Before, ending a new box put back the document from
+            # before the box (its undo base) and dropped the picture. The import is held 1.5 s so the
+            # box opens first.
+            tinted = make_png(Path(tmp) / 'tinted.png', 300, 200, (40, 160, 90))
+            easel(action='import-delay', ms=1500, tab=e2)
+            try:
+                app.call('easel', action='pasteboard', file=str(tinted))
+                held = easel(action='edit', op='paste', tab=e2).get('pendingImageImports') == 1
+                easel(action='tool', tool='text', tab=e2); easel(action='click', at=[120, 560], tab=e2)
+                easel(action='type', text='During import', tab=e2)
+                editing_while_held = canvas(easel(tab=e2))['editingText'] is not None and easel(tab=e2)['pendingImageImports'] == 1
+                s = stored()
+                easel(action='click', at=[960, 150], tab=e2)
+                s = easel(tab=e2)
+            finally:
+                easel(action='import-delay', ms=0, tab=e2)
+            tinted_rows = [x for x in objects(s) if x['kind'] == 'image' and x['pixelSize'] == [300, 200]]
+            typed_rows = [x for x in objects(s) if x['kind'] == 'text' and x.get('text') == 'During import']
+            record('E23t_text_box_during_image_import', held and editing_while_held and len(tinted_rows) == 1
+                   and len(typed_rows) == 1 and canvas(s)['editingText'] is None,
+                   held=held, editingWhileHeld=editing_while_held, images=len(tinted_rows), texts=len(typed_rows), state=canvas(s))
 
             # E24: a pasted address makes a link card at once; its metadata and picture follow.
             app.call('easel', action='pasteboard', url=origin + '/page.html')

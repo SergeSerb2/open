@@ -259,6 +259,9 @@ extension AutomationController {
       }
       return ["shown": true, "buttons": all.map(\.title), "texts": labels(content).filter { !$0.isEmpty }]
     case "flush": app.easels.flush()
+    case "import-delay":
+      let ms = args["ms"] as? Int ?? 0
+      EaselContentHost.importDelayForAutomation = ms > 0 ? .milliseconds(ms) : nil
     default: throw Failure(message: "unknown easel action")
     }
     canvas.layoutSubtreeIfNeeded()

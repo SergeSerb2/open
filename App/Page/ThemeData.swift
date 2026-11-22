@@ -42,6 +42,9 @@ enum ThemeData {
   static func watchThemes(app: AppDelegate) {
     guard enabled, !watching else { return }
     watching = true
+    // A normal launch never runs `refreshAll` (no setting change): take the baseline here, or the
+    // first theme edit would count every Space as changed and re-apply to every live page.
+    if !seeded { snapshotThemes(app: app) }
     withObservationTracking {
       for space in app.model.spaces { _ = space.theme }
       _ = ThemePreviewRegistry.shared.livePreviewSpaces
@@ -53,7 +56,9 @@ enum ThemeData {
       }
     }
   }
+  private static var seeded = false
   private static func snapshotThemes(app: AppDelegate) {
+    seeded = true
     appliedThemes = Dictionary(app.model.spaces.map { ($0.id, $0.theme) }, uniquingKeysWith: { a, _ in a })
     deferredSpaces = []
   }
