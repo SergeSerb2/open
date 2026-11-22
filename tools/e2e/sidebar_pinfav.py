@@ -293,12 +293,14 @@ def run(factory, results, tmp, harness):
         # URL. After Cmd-W put the tab back on its pinned URL (P4), selecting it again woke that stored
         # page (and wrote its URL back into the tab). It loads the pinned URL now, with no back list.
         stored15 = any(r['tab'] == pr for r in app.call('sleep-store'))
+        # The stored-row wake needs the started sleep controller (T5); without it the row passes by luck.
+        started15 = bool(wait_until(lambda: app.call('sleep-state').get('started'), timeout=10, step=.1))
         app.call('select', tab=pr)
         again = wait_until(lambda: (lambda t: t if t['hasWebContent'] and t['loaded'] and not t['loading'] else None)(tab(pr)), timeout=8, step=.05) or tab(pr)
         href = app.eval(pr, 'location.href') if again.get('loaded') else ''
         record('PF17_reselect_after_reset_loads_pinned_url', again['url'] == again['pinnedURL'] and href == again['pinnedURL']
-               and not again['canGoBack'] and stored_before15 and not stored15,
-               storedBefore=stored_before15, stored=stored15, again={k: again.get(k) for k in ('url', 'pinnedURL', 'canGoBack')}, href=href)
+               and not again['canGoBack'] and stored_before15 and not stored15 and started15,
+               started=started15, storedBefore=stored_before15, stored=stored15, again={k: again.get(k) for k in ('url', 'pinnedURL', 'canGoBack')}, href=href)
     finally:
         server.shutdown()
         app.quit()

@@ -377,6 +377,46 @@ def run(factory, results, tmp, h):
                          state=state, shown=shown, target=target, kept=kept, gone=bool(gone), selected=selected, low=low)
         gate('dialog_beforeunload_bulk_archive', bulk_archive)
 
+        def bulk_archive_leave_then_stay():
+            # Bug sweep r6 P-01, lead ruling (b): pages ask in turn. "Leave" on the first and "Stay"
+            # on the second cancels the action: both tabs stay. The first page has closed; its tab
+            # wakes from the back list stored before it asked.
+            assert wait(lambda: app.call('sleep-state').get('started'), timeout=10, step=.1)
+            low = page(); second = page(); arm(second)
+            first = page(); app.call('navigate', tab=first, url=origin + '/leave-b?' + str(time.time_ns())); app.call('wait', tab=first); arm(first)
+            app.call('select', tab=low)
+            app.call('sidebar-menu', node=low, item='Archive Tabs Above', alternate=True)
+            asked_first = visible(ds); shown_first = app.call('window-state')['selected']; answer()
+            asked_second = visible(ds); shown_second = app.call('window-state')['selected']; answer(False)
+            ids = {t['id'] for t in app.call('tabs')}
+            kept = first in ids and second in ids
+            first_closed = not tab_row(first).get('loaded')
+            app.call('select', tab=first)
+            woke = wait(lambda: (lambda t: t if t.get('loaded') and not t.get('loading') else None)(tab_row(first)), timeout=8, step=.05) or {}
+            length = app.eval(first, 'history.length') if woke.get('loaded') else 0
+            return check(shown_first == first and shown_second == second and kept and first_closed and length >= 2,
+                         shownFirst=shown_first, shownSecond=shown_second, first=first, second=second,
+                         kept=kept, firstClosed=first_closed, historyLength=length)
+        gate('dialog_beforeunload_bulk_leave_then_stay', bulk_archive_leave_then_stay)
+
+        def folder_delete():
+            # Bug sweep r6 P-01: Delete Folder confirms first; the page in it then asks on the next
+            # turn, after the confirmation sheet ended. "Stay" keeps the folder and the tab.
+            inner = page(); arm(inner); other = page()
+            folder = app.call('folder', tabs=[inner], title='Unload folder')
+            app.call('select', tab=other)
+            app.call('sidebar-menu', node=folder, item='Delete')
+            assert wait(lambda: h['_try'](lambda: app.call('alert', button='Delete Folder')) is not None, timeout=3, step=.05)
+            state = visible(ds); answer(False)
+            kept = any(t['id'] == inner for t in app.call('tabs'))
+            app.call('select', tab=other)
+            app.call('sidebar-menu', node=folder, item='Delete')
+            assert wait(lambda: h['_try'](lambda: app.call('alert', button='Delete Folder')) is not None, timeout=3, step=.05)
+            visible(ds); answer()
+            gone = wait(lambda: all(t['id'] != inner for t in app.call('tabs')), timeout=3, step=.02)
+            return check(state['title'] == 'Leave site?' and kept and bool(gone), state=state, kept=kept, gone=bool(gone))
+        gate('dialog_beforeunload_folder_delete', folder_delete)
+
         def window_close():
             # Bug sweep r6 WL-04: closing a window (its close button, Close Window) destroyed its
             # pages without beforeunload; a Blank Window loses its tabs with it. "Stay" keeps the
