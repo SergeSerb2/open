@@ -519,7 +519,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             "dragSession":listView.dragSession,"search":searchText,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "statusLabel":statusLabel.isHidden ? "" : statusLabel.stringValue, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden,"bodyFrame":rect(emptyBody),"buttonFrame":rect(emptyButton),"bodyNeededHeight":ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:emptyBody.frame.width,height:200),options:[.usesLineFragmentOrigin,.usesFontLeading]).height),"buttonToolTip":emptyButton.toolTip ?? "","buttonHelp":emptyButton.accessibilityHelp() ?? ""],
             "easels":easelsState, "notes":noteItems.count,
             "menuOpen":listView.activeMenu != nil,"menuLifecycle":listView.menuLifecycle,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? "",
-            "firstResponderLabel":(window?.firstResponder as? NSView).map { $0.identifier?.rawValue ?? $0.accessibilityLabel() ?? "" } ?? ""]
+            "listVisible":!listView.isHiddenOrHasHiddenAncestor,"firstResponderLabel":(window?.firstResponder as? NSView).map { $0.identifier?.rawValue ?? $0.accessibilityLabel() ?? "" } ?? ""]
     }
     public func hoverTile(_ section: LibraryPanelSection, hovered: Bool) { tiles[section]?.hovered=hovered }
     public func pressBack() { back.performClick(nil) }

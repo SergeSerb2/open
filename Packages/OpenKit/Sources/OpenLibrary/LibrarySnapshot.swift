@@ -63,6 +63,9 @@ final class LibrarySectionHost {
     var storeVersion = ""
     var storeWatch: Task<Void,Never>?
     var loaded = false
+    /// Its list still shows rows of a Profile the filter has left: hidden until the new
+    /// Profile's rows load (bug sweep r6).
+    var showsOldProfile = false
     var provider: Task<Void,Never>?
     var providerGeneration = 0
     var wasWarmed = false

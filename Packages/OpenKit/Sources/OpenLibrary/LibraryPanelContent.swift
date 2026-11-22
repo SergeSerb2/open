@@ -178,7 +178,7 @@ extension LibraryPanelView {
             await self.viewModel.refreshExternalState(for:mapped)
             guard !Task.isCancelled,host.providerGeneration == generation else { return }
             host.phaseMilliseconds["provider"] = (ProcessInfo.processInfo.systemUptime-started)*1000
-            host.loaded = true; host.dirty = true
+            host.loaded = true; host.dirty = true; host.showsOldProfile = false
             if self.section == target,self.contentActive {
                 self.skeletonTask?.cancel(); self.skeletonTask = nil; self.loadingSkeleton.isHidden = true
                 self.renderRows()
@@ -220,11 +220,7 @@ extension LibraryPanelView {
                     if (target == .history || target == .boosts), historyProfile != self.viewModel.historyProfileID {
                         // Profile changes alone retire the old subscription and
                         // provider. Ordinary opens and list updates keep both.
-                        if let host = self.hosts[target] {
-                            host.storeWatch?.cancel(); host.storeWatch = nil
-                            host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1
-                            host.loaded = false; host.wasWarmed = false
-                        }
+                        if let host = self.hosts[target] { self.retireProfileRows(host) }
                         storeChanged = true
                     }
                     if target == .archive, let host = self.hosts[target] {
@@ -346,7 +342,7 @@ extension LibraryPanelView {
         if section == .media, viewModel.captures.loadFailed { emptyTitle.stringValue = "Could not load media"; emptyBody.stringValue = "Close the Library and try again." }
         statusLabel.stringValue = section == .downloads && !viewModel.downloads.downloadHistoryError.isEmpty ? viewModel.downloads.downloadHistoryError : viewModel.statusText
         statusLabel.isHidden = statusLabel.stringValue.isEmpty || section == .spaces
-        for (target,host) in hosts { host.list.isHidden = target != section || (host.loaded && host.list.rowCount == 0) || section == .spaces }
+        for (target,host) in hosts { host.list.isHidden = target != section || host.showsOldProfile || (host.loaded && host.list.rowCount == 0) || section == .spaces }
         layoutActiveList()
         content.isHidden = !rowsEmpty || (section == .spaces && manager != nil) || (section != .spaces && hosts[section]?.loaded != true)
         manager?.isHidden = section != .spaces
@@ -626,6 +622,22 @@ extension LibraryPanelView {
         case .history: !historyWhenChips.isEmpty || viewModel.historyProfileID != context.focusedSpace?.profileID
         default: false
         }
+    }
+    /// A section's rows belong to a Profile the filter has left: drop its provider and hide its
+    /// list until the new Profile's rows load.
+    func retireProfileRows(_ host:LibrarySectionHost) {
+        host.storeWatch?.cancel(); host.storeWatch = nil
+        host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1
+        host.loaded = false; host.wasWarmed = false; host.dirty = true; host.showsOldProfile = true
+    }
+    /// An outside entry (Library opened from a window of another Profile) changes the Profile
+    /// filters. Call before show(section:): it draws on this turn, and the content observer that
+    /// also retires the old rows runs only on the next one, so the old Profile's cached rows were
+    /// drawn meanwhile (bug sweep r6; review of #646, #7).
+    public func profileFiltersWillChange(history:Bool, downloads:Bool) {
+        if history { for target in [LibraryPanelSection.history,.boosts] { if let host = hosts[target] { retireProfileRows(host) } } }
+        // Downloads rows are filtered at render: rebuild them from the new filter.
+        if downloads { hosts[.downloads]?.dirty = true }
     }
     public func setFilterOpen(_ value:Bool) {
         filterOpen = value

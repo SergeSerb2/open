@@ -184,6 +184,24 @@ def run(factory, results, tmp, h):
         guarded('nav4_library_reopen_follows_profile', library_profile,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
 
+        # Bug sweep r6 (review of #646, #7): the panel above holds Profile B's History rows. Reopened
+        # from Profile A's Space, the open call's own turn must not draw them (the `open` reply is read
+        # on the same main-actor turn as the show).
+        def library_profile_same_turn():
+            page_a, page_b = origin + '/library-profile-a', origin + '/library-profile-b'
+            app.call('library', action='close')
+            time.sleep(.6)
+            app.call('space', space=space_a['id'])
+            opened = app.call('library', action='open', section='history')
+            drawn = [r.get('subtitle', '') for r in opened.get('rows', [])] if opened.get('listVisible') else []
+            later = wait_until(lambda: (lambda r: r if page_a in [x['url'] for x in r['rows']] else None)(
+                app.call('library-history-state')), timeout=5, step=.1) or app.call('library-history-state')
+            row('nav6_library_profile_switch_no_stale_rows', opened.get('section') == 'history'
+                and not any(page_b in text for text in drawn) and page_a in [x['url'] for x in later['rows']],
+                listVisible=opened.get('listVisible'), drawn=drawn, profiles=opened.get('profiles'))
+        guarded('nav6_library_profile_switch_no_stale_rows', library_profile_same_turn,
+                lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
+
         # F-13: Cmd+F in Library ▸ Spaces opens no Find on the page strip behind Library (and keeps focus).
         def library_spaces_find():
             app.call('select', tab=start)
