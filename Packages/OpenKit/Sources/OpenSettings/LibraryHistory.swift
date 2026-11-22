@@ -27,7 +27,11 @@ extension LibraryViewModel {
         confirmsClearHistory = false
         guard let store = histories[historyProfileID] else { return }
         await actions.flushHistoryWrites()
-        do { try await store.deleteVisits(); selectedIDs = []; statusText = "History cleared." }
+        do {
+            try await store.deleteVisits(); selectedIDs = []; statusText = "History cleared."
+            // Not only Open's list: the engine keeps its own copy (bug sweep r6 DHR-01).
+            await actions.clearEngineHistory(profileID: historyProfileID)
+        }
         catch { statusText = error.localizedDescription }
         await reloadHistory()
     }

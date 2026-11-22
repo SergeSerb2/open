@@ -122,6 +122,9 @@ public struct LibraryMediaFolders: Sendable {
                                                  (.documents, folders.documents), (.download, folders.downloads)]
         var claimed = Set<String>()
         for (folderSource, folder) in order {
+            // Read only folders whose files can show (bug sweep r6 CF-07): a screen capture shows as
+            // Screenshots wherever it is, so with Screenshots on every folder is read for them.
+            guard enabled.contains(folderSource) || (folderSource != .screenshot && enabled.contains(.screenshot)) else { continue }
             for file in listMedia(in: folder, source: folderSource) where !claimed.contains(file.url.path) {
                 // A screen capture belongs to Screenshots wherever it is; other files in the
                 // screenshot folder belong to the folder they are in (a later pass).

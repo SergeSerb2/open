@@ -557,8 +557,11 @@ extension LibraryPanelView {
             let id = item.id
             let edit: () -> Void = { [weak self] in
                 guard let self else { return }
-                // A successful edit clears an earlier reason.
-                self.viewModel.statusText = self.viewModel.actions.editBoost(id:id,profileID:profile) ?? ""; self.updateContentChrome()
+                // A successful edit clears an earlier reason and, like opening any other Library item,
+                // closes the Library over the page and its editor (bug sweep r6 CF-10).
+                let reason = self.viewModel.actions.editBoost(id:id,profileID:profile)
+                self.viewModel.statusText = reason ?? ""; self.updateContentChrome()
+                if reason == nil { self.onClose?() }
             }
             // Arc's card: the Boost name over its host, no on/off text (capture session 8 item 14,
             // `v13/33-boost-menu-delete/i14-boosts.png`: "My Boost" over "127.0.0.1").
@@ -694,7 +697,9 @@ nonisolated private func downloadSubtitle(_ item:DownloadItemSnapshot) -> String
     switch item.state {
     // Arc's subtitle is the file-kind word ("PDF", "Archive"), else "Download" (capture session 8 item 9).
     case .completed:
-        guard item.fileExists == true else { return "File moved or deleted." }
+        // Nil: not checked yet (a row restored at launch). Only a checked, missing file reads as gone
+        // (bug sweep r6 DHR-14); the file buttons still wait for the check.
+        guard item.fileExists != false else { return "File moved or deleted." }
         // C12-PB1-2: these filename probes all show Download. In particular,
         // DOCX may conform to ZIP on the host; that must not change its subtitle.
         let ext = URL(fileURLWithPath: item.fileName).pathExtension.lowercased()
