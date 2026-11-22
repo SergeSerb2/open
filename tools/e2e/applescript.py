@@ -471,6 +471,41 @@ def window_close_checks(factory, results, fixture_server, wait_until):
         results['W3_close_two_windows_front_unloads_pinned'] = {'ok': bool(unloaded), 'shownBefore': shown,
             'row': row and {k: row.get(k) for k in ('section', 'loaded', 'selected')}}
 
+        # Both windows show pinned P and the reference names the BACK window: that window closes it
+        # (P unloads there), not the front one.
+        back_p = app.call('open', url=origin + '/w-back-pinned')['id']; app.call('wait', tab=back_p)
+        app.call('pin', tab=back_p)
+        shown = show_in_both(back_p)
+        script('close tab id %s of window id %s' % (quote(back_p), quote(first)))
+        app.call('window-focus', id=first, activate=True)
+        wait_until(lambda: app.call('window-state')['id'].lower() == first.lower() or None, timeout=5, step=.1)
+        def unloaded_in_back():
+            row = next((t for t in app.call('tabs') if t['id'] == back_p), None)
+            return row if row and row.get('section') == 'pinned' and not row.get('loaded') else None
+        unloaded = wait_until(unloaded_in_back, timeout=5, step=.1)
+        row = next((t for t in app.call('tabs') if t['id'] == back_p), None)
+        results['W3_close_two_windows_named_back_unloads_pinned'] = {'ok': bool(unloaded), 'shownBefore': shown,
+            'row': row and {k: row.get(k) for k in ('section', 'loaded', 'selected')}}
+
+        # The named BACK window only holds T (it showed T, then another tab); the front window shows T.
+        # The window that shows T must close it: a close in the back window blanked the front one
+        # and skipped its page's beforeunload.
+        held_t = app.call('open', url=origin + '/w-held-today')['id']; app.call('wait', tab=held_t)
+        script('select tab id %s of window id %s' % (quote(held_t), quote(first)))
+        wait_until(lambda: (window_state(first) or {}).get('selected') == held_t or None, timeout=5, step=.1)
+        script('select tab id %s of window id %s' % (quote(two_a), quote(first)))
+        script('select tab id %s of window id %s' % (quote(held_t), quote(made_id)))
+        wait_until(lambda: (window_state(made_id) or {}).get('selected') == held_t or None, timeout=5, step=.1)
+        before = {'first': (window_state(first) or {}).get('selected'), 'made': (window_state(made_id) or {}).get('selected'),
+                  'front': script('return id of window 1')}
+        script('close tab id %s of window id %s' % (quote(held_t), quote(first)))
+        gone = wait_until(lambda: all(t['id'] != held_t for t in app.call('tabs')) or None, timeout=5, step=.1)
+        shower = wait_until(lambda: (s if s.get('selected') else None) if (s := window_state(made_id)) else None, timeout=3, step=.1)
+        results['W3_close_named_back_holder_closes_in_shower'] = {'ok': bool(gone) and bool(shower)
+            and before['first'] == two_a and before['made'] == held_t and before['front'] == made_id,
+            'before': before, 'closed': bool(gone), 'showerSelected': (shower or window_state(made_id) or {}).get('selected')}
+        app.call('window-focus', id=made_id, activate=True)
+
         # make new tab at a Space of a named window shows it in that window, not in the front one.
         two_space = app.call('space-create', title='W Two')
         app.call('space', space=research)

@@ -66,9 +66,10 @@ registered. Scratch probes without these hooks change the model only, also witho
 `make new tab` shows the new tab through the same `selectInWindow` path, so the new tab is
 the only Undo step; `make new tab at space … of window id "…"` shows it in that named window.
 `close` (and removing a tab from a window's or Space's tabs) uses the window's own
-single-tab close (`ScriptHost.closeTab(tab, window)`, the same path as ⌘W): in the window
-the reference names when that window shows or holds the tab, else front to back in a window
-that shows it, then one that holds its page, then one that shows its Space. A page's
+single-tab close (`ScriptHost.closeTab(tab, window)`, the same path as ⌘W). A window that
+shows the tab closes it: the window the reference names if it shows the tab, else the first
+window (front to back) that shows it. Only then a window that keeps the tab's hidden page (the
+named one first), then one that shows its Space. A reference that names no window passes nil. A page's
 beforeunload can ask, a closed selected tab hands the selection to its neighbour, and a
 pinned tab or Favorite stays in the sidebar and unloads. Scratch probes without the hook
 close in the model.

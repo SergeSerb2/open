@@ -340,10 +340,11 @@ extension AppDelegate {
     refreshScriptingEngine()
     host.purgeRemovedWrappers()
   }
-  /// The window whose close path closes a scripted tab. The named window when it shows or holds
-  /// the tab; else, front to back, one that shows it, one that holds its page, one that shows its
-  /// Space; else the named or front window. A window that shows the tab must close it: another
-  /// window's close would blank it and skip its page's beforeunload. Main-model windows only.
+  /// The window whose close path closes a scripted tab: the named window if it shows the tab, else
+  /// the first window (front to back) that shows it; then the named window if it holds the tab's
+  /// page, else the first that holds it; then one that shows its Space; else the named or front
+  /// window. A window that shows the tab must close it: a close in another window (one that only
+  /// keeps a hidden page) blanked it and skipped its page's beforeunload. Main-model windows only.
   private func scriptCloseFactory(for id: ItemID, named: WindowID?) -> EngineWebContentHostFactory? {
     let controllers: [BrowserWindowController] = NSApp.orderedWindows.compactMap { window in
       windowControllers.first { $0.window === window }
@@ -355,8 +356,9 @@ extension AppDelegate {
       factory.hosts[id] != nil || factory.noteHosts[id] != nil || factory.easelHosts[id] != nil || factory.welcomeHosts[id] != nil
     }
     let preferred = named.flatMap { id in ordered.first { $0.windowState.id == id } }
-    if let preferred, shows(preferred) || holds(preferred) { return preferred }
+    if let preferred, shows(preferred) { return preferred }
     if let factory = ordered.first(where: shows) { return factory }
+    if let preferred, holds(preferred) { return preferred }
     if let factory = ordered.first(where: holds) { return factory }
     for factory in ordered {
       if let focused = factory.focusedSpace?.id, factory.space(for: id)?.id == focused { return factory }

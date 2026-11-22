@@ -56,15 +56,19 @@ enum ScriptTarget {
 
     /// The window a command's specifier names (`… of window 2`), else the key or front window.
     static func window(for command: NSScriptCommand) -> BrowserWindowState? {
+        namedWindow(for: command) ?? ScriptRead.preferredWindow()
+    }
+
+    /// Only the window the specifier itself names; nil when the reference names none.
+    static func namedWindow(for command: NSScriptCommand) -> BrowserWindowState? {
         var current = command.directParameter as? NSScriptObjectSpecifier ?? command.receiversSpecifier
         while let specifier = current {
             if specifier.key == "appleScriptWindows", specifier.container == nil {
-                if let named = (specifier.objectsByEvaluatingSpecifier as? ScriptWindow)?.state { return named }
-                break
+                return (specifier.objectsByEvaluatingSpecifier as? ScriptWindow)?.state
             }
             current = specifier.container
         }
-        return ScriptRead.preferredWindow()
+        return nil
     }
 
     /// Model-only fallback for scratch probes: a script selection is not an Undo step.
@@ -425,7 +429,7 @@ extension ScriptTab {
             ScriptHost.shared.littleTab?.close(target.tabID)
             ScriptHost.shared.tabWrappers[target.tabID] = nil
         } else {
-            ScriptTarget.closeTab(target.tabID, in: ScriptTarget.window(for: command)?.id)
+            ScriptTarget.closeTab(target.tabID, in: ScriptTarget.namedWindow(for: command)?.id)
         }
         return nil
     }
