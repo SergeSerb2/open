@@ -12,6 +12,13 @@ Open-owned, engine and cache folders, and saves the snapshot synchronously.
 Profile destruction and committed Local State cleanup. A Profile with data
 from a prior launch is loaded for this native metadata cleanup too. Successful
 deletion removes loaded engine/cache directories in the current session.
+Store opens that Chromium had already queued for the destroyed Profile
+(leveldb and sqlite stores such as GCM Store and BudgetDatabase) can still
+run a few milliseconds after deletion completes. They create the engine
+folder again, or make the first removal fail while they write. So the App
+removes the Open-owned, engine and cache folders again whenever one returns,
+until all of them stay gone for 750 ms (at most 5 s). A folder that is still
+there at that limit keeps its journal entry, and the next launch removes it.
 
 A synced `Profiles/.pending-wipe.json` journal covers interrupted or failed
 cleanup. The journal is bounded at 64 KiB, 1024 unique names, and 255 UTF-8

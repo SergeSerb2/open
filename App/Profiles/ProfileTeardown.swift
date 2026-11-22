@@ -114,10 +114,57 @@ final class ProfileTeardown {
     stage = "unload"
     try await unload(profileID: profileID)
     stage = "removeFolders"
-    try Self.removeIfPresent(app.directories.profileDirectory(dataDirectoryName: directory))
-    try Self.wipeEngine(directory, directories: app.directories)
-    try Self.dequeue(directory, directories: app.directories)
+    // Only a removal that stayed removed leaves the journal: folders that keep coming back are
+    // wiped at the next launch, before the engine starts (finishPendingWipes).
+    if try await Self.removeUntilSettled(directory, directories: app.directories) {
+      try Self.dequeue(directory, directories: app.directories)
+    }
     stage = "done"
+  }
+
+  /// The engine reports a Profile deleted once Chromium destroyed it, but store opens already queued
+  /// on Chromium's background sequences (leveldb and sqlite: GCM Store, BudgetDatabase, Feature
+  /// Engagement Tracker, Autofill caches) can still run a few milliseconds later. They create the
+  /// engine folder again, or make the first removal fail while they write ("couldn't be removed
+  /// because you don't have permission"; bug sweep r8: 10-25 ms after removal on the M1). So remove,
+  /// and remove again whenever a folder returns, until all of them stayed gone for `quiet`.
+  /// Returns false when a folder was still there at the deadline (it stays journaled). Throws the
+  /// last removal error only if a folder is still there at the deadline.
+  private static func removeUntilSettled(_ directory: String, directories: ProfileDirectories,
+                                         quiet: Duration = .milliseconds(750), limit: Duration = .seconds(5)) async throws -> Bool {
+    let folders = [directories.profileDirectory(dataDirectoryName: directory),
+                   directories.engineDirectory(dataDirectoryName: directory),
+                   directories.engineCacheDirectory(dataDirectoryName: directory)]
+    let clock = ContinuousClock(), deadline = clock.now + limit
+    var quietSince: ContinuousClock.Instant?
+    var lastError: (any Error)?
+    var passes = 0
+    defer {
+      // Evidence of the race, one line per deletion that needed it (no paths or names).
+      if passes > 1 { FileHandle.standardError.write(Data("Open: Profile folders removed again after deletion (\(passes) passes)\n".utf8)) }
+    }
+    while true {
+      if folders.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+        quietSince = nil; passes += 1
+        do {
+          try removeIfPresent(folders[0])
+          try wipeEngine(directory, directories: directories)
+          lastError = nil
+        } catch { lastError = error }
+      } else if let since = quietSince {
+        if clock.now - since >= quiet { return true }
+      } else {
+        quietSince = clock.now
+      }
+      guard clock.now < deadline else {
+        if folders.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+          if let lastError { throw lastError }
+          return false
+        }
+        return true
+      }
+      try? await Task.sleep(for: .milliseconds(25))
+    }
   }
 
   private static func pendingURL(_ directories: ProfileDirectories) -> URL {
