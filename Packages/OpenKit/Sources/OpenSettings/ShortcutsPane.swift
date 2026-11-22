@@ -60,7 +60,9 @@ import OpenDesign
         // The App ignores a file it cannot apply (AppDelegate.reloadKeyBindings), so never save one.
         do {
             let imported = try KeyBindingStore.load(from: url)
-            guard imported.isSupported else { statusText = "This file has shortcuts Open cannot use. Your saved shortcuts were kept."; return }
+            // As on load, bindings of commands this build does not know are kept but not applied, so
+            // a file exported with such entries imports again (bug sweep r6).
+            guard imported.droppingUnknownCommands.isSupported else { statusText = "This file has shortcuts Open cannot use. Your saved shortcuts were kept."; return }
             store = imported; saveDraft(resolvingLoadError: true)
         } catch { statusText = "Could not read key bindings. Your saved shortcuts were kept." }
     }
