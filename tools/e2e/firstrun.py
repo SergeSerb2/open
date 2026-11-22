@@ -1,5 +1,4 @@
 """First run through the real App, using only owned roots and synthetic data."""
-import copy
 import json
 import os
 import runpy
@@ -295,7 +294,7 @@ def run(factory, results, tmp, h):
         # Bug sweep r6 CF-03 (review r1 #1): one new Arc Archive item, written through the App's own
         # archive store; the same native Undo removes it.
         items = json.loads((expanded/'StorableArchiveItems.json').read_text())['items']
-        template = copy.deepcopy(items[items.index(ids['archive0']) + 1])
+        template = json.loads(json.dumps(items[items.index(ids['archive0']) + 1]))
         archive_new = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/first-run/archive-new')).upper()
         template['sidebarItem']['id'] = archive_new
         template['sidebarItem']['data']['tab']['savedURL'] = 'https://example.org/archive/new'
