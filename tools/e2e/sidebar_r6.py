@@ -7,6 +7,7 @@ P-03: a link dropped on another Space's icon opens there in the background; this
 P-05: Remove Pin (Cmd+D) on one pinned tab puts it at the top of Today, as a selection does.
 P-02: Restore Last Closed Tab brings back the tab the user closed, not a later auto-archived one.
 """
+import json
 import time
 from pathlib import Path
 
@@ -74,12 +75,20 @@ def _rows(app, results, wait_until, tmp):
     link = (Path(tmp) / 'r6-link.html'); link.write_text('<title>R6 Link</title><h1>Link</h1>')
     url_drop = app.call('space-dot-drop', space=b, url=link.as_uri()); settle()
     after = state()
-    app.call('space', space=b); settle()
-    new_in_b = [t['id'] for t in app.call('tabs') if t['url'] == link.as_uri()]
-    app.call('space', space=a); settle()
+    # Read Space B from the saved snapshot: switching to B could select (and so read) the tab.
+    def found(node):
+        if isinstance(node, dict):
+            if node.get('url') == link.as_uri() and 'id' in node: yield node
+            for v in node.values(): yield from found(v)
+        elif isinstance(node, list):
+            for v in node: yield from found(v)
+    with open(app.call('save')) as stream: snapshot = json.load(stream)
+    space_b = next((s for s in snapshot['spaces'] if s['id'] == b), {})
+    new_in_b = list(found(space_b.get('today', [])))
+    unread = [n.get('isUnread', False) for n in new_in_b]
     check('r6_space_icon_link_drop_keeps_current_tab', url_drop.get('accepted') and after['space'] == a and after['selected'] == keep
-          and keep in after['shownPages'] and len(new_in_b) == 1,
-          drop=url_drop, state={k: after[k] for k in ('space', 'selected', 'shownPages')}, keep=keep, newTabs=new_in_b)
+          and keep in after['shownPages'] and len(new_in_b) == 1 and unread == [True],
+          drop=url_drop, unread=unread, newTabs=[n.get('id') for n in new_in_b], state={k: after[k] for k in ('space', 'selected', 'shownPages')}, keep=keep)
 
     # P-05: Remove Pin on one tab puts it at the top of Today (as a selection's Unpin does).
     pin = opened('Pinned One'); app.call('pin', tab=pin); settle()
