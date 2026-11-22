@@ -70,7 +70,6 @@ final class ExternalLinkIntake {
     defer { didRoute?(request.url) }
     let routing = snapshot()
     let decision = evaluator.evaluate(request, in: routing)
-    decisionLog.record(decision)
     var resolved = decision.resolved
     if let profile, case .space(_, let other)? = resolved, other != profile, !decision.via.isRule {
       // The same order as the evaluator's most recent Space: front standard window, then any Space.
@@ -82,6 +81,8 @@ final class ExternalLinkIntake {
     } else if let profile, case .littleOpen? = resolved, !decision.via.isRule {
       resolved = .littleOpen(profileHint: profile)
     }
+    // The log shows where the link goes: after the Profile override, before it opens.
+    var logged = decision; logged.resolved = resolved; decisionLog.record(logged)
     switch resolved {
     case .space(let id, _): executor.openInSpace(request.url, spaceID: id)
     case .littleOpen(let hint): executor.openInLittleOpen(request.url, profileHint: hint)
