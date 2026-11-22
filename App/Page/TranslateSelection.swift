@@ -96,10 +96,14 @@ final class TranslateSelectionController {
       guard let self, let panel = self.popover else { return event }
       if event.type == .keyDown {
         if event.keyCode == 53 { self.closePanel(); return nil }
-        // Tab from the page moves keyboard focus into the bubble, onto Copy; it was out of the
-        // keyboard's reach (bug sweep r6, A11Y-10). Esc gives the key back to the window.
-        if event.keyCode == 48, !panel.isKeyWindow, event.window === panel.parent, !panel.content.copyButton.isHidden,
-           event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+        guard event.keyCode == 48, event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+        // Tab or Shift-Tab in the bubble gives keyboard focus back to the page; the bubble stays.
+        if panel.isKeyWindow { self.returnKeyToPage(); return nil }
+        // Tab from the page the bubble belongs to moves keyboard focus into the bubble, onto Copy; it
+        // was out of the keyboard's reach (bug sweep r6, A11Y-10). Only from that page: Tab in the
+        // command bar, Find, another tab or another pane is theirs (review of #665, #4).
+        if !event.modifierFlags.contains(.shift), event.window === panel.parent, !panel.content.copyButton.isHidden,
+           self.pageHasKeyboardFocus(in: panel.parent) {
           panel.allowsKey = true; panel.makeKey(); panel.makeFirstResponder(panel.content.copyButton); return nil
         }
         return event
@@ -122,6 +126,17 @@ final class TranslateSelectionController {
   }
 
   private weak var popoverParent: NSWindow?
+  /// The page this bubble translates holds keyboard focus in its window.
+  private func pageHasKeyboardFocus(in window: NSWindow?) -> Bool {
+    guard let window, let pageView = anchorView, let responder = window.firstResponder as? NSView,
+      !pageView.isHiddenOrHasHiddenAncestor else { return false }
+    return responder === pageView || responder.isDescendant(of: pageView)
+  }
+  private func returnKeyToPage() {
+    guard let panel = popover else { return }
+    panel.allowsKey = false
+    if let parent = popoverParent, parent.isVisible { parent.makeKey() } else { panel.resignKey() }
+  }
   private func closePanel() {
     if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil
     if let panel = popover {
@@ -200,6 +215,8 @@ final class TranslateSelectionPanel: NSPanel {
   /// or the text, never takes the key from the page.
   var allowsKey = false
   override var canBecomeKey: Bool { allowsKey }
+  /// Once the key leaves (Esc, Tab back, another window or app), a click again never takes it.
+  override func resignKey() { super.resignKey(); allowsKey = false }
 }
 
 /// The bubble's shape: body plus arrow, in the window background colour with a hairline.
