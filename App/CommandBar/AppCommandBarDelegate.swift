@@ -214,7 +214,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       // Open keeps search engines per Profile: Settings ▸ Profiles for the bar's Profile (CC-42 "Search Settings…").
       factory.app.performCommand("search-settings", payload: (profile ?? factory.focusedProfile?.id)?.description)
     case .runExtensionAction(let id):
-      factory.focusedBrowser?.executeExtensionAction(id, source: .menuEntry)
+      // The window's own run path: it clears an earlier click's popup anchor and keeps its guards.
+      factory.extensions.run(id, source: .menuEntry)
     case .extensionOmnibox(let id, let content, let destination, let modifiers):
       let disposition: OEOmniboxDisposition = modifiers.contains(.command) ? .newBackgroundTab
         : destination == .currentTab ? .currentTab : .newForegroundTab
