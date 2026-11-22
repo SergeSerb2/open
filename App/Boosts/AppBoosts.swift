@@ -45,6 +45,8 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     let host = AppBoostEditorHost(boosts: self); editorHostStorage = host; return host
   }
   @ObservationIgnored private var pendingEditors: [ItemID: BoostID] = [:]
+  /// The last address each page's Boosts were planned for (see pageLoadEnded).
+  @ObservationIgnored private var plannedURLs: [ObjectIdentifier: URL] = [:]
 
   init(app: AppDelegate) {
     #if OPEN_AUTOMATION
@@ -111,9 +113,12 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     let store = store(for: profile)
     profiles[profile]?.rebuild(values: store.allBoosts())
     for factory in app.hostFactories.values {
-      if let session = factory.controller?.boostEditor?.session, session.context.profileID == profile {
-        session.reconcileStoreMetadata()
-      }
+      guard let editor = factory.controller?.boostEditor, let session = editor.session, session.context.profileID == profile else { continue }
+      // Another path removed this Boost (Undo Import from Arc): close its editor, or the next edit
+      // writes the session's copy back into the store. A session that is finishing or deleting
+      // its own Boost closes itself.
+      if store.boost(id: session.boost.id) == nil, !session.isEnding { session.boostWasRemoved(); editor.close(returnFocus: false) }
+      else { session.reconcileStoreMetadata() }
     }
     revision &+= 1
     adapter.refresh(profile: profile, startedAt: start)
@@ -192,6 +197,7 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     openEditor(boostID: matchingBoosts(url: url, profileID: host.profileID).first?.id, tabID: tabID, mode: .simple)
   }
   func pageCommitted(_ host: EngineWebContentHost, url: URL, newDocument: Bool = false) {
+    plannedURLs[ObjectIdentifier(host)] = url
     adapter.committed(host, url: url, newDocument: newDocument)
     host.owner?.controller?.boostEditor?.pageDidNavigate(tabID: host.tabID, url: url)
     if newDocument { host.owner?.controller?.boostEditor?.boundPageDidCommit(tabID: host.tabID) }
@@ -203,7 +209,15 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
       openEditor(boostID: id, tabID: host.tabID, mode: .simple, committedURL: url)
     }
   }
+  /// The host skips an address change that arrives during a load (it is usually the load's own
+  /// commit). A pushState or replaceState during the load also lands there: plan for the address
+  /// the page has when the load ends, when it is not the one Boosts last saw.
+  func pageLoadEnded(_ host: EngineWebContentHost, url: URL) {
+    guard plannedURLs[ObjectIdentifier(host)] != url else { return }
+    pageCommitted(host, url: url)
+  }
   func hostClosed(_ host: EngineWebContentHost) {
+    plannedURLs[ObjectIdentifier(host)] = nil
     pendingEditors[host.tabID] = nil
     host.owner?.controller?.boostEditor?.boundTabDidClose(host.tabID)
     adapter.closed(host)

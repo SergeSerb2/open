@@ -54,7 +54,7 @@ final class AppBoostPicker {
     let challenge = BoostEngineAdapter.json(binding.challenge)
     evaluate("""
       (() => {
-        if (location.href !== \(BoostEngineAdapter.json(url.absoluteString))) return false;
+        if (!\(BoostEngineAdapter.locationIs(url))) return false;
         if (typeof window.__openZap?.exit === 'function') window.__openZap.exit();
         window.__openZapBinding = \(challenge);
         __openNative.postMessage('picker:document', JSON.stringify({challenge: \(challenge)}));
