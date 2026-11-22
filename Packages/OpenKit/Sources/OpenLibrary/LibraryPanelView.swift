@@ -324,7 +324,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyGlyph.glyph = LibraryGlyph(rawValue:section.rawValue) ?? .media
         emptyTitle.stringValue = noMatches ? "No matches" : copy.title
         emptyBody.stringValue = noMatches ? "Try another word." : copy.body
-        emptyButton.title = copy.button ?? ""; emptyButton.isHidden = noMatches || copy.button == nil
+        // Only "Choose Folders…" has an action. Archive's "Learn more" has no page to open yet, so it
+        // is not drawn as a dead, dimmed button (bug sweep r7 X-06; as the Command Bar's privacy line).
+        emptyButton.title = copy.button ?? ""; emptyButton.isHidden = noMatches || copy.button == nil || !folderSources
         emptyButton.isEnabled = folderSources
         emptyButton.toolTip = folderSources && !noMatches ? LibraryPanelView.folderSourcesPitch : nil
         if section == .media { emptyButton.setAccessibilityHelp(folderSources ? LibraryPanelView.folderSourcesPitch : nil) }

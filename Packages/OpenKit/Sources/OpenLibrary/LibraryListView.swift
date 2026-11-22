@@ -365,7 +365,13 @@ final class LibraryListView: NSView, NSMenuDelegate {
     var selectedItem: LibraryRowItem? { item(at: table.selectedRow) }
     func entryIndex(_ id: String) -> Int? { entries.indices.first { row in if case .item(let index) = entries[row] { return sources[index].id == id }; return false } }
     func activateSelected() { guard let item = selectedItem else { return }; (item.keyboardActivate ?? item.activate)() }
-    func deleteSelected() { guard let selectedItem else { return }; (selectedItem.hoverActions+selectedItem.actions).first(where: { ["Delete","Move to Trash","Hide from Open"].contains($0.title) && $0.enabled })?.run() }
+    func deleteSelected() {
+        guard let selectedItem else { return }
+        // A running or paused download is not hidden by a key: it would keep writing with no row
+        // left to pause or cancel it (bug sweep r7 X-07). Its menu still has Hide from Open.
+        if selectedItem.kind == "download", selectedItem.progress != nil { return }
+        (selectedItem.hoverActions+selectedItem.actions).first(where: { ["Delete","Move to Trash","Hide from Open"].contains($0.title) && $0.enabled })?.run()
+    }
     func focus() {
         window?.makeFirstResponder(table)
         if table.selectedRow < 0, let row = entries.indices.first(where: { item(at: $0) != nil }) { table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
