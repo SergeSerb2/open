@@ -92,6 +92,8 @@ def rows(factory, results, tmp, h, origin):
         app.call('select', tab=ticker_tab)
         app.eval(ticker_tab, "let n=0;setInterval(()=>{n++;document.title='t'+n;history.replaceState(null,'','#'+n)},200);1")
         time.sleep(1.5)
+        # Start from a saved model: the maximum wait counts from the first change after this save.
+        app.call('save')
         before = app.call('frame-save-counters')
         app.call('space-create', title='R7 Starve Check')
         started = time.monotonic()
