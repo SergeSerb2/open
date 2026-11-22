@@ -834,6 +834,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     scheduleSave()
   }
 
+  /// A background snapshot write failed (a full disk, a read-only folder). The state stays in memory
+  /// and unsaved; the next change, flush or quit writes it again (bug sweep r7 Z-05).
+  func snapshotSaveFailed() {
+    frontStandardWindowController?.toasts.show(ToastContent(title: "Your tabs could not be saved",
+      subtitle: "Make sure your disk has free space. Open tries again after your next change.", lifetime: 10))
+  }
+
   static func makeDefaultModel() -> BrowserModel {
     let profile = Profile(name: "Default", dataDirectoryName: "Default")
     let space = Space(title: "Space", profileID: profile.id)
@@ -862,13 +869,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)
     scheduleBlankWindowsSave()
-  }
-
-  /// A background snapshot write failed (a full disk, a read-only folder). The state stays in memory
-  /// and unsaved; the next change, flush or quit writes it again (bug sweep r7 Z-05).
-  func snapshotSaveFailed() {
-    frontStandardWindowController?.toasts.show(ToastContent(title: "Your tabs could not be saved",
-      subtitle: "Make sure your disk has free space. Open tries again after your next change.", lifetime: 10))
   }
 
   /// Called after the message loop returns, before the engine shuts down.
