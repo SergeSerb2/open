@@ -210,7 +210,7 @@ def r5_delete_selected_favorite_note(app, row, h, origin):
     favorite = app.call('favorite', tab=note)
     app.call('select', tab=note)
     selected_before = [t['id'] for t in app.call('tabs') if t.get('selected')]
-    note_id = next(t['url'] for t in app.call('tabs') if t['id'] == note).rsplit('/', 1)[-1].lower()
+    note_id = 'note-' + next(t['url'] for t in app.call('tabs') if t['id'] == note).rsplit('/', 1)[-1].lower()  # Library row id
     # A Favorite's row menu has no Delete Note: delete it from Library ▸ Easels & Notes (Arc's card "Delete").
     app.call('defaults', key='libraryShowsEasels', value=True)
     app.call('library', action='open', section='easels')
