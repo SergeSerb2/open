@@ -194,6 +194,23 @@ def run(factory, results, tmp, h):
             linked = wait_until(lambda: (lambda s: s if s['selectedProfile'] == parent else None)(shell()), timeout=5, step=.1) or shell()
             row('setcmd6_q05_incognito_settings_link_parent', linked['selectedProfile'] == parent,
                 selected=linked['selectedProfile'], parent=parent, other=other)
+            # Review r2 #1: a link to another section (Downloads) also takes the parent Profile, without the
+            # search-suggestion notice sheet (only the Search section shows it).
+            shell(profile=other); shell(action='cancel')
+            app.call('window-focus', id=window['id'], activate=True)
+            close_bar()
+            bar('t'); found = type_query('download location')
+            rows = found.get('rows', [])
+            index = next((i for i, r in enumerate(rows) if r.get('action') == 'settings-link:downloads/location'), None)
+            assert index is not None, [(r.get('title'), r.get('action')) for r in rows]
+            current = found['selected']
+            for _ in range(max(0, index - current)): press('down')
+            for _ in range(max(0, current - index)): press('up')
+            press('return')
+            downloads = wait_until(lambda: (lambda s: s if s['selectedProfile'] == parent else None)(shell()), timeout=5, step=.1) or shell()
+            time.sleep(.5); downloads = shell()
+            row('setcmd6_q05_settings_link_no_suggest_notice', downloads['selectedProfile'] == parent and not downloads['sheet'],
+                selected=downloads['selectedProfile'], parent=parent, sheet=downloads['sheet'], sheetText=downloads.get('sheetText', [])[:6])
             shell(action='cancel')
             app.call('window-focus', id=window['id'], activate=True)
             app.call('window-close')
@@ -378,7 +395,8 @@ def run(factory, results, tmp, h):
         if wanted('s01'): guarded('setcmd6_s01_undo_new_profile_wipes_folders', undo_new_profile)
 
         # Review r1 #1: Undo of a new Profile saves the snapshot by itself. Here no Settings model exists (a
-        # fresh process; Settings is not touched until after the crash), so nothing else saves after the Undo.
+        # fresh process; Settings is not touched until after the crash). A regression guard, not proof of that
+        # save: on every path tried, another save also follows the Undo, so this row passes without it too.
         def undo_saves_without_settings():
             nonlocal app
             import json, signal

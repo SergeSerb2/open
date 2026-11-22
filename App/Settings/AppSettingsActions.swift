@@ -162,7 +162,12 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   /// Search Settings does; Settings keeps its selection for an unknown or nil Profile.
   @discardableResult func showSettingsURL(_ url: URL, profileID: ProfileID? = nil) -> Bool {
     guard let target = SettingsSearchIndex.destination(for: url) else { return false }
-    show(section: target.section, row: target.row, profileID: profileID); return true
+    // Only Search shows the search-suggestion notice; `profiles.select` would raise it over any section.
+    if target.section == .search { show(section: target.section, row: target.row, profileID: profileID); return true }
+    if let profileID, app.model.profile(id: profileID) != nil, settings.selectedProfileID != profileID {
+      settings.selectedProfileID = profileID; settings.profiles.refresh()
+    }
+    show(section: target.section, row: target.row); return true
   }
   func updateStatusDidChange(_ status: String?) { settingsStorage?.updateState = status }
   func showProfileSettings(profileID: ProfileID) {
