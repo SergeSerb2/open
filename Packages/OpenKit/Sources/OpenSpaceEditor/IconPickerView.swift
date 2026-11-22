@@ -91,6 +91,8 @@ public final class IconPickerView: NSView, NSSearchFieldDelegate, NSCollectionVi
         categoryHairline.frame = CGRect(x: 0, y: 27, width: 246, height: 1)
         categoryHairline.backgroundColor = NSColor.separatorColor.cgColor
     }
+    /// layout() resolves the hairline's dynamic color; a Light/Dark switch alone runs no layout (A11Y-09).
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
     public func load(_ index: EmojiIndex) {
         entries = index.entries; filter()
     }
