@@ -63,6 +63,18 @@ window that the reference names (`… of window id "…"`), else on the key or f
 In the App they use the sidebar's own paths (`ScriptHost.selectInWindow` and
 `focusSpaceInWindow`): Expand Current Pane ends, sleeping tabs wake, and no Undo step is
 registered. Scratch probes without these hooks change the model only, also without Undo.
+`make new tab` shows the new tab through the same `selectInWindow` path, so the new tab is
+the only Undo step; `make new tab at space … of window id "…"` shows it in that named window.
+`close` (and removing a tab from a window's or Space's tabs) uses the window's own
+single-tab close (`ScriptHost.closeTab(tab, window)`, the same path as ⌘W). A window that
+shows the tab closes it: the window the reference names if it shows the tab, else the first
+window (front to back) that shows it. Only then a window that keeps the tab's hidden page (the
+named one first), then one that shows its Space. A reference that names no window passes nil. A page's
+beforeunload can ask, a closed selected tab hands the selection to its neighbour, and a
+pinned tab or Favorite stays in the sidebar and unloads. Scratch probes without the hook
+close in the model.
+`window N`, `front window` and `index` follow AppKit's front-to-back order
+(`NSApp.orderedWindows`); minimized and hidden windows follow the on-screen ones.
 JavaScript returns text. H2 converts null/undefined to empty text, primitives to their
 JavaScript string forms, and objects/arrays to JSON. Exceptions map to 1013 with the
 first line limited to 300 characters; timeout maps to 1014. Missing engine maps to 1006.
@@ -103,6 +115,9 @@ ScriptHost.shared.windowForState: ((WindowID) -> NSWindow?)?
 ScriptHost.shared.makeWindow: ((Bool) -> WindowID?)?
 ScriptHost.shared.littleTab: (any LittleTabProviding)?
 ScriptHost.shared.engineBridge: (any ScriptEngineBridge)?
+ScriptHost.shared.selectInWindow: ((WindowID, SpaceID, ItemID) -> Bool)?
+ScriptHost.shared.focusSpaceInWindow: ((WindowID, SpaceID) -> Bool)?
+ScriptHost.shared.closeTab: ((ItemID, WindowID?) -> Bool)?
 ```
 
 Use weak model capture. `windowStateID` must skip panels and non-browser windows.
@@ -114,7 +129,9 @@ closures `windowStateID` and `windowForState`.
 The App-owned model observer calls `ScriptHost.shared.purgeRemovedWrappers()`
 on external removals and after model replacement. Scripting installs no observers.
 The App window close observer removes `BrowserWindowState`. Window creation receives
-the incognito Boolean; until supported, return nil for incognito (1010). Little Open uses `LittleTabProviding` for creation, existence, URL/title/loading,
+the incognito Boolean; until supported, return nil for incognito (1010). `{incognito:true}`
+and `{mode:"incognito"}` (any letter case) both request it, whatever other properties say;
+a mode other than normal or incognito fails with 1002 and makes no window. Little Open uses `LittleTabProviding` for creation, existence, URL/title/loading,
 history availability and close. Its transient ID never enters the live model.
 An absent provider or a refused creation returns 1011.
 
