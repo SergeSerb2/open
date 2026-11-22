@@ -12,6 +12,9 @@ import OpenWeb
     /// Observes unanswered release without answering the engine request.
     public var onDiscard: ((any SavePromptRequest) -> Void)?
     private var activePage: AnyHashable?
+    /// The prompt a tab switch took off screen and put back at the front of the queue: the one
+    /// the user saw last. The cap keeps it (lead ruling, bug sweep r6).
+    private weak var lastShown: (any SavePromptRequest)?
     public var queuedCount: Int { pending.count }
     private weak var window: NSWindow?
     private let isFocused: (AnyHashable) -> Bool
@@ -45,7 +48,7 @@ import OpenWeb
         removePending { $0.page == page }
         if activePage == page { activeInvalidated = true }
         pending.append(Entry(request: request, page: page))
-        if pending.count > 3 { discard(pending.removeFirst().request) } // Release unanswered, never synthesize No.
+        trimPending()
         scheduleNext()
     }
     public func withdraw(_ request: any SavePromptRequest) {
@@ -70,6 +73,7 @@ import OpenWeb
         pending.removeAll { $0.request.isAnswered }
         guard let index = pending.firstIndex(where: { isFocused($0.page) }) else { return }
         let entry = pending.remove(at: index)
+        if entry.request === lastShown { lastShown = nil }
         guard let sheet = SavePromptSheet(entry.request) else { scheduleNext(); return }
         showing = true
         defer { finishSheetChange() }
@@ -122,18 +126,25 @@ import OpenWeb
             self.needsPass = false
             if self.closing || self.activeInvalidated { self.removeActive() }
             else if let sheet = self.active, let page = self.activePage, !self.isFocused(page) {
-                if let request = sheet.request { self.pending.insert(Entry(request: request, page: page), at: 0) }
+                if let request = sheet.request {
+                    self.pending.insert(Entry(request: request, page: page), at: 0); self.lastShown = request
+                }
                 self.removeActive(preservingRequest: true)
             }
             self.showNext()
-            // A tab switch put the prompt the user just saw back at index 0, and showNext took the
-            // newly focused page's prompt out of the queue. Only then trim: keep index 0 and any
-            // focused page's prompt; drop the oldest other waiting one.
-            self.pending.removeAll { $0.request.isAnswered }
-            if self.pending.count > 3 {
-                let drop = self.pending.indices.dropFirst().first { !self.isFocused(self.pending[$0].page) } ?? 1
-                self.discard(self.pending.remove(at: drop).request)
-            }
+            // A tab switch put the prompt the user just saw back at the front, and showNext took the
+            // newly focused page's prompt out of the queue. Only then trim.
+            self.trimPending()
+        }
+    }
+    /// At most three prompts wait. A focused page's prompt (on screen at the next pass) and the
+    /// one the user saw last stay; the oldest other one is released unanswered, never answered No.
+    private func trimPending() {
+        pending.removeAll { $0.request.isAnswered }
+        while pending.count > 3 {
+            let drop = pending.firstIndex { !isFocused($0.page) && $0.request !== lastShown }
+                ?? pending.firstIndex { $0.request !== lastShown } ?? 0
+            discard(pending.remove(at: drop).request)
         }
     }
     public func cancelAll() {

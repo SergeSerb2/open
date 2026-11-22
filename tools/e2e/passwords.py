@@ -259,6 +259,38 @@ def run_save_prompts(factory, results, tmp, harness):
             return {'dropped': 'waiting-1.example.com', 'kept': 'active-0.example.com', 'focusedWaitingShown': 'waiting-1.example.com'}
         row('M-3-active-kept-on-switch', active_kept_on_switch)
 
+        def new_request_keeps_last_shown():
+            # Bug sweep r6 seed 9: after a tab switch put the visible prompt back at the front of the
+            # queue, a new request from another page dropped that prompt (enqueue evicted index 0).
+            # Lead ruling: the prompt the user saw stays; the oldest other waiting one goes.
+            events()
+            tabs = [harness['new_tab'](app, 'about:blank') for _ in range(6)]
+            app.call('select', tab=tabs[0])
+            show(host='active-0.example.com')
+            for i in range(1, 4):
+                app.call('save-prompt', mock={'kind': 'password', 'host': 'waiting-%d.example.com' % i, 'tab': tabs[i]})
+            app.call('select', tab=tabs[4])
+            assert gone(), 'the tab switch kept the sheet'
+            switched = [(e['displayHost'], e['answer']) for e in events()]
+            app.call('save-prompt', mock={'kind': 'password', 'host': 'late-5.example.com', 'tab': tabs[5]})
+            time.sleep(.2)
+            late = [(e['displayHost'], e['answer']) for e in events()]
+            app.call('select', tab=tabs[0])
+            s = wait(lambda: (s if (s := state()).get('visible') else None), timeout=5, step=.05)
+            shown = s and s['title']
+            if s: answer('dismiss')
+            for i, host in [(3, 'waiting-3'), (5, 'late-5')]:
+                app.call('select', tab=tabs[i])
+                if wait(lambda: state().get('visible'), timeout=5, step=.05): answer('dismiss')
+            events()
+            for tab in tabs:
+                app.call('close', tab=tab)
+            assert switched == [('waiting-1.example.com', 'ignored')], switched
+            assert late == [('waiting-2.example.com', 'ignored')], late
+            assert shown == 'Save password for active-0.example.com?', shown
+            return {'droppedOnSwitch': switched, 'droppedOnLateRequest': late, 'shownAgain': shown}
+        row('M-3-r6-new-request-keeps-last-shown', new_request_keeps_last_shown)
+
         def page_close():
             events()
             tab = harness['new_tab'](app, 'about:blank')
