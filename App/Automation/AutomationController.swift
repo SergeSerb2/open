@@ -682,6 +682,7 @@
         }
         return controller.context.performNodeDrop(ids: ids, to: destination, index: index)
       case "sidebar-drag": return try sidebarDrag(a)
+      case "space-dot-drop": return try spaceDotDrop(a)
       case "sidebar-clear-state":
         let controller = try sidebarController(a)
         controller.contentView.layoutSubtreeIfNeeded()

@@ -589,21 +589,54 @@ def run(factory, results, tmp, h):
             return check(state['question']=='Allow midi.localhost to access your MIDI devices?' and state['kinds'] & 32, state=state)
         gate('permission_midi_real_request', midi)
 
-        for key in ['escape','return','w','t','l']:
+        # Bug sweep r6 V-05: a plain Return or Escape typed into the page goes to the page; it
+        # never answers the prompt (a page could time a prompt so the user's Enter grants it).
+        # Only a key in the prompt's own window answers it.
+        for key in ['escape','return']:
+            def permission_page_key(key=key):
+                permission_page('pagekey-' + key); target=tab
+                app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
+                perm(); state=visible(ps)
+                app.call('key', key=key); time.sleep(.4)
+                after=ps(); pending=app.eval(target,'permissionResult'); page_keys=app.eval(target,'promptKeys')
+                app.call('key', key=key, window=state['window'], route='window')
+                closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
+                actual=app.eval(target,'permissionResult')
+                return check(after['visible'] and pending=='pending' and page_keys==[{'return':'Enter','escape':'Escape'}[key]]
+                             and closed and actual==('granted' if key=='return' else 'denied'),
+                             state=state, afterPageKey=after, pendingAfterPageKey=pending, pageKeys=page_keys, result=actual)
+            gate('permission_native_' + key, permission_page_key)
+
+        def permission_split_pane_return():
+            # The prompt belongs to pane A; Return typed into pane B goes to B and leaves A's prompt.
+            permission_page('split-a'); pane_a=tab
+            pane_b=page(); app.call('split'); time.sleep(.5)
+            try:
+                app.call('focus', tab=pane_b)
+                app.eval(pane_b,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
+                perm(target=pane_a); state=visible(ps)
+                app.call('focus', tab=pane_b); time.sleep(.2)
+                app.call('key', key='return'); time.sleep(.4)
+                after=ps(); pending=app.eval(pane_a,'permissionResult'); keys_b=app.eval(pane_b,'promptKeys')
+                return check(after['visible'] and pending=='pending' and keys_b==['Enter'],
+                             state=state, after=after, pending=pending, paneBKeys=keys_b)
+            finally:
+                h['_try'](lambda: app.call('permission-prompt', answer='notnow'))
+                for t in (pane_b, pane_a): h['_try'](lambda t=t: app.call('close', tab=t))
+        gate('permission_split_pane_return_not_answered', permission_split_pane_return)
+
+        for key in ['w','t','l']:
             def permission_keys(key=key):
                 permission_page('keys-' + key); target=tab
                 app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
                 perm(); state=visible(ps)
                 app.call('key', key=key, **({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
                 closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
-                if key in ['escape','return']:
-                    actual=app.eval(target,'permissionResult')
-                    good=actual==('granted' if key=='return' else 'denied') and app.eval(target,'promptKeys')==[]
-                elif key=='w': good=all(t['id']!=target for t in app.call('tabs'))
+                if key=='w': good=all(t['id']!=target for t in app.call('tabs'))
                 else:
                     bar=app.call('commandbar-state'); good=bar.get('presented') and bar['mode']==('newTab' if key=='t' else 'editCurrentURL')
                     app.call('key',key='escape')
-                return check((closed if key in ['escape','return','w'] else True) and good,state=state)
+                return check((closed if key=='w' else True) and good,state=state)
             gate('permission_native_' + key, permission_keys)
 
         if only and 'permission_remember_relaunch' not in only: return
