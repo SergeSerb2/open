@@ -51,6 +51,9 @@ def run(factory, results, h, tmp):
     downloads_dir = os.path.join(tmp, 'content-r6-downloads')
     os.makedirs(downloads_dir, exist_ok=True)
     env = {'OPEN_DOWNLOADS_DEFAULT_DIRECTORY': downloads_dir}
+    if os.environ.get('OPEN_CONTENT_R6_APP'):
+        # A saved copy of another build (break-and-revert proof against the parent commit).
+        env['OPEN_E2E_APP_BUNDLE'] = os.environ['OPEN_CONTENT_R6_APP']
 
     def record(name, ok, **evidence):
         results[name] = dict(ok=bool(ok), **evidence)
