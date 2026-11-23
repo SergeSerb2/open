@@ -458,7 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       if removed {
         // As Profile deletion does: no window or Little Open session keeps browsing as a Profile that is gone
         // (its writes would go to folders the next launch wipes). After the Undo, outside its registration.
-        DispatchQueue.main.async { [weak self] in self?.closeWindows(ofUndoneProfile: profile.id) }
+        DispatchQueue.main.async { [weak self] in self?.closeWindows(ofUndoneProfile: profile) }
       }
     }
     modelSaveObserver = model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
@@ -860,18 +860,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     return body()
   }
 
-  /// Blank Windows, Incognito windows and Little Open sessions of a Profile whose creation was undone
-  /// (the same windows `ProfileTeardown` closes for a deleted Profile). Registers no Undo, so the
-  /// Profile's Redo stays available.
-  private func closeWindows(ofUndoneProfile profileID: ProfileID) {
+  /// Blank Windows, Incognito windows, Little Open sessions, popup panels and extension windows of a
+  /// Profile whose creation was undone (the same windows `ProfileTeardown` closes for a deleted
+  /// Profile). As for a delete, no beforeunload runs: "Stay" would keep a page browsing as a Profile
+  /// whose folders the next launch wipes (bug sweep r8, A-R6-06). Registers no Undo, so the Profile's
+  /// Redo stays available.
+  private func closeWindows(ofUndoneProfile profile: Profile) {
+    let profileID = profile.id, directory = profile.dataDirectoryName
     guard model.profile(id: profileID) == nil else { return }
     withoutWindowUndo {
       for session in littleOpenCoordinator?.sessions.filter({ $0.profileID == profileID }) ?? [] {
-        littleOpenCoordinator.close(sessionID: session.id, archiveReason: nil)
+        littleOpenCoordinator.closeForRemovedProfile(sessionID: session.id)
       }
       for controller in windowControllers where hostFactories[controller.windowID].map({
         $0.incognitoSession?.parent.id == profileID || ($0.isBlankWindow && $0.model.profile(id: profileID) != nil) }) == true {
         controller.window?.close()
+      }
+      for factory in hostFactories.values where !factory.isIncognito {
+        for page in factory.auxiliaryPages where page.content.context.identifier == directory {
+          factory.closeAuxiliary(page); page.panel.close()
+        }
+      }
+      if let context = OEEngine.shared.contexts.first(where: { $0.identifier == directory }), context !== OEEngine.shared.defaultContext {
+        ExtensionWindowController.closeAll(in: context)
       }
     }
   }
@@ -1044,20 +1055,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   #endif
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
-    if let owner = hostFactories.values.first(where: { $0.isIncognito && $0.incognitoSession?.context === request.context }) {
-      return owner.adoptUnownedRequest(request)
+    // No page may open during Quit or engine shutdown (review r2 #2), Incognito included (bug sweep r8, A-R6-08).
+    guard engineReady, !terminationRequested, !shutdownPrepared else { return nil }
+    let controller: BrowserWindowController
+    let privates = windowControllers.filter { hostFactories[$0.windowID].map { $0.isIncognito && $0.incognitoSession?.context === request.context } ?? false }
+    if !privates.isEmpty {
+      // The frontmost Incognito window of the session, not an arbitrary one.
+      controller = NSApp.orderedWindows.compactMap { window in privates.first { $0.window === window } }.first ?? privates[0]
+    } else {
+      // Only a main-model window: a Blank Window's one-Profile model drops another Profile's request
+      // and must not take this Profile's. Prefer a window that already shows the request's Profile,
+      // so another window is not switched to it; with none open, reopen one (bug sweep r6 WL-12).
+      guard let profile = regularProfile(for: request.context),
+        let space = model.mostRecentlyFocusedSpace(profileID: profile.id) ?? model.spaces.first(where: { $0.profileID == profile.id })
+      else { return nil }
+      let mains = windowControllers.filter { hostFactories[$0.windowID].map { !$0.isIncognito && $0.model === model } ?? false }
+      let ordered = NSApp.orderedWindows.compactMap { window in mains.first { $0.window === window } } + mains
+      let showing = ordered.first { hostFactories[$0.windowID]?.focusedSpace?.profileID == profile.id }
+      guard let found = showing ?? ordered.first ?? makeWindow(focusedSpaceID: space.id) else { return nil }
+      controller = found
     }
-    // Only a main-model window: a Blank Window's one-Profile model drops another Profile's request
-    // and must not take this Profile's. Prefer a window that already shows the request's Profile,
-    // so another window is not switched to it; with none open, reopen one (bug sweep r6 WL-12).
-    // No window may open during Quit or engine shutdown (review r2 #2).
-    guard engineReady, !terminationRequested, !shutdownPrepared, let profile = regularProfile(for: request.context),
-      let space = model.mostRecentlyFocusedSpace(profileID: profile.id) ?? model.spaces.first(where: { $0.profileID == profile.id })
-    else { return nil }
-    let mains = windowControllers.filter { hostFactories[$0.windowID].map { !$0.isIncognito && $0.model === model } ?? false }
-    let ordered = NSApp.orderedWindows.compactMap { window in mains.first { $0.window === window } } + mains
-    let showing = ordered.first { hostFactories[$0.windowID]?.focusedSpace?.profileID == profile.id }
-    guard let controller = showing ?? ordered.first ?? makeWindow(focusedSpaceID: space.id) else { return nil }
     // The request opens a foreground tab: a window behind another or minimized comes forward,
     // or the page opens where nobody sees it (review r2 #1; as openNewTabInMainWindow).
     if let window = controller.window, window.isMiniaturized || NSApp.keyWindow !== window {

@@ -15414,9 +15414,14 @@ def main():
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results["split"] = CheckedResults(tracker)
             # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
-            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1":
+            # OPEN_SPLIT_WIN8_ONLY=1 runs only the bug sweep round 8 window rows (tools/e2e/windows_r8.py).
+            win8 = os.environ.get("OPEN_SPLIT_WIN8_ONLY") == "1"
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
                 module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
+            if not win8:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
+                    factory, results["split"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
                 factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)

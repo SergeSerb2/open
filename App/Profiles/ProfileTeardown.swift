@@ -53,8 +53,9 @@ final class ProfileTeardown {
 
   func unload(profileID: ProfileID) async throws {
     guard let directory = loaded[profileID], !unloaded.contains(profileID) else { return }
+    // No beforeunload: "Stay" would keep the window browsing as the deleted Profile (bug sweep r8, B-R6-02).
     for session in app.littleOpenCoordinator?.sessions.filter({ $0.profileID == profileID }) ?? [] {
-      app.littleOpenCoordinator.close(sessionID: session.id, archiveReason: nil)
+      app.littleOpenCoordinator.closeForRemovedProfile(sessionID: session.id)
     }
     for controller in app.windowControllers where
       app.hostFactories[controller.windowID]?.incognitoSession?.parent.id == profileID {
