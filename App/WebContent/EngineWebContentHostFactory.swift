@@ -774,9 +774,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // P1); a Peek page is Alloy. The M4 Q5 fallback restores the browser's
     // own history (including saved scroll/form state) in a Chrome host.
     // The container closes the old host after this callback returns.
-    if model.tab(id: tabID) != nil, host.content.runtimeStyle != app.options.defaultStyle {
-      _ = makeHost(tabID: tabID, profileID: host.profileID, url: host.currentURL,
-                   history: host.content.captureNavigationHistory())
+    // The replacement goes into the container now, as PeekController.promote expects: otherwise
+    // ensureHost binds it later and loads the tab's URL over the restored history, losing its
+    // scroll and form state (bug sweep r8). The replacement is this tab's own host, so the inner
+    // adopt cannot come back here.
+    if model.tab(id: tabID) != nil, host.tabID != tabID, host.content.runtimeStyle != app.options.defaultStyle {
+      if let replacement = makeHost(tabID: tabID, profileID: host.profileID, url: host.currentURL,
+                                    history: host.content.captureNavigationHistory()) {
+        controller?.container.adopt(replacement, for: tabID)
+      }
       return false
     }
     if host.tabID != tabID {

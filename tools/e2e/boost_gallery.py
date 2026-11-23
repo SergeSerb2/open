@@ -303,6 +303,8 @@ def run(factory, results, tmp, env):
                 return {'privateMenuAndBarRefused': True}
             row('BG_private', private)
             def delete():
+                # As in BG2: after F1_browser_profile tab B may be unloaded; load it before reading it below.
+                app.call('wait', tab=tab_b)
                 gallery(); delete_card(second)
                 alert=wait(lambda: app.call('alert', window='library'), timeout=5)
                 assert 'Delete this Boost?' in alert['texts'], alert
