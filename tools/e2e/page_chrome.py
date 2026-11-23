@@ -728,7 +728,7 @@ def run(factory, results, tmp, h):
             return check(pressed and denied and stored == 0 and again['visible']
                          and state['question'] == 'Allow notnow.localhost to send you notifications?'
                          and state['buttons'] == ['Not Now','Allow']
-                         and state['help'] == 'Click the lock to change this any time'
+                         and state['help'] == 'Change this any time in Site Controls'
                          and state['anchor']['name'] == 'sidebar-url', state=state, stored=stored)
         gate('permission_notnow_once_copy_anchor', notnow)
 
@@ -820,6 +820,28 @@ def run(factory, results, tmp, h):
             gate('permission_anchor_' + anchor, fallback)
             h['_try'](lambda: app.call('command',id='toggle-sidebar'))
             if anchor == 'toolbar-site-control': h['_try'](lambda: app.call('command', id='toggle-toolbar'))
+
+        # UX round 1 F3: the prompt card lies inside its browser window: a narrow sidebar (its
+        # anchor near the left edge) and the toolbar (its Site Control button near the right edge).
+        def inside_window():
+            rows = []
+            try:
+                for setup in ['sidebar-164', 'sidebar-228', 'toolbar']:
+                    if setup.startswith('sidebar'): app.call('updater-banner-width', width=float(setup[8:]))
+                    else: app.call('command', id='toggle-toolbar')
+                    permission_page('inside-' + setup); perm(); state = visible(ps)
+                    card, owner = state.get('promptScreenFrame') or [], state.get('ownerScreenFrame') or []
+                    inside = (len(card) == 4 and len(owner) == 4 and card[0] >= owner[0] - .5
+                              and card[0] + card[2] <= owner[0] + owner[2] + .5 and card[2] >= 260)
+                    rows.append(dict(setup=setup, inside=inside, card=card, owner=owner, anchor=state['anchor'],
+                                     help=state['help']))
+                    app.call('permission-prompt', answer='notnow')
+            finally:
+                h['_try'](lambda: app.call('updater-banner-width', width=228.0))
+                if any(r['setup'] == 'toolbar' for r in rows): h['_try'](lambda: app.call('command', id='toggle-toolbar'))
+            return check(len(rows) == 3 and all(r['inside'] for r in rows)
+                         and all(r['help'] == 'Change this any time in Site Controls' for r in rows), rows=rows)
+        gate('permission_prompt_inside_window', inside_window)
 
         def midi():
             page('http://midi.localhost:%d/midi' % port); perm('midi'); state=visible(ps)

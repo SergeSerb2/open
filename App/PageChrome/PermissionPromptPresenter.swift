@@ -120,7 +120,12 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     // The sidebar's address field shows the focused page: an unfocused Split pane's prompt
     // points at its own toolbar or into the pane.
     if owner.selectedContent === page, owner.windowState.sidebarMode == .anchored, !sidebar.isHidden, sidebar.urlFieldVisible {
-      return Anchor(view: sidebar, rect: sidebar.chromeGeometry.urlField, name: "sidebar-url")
+      // Point at the Site Control button's place at the field's trailing end (it shows on hover),
+      // where the user changes this decision later; never at the centre of the whole field.
+      let field = sidebar.chromeGeometry.urlField
+      let size = URLFieldMetrics.accessorySize
+      let rect = CGRect(x: field.maxX - URLFieldMetrics.siteControlsTrailing - size, y: field.minY, width: size, height: field.height)
+      return Anchor(view: sidebar, rect: rect, name: "sidebar-url")
     }
     if let bar = controller.container.slots.first(where: { $0.tabID == owner.tabID(for: page) })?.paneChrome, bar.role == .toolbar {
       return Anchor(view: bar, rect: bar.urlAreaFrame, name: "toolbar-url")
@@ -128,6 +133,20 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     let target = page.view
     return Anchor(view: target, rect: CGRect(x: 24, y: target.isFlipped ? 0 : target.bounds.maxY - 1, width: 1, height: 1),
                   edge: target.isFlipped ? .maxY : .minY, name: "content-top-left")
+  }
+  /// The prompt's width and anchor rect so that a popover centred on the anchor stays inside the
+  /// window with an 8 pt margin: full width when there is room, down to `minimumWidth`, then the
+  /// anchor point moves inward (the arrow still lies on the anchor's edge line).
+  private func fitted(_ anchor: Anchor, in window: NSWindow) -> (width: CGFloat, rect: CGRect) {
+    let preferred = PermissionPromptView.preferredWidth, minimum = PermissionPromptView.minimumWidth, margin: CGFloat = 8
+    let inWindow = anchor.view.convert(anchor.rect, to: nil)
+    let windowWidth = window.contentView?.bounds.width ?? window.frame.width
+    let room = min(inWindow.midX - margin, windowWidth - inWindow.midX - margin)
+    let width = max(minimum, min(preferred, (room * 2).rounded(.down)))
+    let clamped = min(max(inWindow.midX, width / 2 + margin), windowWidth - width / 2 - margin)
+    guard abs(clamped - inWindow.midX) > 0.5 else { return (width, anchor.rect) }
+    let point = anchor.view.convert(CGPoint(x: clamped, y: inWindow.midY), from: nil)
+    return (width, CGRect(x: point.x - 0.5, y: anchor.rect.minY, width: 1, height: anchor.rect.height))
   }
   func presentPending() {
     guard !closed, !finishing, current == nil, let owner, !owner.isClosing,
@@ -170,9 +189,13 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       return
     }
     popover.contentViewController?.view = view
+    // Keep the card inside its window (UX round 1 F3): narrow it toward the minimum width when
+    // the anchor is near a window edge, and only then move the arrow's point inward.
+    let placed = fitted(anchor, in: targetWindow)
+    popover.contentSize = CGSize(width: placed.width, height: view.preferredHeight(width: placed.width))
     // The window that has the keyboard now: only it may get key status back (review round 2).
     let keyBefore = NSApp.keyWindow
-    popover.show(relativeTo: anchor.rect, of: anchor.view, preferredEdge: anchor.edge)
+    popover.show(relativeTo: placed.rect, of: anchor.view, preferredEdge: anchor.edge)
     if let promptWindow = view.window {
       // This NSPopover is ours; its native window class alone cannot prove
       // ownership to the browser's child-window appearance policy.
@@ -337,7 +360,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      // Points for a real click, in the prompt's window, top-left origin.
      "allowPoint": point(in: view.allow), "backgroundPoint": point(in: view, at: CGPoint(x: 24, y: 8)),
      "parent": view.window?.parent?.windowNumber ?? 0, "selectedPage": owner?.selectedContent?.identifier ?? 0,
-     "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0]
+     "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0,
+     // The drawn card (no popover shadow margin) and its browser window, AppKit screen points.
+     "promptScreenFrame": view.window.map { let r = $0.convertToScreen(view.convert(view.bounds, to: nil)); return [r.minX, r.minY, r.width, r.height] } ?? [],
+     "ownerScreenFrame": owner?.window.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? []]
   }
   private func point(in target: NSView, at local: CGPoint? = nil) -> [Double] {
     guard let window = target.window else { return [] }
