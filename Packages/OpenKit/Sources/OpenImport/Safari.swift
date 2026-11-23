@@ -44,6 +44,17 @@ public struct PasswordsCSVReport: Sendable, Equatable {
 
 /// Safari/Passwords-app CSV (Title, URL, Username, Password, Notes, OTPAuth) and the Chrome-style
 /// CSV (name, url, username, password, note). Columns are found by header name.
+/// Chromium's canonical origin, which is the login realm: a lower-case host, IPv6 in brackets, no default
+/// port. A raw host would never match a page's realm (bug sweep r7 Y-07). `URL.host` is already punycode.
+enum ImportedLoginOrigin {
+    static func canonical(scheme: String, host: String, port: Int?) -> String {
+        let scheme = scheme.lowercased()
+        let canonicalHost = host.contains(":") ? "[\(host.lowercased())]" : host.lowercased()
+        let defaultPort = scheme == "https" ? 443 : scheme == "http" ? 80 : nil
+        return "\(scheme)://\(canonicalHost)\(port.flatMap { $0 == defaultPort ? nil : ":\($0)" } ?? "")"
+    }
+}
+
 public enum PasswordsCSVReader {
     public static let maxFileBytes = 32 << 20
 
@@ -76,7 +87,7 @@ public enum PasswordsCSVReader {
             guard !password.isEmpty else { report.skippedEmptyPassword += 1; continue }
             let user = field(userColumn), note = field(noteColumn)
             guard user.utf8.count <= 16 * 1024, password.utf8.count <= 16 * 1024, note.utf8.count <= 16 * 1024 else { report.skippedOversize += 1; continue }
-            let origin = "\(scheme)://\(host)\(url.port.map { ":\($0)" } ?? "")/"
+            let origin = ImportedLoginOrigin.canonical(scheme: scheme, host: host, port: url.port) + "/"
             var record = ImportedLoginRecord(originURLString: origin, actionURLString: nil, username: user, passwordBytes: Array(password.utf8),
                                              signonRealm: origin, dateCreated: Date(), isBlacklisted: false, timesUsed: 0)
             record.noteBytes = Array(note.utf8)
