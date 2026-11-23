@@ -1276,9 +1276,13 @@ extension AppDelegate: CommandDispatcher {
     afterPaintTask = Task { @MainActor [weak self, weak page] in
       defer { self?.afterPaintTask = nil }
       for _ in 0..<40 {
-        guard let self, let page, self.engineReady, !self.shutdownPrepared,
+        guard let self, self.engineReady, !self.shutdownPrepared,
               !self.terminationRequested, !Task.isCancelled else { return }
-        let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0", userGesture: false)) as? Bool
+        // A page that closed before it reported a paint (Cmd+W while it loads) can paint no more:
+        // keep the budget and start below. Ending here left the sleep controller (T5) unstarted
+        // until another page finished a load (bug sweep r8, PF17/PF18).
+        var painted: Bool?
+        if let page { painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0", userGesture: false)) as? Bool }
         if painted == true {
           self.deferredStartupBegan = true
           self.scheduleCloneCleanupAfterPaint()
@@ -1310,7 +1314,7 @@ extension AppDelegate: CommandDispatcher {
         }
         try? await Task.sleep(for: .milliseconds(50))
       }
-      // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
+      // A page that never reports a paint (about:blank), or closed first: start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
       self.deferredStartupBegan = true
       self.scheduleCloneCleanupAfterPaint()
