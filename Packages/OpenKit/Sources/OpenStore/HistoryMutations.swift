@@ -60,6 +60,21 @@ extension HistoryStore {
                 db.bindDouble(remove, 1, start.timeIntervalSince1970); db.bindDouble(remove, 2, end.timeIntervalSince1970)
                 let removed = sqlite3_step(remove) == SQLITE_DONE; sqlite3_finalize(remove)
                 guard removed else { throw HistoryMutationError.unavailable }
+            } else if end < .distantFuture {
+                // Clear all up to the moment the user confirmed: a visit that commits after it stays
+                // (bug sweep r6 DHR-15).
+                // As the full clear: also URL rows without any visit.
+                let select = db.prepare("""
+                INSERT OR IGNORE INTO history_delete_urls SELECT url_id FROM visits WHERE time <= ?
+                  UNION SELECT id FROM urls WHERE NOT EXISTS (SELECT 1 FROM visits WHERE visits.url_id = urls.id)
+                """)
+                db.bindDouble(select, 1, end.timeIntervalSince1970)
+                let selected = sqlite3_step(select) == SQLITE_DONE; sqlite3_finalize(select)
+                guard selected else { throw HistoryMutationError.unavailable }
+                let remove = db.prepare("DELETE FROM visits WHERE time <= ?")
+                db.bindDouble(remove, 1, end.timeIntervalSince1970)
+                let removed = sqlite3_step(remove) == SQLITE_DONE; sqlite3_finalize(remove)
+                guard removed else { throw HistoryMutationError.unavailable }
             } else {
                 guard db.exec("INSERT INTO history_delete_urls SELECT id FROM urls; DELETE FROM visits") else { throw HistoryMutationError.unavailable }
             }

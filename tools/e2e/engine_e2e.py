@@ -322,7 +322,9 @@ class Open:
         self.user_data = user_data
         self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
-        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE")
+        # OPEN_E2E_APP_BUNDLE in the environment: a saved copy of another build for a whole suite
+        # (break-and-revert proof against a parent commit while the tree builds the fix).
+        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE") or os.environ.get("OPEN_E2E_APP_BUNDLE")
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         launched_file = os.stat(app)
@@ -15508,11 +15510,18 @@ def main():
             littleopen_checks(factory, results["littleopen"], tmp)
         elif opts.only == "routing":
             results["routing"] = CheckedResults(tracker)
-            # OPEN_ROUTING_ENG6_ONLY=1 runs only the bug sweep round 6 engine rows (tools/e2e/engine_round6.py).
-            if os.environ.get("OPEN_ROUTING_ENG6_ONLY") != "1":
+            # Bug sweep round 6 rows in this group: OPEN_ROUTING_ENG6_ONLY=1 runs only the engine rows
+            # (tools/e2e/engine_round6.py); OPEN_CONTENT_R6_ONLY=1 runs only the CONTENT6 rows (tools/e2e/content_r6.py).
+            eng6_only = os.environ.get("OPEN_ROUTING_ENG6_ONLY") == "1"
+            content_only = os.environ.get("OPEN_CONTENT_R6_ONLY") == "1"
+            if not eng6_only and not content_only:
                 routing_checks(factory, results["routing"], tmp)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_round6.py"))["run"](
-                factory, results["routing"], tmp, sys.modules[__name__])
+            if not content_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_round6.py"))["run"](
+                    factory, results["routing"], tmp, sys.modules[__name__])
+            if not eng6_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "content_r6.py"))["run"](
+                    factory, results["routing"], sys.modules[__name__], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,

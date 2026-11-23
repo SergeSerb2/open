@@ -1915,6 +1915,12 @@ public final class BrowserModel {
         return find(space.pinned) ?? find(space.today)
     }
 
+    /// A fetched row of a Live Folder (not a tab the user moved into it by hand).
+    func isLiveFolderRow(_ tab: Tab) -> Bool {
+        guard tab.liveItemURL != nil, case .folder(let folderID)? = parentByID[tab.id] else { return false }
+        return index[folderID]?.folder?.live != nil
+    }
+
     /// Creates "Pull Requests" at the end of the Space's Pinned section (capture s5 b3). Undoable like New Folder.
     @discardableResult
     public func createLiveFolder(in spaceID: SpaceID, config: LiveFolderConfig, title: String = "Pull Requests") -> Folder? {
@@ -2082,6 +2088,8 @@ public final class BrowserModel {
     }
 
     private func fill(_ folder: Folder, in parent: NodeParent, at position: Int?, with nodeIDs: [ItemID]) -> Revert? {
+        // Redo of an undone Live Folder: the Space may have a new Live Folder by now (one per Space).
+        if folder.live != nil, case .spacePinned(let spaceID) = parent, liveFolder(in: spaceID) != nil { return nil }
         guard attach(.folder(folder), to: parent, at: position) != nil else { return nil }
         let destination = NodeParent.folder(folder.id)
         var moves: [(id: ItemID, source: NodeParent, revert: Revert)] = []
@@ -2930,7 +2938,9 @@ public final class BrowserModel {
             if keeping.contains(node.id) { return true }
             switch node {
             case .tab: return false
-            case .folder(let folder): return folder.children.contains(where: retained)
+            // A Live Folder (dragged into Today) is the Space's GitHub setting, not tabs: Clear keeps it,
+            // as auto-archive does. Archiving its fetched rows only made the next refresh fetch them again.
+            case .folder(let folder): return folder.live != nil || folder.children.contains(where: retained)
             case .split(let split): return split.panes.contains { keeping.contains($0.id) }
             }
         }
@@ -3013,7 +3023,8 @@ public final class BrowserModel {
                 // schedules no second snapshot save (bug sweep r6, #643 L11).
                 guard shown[tab.id] == nil else { continue }
                 let activity = tab.lastActiveAt
-                guard let threshold else { continue }
+                // Fetched Live Folder rows never expire (the sweep skips them too).
+                guard let threshold, !isLiveFolderRow(tab) else { continue }
                 let deadline = activity.addingTimeInterval(threshold)
                 earliest = earliest.map { min($0, deadline) } ?? deadline
             }
@@ -3050,7 +3061,9 @@ public final class BrowserModel {
         for node in list {
             switch node {
             case .tab(let tab):
-                if !sweep.shownTabIDs.contains(tab.id), tab.lastActiveAt < sweep.cutoff {
+                // A Live Folder's fetched rows are GitHub data, not the user's tabs: never archived
+                // (a refresh would add the same pull request again, and the next sweep archive it again).
+                if !sweep.shownTabIDs.contains(tab.id), tab.lastActiveAt < sweep.cutoff, !isLiveFolderRow(tab) {
                     expire(tab, from: parent, &sweep)
                     listChanged = true
                 } else {

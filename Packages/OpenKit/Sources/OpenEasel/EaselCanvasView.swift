@@ -161,7 +161,12 @@ public final class EaselCanvasView: NSView {
     func syncObjects() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let ids = Set(document.objects.map(\.id))
-        for (id, view) in objectViews where !ids.contains(id) { view.removeFromSuperview(); objectViews[id] = nil }
+        for (id, view) in objectViews where !ids.contains(id) {
+            // A removed live card closes its page now: `updateLiveViews` only sees views that remain,
+            // so its page would run on (and hold a pool slot) until the Easel tab closed.
+            if view.liveView != nil { view.liveView = nil; liveViewRelease?(id) }
+            view.removeFromSuperview(); objectViews[id] = nil
+        }
         var ordered: [EaselObjectView] = []
         for object in document.paintOrder {
             let view = objectViews[object.id] ?? {
