@@ -212,6 +212,12 @@ def run(factory, results, tmp, env):
             def bg2():
                 gallery(); controls=ui()['controls']; labels=' '.join(c['label'] + ' ' + c['value'] for c in controls)
                 assert all(s in labels for s in ['Alpha Boost', 'Beta Boost', 'alpha.example.test', 'beta.example.test']), controls
+                # F1_browser_profile showed a Space of Profile B in this window, and that closes the
+                # window's Profile A pages except the ones shown (WebContentContainer.show: closeAll on a
+                # Profile change). Tab B is unloaded. Load it, so the live toggle below reaches a live page
+                # (an eval of an unloaded tab creates its page and races the page's browser creation).
+                app.call('wait', tab=tab_b)
+                assert wait(lambda: font(tab_b).startswith('Avenir'), timeout=5)
                 ui('press', id='boosts.' + first + '.enabled')
                 assert wait(lambda: not font(tab_a).startswith('Avenir'), timeout=5)
                 assert font(tab_b).startswith('Avenir')
@@ -297,6 +303,8 @@ def run(factory, results, tmp, env):
                 return {'privateMenuAndBarRefused': True}
             row('BG_private', private)
             def delete():
+                # As in BG2: after F1_browser_profile tab B may be unloaded; load it before reading it below.
+                app.call('wait', tab=tab_b)
                 gallery(); delete_card(second)
                 alert=wait(lambda: app.call('alert', window='library'), timeout=5)
                 assert 'Delete this Boost?' in alert['texts'], alert
