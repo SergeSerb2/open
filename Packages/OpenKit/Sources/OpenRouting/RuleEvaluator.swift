@@ -45,6 +45,12 @@ public struct RoutingEvaluator: Sendable {
                 traces.append(trace(.targetProfileMissing))
                 continue
             }
+            // A Little Open rule for a deleted Profile is skipped like the others (bug sweep r6 DHR-02):
+            // it used to match and open the link in another Profile's Little Open.
+            if case .littleOpen(let profile?) = rule.destination, validProfile(profile, in: snapshot) == nil {
+                traces.append(trace(.targetProfileMissing))
+                continue
+            }
             traces.append(trace(.matched))
             let target = resolve(rule.destination, in: snapshot, mostRecent: mostRecent)
             return finish(target == nil ? .noSpaces : .rule(index: index, id: rule.id), target, traces)
@@ -69,6 +75,7 @@ public struct RoutingEvaluator: Sendable {
         case .littleOpen(let profile):
             if snapshot.externalLinksInLittleOpen {
                 target = .littleOpen(profileHint: validProfile(profile, in: snapshot) ?? mostRecent?.profileID)
+                if let profile, validProfile(profile, in: snapshot) == nil { via = .fallbackMissingProfile(requested: profile) }
             } else {
                 target = mostRecent.map(resolvedSpace)
                 via = .defaultSuppressedByToggle

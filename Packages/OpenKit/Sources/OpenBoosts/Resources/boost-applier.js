@@ -59,7 +59,7 @@
   const sendToNative = (type, payload) => window.__open?.postMessage?.(type, payload);
   const post = (type, payload) => { try { sendToNative(type, payload); } catch (_) {} };
   const STYLE_ID = "open-boosts-style";
-  let current = null, style = null, cssText = "", observer = null, frame = 0;
+  let current = null, style = null, cssText = "", observer = null, frame = 0, documentSheet = null;
   let earlyObserver = null, earlyReady = null, pending = null;
   let historyHooks = [], attachHook = null, shadowCSS = "";
   let knownRoots = [];
@@ -121,6 +121,18 @@
       style.textContent = cssText;
       document.documentElement.appendChild(style);
     }
+    if (documentSheet && !arrayIncludes(document.adoptedStyleSheets, documentSheet)) document.adoptedStyleSheets = [...document.adoptedStyleSheets, documentSheet];
+    else if (current) adoptBlockedStyle();
+  }
+  // A page CSP whose style-src has no 'unsafe-inline' blocks the <style> element: it stays in the
+  // document with a null sheet. A constructed sheet is not subject to style-src. The element stays
+  // too: it names the runtime's CSS for tools and the zap picker's first-script checks.
+  function adoptBlockedStyle() {
+    if (style?.sheet || documentSheet) return;
+    try {
+      documentSheet = new CSSStyleSheet(); documentSheet.replaceSync(cssText);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, documentSheet];
+    } catch (_) { documentSheet = null; }
   }
   function schedule() { if (current && !frame) frame = requestAnimationFrame(reassert); }
   function installGuards() {
@@ -189,6 +201,8 @@
     attachHook = null;
     if (frame) cancelAnimationFrame(frame); frame = 0;
     style?.remove(); style = null; cssText = "";
+    if (documentSheet) document.adoptedStyleSheets = arrayFilter(document.adoptedStyleSheets, s => s !== documentSheet);
+    documentSheet = null;
     for (const h of historyHooks) if (history[h.name] === h.wrapped) history[h.name] = h.original;
     historyHooks = [];
     window.removeEventListener("popstate", schedule); window.removeEventListener("hashchange", schedule);
@@ -213,6 +227,7 @@
     current = { planID: plan.planID, boostIDs: arrayMap(plan.boosts, b => b.boostID), zapCount: zaps.count };
     style = document.createElement("style"); style.id = STYLE_ID; style.textContent = cssText;
     document.documentElement.appendChild(style);
+    adoptBlockedStyle();
     installGuards();
     // Root-scoped selectors use :host, since body is outside each shadow scope.
     shadowCSS = generatedCSS({ ...plan, colorAdjustment: null, textZoom: null }).replace(/(^|\n)body, body /g, "$1:host, :host ") + zaps.css;

@@ -52,9 +52,15 @@ public extension CapturesProvider { var loadFailed: Bool { false } }
     /// browser window's current Space and Profile (not the History filter's Profile).
     func openCaptureSource(url: URL)
     func flushHistoryWrites() async
+    /// Library ▸ History ▸ Clear History: the Profile's engine history (its own History database
+    /// and visited links) goes too, as Settings ▸ Clear Browsing Data does for a loaded Profile.
+    func clearEngineHistory(profileID: ProfileID) async
     func viewSpace(id: SpaceID)
 }
-extension LibraryActions { public func flushHistoryWrites() async {} }
+extension LibraryActions {
+    public func flushHistoryWrites() async {}
+    public func clearEngineHistory(profileID: ProfileID) async {}
+}
 
 /// The capture feature writes the same epoch-based index. No filesystem folder sources.
 @MainActor @Observable public final class FileCapturesProvider: CapturesProvider {

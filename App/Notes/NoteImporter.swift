@@ -41,6 +41,8 @@ enum NoteImporter {
   static func importZip(_ zip: URL, factory: EngineWebContentHostFactory) -> Outcome {
     var outcome = Outcome()
     defer { last = outcome }
+    // Notes are never written from an Incognito window (its menu item is off; this is the backstop).
+    guard !factory.isIncognito else { outcome.error = "Notes can't be imported in an Incognito window."; return outcome }
     let fm = FileManager.default
     guard let size = (try? zip.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= maxZipBytes else {
       outcome.error = "This file is not an Arc Notes export."; return outcome
@@ -72,9 +74,11 @@ enum NoteImporter {
     // An export page without an Arc id is "already present" when a Note has its title and text.
     var present = Set<String>()
     for tab in tabs {
-      guard let id = NoteLink.id(from: tab.url), let note = store.load(id) else { continue }
-      if note.importPlaceholder == true { placeholders[id] = note } else { present.insert(note.title + "\u{0}" + note.text) }
+      guard let id = NoteLink.id(from: tab.url), let note = store.load(id), note.importPlaceholder == true else { continue }
+      placeholders[id] = note
     }
+    // Every stored Note, not only those with a row: a closed Note is still in the Library (bug sweep r6 CF-08).
+    for note in store.allNotes().notes where note.importPlaceholder != true { present.insert(note.title + "\u{0}" + note.text) }
     var newIDs: [UUID] = []
     for file in files {
       guard let data = try? Data(contentsOf: file), var parsed = ArcNotes.exported(fileName: file.lastPathComponent, data: data) else {
@@ -111,6 +115,7 @@ enum NoteImporter {
         // A Note over the store's size limit is not written: the placeholder stays.
         guard store.replace(parsed.note) else { outcome.unreadable += 1; continue }
         placeholders[id] = nil
+        present.insert(parsed.note.title + "\u{0}" + parsed.note.text)
         outcome.filled += 1
         refresh(noteID: id, title: parsed.note.title, factory: factory)
       } else {
@@ -121,6 +126,8 @@ enum NoteImporter {
         }
         newIDs.append(id)
         outcome.added += 1
+        // The same page twice in one export is one Note.
+        present.insert(parsed.note.title + "\u{0}" + parsed.note.text)
       }
     }
     // New Notes go to the top of Today in the focused Space, in export order.
@@ -133,6 +140,7 @@ enum NoteImporter {
       }
       if !newIDs.isEmpty { factory.controller?.refresh(); factory.scheduleSave() }
     }
+    if outcome.added + outcome.filled > 0 { factory.app.easelsDidChange() }
     return outcome
   }
 

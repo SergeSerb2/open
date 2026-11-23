@@ -102,8 +102,12 @@ final class LiveFolderService {
     }
     guard let folder, model.parent(of: tabID) != .folder(folder.id) else { return }
     if folder.children.contains(where: { node in if case .tab(let t) = node { return t.liveItemURL == pr }; return false }) { return }
+    // A Favorite stays a Favorite, and a Split View pane cannot move: neither becomes a fetched row
+    // (bug sweep r6 CF-14). Mark the row only once it is in the folder.
+    if case .favorites? = model.parent(of: tabID) { return }
+    guard model.canMoveNode(id: tabID, to: .folder(folder.id)) else { return }
     tab.liveItemURL = pr
-    model.moveNode(id: tabID, to: .folder(folder.id), at: 0)
+    guard model.moveNode(id: tabID, to: .folder(folder.id), at: 0) else { tab.liveItemURL = nil; return }
     Task { await refresh(folderID: folder.id, manual: true) }
   }
 

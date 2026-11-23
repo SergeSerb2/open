@@ -591,8 +591,9 @@ public final class BrowserModel {
     }
 
     /// One archive entry per tab under `node`, each with the tab's direct parent.
+    /// `skippingLiveRows`: leave out a Live Folder's fetched rows (fetched data, not the user's tabs).
     private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date(),
-                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil) -> [ArchiveEntry] {
+                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil, skippingLiveRows: Bool = false) -> [ArchiveEntry] {
         let owning = ownership ?? owner(of: parent)
         var entries: [ArchiveEntry] = []
         func collect(_ node: SidebarNode, _ parent: NodeParent) {
@@ -600,7 +601,10 @@ public final class BrowserModel {
             case .tab(let tab):
                 entries.append(ArchiveEntry(tab: tab, reason: reason, originalLocation: parent.archiveLocation, spaceID: owning.space, profileID: owning.profile, archivedAt: date))
             case .folder(let folder):
-                for child in folder.children { collect(child, .folder(folder.id)) }
+                for child in folder.children {
+                    if skippingLiveRows, folder.live != nil, case .tab(let tab) = child, tab.liveItemURL != nil { continue }
+                    collect(child, .folder(folder.id))
+                }
             case .split(let split):
                 for pane in split.panes { collect(.tab(pane), .splitPane(split.id)) }
             }
@@ -1915,6 +1919,12 @@ public final class BrowserModel {
         return find(space.pinned) ?? find(space.today)
     }
 
+    /// A fetched row of a Live Folder (not a tab the user moved into it by hand).
+    func isLiveFolderRow(_ tab: Tab) -> Bool {
+        guard tab.liveItemURL != nil, case .folder(let folderID)? = parentByID[tab.id] else { return false }
+        return index[folderID]?.folder?.live != nil
+    }
+
     /// Creates "Pull Requests" at the end of the Space's Pinned section (capture s5 b3). Undoable like New Folder.
     @discardableResult
     public func createLiveFolder(in spaceID: SpaceID, config: LiveFolderConfig, title: String = "Pull Requests") -> Folder? {
@@ -2082,6 +2092,8 @@ public final class BrowserModel {
     }
 
     private func fill(_ folder: Folder, in parent: NodeParent, at position: Int?, with nodeIDs: [ItemID]) -> Revert? {
+        // Redo of an undone Live Folder: the Space may have a new Live Folder by now (one per Space).
+        if folder.live != nil, case .spacePinned(let spaceID) = parent, liveFolder(in: spaceID) != nil { return nil }
         guard attach(.folder(folder), to: parent, at: position) != nil else { return nil }
         let destination = NodeParent.folder(folder.id)
         var moves: [(id: ItemID, source: NodeParent, revert: Revert)] = []
@@ -2545,8 +2557,10 @@ public final class BrowserModel {
         guard spaces.count > 1, let doomed = space(id: id), let slot = spaces.firstIndex(where: { $0.id == id }) else { return nil }
         var entries: [ArchiveEntry] = []
         if archiveTabs {
-            for node in doomed.pinned { entries += archiveEntries(for: node, in: .spacePinned(id), reason: .closed) }
-            for node in doomed.today { entries += archiveEntries(for: node, in: .spaceToday(id), reason: .closed) }
+            // A Live Folder's fetched rows are not archived, as when the folder itself is deleted
+            // (`deleteFolders`); tabs the user put in it are (bug sweep r7 W-03).
+            for node in doomed.pinned { entries += archiveEntries(for: node, in: .spacePinned(id), reason: .closed, skippingLiveRows: true) }
+            for node in doomed.today { entries += archiveEntries(for: node, in: .spaceToday(id), reason: .closed, skippingLiveRows: true) }
         }
         let focusedWindows = windows.filter { $0.focusedSpaceID == id }
         let selections = removeSpace(id)
@@ -2930,7 +2944,9 @@ public final class BrowserModel {
             if keeping.contains(node.id) { return true }
             switch node {
             case .tab: return false
-            case .folder(let folder): return folder.children.contains(where: retained)
+            // A Live Folder (dragged into Today) is the Space's GitHub setting, not tabs: Clear keeps it,
+            // as auto-archive does. Archiving its fetched rows only made the next refresh fetch them again.
+            case .folder(let folder): return folder.live != nil || folder.children.contains(where: retained)
             case .split(let split): return split.panes.contains { keeping.contains($0.id) }
             }
         }
@@ -3013,7 +3029,8 @@ public final class BrowserModel {
                 // schedules no second snapshot save (bug sweep r6, #643 L11).
                 guard shown[tab.id] == nil else { continue }
                 let activity = tab.lastActiveAt
-                guard let threshold else { continue }
+                // Fetched Live Folder rows never expire (the sweep skips them too).
+                guard let threshold, !isLiveFolderRow(tab) else { continue }
                 let deadline = activity.addingTimeInterval(threshold)
                 earliest = earliest.map { min($0, deadline) } ?? deadline
             }
@@ -3050,7 +3067,9 @@ public final class BrowserModel {
         for node in list {
             switch node {
             case .tab(let tab):
-                if !sweep.shownTabIDs.contains(tab.id), tab.lastActiveAt < sweep.cutoff {
+                // A Live Folder's fetched rows are GitHub data, not the user's tabs: never archived
+                // (a refresh would add the same pull request again, and the next sweep archive it again).
+                if !sweep.shownTabIDs.contains(tab.id), tab.lastActiveAt < sweep.cutoff, !isLiveFolderRow(tab) {
                     expire(tab, from: parent, &sweep)
                     listChanged = true
                 } else {

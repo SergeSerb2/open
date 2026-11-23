@@ -1043,8 +1043,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             context.haptics.dropped(accepted)
             return accepted
         }
-        guard let url = SidebarPasteboard.urls(from: info.draggingPasteboard).first else { return false }
-        return context.send(.openURL(url, in: dest.parent, index: dest.index))
+        return SidebarPasteboard.openDropped(SidebarPasteboard.urls(from: info.draggingPasteboard), in: dest.parent, at: dest.index, context: context)
     }
 
 }

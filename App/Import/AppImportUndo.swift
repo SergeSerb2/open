@@ -21,7 +21,8 @@ final class AppImportUndo {
   var actionName = "Import from Arc"
   private var importing = true
   private var importWaiters: [CheckedContinuation<Void, Never>] = []
-  private var archives: [(ArchiveStore, [ArchivedTabRecord])] = []
+  /// Archive rows by Profile: Undo and Redo use the App's store of a Profile that still exists.
+  private var archives: [(ProfileID, [ArchivedTabRecord])] = []
   private var histories: [(HistoryStore, HistoryImportUndo)] = []
   private var boosts: [(ProfileID, BoostStore, [Boost])] = []
   /// Profiles this import created (audit A7): after Undo their folders are journaled for the next launch.
@@ -47,9 +48,14 @@ final class AppImportUndo {
     return result
   }
 
-  func append(archive: ArchiveStore, records: [ArchivedTabRecord]) {
+  func append(archive profileID: ProfileID, records: [ArchivedTabRecord]) {
     guard !records.isEmpty else { return }
-    archives.append((archive, records)); registerIfNeeded()
+    archives.append((profileID, records)); registerIfNeeded()
+  }
+  /// A deleted Profile's archive went with its folder: never reopen (and so recreate) that folder.
+  private func archiveStore(_ profileID: ProfileID) -> ArchiveStore? {
+    guard let app, app.model.profile(id: profileID) != nil else { return nil }
+    return app.archiveSink.store(for: profileID)
   }
 
   func append(history: HistoryStore, receipt: HistoryImportUndo) {
@@ -112,6 +118,9 @@ final class AppImportUndo {
     enqueue { [self] in
       if importing { await withCheckedContinuation { importWaiters.append($0) } }
       if undoing {
+        for (profileID, _, values) in boosts {
+          app.stores.boosts.boostsWillBeRemoved(Set(values.map(\.id)), profileID: profileID)
+        }
         for (_, store, values) in boosts {
           await Task.detached(priority: .utility) {
             for boost in values { store.delete(id: boost.id) }
@@ -120,13 +129,19 @@ final class AppImportUndo {
             store.saveNow()
           }.value
         }
+        // Before the model Undo, like the Boosts above: this Undo can remove the Profile (a new one,
+        // or first run's Arc Default that gives the folder back to the bootstrap Default). A Profile
+        // the user deleted earlier is skipped, so its folder is never opened again (review r1 #1).
+        for (profileID, records) in archives.reversed() {
+          guard let store = archiveStore(profileID) else { continue }
+          try await store.delete(ids: records.map(\.id))
+        }
         applyModel(undoing: true)
         applyDefaults(undoing: true)
         for (profileID, _, _) in boosts { app.stores.boosts.refresh(profile: profileID) }
         for (store, receipt) in histories.reversed() {
           guard await store.removeImportedHistory(receipt) else { throw UndoFailure.store }
         }
-        for (store, records) in archives.reversed() { try await store.delete(ids: records.map(\.id)) }
         let orphans = createdProfiles.filter { created in
           app.model.profile(id: created.id) == nil
             && !app.model.profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(created.directory) == .orderedSame }
@@ -156,10 +171,11 @@ final class AppImportUndo {
           if let next = result.undo { replaced.append((store, next)) }
         }
         histories = replaced
-        var replacedArchives: [(ArchiveStore, [ArchivedTabRecord])] = []
-        for (store, records) in archives {
+        var replacedArchives: [(ProfileID, [ArchivedTabRecord])] = []
+        for (profileID, records) in archives {
+          guard let store = archiveStore(profileID) else { continue }
           let result = try await store.importRecordsWithUndo(records)
-          if !result.undo.isEmpty { replacedArchives.append((store, result.undo)) }
+          if !result.undo.isEmpty { replacedArchives.append((profileID, result.undo)) }
         }
         archives = replacedArchives
         for provider in providers { try await provider.redo?() }

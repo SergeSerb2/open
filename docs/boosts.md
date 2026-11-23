@@ -67,6 +67,18 @@ MutationObserver references.
 An isolated applier's prototype hooks see calls from its own world. The engine
 must provide late closed-root style injection for roots created by main-world
 page code. The main-world harness S2/S3 checks do not prove that engine path.
+Open roots have a related gap: when page code attaches a root to an element that
+is already in the document (a custom element defined after it was parsed), no
+child node is added, so the applier does not discover that root (BST7-F7, open).
+
+A page CSP whose `style-src` has no `'unsafe-inline'` also blocks `<style>`
+elements that the isolated world inserts. The applier keeps its
+`#open-boosts-style` element, and when that element has no sheet it adopts a
+constructed stylesheet with the same rules; `style-src` does not check those.
+The Zap overlay always uses a constructed sheet, and its preview falls back the
+same way as the applier (BST7-F8, row `BST7_F8_strict_style_src`). Each Boost's
+JavaScript is its own main-world user script (`open.boosts.js.<plan>.<boost>`),
+so code that does not parse stops only that Boost.
 
 Every `zap:*` and `picker:*` payload now includes `boostID` and `sessionNonce`.
 Native creates that nonce when it arms `zap:enter`; the picker echoes it in every

@@ -192,9 +192,12 @@ final class BoostEngineAdapter {
         // Main-world user script, separate from the managed stylesheet runtime. Each Boost's
         // code has its own function scope, so two Boosts can declare the same names, and an
         // exception in one does not stop the next.
-        let code = p.boosts.map(\.js).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-          .map { "try { (() => {\n\($0)\n})(); } catch (error) { console.error(error); }" }.joined(separator: "\n")
-        scripts.append(UserScript(id: "open.boosts.js.\(p.planID)", source: "(() => {\n\(gate)\n\(code)\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true))
+        // One script per Boost: code that does not parse fails only its own script, not every
+        // Boost of the plan (a try/catch catches runtime errors only).
+        for boost in p.boosts where !boost.js.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          let code = "try { (() => {\n\(boost.js)\n})(); } catch (error) { console.error(error); }"
+          scripts.append(UserScript(id: "open.boosts.js.\(p.planID).\(boost.boostID)", source: "(() => {\n\(gate)\n\(code)\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true))
+        }
       }
     }
     return scripts
@@ -216,7 +219,7 @@ final class BoostEngineAdapter {
       do {
         // Do not deliver an old document's plan into a newly navigated page.
         self.javaScriptDeliveryCount += 1
-        _ = try await host.content.evaluateJavaScript("(() => { if (location.href !== \(Self.json(url.absoluteString))) return false; \(source) return true; })()", inWorld: .open)
+        _ = try await host.content.evaluateJavaScript("(() => { if (!\(Self.locationIs(url))) return false; \(source) return true; })()", inWorld: .open)
       } catch {
         guard !Task.isCancelled, !self.boosts.app.shutdownPrepared else { return }
         let failure = error as NSError
@@ -237,6 +240,13 @@ final class BoostEngineAdapter {
     var live = plan; live.combinedJS = ""; live.containsJS = false
     let wire = BridgeDecode.encode(.applyBoosts(live))
     return "window.__openBoosts.apply(\(wire.payloadJSON));"
+  }
+  /// A JS expression that is true when the page's address is `url`. Chromium keeps characters raw in
+  /// location.href that Foundation's URL percent-encodes ("[" "]" in the path; "[" "]" "{" "}" "|" in the
+  /// query and fragment), so a string compare fails on such pages. Both sides go through one encoder for
+  /// the part after the authority; the authority keeps its IPv6 brackets.
+  static func locationIs(_ url: URL) -> String {
+    #"((n) => n(location.href) === n(\#(json(url.absoluteString))))((s) => { const m = /^([a-z][a-z0-9+.-]*:\/\/[^\/?#]*)([^#]*)(#.*)?$/i.exec(s); if (!m) return s; const e = (t) => t.replace(/[^A-Za-z0-9\-._~:\/?@!$&'()*+,;=%]/gu, (c) => encodeURIComponent(c)); return m[1] + e(m[2]) + (m[3] === undefined ? '' : '#' + e(m[3].slice(1))); })"#
   }
   static func json(_ value: Any) -> String {
     guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed]) else { return "null" }

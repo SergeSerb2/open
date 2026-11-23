@@ -30,10 +30,12 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public var onWidthChange: ((CGFloat) -> Void)?
     public var onIdleRefresh: (() -> Void)?
     public internal(set) var prebuiltReady = false
+    /// The last open showed the idle prebuild's rows without a refresh (automation read-back).
+    public private(set) var lastOpenWasPrebuilt = false
     var preparing = false
     var contentActive: Bool { isPresented || preparing }
     public var isPresented = false {
-        didSet { guard isPresented != oldValue else { return }; if isPresented { if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
+        didSet { guard isPresented != oldValue else { return }; if isPresented { lastOpenWasPrebuilt = prebuiltReady; if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
     }
     public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
     let rail = NSScrollView()
@@ -330,7 +332,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyGlyph.glyph = LibraryGlyph(rawValue:section.rawValue) ?? .media
         emptyTitle.stringValue = noMatches ? "No matches" : copy.title
         emptyBody.stringValue = noMatches ? "Try another word." : copy.body
-        emptyButton.title = copy.button ?? ""; emptyButton.isHidden = noMatches || copy.button == nil
+        // Only "Choose Folders…" has an action. Archive's "Learn more" has no page to open yet, so it
+        // is not drawn as a dead, dimmed button (bug sweep r7 X-06; as the Command Bar's privacy line).
+        emptyButton.title = copy.button ?? ""; emptyButton.isHidden = noMatches || copy.button == nil || !folderSources
         emptyButton.isEnabled = folderSources
         emptyButton.toolTip = folderSources && !noMatches ? LibraryPanelView.folderSourcesPitch : nil
         if section == .media { emptyButton.setAccessibilityHelp(folderSources ? LibraryPanelView.folderSourcesPitch : nil) }

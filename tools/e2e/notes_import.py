@@ -126,5 +126,14 @@ def run(factory, results, tmp, h):
         again = app.call('note', action='import-zip', path=export)
         row('reimport_is_idempotent', again['filled'] == 0 and again['added'] == 0 and again['alreadyPresent'] == 2
             and len([x for x in app.call('tabs') if x['title'] == 'Extra']) == 1, result=again)
+        # Bug sweep r6 CF-08: a Note whose row was closed is still a Note (Library lists it): a third
+        # import must not add it again under a new id.
+        app.call('space', space=notes['Trip ideas']['space'])
+        app.call('close', tab=notes['Trip ideas']['id'])
+        closed = not any(x['id'] == notes['Trip ideas']['id'] for x in app.call('tabs'))
+        third = app.call('note', action='import-zip', path=export)
+        trips = [x for x in app.call('tabs') if x['title'] == 'Trip ideas' and x['url'].startswith('open://note/')]
+        row('reimport_after_close_is_idempotent', closed and third['added'] == 0 and third['filled'] == 0
+            and third['alreadyPresent'] == 2 and trips == [], result=third, trips=[x['url'] for x in trips])
     finally:
         app.quit()

@@ -479,6 +479,21 @@ def run(factory, results, tmp, api):
             lives = [x for x in objects(s) if x['kind'] == 'webCard' and x.get('live')]
             record('E30_live_pool_cap', len(lives) == 4 and s['livePages'] == 3 and canvas(s)['liveCount'] == 3
                    and sum(1 for x in lives if x['liveAttached']) == 3, livePages=s['livePages'], made=s['livePagesMade'])
+            # E30b (bug sweep r6 CF-01): removing live cards (Undo of the duplicates) closes their pages,
+            # so the pool of three is not used up by cards that are gone; Redo brings three back.
+            for _ in range(3):
+                easel(action='undo', tab=e2)
+            s = api.wait_until(lambda: (lambda x: x if x['livePages'] == 1 else None)(easel(tab=e2)), timeout=5, step=.1) or easel(tab=e2)
+            lives = [x for x in objects(s) if x['kind'] == 'webCard' and x.get('live')]
+            removed = dict(cards=len(lives), livePages=s['livePages'], liveCount=canvas(s)['liveCount'])
+            for _ in range(3):
+                easel(action='redo', tab=e2)
+            s = api.wait_until(lambda: (lambda x: x if x['livePages'] == 3 and canvas(x)['liveCount'] == 3 else None)(easel(tab=e2)),
+                               timeout=8, step=.1) or easel(tab=e2)
+            lives = [x for x in objects(s) if x['kind'] == 'webCard' and x.get('live')]
+            record('E30b_live_pages_released_on_remove', removed == dict(cards=1, livePages=1, liveCount=1)
+                   and len(lives) == 4 and s['livePages'] == 3 and canvas(s)['liveCount'] == 3,
+                   removed=removed, restored=dict(cards=len(lives), livePages=s['livePages'], liveCount=canvas(s)['liveCount']))
             # E31: a hidden Easel releases every live page; showing it again brings them back.
             app.call('select', tab=page)
             hidden = easel(tab=e2)
@@ -855,6 +870,29 @@ def run(factory, results, tmp, api):
             fav_left = [t['id'] for t in app.call('tabs') if t['url'] == fav_url]
             record('L04b_library_favorite_easel', opened_rows == [fav] and selected == fav and not fav_left and not fav_folder.exists(),
                    opened=opened_rows, selected=selected, left=fav_left, folderExists=fav_folder.exists())
+            # L04c (bug sweep r6 CF-11): a sidebar rename while Library ▸ Easels is open shows in it at once.
+            b_tab = next((t['id'] for t in app.call('tabs') if t['url'] == b_url), None)
+            renamed = None
+            if b_tab:
+                easel(action='rename', text='Board B renamed', tab=b_tab)
+                renamed = api.wait_until(lambda: (lambda x: x if any(r.get('title') == 'Board B renamed' for r in x.get('rows', [])) else None)(library()),
+                                         timeout=5, step=.2)
+            record('L04c_library_follows_sidebar_rename', bool(b_tab) and bool(renamed) and library().get('open'),
+                   tab=b_tab, titles=sorted(r.get('title') or '' for r in library().get('rows', [])))
+            # L04d (review r2 #2): a title typed in the canvas (one row) shows in the open Library too.
+            typed = None
+            if b_tab:
+                # The canvas must be on screen to type in it: show Board B, then open the Library over it.
+                library(action='close')
+                app.call('select', tab=b_tab)
+                api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=b_tab)), timeout=8, step=.1)
+                library(action='open', section='easels')
+                api.wait_until(lambda: (lambda x: x if x.get('open') and x.get('rows') else None)(library()), timeout=8, step=.2)
+                easel(action='title', text='Board B typed', tab=b_tab)
+                typed = api.wait_until(lambda: (lambda x: x if any(r.get('title') == 'Board B typed' for r in x.get('rows', [])) else None)(library()),
+                                       timeout=5, step=.2)
+            record('L04d_library_follows_canvas_title', bool(b_tab) and bool(typed) and library().get('open'),
+                   tab=b_tab, titles=sorted(r.get('title') or '' for r in library().get('rows', [])))
             library(action='close')
         finally:
             server.shutdown()
@@ -936,6 +974,12 @@ def run(factory, results, tmp, api):
         redone_tabs, redone_file = easel_tabs(), a_doc.exists()
         record('W02_wizard_undo_redo', undone_tabs == [] and not undone_file and len(redone_tabs) == 3 and redone_file,
                undone=[t['title'] for t in undone_tabs], undoneFile=undone_file, redone=[t['title'] for t in redone_tabs])
+        # W02b (bug sweep r6 CF-06): Undo after Redo removes the rows Redo made (new row IDs), not only the first ones.
+        app.call('sidebar-key', key='z', modifiers=['command'])
+        api.wait_until(lambda: not fr().get('importUndoInProgress', False), timeout=30, step=.05)
+        again_tabs, again_file = easel_tabs(), a_doc.exists()
+        record('W02b_wizard_undo_after_redo', again_tabs == [] and not again_file,
+               tabs=[t['title'] for t in again_tabs], file=again_file)
     finally:
         if app:
             app.quit()

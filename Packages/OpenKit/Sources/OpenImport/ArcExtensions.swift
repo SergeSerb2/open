@@ -25,6 +25,23 @@ public struct ArcExtensionsReader: Sendable {
     public let profileDirectory: URL
     public init(profileDirectory: URL) { self.profileDirectory = profileDirectory }
 
+    /// Replaces every `__MSG_key__` token (case-insensitive key). Nil when a key is unknown, or the result is
+    /// empty or over the 1024-byte name limit (ignored, so it cannot fail the whole Profile read).
+    static func localizedName(_ raw: String, messages: [String: Any]) -> String? {
+        var lookup: [String: String] = [:]
+        for (key, value) in messages { if let message = (value as? [String: Any])?["message"] as? String { lookup[key.lowercased()] = message } }
+        guard let pattern = try? NSRegularExpression(pattern: "__MSG_([A-Za-z0-9_@]+?)__") else { return nil }
+        var result = "", cursor = raw.startIndex
+        for match in pattern.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)) {
+            guard let whole = Range(match.range, in: raw), let key = Range(match.range(at: 1), in: raw),
+                  let message = lookup[raw[key].lowercased()] else { return nil }
+            result += raw[cursor..<whole.lowerBound] + message
+            cursor = whole.upperBound
+        }
+        result += raw[cursor...]
+        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed.contains("__MSG_") || trimmed.utf8.count > 1024 ? nil : trimmed
+    }
     private func boundedData(_ file: URL, maximum: Int) throws -> Data {
         let handle = try FileHandle(forReadingFrom: file)
         defer { try? handle.close() }
@@ -114,7 +131,30 @@ public struct ArcExtensionsReader: Sendable {
             let isInternal = location == 5 || location == 10 || entry?["was_installed_by_default"] as? Bool == true
                 || path.hasPrefix("/Applications/") || (path.isEmpty && folders[id] == nil)
                 || (entry == nil && manifest == nil)
-            let name = manifest?["name"] as? String
+            var name = manifest?["name"] as? String
+            // A localized name holds `__MSG_key__` tokens, resolved from the default locale's messages.json as
+            // Chromium does (every token, anywhere in the name). An unknown key leaves no name, so the list shows
+            // the ID (bug sweep r7 Y-06, review r1 #4).
+            if let raw = name, raw.contains("__MSG_") {
+                name = nil
+                let locale = (manifest?["default_locale"] as? String) ?? ""
+                let pathParts = path.split(separator: "/")
+                if let folder = folders[id], !locale.isEmpty, !locale.contains("/"), !locale.contains("..") {
+                    // The version Preferences names first; a stale path falls back to the newest folder on disk.
+                    let named = pathParts.count == 2 && pathParts[0] == Substring(id)
+                        ? [folder.appendingPathComponent(String(pathParts[1]), isDirectory: true)] : []
+                    let scanned = ((try? children(folder, maximum: 256)) ?? [])
+                        .sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedDescending }
+                    for version in named + scanned where safeDirectory(version) {
+                        let file = version.appendingPathComponent("_locales/\(locale)/messages.json")
+                        guard file.resolvingSymlinksInPath().path.hasPrefix(rootPath), fm.fileExists(atPath: file.path),
+                              let data = try? boundedData(file, maximum: 1024 * 1024),
+                              let messages = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                        name = Self.localizedName(raw, messages: messages)
+                        break
+                    }
+                }
+            }
             guard id.utf8.count <= 256, (name?.utf8.count ?? 0) <= 1024 else { throw ArcExtensionsReadError.exceedsLimit }
             records.append(ArcExtensionRecord(extensionID: id, manifestName: name, version: manifest?["version"] as? String,
                                                manifestVersion: manifest?["manifest_version"] as? Int,

@@ -672,6 +672,22 @@ extension SidebarView {
     }
 
     public func clearDropIndicator() { pager.pages.values.forEach { $0.clearDropIndicator() } }
+
+    /// Automation: an external drop (links or files) at a row boundary of the focused page, or into
+    /// Favorites at `favoritesIndex`, through the same validate and accept callbacks a native drop
+    /// runs. Only the drag transport is substituted.
+    public func performExternalDrop(_ info: any NSDraggingInfo, intoFolder folder: ItemID?, childIndex: Int, favoritesIndex: Int?) -> Bool {
+        if let favoritesIndex {
+            var proposed = IndexPath(item: favoritesIndex, section: 0) as NSIndexPath
+            var operation = NSCollectionView.DropOperation.before
+            guard !favorites.collectionView(favorites.collection, validateDrop: info, proposedIndexPath: &proposed, dropOperation: &operation).isEmpty else { return false }
+            return favorites.collectionView(favorites.collection, acceptDrop: info, indexPath: proposed as IndexPath, dropOperation: operation)
+        }
+        guard let page = pager.currentPage else { return false }
+        let item: Any? = folder.flatMap { context.model.node(id: $0)?.object }
+        guard !page.outlineView(page.outline, validateDrop: info, proposedItem: item, proposedChildIndex: childIndex).isEmpty else { return false }
+        return page.outlineView(page.outline, acceptDrop: info, item: item, childIndex: childIndex)
+    }
     public var dropIndicatorFrame: CGRect? {
         guard let page = pager.currentPage, !page.dropIndicator.isHidden else { return nil }
         return convert(page.dropIndicator.bounds, from: page.dropIndicator)
@@ -879,6 +895,13 @@ extension SidebarView {
     public var toolbarVisibleButtons: [String] {
         [("toggle", toolbar.toggle), ("back", toolbar.back), ("forward", toolbar.forward), ("reload", toolbar.reload), ("more", toolbar.more)]
             .filter { !$0.1.isHidden }.map(\.0)
+    }
+    /// The toolbar buttons' tooltips as a hover would build them now: title, then key caps.
+    public var toolbarTooltips: [String: [String]] {
+        var tips = ["toggle": toolbar.toggle, "back": toolbar.back, "forward": toolbar.forward, "reload": toolbar.reload]
+            .compactMapValues { $0.tooltip?().map { [$0.title] + $0.keys } }
+        for (id, item) in bottomBar.items { if let tip = item.tooltip?() { tips["space:" + id.description] = [tip.title] + tip.keys } }
+        return tips
     }
     /// The compact toolbar's "More options" menu, built as a click would build it.
     /// The "More options" rows as the popover shows them: title, shortcut, enabled.

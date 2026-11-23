@@ -28,6 +28,7 @@ enum EaselTab {
     tab.live.faviconPNG = EaselIcon.faviconPNG
     factory.select(nodeID: tab.id)
     factory.scheduleSave()
+    factory.app.easelsDidChange()  // review r1 #4
     return tab.id
   }
 

@@ -32,6 +32,14 @@ public final class SidebarContext {
     /// The pointer in window coordinates, or nil when it is not in this window. The window controller
     /// sets it so own-window automation input counts as the pointer; nil uses the hardware pointer.
     @ObservationIgnored public var pointerLocation: (@MainActor () -> NSPoint?)?
+    /// The key caps of a command's effective shortcut (after Settings ▸ Shortcuts), such as
+    /// ["⌥", "⌘", "S"]; empty when it has none. Tooltips and menu rows read it when they show, so
+    /// a rebind shows at once (bug sweep r7 AB-07). Nil uses the default keys.
+    @ObservationIgnored public var shortcutKeys: (@MainActor (_ commandID: String) -> [String])?
+    func keys(_ commandID: String, default keys: [String]) -> [String] { shortcutKeys?(commandID) ?? keys }
+    /// Set while a multi-item drop opens all but its last link: the App does not select (and so
+    /// does not load) those tabs (AB-05).
+    @ObservationIgnored public internal(set) var defersOpenedTabSelection = false
     /// Incognito and Blank Windows show no Favorites, pinned section, Space dots or Space header controls.
     public var hidesSpaceChrome: Bool { isIncognito || isWindowOnly }
     public var extensionsUI: ExtensionsUIContext?
@@ -321,6 +329,8 @@ public final class SidebarContext {
 
     /// The page the toolbar and URL field describe: the Peek on screen, else the current tab.
     var hasPage: Bool { shownPeek != nil || currentTab != nil }
+    /// That page is a Note: it has no address to copy or share (bug sweep r7 AB-06).
+    var pageIsNote: Bool { shownPeek == nil && currentTab.map(SidebarMenus.isNote) == true }
     var pageHost: String? {
         if let peek = shownPeek { return Self.fieldText(peek.url, developerModeHosts) }
         return currentTab.map { Self.fieldText($0.url, developerModeHosts) }

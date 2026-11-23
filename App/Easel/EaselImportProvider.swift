@@ -83,8 +83,9 @@ struct EaselArchive: Sendable {
   }
 }
 
-/// What one Easel import changed, so Undo and Redo restore exactly that.
-struct EaselImportChange: @unchecked Sendable {
+/// What one Easel import changed, so Undo and Redo restore exactly that. A reference: Redo makes
+/// new rows (new IDs), and the next Undo must remove those (bug sweep r6 CF-06).
+final class EaselImportChange: @unchecked Sendable {
   var imported = 0
   var newRows = 0
   /// Document id → its file before the import (nil: there was none).
@@ -100,7 +101,7 @@ extension AppDelegate {
   /// Writes the read Easels: content by stable id, pictures through the store, new rows for
   /// Easels that have none in any Space. Open canvases of replaced Easels are closed first.
   func applyEaselImport(_ read: EaselImporter.Result, profileID: ProfileID?) -> EaselImportChange {
-    var change = EaselImportChange()
+    let change = EaselImportChange()
     let store = easels
     for item in read.easels {
       let id = item.document.id
@@ -129,6 +130,7 @@ extension AppDelegate {
     store.flush()
     reshowEaselWindows()
     scheduleSave()
+    easelsDidChange()
     return change
   }
 
@@ -159,17 +161,23 @@ extension AppDelegate {
       }
     }
     writeEaselFiles(change.before)
+    easelsDidChange()
   }
 
   func redoEaselImport(_ change: EaselImportChange) {
     writeEaselFiles(change.after.mapValues { Optional($0) })
-    for (id, _, spaceID) in change.rows where anyEaselRow(documentID: id) == nil && model.space(id: spaceID) != nil {
+    var rows: [(UUID, ItemID, SpaceID)] = []
+    for (id, rowID, spaceID) in change.rows {
+      guard anyEaselRow(documentID: id) == nil, model.space(id: spaceID) != nil else { rows.append((id, rowID, spaceID)); continue }
       let undo = model.undoManager; undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }
       let tab = model.newTab(in: spaceID, url: EaselTab.url(for: id), title: change.titles[id] ?? EaselDocument.untitled, at: 0)
       tab.live.faviconPNG = EaselIcon.faviconPNG
+      rows.append((id, tab.id, spaceID))
     }
+    change.rows = rows
     for factory in hostFactories.values { factory.controller?.refresh() }
     scheduleSave()
+    easelsDidChange()
   }
 
   /// Puts document files back (nil removes the document folder's `document.json`).

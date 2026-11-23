@@ -16,11 +16,12 @@ final class NoteLibraryProvider: LibraryNotesProvider {
   }
 
   func libraryNotes() async -> [LibraryNoteItem] {
-    let (notes, _) = app.notes.allNotes()
-    return notes.sorted { $0.modifiedAt > $1.modifiedAt }.map { note in
-      let preview = note.text.replacingOccurrences(of: "\u{FFFC}", with: "").split(whereSeparator: \.isNewline)
-        .first.map { String($0.prefix(80)) } ?? ""
-      return LibraryNoteItem(id: note.id.uuidString.lowercased(), title: note.title, preview: preview, modifiedAt: note.modifiedAt)
+    // Unsaved edits first, then the files off the main thread, as Library ▸ Easels does (bug sweep r6 CF-12).
+    app.notes.flush()
+    let directory = app.notes.directory
+    let rows = await Task.detached(priority: .userInitiated) { NoteStore.librarySummaries(directory: directory) }.value
+    return rows.sorted { $0.modifiedAt > $1.modifiedAt }.map { note in
+      LibraryNoteItem(id: note.id.uuidString.lowercased(), title: note.title, preview: note.preview, modifiedAt: note.modifiedAt)
     }
   }
 

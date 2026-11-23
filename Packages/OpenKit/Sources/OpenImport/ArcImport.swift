@@ -491,10 +491,11 @@ public struct ArcImporter {
 
         // Parse alternating arrays.
         var itemsByID: [String: [String: Any]] = [:]
+        var sourceOrder: [String] = []  // First position of each item ID in the file.
         var i = 0
         while i + 1 < itemsArr.count {
             if let id = itemsArr[i] as? String, let obj = itemsArr[i + 1] as? [String: Any] {
-                itemsByID[id] = obj
+                if itemsByID.updateValue(obj, forKey: id) == nil { sourceOrder.append(id) }
             }
             i += 2
         }
@@ -834,6 +835,16 @@ public struct ArcImporter {
                 return result
             }
             space.pinned = nodes(forContainer: pinnedCID)
+            // Pinned tabs keep a pinned URL, as the model's pinned rule and the other importers set it.
+            // Without it Reset Tab, Edit Pinned Page and Back to Pinned URL do nothing (bug sweep r7 Y-03).
+            func pinURLs(_ node: SidebarNode) {
+                switch node {
+                case .tab(let tab): if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
+                case .folder(let folder): folder.children.forEach(pinURLs)
+                case .split(let split): for tab in split.panes where tab.pinnedURL == nil { tab.pinnedURL = tab.url }
+                }
+            }
+            space.pinned.forEach(pinURLs)
             space.today = nodes(forContainer: todayCID) + overflowTabs
             spaces.append(space)
         }
@@ -889,7 +900,20 @@ public struct ArcImporter {
 
         // Orphans: item objects never reached and not containers.
         var orphanNodes: [SidebarNode] = looseNodes
-        for (arcID, item) in itemsByID {
+        // A fixed order: file order, with unreached items that no other unreached item lists as a
+        // child first. A Dictionary's order changes per process, so an orphaned folder could lose
+        // its child to the orphan list in some runs (bug sweep r7 Y-04). Every ID is still visited once.
+        let unreachedIDs = sourceOrder.filter { !reachedArcIDs.contains($0) && nodeByArcID[$0] == nil }
+        // Only a folder or a split builds its children. An unreached container (a removed Space) does not,
+        // so its children stay orphan roots (review r1 #1).
+        let nestedInUnreached = Set(unreachedIDs.flatMap { id -> [String] in
+            guard let item = itemsByID[id], let kind = (item["data"] as? [String: Any])?.keys.first,
+                  kind == "list" || kind == "splitView" else { return [] }
+            return (item["childrenIds"] as? [String]) ?? []
+        })
+        let orphanOrder = sourceOrder.filter { !nestedInUnreached.contains($0) } + sourceOrder.filter { nestedInUnreached.contains($0) }
+        for arcID in orphanOrder {
+            guard let item = itemsByID[arcID] else { continue }
             guard let dataDict = item["data"] as? [String: Any], let kind = dataDict.keys.first else {
                 if !skipCounted.contains(arcID) { countSkip(arcID) { report.skippedUnknown += 1 } }
                 continue
