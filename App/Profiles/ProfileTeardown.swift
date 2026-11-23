@@ -114,9 +114,9 @@ final class ProfileTeardown {
     stage = "unload"
     try await unload(profileID: profileID)
     stage = "removeFolders"
-    // Only a removal that stayed removed leaves the journal: folders that keep coming back are
-    // wiped at the next launch, before the engine starts (finishPendingWipes).
-    if try await Self.removeUntilSettled(directory, directories: app.directories) {
+    // Only a removal that stayed removed leaves the journal: folders that keep coming back, or a
+    // removal stopped early, stay journaled and the next launch wipes them before the engine starts.
+    if try await removeFoldersUntilSettled(directory) {
       try Self.dequeue(directory, directories: app.directories)
     }
     stage = "done"
@@ -125,16 +125,20 @@ final class ProfileTeardown {
   /// The engine reports a Profile deleted once Chromium destroyed it, but store opens already queued
   /// on Chromium's background sequences (leveldb and sqlite: GCM Store, BudgetDatabase, Feature
   /// Engagement Tracker, Autofill caches) can still run a few milliseconds later. They create the
-  /// engine folder again, or make the first removal fail while they write ("couldn't be removed
-  /// because you don't have permission"; bug sweep r8: 10-25 ms after removal on the M1). So remove,
-  /// and remove again whenever a folder returns, until all of them stayed gone for `quiet`.
-  /// Returns false when a folder was still there at the deadline (it stays journaled). Throws the
-  /// last removal error only if a folder is still there at the deadline.
-  private static func removeUntilSettled(_ directory: String, directories: ProfileDirectories,
-                                         quiet: Duration = .milliseconds(750), limit: Duration = .seconds(5)) async throws -> Bool {
+  /// engine folder again, or make a removal fail while they write ("couldn't be removed because you
+  /// don't have permission"; bug sweep r8: 10-25 ms after removal on the M1). So remove the Open,
+  /// engine and cache folders, and remove them again whenever one returns, until all of them stayed
+  /// gone for `quiet`. Only then returns true. Returns false (the caller keeps the journal entry)
+  /// when the folders had not stayed gone by `limit`, when a Profile uses the directory again, or
+  /// when the task is cancelled. Throws the last removal error if one is still unresolved at `limit`.
+  /// The file work runs off the main actor; each pass tries every folder.
+  func removeFoldersUntilSettled(_ directory: String, quiet: Duration = .milliseconds(750),
+                                 limit: Duration = .seconds(5)) async throws -> Bool {
+    let directories: ProfileDirectories = app.directories
     let folders = [directories.profileDirectory(dataDirectoryName: directory),
                    directories.engineDirectory(dataDirectoryName: directory),
                    directories.engineCacheDirectory(dataDirectoryName: directory)]
+      .reduce(into: [URL]()) { list, url in if !list.contains(url) { list.append(url) } }
     let clock = ContinuousClock(), deadline = clock.now + limit
     var quietSince: ContinuousClock.Instant?
     var lastError: (any Error)?
@@ -144,33 +148,37 @@ final class ProfileTeardown {
       if passes > 1 { FileHandle.standardError.write(Data("Open: Profile folders removed again after deletion (\(passes) passes)\n".utf8)) }
     }
     while true {
-      if folders.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-        quietSince = nil; passes += 1
-        do {
-          try removeIfPresent(folders[0])
-          try wipeEngine(directory, directories: directories)
-          lastError = nil
-        } catch { lastError = error }
-      } else if let since = quietSince {
-        if clock.now - since >= quiet { return true }
+      // Never touch a folder that a Profile uses (again): leave it to launch recovery, which keeps it.
+      guard !app.model.profiles.contains(where: { $0.dataDirectoryName.lowercased() == directory.lowercased() }) else { return false }
+      let pass = await Task.detached(priority: .userInitiated) { Self.removalPass(folders) }.value
+      if pass.present {
+        passes += 1; quietSince = nil; lastError = pass.error
       } else {
-        quietSince = clock.now
+        lastError = nil
+        if let since = quietSince { if clock.now - since >= quiet { return true } } else { quietSince = clock.now }
       }
       guard clock.now < deadline else {
-        if folders.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-          if let lastError { throw lastError }
-          return false
-        }
-        return true
+        if let lastError { throw lastError }
+        return false
       }
-      try? await Task.sleep(for: .milliseconds(25))
+      do { try await Task.sleep(for: .milliseconds(25)) } catch { return false }
     }
+  }
+
+  /// One removal pass over every folder, also after a failure. `present`: some folder existed.
+  private nonisolated static func removalPass(_ folders: [URL]) -> (present: Bool, error: (any Error)?) {
+    var present = false, failure: (any Error)?
+    for folder in folders where FileManager.default.fileExists(atPath: folder.path) {
+      present = true
+      do { try removeIfPresent(folder) } catch { failure = error }
+    }
+    return (present, failure)
   }
 
   private static func pendingURL(_ directories: ProfileDirectories) -> URL {
     directories.root.appendingPathComponent("Profiles/.pending-wipe.json")
   }
-  private static func failure(_ message: String) -> NSError {
+  private nonisolated static func failure(_ message: String) -> NSError {
     NSError(domain:"Open.ProfileTeardown",code:1,userInfo:[NSLocalizedDescriptionKey:message])
   }
   private static func valid(_ name: String) -> Bool {
@@ -210,13 +218,13 @@ final class ProfileTeardown {
     if remaining.isEmpty { try removeIfPresent(pendingURL(directories)) }
     else { try writeAtomically(JSONEncoder().encode(remaining), to: pendingURL(directories)) }
   }
-  private static func removeIfPresent(_ url: URL) throws {
+  private nonisolated static func removeIfPresent(_ url: URL) throws {
     if FileManager.default.fileExists(atPath:url.path) {
       try FileManager.default.removeItem(at:url)
       try sync(url.deletingLastPathComponent())
     }
   }
-  private static func sync(_ url: URL) throws {
+  private nonisolated static func sync(_ url: URL) throws {
     let fd=Darwin.open(url.path,O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
     guard fd >= 0 else { throw failure("Could not open Profile cleanup file for sync.") }
     defer {Darwin.close(fd)}

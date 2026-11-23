@@ -133,7 +133,11 @@ extension AutomationController {
         app.model.deleteSpace(id: space.id, archiveTabs: false)
       }
       guard try app.model.deleteProfile(id: profile.id) else { throw Failure(message: "model profile deletion refused") }
-      try app.directories.deleteProfileData(for: profile)
+      // The same settled removal as Settings deletion: queued Chromium store opens can create the
+      // engine folder again just after deleteContext (bug sweep r8, ProfileTeardown).
+      guard try await app.profileTeardown.removeFoldersUntilSettled(profile.dataDirectoryName) else {
+        throw Failure(message: "profile folders did not stay removed")
+      }
       return ["closed": context.state == .closed, "directory": profile.dataDirectoryName,
               "completions": completions, "extensionsClosed": !context.extensions.isReady]
     case "state":

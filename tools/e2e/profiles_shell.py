@@ -628,6 +628,41 @@ def run(factory, results, tmp, api, defaults_before):
             'profileGone': not (root / 'Profiles' / never['directory']).exists(),
             'modelGone': 'Shell Never Loaded' not in gone['rows'], 'error': gone.get('error')}
 
+        # Bug sweep r8: queued Chromium store opens can create a deleted Profile's engine folder again
+        # just after deletion; the App removes it again until it stays gone (ProfileTeardown
+        # removeFoldersUntilSettled). Here the folder keeps coming back for longer than the App's 5 s
+        # limit: the deletion must keep its pending-wipe entry, and the next launch removes the folder.
+        state(action='create', name='Shell Recreated')
+        recreated = profile('Shell Recreated')
+        recreated_engine = root / 'Engine' / recreated['directory']
+        recreated_engine.mkdir(parents=True, exist_ok=True)
+        (recreated_engine / 'synthetic-marker').write_text('synthetic late store open')
+        stop_recreating = threading.Event()
+        def keep_recreating():
+            while not stop_recreating.is_set():
+                try:
+                    recreated_engine.mkdir(parents=True, exist_ok=True)
+                except OSError:
+                    pass
+                stop_recreating.wait(.005)
+        recreator = threading.Thread(target=keep_recreating, daemon=True)
+        recreator.start()
+        try:
+            _, _, recreated_gone = confirm('Shell Recreated')
+            journal = json.loads(pending.read_text()) if pending.exists() else []
+        finally:
+            stop_recreating.set()
+            recreator.join()
+        app.quit()
+        launch()
+        journal_after = json.loads(pending.read_text()) if pending.exists() else []
+        results['shell_delete_recreated_keeps_journal'] = {
+            'ok': 'Shell Recreated' not in recreated_gone['rows'] and recreated['directory'] in journal
+                  and not recreated_engine.exists() and recreated['directory'] not in journal_after,
+            'modelGone': 'Shell Recreated' not in recreated_gone['rows'], 'journaled': recreated['directory'] in journal,
+            'goneAfterRelaunch': not recreated_engine.exists(), 'journalClearedAfterRelaunch': recreated['directory'] not in journal_after,
+            'error': recreated_gone.get('error')}
+
         # Bug sweep R2 (seed-media #2): the process stopped after a deletion was journaled but before the
         # snapshot without the Profile was saved (here: a hand-written journal). The next launch must keep
         # the Profile's data, because the loaded snapshot still lists that Profile, and clear the journal.

@@ -17,8 +17,12 @@ Store opens that Chromium had already queued for the destroyed Profile
 run a few milliseconds after deletion completes. They create the engine
 folder again, or make the first removal fail while they write. So the App
 removes the Open-owned, engine and cache folders again whenever one returns,
-until all of them stay gone for 750 ms (at most 5 s). A folder that is still
-there at that limit keeps its journal entry, and the next launch removes it.
+until all of them stay gone for 750 ms (at most 5 s). The file work runs off
+the main thread, and each pass tries every folder. The journal entry stays
+when the folders did not stay gone by that limit, when a Profile uses the
+directory again, or when the removal is cancelled; the next launch removes
+the folders. The automation `profile-engine delete` action uses the same
+removal.
 
 A synced `Profiles/.pending-wipe.json` journal covers interrupted or failed
 cleanup. The journal is bounded at 64 KiB, 1024 unique names, and 255 UTF-8
