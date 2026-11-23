@@ -13,6 +13,7 @@ extension AppImportRunner {
     var errorText: String?
     var extensions: [ImportExtensionCandidate] = []
     var secretsReportLines: [String] = []
+    var secretsReportRows: [SecretsReportRow] = []
   }
 
   func importBrowser(source: BrowserSource, profile sourceProfile: BrowserSourceProfile, plan: ImportPlan, undo: AppImportUndo,
@@ -141,6 +142,7 @@ extension AppImportRunner {
       result.counts.merge(secrets.counts) { _, new in new }
       result.failures.merge(secrets.failures) { _, new in new }
       result.secretsReportLines = secrets.secretsReportLines
+      result.secretsReportRows = secrets.secretsReportRows
     }
     return finish(result)
   }
@@ -177,7 +179,7 @@ extension AppImportRunner {
       }
       let total = report.total
       return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
-        "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines)
+        "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines, secretsReportRows: report.rows)
     } catch is ChromiumCryptoError {
       return ImportOutcome(failures: ["Passwords and cookies": "Keychain access was not granted. Passwords and cookies were not imported."])
     } catch {

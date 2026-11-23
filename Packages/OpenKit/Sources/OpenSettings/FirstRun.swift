@@ -342,35 +342,55 @@ public struct FirstRunView:View {
         Group {if let value=model.progress {ProgressView(value:value)} else {ProgressView().progressViewStyle(.linear)}}.frame(width:320).accessibilityValue(model.phaseText)
         if model.browserHasLanded && model.phaseText == "Importing your history…" {Text("Your browser is ready. History is still importing in the background.").frame(width:SettingsTokens.firstRunSparseTextWidth).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.top,12)}
     }}}
+    /// One report row: a category, its value and the value's ink.
+    private struct ReportRow:Hashable {let title:String;let value:String;let ink:Ink;enum Ink {case normal,dim,failure}}
+    private var reportRows:[ReportRow] {
+        let categories=model.wizard.displayedReportCategories.map {name->ReportRow in
+            let value=model.reportValue(name)
+            // A long failure sentence is shown once below the table; the row stays one short word.
+            if let failure=model.outcome?.failures[name] {return ReportRow(title:ImportCountCopy.displayCategory(name),value:failure.count > 24 ? "Not imported":failure,ink:.failure)}
+            return ReportRow(title:ImportCountCopy.displayCategory(name),value:value,ink:value.contains("Not ") ? .dim:.normal)
+        }
+        let secrets=model.wizard.secretsReportRows.map {ReportRow(title:$0.title,value:model.wizard.secretsReportValue($0),ink:$0.noneFound ? .dim:.normal)}
+        return categories+secrets
+    }
+    private func ink(_ value:ReportRow.Ink)->Color {
+        switch value {case .failure:Color.red;case .dim:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary;case .normal:Color.primary}
+    }
+    /// The table already lists every count, so the headline only says how the import ended.
+    private var reportHeadline:String {model.outcome?.failures.isEmpty == false || model.errorText != nil ? "Import finished.":"Import complete."}
     private var report:some View {VStack(alignment:.leading,spacing:10) {
         if !embeddedImport {Text("Import complete").font(.title2)}
         ScrollView {VStack(alignment:.leading,spacing:10) {
-            Text(model.reportSummary).font(embeddedImport ? .system(size:13,weight:.medium):Font(SettingsTokens.label.font)).fixedSize(horizontal:false,vertical:true)
             if embeddedImport {
+                Text(reportHeadline).font(.system(size:13,weight:.semibold)).fixedSize(horizontal:false,vertical:true)
+                let rows=reportRows
                 VStack(spacing:0) {
-                    ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
-                        HStack {
-                            Text(ImportCountCopy.displayCategory(name));Spacer()
-                            Text(model.reportValue(name)).monospacedDigit()
-                                .foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? Color(nsColor:.tertiaryLabelColor):Color.primary)
+                    ForEach(Array(rows.enumerated()),id:\.element) {index,row in
+                        HStack(spacing:12) {
+                            Text(row.title).lineLimit(1);Spacer(minLength:8)
+                            Text(row.value).monospacedDigit().lineLimit(1).foregroundStyle(ink(row.ink))
                         }.font(.system(size:12)).padding(.horizontal,16).frame(height:32)
                             .overlay(alignment:.bottom) {
-                                if index != model.wizard.displayedReportCategories.count-1 {Divider().padding(.horizontal,16)}
+                                if index != rows.count-1 {Divider().padding(.horizontal,16)}
                             }
                     }
                 }.background(Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:12))
                     .overlay(RoundedRectangle(cornerRadius:12).strokeBorder(Color(nsColor:.separatorColor),lineWidth:1))
             } else {
-            SettingsGroup {ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
-                SettingsRow(height:30,divider:index != model.wizard.displayedReportCategories.count-1) {HStack {
-                    Text(ImportCountCopy.displayCategory(name));Spacer();
-                    Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? secondary:Color.primary)
+            Text(model.reportSummary).font(Font(SettingsTokens.label.font)).fixedSize(horizontal:false,vertical:true)
+            let rows=reportRows
+            SettingsGroup {ForEach(Array(rows.enumerated()),id:\.element) {index,row in
+                SettingsRow(height:30,divider:index != rows.count-1) {HStack {
+                    Text(row.title);Spacer();
+                    Text(row.value).monospacedDigit().foregroundStyle(ink(row.ink))
                 }}
             }}
             }
-            ForEach(model.wizard.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
-            if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(secondary) }
-            if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).foregroundStyle(secondary) }
+            let noteFont:Font=embeddedImport ? .system(size:12):section
+            ForEach(model.wizard.secretsReportNotes, id: \.self) { Text($0).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
+            if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
+            if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
             if embeddedImport, model.outcome?.errorText != nil, !model.wizard.hasImportedData {Button("Try Again") {model.showImport()}}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}

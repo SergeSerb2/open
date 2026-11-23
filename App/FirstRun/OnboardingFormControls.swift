@@ -13,24 +13,47 @@ import OpenSpaceEditor
   }
   required init?(coder: NSCoder) { nil }
   override func draw(_ dirtyRect: NSRect) {
-    let rect = bounds.insetBy(dx: 0.5,dy: 0.5)
-    let path = NSBezierPath(roundedRect: rect,xRadius: 10,yRadius: 10)
-    NSColor.controlBackgroundColor.setFill(); path.fill()
-    NSColor.separatorColor.setStroke(); path.lineWidth = 1; path.stroke()
-    super.draw(dirtyRect)
-    if currentEditor() != nil {
-      OnboardingTokens.Room.space.withAlphaComponent(0.35).setStroke()
-      let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5,dy: 1.5),xRadius: 9,yRadius: 9)
+    let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    let focused = currentEditor() != nil
+    let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 10,yRadius: 10)
+    // A faint fill separates the field from the panel in both appearances.
+    (dark ? NSColor(white: 1, alpha: 0.06):NSColor(white: 0, alpha: 0.03)).setFill(); path.fill()
+    (focused ? OnboardingTokens.Room.space.withAlphaComponent(0.9):NSColor.separatorColor).setStroke()
+    path.lineWidth = 1; path.stroke()
+    if focused {
+      OnboardingTokens.Room.space.withAlphaComponent(0.22).setStroke()
+      let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 2,dy: 2),xRadius: 8.5,yRadius: 8.5)
       ring.lineWidth = 3; ring.stroke()
     }
+    super.draw(dirtyRect)
   }
   override func becomeFirstResponder() -> Bool { let result = super.becomeFirstResponder(); needsDisplay = true; return result }
   override func textDidEndEditing(_ notification: Notification) { super.textDidEndEditing(notification); needsDisplay = true }
+  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+  #if OPEN_AUTOMATION
+  /// Insets of the live text (field editor while focused, else the drawn text) inside the field: left, top, bottom.
+  var textInsets: [CGFloat] {
+    let rect = (currentEditor() as? NSView).map { $0.convert($0.bounds, to: self) } ?? (cell?.drawingRect(forBounds: bounds) ?? bounds)
+    return [rect.minX, rect.minY, bounds.height-rect.maxY]
+  }
+  #endif
 }
+/// The placeholder, the drawn value and the field editor share one inset line box,
+/// centred vertically. AppKit hands the editor the frame given to edit/select, so
+/// both must receive the inset rect, not the control's bounds.
 @MainActor private final class OnboardingNameCell: NSTextFieldCell {
-  override func drawingRect(forBounds rect: NSRect) -> NSRect {
-    let height = min(22,rect.height)
-    return NSRect(x: rect.minX+12,y: rect.midY-height/2,width: max(0,rect.width-24),height: height)
+  private func textRect(_ rect: NSRect) -> NSRect {
+    let line = ceil(NSLayoutManager().defaultLineHeight(for: font ?? .systemFont(ofSize: 15)))
+    let height = min(line, rect.height)
+    return NSRect(x: rect.minX+12, y: rect.minY+floor((rect.height-height)/2), width: max(0,rect.width-24), height: height)
+  }
+  override func drawingRect(forBounds rect: NSRect) -> NSRect { textRect(rect) }
+  override func titleRect(forBounds rect: NSRect) -> NSRect { textRect(rect) }
+  override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
+    super.edit(withFrame: textRect(rect), in: controlView, editor: textObj, delegate: delegate, event: event)
+  }
+  override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+    super.select(withFrame: textRect(rect), in: controlView, editor: textObj, delegate: delegate, start: selStart, length: selLength)
   }
 }
 

@@ -49,6 +49,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   private var nextContent: NSViewController?
   private var lifecycle: [Task<Void, Never>] = []
   private let residentBaseline: UInt64
+  /// The screen area the window was sized and placed in (state only).
+  private let placementArea: NSRect
   private var residentAtThree: Int64?
   private var residentAfterHandoff: Int64?
   #if OPEN_AUTOMATION
@@ -66,10 +68,22 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     self.replay = replay
     residentBaseline = Self.residentBytes()
     let screen = NSScreen.main ?? NSScreen.screens.first
-    var size = OnboardingTokens.windowSize
-    if let frame = screen?.frame, frame.width <= size.width && frame.height <= size.height {
-      size = NSSize(width: max(1, frame.width-72), height: max(1, frame.height-72))
+    // Fit each axis to the area outside the menu bar and Dock, with a 24 pt margin, so the
+    // footer can never fall under the Dock or off a short screen.
+    var area = screen?.visibleFrame ?? NSRect(origin: .zero, size: OnboardingTokens.windowSize)
+    #if OPEN_AUTOMATION
+    // e2e only: OPEN_AUTOMATION_ONBOARDING_VISIBLE_SIZE=<width>x<height> stands in for a smaller display.
+    if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_ONBOARDING_VISIBLE_SIZE"] {
+      let parts = raw.split(separator: "x").compactMap { Double($0) }
+      if parts.count == 2, (400...10_000).contains(parts[0]), (300...10_000).contains(parts[1]) {
+        area = NSRect(x: area.minX, y: area.minY, width: parts[0], height: parts[1])
+      }
     }
+    #endif
+    placementArea = area
+    var size = OnboardingTokens.windowSize
+    size.width = min(size.width, max(1, area.width-48))
+    size.height = min(size.height, max(1, area.height-48))
     let window = OnboardingWindow(contentRect: NSRect(origin: .zero, size: size),
       styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
     window.title = "Open"; window.titleVisibility = .hidden
@@ -100,7 +114,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     dim.isReleasedWhenClosed = false; dim.tabbingMode = .disallowed
     dim.identifier = .init("onboarding-dim"); dim.setAccessibilityElement(false)
     super.init(window: window)
-    window.delegate = self; window.center()
+    window.delegate = self
+    window.setFrameOrigin(NSPoint(x: floor(area.midX-size.width/2), y: floor(area.midY-size.height/2)))
     window.addChildWindow(dim, ordered: .below)
     #if OPEN_AUTOMATION
     dimRegion?.end()
@@ -330,6 +345,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     state["sound"] = sound.state; state["replay"] = replay
     state["window"] = window?.windowNumber ?? 0
     state["frameSize"] = [window?.frame.width ?? 0, window?.frame.height ?? 0]
+    let frame = window?.frame ?? .zero
+    state["windowFrame"] = [frame.minX, frame.minY, frame.width, frame.height]
+    state["placementArea"] = [placementArea.minX, placementArea.minY, placementArea.width, placementArea.height]
     state["dim"] = ["exists": dim.isVisible, "alpha": dimView.layer?.presentation()?.opacity ?? dimView.layer?.opacity ?? 0, "ignoresMouseEvents": dim.ignoresMouseEvents, "child": dim.parent === window]
     #if OPEN_AUTOMATION
     state["artwork"] = steps?.preview.artworkState as Any? ?? NSNull()

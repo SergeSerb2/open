@@ -506,20 +506,30 @@ final class OnboardingMiniature: NSView {
         NSBezierPath(ovalIn: CGRect(x: imageRect.maxX-92,y: imageRect.minY+22,width: 48,height: 48)).fill()
         let hill = NSBezierPath(); hill.move(to: CGPoint(x: imageRect.minX,y: imageRect.maxY)); hill.curve(to: CGPoint(x: imageRect.maxX,y: imageRect.maxY-40),controlPoint1: CGPoint(x: imageRect.midX-55,y: imageRect.minY+50),controlPoint2: CGPoint(x: imageRect.midX+45,y: imageRect.maxY+30)); hill.line(to: CGPoint(x: imageRect.maxX,y: imageRect.maxY)); hill.close()
         OnboardingTokens.Room.imageEnd.withAlphaComponent(0.45).setFill(); hill.fill(); NSGraphicsContext.restoreGraphicsState()
-        (subtitle as NSString).draw(in: CGRect(x: left,y: imageRect.maxY+24,width: width,height: 42),withAttributes: [.font:NSFont.systemFont(ofSize: 15,weight: .medium),.foregroundColor:OnboardingTokens.Room.pageInk])
-        let body = "Keep your everyday places close.\nLeave room for something new."
-        (body as NSString).draw(in: CGRect(x: left,y: imageRect.maxY+68,width: width,height: 96),withAttributes: [.font:NSFont.systemFont(ofSize: 13),.foregroundColor:OnboardingTokens.Room.pageInk.withAlphaComponent(0.68)])
-        if let blockerEnabled {
-            ((blockerEnabled ? "12 blocked":"Ads are visible") as NSString).draw(in: CGRect(x: left,y: r.height-28,width: width,height: 20),withAttributes: [.font:NSFont.systemFont(ofSize: 12,weight: .semibold),.foregroundColor:OnboardingTokens.Room.pageInk.withAlphaComponent(0.68)])
-        }
+        // Sections share the page below the image evenly, so no section leaves a large gap.
+        // Faint placeholder lines finish each section like a real article.
+        var sections: [(String, String)] = [(subtitle, "Keep your everyday places close.\nLeave room for something new.")]
         if r.height > 600 {
-            let headings = ["Make space for the good stuff.","Your next chapter starts here."]
-            for (section,heading) in headings.enumerated() {
-                let y = imageRect.maxY+196+CGFloat(section)*158
-                (heading as NSString).draw(in: CGRect(x: left,y: y,width: width,height: 26),withAttributes: [.font:NSFont.systemFont(ofSize: 17,weight: .semibold),.foregroundColor:OnboardingTokens.Room.pageInk])
-                let copy = section == 0 ? "Keep your favourites in easy reach.":"Follow a link. Find a new perspective."
-                (copy as NSString).draw(in: CGRect(x: left,y: y+38,width: width,height: 88),withAttributes: [.font:NSFont.systemFont(ofSize: 13),.foregroundColor:OnboardingTokens.Room.pageInk.withAlphaComponent(0.68)])
+            sections += [("Make space for the good stuff.", "Keep your favourites in easy reach."),
+                         ("Your next chapter starts here.", "Follow a link. Find a new perspective.")]
+        }
+        let top = imageRect.maxY+26, bottom = r.height-(blockerEnabled == nil ? 26:44)
+        let slot = max(96, (bottom-top)/CGFloat(sections.count))
+        let ink = OnboardingTokens.Room.pageInk
+        for (index, (heading, copy)) in sections.enumerated() {
+            let y = top+CGFloat(index)*slot
+            (heading as NSString).draw(in: CGRect(x: left,y: y,width: width,height: 22),withAttributes: [.font:NSFont.systemFont(ofSize: 15,weight: .semibold),.foregroundColor:ink])
+            let body = (copy as NSString).boundingRect(with: CGSize(width: width,height: 60),options: [.usesLineFragmentOrigin],attributes: [.font:NSFont.systemFont(ofSize: 13)])
+            (copy as NSString).draw(in: CGRect(x: left,y: y+28,width: width,height: ceil(body.height)),withAttributes: [.font:NSFont.systemFont(ofSize: 13),.foregroundColor:ink.withAlphaComponent(0.68)])
+            var line = y+28+ceil(body.height)+12
+            ink.withAlphaComponent(0.08).setFill()
+            for fraction in [1.0, 0.92, 0.64] where line+6 <= y+slot-18 {
+                NSBezierPath(roundedRect: CGRect(x: left,y: line,width: width*fraction,height: 6),xRadius: 3,yRadius: 3).fill()
+                line += 14
             }
+        }
+        if let blockerEnabled {
+            ((blockerEnabled ? "12 blocked":"Ads are visible") as NSString).draw(in: CGRect(x: left,y: r.height-28,width: width,height: 20),withAttributes: [.font:NSFont.systemFont(ofSize: 12,weight: .semibold),.foregroundColor:ink.withAlphaComponent(0.68)])
         }
     }
 }

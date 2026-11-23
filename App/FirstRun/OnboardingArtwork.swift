@@ -96,7 +96,8 @@ import ImageIO
     super.layout(); scene.frame = bounds; room.frame = bounds
     readyCard.frame = cardRect
     favoriteMiniature.frame = CGRect(x: 44,y: bounds.height*0.12,width: 480,height: 544)
-    progress.frame = CGRect(x: 40,y: 36,width: 104,height: 6)
+    // The dots share the footer's centre line (72 pt above the bottom) and the miniature's left edge.
+    progress.frame = CGRect(x: 44,y: 69,width: 104,height: 6)
     progress.selected = ["name","import","favorites","theme","blocker","defaultBrowser","ready"].firstIndex(of: step) ?? 0
     mail.frame = CGRect(x: 58,y: bounds.height-126,width: 184,height: 48)
     flyingLink.frame = CGRect(x: 112,y: bounds.height-184,width: 160,height: 40)

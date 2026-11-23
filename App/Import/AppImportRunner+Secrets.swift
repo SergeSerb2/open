@@ -61,7 +61,7 @@ extension AppImportRunner {
     }
     let total = report.total
     return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
-      "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines)
+      "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines, secretsReportRows: report.rows)
   }
   #endif
 
@@ -138,7 +138,7 @@ extension AppImportRunner {
       }
       let total = report.total
       return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
-        "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines)
+        "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines, secretsReportRows: report.rows)
     } catch is ChromiumCryptoError {
       // E-3: the non-secret import remains successful; no retry in this run.
       return ImportOutcome(failures: ["Passwords and cookies": "Keychain access was not granted. Passwords and cookies were not imported."])

@@ -13,7 +13,10 @@ import uuid
 def run(factory, results, tmp, h):
     if os.environ.get('OPEN_E2E_ONBOARDING_ICONS_ONLY') == '1':
         return run_favorite_icons(factory, results, tmp, h)
+    if os.environ.get('OPEN_E2E_ONBOARDING_LAYOUT_ONLY') == '1':
+        return run_layout_rows(factory, results, tmp, h)
     run_favorite_icons(factory, results, tmp, h)
+    run_layout_rows(factory, results, tmp, h)
     source = Path(tmp)/'setup-arc-synthetic'
     shutil.rmtree(source, ignore_errors=True)
     ids = runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
@@ -765,3 +768,73 @@ def run_favorite_icons(factory, results, tmp, h):
         (evidence/'icon-receipts.json').write_text(json.dumps(receipts, indent=2))
         if app and not app.closed: app.quit()
         h._restore_defaults(None, saved)
+
+
+def run_layout_rows(factory, results, tmp, h):
+    """UX round 1 layout rows. Real App and window; frames come from the automation socket in
+    window points with a top-left origin. Secrets use the automation-only generated fixture."""
+    source = Path(tmp)/'layout-arc-synthetic'
+    shutil.rmtree(source, ignore_errors=True)
+    runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
+    app = None
+    def state(): return app.call('onboarding', action='state')
+    def action(verb, **args): return app.call('onboarding', action=verb, **args)
+    def until(predicate, timeout=30): assert h.wait_until(predicate, timeout=timeout, step=.05), state()
+    def launch(env=None, flags=()):
+        nonlocal app
+        if app and not app.closed: app.quit()
+        app = factory(urls=(), fresh=True, extra_env=env, extra_args=['--arc-dir='+str(source), '--intro-sound=off', *flags])
+        app.call('quit-warning', button='quit')
+        if state().get('active') and state()['screen'] == 'intro':
+            action('skip-intro'); action('get-started')
+        until(lambda: state()['screen'] == 'name')
+    def footer_problems(s):
+        """Every footer button inside the panel's 56 pt content margins and the window, on one centre
+        line, at least 8 pt apart, and wide enough for its whole label (no truncation)."""
+        layout = s.get('layout') or {}; panel = layout.get('panel'); buttons = layout.get('buttons') or []
+        if not panel or not buttons: return ['no footer']
+        problems, height = [], layout['contentHeight']
+        left, right = panel[0]+56-.5, panel[0]+panel[2]-56+.5
+        frames = sorted(((b['label'], b['frame'], b['labelWidth']) for b in buttons), key=lambda b: b[1][0])
+        for label, f, text in frames:
+            if f[0] < left or f[0]+f[2] > right or f[1] < 0 or f[1]+f[3] > height: problems.append(label+' outside')
+            if f[2] < text+16: problems.append(label+' truncated')
+        for (a, fa, _), (b, fb, _) in zip(frames, frames[1:]):
+            if fa[0]+fa[2]+8 > fb[0]+.5: problems.append(a+'/'+b+' crowded')
+        if len({round(f[1]+f[3]/2) for _, f, _ in frames}) != 1: problems.append('not one centre line')
+        return problems
+    footers = {}
+    def record(name):
+        s = state(); footers[name if name else s['screen']] = dict(problems=footer_problems(s), buttons=(s.get('layout') or {}).get('buttons'))
+        return s
+    try:
+        launch(env={'OPEN_AUTOMATION_SYNTHETIC_SECRETS': 'noLogins'}, flags=['--open-allow-mock-keychain-secrets'])
+        named = record('name')
+        insets = (named.get('layout') or {}).get('nameTextInsets') or []
+        results['steps_name_text_inset'] = dict(ok=len(insets) == 3 and insets[0] >= 10 and insets[1] >= 6
+            and abs(insets[1]-insets[2]) <= 2, insets=insets, field=(named.get('layout') or {}).get('nameFieldFrame'), load=os.getloadavg())
+        action('set-name', name='Alex'); action('next'); until(lambda: state()['screen'] == 'import'); record('import')
+        app.call('first-run', action='select', secrets=True)
+        app.call('first-run', action='continue')
+        until(lambda: app.call('first-run')['step'] == 'secretsConsent', timeout=60); record('secretsConsent')
+        action('next')
+        until(lambda: app.call('first-run')['step'] == 'report', timeout=60); record('report')
+        report = app.call('first-run')
+        rows = dict(map(tuple, report.get('secretsReportRows') or []))
+        results['steps_secrets_report_rows'] = dict(ok=rows.get('Passwords') == 'None found in Arc'
+            and all(rows.get(k, '').isdigit() for k in ('Cookies', 'Addresses', 'Cards')), rows=rows, notes=report.get('secretsReportNotes'), load=os.getloadavg())
+        for step in ('theme', 'blocker', 'defaultBrowser', 'ready'):
+            if state()['screen'] == 'defaultBrowser': action('choose-default', yes=False)
+            current = state()['screen']; action('next'); until(lambda: state()['screen'] != current)
+            until(lambda: state()['screen'] == step); record(step)
+        results['steps_footer_layout'] = dict(ok=len(footers) == 8 and not any(v['problems'] for v in footers.values()),
+            footers=footers, load=os.getloadavg())
+        # A display whose visible area is shorter and narrower than the 1280 x 800 design.
+        launch(env={'OPEN_AUTOMATION_ONBOARDING_VISIBLE_SIZE': '1440x700'})
+        small = state(); area, win = small.get('placementArea') or [0]*4, small.get('windowFrame') or [0]*4
+        problems = footer_problems(small)
+        results['steps_small_screen_fits'] = dict(ok=win[2] <= area[2] and win[3] <= area[3]
+            and win[0] >= area[0] and win[1] >= area[1] and win[0]+win[2] <= area[0]+area[2] and win[1]+win[3] <= area[1]+area[3]
+            and not problems, window=win, area=area, problems=problems, load=os.getloadavg())
+    finally:
+        if app and not app.closed: app.quit()
