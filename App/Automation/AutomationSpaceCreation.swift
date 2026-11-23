@@ -89,7 +89,10 @@ extension AutomationController {
   }
 
   private func creationLayerState(_ form: NSView, in root: NSView) -> [String: Any] {
-    func tx(_ layer: CALayer?) -> Double { (layer?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? .nan }
+    func tx(_ layer: CALayer?) -> Any {
+      guard let value = (layer?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue, value.isFinite else { return NSNull() }
+      return value
+    }
     var chain: [[String: Any]] = []
     var view: NSView? = form
     while let current = view, current !== root.superview {
@@ -103,9 +106,9 @@ extension AutomationController {
     var visible: [Double] = [], model: [Double] = []
     if let formLayer = form.layer, let rootLayer = root.layer {
       let m = rootLayer.convert(formLayer.bounds, from: formLayer)
-      model = [m.minX, m.minY, m.width, m.height]
+      model = [m.minX, m.minY, m.width, m.height].allSatisfy(\.isFinite) ? [m.minX, m.minY, m.width, m.height] : []
       let rect = (rootLayer.presentation() ?? rootLayer).convert((formLayer.presentation() ?? formLayer).bounds, from: formLayer.presentation() ?? formLayer)
-      visible = [rect.minX, rect.minY, rect.width, rect.height]
+      visible = [rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite) ? [rect.minX, rect.minY, rect.width, rect.height] : []
     }
     return ["chain": chain, "presentationRectInRoot": visible, "modelRectInRoot": model, "rootBounds": [root.bounds.width, root.bounds.height]]
   }
