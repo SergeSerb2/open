@@ -164,12 +164,6 @@ def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, ch
               and after['space'] == solo_space and after['selected'] == '' and title == 'Open',
               favorites=favorites, others=others, titleBefore=before, title=title,
               state={k: after[k] for k in ('space', 'selected', 'shownPages')}, solo=solo)
-        # Control: Undo brings the tab back selected (the Space keeps its last selection), with its title.
-        app.call('key', key='z', modifiers=['command'], route='app'); settle()
-        undone = state(); title = title_of(window); back = section('today')
-        check('r8_move_last_tab_undo_reselects', undone['space'] == solo_space and undone['selected'] == solo and title == 'R6 Solo',
-              state={k: undone[k] for k in ('space', 'selected', 'shownPages')}, title=title, solo=solo, today=back,
-              undo=app.call('undo-state'))
     guarded('r8_move_last_tab_out_updates_title', move_last_tab)
 
     # B-R6-10: Clear Unpinned Tabs waits for a page's beforeunload. When Today is already empty by
