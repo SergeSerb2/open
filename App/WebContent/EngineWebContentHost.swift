@@ -184,6 +184,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
         owner.app.liveFolders.addressChanged(tabID: tabID, url: url, space: owner.space(for: tabID))
       }
     }
+    if changes.contains(.loading), !page.isLoading, let url = page.url { owner.app.stores.boosts.pageLoadEnded(self, url: url) }
     if changes.contains(.loading), !page.isLoading { historyRecorder.loadingChanged(false); historyRecorder.titleChanged(page.title) }
     if (changes.contains(.URL) || (changes.contains(.loading) && !page.isLoading)) { ThemeData.pageChanged(self, factory: owner) }
     if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title); historyRecorder.titleChanged(page.title) }
