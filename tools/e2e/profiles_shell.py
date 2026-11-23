@@ -195,7 +195,7 @@ def run(factory, results, tmp, api, defaults_before):
         state(action='show', **({'profile': name} if name else {}))
         time.sleep(.15)
 
-    def confirm(name, token=None, bulk=False):
+    def confirm(name, token=None, bulk=False, timeout=15):
         show(name)
         press('Delete Unused Profiles…' if bulk else 'Delete Profile')
         assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
@@ -207,7 +207,7 @@ def run(factory, results, tmp, api, defaults_before):
         typed = state()
         assert typed['deleteEnabled'] and typed['deleteAXEnabled'] is True, typed
         press('Delete')
-        assert wait(lambda: not state()['deleting'] and state()['sheet'] == 0, timeout=15), state()
+        assert wait(lambda: not state()['deleting'] and state()['sheet'] == 0, timeout=timeout), state()
         return before, typed, state()
 
     def check_deleted_profile_favorites():
@@ -627,6 +627,42 @@ def run(factory, results, tmp, api, defaults_before):
                   and 'Shell Never Loaded' not in gone['rows'], 'engineGone': not engine.exists(), 'cacheGone': not cache.exists(),
             'profileGone': not (root / 'Profiles' / never['directory']).exists(),
             'modelGone': 'Shell Never Loaded' not in gone['rows'], 'error': gone.get('error')}
+
+        # Bug sweep r8: queued Chromium store opens can create a deleted Profile's engine folder again
+        # just after deletion; the App removes it again until it stays gone (ProfileTeardown
+        # removeFoldersUntilSettled). Here the folder keeps coming back for longer than the App's 5 s
+        # limit: the deletion must keep its pending-wipe entry, and the next launch removes the folder.
+        state(action='create', name='Shell Recreated')
+        recreated = profile('Shell Recreated')
+        recreated_engine = root / 'Engine' / recreated['directory']
+        recreated_engine.mkdir(parents=True, exist_ok=True)
+        (recreated_engine / 'synthetic-marker').write_text('synthetic late store open')
+        stop_recreating = threading.Event()
+        def keep_recreating():
+            while not stop_recreating.is_set():
+                try:
+                    recreated_engine.mkdir(parents=True, exist_ok=True)
+                except OSError:
+                    pass
+                stop_recreating.wait(.005)
+        recreator = threading.Thread(target=keep_recreating, daemon=True)
+        recreator.start()
+        try:
+            # The wipe loads the Profile's context, deletes it, then spends the App's whole 5 s limit.
+            _, _, recreated_gone = confirm('Shell Recreated', timeout=30)
+            journal = json.loads(pending.read_text()) if pending.exists() else []
+        finally:
+            stop_recreating.set()
+            recreator.join()
+        app.quit()
+        launch()
+        journal_after = json.loads(pending.read_text()) if pending.exists() else []
+        results['shell_delete_recreated_keeps_journal'] = {
+            'ok': 'Shell Recreated' not in recreated_gone['rows'] and recreated['directory'] in journal
+                  and not recreated_engine.exists() and recreated['directory'] not in journal_after,
+            'modelGone': 'Shell Recreated' not in recreated_gone['rows'], 'journaled': recreated['directory'] in journal,
+            'goneAfterRelaunch': not recreated_engine.exists(), 'journalClearedAfterRelaunch': recreated['directory'] not in journal_after,
+            'error': recreated_gone.get('error')}
 
         # Bug sweep R2 (seed-media #2): the process stopped after a deletion was journaled but before the
         # snapshot without the Profile was saved (here: a hand-written journal). The next launch must keep
