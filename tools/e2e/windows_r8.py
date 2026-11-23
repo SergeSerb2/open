@@ -198,6 +198,11 @@ def run(factory, results, tmp, h):
             second = next(w for w in windows() if w['id'] != main_window[0])
             app.call('window-focus', id=second['id'], activate=True)
             app.call('key', key='escape', route='app')
+            # A Blank Window of the same Profile in front (its stand-in Profile shares the id): never the target.
+            app.call('menu-perform', id='blank-window')
+            assert wait_until(lambda: len(windows()) == 3 or None, timeout=5, step=.05), windows()
+            blank = next(w for w in windows() if w['id'] not in (main_window[0], second['id']))
+            app.call('key', key='escape', route='app')
             session = little_open_page('w8ext', '/w8ext')
             app.call('little-open-action', id=session['id'], action='focus')
             app.call('menu-perform', id='manage-extensions')
@@ -209,7 +214,7 @@ def run(factory, results, tmp, h):
                 return state['id'] if page.get('url', '').startswith('chrome://extensions') else None
             target = wait_until(ext_window, timeout=6, step=.1)
             row('win8_little_open_manage_extensions_front_window', target == second['id'],
-                target=target, front=second['id'], oldest=main_window[0], keyWindow=app.call('window-state')['id'])
+                target=target, front=second['id'], oldest=main_window[0], blank=blank['id'], keyWindow=app.call('window-state')['id'])
         def ext_cleanup():
             close_little_opens()
             for w in windows():

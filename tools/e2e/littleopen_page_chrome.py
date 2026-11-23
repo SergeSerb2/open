@@ -211,9 +211,23 @@ def run(factory, results, tmp, h):
             plain_bar = ev('document.hasFocus()')
             app.call('key', window=row['window'], key='escape')
             wait(lambda: not current()['barPresented'] or None, timeout=3, step=.05)
+            # Case B (review r1 #5): the card holds the keyboard and the main window becomes key. The
+            # background page gets no focus; it gets it back when Little Open is key again.
+            app.call('little-open-action', id=row['id'], action='focus'); time.sleep(.3)
+            refocused = call('permission-prompt', focus=True)
+            ev('focusLog=[];true')
+            main = app.call('shell-windows')[0]['id']
+            app.call('window-focus', id=main, activate=True); time.sleep(.6)
+            away = dict(log=ev('focusLog'), hasFocus=ev('document.hasFocus()'), prompt=ps()['promptHasKeyboard'],
+                        littleKey=current().get('key'))
+            app.call('little-open-action', id=row['id'], action='focus'); time.sleep(.6)
+            back = dict(log=ev('focusLog'), hasFocus=ev('document.hasFocus()'))
             return dict(ok=bool(focused) and held and bool(bar) and in_bar['hasFocus'] is False and not in_bar['prompt']
-                        and plain_bar is False and ps()['visible'],
-                        focused=focused, held=held, bar=bool(bar), inBar=in_bar, plainBar=plain_bar)
+                        and plain_bar is False and ps()['visible']
+                        and bool(refocused) and 'focus' not in away['log'] and away['hasFocus'] is False and not away['prompt']
+                        and back['hasFocus'] is True,
+                        focused=focused, held=held, bar=bool(bar), inBar=in_bar, plainBar=plain_bar,
+                        refocused=refocused, away=away, back=back)
         gate('little_permission_focus_r8', focus_r8)
         for action in ['navigate', 'miniaturize']:
             def dismissed(action=action):

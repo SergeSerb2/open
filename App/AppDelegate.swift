@@ -869,20 +869,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let profileID = profile.id, directory = profile.dataDirectoryName
     guard model.profile(id: profileID) == nil else { return }
     withoutWindowUndo {
-      for session in littleOpenCoordinator?.sessions.filter({ $0.profileID == profileID }) ?? [] {
-        littleOpenCoordinator.closeForRemovedProfile(sessionID: session.id)
-      }
+      closePopupPanels(ofProfileDirectory: directory)
+      littleOpenCoordinator?.closeForRemovedProfile(profileID)
       for controller in windowControllers where hostFactories[controller.windowID].map({
         $0.incognitoSession?.parent.id == profileID || ($0.isBlankWindow && $0.model.profile(id: profileID) != nil) }) == true {
         controller.window?.close()
       }
-      for factory in hostFactories.values where !factory.isIncognito {
-        for page in factory.auxiliaryPages where page.content.context.identifier == directory {
-          factory.closeAuxiliary(page); page.panel.close()
-        }
-      }
       if let context = OEEngine.shared.contexts.first(where: { $0.identifier == directory }), context !== OEEngine.shared.defaultContext {
         ExtensionWindowController.closeAll(in: context)
+      }
+    }
+  }
+  /// Popup panels of a Profile that is going away: those of browser windows, and those of Little Open
+  /// pages, whose factories are not browser windows' (a download can keep such a page, and its popups,
+  /// past its window's close; review r1 #4). Before the Little Open windows close.
+  func closePopupPanels(ofProfileDirectory directory: String) {
+    for factory in Array(hostFactories.values) + littleOpenHosts.values.compactMap(\.owner) where !factory.isIncognito {
+      for page in factory.auxiliaryPages where page.content.context.identifier == directory {
+        factory.closeAuxiliary(page); page.panel.close()
       }
     }
   }

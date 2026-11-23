@@ -342,6 +342,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard
           let controller = ordered.first(where: { app.hostFactories[$0.windowID]?.focusedProfile?.id == profile })
             ?? app.makeWindow(focusedSpaceID: space.id), let factory = app.hostFactories[controller.windowID] else { return }
+    if controller.window?.isMiniaturized == true { controller.window?.deminiaturize(nil) }
     app.focusWindow(controller.windowID, activate: true); _ = factory.performAppCommand(command)
   }
 
@@ -1404,13 +1405,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     enteredWindowFullscreenForPage = false; exitWindowFullscreenAfterTransition = false
   }
   /// Little Open closes or replaces its page (a Profile switch) and a running download may keep the
-  /// page alive for a while: the window gets its title bar and corners back now, and the detached
-  /// page, which leaves fullscreen now, can no longer change the window's chrome later (bug sweep r8, A-R6-03).
+  /// page alive for a while: the window gets its title bar and corners back now, and this factory lets
+  /// go of the window, so the detached page (a late fullscreen exit, or a new fullscreen request) can
+  /// never change the chrome of the page that replaces it (bug sweep r8, A-R6-03; review r1 #1).
   func releaseLittleOpenWindow() {
     leaveWindowFullScreenStartedByPage()
     removeStandaloneFullscreenObservers()
     if let page = fullscreenPage { fullscreenPage = nil; try? page.exitFullscreen() }
     if littleOpenController?.isPageFullscreen == true { littleOpenController?.isPageFullscreen = false }
+    littleOpenController = nil; littleOpenContent = nil
   }
   func closeAll() {
     guard !isClosing else { return }
