@@ -195,7 +195,7 @@ def run(factory, results, tmp, api, defaults_before):
         state(action='show', **({'profile': name} if name else {}))
         time.sleep(.15)
 
-    def confirm(name, token=None, bulk=False):
+    def confirm(name, token=None, bulk=False, timeout=15):
         show(name)
         press('Delete Unused Profiles…' if bulk else 'Delete Profile')
         assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
@@ -207,7 +207,7 @@ def run(factory, results, tmp, api, defaults_before):
         typed = state()
         assert typed['deleteEnabled'] and typed['deleteAXEnabled'] is True, typed
         press('Delete')
-        assert wait(lambda: not state()['deleting'] and state()['sheet'] == 0, timeout=15), state()
+        assert wait(lambda: not state()['deleting'] and state()['sheet'] == 0, timeout=timeout), state()
         return before, typed, state()
 
     def check_deleted_profile_favorites():
@@ -648,7 +648,8 @@ def run(factory, results, tmp, api, defaults_before):
         recreator = threading.Thread(target=keep_recreating, daemon=True)
         recreator.start()
         try:
-            _, _, recreated_gone = confirm('Shell Recreated')
+            # The wipe loads the Profile's context, deletes it, then spends the App's whole 5 s limit.
+            _, _, recreated_gone = confirm('Shell Recreated', timeout=30)
             journal = json.loads(pending.read_text()) if pending.exists() else []
         finally:
             stop_recreating.set()
