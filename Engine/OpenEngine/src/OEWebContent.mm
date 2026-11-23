@@ -1291,6 +1291,12 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     return;
   }
   if (!_browser) {
+    // A restored page already opens at its history's current entry. A load of
+    // that same address before creation (the shell binding the page loads the
+    // tab's URL) adds nothing; run after the restore, it would replace the
+    // restored entry and lose its scroll and form state (bug sweep r8: Peek
+    // Expand in Chrome style). A load of another address still runs (OE-13).
+    if (_restoreHistory && [URL isEqual:_restoreHistory.currentURL]) return;
     _pendingURL = URL;
     // A restored page creates its browser with no URL (the history comes
     // first): a load before that snapshot must still run after the restore.
