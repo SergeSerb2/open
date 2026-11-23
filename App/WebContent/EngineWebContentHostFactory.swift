@@ -912,8 +912,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     var reselected = false
     if controller?.isKeepingSelection != true, let space = focusedSpace, let id = windowState.selectedNodeBySpace[space.id],
        model.node(id: id) != nil, model.selectedNode(in: space, window: windowState) == nil {
+      // Favorites first, as Cmd+W's order and the moving window's keepingSelection (bug sweep r8 A-R6-09).
       let previous = selectionHistory[space.id]?.last { $0 != id && model.isSelectable($0, in: space) }
-        ?? (flattened(space.pinned) + flattened(space.today)).lazy.compactMap { self.model.sidebarSelectionID(for: $0.id) }
+        ?? ((model.profile(id: space.profileID)?.favorites ?? []) + flattened(space.pinned) + flattened(space.today)).lazy
+          .compactMap { self.model.sidebarSelectionID(for: $0.id) }
           .first { $0 != id && self.model.isSelectable($0, in: space) }
       withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: previous) }
       reselected = true
@@ -921,7 +923,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // A new selection wakes its page and updates the title, media and page chrome.
     if reselected { showSelection(focus: false) }
     else if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
-    else { controller?.refresh(); mirror.sync() }
+    // The window showed no tab and now has one (Undo of moving the Space's last tab away): wake it
+    // and update the title, menus and extensions, as a selection does (review of #674).
+    else if controller != nil, showedNoTab, selectedTab != nil { showSelection(focus: false) }
+    else {
+      controller?.refresh(); mirror.sync()
+      // The selection can leave with no replacement (the Space's last tab moved or closed elsewhere):
+      // the title must not keep the gone tab's (bug sweep r8 B-R6-08).
+      if controller != nil, selectedTab == nil { updateWindowTitle() }
+    }
     controller?.container.prunePinnedPageTitles()
   }
   /// Shown tabs become live; the sleep controller wakes the ones it put to sleep (or can restore
@@ -933,13 +943,20 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       else { tab.live.sleepPhase = .live }
     }
   }
+  /// The last title update found no selected tab.
+  private var showedNoTab = false
+  func updateWindowTitle() {
+    let title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
+    if window?.title != title { window?.title = title }
+    showedNoTab = selectedTab == nil
+  }
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
     app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
     exitFullscreenIfHidden()
-    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
+    updateWindowTitle()
     // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
     // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
     if focus, commandBarSession?.isPresented != true {
