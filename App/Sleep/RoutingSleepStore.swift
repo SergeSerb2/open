@@ -74,39 +74,52 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   /// The store file of a tab (automation reads it to prove quit capture).
   func fileURL(for tabID: ItemID) -> URL { directories.sleepFileURL(dataDirectoryName: directoryName(for: tabID)) }
 
-  /// Counts each tab's row deletions (a pinned reset, a close): a save that began before one must not
-  /// bring the deleted row back (bug sweep r8 A-R6-04).
+  /// Each tab's row deletions (a pinned reset, a close). `SleepStore` queues a write on the call, so
+  /// a delete called during a save runs after it on the store's queue and the row is gone. The save
+  /// must then not list the tab as stored when it returns (bug sweep r8 A-R6-04).
   private var deletions: [ItemID: Int] = [:]
-  func deletionCount(_ tabID: ItemID) -> Int { deletions[tabID, default: 0] }
-  /// Counts each tab's saves: an older save's second delete must not erase a newer save's row.
-  private var saves: [ItemID: Int] = [:]
+  /// The stores a save in flight writes to: a delete meanwhile deletes there too, also when the tab
+  /// has moved to another Profile since the save began.
+  private var inFlight: [ItemID: [String: Int]] = [:]
 
   func save(tabID: ItemID, envelope e: SleepHistoryEnvelope) async throws {
-    try await save(tabID: tabID, envelope: e, deletions: deletionCount(tabID))
-  }
-
-  /// A save for a page that closed at `deletions` (`deletionCount` then). A deletion since drops it:
-  /// before the write it does nothing; during the write (the store's queue may take it after the
-  /// delete) the row is deleted again, unless a newer save began, and is not listed as stored.
-  func save(tabID: ItemID, envelope e: SleepHistoryEnvelope, deletions mark: Int) async throws {
-    guard deletionCount(tabID) == mark else { return }
-    saves[tabID, default: 0] += 1
-    let sequence = saves[tabID, default: 0]
     let name = directoryName(for: tabID)
     guard let store = store(named: name) else { throw CancellationError() }
-    try await store.save(SleepHistoryRecord(
+    let mark = deletions[tabID, default: 0]
+    inFlight[tabID, default: [:]][name, default: 0] += 1
+    defer {
+      inFlight[tabID]?[name]? -= 1
+      if inFlight[tabID]?[name] == 0 { inFlight[tabID]?[name] = nil }
+      if inFlight[tabID]?.isEmpty == true { inFlight[tabID] = nil }
+    }
+    try await store.save(record(tabID, e))
+    // The Profile may have been deleted while the save ran.
+    guard !retired.contains(name.lowercased()) else { return }
+    // Deleted while the write ran: the delete followed it on the queue, so no row is stored.
+    guard deletions[tabID, default: 0] == mark else { return }
+    noteStored(tabID, in: name)
+  }
+
+  /// A closing page's history (`AppSleepCoordinator.pageWillClose`), queued on this turn in the store
+  /// of the tab's Profile now: a later reset, close, wake read or newer save of the tab runs after it
+  /// on the same queue. It used to wait for a later turn in an untracked Task, where a reset meanwhile
+  /// was overwritten and a Profile change sent it to the other Profile's store (review of #674).
+  func saveClosingPage(tabID: ItemID, envelope e: SleepHistoryEnvelope) {
+    let name = directoryName(for: tabID)
+    guard let store = store(named: name) else { return }
+    store.enqueueSave(record(tabID, e))
+    noteStored(tabID, in: name)
+  }
+
+  private func record(_ tabID: ItemID, _ e: SleepHistoryEnvelope) -> SleepHistoryRecord {
+    SleepHistoryRecord(
       tabID: tabID, container: e.container, currentIndex: e.currentIndex, entryCount: e.entryCount,
       currentURL: e.currentURL, currentTitle: e.currentTitle, faviconURL: e.faviconURL,
       hasPageState: e.hasPageState, containerVersion: e.containerVersion, chromiumTag: e.chromiumTag,
-      capturedAt: e.capturedAt))
-    // The Profile may have been deleted while the save ran.
-    guard !retired.contains(name.lowercased()) else { return }
-    // Deleted during the write: delete again, unless a newer save began after that delete (its
-    // write follows the delete on the store's queue and must stay).
-    guard deletionCount(tabID) == mark else {
-      if saves[tabID] == sequence { store.delete(tabID: tabID) }
-      return
-    }
+      capturedAt: e.capturedAt)
+  }
+
+  private func noteStored(_ tabID: ItemID, in name: String) {
     savedIn[tabID] = name
     storedIn[tabID, default: []].insert(name)
     knownStored.insert(tabID)
@@ -135,7 +148,10 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   /// a relaunch).
   func deleteSleepHistory(tabID: ItemID) {
     var names = [directoryName(for: tabID)]
-    for name in storedIn[tabID] ?? [] where !names.contains(where: { $0.lowercased() == name.lowercased() }) { names.append(name) }
+    // Also a store a save in flight writes to: its write is queued already, so the delete follows it.
+    let writing = inFlight[tabID].map { Array($0.keys) } ?? []
+    for name in (storedIn[tabID] ?? []).union(writing)
+    where !names.contains(where: { $0.lowercased() == name.lowercased() }) { names.append(name) }
     for name in names { store(named: name)?.delete(tabID: tabID) }
     deletions[tabID, default: 0] += 1
     savedIn[tabID] = nil; storedIn[tabID] = nil
