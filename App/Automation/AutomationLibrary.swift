@@ -139,6 +139,7 @@ extension AutomationController {
     }
     var state=session.panel?.automationState() ?? [:]
     state["prebuiltReady"] = session.panel?.prebuiltReady ?? false
+    state["lastOpenWasPrebuilt"] = session.panel?.lastOpenWasPrebuilt ?? false
     state["prebuild"] = ["firstSidebarDraw":app.libraryFirstSidebarDraws[controller.windowID] ?? 0,"lastInput":app.libraryLastInput,"builtAt":app.libraryPrebuiltAt ?? 0,"pending":app.libraryPrebuildTask != nil] as [String:Any]
     state["performance"] = session.panel?.performanceCounters ?? [:]
     state["open"]=controller.isLibraryOpen
@@ -146,6 +147,7 @@ extension AutomationController {
     state["panelCreated"]=session.panel != nil
     state["releasedPanelAlive"]=session.releasedPanel != nil
     state["panelGeneration"]=session.panelGeneration
+    state["easelThumbnailRenders"]=session.easelsProvider?.thumbnailRenders ?? 0
     state["releaseDelay"]=session.releaseDelay
     state["releaseClock"] = ["scheduledAt":session.releaseScheduledAt,"firedAt":session.releaseFiredAt,"pending":session.releasePending] as [String:Any]
     state["key"]=controller.window?.isKeyWindow ?? false

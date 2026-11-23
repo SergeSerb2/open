@@ -13,12 +13,25 @@ final class NotificationClickRouter {
   static let shared = NotificationClickRouter()
   static let fallbackDelay: TimeInterval = 0.5
 
-  /// The last page activation (P1), so a click can tell whether its page answered.
-  private var lastActivation: (tab: ItemID, at: Date)?
+  /// The last page activation (P1), so a click can tell whether its page answered: its tab in
+  /// the model of the window that showed it, the page's URL then, and its browser context (a
+  /// Profile's, or Incognito's), held weakly.
+  private final class Activation {
+    let tab: ItemID, url: URL?, at = Date()
+    weak var context: OEBrowserContext?
+    init(tab: ItemID, url: URL?, context: OEBrowserContext) { self.tab = tab; self.url = url; self.context = context }
+  }
+  private var lastActivation: Activation?
   /// Recent clicks and what Open did (automation evidence).
   private(set) var log: [[String: Any]] = []
 
-  func pageRequestedActivation(tab: ItemID) { lastActivation = (tab, Date()) }
+  /// A tab of any window counts, also a Blank Window's (its own model, not `app.model`): the
+  /// fallback then raised another window over the page that had just answered (bug sweep r7 AB-02).
+  /// Only a page of the clicked notification's context counts: another Profile's or an Incognito
+  /// page of the same origin does not answer it (review r1 #2).
+  func pageRequestedActivation(tab: ItemID, url: URL?, context: OEBrowserContext) {
+    lastActivation = Activation(tab: tab, url: url, context: context)
+  }
 
   func clicked(app: AppDelegate, context: OEBrowserContext, identifier: String, origin: URL, persistent: Bool) {
     let clickedAt = Date()
@@ -27,8 +40,8 @@ final class NotificationClickRouter {
         guard let self, let app, let context else { return }
         var entry: [String: Any] = ["id": identifier, "origin": origin.absoluteString, "persistent": persistent]
         defer { self.log.append(entry); if self.log.count > 20 { self.log.removeFirst() } }
-        if let activation = self.lastActivation, activation.at >= clickedAt,
-           app.model.tab(id: activation.tab).map({ Self.sameOrigin($0.url, origin) }) == true {
+        if let activation = self.lastActivation, activation.at >= clickedAt, activation.context === context,
+           activation.url.map({ Self.sameOrigin($0, origin) }) == true {
           entry["action"] = "page"; entry["tab"] = activation.tab.description
           return
         }

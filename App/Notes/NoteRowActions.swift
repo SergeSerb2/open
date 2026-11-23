@@ -23,6 +23,7 @@ extension EngineWebContentHostFactory {
     tab.customTitle = nil
     tab.title = trimmed.isEmpty ? NoteTab.untitled : trimmed
     controller?.refresh(); scheduleSave()
+    app.easelsDidChange()
     return true
   }
 
@@ -117,6 +118,7 @@ extension AppDelegate {
     }
     notes.delete(noteID)
     discardArchivedRows(url: NoteLink.url(for: noteID))
+    easelsDidChange()
   }
 
   /// A Note or Easel was deleted: Archive entries of its rows that left the sidebar earlier

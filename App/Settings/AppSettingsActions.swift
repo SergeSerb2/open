@@ -43,14 +43,18 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       // A worker prepares the store; adBlockStoreDidOpen attaches it to this model.
       else if !app.stores.prepareAdBlockInBackground() { vm.advanced.statusText = "Ad blocking settings could not be opened." }
     }
-    app.defaultBrowserService.onChange = { [weak vm, weak app] state in
-      vm?.general.refresh()
-      vm?.links.isDefaultBrowser = state.values.allSatisfy { $0 }
-      app?.firstRunWindowController?.model.refreshDefaultBrowserStatus()
-    }
     vm.updateState = app.updater?.settingsStatus
     settingsStorage = vm
     return vm
+  }
+  /// The system's default browser changed (read at each activation). The App registers this at launch:
+  /// first run's default-browser step must update without Settings ever loaded (bug sweep r6 DHR-13).
+  func defaultBrowserDidChange(_ state: [String: Bool]) {
+    if let vm = settingsStorage {
+      vm.general.refresh()
+      vm.links.isDefaultBrowser = state.values.allSatisfy { $0 }
+    }
+    app.firstRunWindowController?.model.refreshDefaultBrowserStatus()
   }
   /// A replaced model (first-run import) needs a fresh view model AND a fresh
   /// presenter: the presenter keeps the view model it was created with.
@@ -272,7 +276,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       case .openURL(let url, let parent, let index):
         // The Manager shows every Space: create the tab in the column it was
         // dropped on, not in the browser's focused Space, then select it there.
-        return self.openDroppedURL(url, parent: parent, index: index, factory: factory, windowID: context.windowID)
+        // A multi-item drop selects (and loads) only its last tab (bug sweep r7 AB-05, review r1 #1).
+        return self.openDroppedURL(url, parent: parent, index: index, factory: factory, windowID: context.windowID,
+                                   select: !context.defersOpenedTabSelection)
       case .openInSplitView(let id), .addSplitView(let id), .addTabToSplit(let id):
         // Split View lives in the browser window: show the node's Space there,
         // then use the browser controller's own split path.
@@ -398,7 +404,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     return nil
   }
-  private func openDroppedURL(_ url: URL, parent: NodeParent, index: Int?, factory: EngineWebContentHostFactory?, windowID: WindowID) -> Bool {
+  private func openDroppedURL(_ url: URL, parent: NodeParent, index: Int?, factory: EngineWebContentHostFactory?, windowID: WindowID,
+                              select: Bool = true) -> Bool {
     guard let model = app.model else { return false }
     let title = url.host() ?? url.absoluteString
     let space: SpaceID?
@@ -413,8 +420,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
       // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
       if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
-      if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
-      else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+      if select, let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
+      else if select { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
     }
     app.scheduleSave(); app.scheduleMenuRebuild()
     return true
@@ -642,6 +649,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     openURL(url, profileID: profileID, preferringFocusedSpace: true)
   }
   func flushHistoryWrites() async { await app.stores.flushHistory() }
+  /// Same rule as Clear Browsing Data's History: a loaded context clears its own history; an
+  /// unloaded Profile is not loaded only for this.
+  func clearEngineHistory(profileID: ProfileID) async {
+    guard let profile = app.model.profile(id: profileID) else { return }
+    let identifier = profile.id == app.model.defaultProfile?.id ? "Default" : profile.dataDirectoryName
+    guard let context = OEEngine.shared.contexts.first(where: { $0.identifier == identifier && $0.state == .live }) else { return }
+    let kinds = OEBrowsingDataKinds(rawValue: UInt32(ClearDataKinds.history.rawValue))
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      context.clearBrowsingData(kinds, from: .distantPast, to: .distantFuture) { _ in continuation.resume() }
+    }
+  }
   func viewSpace(id: SpaceID) {
     guard let controller = app.frontMainModelWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)

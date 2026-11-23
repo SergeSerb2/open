@@ -51,6 +51,24 @@ enum SidebarPasteboard {
     static func urls(from pb: NSPasteboard) -> [URL] {
         (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: false]) as? [URL]) ?? []
     }
+    /// At most this many dropped links or files open as tabs from one drop.
+    static let maxDroppedURLs = 50
+    /// Opens every dropped link or file in `parent` from `index`, in drop order, as one Undo
+    /// step. A drop on the list or Favorites used to open only the first item while a Space icon
+    /// opened all of them (bug sweep r7 AB-05). True when any opened.
+    @MainActor static func openDropped(_ urls: [URL], in parent: NodeParent, at index: Int, context: SidebarContext) -> Bool {
+        let urls = Array(urls.prefix(maxDroppedURLs))
+        return context.model.asOneUndoStep {
+            var opened = 0
+            for (i, url) in urls.enumerated() {
+                // Only the last new tab is selected, so one drop loads one page, not one per item.
+                context.defersOpenedTabSelection = i < urls.count - 1
+                if context.send(.openURL(url, in: parent, index: index + opened)) { opened += 1 }
+            }
+            context.defersOpenedTabSelection = false
+            return opened > 0
+        }
+    }
 }
 
 /// List edits that turn one ordered list of unique IDs into another.

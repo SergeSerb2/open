@@ -103,6 +103,16 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         return value
     }
 
+    /// The key caps of `symbolDisplay`, one per key, such as ["⇧", "⌘", "T"] (tooltips).
+    public var symbolKeys: [String] {
+        var keys: [String] = []
+        if modifiers.contains(.control) { keys.append("⌃") }
+        if modifiers.contains(.option) { keys.append("⌥") }
+        if modifiers.contains(.shift) { keys.append("⇧") }
+        if modifiers.contains(.command) { keys.append("⌘") }
+        return keys + [Self.displayKey(key)]
+    }
+
     public var description: String { display }
 
     public static func displayKey(_ key: String) -> String {

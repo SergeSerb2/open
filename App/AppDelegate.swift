@@ -73,6 +73,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var terminationRequested = false
   /// The Blank Windows open when quit started (C-report-s11 1(c)); written by saveState.
   var blankWindowsAtQuit: [SavedBlankWindow]?
+  /// Bug sweep r7 Z-07: the pending Blank Window save, and whether `blank-windows.json` holds windows.
+  var blankWindowsSaveTask: Task<Void, Never>?
+  var blankWindowsFileHoldsWindows = false
+  /// The content last written to `blank-windows.json` (nil: no file).
+  var blankWindowsWritten: Data?
+  var blankWindowsRestoreDone = false
   private var faviconShutdownTask: Task<Void, Never>?
   private var historyQuitTask: Task<Void, Never>?
   /// Uptime of the last quit-time history flush. A quit cancelled later (downloads alert,
@@ -183,6 +189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
     LaunchTiming.shared.phase("settingsRegistered")
+    // Runs at each activation that finds a new default-browser state; reads only (no Settings load).
+    defaultBrowserService.onChange = { [weak self] state in self?.settingsPresenter.defaultBrowserDidChange(state) }
     _ = importRunner.unfinishedSecretsImportAtLaunch
     importRunner.sweepStaleImportCopiesAfterLaunch()
     NSApp.mainMenu = MainMenu.build()
@@ -272,6 +280,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       quitWarning.markRetryPending()
       return .terminateCancel
     }
+    // The quit is committed only now: approved transfers stop here, not at the downloads alert,
+    // and the retry's history step writes their cancelled rows (bug sweep r6 DHR-04).
+    if downloadsCenter.cancelTransfersForQuit() {
+      quitWarning.markRetryPending()
+      Task { @MainActor in NSApp.terminate(nil) }
+      return .terminateCancel
+    }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),
       // then ask again. The snapshot save and engine shutdown follow below.
@@ -347,6 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         "Open: engine layout \(layout.layout) in \(String(format: "%.1f", layout.milliseconds)) ms\n".utf8))
     }
     snapshotStore = SnapshotStore(root: root)
+    snapshotStore.onSaveFailure = { [weak self] _ in self?.snapshotSaveFailed() ?? false }
     // Only an unreadable snapshot starts a fresh model, and the unreadable
     // file is kept beside the new one, never overwritten.
     var loaded: BrowserModel?
@@ -369,14 +385,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // Interrupted Profile deletions finish now, after the snapshot loaded (so a folder that a loaded Profile
     // still uses is kept) and before the engine starts. Never from a fresh fallback model: an unreadable
     // snapshot keeps the journal and every folder for a later launch.
+    // A cleanup failure never stops the launch (bug sweep r7 Z-01): the names stay journaled for a later launch.
     if loaded != nil {
-      do {
-        try ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root),
-                                               inUse: Set(model.profiles.map { $0.dataDirectoryName.lowercased() }))
-      } catch {
-        FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
-        exit(1)
-      }
+      ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root),
+                                         inUse: Set(model.profiles.map { $0.dataDirectoryName.lowercased() }))
     }
     // Audit A7: folders of Profiles that an undone import created go now, if the loaded snapshot does not use
     // them. Never from a fresh fallback model (an unreadable snapshot keeps every folder).
@@ -388,6 +400,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         FileHandle.standardError.write(Data("Open: undone-import Profile cleanup postponed: \(error)\n".utf8))
       }
     }
+    // Trees that an earlier delete renamed aside are removed on a utility task (bug sweep r7 Z-04).
+    ProfileTeardown.sweepTrash(directories: ProfileDirectories(root: engine.root))
     applyLaunchWindowPreference(to: model)
     // Repeated IDs in the snapshot were repaired while loading: save the repaired copy.
     let repaired = repairMissingProfiles(in: model) || !model.loadRepairs.isEmpty
@@ -395,6 +409,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       let state = BrowserWindowState(focusedSpaceID: space.id)
       model.windows.append(state)
       autoCreatedLaunchWindowID = state.id
+    }
+    // The repair save replaces the only copy on disk: keep the file as it was first (bug sweep r7 Z-08).
+    if repaired, loaded != nil {
+      let kept = snapshotStore.fileURL.deletingLastPathComponent()
+        .appendingPathComponent("browser.repaired-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json")
+      do { try FileManager.default.copyItem(at: snapshotStore.fileURL, to: kept) }
+      catch { FileHandle.standardError.write(Data("Open: snapshot copy before repair failed: \(error)\n".utf8)) }
     }
     do {
       try OpenDataRoot.prepare(root: root, model: model)
@@ -437,6 +458,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     archiveSink = ProfileArchiveSink(directories: directories) { [weak model] id in
       let profile = id.flatMap { model?.profile(id: $0) } ?? model?.defaultProfile
       return profile?.dataDirectoryName ?? "Default"
+    }
+    archiveSink.onWriteFailure = { [weak self] in
+      self?.frontStandardWindowController?.toasts.show(ToastContent(title: "Closed tabs could not be saved to the Archive",
+        subtitle: "Make sure your disk has free space.", lifetime: 10, coalescingKey: "archive-write-failed"))
     }
     model.archiveSink = archiveSink; model.undoManager = undoManager
     // Undo of New Profile (Settings, or a Space created with a new Profile) leaves the Profile's folders
@@ -843,6 +868,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     scheduleSave()
   }
 
+  /// A background snapshot write failed (a full disk, a read-only folder). The state stays in memory
+  /// and unsaved; the next change, flush or quit writes it again (bug sweep r7 Z-05).
+  /// False when no browser window can show it: the next failure tries again (review r1 of #670).
+  func snapshotSaveFailed() -> Bool {
+    guard let controller = frontStandardWindowController else { return false }
+    controller.toasts.show(ToastContent(title: "Your tabs could not be saved",
+      subtitle: "Make sure your disk has free space. Open tries again after your next change.", lifetime: 10))
+    return true
+  }
+
   static func makeDefaultModel() -> BrowserModel {
     let profile = Profile(name: "Default", dataDirectoryName: "Default")
     let space = Space(title: "Space", profileID: profile.id)
@@ -901,11 +936,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func scheduleSave() {
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)
+    scheduleBlankWindowsSave()
   }
   /// A page title alone changed: saved within 10 s (SnapshotStore.scheduleMetadataSave, PERF-06).
   func scheduleMetadataSave() {
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleMetadataSave(model: model)
+    // A Blank Window tab's title is saved on the same cadence as its other changes (bug sweep r7 Z-07).
+    scheduleBlankWindowsSave()
   }
 
   /// Called after the message loop returns, before the engine shuts down.
@@ -922,7 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     archiveSink.flushAll()
     notes.flush()
-    if let blankWindowsAtQuit { writeBlankWindows(blankWindowsAtQuit) }
+    if let blankWindowsAtQuit { writeBlankWindows(blankWindowsAtQuit, wait: true) }
   }
 
   /// Used after import (including an E-5 save error) so the imported items are

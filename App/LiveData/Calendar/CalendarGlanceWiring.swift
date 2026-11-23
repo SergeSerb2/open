@@ -13,7 +13,11 @@ extension AppDelegate {
         guard let calendar = self?.calendar else { return .denied }
         let access = calendar.source.access
         switch access {
-        case .notDetermined: return await calendar.source.requestAccess()
+        case .notDetermined:
+          let answer = await calendar.source.requestAccess()
+          // The calendar tile appeared before access existed (Live Calendar never prompts): start it now.
+          if answer == .granted { self?.liveCalendar.refetch() }
+          return answer
         case .denied: CalendarPrivacySettings.open(); return access
         case .granted, .restricted: return access
         }

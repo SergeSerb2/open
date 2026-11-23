@@ -183,8 +183,155 @@ def run(factory, results, tmp, h):
         value = subprocess.check_output(['ps', '-p', str(app.pid), '-o', 'time='], text=True).strip()
         parts = value.split(':')
         return sum(float(v) * 60**i for i, v in enumerate(reversed(parts)))
+    def sweep_r7(source):
+        """Bug sweep round 7 (lane IMPORT7): import data correctness through the real Settings import."""
+        nonlocal app
+        r7 = root/'r7'; shutil.copytree(source, r7)
+        sidebar_file = r7/'StorableSidebar.json'
+        data = json.loads(sidebar_file.read_text()); graph = data['sidebar']['containers'][1]
+        def key(name): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/r7/'+name)).upper()
+        # Y-04: an unreached folder and its child, with the child first in the file.
+        # Review r1 #1: an unreached container (a removed Space) lists the folder, ahead of both in the file.
+        child, folder, removed = key('orphan-child'), key('orphan-folder'), key('removed-container')
+        graph['items'] += [removed, dict(id=removed, parentID=None, childrenIds=[folder], data={'itemContainer': {}})]
+        graph['items'] += [child, dict(id=child, parentID=folder, childrenIds=[], data={'tab': {
+            'savedURL': 'https://example.com/r7-orphan-child', 'savedTitle': 'Example orphan child'}}),
+            folder, dict(id=folder, parentID=None, title='Example orphan folder', childrenIds=[child], data={'list': {}})]
+        sidebar_file.write_text(json.dumps(data))
+        # Y-05: one URL whose newest visit has the newer title.
+        history = r7/'User Data/Default/History'
+        with sqlite3.connect(history) as db:
+            db.execute("INSERT INTO urls VALUES(900,'https://example.com/r7-title','Example newer title',0)")
+            db.execute('INSERT INTO visits VALUES(900,900,13437000050000000,0,0)')
+        # Y-06: a store extension whose manifest name is localized.
+        extension = 'cdefghijklmnopabcdefghijklmnopab'
+        version = r7/'User Data/Default/Extensions'/extension/'1.0_0'
+        (version/'_locales/en').mkdir(parents=True)
+        # Review r1 #4: two tokens in one name, and Preferences naming a version folder that is gone.
+        manifest = {'manifest_version': 3, 'name': '__MSG_extName__ __MSG_edition__', 'default_locale': 'en', 'version': '1.0'}
+        (version/'manifest.json').write_text(json.dumps(manifest))
+        (version/'_locales/en/messages.json').write_text(json.dumps({'extName': {'message': 'Example Localized Extension'},
+                                                                     'Edition': {'message': 'Preview'}}))
+        (r7/'User Data/Default/Secure Preferences').write_text(json.dumps({'extensions': {'settings': {extension: {
+            'path': extension+'/0.9_0', 'from_webstore': True, 'manifest': manifest}}}}))
+        def stored(): return json.loads(Path(app.call('save')).read_text())
+        def tabs_under(nodes):
+            found = []
+            def walk(value):
+                if isinstance(value, dict):
+                    if 'url' in value and 'id' in value and 'children' not in value: found.append(value)
+                    for item in value.values(): walk(item)
+                elif isinstance(value, list):
+                    for item in value: walk(item)
+            walk(nodes); return found
+        def history_title(url):
+            for file in (Path(app.user_data)/'Profiles').glob('*/State/history.sqlite3'):
+                with sqlite3.connect('file:'+str(file)+'?mode=ro', uri=True) as db:
+                    hit = db.execute('SELECT title FROM urls WHERE url=?', (url,)).fetchone()
+                    if hit: return hit[0]
+            return None
+        launch(r7); start_fresh()
+        # Y-01: the user's own engine and a custom engine on the Default Profile.
+        app.call('settings-custom-engine', template='https://search.example.com/?q=%s')
+        def default_settings():
+            profile = next(p for p in stored()['profiles'] if p['dataDirectoryName'] == 'Default')
+            return profile['settings'].get('searchEngineID'), sorted(e.get('id') for e in profile['settings'].get('customSearchEngines', []))
+        engine_before = default_settings()
+        outcome = settings_import(r7, finish=False)
+        app.call('import-extensions', action='fixtures', files={extension: str(root/'missing-r7.crx')})
+        try:
+            rendered = ' '.join(r['text'] for r in app.call('import-extensions', action='inspect')['text']).casefold()
+        except Exception as error:
+            rendered = 'inspect failed: ' + str(error)
+        app.call('first-run', action='settings-done')
+        engine_after = default_settings()
+        row('r7_Y01_search_engine_kept', engine_before[0] == 'custom-e2e' and engine_after == engine_before
+            and 'Search settings' not in outcome.get('settingsReportCategories', [])
+            and not outcome.get('settingsOutcome', {}).get('Search settings'),
+            before=engine_before, after=engine_after, categories=outcome.get('settingsReportCategories'))
+        row('r7_Y06_localized_extension_name', 'example localized extension preview' in rendered and '__msg' not in rendered,
+            extensions=outcome.get('settingsExtensions'), localizedShown='example localized extension' in rendered,
+            rawShown='__msg' in rendered, inspectFailed=rendered.startswith('inspect failed'))
+        data = stored()
+        pinned = [tab for space in data['spaces'] for tab in tabs_under(space.get('pinned', []))]
+        row('r7_Y03_pinned_urls', len(pinned) >= 3 and all(tab.get('pinnedURL') for tab in pinned)
+            and any('/pane' in tab.get('url', '') for tab in pinned),
+            pinnedTabs=len(pinned), withoutPinnedURL=sum(1 for tab in pinned if not tab.get('pinnedURL')))
+        def folder_children(value):
+            hits = []
+            def walk(value):
+                if isinstance(value, dict):
+                    if value.get('title') == 'Example orphan folder' and 'children' in value:
+                        hits.append([t.get('url') for t in tabs_under(value['children'])])
+                    for item in value.values(): walk(item)
+                elif isinstance(value, list):
+                    for item in value: walk(item)
+            walk(value); return hits
+        orphan_folders = folder_children(data['spaces'])
+        orphan_tabs = [t for space in data['spaces'] for t in tabs_under([space.get('pinned', []), space.get('today', [])])
+                       if t.get('url') == 'https://example.com/r7-orphan-child']
+        row('r7_Y04_orphan_folder_keeps_child', orphan_folders == [['https://example.com/r7-orphan-child']] and len(orphan_tabs) == 1,
+            folders=orphan_folders, childCopies=len(orphan_tabs))
+        # Y-05: re-import the same URL with only an older visit and an older title.
+        newer = history_title('https://example.com/r7-title')
+        with sqlite3.connect(history) as db:
+            db.execute("UPDATE urls SET title='Example older title' WHERE id=900")
+            db.execute('DELETE FROM visits WHERE id=900')
+            db.execute('INSERT INTO visits VALUES(901,900,13437000020000000,0,0)')
+        settings_import(r7)
+        row('r7_Y05_history_title_newer_kept', newer == 'Example newer title'
+            and history_title('https://example.com/r7-title') == 'Example newer title',
+            afterFirst=newer, afterSecond=history_title('https://example.com/r7-title'))
+        # Y-02: delete the imported Work Profile in Settings, then import from Arc again.
+        def work_profiles(): return [p for p in app.call('profiles-shell')['profiles'] if p['name'].startswith('Example Work')]
+        evidence = {}
+        try:
+            old = work_profiles()[0]
+            for space in app.call('spaces'):
+                if space['profile'] == old['id']:
+                    assert app.call('space-profile', space=space['id'], profile='Default')
+                    if next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == old['id'])['spaces']:
+                        app.call('alert', button='Change Profile')
+            assert h.wait_until(lambda: next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == old['id'])['spaces'] == 0,
+                                timeout=5, step=.05), 'Work Spaces did not move'
+            app.call('profiles-shell', action='show', profile=old['name'])
+            time.sleep(.15)
+            app.press_profile_delete()
+            assert h.wait_until(lambda: app.call('profiles-shell')['sheet'] > 0 and app.call('profiles-shell')['deleteNames'] == [old['name']],
+                                timeout=5, step=.05), 'no delete sheet for the Work Profile'
+            app.call('profiles-shell', action='type-delete', text=old['name'])
+            evidence['deleteEnabled'] = app.call('profiles-shell').get('deleteEnabled')
+            app.call('profiles-shell', action='press', label='Delete')
+            # Another Settings sheet can be open by then; the delete itself is done when its teardown is.
+            if not h.wait_until(lambda: (lambda shell: not shell['deleting'] and shell.get('teardownStage') == 'done')(app.call('profiles-shell'))
+                                and not work_profiles(), timeout=90, step=.1):
+                shell = app.call('profiles-shell')
+                evidence['stuck'] = {k: shell.get(k) for k in ('deleting', 'sheet', 'sheetText', 'teardownStage', 'errorText', 'deleteNames')}
+                evidence['workProfiles'] = work_profiles()
+                raise AssertionError('Profile delete did not finish')
+            settings_import(r7)
+            again = work_profiles()
+            evidence.update(oldID=old['id'], againIDs=[p['id'] for p in again])
+            # The ad-block store keeps a per-process retired set by Profile ID (Release-safe readout).
+            # The deleted ID must read retired, so a False for the new ID is not a missing store.
+            evidence['adblockRetired'] = {which: app.call('profiles-shell', adblockProfile=pid)['adblockProfileRetired']
+                                          for which, pid in (('old', old['id']), ('again', again[0]['id']))}
+            settings_import(r7)
+            third = work_profiles()
+            evidence['thirdIDs'] = [p['id'] for p in third]
+            ok = (len(again) == 1 and again[0]['id'] != old['id'] and evidence['thirdIDs'] == evidence['againIDs']
+                  and evidence['adblockRetired'] == {'old': True, 'again': False})
+        except Exception as error:
+            ok = False; evidence['error'] = str(error)
+        row('r7_Y02_reimport_after_delete_new_id', ok, **evidence)
+        app.quit(); app = None
+
     try:
         source = root/'healthy'; fixture(source, h)
+        if only in ('', 'r7'):
+            sweep_r7(source)
+            if only == 'r7':
+                return
         if only != 'timing':
             # Fully synthetic Storable identities. A Little Browser can precede
             # the global pair in real Arc files; its own tab must stay out of

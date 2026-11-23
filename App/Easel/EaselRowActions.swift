@@ -23,6 +23,7 @@ extension EngineWebContentHostFactory {
     tab.customTitle = nil
     tab.title = trimmed.isEmpty ? EaselDocument.untitled : trimmed
     controller?.refresh(); scheduleSave()
+    app.easelsDidChange()
     return true
   }
 
@@ -139,10 +140,13 @@ extension AppDelegate {
   /// A canvas saved `doc`: every other open canvas of the Easel shows it. With `titleChanged`,
   /// every row of the Easel takes its title (also rows whose canvas is not open).
   func easelDidChange(_ doc: EaselDocument, from source: EaselContentHost?, titleChanged: Bool) {
+    for session in settingsPresenter.librarySessions.values { session.easelsProvider?.forget(doc.id) }
     for factory in hostFactories.values {
       for host in factory.easelHosts.values where host !== source && host.documentID == doc.id { host.showSaved(doc) }
     }
     guard titleChanged else { return }
+    // The editing row already has the new title (one row: nothing below changes), so post here (review r2 #2).
+    easelsDidChange()
     var models = Set<ObjectIdentifier>(), changed = false
     for factory in hostFactories.values where models.insert(ObjectIdentifier(factory.model)).inserted {
       for tab in factory.model.allTabsForNotes() where EaselTab.documentID(tab.url) == doc.id && tab.title != doc.displayTitle {
@@ -186,10 +190,30 @@ extension AppDelegate {
     let folder = easels.fileURL(for: documentID).deletingLastPathComponent()
     if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.trashItem(at: folder, resultingItemURL: nil) }
     discardArchivedRows(url: EaselTab.url(for: documentID))
+    easelsDidChange()
   }
 }
 
 extension AppDelegate {
+  /// An Easel or Note changed outside the Library (renamed, deleted, imported): an open Library ▸
+  /// Easels & Notes in any window and the command bar's Easel list read them again (bug sweep r6 CF-11).
+  /// Coalesced (review r2 #2): a title typed in a canvas or editor posts on every change, and a reload
+  /// rereads every Easel and Note file, so open panes reload at most once per 0.3 s.
+  func easelsDidChange() {
+    easelSearch.invalidate()
+    guard !easelSearch.libraryReloadPending else { return }
+    easelSearch.libraryReloadPending = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.easelSearch.libraryReloadPending = false
+        for session in self.settingsPresenter.librarySessions.values where session.controller?.isLibraryOpen == true {
+          session.panel?.reloadEasels()
+        }
+      }
+    }
+  }
+
   /// Every Easel (sidebar rows first, then documents without a row), for Export All Easels.
   func allEaselItems() -> [EaselExporter.Item] {
     var seen = Set<UUID>(), items: [EaselExporter.Item] = []

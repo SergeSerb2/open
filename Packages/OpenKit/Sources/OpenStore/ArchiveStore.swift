@@ -49,6 +49,9 @@ public final class ArchiveStore: ArchiveSink {
     @ObservationIgnored nonisolated(unsafe) private var retired = false
 
     public init(fileURL: URL) { self.fileURL = fileURL }
+    /// Called on the main actor when a closed tab could not be written (a full disk): the tab has
+    /// already left the sidebar, so the App tells the user (bug sweep r7 Z-02).
+    @ObservationIgnored public var onWriteFailure: (@MainActor @Sendable () -> Void)?
 
     /// Runs `body` with synchronous=FULL, then restores the connection's previous mode, so only
     /// the archive commit itself (and its schema setup) pays for the full sync.
@@ -65,7 +68,7 @@ public final class ArchiveStore: ArchiveSink {
         guard !retired else { throw archiveFailure() }
         guard db == nil else { return }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let opened = try SQLiteDB(path: fileURL.path)
+        let opened = try SQLiteDB.openSettingAsideDamage(path: fileURL.path) { try SQLiteDB(path: $0) }
         try withFullSync(opened) { try migrateOnQueue(opened) }
         db = opened
     }
@@ -117,10 +120,16 @@ public final class ArchiveStore: ArchiveSink {
                            children: entry.folder.children.map { SnapshotMapper.archivedNodeDTO($0) }, originalSection: entry.originalSection)))
         }
         guard !rows.isEmpty else { return }
+        let report = onWriteFailure
         queue.async { [weak self] in
             guard let self else { return }
-            try? self.openOnQueue()
-            try? self.insertOnQueue(rows)
+            do {
+                try self.openOnQueue()
+                try self.insertOnQueue(rows)
+            } catch {
+                FileHandle.standardError.write(Data("Open: archive write failed: \(error)\n".utf8))
+                if let report, !self.retired { Task { @MainActor in report() } }
+            }
         }
     }
 

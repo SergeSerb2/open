@@ -62,21 +62,63 @@ extension AppDelegate {
     }
   }
 
-  func writeBlankWindows(_ windows: [SavedBlankWindow]) {
+  /// Writes only when the content changed since the last write, on a serial utility queue (review r1 of
+  /// #670): normal-window activity schedules this too, but costs one small encode and no disk work.
+  /// `wait` (quit) blocks until the write is done. A failed remove keeps the file marked as holding
+  /// windows, so the next save tries again and a closed Blank Window cannot come back after a crash.
+  func writeBlankWindows(_ windows: [SavedBlankWindow], wait: Bool = false) {
+    let data: Data?
+    if windows.isEmpty { data = nil }
+    else { guard let encoded = try? JSONEncoder().encode(windows) else { return }; data = encoded }
+    guard wait || data != blankWindowsWritten || data == nil && blankWindowsFileHoldsWindows else { return }
+    blankWindowsWritten = data; blankWindowsFileHoldsWindows = data != nil
     let file = blankWindowsFile
-    if windows.isEmpty { try? FileManager.default.removeItem(at: file); return }
-    guard let data = try? JSONEncoder().encode(windows) else { return }
-    try? data.write(to: file, options: .atomic)
+    let work: @Sendable () -> Void = { [weak self] in
+      do {
+        if let data { try data.write(to: file, options: .atomic) }
+        else if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+      } catch {
+        FileHandle.standardError.write(Data("Open: Blank Windows not saved: \(error)\n".utf8))
+        // Unknown content on disk now: the next save writes or removes it again.
+        Task { @MainActor [weak self] in self?.blankWindowsWritten = Data(); self?.blankWindowsFileHoldsWindows = true }
+      }
+    }
+    if wait { Self.blankWindowsQueue.sync(execute: work) } else { Self.blankWindowsQueue.async(execute: work) }
+  }
+  static let blankWindowsQueue = DispatchQueue(label: "open.blank-windows", qos: .utility)
+
+  /// Bug sweep r7 Z-07: the open Blank Windows are written on the session snapshot's cadence (at most
+  /// once a second, 1 s after the first change), not only at a clean quit, so a crash or force quit
+  /// keeps them. A pending save is never pushed back, so a page title that keeps changing cannot hold
+  /// it off. Quit writes the windows it took before any window closed (`blankWindowsAtQuit`).
+  func scheduleBlankWindowsSave() {
+    guard !terminationRequested, blankWindowsSaveTask == nil,
+      blankWindowsFileHoldsWindows || hostFactories.values.contains(where: \.isBlankWindow) else { return }
+    blankWindowsSaveTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(1))
+      guard let self else { return }
+      self.blankWindowsSaveTask = nil
+      guard !self.terminationRequested else { return }
+      self.writeBlankWindows(self.currentBlankWindows())
+    }
   }
 
-  /// At launch, after the snapshot's windows: once, then the file is gone.
+  /// At launch, after the snapshot's windows. The file stays until the restored windows are saved over
+  /// it, so a crash right after this launch still has them (bug sweep r7 Z-07).
   func restoreBlankWindows() {
+    // Once per process, at launch: a Dock reopen after the last window closed never brings back a
+    // closed Blank Window, even before its 1 s save (review r2 of #670; capture C10).
+    guard !blankWindowsRestoreDone else { return }
+    blankWindowsRestoreDone = true
     let file = blankWindowsFile
     guard let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4 << 20,
       let data = try? Data(contentsOf: file), data.count <= 4 << 20 else { return }
-    try? FileManager.default.removeItem(at: file)
-    guard UserDefaults.standard.object(forKey: "open.advanced.restoreWindowsOnLaunch") as? Bool != false,
-      let saved = try? JSONDecoder().decode([SavedBlankWindow].self, from: data) else { return }
+    guard UserDefaults.standard.object(forKey: "open.advanced.restoreWindowsOnLaunch") as? Bool != false else {
+      try? FileManager.default.removeItem(at: file); return
+    }
+    blankWindowsFileHoldsWindows = true; blankWindowsWritten = data
+    defer { scheduleBlankWindowsSave() }
+    guard let saved = try? JSONDecoder().decode([SavedBlankWindow].self, from: data) else { return }
     for window in saved.prefix(16) {
       guard let profile = model.profile(id: window.profileID) else { continue }
       makeBlankWindow(profile: profile, restoring: window)
@@ -111,6 +153,8 @@ extension AppDelegate {
     }
     // After the restore: restored tabs are not Undo steps (Cmd+Z would remove them).
     let undo = UndoManager(); undo.groupsByEvent = false; memory.undoManager = undo
+    // Its own model's edits (a tab opened, closed or moved) save the Blank Windows file too.
+    _ = memory.addObserver { [weak self] _ in self?.scheduleBlankWindowsSave() }
     let controller = createWindowController(state: state, privateModel: memory, blankWindow: true)
     controller.context.windowOnlyMoveSpaces = { [weak self] in
       guard let model = self?.model else { return [] }
