@@ -37,6 +37,9 @@ private final class LittleOpenNativeWindow: SpaceThemeWindow {
 public final class LittleOpenWindowController: NSWindowController, NSWindowDelegate, CommandBarDelegate {
     public var contentView: NSView { root }
     public var onCloseRequested: (() -> Void)?
+    /// Edit ▸ Find (Find…, Find Next, Find Previous, Use Selection for Find) for the shown page, by
+    /// menu tag. The App routes it to the page's find bar; nil leaves the items disabled (UX1 D7).
+    public var onFind: ((Int) -> Void)?
     public var onCloseDownloads: (() -> Void)?
     public var onDownloadsKey: ((NSEvent) -> Bool)?
     public let session: LittleOpenSession
@@ -261,6 +264,15 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         if window?.appearance?.name != name { window?.appearance = appearance.nsAppearance }
         titleBar.update(url: currentURL ?? session.tab.url, profile: model.profile(id: session.profileID),
                         showsProfile: model.profiles.count >= 2, spaceTitle: space.map { model.displayTitle(for: $0) })
+    }
+    @objc public func performFindPanelAction(_ sender: Any?) {
+        guard state == .page else { return }
+        onFind?((sender as? NSMenuItem)?.tag ?? 1)
+    }
+    public override func responds(to selector: Selector!) -> Bool {
+        // Only a shown page can be searched: the blank bar keeps the menu items disabled.
+        if selector == #selector(performFindPanelAction(_:)) { return onFind != nil && state == .page }
+        return super.responds(to: selector)
     }
     @objc public func dismissIntro() { banner.isHidden = true; layoutContent() }
     /// A fresh container on profile switch prevents host/cache reuse across Profile data contexts.

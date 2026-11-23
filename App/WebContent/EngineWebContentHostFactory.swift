@@ -135,6 +135,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
   var pendingSaveChoice: ((URL?) -> Void)?
   var findController: FindController?
+  /// The hovered link's URL capsule (UX1 D2); created on the first link hover.
+  var linkStatus: LinkStatusBubble?
   var findKeyRequestedAt: TimeInterval?
   var hasFindSelectionTask: Bool { findController?.hasSelectionTask == true }
   var pendingSpaceProfileAlert: NSAlert?
@@ -321,6 +323,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let self, let window = self.window else { return }; self.app.extensionPrompts.cancel(window: window)
     }
     controller.extensionsUI = extensions.context
+    controller.onFind = { [weak self] tag in self?.ensureFindController().perform(tag: tag) }
     extensions.attach()
     controller.titleBar.onExtensions = { [weak self, weak controller] in
       guard let controller else { return }; self?.extensions.showLittleOpenMenu(controller)

@@ -1238,6 +1238,9 @@
         return try await mouse(a, w)
       case "key":
         return try await sendKey(a, w)
+      case "link-status":
+        // The hovered link's URL capsule of this window (UX1 D2): window-base frames (bottom-left origin).
+        return w.linkStatusAutomationState()
       case "find-state":
         var state = w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
         state["display"] = FindIdleProbe.displayInfo(window: w.window)
