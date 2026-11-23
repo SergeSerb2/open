@@ -259,6 +259,9 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
           let factory = app.hostFactories[controller.windowID] else { return nil }
     // As Library ▸ Easels and Notes do: the page and its editor show in the window, not under the Library.
     app.settingsPresenter.closeLibrary()
+    // The window that shows the editor may have its own Library open (the front one was a Blank
+    // Window's): it closes too, or the editor opens under it (bug sweep r8, A-R6-11).
+    app.settingsPresenter.librarySessions[controller.windowID]?.close()
     // From a Blank Window's Library the edit happens in the standard window behind it: bring it forward.
     app.focusWindow(controller.windowID, activate: true)
     factory.focus(space: space)

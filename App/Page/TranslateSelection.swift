@@ -88,6 +88,7 @@ final class TranslateSelectionController {
     let onScreen = window.convertToScreen(view.convert(target, to: nil))
     let panel = TranslateSelectionPanel(content: content, pointingAt: onScreen, inside: area.insetBy(dx: Self.inset, dy: Self.inset))
     window.addChildWindow(panel, ordered: .above)
+    panel.onCloseRequest = { [weak self] sender in self?.panelCloseRequested(sender) }
     popover = panel; popoverParent = window; tabbedOut = false
     last["anchorInPage"] = view !== adapter.factory.controller?.contentView
     last["shown"] = panel.isVisible
@@ -101,19 +102,20 @@ final class TranslateSelectionController {
           // Tab or Shift-Tab in the bubble gives keyboard focus back to the page; the bubble stays, and
           // later Tabs are the page's again (review of #665, round 2 #2).
           if plainTab { self.tabbedOut = true; self.returnKeyToPage(); return nil }
-          // Space and Return press the focused Copy. Any other key (Cmd+F, Cmd+L, Cmd+W…) is a window
-          // command: the window takes the key back first, so Find and other fields it focuses get the
-          // typing (review of #665, round 2 #1).
-          guard ![49, 36, 76].contains(event.keyCode), let parent = self.popoverParent else { return event }
-          self.returnKeyToPage()
-          // The same key again, now for the browser window: its key path (menus, Find, the command bar)
-          // runs as for a key pressed there.
-          if let again = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: event.modifierFlags,
-              timestamp: event.timestamp, windowNumber: parent.windowNumber, context: nil, characters: event.characters ?? "",
-              charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "", isARepeat: event.isARepeat, keyCode: event.keyCode) {
-            NSApp.postEvent(again, atStart: true); return nil
+          let plain = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+          // Return presses the focused Copy (it is not the default button, so AppKit beeped); Space
+          // presses it natively (bug sweep r8, A-R6-02).
+          if plain, [36, 76].contains(event.keyCode), panel.firstResponder === panel.content.copyButton {
+            panel.content.copyButton.performClick(nil); return nil
           }
-          return event
+          if plain, [49, 36, 76].contains(event.keyCode) { return event }
+          // Cmd+C or Cmd+A in the translation's selected text copies or selects that text, not the page's
+          // (bug sweep r8, B-R6-03).
+          if panel.firstResponder is NSTextView, event.modifierFlags.intersection([.command, .control, .option]) == .command,
+             ["c", "a"].contains(event.charactersIgnoringModifiers ?? "") { return event }
+          // Any other key (Cmd+F, Cmd+L…) is a window command: the window takes the key back first, so
+          // Find and other fields it focuses get the typing (review of #665, round 2 #1).
+          return self.forwardToPage(event) ? nil : event
         }
         // Tab from the page the bubble belongs to moves keyboard focus into the bubble, onto Copy; it
         // was out of the keyboard's reach (bug sweep r6, A11Y-10). Only from that page (Tab in the
@@ -156,7 +158,40 @@ final class TranslateSelectionController {
     parentFocusObservation = nil
     guard let panel = popover else { return }
     panel.allowsKey = false
-    if let parent = popoverParent, parent.isVisible { parent.makeKey() } else { panel.resignKey() }
+    if let parent = popoverParent, parent.isVisible { parent.makeKey() }
+    // AppKit may decline the parent (bug sweep r8, B-R6-03): the bubble must still give up the key.
+    if panel.isKeyWindow { panel.resignKey() }
+  }
+  /// A key pressed while the bubble holds the keyboard, sent again to the browser window after the
+  /// window takes the key back: its key path (menus, Find, the command bar, Archive Tab) runs as for a
+  /// key pressed there. False when the key stays with the bubble.
+  private func forwardToPage(_ event: NSEvent) -> Bool {
+    guard let panel = popover, let parent = popoverParent else { return false }
+    returnKeyToPage()
+    // Never post the key back to a bubble that still has it: it would come straight back here.
+    guard !panel.isKeyWindow, let again = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: event.modifierFlags,
+        timestamp: event.timestamp, windowNumber: parent.windowNumber, context: nil, characters: event.characters ?? "",
+        charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "", isARepeat: event.isARepeat, keyCode: event.keyCode)
+    else { return false }
+    NSApp.postEvent(again, atStart: true); return true
+  }
+  /// Cmd+W or Shift-Cmd+W reaches the App's key router before any key monitor, and closes the key
+  /// window: the bubble, which has no close button, so AppKit beeped (bug sweep r8, A-R6-02). The key
+  /// goes to the browser window, whose own key path decides as for a key pressed there (Cmd+W archives
+  /// the tab). A menu click (File ▸ Archive Tab or Close Window while the bubble has the key) closes the
+  /// bubble and then runs that command on its window: Close Window closes it; Archive Tab archives the
+  /// tab, never closes the whole browser window (review r1 #2, r2 #3).
+  fileprivate func panelCloseRequested(_ sender: Any?) {
+    if let event = NSApp.currentEvent, event.type == .keyDown, event.window === popover, forwardToPage(event) { return }
+    let parent = popoverParent
+    closePanel()
+    guard let parent, parent.isVisible else { return }
+    // A browser window archives its tab; Little Open or a popup panel closes, as Archive Tab does there.
+    if (sender as? NSMenuItem)?.identifier?.rawValue == "close-window" || adapter.factory.controller?.window !== parent {
+      parent.performClose(sender)
+    } else {
+      _ = adapter.factory.performAppCommand("archive-tab")
+    }
   }
   /// While the bubble holds the key, a window command (Cmd+F, Cmd+L…) runs through the App's key
   /// router before any key monitor and focuses a field in the browser window: the window takes the
@@ -254,6 +289,11 @@ final class TranslateSelectionPanel: NSPanel {
   override var canBecomeKey: Bool { allowsKey }
   /// Once the key leaves (Esc, Tab back, another window or app), a click again never takes it.
   override func resignKey() { super.resignKey(); allowsKey = false }
+  /// Archive Tab and Close Window close the key window; while the bubble holds the key, they belong to its page.
+  var onCloseRequest: ((Any?) -> Void)?
+  override func performClose(_ sender: Any?) {
+    if let onCloseRequest { onCloseRequest(sender) } else { super.performClose(sender) }
+  }
 }
 
 /// The bubble's shape: body plus arrow, in the window background colour with a hairline.

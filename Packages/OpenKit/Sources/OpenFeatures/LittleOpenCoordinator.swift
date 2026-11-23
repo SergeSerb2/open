@@ -170,6 +170,16 @@ public final class LittleOpenCoordinator {
     public func close(sessionID: WindowID, archiveReason: ArchiveReason?) {
         close(sessionID: sessionID, archiveReason: archiveReason, now: Date())
     }
+    /// A Profile is gone (deleted, or its creation undone): its windows close now, with no
+    /// beforeunload and no exit fade, so no "Stay" or fading window keeps a page browsing as that
+    /// Profile while its engine context goes (bug sweep r8, A-R6-06; review r1 #4). Windows already
+    /// in their exit fade finish too.
+    public func closeForRemovedProfile(_ profileID: ProfileID) {
+        for session in sessions where session.profileID == profileID {
+            close(sessionID: session.id, archiveReason: nil, now: Date(), preflight: false, immediate: true)
+        }
+        for controller in Array(closing.values) where controller.session.profileID == profileID { controller.finishClosing() }
+    }
     private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date, preflight: Bool = true, immediate: Bool = false) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         if preflight, archiveReason == nil, requestPageClose?(sessionID, { [weak self] allowed in
@@ -212,9 +222,20 @@ public final class LittleOpenCoordinator {
     }
     public func switchProfile(sessionID: WindowID, profileID: ProfileID) {
         guard let session = sessions.first(where: { $0.id == sessionID }), session.profileID != profileID, model.profile(id: profileID) != nil else { return }
-        let apply: (Bool) -> Void = { [weak self, weak session] confirmed in
-            guard confirmed, let self, let session, self.sessions.contains(where: { $0 === session }) else { return }
+        let replace: () -> Void = { [weak self, weak session] in
+            guard let self, let session, self.sessions.contains(where: { $0 === session }),
+                  session.profileID != profileID, self.model.profile(id: profileID) != nil else { return }
             session.profileID = profileID; self.controllers[sessionID]?.replaceProfile(); self.onChange?()
+        }
+        let apply: (Bool) -> Void = { [weak self, weak session] confirmed in
+            // The confirmation sheet may outlive the session, its Profile switch or the target Profile:
+            // ask the page only for a switch that can still happen (review r1 #3).
+            guard confirmed, let self, let session, self.sessions.contains(where: { $0 === session }),
+                  session.profileID != profileID, self.model.profile(id: profileID) != nil else { return }
+            // The page reloads in the other Profile: its beforeunload runs first, as for Open in Space.
+            // "Stay" keeps the page and its Profile (bug sweep r8, B-R6-06).
+            if self.requestPageClose?(sessionID, { allowed in if allowed { replace() } }) == true { return }
+            replace()
         }
         if defaults.bool(forKey: "open.links.littleOpenProfileSwitchConfirmed") { apply(true) }
         else if let confirmProfileSwitch { confirmProfileSwitch(profileID, apply) }
