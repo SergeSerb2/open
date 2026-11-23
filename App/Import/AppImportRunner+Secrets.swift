@@ -49,8 +49,15 @@ extension AppImportRunner {
   func syntheticSecretsOutcome(sinks: [String: any OpenImport.SecretsImportSink]) async throws -> ImportOutcome? {
     guard let scenario = Self.syntheticSecretsScenario, OEEngine.shared.usesMockKeychain else { return nil }
     let ledger = SecretsImportLedger(dataRoot: app.directories.root)
-    let report = try await runSecretsBatch(sinks: sinks) {
-      try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil, scenario: scenario)
+    let report: ArcSecretsImportReport
+    do {
+      report = try await runSecretsBatch(sinks: sinks) {
+        try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil, scenario: scenario)
+      }
+    } catch {
+      // Fixture data only: the generated records hold no user data.
+      FileHandle.standardError.write(Data("Open: synthetic secrets import failed: \(String(reflecting: error)) sinks=\(sinks.keys.sorted())\n".utf8))
+      throw error
     }
     let total = report.total
     return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
