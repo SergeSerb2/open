@@ -149,6 +149,91 @@ def run(factory, results, tmp, h):
                 made=made['id'], after=after['id'], tabsBefore=len(before), tabsAfter=len(ids))
         guarded('win6_note_split_single_undo', note_split_one_undo, unsplit)
 
+        # Bug sweep r8 A-R6-10: the row menu's "Add Tab…" on an unselected split (it selects the split
+        # first) is one Undo step too: one Cmd+Z returns to the tab that was selected, with no new pane.
+        def add_tab_to_unselected_split_one_undo():
+            a = new_tab(url('ats1')); b = new_tab(url('ats2'))
+            app.call('select', tab=a)
+            app.call('sidebar-menu', node=b, item='Open in Split View')
+            made = wait_until(lambda: (lambda v: v if v['id'] and len(v['panes']) == 2 else None)(split()), timeout=3, step=.05)
+            assert made, split()
+            c = new_tab(url('ats3'))
+            app.call('select', tab=c)
+            assert wait_until(lambda: selected() == c and not split()['id'], timeout=3, step=.05), split()
+            before = [t['id'] for t in tabs()]
+            app.call('sidebar-menu', node=made['id'], item='Add Tab…')
+            added = wait_until(lambda: (lambda v: v if v['id'] == made['id'] and len(v['panes']) == 3 else None)(split()), timeout=3, step=.05)
+            assert added, split()
+            time.sleep(.4)
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
+            time.sleep(.6)
+            after = split(); ids = [t['id'] for t in tabs()]
+            row('r8_add_tab_to_unselected_split_single_undo', selected() == c and not after['id'] and sorted(ids) == sorted(before),
+                split=made['id'], after=after['id'], selected=selected(), c=c, tabsBefore=len(before), tabsAfter=len(ids))
+            app.call('select', tab=a)
+        guarded('r8_add_tab_to_unselected_split_single_undo', add_tab_to_unselected_split_one_undo, unsplit)
+
+        # Bug sweep r8 B-R6-05: Close This Pane (also the pane's x and Ctrl+Shift+-) archives the pane's
+        # page: its beforeunload asks first, as Cmd+W does. Stay keeps the pane; Leave closes it.
+        def close_pane_asks():
+            a = new_tab(url('cpa1')); b = new_tab(url('cpa2'))
+            app.call('select', tab=a)
+            app.call('sidebar-menu', node=b, item='Open in Split View')
+            made = wait_until(lambda: (lambda v: v if v['id'] and len(v['panes']) == 2 else None)(split()), timeout=3, step=.05)
+            assert made, split()
+            app.call('click', tab=b, selector='#arm')
+            assert wait_until(lambda: app.call('engine-sleep', tab=b)['unloadHandlers'], timeout=4, step=.05)
+            # Open in Split View focuses the opened tab: Close This Pane acts on it.
+            assert split()['focused'] == b, split()
+            app.call('split', op='menu', item='Close This Pane')
+            asked = wait_until(lambda: app.call('dialog-state').get('visible'), timeout=4, step=.05)
+            if asked:
+                app.call('dialog-button', accept=False)
+                wait_until(lambda: not app.call('dialog-state').get('pending'), timeout=3, step=.05)
+            time.sleep(.5)
+            kept = split(); ids = [t['id'] for t in tabs()]
+            row('r8_close_pane_asks_beforeunload_stay', bool(asked) and kept['id'] == made['id'] and len(kept['panes']) == 2 and b in ids,
+                asked=bool(asked), split=kept['id'], panes=[p['id'] for p in kept['panes']], b=b)
+            if asked:
+                app.call('split', op='menu', item='Close This Pane')
+                again = wait_until(lambda: app.call('dialog-state').get('visible'), timeout=4, step=.05)
+                if again: app.call('dialog-button', accept=True)
+                gone = wait_until(lambda: b not in [t['id'] for t in tabs()], timeout=4, step=.05)
+                row('r8_close_pane_asks_beforeunload_leave', bool(again) and bool(gone) and not split()['id'] and selected() == a,
+                    asked=bool(again), gone=bool(gone), split=split()['id'], selected=selected(), a=a)
+            else:
+                row('r8_close_pane_asks_beforeunload_leave', False, reason='no beforeunload sheet on the first close')
+        def close_pane_cleanup():
+            answer_dialogs()
+            unsplit()
+        guarded('r8_close_pane_asks_beforeunload_stay', close_pane_asks, close_pane_cleanup)
+
+        # Review r2 #1: the split dissolves while the page asks (its other pane closes elsewhere).
+        # Leave still closes the page's tab, as Cmd+W would; it does not stay open.
+        def close_pane_after_collapse():
+            a = new_tab(url('cpc1')); b = new_tab(url('cpc2'))
+            app.call('select', tab=a)
+            app.call('sidebar-menu', node=b, item='Open in Split View')
+            made = wait_until(lambda: (lambda v: v if v['id'] and len(v['panes']) == 2 else None)(split()), timeout=3, step=.05)
+            assert made, split()
+            app.call('click', tab=b, selector='#arm')
+            assert wait_until(lambda: app.call('engine-sleep', tab=b)['unloadHandlers'], timeout=4, step=.05)
+            assert split()['focused'] == b, split()
+            app.call('split', op='menu', item='Close This Pane')
+            asked = wait_until(lambda: app.call('dialog-state').get('visible'), timeout=4, step=.05)
+            collapsed = False
+            if asked:
+                app.call('close', tab=a)
+                collapsed = bool(wait_until(lambda: a not in [t['id'] for t in tabs()], timeout=3, step=.05))
+                app.call('dialog-button', accept=True)
+            gone = wait_until(lambda: b not in [t['id'] for t in tabs()], timeout=4, step=.05)
+            row('r8_close_pane_leave_after_split_collapsed', bool(asked) and collapsed and bool(gone),
+                asked=bool(asked), collapsed=collapsed, gone=bool(gone), a=a, b=b, tabs=[t['id'] for t in tabs()][-4:])
+        def close_pane_after_collapse_cleanup():
+            answer_dialogs()
+            unsplit()
+        guarded('r8_close_pane_leave_after_split_collapsed', close_pane_after_collapse, close_pane_after_collapse_cleanup)
+
         # WL-02: "Open in Split View" on a closing nested Peek must not wedge the Peek under it.
         def split_during_dismiss():
             source = new_tab(url('psrc'))

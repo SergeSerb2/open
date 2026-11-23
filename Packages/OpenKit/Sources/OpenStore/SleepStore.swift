@@ -74,37 +74,54 @@ public final class SleepStore {
             onError?("SleepStore: container exceeds 2 MiB; write dropped")
             throw Failure.tooLarge
         }
-        do {
-            try await write { db in
-                guard let stmt = db.prepare("INSERT OR REPLACE INTO sleep_history VALUES(?,?,?,?,?,?,?,?,?,?,?)") else { throw Failure.sqlite }
-                defer { sqlite3_finalize(stmt) }
-                db.bindText(stmt, 1, record.tabID.rawValue.uuidString)
-                let code = record.container.withUnsafeBytes { bytes in
-                    sqlite3_bind_blob(stmt, 2, bytes.baseAddress, Int32(bytes.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-                }
-                guard code == SQLITE_OK else { throw Failure.sqlite }
-                db.bindInt(stmt, 3, Int64(record.currentIndex)); db.bindInt(stmt, 4, Int64(record.entryCount))
-                db.bindText(stmt, 5, record.currentURL.absoluteString); db.bindText(stmt, 6, record.currentTitle)
-                db.bindText(stmt, 7, record.faviconURL?.absoluteString)
-                db.bindInt(stmt, 8, record.hasPageState ? 1 : 0); db.bindInt(stmt, 9, Int64(record.containerVersion))
-                db.bindText(stmt, 10, record.chromiumTag); db.bindDouble(stmt, 11, record.capturedAt.timeIntervalSince1970)
-                guard sqlite3_step(stmt) == SQLITE_DONE else { throw Failure.sqlite }
+        do { try await write(Self.insert(record)) } catch { onError?("SleepStore: save failed"); throw error }
+    }
+
+    /// Queues the write on this call and returns without waiting for it. Deletes, reads and saves
+    /// called later run after it on the same serial queue; `flush()` waits for it. Failures go to
+    /// `onError` (a closing page's history, bug sweep r8 review of #674).
+    public func enqueueSave(_ record: SleepHistoryRecord) {
+        guard record.container.count <= Self.maximumContainerBytes else {
+            onError?("SleepStore: container exceeds 2 MiB; write dropped"); return
+        }
+        let body = Self.insert(record)
+        queue.async { [self] in
+            do { try writeOnQueue(body) } catch { report("SleepStore: save failed") }
+        }
+    }
+
+    nonisolated private static func insert(_ record: SleepHistoryRecord) -> @Sendable (SQLiteDB) throws -> Void {
+        { db in
+            guard let stmt = db.prepare("INSERT OR REPLACE INTO sleep_history VALUES(?,?,?,?,?,?,?,?,?,?,?)") else { throw Failure.sqlite }
+            defer { sqlite3_finalize(stmt) }
+            db.bindText(stmt, 1, record.tabID.rawValue.uuidString)
+            let code = record.container.withUnsafeBytes { bytes in
+                sqlite3_bind_blob(stmt, 2, bytes.baseAddress, Int32(bytes.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
             }
-        } catch { onError?("SleepStore: save failed"); throw error }
+            guard code == SQLITE_OK else { throw Failure.sqlite }
+            db.bindInt(stmt, 3, Int64(record.currentIndex)); db.bindInt(stmt, 4, Int64(record.entryCount))
+            db.bindText(stmt, 5, record.currentURL.absoluteString); db.bindText(stmt, 6, record.currentTitle)
+            db.bindText(stmt, 7, record.faviconURL?.absoluteString)
+            db.bindInt(stmt, 8, record.hasPageState ? 1 : 0); db.bindInt(stmt, 9, Int64(record.containerVersion))
+            db.bindText(stmt, 10, record.chromiumTag); db.bindDouble(stmt, 11, record.capturedAt.timeIntervalSince1970)
+            guard sqlite3_step(stmt) == SQLITE_DONE else { throw Failure.sqlite }
+        }
+    }
+
+    /// One transaction on `queue`.
+    nonisolated private func writeOnQueue(_ body: (SQLiteDB) throws -> Void) throws {
+        let db = try openOnQueue()
+        guard db.exec("BEGIN IMMEDIATE") else { throw Failure.sqlite }
+        do {
+            try body(db)
+            guard db.exec("COMMIT") else { throw Failure.sqlite }
+        } catch { db.exec("ROLLBACK"); throw error }
     }
 
     private func write(_ body: @escaping @Sendable (SQLiteDB) throws -> Void) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
             queue.async { [self] in
-                do {
-                    let db = try openOnQueue()
-                    guard db.exec("BEGIN IMMEDIATE") else { throw Failure.sqlite }
-                    do {
-                        try body(db)
-                        guard db.exec("COMMIT") else { throw Failure.sqlite }
-                    } catch { db.exec("ROLLBACK"); throw error }
-                    continuation.resume()
-                } catch { continuation.resume(throwing: error) }
+                do { try writeOnQueue(body); continuation.resume() } catch { continuation.resume(throwing: error) }
             }
         }
     }
