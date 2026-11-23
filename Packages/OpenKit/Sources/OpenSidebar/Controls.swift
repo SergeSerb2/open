@@ -52,6 +52,14 @@ final class TextLabel: NSView {
     override var isOpaque: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+    /// The layer redraws only on `needsDisplay`, so a new width must ask for it: the truncation
+    /// (or the full line, when the view grows) depends on it. A height or origin change keeps the draw.
+    override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = newSize.width != frame.width
+        super.setFrameSize(newSize)
+        if widthChanged { needsDisplay = true }
+    }
+
     /// Width of the current text at this font (for layout of trailing items).
     var textWidth: CGFloat {
         ceil((text() as NSString).size(withAttributes: [.font: font]).width) + inset
