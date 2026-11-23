@@ -48,6 +48,9 @@ extension AppImportRunner {
       let sourceModel = BrowserBookmarksImport.sourceModel(roots: read.roots, browserName: source.name, sourceKey: key,
                                                            profileID: target.id, settings: target.settings, spaceID: space.id)
       do {
+        // The Space may have been deleted, or its Profile changed, during the read. Write nothing
+        // then: the bookmarks would be lost or land in a different Profile than the rest (bug sweep r7 Y-08).
+        guard app.model.space(id: space.id)?.profileID == target.id, app.model.profile(id: target.id) === target else { throw CancellationError() }
         let before = mergeFingerprint()
         let merged = try undo.captureModel(app.model) {
           try app.model.mergeImportedSidebar(sourceModel, profileMapping: [:], spaces: false, tabs: true, favorites: false,
@@ -133,9 +136,10 @@ extension AppImportRunner {
     case .failure(FirefoxImportError.missingFile): result.failures["Open tabs"] = "Not found"; return
     case .failure: result.failures["Open tabs"] = "Could not be read"; return
     }
-    // The import may have been cancelled, or its Space or Profile removed, during the read.
+    // The import may have been cancelled, or its Space or Profile removed or changed, during the read
+    // (bug sweep r7 Y-08, review r1 #2: tabs must not land in a different Profile than the history).
     guard !undo.cancelled, !app.terminationRequested else { return }
-    guard app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {
+    guard app.model.space(id: space.id)?.profileID == target.id, app.model.profile(id: target.id) === target else {
       result.failures["Open tabs"] = "Could not be saved"; return
     }
     var pinned: [SidebarNode] = [], today: [SidebarNode] = []
@@ -201,7 +205,7 @@ extension AppImportRunner {
       #endif
       // The import may have been cancelled, or its Space or Profile removed, during the scan.
       guard !undo.cancelled, !app.terminationRequested else { return }
-      guard app.model.space(id: space.id) != nil, app.model.profile(id: target.id) != nil else {
+      guard app.model.space(id: space.id)?.profileID == target.id, app.model.profile(id: target.id) === target else {
         result.failures["Open tabs"] = "Could not be saved"; return
       }
       chosen.merge(scanned) { _, found in found }

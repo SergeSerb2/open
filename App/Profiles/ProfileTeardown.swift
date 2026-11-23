@@ -28,6 +28,10 @@ final class ProfileTeardown {
   unowned let app: AppDelegate
   private var loaded: [ProfileID: String] = [:]
   private var unloaded: Set<ProfileID> = []
+  /// Profiles whose delete reached the owners: their IDs are retired for the rest of this process.
+  /// A later import must not bring a Profile back under one of these IDs (bug sweep r7 Y-02).
+  private var retired: Set<ProfileID> = []
+  func isRetired(_ id: ProfileID) -> Bool { retired.contains(id) }
   private var owners: [WeakOwner] = []
   private struct WeakOwner { weak var owner: (any ProfileDataOwner)? }
   init(app: AppDelegate) { self.app = app }
@@ -96,6 +100,7 @@ final class ProfileTeardown {
     }
     // Registered App stores stop and drop dirty state before any folder goes.
     stage = "retireOwners"
+    retired.insert(profileID)
     await retireOwners(profileID: profileID, directory: directory)
     stage = "flushHistory"
     await app.stores.flushHistory()

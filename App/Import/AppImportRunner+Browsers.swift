@@ -65,6 +65,9 @@ extension AppImportRunner {
       let openIDs = Set(read.tabs.map { BrowserBookmarksImport.openTabID(sourceKey: key, url: $0.url) })
       let openBefore = Set(openIDs.filter { self.app.model.node(id: $0) != nil })
       do {
+        // The Space may have been deleted, or its Profile changed, during the read. Write nothing
+        // then: the bookmarks would be lost or land in a different Profile than the rest (bug sweep r7 Y-08).
+        guard app.model.space(id: space.id)?.profileID == target.id, app.model.profile(id: target.id) === target else { throw CancellationError() }
         let before = mergeFingerprint()
         let merged = try undo.captureModel(app.model) {
           try app.model.mergeImportedSidebar(model, profileMapping: [:], spaces: false, tabs: plan.bookmarks || plan.openTabs, favorites: false,

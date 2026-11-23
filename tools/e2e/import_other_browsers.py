@@ -388,6 +388,24 @@ def run(factory, results, tmp, h):
         failures=quoted_report.get('settingsFailures'), error=quoted_report.get('settingsError'),
         appLog=[l for l in app.log_text().splitlines() if 'browser passwords import failed' in l][-3:])
 
+    # Bug sweep r7 Y-07: a CSV URL with upper-case letters and the default port is saved under Chromium's
+    # canonical realm. The same login written in lower case is then a duplicate, not a second login.
+    realm_outcomes, realm_labels, before_logins = [], [], logins()
+    # An IPv6 login cannot be checked here: the mock-keychain engine accepts only fixture hosts (FixtureURL).
+    for name, url in (('Passwords-case.csv', 'https://R7Case.Example.COM:443/login'), ('Passwords-lower.csv', 'https://r7case.example.com/')):
+        (files/name).write_text('Title,URL,Username,Password\nCase,%s,example-case,fixture-case\n' % url)
+        open_sources(); call('settings-source', id='safari'); settle()
+        call('settings-passwords-file', path=str(files/name)); settle()
+        call('settings-browser-select', bookmarks=False, history=False, passwords=True); chosen = settle()
+        realm_labels.append({'label': chosen.get('settingsBrowserLabels', {}).get('Passwords'), 'ticked': chosen.get('settingsPasswords')})
+        report = finish_import()
+        realm_labels[-1].update(failures=report.get('settingsFailures'), error=report.get('settingsError', '')[:80])
+        realm_outcomes.append({k: v for k, v in report.get('settingsOutcome', {}).items() if k.startswith(('Password', 'Skipped'))})
+    row('safari_csv_realm_canonical', realm_outcomes[0].get('Passwords') == 1 and realm_outcomes[1].get('Password duplicates') == 1
+        and not realm_outcomes[1].get('Passwords') and logins() - before_logins == 1,
+        outcomes=realm_outcomes, wizard=realm_labels, logins=logins() - before_logins,
+        appLog=[l[-160:] for l in app.log_text().splitlines() if 'passwords import failed' in l][-3:])
+
     # A fresh Safari profile has no Bookmarks.plist: Bookmarks shows "Not found", is unticked and disabled, and the
     # Report has no "could not be imported" line (hand check, IMF 20:15). The file returns for later rows.
     aside = files/'Bookmarks.plist.aside'

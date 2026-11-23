@@ -62,7 +62,7 @@ public struct FirefoxLoginsReader: Sendable {
                 return validatedImportDate(unixSeconds: ms / 1000)
             }
             // Chromium form logins use the origin plus "/" as realm; HTTP auth adds the realm name (scheme 1 = basic).
-            let originString = "\(scheme)://\(origin.host!)\(origin.port.map { ":\($0)" } ?? "")"
+            let originString = ImportedLoginOrigin.canonical(scheme: scheme, host: origin.host!, port: origin.port)  // review r1 #5
             let httpRealm = entry["httpRealm"] as? String
             let action = (entry["formSubmitURL"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             var record = ImportedLoginRecord(originURLString: originString + "/", actionURLString: action,
