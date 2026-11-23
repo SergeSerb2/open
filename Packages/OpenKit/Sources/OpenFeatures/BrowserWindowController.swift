@@ -516,6 +516,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.onToolbarMenu = { [weak self] in self?.makeToolbarMenu() }
         splitController.onChange = { [weak self] in self?.changed() }
         splitController.pageClosePreflight = { [weak self] ids, action in self?.pageClosePreflight?(ids, action) ?? false }
+        splitController.onCloseTab = { [weak self] id in guard let self else { return }; _ = self.sidebar(self.sidebar, didRequest: .close(nodeID: id)) }
         if let siteControlSource, let siteControlActions {
             let controller = SiteControlController(source: siteControlSource, actions: siteControlActions)
             siteControl = controller

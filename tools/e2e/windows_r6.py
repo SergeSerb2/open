@@ -208,6 +208,32 @@ def run(factory, results, tmp, h):
             unsplit()
         guarded('r8_close_pane_asks_beforeunload_stay', close_pane_asks, close_pane_cleanup)
 
+        # Review r2 #1: the split dissolves while the page asks (its other pane closes elsewhere).
+        # Leave still closes the page's tab, as Cmd+W would; it does not stay open.
+        def close_pane_after_collapse():
+            a = new_tab(url('cpc1')); b = new_tab(url('cpc2'))
+            app.call('select', tab=a)
+            app.call('sidebar-menu', node=b, item='Open in Split View')
+            made = wait_until(lambda: (lambda v: v if v['id'] and len(v['panes']) == 2 else None)(split()), timeout=3, step=.05)
+            assert made, split()
+            app.call('click', tab=b, selector='#arm')
+            assert wait_until(lambda: app.call('engine-sleep', tab=b)['unloadHandlers'], timeout=4, step=.05)
+            assert split()['focused'] == b, split()
+            app.call('split', op='menu', item='Close This Pane')
+            asked = wait_until(lambda: app.call('dialog-state').get('visible'), timeout=4, step=.05)
+            collapsed = False
+            if asked:
+                app.call('close', tab=a)
+                collapsed = bool(wait_until(lambda: a not in [t['id'] for t in tabs()], timeout=3, step=.05))
+                app.call('dialog-button', accept=True)
+            gone = wait_until(lambda: b not in [t['id'] for t in tabs()], timeout=4, step=.05)
+            row('r8_close_pane_leave_after_split_collapsed', bool(asked) and collapsed and bool(gone),
+                asked=bool(asked), collapsed=collapsed, gone=bool(gone), a=a, b=b, tabs=[t['id'] for t in tabs()][-4:])
+        def close_pane_after_collapse_cleanup():
+            answer_dialogs()
+            unsplit()
+        guarded('r8_close_pane_leave_after_split_collapsed', close_pane_after_collapse, close_pane_after_collapse_cleanup)
+
         # WL-02: "Open in Split View" on a closing nested Peek must not wedge the Peek under it.
         def split_during_dismiss():
             source = new_tab(url('psrc'))

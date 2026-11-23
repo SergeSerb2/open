@@ -20,6 +20,8 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
     public var onChange: (() -> Void)?
     /// The window's `pageClosePreflight`: true when the pages ask, and `action` runs once each agreed.
     public var pageClosePreflight: ((_ tabIDs: [ItemID], _ action: @escaping () -> Void) -> Bool)?
+    /// Closes a tab by the window's one close rule (the sidebar's Close, as Cmd+W).
+    public var onCloseTab: ((ItemID) -> Void)?
     public private(set) var maximizedPaneID: ItemID?
     public var state: BrowserWindowState? { model.windows.first { $0.id == windowID } }
     public var space: Space? { state.flatMap { model.space(id: $0.focusedSpaceID) } }
@@ -123,7 +125,13 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
             // (bug sweep r8 B-R6-05). The split is captured: the selection can change while it asks.
             let splitID = split.id
             let archive = { [weak self] in
-                guard let self, self.model.node(id: splitID)?.split?.panes.contains(where: { $0.id == id }) == true else { return }
+                guard let self else { return }
+                guard self.model.node(id: splitID)?.split?.panes.contains(where: { $0.id == id }) == true else {
+                    // The split dissolved while the page asked (another window closed its other
+                    // pane): the page agreed to leave, so its tab closes as Cmd+W would (review r2 #1).
+                    if self.model.tab(id: id) != nil { self.onCloseTab?(id) }
+                    return
+                }
                 self.model.asOneUndoStep { self.model.removePane(splitID: splitID, tabID: id, archive: true) }
                 self.clearMaximizedPane(unless: nil); self.refresh(); self.onChange?()
             }
