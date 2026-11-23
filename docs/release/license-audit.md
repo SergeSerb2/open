@@ -84,6 +84,14 @@ generator includes the terms and omits that nonshipped row. The native
 `/usr/bin/textutil -convert txt -stdout Credits.rtf` conversion exactly
 matches Acknowledgements.txt, including Unicode characters.
 
+UX round 1 (2026-11-23): the About panel showed the inventory's review
+notes ("BLOCKED", "U-6", "Review LGPL…") to users. Credits.rtf now lists each
+shipped component as name, version and license, with the source location of
+copyleft components and a pointer to Acknowledgements.txt. Its license texts
+and Chromium credits are unchanged and complete. Acknowledgements.txt and
+CREDITS.html are byte-identical to the previous generator's output, so the
+RTF and TXT now differ only in the component list.
+
 The build-tool input limits are 2 MiB / 2,048 inventory rows, 4 MiB per
 license / 16 MiB total / 256 distinct texts, and 32 MiB for Chromium HTML.
 A future uBO source input is capped at 16 MiB per file, 64 MiB total,

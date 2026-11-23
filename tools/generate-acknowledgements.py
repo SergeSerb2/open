@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Generate About Credits.rtf and its text twin from the release inventory.
 
+Credits.rtf (the About panel) lists each component as name, version and license; the text
+twin Acknowledgements.txt also keeps the inventory's use and source-offer columns. Both carry
+every license text and the Chromium credits.
+
 No network, third-party modules, or credentials. Preview mode warns about
 missing/sample Chromium credits and an unset public MPL source location.
 --require-cef-credits enforces both gates for existing release callers.
@@ -377,13 +381,28 @@ def main():
             data.decode('utf-8')
 
     paragraphs = [f'Open {marketing} ({build})', stamp, '']
+    # The About panel (Credits.rtf) is user-facing: one plain line per component, with the
+    # public source location of copyleft components. The use and offer columns hold release
+    # review notes; they stay complete in Acknowledgements.txt. Every license text and the
+    # Chromium credits below are in both outputs.
+    about = [f'Open {marketing} ({build})', stamp, '', 'Components', '']
     for name, version, license_name, use, offer in shipped:
         paragraphs.extend([f'{name} — {version} — {license_name}\n{use}\n{offer}', ''])
+        about.append(f'{name} — {version} — {license_name}')
+        if re.search(r'\b(?:L?GPL|MPL)-', license_name):
+            urls = [u.rstrip(').,;') for u in re.findall(r'https://[^\s`|]+', offer)]
+            if urls:
+                about.append('Source: ' + ' '.join(dict.fromkeys(urls)))
+    about.append('')
     if needs_source:
-        paragraphs.extend(['Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)'), ''])
-    paragraphs.extend(['License texts', ''])
+        location = 'Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)')
+        paragraphs.extend([location, ''])
+        about.extend([location, ''])
+    about.extend(['Full notices for each component, including how Open uses it, are in '
+                  'Acknowledgements.txt, published with each Open release.', ''])
+    tail = ['License texts', '']
     for name, text in texts:
-        paragraphs.extend([name, text.rstrip(), ''])
+        tail.extend([name, text.rstrip(), ''])
     complete = False
     cef_bytes = None
     if a.cef_credits.is_file():
@@ -400,7 +419,7 @@ def main():
                 parser = CreditsParser()
                 parser.feed(raw)
                 body = ''.join(parser.parts).strip()
-            paragraphs.extend(['Chromium and third-party credits (HTML twin: CREDITS.html)', body, ''])
+            tail.extend(['Chromium and third-party credits (HTML twin: CREDITS.html)', body, ''])
     if not complete:
         message = 'INCOMPLETE PREVIEW: full Chromium/codec CREDITS.html is missing or is the upstream sample.'
         if a.require_cef_credits:
@@ -410,8 +429,9 @@ def main():
         raise ValueError('\n'.join(failures))
     for message in warnings:
         print('WARNING: ' + message, file=sys.stderr)
-        paragraphs.extend([message, ''])
-    text = '\n'.join(paragraphs)
+        tail.extend([message, ''])
+    text = '\n'.join(paragraphs + tail)
+    about_text = '\n'.join(about + tail)
     twin = a.text_output or a.output.with_name('Acknowledgements.txt')
     if a.output.resolve() == twin.resolve():
         raise ValueError('RTF and TXT outputs must be different paths')
@@ -420,7 +440,7 @@ def main():
         raise ValueError('RTF and TXT outputs must not overwrite the HTML twin')
     a.output.parent.mkdir(parents=True, exist_ok=True)
     twin.parent.mkdir(parents=True, exist_ok=True)
-    a.output.write_text(rtf(text), encoding='ascii')
+    a.output.write_text(rtf(about_text), encoding='ascii')
     twin.write_text(text, encoding='utf-8')
     # Keep the exact distribution HTML next to each text output, including
     # previews. A sample twin is labelled incomplete above, never accepted.
