@@ -118,6 +118,9 @@ final class AppImportUndo {
     enqueue { [self] in
       if importing { await withCheckedContinuation { importWaiters.append($0) } }
       if undoing {
+        for (profileID, _, values) in boosts {
+          app.stores.boosts.boostsWillBeRemoved(Set(values.map(\.id)), profileID: profileID)
+        }
         for (_, store, values) in boosts {
           await Task.detached(priority: .utility) {
             for boost in values { store.delete(id: boost.id) }
