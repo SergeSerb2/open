@@ -515,6 +515,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.toasts = toasts
         container.onToolbarMenu = { [weak self] in self?.makeToolbarMenu() }
         splitController.onChange = { [weak self] in self?.changed() }
+        splitController.pageClosePreflight = { [weak self] ids, action in self?.pageClosePreflight?(ids, action) ?? false }
         if let siteControlSource, let siteControlActions {
             let controller = SiteControlController(source: siteControlSource, actions: siteControlActions)
             siteControl = controller
@@ -1769,11 +1770,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .newSplitView: splitController.addEmptyPane()
         case .addTabToSplit(let id):
             guard model.node(id: id)?.split != nil else { return false }
-            if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }
-            splitController.addEmptyPane()
+            // The row's selection and the new pane are one Undo step (bug sweep r8 A-R6-10).
+            model.asOneUndoStep {
+                if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }
+                splitController.addEmptyPane()
+            }
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
-            if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
+            model.asOneUndoStep {
+                if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }
+                splitController.addEmptyPane()
+            }
         case .archiveFolder(let id):
             return afterPagesAgreeToClose(tabIDs(under: [id])) { [weak self] in
                 guard let self, ModelSidebarActions(context: self.context).perform(intent) else { return false }
