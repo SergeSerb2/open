@@ -61,8 +61,9 @@ public struct LinksPane:View {
         }
         .sheet(item: $editing) { draft in LinkRuleSheet(root: root, draft: draft, onDone: { editing = nil }) }
         LinkTestArea(root: root, tested: $tested).id("links/test")
-        let notice = !root.linksError.isEmpty ? root.linksError : tested && !links.testInputIsValid ? "Enter a valid URL." : root.linkTestSummary ?? ""
-        SettingsInlineMessage(text: notice)
+        // An invalid test URL is shown under its field in the test card (UX round 1 F23).
+        let notice = !root.linksError.isEmpty ? root.linksError : tested && !links.testInputIsValid ? "" : root.linkTestSummary ?? ""
+        SettingsInlineMessage(text: notice).padding(.top, notice.isEmpty ? 0 : 12)
         if let decision = links.testDecision {
             DisclosureGroup("Details") { Text(RoutingDecisionFormatter.report(decision, spaces: root.routingSpaces)).font(.system(size: 11.5, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
         }
@@ -94,7 +95,17 @@ private struct LinkTestArea: View {
                 }.padding(.horizontal, 14).frame(height: 44).contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("Expand link test").accessibilityValue(expanded ? "Expanded" : "Collapsed")
             if expanded {
-                HStack(spacing: 10) { TextField("URL or host", text: $links.testURLString).textFieldStyle(.plain).accessibilityLabel("URL or host"); Button("Test") { tested = true; links.runTest() } }.padding(14)
+                HStack(spacing: 10) {
+                    TextField("URL or host", text: $links.testURLString).textFieldStyle(.plain).accessibilityLabel("URL or host")
+                        .padding(.horizontal, 8).frame(height: 26)
+                        .background(Color(nsColor: SettingsStyle.control.nsColor), in: RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: SettingsStyle.controlLine.nsColor), lineWidth: 1))
+                        .onSubmit { tested = true; links.runTest() }
+                    Button("Test") { tested = true; links.runTest() }
+                }.padding(.horizontal, 14).padding(.top, 4).padding(.bottom, tested && !links.testInputIsValid ? 4 : 10)
+                if tested && !links.testInputIsValid {
+                    SettingsError(text: "Enter a valid URL.").font(.system(size: 11.5)).padding(.horizontal, 14).padding(.bottom, 10)
+                }
                 AppPicker(bundleID: $links.testSourceBundleID).padding(.horizontal, 14).padding(.bottom, 10)
                 OpenSettingsRow(root: root, id: "links/test-space", title: "Most Recent Space", last: true) {
                     OpenSettingsPop(title: "Most Recent Space", value: $links.testMostRecentSpaceID, options: [("Automatic", nil)] + links.spaces.map { ($0.title, Optional($0.id)) })
@@ -114,14 +125,20 @@ public struct LinkRuleSheet:View {
     let root:SettingsViewModel
     @State private var draft:RuleDraft
     let onDone:()->Void
-    public init(root:SettingsViewModel,draft:RuleDraft,onDone:@escaping ()->Void={}){self.root=root;_draft=State(initialValue:draft);self.onDone=onDone}
+    /// "Enter a site to match." waits until the pattern was edited (UX round 1 F10); Save stays disabled.
+    @State private var patternEdited:Bool
+    public init(root:SettingsViewModel,draft:RuleDraft,onDone:@escaping ()->Void={}){self.root=root;_draft=State(initialValue:draft);_patternEdited=State(initialValue:!draft.pattern.isEmpty);self.onDone=onDone}
     public var body:some View {VStack(alignment:.leading,spacing:18) {
-        Text("Link Routing").font(.title2)
+        SettingsSheetTitle("Link Routing")
         HStack {Text("Match");Spacer();SettingsPopUp("Match",selection:$draft.matchKind,width:185,entries:[.option("Host contains",.hostContains),.option("Host equals",.hostEquals),.option("URL starts with",.urlPrefix)])}
-        TextField("Pattern",text:$draft.pattern).accessibilityLabel("Pattern")
+        TextField("Pattern",text:$draft.pattern).accessibilityLabel("Pattern").onChange(of:draft.pattern) { _,_ in patternEdited=true }
         HStack {Text("Open in");Spacer();RouteDestinationPicker(links:root.links,selection:$draft.destination)}
         AppPicker(bundleID:$draft.sourceBundleID)
-        LinkIssues(issues:root.links.issues(replacing:draft).filter{$0.ruleID == draft.id})
+        LinkIssues(issues:root.links.issues(replacing:draft).filter{ issue in
+            guard issue.ruleID == draft.id else { return false }
+            if case .emptyPattern = issue { return patternEdited }
+            return true
+        })
         SettingsError(text:root.linksError)
         Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).disabled(root.links.issues(replacing:draft).contains{$0.ruleID == draft.id && $0.isError})}
     }.padding(24).frame(width:520,height:380).settingsSheet()}

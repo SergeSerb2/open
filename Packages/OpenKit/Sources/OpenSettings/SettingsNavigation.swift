@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 import OpenDesign
 
@@ -19,7 +20,7 @@ struct SettingsNavigation: NSViewRepresentable {
     let search = NSTextField()
     private let clear = NSButton(title: "×", target: nil, action: nil)
     private let hint = NSTextField(labelWithString: "⌘F")
-    private let glass = NSTextField(labelWithString: "⌕")
+    private let glass = NSImageView()
     private let scroll = NSScrollView()
     private let items = FlippedSettingsView()
     private let footer = NSTextField(labelWithString: "")
@@ -36,12 +37,18 @@ struct SettingsNavigation: NSViewRepresentable {
         search.delegate = self; search.focusRingType = .none
         search.setAccessibilityLabel("Search settings"); search.identifier = .init("settings-search")
         search.setAccessibilityRole(.textField)
-        addSubview(search); glass.font = .systemFont(ofSize: 17); addSubview(glass)
+        // The same SF magnifier as the Shortcuts and Block lists search fields (UX round 1 F13).
+        glass.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+        glass.imageScaling = .scaleNone
+        addSubview(search); addSubview(glass)
         hint.font = .systemFont(ofSize: 11, weight: .medium); addSubview(hint)
         clear.isBordered = false; clear.target = self; clear.action = #selector(clearSearch)
         clear.setAccessibilityLabel("Clear settings search"); addSubview(clear)
         scroll.drawsBackground = false; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         scroll.documentView = items; addSubview(scroll)
+        // A short fade at the list's bottom edge while more sections lie below (UX round 1 F14).
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(listScrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         for section in SettingsSection.allCases {
             if let title = section.group {
                 let label = NSTextField(labelWithString: title); label.font = SettingsTokens.Redesign.group.font
@@ -54,6 +61,7 @@ struct SettingsNavigation: NSViewRepresentable {
         }
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         footer.stringValue = "Open \(version)"; footer.font = .systemFont(ofSize: 11.5)
+        footer.lineBreakMode = .byTruncatingTail; footer.cell?.truncatesLastVisibleLine = true
         addSubview(footer); check.isBordered = false; check.font = .systemFont(ofSize: 11.5, weight: .medium)
         check.target = self; check.action = #selector(checkUpdates); addSubview(check)
         check.setAccessibilityLabel("Check for Updates")
@@ -91,7 +99,7 @@ struct SettingsNavigation: NSViewRepresentable {
     override func layout() {
         super.layout()
         search.frame = .init(x: 34, y: 51, width: 146, height: 19)
-        glass.frame = .init(x: 19, y: 48, width: 16, height: 24)
+        glass.frame = .init(x: 17, y: 51, width: 16, height: 18)
         hint.frame = .init(x: 183, y: 52, width: 28, height: 16)
         clear.frame = .init(x: 187, y: 48, width: 26, height: 24)
         scroll.frame = .init(x: 10, y: 84, width: bounds.width - 20, height: max(100, bounds.height - 126))
@@ -103,8 +111,27 @@ struct SettingsNavigation: NSViewRepresentable {
             button.frame = .init(x: 0, y: y, width: bounds.width - 20, height: 30); y += 30
         }
         items.frame = .init(x: 0, y: 0, width: scroll.bounds.width, height: y)
-        footer.frame = .init(x: 18, y: bounds.height - 27, width: 165, height: 18)
         check.frame = .init(x: bounds.width - 51, y: bounds.height - 31, width: 41, height: 24)
+        // Keep 8 pt between the version/update state and Check (UX round 1 F22).
+        footer.frame = .init(x: 18, y: bounds.height - 27, width: max(0, check.frame.minX + 6 - 8 - 18), height: 18)
+        updateListFade()
+    }
+    @objc private func listScrolled() { updateListFade() }
+    private func updateListFade() {
+        let visible = scroll.contentView.bounds
+        let below = items.frame.height - visible.maxY
+        guard below > 1 else { scroll.layer?.mask = nil; return }
+        scroll.wantsLayer = true
+        let mask = (scroll.layer?.mask as? CAGradientLayer) ?? CAGradientLayer()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        mask.frame = scroll.bounds
+        let fade = min(24, below) / max(1, scroll.bounds.height)
+        // AppKit layers of a flipped scroll view are not flipped: the list's bottom is y = 0.
+        mask.startPoint = .init(x: 0.5, y: 0); mask.endPoint = .init(x: 0.5, y: 1)
+        mask.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.cgColor, NSColor.black.cgColor]
+        mask.locations = [0, NSNumber(value: Double(fade)), 1]
+        scroll.layer?.mask = mask
+        CATransaction.commit()
     }
     override func draw(_ rect: NSRect) {
         let dark = contentAppearance == .dark
@@ -119,7 +146,7 @@ struct SettingsNavigation: NSViewRepresentable {
         ring.lineWidth = 1; ring.stroke()
         if focused { accent.withAlphaComponent(0.35).setStroke(); let path = NSBezierPath(roundedRect: .init(x: 8.5, y: 42.5, width: bounds.width - 17, height: 33), xRadius: 9, yRadius: 9); path.lineWidth = 3; path.stroke() }
         search.placeholderAttributedString = NSAttributedString(string: "Search settings", attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: t.secondary.nsColor])
-        search.textColor = t.text.nsColor; glass.textColor = t.secondary.nsColor; hint.textColor = t.secondary.nsColor
+        search.textColor = t.text.nsColor; glass.contentTintColor = t.secondary.nsColor; hint.textColor = t.secondary.nsColor
         clear.contentTintColor = t.secondary.nsColor; footer.textColor = t.secondary.nsColor; check.contentTintColor = accent
         groups.forEach { $0.0.textColor = t.secondary.nsColor }
         t.hairline.nsColor.setFill(); NSRect(x: 18, y: bounds.height - 40, width: bounds.width - 36, height: 1).fill()
@@ -164,6 +191,7 @@ private final class FlippedSettingsView: NSView { override var isFlipped: Bool {
     init(section: SettingsSection) {
         self.section = section; super.init(frame: .zero)
         title = section.title; isBordered = false; setButtonType(.momentaryChange)
+        focusRingType = .none  // draw() paints the rounded accent ring (UX round 1 F4)
         setAccessibilityRole(.button)
         setAccessibilityLabel(section.title); identifier = .init("settings-nav-" + section.rawValue)
     }
