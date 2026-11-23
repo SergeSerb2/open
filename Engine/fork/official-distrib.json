@@ -1,7 +1,7 @@
 {
  "status": "WebAuthn candidate with Chromium patches 0811 and 0812; framework link uses --lto-O0",
- "distribution_name": "webauthn-0811-0812_minimal",
- "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/webauthn-0811-0812_minimal",
+ "distribution_name": "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-f6e6c984-official_minimal",
+ "distribution_path_rel_engine_root": "chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_-f6e6c984-official_minimal",
  "recorded_in": "<engine root>/.open-engine-state/distrib.txt (outside git; tools/fetch-engine.sh reads it)",
  "framework_sha256": "f6e6c984fff9a7364164406befd5e0edb9dc3e813fbf7ae58913560bf67e5105",
  "framework_uuid": "4C4C44C8-5555-3144-A196-093A08915D0D",
@@ -70,5 +70,5 @@
   }
  ],
  "english_pak_sha256": "372eb8401de3b431f570f230af008ff8577244537d14979bf8e52e17eabd5cc4",
- "distribution_built": "2026-11-18 09:4x local: cef/tools/make_distrib.py with the engine-distrib --config release arguments (--ninja-build --arm64-build --minimal --no-symbols --no-docs --no-archive --release-build-dir=out/Release_Official_arm64), named with --distrib-subdir because the -official suffix name belongs to 61709cc0; 1046 files, 349264 KiB; engine-status --config release --strict 8/0/0"
+ "distribution_built": "2026-11-23 11:05 local (REL017): cef/tools/make_distrib.py with the engine-distrib --config release arguments (--ninja-build --arm64-build --minimal --no-symbols --no-docs --no-archive --release-build-dir=out/Release_Official_arm64) and the engine-distrib guards, named with --distrib-subdir because the -official suffix name belongs to 61709cc0. make_distrib copies the framework from cefclient.app, and the 2026-11-19 incremental build linked only the top-level framework, so cefclient.app still held 591b21a6f2b6f53f2a99582385d1b8d8cf3615293ea8b2a1484e5f90363be868. Before packaging, the top-level f6e6c984fff9a7364164406befd5e0edb9dc3e813fbf7ae58913560bf67e5105 binary was copied by hand (/bin/cp -c, the same copy as ninja's copy_bundle_data rule) into cefclient.app/Contents/Frameworks/Chromium Embedded Framework.framework/Versions/A, mode 755 (the link left it 700); no other file in out/ changed except chmod 755 on the top-level binary and go+rX on its dSYM. Every other framework file was already identical. 1046 files, 349264 KiB; differs from the 591b21a6 distribution only in the framework binary and the README date; CREDITS ff438af8, README 426e05ec. The Chromium tree then had 0811 and 0812 applied again with engine-apply --only chromium (they were built but had been restored); engine-status --config release --strict 8/0/0."
 }
