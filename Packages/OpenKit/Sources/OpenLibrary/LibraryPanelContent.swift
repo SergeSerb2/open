@@ -270,7 +270,16 @@ extension LibraryPanelView {
         guard host.dirty || host.identity != identity else { return }
         host.cancel(); host.generation += 1
         let generation = host.generation, target = section, query = searchText
+        // History rows are the History store's own matches for the query: every word, in any order
+        // (`HistoryStore.search`). The panel's phrase filter dropped them: "hooks react" showed
+        // "No matches" for "React Hooks" (bug sweep r7 X-02). Other sections keep the phrase match.
+        let matchesWords = section == .history
         let rebuild = host.dirty
+        // A refresh of the list the user is reading (a new History page, a download's progress, a
+        // new visit) keeps the rows it shows: the 60-row first page dropped a selection below row 60
+        // and shrank the list under the scroll position (bug sweep r7 X-01). This includes an open:
+        // the list still shows the rows of the prebuild or of the last open (review of #669 #1).
+        let sameList = host.identity == identity && isPresented
         host.identity = identity; host.dirty = false
         if rebuild {
             let started = ProcessInfo.processInfo.systemUptime
@@ -304,19 +313,27 @@ extension LibraryPanelView {
             host.phaseMilliseconds["prepareBackground"] = (ProcessInfo.processInfo.systemUptime-prepareStart)*1000
             let filterStart = ProcessInfo.processInfo.systemUptime
             let filter = Task.detached(priority:.userInitiated) {
-                let key = query.folding(options:[.caseInsensitive,.diacriticInsensitive],locale:.current)
-                return key.isEmpty ? prepared : prepared.filter { !Task.isCancelled && $0.key.contains(key) }
+                // The store trims the query first (review of #669 #6: " ? " is the text "?").
+                let key = (matchesWords ? query.trimmingCharacters(in:.whitespacesAndNewlines) : query)
+                    .folding(options:[.caseInsensitive,.diacriticInsensitive],locale:.current)
+                // The store's words: split on what is not a letter or digit. Punctuation alone has no
+                // word, and the store then matches the text itself.
+                let words = matchesWords ? key.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init) : []
+                return key.isEmpty ? prepared : prepared.filter { row in
+                    !Task.isCancelled && (words.isEmpty ? row.key.contains(key) : words.allSatisfy { row.key.contains($0) })
+                }
             }
             host.worker = filter
             let filtered = await filter.value
             guard !Task.isCancelled, host.generation == generation else { return }
             host.filtered = filtered
             host.phaseMilliseconds["filterBackground"] = (ProcessInfo.processInfo.systemUptime-filterStart)*1000
-            self.applyPage(host,target:target,count:min(60,filtered.count))
+            let first = min(filtered.count, sameList ? max(60, host.list.sources.count) : 60)
+            self.applyPage(host,target:target,count:first)
             host.preparation = nil; host.worker = nil
             // Append idle slices. They contain lazy sources, never formatted rows.
             host.append = Task { @MainActor [weak self,weak host] in
-                var count = min(60,filtered.count)
+                var count = first
                 while count < filtered.count {
                     try? await Task.sleep(for:.milliseconds(16))
                     guard let self,let host,!Task.isCancelled,host.generation == generation,(self.contentActive || self.prebuiltReady) else { return }
@@ -434,7 +451,9 @@ extension LibraryPanelView {
                     guard let self else { return }
                     // Close on this call's own result. A failure sets only statusText, which the
                     // panel does not observe, so refresh the status label here.
-                    if await self.viewModel.restore(id:id) { self.onClose?() } else { self.updateContentChrome() }
+                    // The status line ("Restored to …") is set as the Library closes, so nobody reads
+                    // it; it showed on the next open instead (bug sweep r7 X-03).
+                    if await self.viewModel.restore(id:id) { self.viewModel.statusText = ""; self.onClose?() } else { self.updateContentChrome() }
                 }
             }
             let remove: () -> Void = { [weak self] in

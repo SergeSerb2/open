@@ -140,6 +140,7 @@ extension AppDelegate {
   /// A canvas saved `doc`: every other open canvas of the Easel shows it. With `titleChanged`,
   /// every row of the Easel takes its title (also rows whose canvas is not open).
   func easelDidChange(_ doc: EaselDocument, from source: EaselContentHost?, titleChanged: Bool) {
+    for session in settingsPresenter.librarySessions.values { session.easelsProvider?.forget(doc.id) }
     for factory in hostFactories.values {
       for host in factory.easelHosts.values where host !== source && host.documentID == doc.id { host.showSaved(doc) }
     }

@@ -15505,8 +15505,11 @@ def main():
                 incognito_privacy.checks(factory, results["incognito"], tmp, sys.modules[__name__])
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
-                factory, results["history"], tmp, wait_until, _restore_defaults)
+            # OPEN_LIBRARY_R7_ONLY=1 runs only the bug sweep r7 Library and Spaces rows (tools/e2e/library_r7.py).
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
+                    factory, results["history"], tmp, wait_until, _restore_defaults)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
