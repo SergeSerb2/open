@@ -14702,6 +14702,46 @@ def page_translate_checks(factory, results, tmp):
             'cmdF': {'into': into.get('panelKey'), 'panelKey': find_key.get('panelKey'), 'parentKey': find_key.get('parentKey'),
                      'findFocused': bool(find_pane), 'browserKey': any(w.get('key') for w in windows_after)},
             'esc': {k: escaped.get(k) for k in ('shown',)}}
+        # Bug sweep r8 (A-R6-02, B-R6-03): with keyboard focus on the bubble's Copy, Return presses Copy
+        # (it beeped: Copy is not the default button), and Cmd+W archives the page's tab (the bubble has
+        # no close button, so Archive Tab beeped and did nothing). A fresh tab holds both bubbles: Tab
+        # enters a bubble only from its focused page, and Cmd+W archives it.
+        spa_url = next(t['url'] for t in app.call('tabs') if t['id'] == spa_tab)
+        throwaway = app.call('open', url=spa_url)['id']
+        app.call('wait', tab=throwaway)
+        wait_until(lambda: app.eval(throwaway, "!!document.getElementById('p1') || null"), timeout=5, step=.1)
+        def bubble_in(tab_id):
+            try: app.call('focus', tab=tab_id)
+            except RuntimeError as error: print('X8 r8 focus: %r' % (error,), flush=True)
+            app.call('policy', contextMenu='run-open:' + title)
+            box = app.eval(tab_id, "(() => { const n = document.getElementById('p1'); n.scrollIntoView({block: 'center'}); const r = document.createRange(); r.selectNodeContents(n); const s = getSelection(); s.removeAllRanges(); s.addRange(r); const b = n.getBoundingClientRect(); return [b.left + Math.min(40, b.width / 2), b.top + b.height / 2]; })()")
+            app.call('rightclick', tab=tab_id, x=box[0], y=box[1])
+            shown = wait_until(lambda: (lambda v: v if v.get('state') == 'translated' and v.get('shown') else None)(app.call('translate', action='selection')), timeout=10, step=.1)
+            app.call('policy', contextMenu='')
+            return bool(shown)
+        bubble_r = bubble_in(throwaway)
+        subprocess.run(['/usr/bin/pbcopy'], input='r8-sentinel', text=True)
+        into_r = app.call('translate', action='selection-key', code=48)
+        returned = app.call('translate', action='selection-key', code=36)
+        pasted_r = subprocess.run(['/usr/bin/pbpaste'], capture_output=True, text=True).stdout
+        app.call('translate', action='selection-close')
+        results['X8_selection_return_presses_copy'] = {
+            'ok': bubble_r and into_r.get('copyFocused') is True and pasted_r == into_r.get('result') and bool(pasted_r)
+                  and returned.get('shown') is True,
+            'into': {k: into_r.get(k) for k in ('panelKey', 'copyFocused')}, 'pasted': pasted_r[:80], 'result': (into_r.get('result') or '')[:80]}
+        bubble_w = bubble_in(throwaway)
+        into_w = app.call('translate', action='selection-key', code=48)
+        cmd_w = app.call('translate', action='selection-key', code=13)
+        archived_w = wait_until(lambda: all(t['id'] != throwaway for t in app.call('tabs')) or None, timeout=3, step=.05)
+        if not archived_w:
+            app.call('translate', action='selection-close')
+            app.call('close', tab=throwaway)
+        windows_w = [w for w in app.call('windows') if w.get('class') == 'BrowserWindow' and w.get('visible')]
+        results['X8_selection_cmd_w_archives_tab'] = {
+            'ok': bubble_w and into_w.get('panelKey') is True and bool(archived_w) and cmd_w.get('shown') is not True
+                  and len(windows_w) >= 1,
+            'into': into_w.get('panelKey'), 'archived': bool(archived_w), 'after': {k: cmd_w.get(k) for k in ('shown', 'panelKey', 'parentKey')},
+            'windows': len(windows_w)}
         results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
             and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
         # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
@@ -15381,9 +15421,14 @@ def main():
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results["split"] = CheckedResults(tracker)
             # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
-            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1":
+            # OPEN_SPLIT_WIN8_ONLY=1 runs only the bug sweep round 8 window rows (tools/e2e/windows_r8.py).
+            win8 = os.environ.get("OPEN_SPLIT_WIN8_ONLY") == "1"
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
                 module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
+            if not win8:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
+                    factory, results["split"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
                 factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)

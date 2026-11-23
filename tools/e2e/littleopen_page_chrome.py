@@ -188,6 +188,47 @@ def run(factory, results, tmp, h):
                     good=current()['barPresented']; app.call('key',window=row['window'],key='escape')
                 return dict(ok=bool(good), state=state)
             gate('little_permission_key_' + key,keys)
+        # Bug sweep r8 (A-R6-01): the card gives up the keyboard when Little Open's own address bar takes
+        # focus, without focusing the page from inside AppKit's responder change: the page must not report
+        # focus while the bar holds the keyboard. (B-R6-04 case B) Another window taking the key leaves
+        # Little Open's page unfocused too.
+        def focus_r8():
+            page(host='little-focus-r8'); request(); visible(ps)
+            ev('window.focusLog=[];addEventListener("focus",()=>focusLog.push("focus"));addEventListener("blur",()=>focusLog.push("blur"));true')
+            plain_bar = None
+            focused = call('permission-prompt', focus=True)
+            held = ps()['promptHasKeyboard']
+            app.call('key', window=row['window'], key='l', modifiers=['cmd'])
+            bar = wait(lambda: current()['barPresented'] or None, timeout=3, step=.05)
+            time.sleep(.4)
+            in_bar = dict(hasFocus=ev('document.hasFocus()'), prompt=ps()['promptHasKeyboard'], log=ev('focusLog'))
+            app.call('key', window=row['window'], key='escape')
+            wait(lambda: not current()['barPresented'] or None, timeout=3, step=.05)
+            # The same bar with no prompt: the page reports no focus while the bar is open.
+            app.call('focus', tab=current()['content']); time.sleep(.2)
+            app.call('key', window=row['window'], key='l', modifiers=['cmd'])
+            wait(lambda: current()['barPresented'] or None, timeout=3, step=.05); time.sleep(.4)
+            plain_bar = ev('document.hasFocus()')
+            app.call('key', window=row['window'], key='escape')
+            wait(lambda: not current()['barPresented'] or None, timeout=3, step=.05)
+            # Case B (review r1 #5): the card holds the keyboard and the main window becomes key. The
+            # background page gets no focus; it gets it back when Little Open is key again.
+            app.call('little-open-action', id=row['id'], action='focus'); time.sleep(.3)
+            refocused = call('permission-prompt', focus=True)
+            ev('focusLog=[];true')
+            main = app.call('shell-windows')[0]['id']
+            app.call('window-focus', id=main, activate=True); time.sleep(.6)
+            away = dict(log=ev('focusLog'), hasFocus=ev('document.hasFocus()'), prompt=ps()['promptHasKeyboard'],
+                        littleKey=current().get('key'))
+            app.call('little-open-action', id=row['id'], action='focus'); time.sleep(.6)
+            back = dict(log=ev('focusLog'), hasFocus=ev('document.hasFocus()'))
+            return dict(ok=bool(focused) and held and bool(bar) and in_bar['hasFocus'] is False and not in_bar['prompt']
+                        and plain_bar is False and ps()['visible']
+                        and bool(refocused) and 'focus' not in away['log'] and away['hasFocus'] is False and not away['prompt']
+                        and back['hasFocus'] is True,
+                        focused=focused, held=held, bar=bool(bar), inBar=in_bar, plainBar=plain_bar,
+                        refocused=refocused, away=away, back=back)
+        gate('little_permission_focus_r8', focus_r8)
         for action in ['navigate', 'miniaturize']:
             def dismissed(action=action):
                 page(host='little-dismiss-' + action); request(); state=visible(ps)

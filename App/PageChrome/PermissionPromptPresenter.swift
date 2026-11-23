@@ -42,7 +42,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     view.allow.onPress = { [weak self] in self?.finish(.allow) }
     view.notNow.onPress = { [weak self] in self?.finish(.block) }
     view.onFocusRequest = { [weak self] in self?.focusPrompt() }
-    view.onFocusLost = { [weak self] in self?.dropKeyboard() }
+    view.onFocusLost = { [weak self] in self?.focusLeftPrompt() }
     for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification, NSWindow.didEndSheetNotification] {
       observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
         let window = note.object as? NSWindow
@@ -50,6 +50,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
           // Another window took the keyboard (a click into the page's window): the prompt has
           // no keys any more (bug sweep r6 V-05 review).
           if let self, let window, window !== self.view.window { self.dropKeyboard() }
+          // Little Open is key again after the card gave up the keyboard while it was in the
+          // background: its page gets the focus it could not take then (bug sweep r8 review r1 #5).
+          if let self, let window, window === self.view.window, self.refocusPageWhenKey { self.refocusPageIfCardHoldsFocus() }
           self?.presentPending()
         }
       })
@@ -189,8 +192,18 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
                          userInfo: [.announcement: view.question.stringValue, .priority: NSAccessibilityPriorityLevel.high.rawValue])
   }
-  /// Focus left the prompt (a click into the page, another window became key): Return and
-  /// Escape go back to the page, so the prompt drops its key equivalents and default button.
+  /// The prompt lost first responder (a click into the page, another control): it drops its key
+  /// equivalents and default button. AppKit is still moving first responder (this runs inside
+  /// resignFirstResponder), so no responder or page focus changes here (bug sweep r8 review r1 #5).
+  private func focusLeftPrompt() {
+    guard view.hasKeyboard else { return }
+    view.hasKeyboard = false
+    if card == nil { view.window?.defaultButtonCell = nil }
+  }
+  /// Little Open's card gave up the keyboard while its window was not key.
+  private var refocusPageWhenKey = false
+  /// Another window became key: Return and Escape go back to the page, so the prompt drops its key
+  /// equivalents and default button.
   private func dropKeyboard() {
     guard view.hasKeyboard else { return }
     view.hasKeyboard = false
@@ -199,10 +212,16 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       window.defaultButtonCell = nil
       if window.firstResponder === view { window.makeFirstResponder(nil) }
     } else if window.firstResponder === view {
-      // Little Open's card: its view would keep swallowing Return and Escape (review round 2).
-      if let page = current?.page, owner?.pageChrome.isVisible(page) == true { page.focusPage() }
-      else { window.makeFirstResponder(nil) }
+      // Little Open's card: its view would keep swallowing Return and Escape (review round 2). A page
+      // in a window that is not key gets no focus now; it gets it when Little Open is key again.
+      if window.isKeyWindow { refocusPageIfCardHoldsFocus() } else { refocusPageWhenKey = true }
     }
+  }
+  private func refocusPageIfCardHoldsFocus() {
+    refocusPageWhenKey = false
+    guard card != nil, !view.hasKeyboard, let window = view.window, window.firstResponder === view else { return }
+    if let page = current?.page, owner?.pageChrome.isVisible(page) == true { page.focusPage() }
+    else { window.makeFirstResponder(nil) }
   }
   func visibilityChanged() {
     if let current {

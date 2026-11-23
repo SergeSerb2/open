@@ -57,9 +57,10 @@ final class ProfileTeardown {
 
   func unload(profileID: ProfileID) async throws {
     guard let directory = loaded[profileID], !unloaded.contains(profileID) else { return }
-    for session in app.littleOpenCoordinator?.sessions.filter({ $0.profileID == profileID }) ?? [] {
-      app.littleOpenCoordinator.close(sessionID: session.id, archiveReason: nil)
-    }
+    // No beforeunload and no exit fade: "Stay" or a fading window would keep a page browsing as the
+    // deleted Profile while its context goes (bug sweep r8, B-R6-02; review r1 #4).
+    app.closePopupPanels(ofProfileDirectory: directory)
+    app.littleOpenCoordinator?.closeForRemovedProfile(profileID)
     for controller in app.windowControllers where
       app.hostFactories[controller.windowID]?.incognitoSession?.parent.id == profileID {
       controller.window?.close()
