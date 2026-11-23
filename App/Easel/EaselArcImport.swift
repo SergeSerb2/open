@@ -49,6 +49,7 @@ extension EngineWebContentHostFactory {
     store.flush()
     scheduleSave()
     app.reshowEaselWindows()
+    app.easelsDidChange()
     return report
   }
 

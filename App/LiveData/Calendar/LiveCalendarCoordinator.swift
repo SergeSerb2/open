@@ -99,6 +99,9 @@ final class LiveCalendarCoordinator {
     guard isActive else { return }
     let calendar = app.calendar, now = calendar.now
     guard calendar.source.access == .granted else { stop(); return }
+    // The last calendar Favorite can go (removed, its window closed) with the timer armed: stop
+    // before asking EventKit for events nobody shows (bug sweep r6 CF-13).
+    guard hasLiveFavorite() else { stop(); return }
     let stale = lastFetch.map { now.timeIntervalSince($0) >= LiveCalendar.minFetchInterval || $0 > now } ?? true
     if (stale || fetchedGeneration != calendar.generation), !fetching {
       fetching = true

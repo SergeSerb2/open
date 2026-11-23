@@ -123,7 +123,7 @@ public struct LinkRuleSheet:View {
         AppPicker(bundleID:$draft.sourceBundleID)
         LinkIssues(issues:root.links.issues(replacing:draft).filter{$0.ruleID == draft.id})
         SettingsError(text:root.linksError)
-        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).disabled(root.links.issues(replacing:draft).contains(where:\.isError))}
+        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).disabled(root.links.issues(replacing:draft).contains{$0.ruleID == draft.id && $0.isError})}
     }.padding(24).frame(width:520,height:380).settingsSheet()}
 }
 private struct LinkIssues: View {

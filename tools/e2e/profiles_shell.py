@@ -734,7 +734,14 @@ def run(factory, results, tmp, api, defaults_before):
         original_local_state = local_state.read_bytes()
         boundary = []
 
-        def early(label, journal, local_bytes=None, expected=0):
+        set_aside = lambda: sorted((root / 'Profiles').glob('.pending-wipe.unreadable-*.json'))
+
+        def early(label, journal, local_bytes=None, expected=0, unreadable=False, kept=None):
+            # Bug sweep r7 Z-01: a bad cleanup input never stops the launch (exit 0, the engine-free
+            # launch quits by itself). An unreadable journal is set aside and deletes nothing; a bad
+            # Local State keeps the journaled names for a later launch.
+            for old in set_aside():
+                old.unlink()
             pending.write_bytes(journal)
             local_state.write_bytes(original_local_state if local_bytes is None else local_bytes)
             env = dict(os.environ, OPEN_USER_DATA=str(root), OPEN_E2E_OWNER_PID=str(os.getpid()),
@@ -742,7 +749,13 @@ def run(factory, results, tmp, api, defaults_before):
             run = subprocess.run([app.executable, '--skip-first-run', '--use-mock-keychain'], env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
             Path(tmp, 'profiles-boundary-' + label + '.log').write_bytes(run.stdout)
-            boundary.append({'name': label, 'exit': run.returncode, 'expected': expected})
+            entry = {'name': label, 'exit': run.returncode, 'expected': expected}
+            if unreadable:
+                entry['setAside'] = (not pending.exists() and len(set_aside()) == 1
+                                     and set_aside()[0].read_bytes() == journal)
+            if kept is not None:
+                entry['journalKept'] = pending.exists() and json.loads(pending.read_text()) == kept
+            boundary.append(entry)
 
         try:
             interrupted = 'Interrupted-Wipe'
@@ -762,25 +775,31 @@ def run(factory, results, tmp, api, defaults_before):
                 and interrupted not in cleaned.get('info_cache', {}) and cleaned.get('last_used') == 'Default'
                 and cleaned.get('last_active_profiles') == ['Default'] and not pending.exists())
             early('journal-at-64KiB', b'[]' + b' ' * (65536 - 2))
-            early('journal-over-64KiB', b'[]' + b' ' * (65537 - 2), expected=1)
+            early('journal-over-64KiB', b'[]' + b' ' * (65537 - 2), unreadable=True)
             early('names-at-1024', json.dumps(['P%04d' % n for n in range(1024)]).encode())
-            early('names-over-1024', json.dumps(['P%04d' % n for n in range(1025)]).encode(), expected=1)
+            early('names-over-1024', json.dumps(['P%04d' % n for n in range(1025)]).encode(), unreadable=True)
             early('name-at-255', json.dumps(['P' * 255]).encode())
-            early('name-over-255', json.dumps(['P' * 256]).encode(), expected=1)
+            early('name-over-255', json.dumps(['P' * 256]).encode(), unreadable=True)
             for label, value in [('default', ['Default']), ('path', ['../Default']), ('duplicate', ['A', 'A'])]:
-                early(label, json.dumps(value).encode(), expected=1)
-            early('trailing-JSON', b'["P"] {}', expected=1)
-            early('local-state-trailing-JSON', b'["P"]', original_local_state + b' {}', expected=1)
+                early(label, json.dumps(value).encode(), unreadable=True)
+            # The Default Profile's folder survives a journal that names it.
+            boundary[-3]['defaultKept'] = (root / 'Engine/Default').exists()
+            early('trailing-JSON', b'["P"] {}', unreadable=True)
+            early('local-state-trailing-JSON', b'["P"]', original_local_state + b' {}', kept=['P'])
             # Real launch parser, not an isolated JSON helper. Each allocation is bounded.
             small = json.dumps({'profile': {}, 'padding': ''}, separators=(',', ':')).encode()
             at_limit = small.replace(b'"padding":""', b'"padding":"' + b'x' * (16777216 - len(small)) + b'"')
             early('local-state-at-16MiB', b'["P"]', at_limit)
-            early('local-state-over-16MiB', b'["P"]', at_limit + b' ', expected=1)
+            early('local-state-over-16MiB', b'["P"]', at_limit + b' ', kept=['P'])
         finally:
             local_state.write_bytes(original_local_state)
             if pending.exists():
                 pending.unlink()
-        results['shell_cleanup_input_bounds'] = {'ok': all(row['exit'] == row['expected'] and row.get('cleanupComplete', True) for row in boundary), 'rows': boundary}
+            for old in set_aside():
+                old.unlink()
+        results['shell_cleanup_input_bounds'] = {'ok': all(row['exit'] == row['expected'] and row.get('cleanupComplete', True)
+                                                           and row.get('setAside', True) and row.get('journalKept', True)
+                                                           and row.get('defaultKept', True) for row in boundary), 'rows': boundary}
     finally:
         if app is not None:
             if not app.closed:

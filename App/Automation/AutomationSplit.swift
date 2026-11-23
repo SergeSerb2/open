@@ -35,9 +35,12 @@ extension AutomationController {
                      "layerRedrawPolicy": slot.layerContentsRedrawPolicy.rawValue,
                      "layerAnimations": slot.layer?.animationKeys() ?? [], "clipAnimations": slot.clipAnimationKeys,
                      "holdingPage": slot.isHoldingPage, "pageFrame": slot.contentHostView.map(frame) ?? [],
-                     "ring": !slot.focusRing.isHidden, "bar": slot.paneChrome != nil,
+                     "ring": !slot.focusRing.isHidden, "bar": slot.paneChrome != nil, "fullBleed": slot.fullBleed,
+                     "developerBar": slot.developerPanel != nil,
                      "host": container.host(for: slot.tabID) != nil]
-                }, "dividers": (0..<max(0, container.slots.count - 1)).compactMap { container.divider(at: $0).map(frame) }] as [String: Any]
+                }, "dividers": (0..<max(0, container.slots.count - 1)).compactMap { container.divider(at: $0).map(frame) },
+                "dividersHidden": (0..<max(0, container.slots.count - 1)).compactMap { container.divider(at: $0)?.isHidden },
+                "pageFullscreenTab": container.pageFullscreenTabID?.description ?? ""] as [String: Any]
         case "menu", "plus":
             guard let menu = args["op"] as? String == "plus" ? controller.sidebar.plusMenu() : split.menu() else { throw Failure(message: "no split menu") }
             guard let title = args["item"] as? String else {
@@ -298,6 +301,13 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
         draggingDestinationWindow = window; draggingSource = source; draggingLocation = point
         super.init()
         draggingPasteboard.setString(node, forType: .init("com.open.sidebar.node"))
+    }
+    /// An external drag of links or files (another app), with no sidebar node on its pasteboard.
+    init(window: NSWindow, point: NSPoint, urls: [URL]) {
+        draggingDestinationWindow = window; draggingSource = nil; draggingLocation = point
+        super.init()
+        draggingPasteboard.clearContents(); draggingPasteboard.writeObjects(urls.map { $0 as NSURL })
+        numberOfValidItemsForDrop = urls.count
     }
     func slideDraggedImage(to screenPoint: NSPoint) {}
     override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }

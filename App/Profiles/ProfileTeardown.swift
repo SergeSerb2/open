@@ -28,6 +28,10 @@ final class ProfileTeardown {
   unowned let app: AppDelegate
   private var loaded: [ProfileID: String] = [:]
   private var unloaded: Set<ProfileID> = []
+  /// Profiles whose delete reached the owners: their IDs are retired for the rest of this process.
+  /// A later import must not bring a Profile back under one of these IDs (bug sweep r7 Y-02).
+  private var retired: Set<ProfileID> = []
+  func isRetired(_ id: ProfileID) -> Bool { retired.contains(id) }
   private var owners: [WeakOwner] = []
   private struct WeakOwner { weak var owner: (any ProfileDataOwner)? }
   init(app: AppDelegate) { self.app = app }
@@ -96,6 +100,7 @@ final class ProfileTeardown {
     }
     // Registered App stores stop and drop dirty state before any folder goes.
     stage = "retireOwners"
+    retired.insert(profileID)
     await retireOwners(profileID: profileID, directory: directory)
     stage = "flushHistory"
     await app.stores.flushHistory()
@@ -131,7 +136,8 @@ final class ProfileTeardown {
   /// gone for `quiet`. Only then returns true. Returns false (the caller keeps the journal entry)
   /// when the folders had not stayed gone by `limit`, when a Profile uses the directory again, or
   /// when the task is cancelled. Throws the last removal error if one is still unresolved at `limit`.
-  /// The file work runs off the main actor; each pass tries every folder.
+  /// Each pass runs off the main actor, tries every folder, and moves each one aside with `discard`
+  /// (one rename; the renamed tree is deleted on the trash queue).
   func removeFoldersUntilSettled(_ directory: String, quiet: Duration = .milliseconds(750),
                                  limit: Duration = .seconds(5)) async throws -> Bool {
     let directories: ProfileDirectories = app.directories
@@ -170,9 +176,52 @@ final class ProfileTeardown {
     var present = false, failure: (any Error)?
     for folder in folders where FileManager.default.fileExists(atPath: folder.path) {
       present = true
-      do { try removeIfPresent(folder) } catch { failure = error }
+      do { try discard(folder) } catch { failure = error }
     }
     return (present, failure)
+  }
+
+  // MARK: Folder removal off the main thread (bug sweep r7 Z-04)
+
+  /// A deleted folder leaves its live path in one rename, to a hidden sibling on the same volume. A
+  /// utility task then deletes the renamed tree, so a large Chromium profile or cache (tens of
+  /// thousands of files) never stalls the main thread or the launch. A tree left behind (a quit or an
+  /// error during the delete) is removed again by `sweepTrash` at the next launch.
+  nonisolated static let trashPrefix = ".open-trash-"
+  nonisolated private static func discard(_ url: URL) throws {
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    let parent = url.deletingLastPathComponent()
+    let trash = parent.appendingPathComponent(trashPrefix + UUID().uuidString, isDirectory: true)
+    try FileManager.default.moveItem(at: url, to: trash)
+    try sync(parent)
+    purge([trash])
+  }
+  /// Every trash removal and the launch sweep run on this one serial queue, so the sweep never walks a
+  /// tree that a delete is still removing (review r1 of #670).
+  nonisolated private static let trashQueue = DispatchQueue(label: "open.profile-trash", qos: .utility)
+  nonisolated private static func purge(_ urls: [URL]) {
+    guard !urls.isEmpty else { return }
+    trashQueue.async {
+      for url in urls {
+        do { try FileManager.default.removeItem(at: url) }
+        catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError {}
+        catch { FileHandle.standardError.write(Data("Open: deleted Profile data left in \(url.path): \(error)\n".utf8)) }
+      }
+    }
+  }
+  /// Launch: deletes trees that an earlier delete renamed but did not finish removing. The listing
+  /// and the delete run on a utility task, never before the first window.
+  nonisolated static func sweepTrash(directories: ProfileDirectories) {
+    let parents = [directories.root.appendingPathComponent("Profiles", isDirectory: true), directories.engineRoot,
+                   ProfileDirectories.chromiumCacheDirectory(forProfile: directories.engineRoot)]
+    trashQueue.async {
+      var found: [URL] = []
+      for parent in Set(parents.map(\.standardizedFileURL)) {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: parent.path) else { continue }
+        found += names.filter { $0.hasPrefix(trashPrefix) }.map { parent.appendingPathComponent($0, isDirectory: true) }
+      }
+      purge(found)  // queued behind this block on the same serial queue
+    }
   }
 
   private static func pendingURL(_ directories: ProfileDirectories) -> URL {
@@ -238,8 +287,8 @@ final class ProfileTeardown {
   private static func wipeEngine(_ directory: String, directories: ProfileDirectories) throws {
     let engine = directories.engineDirectory(dataDirectoryName:directory)
     let cache = directories.engineCacheDirectory(dataDirectoryName:directory)
-    if cache != engine { try removeIfPresent(cache) }
-    try removeIfPresent(engine)
+    if cache != engine { try discard(cache) }
+    try discard(engine)
   }
 
   // MARK: Orphans of an undone import (audit A7)
@@ -286,11 +335,12 @@ final class ProfileTeardown {
   #endif
   /// Launch, after the snapshot loaded and before OEEngine.start: wipe every journaled folder that no Profile
   /// of the loaded model uses (folders, engine data, Local State entries), through the pending-wipe journal.
+  /// A folder that cannot be removed now stays in the pending-wipe journal for a later launch.
   static func finishOrphanWipes(directories: ProfileDirectories, inUse: Set<String>) throws {
     let names = try orphans(directories)
     guard !names.isEmpty else { return }
     for name in names where !inUse.contains(name.lowercased()) { try enqueue(name, directories: directories) }
-    try finishPendingWipes(directories: directories, inUse: inUse)
+    finishPendingWipes(directories: directories, inUse: inUse)
     try writeOrphans([], directories: directories)
   }
 
@@ -298,38 +348,75 @@ final class ProfileTeardown {
   /// `inUse` (lowercased folder names of the loaded model's Profiles): a journaled folder that a loaded
   /// Profile still uses is kept and leaves the journal. Its deletion never reached the snapshot, so the
   /// Profile is back with its data rather than back and empty.
-  static func finishPendingWipes(directories: ProfileDirectories, inUse: Set<String>) throws {
-    let journaled = try pending(directories)
+  ///
+  /// Never throws and never stops the launch (bug sweep r7 Z-01): the Profiles named here are no longer
+  /// in the loaded model, so the engine never loads their folders. A name whose folders cannot be
+  /// removed (a locked file, EPERM) stays in the journal and the other names go on. The Local State
+  /// entries are removed only for the names whose folders went; when that edit fails, those names stay
+  /// journaled too (their folder removal repeats as a no-op). An unreadable journal is set aside, and
+  /// no folder is deleted on its word.
+  static func finishPendingWipes(directories: ProfileDirectories, inUse: Set<String>) {
+    let journaled: [String]
+    do { journaled = try pending(directories) }
+    catch {
+      let url = pendingURL(directories)
+      let kept = url.deletingLastPathComponent().appendingPathComponent(
+        ".pending-wipe.unreadable-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json")
+      do {
+        try FileManager.default.moveItem(at: url, to: kept)
+        log("Profile cleanup list unreadable (kept as \(kept.lastPathComponent)); no folder deleted: \(error)")
+      } catch let move {
+        log("Profile cleanup list unreadable and not set aside (\(move)); no folder deleted: \(error)")
+      }
+      return
+    }
     guard !journaled.isEmpty else { return }
     let names = journaled.filter { !inUse.contains($0.lowercased()) }
     if names.count != journaled.count {
-      let kept = journaled.filter { inUse.contains($0.lowercased()) }
-      FileHandle.standardError.write(Data("Open: kept \(kept.count) Profile folder(s) whose deletion was not saved\n".utf8))
-      if names.isEmpty { try removeIfPresent(pendingURL(directories)); return }
-      try writeAtomically(JSONEncoder().encode(names), to: pendingURL(directories))
+      log("kept \(journaled.count - names.count) Profile folder(s) whose deletion was not saved")
     }
+    var removed: [String] = [], remaining: Set<String> = []
     for name in names {
       // The process may have stopped between journaling and the immediate wipe.
-      try removeIfPresent(directories.profileDirectory(dataDirectoryName:name))
-      try wipeEngine(name,directories:directories)
+      do {
+        try discard(directories.profileDirectory(dataDirectoryName:name))
+        try wipeEngine(name,directories:directories)
+        removed.append(name)
+      } catch {
+        remaining.insert(name)
+        log("Profile folder \(name) could not be deleted now; retried at the next launch: \(error)")
+      }
     }
+    if !removed.isEmpty {
+      do { try removeLocalStateEntries(removed, directories: directories) }
+      catch {
+        remaining.formUnion(removed)
+        log("Engine Local State not cleaned for \(removed.count) deleted Profile(s); retried at the next launch: \(error)")
+      }
+    }
+    do {
+      let left = names.filter(remaining.contains)
+      if left.isEmpty { try removeIfPresent(pendingURL(directories)) }
+      else { try writeAtomically(JSONEncoder().encode(left), to: pendingURL(directories)) }
+    } catch { log("Profile cleanup list not updated: \(error)") }
+  }
+  private static func log(_ line: String) { FileHandle.standardError.write(Data("Open: \(line)\n".utf8)) }
+  private static func removeLocalStateEntries(_ names: [String], directories: ProfileDirectories) throws {
     let url = directories.engineRoot.appendingPathComponent("Local State")
-    if FileManager.default.fileExists(atPath:url.path) {
-      // A 16 MiB Local State cap bounds decoding at approximately 384 MiB at
-      // 24x expansion; no single allocation approaches PartitionAlloc's 2 GiB.
-      guard var state = try JSONSerialization.jsonObject(with:boundedData(url,maximum:16_777_216)) as? [String:Any] else {
-        throw failure("Engine Local State is not a JSON object.")
-      }
-      if var profile = state["profile"] as? [String:Any] {
-        if var cache = profile["info_cache"] as? [String:Any] {
-          for name in names { cache.removeValue(forKey:name) }; profile["info_cache"] = cache
-        }
-        if let last = profile["last_used"] as? String, names.contains(last) { profile["last_used"] = "Default" }
-        if let active = profile["last_active_profiles"] as? [String] { profile["last_active_profiles"] = active.filter { !names.contains($0) } }
-        state["profile"] = profile
-      }
-      try writeAtomically(JSONSerialization.data(withJSONObject:state,options:[.sortedKeys]),to:url)
+    guard FileManager.default.fileExists(atPath:url.path) else { return }
+    // A 16 MiB Local State cap bounds decoding at approximately 384 MiB at
+    // 24x expansion; no single allocation approaches PartitionAlloc's 2 GiB.
+    guard var state = try JSONSerialization.jsonObject(with:boundedData(url,maximum:16_777_216)) as? [String:Any] else {
+      throw failure("Engine Local State is not a JSON object.")
     }
-    try removeIfPresent(pendingURL(directories))
+    if var profile = state["profile"] as? [String:Any] {
+      if var cache = profile["info_cache"] as? [String:Any] {
+        for name in names { cache.removeValue(forKey:name) }; profile["info_cache"] = cache
+      }
+      if let last = profile["last_used"] as? String, names.contains(last) { profile["last_used"] = "Default" }
+      if let active = profile["last_active_profiles"] as? [String] { profile["last_active_profiles"] = active.filter { !names.contains($0) } }
+      state["profile"] = profile
+    }
+    try writeAtomically(JSONSerialization.data(withJSONObject:state,options:[.sortedKeys]),to:url)
   }
 }

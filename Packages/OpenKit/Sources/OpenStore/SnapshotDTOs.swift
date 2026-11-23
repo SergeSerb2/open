@@ -324,24 +324,31 @@ public enum SnapshotMapper {
         return model
     }
 
-    /// A damaged snapshot can repeat an ID. The first Profile or Space with an ID wins and later
-    /// ones are dropped. A repeated node ID: a tab identical to the first one is dropped, any
-    /// other node (a different tab, a folder or a split) keeps its contents under a fresh ID.
+    /// A damaged snapshot can repeat an ID. The first Profile with an ID wins and later ones are
+    /// dropped. A repeated Space ID: a Space identical to the first one is dropped, a different one
+    /// keeps its tabs under a fresh ID (bug sweep r7 Z-08). A repeated node ID: a tab identical to the
+    /// first one is dropped, any other node (a different tab, a folder or a split) keeps its contents
+    /// under a fresh ID. The App keeps a copy of the file before it saves the repaired model.
     static func removingDuplicateIDs(_ input: SnapshotFileDTO) -> (SnapshotFileDTO, [String]) {
         var dto = input, repairs: [String] = []
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         func key(_ id: String) -> String? { UUID(uuidString: id)?.uuidString }
-        var profileIDs = Set<String>(), spaceIDs = Set<String>()
+        func fresh() -> String { UUID().uuidString }
+        var profileIDs = Set<String>(), spaceBodies: [String: Data] = [:]
         dto.profiles = dto.profiles.filter { profile in
             guard let id = key(profile.id), !profileIDs.insert(id).inserted else { return true }
             repairs.append("dropped duplicate Profile \(id)"); return false
         }
-        dto.spaces = dto.spaces.filter { space in
-            guard let id = key(space.id), !spaceIDs.insert(id).inserted else { return true }
-            repairs.append("dropped duplicate Space \(id)"); return false
+        dto.spaces = dto.spaces.compactMap { space in
+            guard let id = key(space.id) else { return space }
+            let body = (try? encoder.encode(space)) ?? Data()
+            guard let first = spaceBodies[id] else { spaceBodies[id] = body; return space }
+            if first == body { repairs.append("dropped duplicate Space \(id)"); return nil }
+            var kept = space; kept.id = fresh(); spaceBodies[key(kept.id)!] = body
+            repairs.append("gave Space \(id) a new ID \(kept.id)")
+            return kept
         }
         var seen: [String: Data] = [:]
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        func fresh() -> String { UUID().uuidString }
         func tab(_ tab: TabDTO) -> TabDTO? {
             var tab = tab
             let body = (try? encoder.encode(tab)) ?? Data()

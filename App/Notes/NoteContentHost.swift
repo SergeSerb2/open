@@ -52,6 +52,8 @@ final class NoteContentHost: WebContentHost {
   static func noteDidChange(_ noteID: UUID, store: NoteStore, except source: NoteContentHost? = nil, titleChanged: Bool) {
     for host in open(noteID: noteID) where host !== source { host.reloadFromStore() }
     guard titleChanged, let app = NSApp.delegate as? AppDelegate, !store.isUnreadable(noteID) else { return }
+    // The editing row already has the new title (one row: nothing below changes), so post here (review r2 #2).
+    app.easelsDidChange()
     let note = store.document(noteID)
     let title = note.title.isEmpty ? NoteTab.untitled : note.title
     var models = Set<ObjectIdentifier>(), changed = false

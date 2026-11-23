@@ -83,7 +83,8 @@ final class AppLibrarySession {
     await panel.prepareFirstScreen()
   }
   func cancelIdleWork() { panel?.cancelIdleWork() }
-  func close() {
+  /// `animated: false` closes at once; `restoresFocus: false` leaves the keyboard to the caller.
+  func close(animated: Bool = true, restoresFocus: Bool = true) {
     guard let controller, controller.isLibraryOpen else { return }
     // Whether keyboard focus is in Library now (a field editor counts as its text field).
     let focusInLibrary: Bool = {
@@ -94,12 +95,12 @@ final class AppLibrarySession {
     }()
     if controller.hasPeekController { controller.peekController.closeLibraryPreviews() }
     panel?.isPresented = false
-    controller.dismissLibraryPanel()
+    controller.dismissLibraryPanel(animated: animated)
     panel?.onIdleRefresh?()
     // Hand focus back to the page only when Library held it and nothing else (Command Bar, a sheet,
     // Space Creation, a Peek, another window) took it. The hidden search field kept it before, and
     // keys went there instead of the page.
-    if focusInLibrary, let window = controller.window, window.isKeyWindow, window.attachedSheet == nil,
+    if restoresFocus, focusInLibrary, let window = controller.window, window.isKeyWindow, window.attachedSheet == nil,
        !controller.isCommandBarPresented, controller.spaceCreationController == nil,
        !(controller.hasPeekController && controller.peekController.isShown) {
       if !controller.container.focusCurrentContent() { window.makeFirstResponder(nil) }

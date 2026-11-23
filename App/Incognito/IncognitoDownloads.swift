@@ -12,6 +12,8 @@ final class IncognitoDownloads {
   /// Bumped by reset(): a choice that started for the previous private context ends without
   /// a reservation or a sheet (review r1 of #651).
   private var generation = 0
+  /// A destination sheet is open (the transfer waits for it).
+  var hasOpenChoices: Bool { !choices.isEmpty }
   func decide(_ download: OEDownload, filename: String, directory: URL?, profile: Profile?, window: NSWindow?,
               completion: @escaping @MainActor (URL?) -> Void) {
     guard !closed else { completion(nil); return }

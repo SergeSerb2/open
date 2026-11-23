@@ -66,7 +66,8 @@ extension HistoryStore {
               last_visit = COALESCE((SELECT MAX(time) FROM visits WHERE visits.url_id = urls.id), 0)
             WHERE urls.id = ?;
             """,
-            "UPDATE urls SET title = ? WHERE url = ? AND ? <> '' AND title <> ?",
+            // An older imported visit must not replace the title of a newer visit (bug sweep r7 Y-05).
+            "UPDATE urls SET title = ? WHERE url = ? AND ? <> '' AND title <> ? AND (title = '' OR last_visit <= ?)",
         ]
         var statements: [OpaquePointer] = []
         defer { for statement in statements { sqlite3_finalize(statement) } }
@@ -85,12 +86,18 @@ extension HistoryStore {
 
         var orderedURLs: [String] = []
         var titles: [String: String] = [:]
+        // The time of the visit whose title is kept: the newest visit with a title (review r1 #3).
+        // A newer untitled visit must not let an older title pass the time check below.
+        var titleTimes: [String: Double] = [:]
         for visit in visits {
+            let time = visit.time.timeIntervalSince1970
             if titles[visit.urlString] == nil {
                 orderedURLs.append(visit.urlString)
                 titles[visit.urlString] = visit.title
-            } else if !visit.title.isEmpty {
+                if !visit.title.isEmpty { titleTimes[visit.urlString] = time }
+            } else if !visit.title.isEmpty, time >= titleTimes[visit.urlString] ?? -.infinity {
                 titles[visit.urlString] = visit.title
+                titleTimes[visit.urlString] = time
             }
         }
         var urlIDs: [String: Int64] = [:]
@@ -111,8 +118,11 @@ extension HistoryStore {
             if !created, let title = titles[url], !title.isEmpty, title != previousTitle {
                 let update = statements[5]
                 guard text(update, 1, title), text(update, 2, url), text(update, 3, title), text(update, 4, title),
-                      sqlite3_step(update) == SQLITE_DONE, reset(update) else { return .init() }
-                titleChanges.append(.init(urlID: id, previous: previousTitle, imported: title))
+                      sqlite3_bind_double(update, 5, titleTimes[url] ?? 0) == SQLITE_OK,
+                      sqlite3_step(update) == SQLITE_DONE else { return .init() }
+                let changed = db.changes == 1
+                guard reset(update) else { return .init() }
+                if changed { titleChanges.append(.init(urlID: id, previous: previousTitle, imported: title)) }
             }
         }
 

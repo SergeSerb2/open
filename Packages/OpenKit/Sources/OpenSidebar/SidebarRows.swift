@@ -1275,7 +1275,7 @@ final class DividerCellView: SidebarCellView {
         lastPointerLocation = point
         pointerOnClear = showsClear && clearRect.contains(point)
         if pointerOnClear, let page {
-            TooltipController.shared.schedule(Tooltip(title: clearTooltipTitle, keys: ["⇧", "⌘", "K"], style: page.style), for: self)
+            TooltipController.shared.schedule(Tooltip(title: clearTooltipTitle, keys: page.context.keys("clear-unpinned-tabs", default: ["⇧", "⌘", "K"]), style: page.style), for: self)
         } else { TooltipController.shared.cancel(for: self) }
     }
 

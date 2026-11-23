@@ -31,11 +31,18 @@ final class ToolbarView: NSView {
             b.tooltip = tip
             addSubview(b)
         }
-        setup(toggle, .sidebarToggle) { Tooltip(title: "Hide sidebar", keys: ["⌘", "S"], style: style()) }
-        setup(back, .back) { Tooltip(title: "Go back", keys: ["⌘", "["], style: style()) }
-        setup(forward, .forward) { Tooltip(title: "Go forward", keys: ["⌘", "]"], style: style()) }
+        // The keys in effect after a rebind, read at each show (bug sweep r7 AB-07).
+        setup(toggle, .sidebarToggle) { [unowned context] in
+            Tooltip(title: "Hide sidebar", keys: context.keys("toggle-sidebar", default: ["⌘", "S"]), style: style())
+        }
+        setup(back, .back) { [unowned context] in Tooltip(title: "Go back", keys: context.keys("go-back", default: ["⌘", "["]), style: style()) }
+        setup(forward, .forward) { [unowned context] in
+            Tooltip(title: "Go forward", keys: context.keys("go-forward", default: ["⌘", "]"]), style: style())
+        }
         setup(reload, .reload) { [unowned context] in
-            Tooltip(title: context.pageIsLoading ? "Stop loading" : "Reload this page", keys: ["⌘", "R"], style: style())
+            // Stop is ⌘. while a page loads, not Reload's ⌘R.
+            context.pageIsLoading ? Tooltip(title: "Stop loading", keys: context.keys("stop-loading", default: ["⌘", "."]), style: style())
+                : Tooltip(title: "Reload this page", keys: context.keys("reload", default: ["⌘", "R"]), style: style())
         }
         toggle.action = { [unowned context] in context.send(.toggleSidebar) }
         back.action = { [unowned context] in context.send(.goBack) }
@@ -74,9 +81,10 @@ final class ToolbarView: NSView {
     func moreRows() -> [ToolbarMorePopover.Row] {
         let loading = context.pageIsLoading
         return [
-            .init(icon: loading ? .stop : .reload, title: loading ? "Stop Loading" : "Reload", shortcut: loading ? "⌘." : "⌘R",
+            .init(icon: loading ? .stop : .reload, title: loading ? "Stop Loading" : "Reload",
+                  shortcut: loading ? context.keys("stop-loading", default: ["⌘", "."]).joined() : context.keys("reload", default: ["⌘", "R"]).joined(),
                   isEnabled: context.hasPage) { [unowned context] in context.send(context.pageIsLoading ? .stopLoading : .reload) },
-            .init(icon: .sidebar, title: "Toggle Sidebar", shortcut: "⌘S", isEnabled: true) { [unowned context] in
+            .init(icon: .sidebar, title: "Toggle Sidebar", shortcut: context.keys("toggle-sidebar", default: ["⌘", "S"]).joined(), isEnabled: true) { [unowned context] in
                 context.send(.toggleSidebar)
             },
         ]
@@ -350,7 +358,7 @@ final class URLFieldView: NSView {
         let a = URLFieldMetrics.accessorySize
         siteControls.frame = CGRect(x: bounds.width + ox - URLFieldMetrics.siteControlsTrailing - a, y: URLFieldMetrics.accessoryY - oy, width: a, height: a)
         copyLink.frame = siteControls.frame.offsetBy(dx: -URLFieldMetrics.accessoryPitch, dy: 0)
-        copyLink.isHidden = !hasPage || !showAccessories
+        copyLink.isHidden = !hasPage || !showAccessories || context.pageIsNote
         siteControls.isHidden = !hasPage || !siteControlsAvailable || !(showAccessories || siteControlState.isOpen)
         siteControlGlyph.frame = siteControls.bounds
         if showAccessories || siteControlState.isOpen {

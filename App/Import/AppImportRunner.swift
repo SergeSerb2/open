@@ -19,6 +19,8 @@ final class AppImportRunner: ProfileDataOwner {
   var secretsFixtureInProgress = false
   var retiredSecretsProfiles = Set<ProfileID>()
   var retiredSecretsDirectories = Set<String>()
+  /// Arc source Profile ID → the new ID that replaced it after an in-session delete (bug sweep r7 Y-02).
+  var retiredProfileReplacements: [ProfileID: ProfileID] = [:]
   var secretsSinks: [ProfileID: AppSecretsImportSink] = [:]
   var secretsTask: Task<ArcSecretsImportReport, any Error>?
   var secretsTaskProfiles = Set<ProfileID>()
@@ -245,6 +247,13 @@ final class AppImportRunner: ProfileDataOwner {
         if profile.id == imported.sourceDefaultProfileID, let live = app.model.defaultProfile {
           profileMapping[profile.id] = live.id
         } else if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
+        else if app.profileTeardown.isRetired(profile.id) {
+          // A Profile deleted in this session keeps its ID in every App store's retired set.
+          // Give the re-import a new ID, and reuse it on later imports (bug sweep r7 Y-02).
+          let replacement = retiredProfileReplacements[profile.id].flatMap { app.profileTeardown.isRetired($0) ? nil : $0 } ?? ProfileID()
+          retiredProfileReplacements[profile.id] = replacement
+          profileMapping[profile.id] = replacement
+        }
       }
     }
     func mapExtensions() {
@@ -284,8 +293,7 @@ final class AppImportRunner: ProfileDataOwner {
         counts["Splits"] = report.splits
         counts["Imported tabs"] = report.importedTabNodes
         counts[ImportOutcomeKeys.tabs] = report.importedTabNodes
-        // A fallback Profile in an empty source is not imported data.
-        if plan.searchSettings && hasSidebarData { counts["Search settings"] = imported.model.profiles.count }
+        // Arc's search engine is not read (bug sweep r7 Y-01), so no search settings are imported.
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
@@ -331,7 +339,9 @@ final class AppImportRunner: ProfileDataOwner {
         let beforeProfiles = app.model.profiles.count, beforeRules = app.model.routingRules.count
         let merged = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings,
+          // Arc's search engine is not read: the source Profiles carry only default settings.
+          // Applying them would reset each mapped Profile to Google and drop its custom engines (bug sweep r7 Y-01).
+          searchSettings: false,
           profiles: plan.archive || plan.history || plan.boosts || (plan.secretsConsented && canImportPasswordsAndCookies),
           archivedIDsByProfile: archivedIDs,
           importedAt: Date(), saving: {
@@ -353,13 +363,15 @@ final class AppImportRunner: ProfileDataOwner {
       }
     }
     // Arc Notes: write the document of every Note tab that landed. An existing Note
-    // file (an earlier import the user may have edited) is never replaced.
-    if plan.spaces && plan.tabs && !imported.notes.isEmpty {
+    // file (an earlier import the user may have edited) is never replaced. Note tabs also
+    // land without Spaces (into a Space that exists already) and as Favorites (bug sweep r6 CF-04).
+    if (plan.tabs || plan.favorites) && !imported.notes.isEmpty {
       let landed = Set(app.model.allTabsForNotes().compactMap { NoteLink.id(from: $0.url) })
       var written = 0
       for note in imported.notes where landed.contains(note.id) { if app.notes.importIfAbsent(note) { written += 1 } }
       counts["Notes"] = report.importedNotes; counts["Note placeholders"] = report.notePlaceholders
       counts["Notes written"] = written
+      if written > 0 { app.easelsDidChange() }  // review r1 #4
     }
     // Resolve metadata only after the live model has landed. Destination
     // directory collision suffixes must never be used to read the Arc source.
@@ -420,7 +432,9 @@ final class AppImportRunner: ProfileDataOwner {
         }
         do {
           try app.directories.ensureProfileDirectories(for: profile)
-          let store = ArchiveStore(fileURL: app.directories.archiveFileURL(for: profile))
+          // The App's own store per Profile (bug sweep r6 CF-03): an open Library ▸ Archive sees the rows,
+          // Profile deletion closes the same handle, and quit flushes its queue.
+          let store = app.archiveSink.store(for: profile.id)
           let mapped = records.map { record in
             var row = record
             // Existing Space profile assignments are authoritative on re-import.
@@ -430,10 +444,10 @@ final class AppImportRunner: ProfileDataOwner {
           // Route each record by its actual target Profile, including reassigned Spaces.
           for (id, batch) in Dictionary(grouping: mapped, by: \.profileID) {
             let destination = id.flatMap { app.model.profile(id: $0) } ?? profile
-            let sink = destination.id == profile.id ? store : ArchiveStore(fileURL: app.directories.archiveFileURL(for: destination))
+            let sink = destination.id == profile.id ? store : app.archiveSink.store(for: destination.id)
             guard !undo.cancelled else { break }
             let write = try await sink.importRecordsWithUndo(batch)
-            undo.append(archive: sink, records: write.undo)
+            undo.append(archive: destination.id, records: write.undo)
             counts[ImportOutcomeKeys.archive, default: 0] += write.inserted
             counts["Archive duplicates", default: 0] += write.duplicates
             counts["Duplicates", default: 0] += write.duplicates
