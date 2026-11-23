@@ -95,7 +95,8 @@ import ImageIO
   override func layout() {
     super.layout(); scene.frame = bounds; room.frame = bounds
     readyCard.frame = cardRect
-    favoriteMiniature.frame = CGRect(x: 44,y: bounds.height*0.12,width: 480,height: 544)
+    // 12 pt above the old 12% line keeps a clear gap over the page dots on the footer line.
+    favoriteMiniature.frame = CGRect(x: 44,y: bounds.height*0.12+12,width: 480,height: 544)
     // The dots share the footer's centre line (72 pt above the bottom) and the miniature's left edge.
     progress.frame = CGRect(x: 44,y: 69,width: 104,height: 6)
     progress.selected = ["name","import","favorites","theme","blocker","defaultBrowser","ready"].firstIndex(of: step) ?? 0

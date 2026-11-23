@@ -666,7 +666,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       } else { tinted = image.withSymbolConfiguration(.init(paletteColors: [usesLightInk || prominent ? .white:.labelColor])) ?? image }
       tinted.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: (isEnabled ? 1:0.4)*(circular ? 0.9:1))
     }
-    else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: (prominent ? NSColor.white : outlined || pill || (quiet && hovered) ? NSColor.labelColor : NSColor.secondaryLabelColor).withAlphaComponent(isEnabled ? 1:0.45), .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
+    else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: { let ink = prominent ? NSColor.white : outlined || pill || (quiet && hovered) ? NSColor.labelColor : NSColor.secondaryLabelColor; return isEnabled ? ink:ink.withAlphaComponent(0.4) }(), .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
     if window?.firstResponder === self {
       let radius = outlined ? 5:circular ? (bounds.height-4)/2:min(18,(bounds.height-4)/2)
       Self.primaryBlue.withAlphaComponent(0.65).setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: radius, yRadius: radius); path.lineWidth = 2; path.stroke()
