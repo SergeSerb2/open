@@ -358,6 +358,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onSpaceCreationIcon = { [weak self] current, anchor, onPick in
       self?.openDraftSpaceIconPicker(current: current, anchor: anchor, onPick: onPick)
     }
+    controller.onLibraryCloseRequest = { [weak self] in
+      guard let self else { return }
+      // Space Creation lays out the sidebar next and takes the keyboard: no close animation under it,
+      // and no page focus first (review of #669 #5).
+      self.app.settingsPresenter.librarySessions[self.windowState.id]?.close(animated: false, restoresFocus: false)
+      self.app.scheduleMenuRebuild()
+    }
     controller.onExitPageFullscreen = { [weak self] in
       // The fullscreen page can be an unfocused Split pane.
       guard let page = self?.fullscreenPage ?? self?.selectedContent else { return false }
@@ -1045,11 +1052,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)
     let content = makeContent(for: tab, url: nil, requestContext: request.context); focus(space: space); select(nodeID: tab.id); return content
   }
-  func focus(space: Space) {
+  /// `focusPage: false` keeps the keyboard where it is (an editor panel opened for this Space).
+  func focus(space: Space, focusPage: Bool = true) {
     if let id = iconPickerSpaceID, id != space.id { iconPicker?.close() }
     controller?.existingTabSwitcher?.cancel()
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
-    controller?.dismissSidebarReveal(); showSelection(); scheduleSave()
+    controller?.dismissSidebarReveal(); showSelection(focus: focusPage); scheduleSave()
     // Live Folder refresh on Space focus (live-data §2.5; throttled 10 s in the service).
     if !isIncognito, model.liveFolder(in: space.id) != nil { app.liveFolders.spaceFocused(space.id) }
   }
@@ -1252,7 +1260,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
     case .editSpaceTheme(let id):
-      iconPicker?.close(); return controller?.editSpaceTheme(id) == true
+      iconPicker?.close()
+      let previous = focusedSpace?.id
+      guard controller?.editSpaceTheme(id) == true else { return false }
+      // Another Space: the controller switched only the model (it keeps an open editor and
+      // retargets it). Finish the switch on the window's own focus path, or the window title, the
+      // extensions' active tab and the menus keep the previous Space's tab (bug sweep r7 W-01).
+      // The page behind must not take the keyboard from the editor (review of #669 #4).
+      if previous != id, let space = model.space(id: id) { focus(space: space, focusPage: false) }
+      return true
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true

@@ -354,16 +354,28 @@ public enum MenuBuilder {
             menu.addItem(.separator())
             for (index, space) in spaces.enumerated() {
                 let number = index + 1
+                // The Go to Space N binding as Settings ▸ Shortcuts set it (default ⌃N). A fixed ⌃N
+                // kept working, and kept showing, after the user changed or removed it (bug sweep r7 W-04).
+                let shortcuts = number <= 9 ? CommandRegistry.byID["go-to-space-\(number)"].map { overrides.effectiveShortcuts(for: $0) } ?? [] : []
+                let shortcut = shortcuts.first
                 let dynamic = NSMenuItem(
                     title: space.title,
                     action: #selector(MenuCommandTarget.openCommandAction(_:)),
-                    keyEquivalent: number <= 9 ? String(number) : ""
+                    keyEquivalent: shortcut?.keyEquivalent ?? ""
                 )
                 dynamic.target = target
-                dynamic.keyEquivalentModifierMask = [.control]
+                dynamic.keyEquivalentModifierMask = shortcut?.keyEquivalentModifierMask ?? []
                 dynamic.representedObject = ["command": "go-to-space-\(min(number, 9))", "payload": space.id]
                 dynamic.identifier = NSUserInterfaceItemIdentifier("dynamic-space-\(space.id)")
                 menu.addItem(dynamic)
+                // Further bindings: hidden carriers, as `carriers` adds for the other commands (review of #669 #7).
+                for extra in shortcuts.dropFirst() {
+                    let carrier = NSMenuItem(title: space.title, action: dynamic.action, keyEquivalent: extra.keyEquivalent)
+                    carrier.target = target; carrier.keyEquivalentModifierMask = extra.keyEquivalentModifierMask
+                    carrier.representedObject = dynamic.representedObject
+                    carrier.isHidden = true; carrier.allowsKeyEquivalentWhenHidden = true
+                    menu.addItem(carrier)
+                }
             }
         }
         menu.addItem(.separator())
