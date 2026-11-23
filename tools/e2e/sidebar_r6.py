@@ -125,3 +125,102 @@ def _rows(app, results, wait_until, tmp):
     restored = wait_until(lambda: any(t['id'] == closed for t in app.call('tabs')), timeout=5, step=.1)
     check('r6_restore_last_closed_skips_auto_archive', sweep.get('archivedCount', 0) > 0 and auto_first and restored,
           archivedCount=sweep.get('archivedCount'), archiveTop=[(r['title'], r['reason']) for r in rows[:4]], restored=bool(restored))
+
+    _r8_rows(app, results, wait_until, tmp, window, b, target or 'R6 B', opened, state, check, settle)
+
+
+ARM = '<button id=arm onclick="onbeforeunload=e=>{e.preventDefault();e.returnValue=1}">Arm</button>'
+
+
+def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, check, settle):
+    """Bug sweep r8 (REGR8B) rows. Favorites stay empty until the last row adds one."""
+    def guarded(name, body, cleanup=None):
+        try: body()
+        except Exception as error:  # A failed setup is a FAIL row, never a skipped one.
+            check(name, False, error=repr(error))
+        finally:
+            try:
+                if cleanup: cleanup()
+            except Exception as error:
+                print('sidebar r8 cleanup after %s: %r' % (name, error), flush=True)
+    def title_of(w): return next((x['title'] for x in app.call('shell-windows') if x['id'] == w), None)
+    def section(name): return [t['id'] for t in app.call('tabs') if t.get('section') == name]
+    def answer_dialogs():
+        for _ in range(3):
+            if not app.call('dialog-state').get('pending'): break
+            app.call('dialog-button', accept=True); settle()
+
+    # B-R6-08: moving a Space's only tab to another Space leaves no tab here: the window title
+    # follows (it kept the moved tab's title).
+    solo_space = app.call('space-create', title='R8 Solo'); app.call('space', space=solo_space); settle()
+    solo = opened('Solo')
+    def move_last_tab():
+        app.call('select', tab=solo); settle()
+        favorites, others = section('favorites'), [t for t in section('today') + section('pinned') if t != solo]
+        before = title_of(window)
+        app.call('sidebar-menu', node=solo, item='Move to/' + target); settle()
+        after = state(); title = title_of(window)
+        check('r8_move_last_tab_out_updates_title', not favorites and not others and before == 'R6 Solo'
+              and after['space'] == solo_space and after['selected'] == '' and title == 'Open',
+              favorites=favorites, others=others, titleBefore=before, title=title,
+              state={k: after[k] for k in ('space', 'selected', 'shownPages')}, solo=solo)
+        # Control: Undo brings the tab back selected (the Space keeps its last selection), with its title.
+        app.call('key', key='z', modifiers=['command'], route='app'); settle()
+        undone = state(); title = title_of(window); back = section('today')
+        check('r8_move_last_tab_undo_reselects', undone['space'] == solo_space and undone['selected'] == solo and title == 'R6 Solo',
+              state={k: undone[k] for k in ('space', 'selected', 'shownPages')}, title=title, solo=solo, today=back,
+              undo=app.call('undo-state'))
+    guarded('r8_move_last_tab_out_updates_title', move_last_tab)
+
+    # B-R6-10: Clear Unpinned Tabs waits for a page's beforeunload. When Today is already empty by
+    # Leave (the tab was pinned meanwhile, as from a second window), nothing was cleared: no
+    # "Cleared Tabs" toast, whose Undo would undo that pin.
+    clear_space = app.call('space-create', title='R8 Clear'); app.call('space', space=clear_space); settle()
+    page = Path(tmp) / 'r8-arm.html'; page.write_text('<title>R8 Arm</title>' + ARM)
+    armed = app.call('open', url=page.as_uri())['id']; app.call('wait', tab=armed); settle()
+    def clear_after_move():
+        app.call('click', tab=armed, selector='#arm')
+        assert wait_until(lambda: app.call('engine-sleep', tab=armed)['unloadHandlers'], timeout=4, step=.05)
+        shown = app.call('toasts')['shown']
+        app.call('menu-perform', id='clear-unpinned-tabs')
+        asked = wait_until(lambda: app.call('dialog-state').get('visible'), timeout=5, step=.05)
+        moved = app.call('pin', tab=armed) if asked else None
+        settle()
+        still = app.call('dialog-state').get('visible')
+        if asked: app.call('dialog-button', accept=True)
+        time.sleep(.8)
+        toasts = app.call('toasts')
+        titles = [t['title'] for t in toasts['toasts']]
+        check('r8_clear_today_emptied_meanwhile_no_toast', bool(asked) and bool(moved) and armed not in section('today')
+              and 'Cleared Tabs' not in titles and toasts.get('lastTitle') != 'Cleared Tabs', asked=bool(asked), moved=bool(moved), stillAsking=still, shownBefore=shown, shownAfter=toasts['shown'],
+              titles=titles, lastTitle=toasts.get('lastTitle'))
+    def disarm():
+        answer_dialogs()
+        try: app.call('eval', tab=armed, js='onbeforeunload=null;true')
+        except Exception: pass
+    guarded('r8_clear_today_emptied_meanwhile_no_toast', clear_after_move, disarm)
+
+    # A-R6-09: another window moves this window's only Today tab away. The Space still shows a
+    # Favorite (never selected here): it is selected, as Cmd+W and the moving window would, not a blank page.
+    second = None
+    def cross_window_favorite():
+        nonlocal second
+        app.call('space', space=b); settle()
+        fav = opened('Fav'); app.call('favorite', tab=fav); settle()
+        lone_space = app.call('space-create', title='R8 Lone'); app.call('space', space=lone_space); settle()
+        lone = opened('Lone'); app.call('select', tab=lone); settle()
+        others = [t for t in section('today') + section('pinned') if t != lone]
+        app.call('command', id='new-window'); settle()
+        second = wait_until(lambda: next((w['id'] for w in app.call('shell-windows') if w['id'] != window), None), timeout=5, step=.1)
+        if app.call('commandbar-state').get('presented'): app.call('key', key='escape'); settle()
+        app.call('space', space=b); settle()
+        drop = app.call('sidebar-drop', window=second, nodes=[lone], parent={'kind': 'today', 'id': b}, index=0); settle()
+        first = state(window)
+        check('r8_cross_window_move_selects_favorite', drop and second and not others and first['space'] == lone_space
+              and first['selected'] == fav and fav in first['shownPages'],
+              drop=drop, others=others, first={k: first[k] for k in ('space', 'selected', 'shownPages')}, fav=fav, lone=lone)
+    def close_second():
+        if second:
+            app.call('window-focus', id=second); app.call('window-close'); settle()
+        app.call('window-focus', id=window); settle()
+    guarded('r8_cross_window_move_selects_favorite', cross_window_favorite, close_second)

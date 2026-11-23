@@ -414,7 +414,12 @@ extension EngineWebContentHostFactory {
         // Each live page that asks beforeunload answers first (bug sweep r6 P-01).
         let clear = { [weak self] in
           guard let self, self.model.space(id: space.id) != nil else { return }
-          self.model.clearToday(space: space.id); self.controller?.showClearedToast(); self.scheduleSave()
+          // Today can empty while the pages ask (a pin or archive from another window): no clear, no
+          // "Cleared Tabs" toast whose Undo would undo that older step (bug sweep r8 B-R6-10).
+          let before = self.model.space(id: space.id)?.today.count ?? 0
+          self.model.clearToday(space: space.id)
+          if (self.model.space(id: space.id)?.today.count ?? 0) < before { self.controller?.showClearedToast() }
+          self.scheduleSave()
         }
         if !askPagesBeforeClosing(flattened(space.today).map(\.id), then: clear) { clear() }
       }
