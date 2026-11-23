@@ -32,8 +32,31 @@ extension AppImportRunner {
   }
 
   var canImportPasswordsAndCookies: Bool {
-    OEEngine.shared.supportsSecretsImport && !OEEngine.shared.usesMockKeychain
+    #if OPEN_AUTOMATION
+    if Self.syntheticSecretsScenario != nil && OEEngine.shared.usesMockKeychain { return OEEngine.shared.supportsSecretsImport }
+    #endif
+    return OEEngine.shared.supportsSecretsImport && !OEEngine.shared.usesMockKeychain
   }
+
+  #if OPEN_AUTOMATION
+  /// e2e only (`OPEN_AUTOMATION_SYNTHETIC_SECRETS=<scenario>` with the mock key): the consented import reads the
+  /// generated fixture instead of the Keychain, so the real runner, report and views run with no system prompt.
+  static var syntheticSecretsScenario: SyntheticSecretsScenario? {
+    ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SYNTHETIC_SECRETS"].flatMap(SyntheticSecretsScenario.init(rawValue:))
+  }
+
+  /// Arc and Chromium-browser imports both stop here before any Keychain call while the seam is on.
+  func syntheticSecretsOutcome(sinks: [String: any OpenImport.SecretsImportSink]) async throws -> ImportOutcome? {
+    guard let scenario = Self.syntheticSecretsScenario, OEEngine.shared.usesMockKeychain else { return nil }
+    let ledger = SecretsImportLedger(dataRoot: app.directories.root)
+    let report = try await runSecretsBatch(sinks: sinks) {
+      try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil, scenario: scenario)
+    }
+    let total = report.total
+    return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
+      "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines)
+  }
+  #endif
 
   var hasUnfinishedSecretsImport: Bool {
     (try? SecretsImportLedger(dataRoot: app.directories.root).unfinished) != nil
@@ -88,6 +111,9 @@ extension AppImportRunner {
       // A missing destination must never cause a Keychain prompt.
       guard !sinks.isEmpty else { throw ArcSecretsImportError.invalidSinkResult }
       try Task.checkCancellation()
+      #if OPEN_AUTOMATION
+      if let synthetic = try await syntheticSecretsOutcome(sinks: sinks) { return synthetic }
+      #endif
       secretsConsentAdapterCalls += 1
       let consent = SecretsImportConsent.grantedByUser(reason: "import-wizard")
       secretsKeychainProbeCalls += 1

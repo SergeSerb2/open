@@ -159,6 +159,9 @@ extension AppImportRunner {
       guard app.engineReady, !app.terminationRequested else { throw ArcSecretsImportError.invalidSinkResult }
       let sinks: [String: any OpenImport.SecretsImportSink] = [profile.id: try secretsSink(for: target)]
       try Task.checkCancellation()
+      #if OPEN_AUTOMATION
+      if let synthetic = try await syntheticSecretsOutcome(sinks: sinks) { return synthetic }
+      #endif
       secretsConsentAdapterCalls += 1
       let consent = SecretsImportConsent.grantedByUser(reason: "import-wizard")
       secretsKeychainReadCalls += 1

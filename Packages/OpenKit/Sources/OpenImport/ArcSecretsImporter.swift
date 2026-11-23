@@ -1,7 +1,7 @@
 import Foundation
 
 /// Generated inputs only; no caller-supplied source data enters these checks.
-public enum SyntheticSecretsScenario: Sendable { case standard, batchBoundary, fieldAtLimit, fieldOverLimit, empty, nonlocalAddress, invalidLogin }
+public enum SyntheticSecretsScenario: String, Sendable { case standard, batchBoundary, fieldAtLimit, fieldOverLimit, empty, nonlocalAddress, invalidLogin, noLogins }
 
 /// Copy what is needed before returning. Complete only after the writes are
 /// durable (LoginDatabase completion, web-data read barrier, cookie flush).
