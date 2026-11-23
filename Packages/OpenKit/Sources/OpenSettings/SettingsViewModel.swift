@@ -111,6 +111,16 @@ import OpenAdBlock
         }
     }
     @ObservationIgnored private var syncedLinks: LinksDraftState?
+    /// The rule (or the default destination) is as last loaded or saved: its error comes from a change
+    /// elsewhere (a deleted Space or Profile), not from an edit in this pane.
+    private func isUnchangedSavedRule(_ id: RuleID) -> Bool {
+        guard let synced = syncedLinks else { return false }
+        if id == LinksSettingsModel.defaultDestinationIssueID {
+            return synced.kind == links.defaultDestinationKind && synced.space == links.defaultSpaceID && synced.profile == links.defaultProfileID
+        }
+        guard let current = links.drafts.first(where: { $0.id == id }) else { return false }
+        return synced.drafts.first(where: { $0.id == id }) == current
+    }
     @ObservationIgnored private var keyBindingStamp = "unread"
     @ObservationIgnored private var cachedKeyBindings = KeyBindingStore.empty
     @ObservationIgnored public private(set) var keyBindingLoadCount = 0
@@ -150,12 +160,14 @@ import OpenAdBlock
         if let index=links.drafts.firstIndex(where:{$0.id == draft.id}) {links.drafts[index]=draft}
         else {links.drafts.append(draft)}
         if commitLinks() { return true }
-        // Blocked only by other rules' errors (several rules on a deleted Space): keep this explicit
-        // Save in the list and close the sheet. The pane shows what is left; the last repair saves them
-        // all (review r2 #1). An error of this draft, or a failed write, leaves the list as it was, so
-        // the sheet's Cancel leaves nothing behind (review r1 #2).
+        // Blocked only by saved rules that broke on their own (several rules on a deleted Space): keep
+        // this explicit Save in the list and close the sheet. The pane shows what is left; the last
+        // repair saves them all (review r2 #1). An error of this draft, an unsaved broken edit of another
+        // rule, or a failed write keeps the editor open with the error and the list as it was, so the
+        // sheet's Cancel leaves nothing behind (review r1 #2).
         let ownError = links.issues(replacing: draft).contains { $0.ruleID == draft.id && $0.isError }
-        if !ownError, links.issues().contains(where: \.isError) { return true }
+        let blockers = Set(links.issues().filter { $0.isError && $0.ruleID != draft.id }.map(\.ruleID))
+        if !ownError, !blockers.isEmpty, blockers.allSatisfy(isUnchangedSavedRule) { return true }
         links.drafts = previous
         return false
     }
