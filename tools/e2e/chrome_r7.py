@@ -130,20 +130,25 @@ def run(factory, results, tmp, h):
             try:
                 # Next Split Pane (the command ⌃⇧N-style focus keys run).
                 enter_page_fullscreen(second)
+                app.call('events')
                 app.call('command', id='next-split-pane')
                 done = settled(False, False)
                 state = ss()
-                outcomes['nextPane'] = dict(exited=bool(done), focused=state['focused'],
+                # Evidence only: whether the engine reported the page's own fullscreen exit.
+                engine_exit = [e for e in app.call('events') if e.get('type') == 'fullscreen']
+                outcomes['nextPane'] = dict(exited=bool(done), focused=state['focused'], engineEvents=engine_exit,
                     hidden=[p['id'] for p in state['panes'] if p['hidden']], fullscreenTab=state['pageFullscreenTab'])
                 # The other pane's page asks to be shown (the same activation path as its focus()).
                 app.call('command', id='next-split-pane')
                 assert wait(lambda: ss()['focused'] == second or None, timeout=3, step=.05), ss()
                 enter_page_fullscreen(second)
                 page_id = next(t['page']['identifier'] for t in app.call('tabs') if t['id'] == first)
+                app.call('events')
                 app.call('devtools', tab=page_id, method='Page.bringToFront')
                 done = settled(False, False)
                 state = ss()
-                outcomes['activation'] = dict(exited=bool(done), focused=state['focused'],
+                engine_exit = [e for e in app.call('events') if e.get('type') == 'fullscreen']
+                outcomes['activation'] = dict(exited=bool(done), focused=state['focused'], engineEvents=engine_exit,
                     hidden=[p['id'] for p in state['panes'] if p['hidden']], fullscreenTab=state['pageFullscreenTab'])
             finally:
                 if ws()['fullscreen']: h['_try'](lambda: exit_page_fullscreen(second))
