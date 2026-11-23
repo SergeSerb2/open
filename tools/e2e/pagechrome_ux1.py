@@ -200,7 +200,14 @@ def zap_rows(factory, results, tmp, h):
 
         def after_resize():
             app.call('window-frame', frame=[80, 80, 900, 700], unconstrained=True); time.sleep(1.0)
-            return placed('.popup', 'popup')
+            ok, evidence = placed('.popup', 'popup')
+            # The editor stays where it was, so it no longer covers the page: Done is back at its
+            # own place, 10 px from the page's right edge (no stale inset from the old size).
+            page, editor, to_screen = geometry()
+            done = to_screen(picker.box('.done'))
+            scale = page[2] / app.eval(tab, 'innerWidth')
+            flush = abs((page[0] + page[2] - 10 * scale) - (done[0] + done[2])) <= 1
+            return ok and flush and not _overlap(page, editor), dict(evidence, done=[round(v, 1) for v in done], doneFlushRight=flush)
         _row(results, 'uxg_zap_popup_inside_page_after_resize', after_resize)
 
         def short_window():

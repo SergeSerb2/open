@@ -157,7 +157,10 @@ final class AppBoostPicker {
     for observed in windows {
       for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
         binding.observers.append(NotificationCenter.default.addObserver(forName: name, object: observed, queue: .main) { [weak self] _ in
+          // The page view takes its new size in the window's layout pass, which can run after this
+          // notification; measure now and once more on the next turn (unchanged values are not sent).
           MainActor.assumeIsolated { self?.sendOcclusion(tabID: tabID) }
+          DispatchQueue.main.async { MainActor.assumeIsolated { self?.sendOcclusion(tabID: tabID) } }
         })
       }
     }
@@ -166,6 +169,7 @@ final class AppBoostPicker {
   private func sendOcclusion(tabID: ItemID) {
     guard let binding = bindings[tabID], binding.ready, let session = binding.session, let host = binding.host else { return }
     let view = host.view
+    view.window?.layoutIfNeeded()
     var value = [0.0, 0.0, 0.0]
     if let window = view.window, let panel = host.owner?.controller?.boostEditor?.panel, panel.isVisible,
       view.bounds.width > 0, view.bounds.height > 0 {
