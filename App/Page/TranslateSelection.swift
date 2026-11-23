@@ -178,11 +178,20 @@ final class TranslateSelectionController {
   /// Cmd+W or Shift-Cmd+W reaches the App's key router before any key monitor, and closes the key
   /// window: the bubble, which has no close button, so AppKit beeped (bug sweep r8, A-R6-02). The key
   /// goes to the browser window, whose own key path decides as for a key pressed there (Cmd+W archives
-  /// the tab). Any other close request (a menu click while the bubble has the key) closes the bubble
-  /// only: the browser window's performClose would close the whole window (review r1 #2).
+  /// the tab). A menu click (File ▸ Archive Tab or Close Window while the bubble has the key) closes the
+  /// bubble and then runs that command on its window: Close Window closes it; Archive Tab archives the
+  /// tab, never closes the whole browser window (review r1 #2, r2 #3).
   fileprivate func panelCloseRequested(_ sender: Any?) {
     if let event = NSApp.currentEvent, event.type == .keyDown, event.window === popover, forwardToPage(event) { return }
+    let parent = popoverParent
     closePanel()
+    guard let parent, parent.isVisible else { return }
+    // A browser window archives its tab; Little Open or a popup panel closes, as Archive Tab does there.
+    if (sender as? NSMenuItem)?.identifier?.rawValue == "close-window" || adapter.factory.controller?.window !== parent {
+      parent.performClose(sender)
+    } else {
+      _ = adapter.factory.performAppCommand("archive-tab")
+    }
   }
   /// While the bubble holds the key, a window command (Cmd+F, Cmd+L…) runs through the App's key
   /// router before any key monitor and focuses a field in the browser window: the window takes the
