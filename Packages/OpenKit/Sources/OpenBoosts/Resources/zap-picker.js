@@ -63,6 +63,9 @@
   const rect = e => { const r = bounds(e); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
   let active = false, boostID = null, sessionNonce = null, host = null, overlay = null, highlight, chip, bar, relatedButton, popup, band;
   let hovered = null, lastMove = null, frame = 0, flashTimer = 0, graceTimer = 0;
+  // The part of the viewport that native windows (the Boost editor) cover, as fractions of the
+  // viewport: a strip `right` wide at the right edge, from `top` to `bottom`. Native sends it.
+  let occlusion = { right: 0, top: 0, bottom: 0 }, popupAnchor = null;
   let pendingList = null;
   // Spec values explicitly marked as guesses live in one named constant each.
   const IDLE_INSTRUCTION_COLOR = "#777777";
@@ -271,7 +274,7 @@
       .reveals { ${REVEAL_CHIP_LAYOUT};max-width:55%;margin-right:70px; } .reveal { border-radius:8px;background:#EDEEFF;padding:8px;color:#333;white-space:nowrap; }
       .popup { z-index:3;position:fixed;width:428px;max-width:calc(100vw - 12px);height:90px;border-radius:12px;background:white;box-shadow:0 4px 20px #0003;pointer-events:auto;overflow:hidden;color:#333; }
       .actions { display:flex;gap:6px;padding:8px; } .actions button { height:38px;border-radius:7px;color:white;padding:0 10px;white-space:nowrap; }
-      .this { background:#FF453A; } .related { background:#FF9500;flex:1; } .cancel { background:#999; } .popup.select-mode .this, .popup.select-mode .related { background:#3139FF; }
+      .this { background:#FF453A; } .related { background:#FF9500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis; } .cancel { background:#999; } .popup.select-mode .this, .popup.select-mode .related { background:#3139FF; }
       .band { background:#F0F0F2;padding:8px;font:11px monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
     `;
     try {
@@ -312,6 +315,30 @@
     if (!frame) frame = requestAnimationFrame(drawHover);
   }
   function reposition() { if (!frame) frame = requestAnimationFrame(drawHover); }
+  /// CSS pixels covered at the viewport's right edge within the band top..bottom.
+  function occludedRight(top, bottom) {
+    const right = occlusion.right * window.innerWidth;
+    return right > 0 && top < occlusion.bottom * window.innerHeight && bottom > occlusion.top * window.innerHeight ? right : 0;
+  }
+  /// Keep Done (and the reveal chips) out from under a native window that covers the bar.
+  function placeBar() {
+    if (!bar) return;
+    const covered = occludedRight(window.innerHeight - 56, window.innerHeight);
+    bar.style.paddingRight = covered + "px";
+    query(overlay, ".done").style.right = (10 + covered) + "px";
+  }
+  /// The popup stays inside the visible page: 6 px from each edge, clear of the bar and of any
+  /// native window over the page. A narrow room narrows the popup; its middle button truncates.
+  function placePopup() {
+    if (!popup || popup.hidden || !popupAnchor) return;
+    const top = Math.max(6, Math.min(popupAnchor.y + 12, window.innerHeight - 152));
+    const right = window.innerWidth - 6 - occludedRight(top, top + 90);
+    const width = Math.max(0, Math.min(428, right - 6));
+    popup.style.width = width + "px";
+    popup.style.left = Math.max(6, Math.min(popupAnchor.x, right - width)) + "px";
+    popup.style.top = top + "px";
+  }
+  function resized() { reposition(); placeBar(); placePopup(); }
   function clearMulti() { for (const box of multi) box.remove(); multi = []; }
   function showRelated() {
     clearMulti();
@@ -392,12 +419,11 @@
     relatedButton.textContent = mode === "select" ? "Copy selector for related" : "Zap all related elements";
     popup.classList.toggle("select-mode", mode === "select");
     updateBand(); popup.hidden = false; bar.classList.add("popup-open");
-    popup.style.left = Math.max(6, Math.min(event.clientX, window.innerWidth - 434)) + "px";
-    popup.style.top = Math.max(6, Math.min(event.clientY + 12, window.innerHeight - 152)) + "px";
+    popupAnchor = { x: event.clientX, y: event.clientY }; placePopup();
     hovered = null; lastMove = null; drawHover();
   }
   function updateBand() { if (lastPick) band.textContent = `${lastPick.chosen.matches} ${lastPick.entry.selector}`; }
-  function closePopup() { popup.hidden = true; lastPick = null; bar.classList.remove("popup-open"); clearMulti(); }
+  function closePopup() { popup.hidden = true; popupAnchor = null; lastPick = null; bar.classList.remove("popup-open"); clearMulti(); }
   function commitPick() {
     if (mode !== "zap" || !lastPick) return;
     const { entry, chosen } = lastPick;
@@ -528,6 +554,7 @@
     if (typeof options?.boostID !== "string" || typeof options.sessionNonce !== "string" || options.sessionNonce.length < 16) return;
     if (options.mode !== undefined && options.mode !== "zap" && options.mode !== "select") return;
     removePreview(); session = []; knownZaps.clear(); lastPick = null; pendingList = null;
+    occlusion = { right: 0, top: 0, bottom: 0 }; popupAnchor = null;
     boostID = options.boostID; sessionNonce = options.sessionNonce; mode = options.mode === "select" ? "select" : "zap"; revealing = null; active = true;
     invalidateRoots(); rootObserver = new MutationObserver(invalidateRoots);
     rootObserver.observe(document, { childList: true, subtree: true });
@@ -536,7 +563,8 @@
     document.addEventListener("mousemove", move, true); window.addEventListener("click", click, true); document.addEventListener("keydown", keydown, true);
     for (const type of PRESS_EVENTS) window.addEventListener(type, press, true);
     window.addEventListener("contextmenu", contextmenu, true);
-    window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true); window.addEventListener("resize", resized);
+    placeBar();
     window.addEventListener("pagehide", pagehide);
     post("picker:ready", { boostID });
   }
@@ -546,7 +574,7 @@
     document.removeEventListener("mousemove", move, true); window.removeEventListener("click", click, true); document.removeEventListener("keydown", keydown, true);
     for (const type of PRESS_EVENTS) window.removeEventListener(type, press, true);
     window.removeEventListener("contextmenu", contextmenu, true);
-    window.removeEventListener("scroll", reposition, true); window.removeEventListener("resize", reposition);
+    window.removeEventListener("scroll", reposition, true); window.removeEventListener("resize", resized);
     window.removeEventListener("pagehide", pagehide);
     cancelAnimationFrame(frame); frame = 0; clearTimeout(flashTimer); clearMulti(); hovered = null; lastMove = null; host.hidden = true;
     if (previewStyles.size) { window.addEventListener("open-boosts-applied", removePreview, { once: true }); graceTimer = setTimeout(removePreview, 500); }
@@ -567,6 +595,11 @@
         session = arrayFilter(session, z => z.boostID !== p.boostID || z.selector !== p.selector); knownZaps.delete(p.boostID + "\0" + p.selector); refreshPreview();
         post("zap:removed", { boostID: p.boostID, selector: p.selector, via: "native" });
       } else if (msg.type === "zap:list") listZaps(p);
+      else if (msg.type === "zap:occlusion") {
+        const unit = v => (typeof v === "number" && v >= 0 && v <= 1 ? v : 0);
+        occlusion = { right: unit(p.right), top: unit(p.top), bottom: unit(p.bottom) };
+        placeBar(); placePopup();
+      }
     } catch (e) { console.warn("[open-zap]", e); }
   });
 })();
