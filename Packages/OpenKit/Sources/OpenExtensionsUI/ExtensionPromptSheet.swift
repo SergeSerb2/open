@@ -34,10 +34,12 @@ public struct ExtensionPromptText: Equatable, Sendable {
         case .permissions, .reEnable:
             title = "The extension \(model.extensionName) has requested additional permissions"; accept = "Allow"; cancel = "Deny"
         case .repair:
-            title = ExtensionsMenuBuilder.relabel(model.chromiumTitle)
-            accept = ExtensionsMenuBuilder.relabel(model.chromiumAcceptLabel); cancel = ExtensionsMenuBuilder.relabel(model.chromiumCancelLabel)
+            // Our own words, like every other prompt type: the engine's label names
+            // its product ("… in Chromium?"), and relabel() keeps such text verbatim.
+            title = "Repair \(model.extensionName) in Open?"; accept = "Repair"; cancel = "Cancel"
         case .uninstall:
-            title = model.triggeringExtensionName == nil ? "Remove \(model.extensionName) extension from Open?" : ExtensionsMenuBuilder.relabel(model.chromiumTitle)
+            title = model.triggeringExtensionName.map { "\($0) wants to remove \(model.extensionName) from Open" }
+                ?? "Remove \(model.extensionName) extension from Open?"
             accept = "Remove Extension"; cancel = "Cancel"
         }
         bodyHeading = model.type == .repair || model.type == .uninstall ? nil : model.permissions.isEmpty
