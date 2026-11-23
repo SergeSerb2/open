@@ -379,6 +379,9 @@ public final class CalendarTimelineView: NSView {
                 ?? Core.focusRing.nsColor
             let past = event.end <= now
             let shape = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4)
+            // An opaque card-colour base first: the hour grid line under the block must not show
+            // through its translucent tint (UXE E12).
+            PreviewColors.background.resolved(dark ? .dark : .light).nsColor.setFill(); shape.fill()
             tint.withAlphaComponent((dark ? 0.30 : 0.18) * (past ? 0.5 : 1)).setFill(); shape.fill()
             NSGraphicsContext.saveGraphicsState(); shape.addClip()
             tint.withAlphaComponent(past ? 0.5 : 1).setFill(); NSRect(x: frame.minX, y: frame.minY, width: 3, height: frame.height).fill()

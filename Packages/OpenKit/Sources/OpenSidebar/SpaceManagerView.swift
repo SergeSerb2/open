@@ -357,6 +357,27 @@ private final class SpaceManagerColumn: NSView {
         if manager.libraryLayout { layer?.shadowPath = CGPath(roundedRect:bounds,cornerWidth:12,cornerHeight:12,transform:nil); background?.prepareForSnapshot() }
         controls.frame = CGRect(x: 0, y: 0, width: bounds.width, height: manager.libraryLayout ? bounds.height : SpaceManagerMetrics.headerHeight)
         page?.frame = CGRect(x: 0, y: SpaceManagerMetrics.headerHeight, width: bounds.width, height: max(0, bounds.height - SpaceManagerMetrics.headerHeight - (manager.libraryLayout ? 44 : 0)))
+        if manager.libraryLayout, let page { fadeBottom(of: page) }
+    }
+    /// Library Spaces cards: rows that continue below the card's list fade out over the last
+    /// 20 pt instead of being cut through their glyphs at the footer (UXE E11). The mask is
+    /// static: it changes only when the card is resized, never while the list scrolls.
+    private func fadeBottom(of page: NSView) {
+        page.wantsLayer = true
+        guard let layer = page.layer, layer.bounds.height > 0 else { return }
+        let mask = layer.mask as? CAGradientLayer ?? CAGradientLayer()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if layer.mask !== mask {
+            mask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+            layer.mask = mask
+        }
+        let height = layer.bounds.height, fade = min(20, height / 4)
+        // The page view is flipped: gradient locations run from the layer's origin, which is its top.
+        let flipped = page.isFlipped
+        mask.startPoint = CGPoint(x: 0.5, y: flipped ? 0 : 1); mask.endPoint = CGPoint(x: 0.5, y: flipped ? 1 : 0)
+        mask.locations = [0, NSNumber(value: Double((height - fade) / height)), 1]
+        mask.frame = layer.bounds
+        CATransaction.commit()
     }
 }
 

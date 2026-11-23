@@ -506,11 +506,20 @@ private final class LibraryItemView: NSView {
     required init?(coder:NSCoder) { fatalError() }
     func configure(_ item:LibraryRowItem,foreground:NSColor,overlay:NSColor,gallery:Bool,text:LibraryPreparedText? = nil) {
         self.item = item; self.foreground = foreground; self.overlay = overlay; self.gallery = gallery
+        preview = item.kind == "media" || item.kind == "capture"
         LibraryIdleWork.measure("text.layout") {
             title.string = text?.title ?? LibraryText.value(item.title,size:15,weight:.medium,color:foreground)
             subtitle.string = text?.subtitle ?? LibraryText.value(item.subtitle,size:13,weight:.regular,color:foreground.withAlphaComponent(0.68))
         }
         setIcon(item.image); iconLoaded = false
+        // An off Boost in the List layout reads as off, like Site Control's off rows; the Gallery
+        // card already shows its On/Off button (UXE E8). Reused rows always reset the opacity.
+        let dimmed: Float = item.kind == "boost" && item.isOn == false && !gallery ? 0.5 : 1
+        if title.opacity != dimmed {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            title.opacity = dimmed; subtitle.opacity = dimmed; icon.opacity = dimmed
+            CATransaction.commit()
+        }
         LibraryIdleWork.measure("favicon.request") { item.loadImage? { [weak self] image in
             guard let self, self.item?.id == item.id, let image else { return }
             LibraryIdleWork.measure("favicon.decode") { self.setIcon(image) }; self.iconLoaded = true
@@ -613,8 +622,20 @@ private final class LibraryItemView: NSView {
         return ["row": [frame.minX, frame.minY, frame.width, frame.height], "hovered": hovered,
                 "windowScale": window?.backingScaleFactor ?? 0, "title": describe(title), "subtitle": describe(subtitle)]
     }
+    /// Media and capture rows show their picture, not a file icon.
+    private var preview = false
     private func setIcon(_ image:NSImage?) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         icon.contents = LibraryImages.icon(image,foreground:foreground)
+        // A picture fills a square with a 4 pt radius and a hairline edge, so a tall, wide,
+        // white or black image still reads as one 24 pt preview (UXE E4; Arc's populated Media
+        // is not captured: interim design, request UXE-C2). Glyphs (the loading "doc") keep fit.
+        let picture = preview && image.map { !$0.isTemplate } == true
+        icon.contentsGravity = picture ? .resizeAspectFill : .resizeAspect
+        icon.masksToBounds = picture; icon.cornerRadius = picture ? 4 : 0; icon.cornerCurve = .continuous
+        icon.borderWidth = picture ? 1/(window?.backingScaleFactor ?? 2) : 0
+        icon.borderColor = foreground.withAlphaComponent(0.18).cgColor
+        CATransaction.commit()
     }
     override func updateLayer() {
         plate.backgroundColor = overlay.withAlphaComponent(hovered || selected ? 0.105 : gallery ? 0.045 : 0).cgColor
