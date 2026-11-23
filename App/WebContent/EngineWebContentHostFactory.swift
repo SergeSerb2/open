@@ -1219,8 +1219,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
           let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
         // A link dropped on another Space's icon opens there in the background. Selecting it here
-        // stored a selection this Space cannot show: a blank page (bug sweep r6 P-03).
-        if let space = focusedSpace, model.isSelectable(tab.id, in: space) { select(nodeID: tab.id) }
+        // stored a selection this Space cannot show: a blank page (bug sweep r6 P-03). A multi-item
+        // drop selects only its last tab (bug sweep r7 AB-05).
+        if !context.defersOpenedTabSelection, let space = focusedSpace, model.isSelectable(tab.id, in: space) { select(nodeID: tab.id) }
         return true
       }
     case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
@@ -1237,6 +1238,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
     case .shareVia(let id, let service): return shareSidebarTab(id, via: service)
+    case .sharePageVia(let service): return sharePage(via: service)
     case .shareSplit(let id): return shareSidebarSplit(id)
     case .shareNodes(let ids): return shareSidebarNodes(ids)
     case .duplicate(let id): return model.duplicateNode(id: id, into: focusedSpace?.id) != nil
@@ -2169,7 +2171,12 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     // window into full screen with no way back (WC-01).
     guard showsInWindow(webContent) else { try? webContent.exitFullscreen(); return }
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
+    // A fullscreen Split pane takes focus first: the pane that fills the screen is the focused one.
+    if let id = tabID(for: webContent), let split = controller?.splitController, split.focusedTab?.id != id,
+       split.split?.panes.contains(where: { $0.id == id }) == true { split.focus(id) }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
+    // Its pane alone fills the screen: no toolbar, pane bars, other panes or corners (bug sweep r7 AB-01).
+    controller?.container.pageFullscreenTabID = tabID(for: webContent)
     controller?.isPageFullscreen = true
     littleOpenController?.isPageFullscreen = true
     // Also for a window already in full screen: its exit must end the page's fullscreen.
@@ -2190,11 +2197,18 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// A page leaves fullscreen when this window no longer shows it (Space or tab switch, a
   /// Peek on top, a separated pane, an archive).
   private func exitFullscreenIfHidden() {
-    if let page = fullscreenPage, !showsInWindow(page) { try? page.exitFullscreen(); endPageFullscreen() }
+    guard let page = fullscreenPage else { return }
+    // A Split pane in fullscreen hides the other panes. Focus moving to another pane (⌃⇧N, Next
+    // Split Pane, that page's focus(), chrome.tabs.update) ends the fullscreen, so the focused
+    // pane is never hidden (bug sweep r7 review r2 #1).
+    let pane = controller?.container.pageFullscreenTabID
+    let focusLeft = pane != nil && controller?.splitController.focusedTab?.id != pane
+    if focusLeft || !showsInWindow(page) { try? page.exitFullscreen(); endPageFullscreen() }
   }
   /// Clears page fullscreen and leaves the window full screen the page started. Idempotent.
   func endPageFullscreen() {
     fullscreenPage = nil
+    controller?.container.pageFullscreenTabID = nil
     if controller?.isPageFullscreen == true { controller?.isPageFullscreen = false }
     if littleOpenController?.isPageFullscreen == true { littleOpenController?.isPageFullscreen = false }
     guard enteredWindowFullscreenForPage else { return }
@@ -2396,7 +2410,8 @@ extension EngineWebContentHostFactory {
     let space = space(containing: id)
     if let space, space.id != focusedSpace?.id { focus(space: space) }
     select(nodeID: id)
-    NotificationClickRouter.shared.pageRequestedActivation(tab: id)
+    // Also a Blank Window's tab, which is not in the main model (bug sweep r7 AB-02).
+    NotificationClickRouter.shared.pageRequestedActivation(tab: id, url: webContent.url ?? model.tab(id: id)?.url, context: browser.context)
     record("tab-request", webContent, ["request": "activate", "space": space?.id.description ?? ""])
   }
 

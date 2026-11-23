@@ -245,6 +245,14 @@ public final class SpaceManagerView: NSView {
     public func columnFrame(spaceID: SpaceID) -> CGRect? { columns[spaceID]?.frame }
     public func controls(spaceID: SpaceID) -> SpaceControlsView? { columns[spaceID]?.controls }
     public func outline(spaceID: SpaceID) -> NSOutlineView? { columns[spaceID]?.buildContent(); return columns[spaceID]?.page?.outline }
+    /// Automation: an external drop (links or files) on a Space's column at a root row boundary,
+    /// through the column outline's real validate and accept callbacks.
+    public func performExternalDrop(_ info: any NSDraggingInfo, spaceID: SpaceID, childIndex: Int) -> Bool {
+        columns[spaceID]?.buildContent()
+        guard let page = columns[spaceID]?.page,
+              !page.outlineView(page.outline, validateDrop: info, proposedItem: nil, proposedChildIndex: childIndex).isEmpty else { return false }
+        return page.outlineView(page.outline, acceptDrop: info, item: nil, childIndex: childIndex)
+    }
 }
 
 @MainActor
