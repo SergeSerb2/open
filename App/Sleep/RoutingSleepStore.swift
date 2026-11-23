@@ -74,7 +74,20 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
   /// The store file of a tab (automation reads it to prove quit capture).
   func fileURL(for tabID: ItemID) -> URL { directories.sleepFileURL(dataDirectoryName: directoryName(for: tabID)) }
 
+  /// Counts each tab's row deletions (a pinned reset, a close): a save that began before one must not
+  /// bring the deleted row back (bug sweep r8 A-R6-04).
+  private var deletions: [ItemID: Int] = [:]
+  func deletionCount(_ tabID: ItemID) -> Int { deletions[tabID, default: 0] }
+
   func save(tabID: ItemID, envelope e: SleepHistoryEnvelope) async throws {
+    try await save(tabID: tabID, envelope: e, deletions: deletionCount(tabID))
+  }
+
+  /// A save for a page that closed at `deletions` (`deletionCount` then). A deletion since drops it:
+  /// before the write it does nothing; during the write (the store's queue may take it after the
+  /// delete) the row is deleted again and not listed as stored.
+  func save(tabID: ItemID, envelope e: SleepHistoryEnvelope, deletions mark: Int) async throws {
+    guard deletionCount(tabID) == mark else { return }
     let name = directoryName(for: tabID)
     guard let store = store(named: name) else { throw CancellationError() }
     try await store.save(SleepHistoryRecord(
@@ -84,6 +97,7 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
       capturedAt: e.capturedAt))
     // The Profile may have been deleted while the save ran.
     guard !retired.contains(name.lowercased()) else { return }
+    guard deletionCount(tabID) == mark else { store.delete(tabID: tabID); return }
     savedIn[tabID] = name
     storedIn[tabID, default: []].insert(name)
     knownStored.insert(tabID)
@@ -114,6 +128,7 @@ final class RoutingSleepStore: SleepHistoryStoring, ProfileDataOwner {
     var names = [directoryName(for: tabID)]
     for name in storedIn[tabID] ?? [] where !names.contains(where: { $0.lowercased() == name.lowercased() }) { names.append(name) }
     for name in names { store(named: name)?.delete(tabID: tabID) }
+    deletions[tabID, default: 0] += 1
     savedIn[tabID] = nil; storedIn[tabID] = nil
     knownStored.remove(tabID)
     deletedDuringLoad?.insert(tabID)

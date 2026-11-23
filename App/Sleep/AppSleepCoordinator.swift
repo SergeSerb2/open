@@ -197,8 +197,10 @@ final class AppSleepCoordinator {
           owner.model === app.model, let tab = app.model.tab(id: host.tabID),
           owner.profile(for: tab.id)?.id == host.profileID,
           let envelope = adapter.captureHistory(host: host, tab: tab) else { return }
-    // The store's serial queue takes this write before a wake queued later reads the row.
-    Task { @MainActor in try? await store.save(tabID: tab.id, envelope: envelope) }
+    // The write runs on a later turn: a reset or close of the tab meanwhile deletes the row, and this
+    // older page must not bring it back (bug sweep r8 A-R6-04).
+    let deletions = store.deletionCount(tab.id)
+    Task { @MainActor in try? await store.save(tabID: tab.id, envelope: envelope, deletions: deletions) }
   }
 
   /// Every engine change of a sidebar tab's page, after the container updated the model.
