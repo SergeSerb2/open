@@ -1655,6 +1655,8 @@
         return NSApp.effectiveAppearance.name.rawValue
       case "undo-state":
         if a["clear"] as? Bool == true { app.undoManager.removeAllActions() }
+        // `undo`: one step of the model's Undo, as Edit > Undo with a sidebar or page responder.
+        if a["undo"] as? Bool == true, app.undoManager.canUndo { app.undoManager.undo() }
         return ["generation": app.model.undoGeneration, "canUndo": app.undoManager.canUndo,
           "canRedo": app.undoManager.canRedo, "undoName": app.undoManager.undoActionName] as [String: Any]
       case "window-interrupt":

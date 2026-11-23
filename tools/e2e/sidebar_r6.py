@@ -164,6 +164,22 @@ def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, ch
               and after['space'] == solo_space and after['selected'] == '' and title == 'Open',
               favorites=favorites, others=others, titleBefore=before, title=title,
               state={k: after[k] for k in ('space', 'selected', 'shownPages')}, solo=solo)
+        # Review of #674 #3: Undo brings the tab back selected and shown, with its title (the cleared
+        # selection is part of the move's Undo step).
+        app.call('undo-state', undo=True); settle()
+        undone = state(); title = title_of(window)
+        check('r8_move_last_tab_undo_shows_tab', undone['space'] == solo_space and undone['selected'] == solo
+              and solo in undone['shownPages'] and title == 'R6 Solo',
+              state={k: undone[k] for k in ('space', 'selected', 'shownPages')}, title=title, solo=solo, today=section('today'))
+        # Review of #674 #3: moved away again, a background tab opened in the empty Space is not taken
+        # for a cross-window move of the old selection: it stays in the background.
+        app.call('sidebar-menu', node=solo, item='Move to/' + target); settle()
+        page = Path(tmp) / 'r8-background.html'; page.write_text('<title>R8 Background</title><h1>Background</h1>')
+        background = app.call('open', url=page.as_uri(), background=True)['id']; settle()
+        later = state(); title = title_of(window)
+        check('r8_empty_space_background_tab_stays_background', later['space'] == solo_space and later['selected'] == ''
+              and background in section('today') and title == 'Open',
+              state={k: later[k] for k in ('space', 'selected', 'shownPages')}, title=title, background=background)
     guarded('r8_move_last_tab_out_updates_title', move_last_tab)
 
     # B-R6-10: Clear Unpinned Tabs waits for a page's beforeunload. When Today is already empty by

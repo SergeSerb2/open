@@ -201,6 +201,8 @@ def run(factory, results, tmp, h):
                 gone = wait_until(lambda: b not in [t['id'] for t in tabs()], timeout=4, step=.05)
                 row('r8_close_pane_asks_beforeunload_leave', bool(again) and bool(gone) and not split()['id'] and selected() == a,
                     asked=bool(again), gone=bool(gone), split=split()['id'], selected=selected(), a=a)
+            else:
+                row('r8_close_pane_asks_beforeunload_leave', False, reason='no beforeunload sheet on the first close')
         def close_pane_cleanup():
             answer_dialogs()
             unsplit()

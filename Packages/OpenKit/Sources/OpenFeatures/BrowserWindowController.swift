@@ -2135,15 +2135,25 @@ extension BrowserWindowController {
         } ?? false
         let wasKeeping = isKeepingSelection
         isKeepingSelection = true
-        removal()
+        // One Undo step: the removal and, when nothing is left to select, the cleared selection.
+        let remaining: Set<ItemID>? = model.asOneUndoStep {
+            removal()
+            // Gone from the model, or moved to another Space: either way this Space cannot show it.
+            guard let selected, !model.isSelectable(selected, in: space) else { return nil }
+            // The model can hand the selection on by itself (a split that collapses to its last
+            // pane selects that pane). Keep that choice; its Undo restores the split's selection.
+            if model.selectedNode(in: space, window: state) != nil { return nil }
+            let remaining = Set(tabs())
+            // Nothing left: clear the selection, or a later tab or Favorite of this Space would be
+            // taken for a fresh cross-window move and selected. Undo selects the tab again (bug
+            // sweep r8 B-R6-08, review of #674).
+            if remaining.isEmpty, state.selectedNodeBySpace[space.id] != nil {
+                model.selectNode(windowID: windowID, spaceID: space.id, nodeID: nil)
+            }
+            return remaining
+        }
         isKeepingSelection = wasKeeping
-        // Gone from the model, or moved to another Space: either way this Space cannot show it.
-        guard let selected, !model.isSelectable(selected, in: space) else { return }
-        // The model can hand the selection on by itself (a split that collapses to its last
-        // pane selects that pane). Keep that choice; its Undo restores the split's selection.
-        if model.selectedNode(in: space, window: state) != nil { return }
-        let remaining = Set(tabs())
-        guard !remaining.isEmpty else { return }
+        guard let remaining, !remaining.isEmpty else { return }
         // The neighbour; a selection outside the Space's rows (a Favorite moved away) takes the first.
         let next = index.map { before.suffix(from: $0).first(where: remaining.contains) ?? before.prefix($0).last(where: remaining.contains) }
             ?? before.first(where: remaining.contains)

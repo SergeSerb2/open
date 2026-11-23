@@ -911,12 +911,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // A new selection wakes its page and updates the title, media and page chrome.
     if reselected { showSelection(focus: false) }
     else if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
+    // The window showed no tab and now has one (Undo of moving the Space's last tab away): wake it
+    // and update the title, menus and extensions, as a selection does (review of #674).
+    else if controller != nil, showedNoTab, selectedTab != nil { showSelection(focus: false) }
     else {
       controller?.refresh(); mirror.sync()
       // The selection can leave with no replacement (the Space's last tab moved or closed elsewhere):
-      // the title must not keep the gone tab's (bug sweep r8 B-R6-08); its Undo brings the tab's back.
-      // Otherwise a shown tab keeps its own title path.
-      if controller != nil, selectedTab == nil || window?.title == noTabTitle { updateWindowTitle() }
+      // the title must not keep the gone tab's (bug sweep r8 B-R6-08).
+      if controller != nil, selectedTab == nil { updateWindowTitle() }
     }
     controller?.container.prunePinnedPageTitles()
   }
@@ -929,10 +931,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       else { tab.live.sleepPhase = .live }
     }
   }
-  private var noTabTitle: String { isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open" }
+  /// The last title update found no selected tab.
+  private var showedNoTab = false
   func updateWindowTitle() {
-    let title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : noTabTitle
+    let title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
     if window?.title != title { window?.title = title }
+    showedNoTab = selectedTab == nil
   }
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
