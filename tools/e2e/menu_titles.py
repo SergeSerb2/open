@@ -110,6 +110,22 @@ def run(factory, results, tmp, h):
             row('menu_' + name.lower(), got == expected, got=got, expected=expected)
         spaces = menus.get('Spaces', [])
         row('menu_spaces_ends_with_manage', spaces[-2:] == ['---', 'Manage Spaces…'], tail=spaces[-3:])
+        # UX round 1 F12: `visible()` above collapses separators, so it cannot see a double line. On the
+        # raw tree, a hidden item (View ▸ Cast) must not leave two visible separators in a row.
+        doubles = []
+        def raw_walk(items, path):
+            previous = None
+            for item in items:
+                if item.get('hidden'):
+                    continue
+                if item.get('separator') and previous == 'separator':
+                    doubles.append(path)
+                previous = 'separator' if item.get('separator') else 'item'
+                if item.get('children'):
+                    raw_walk(item['children'], path + ' ▸ ' + item.get('title', ''))
+        for top in app.call('menu-tree'):
+            raw_walk(top.get('children') or [], top.get('title', ''))
+        row('menu_no_double_separators', not doubles, menus=doubles)
 
         # Two Today tabs selected: Arc's plural titles for the selection (capture union: Pin Tabs and
         # New Folder from Selection…; both commands act on the selection in Open).
