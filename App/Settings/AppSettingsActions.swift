@@ -155,19 +155,19 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     #endif
   }
   func show(section: SettingsSection, row: String? = nil, profileID: ProfileID? = nil) {
-    if let profileID, app.model.profile(id: profileID) != nil { settings.profiles.select(profileID) }
+    if let profileID, app.model.profile(id: profileID) != nil {
+      // Only Search shows the search-suggestion notice; `profiles.select` would raise it over any
+      // section (Ad Blocking, Tabs & Archive; bug sweep r8, A-R6-05).
+      if section == .search { settings.profiles.select(profileID) }
+      else if settings.selectedProfileID != profileID { settings.selectedProfileID = profileID; settings.profiles.refresh() }
+    }
     settings.navigate(to: section, row: row); show()
   }
   /// `profileID`: the window the link came from (its Profile, or an Incognito window's parent), as
   /// Search Settings does; Settings keeps its selection for an unknown or nil Profile.
   @discardableResult func showSettingsURL(_ url: URL, profileID: ProfileID? = nil) -> Bool {
     guard let target = SettingsSearchIndex.destination(for: url) else { return false }
-    // Only Search shows the search-suggestion notice; `profiles.select` would raise it over any section.
-    if target.section == .search { show(section: target.section, row: target.row, profileID: profileID); return true }
-    if let profileID, app.model.profile(id: profileID) != nil, settings.selectedProfileID != profileID {
-      settings.selectedProfileID = profileID; settings.profiles.refresh()
-    }
-    show(section: target.section, row: target.row); return true
+    show(section: target.section, row: target.row, profileID: profileID); return true
   }
   func updateStatusDidChange(_ status: String?) { settingsStorage?.updateState = status }
   func showProfileSettings(profileID: ProfileID) {

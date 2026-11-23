@@ -335,8 +335,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       let address = command == "add-extension" ? "https://chromewebstore.google.com/category/extensions" : command == "extension-shortcuts" ? "chrome://extensions/shortcuts" : "chrome://extensions"
       app.openProfilePage(URL(string:address)!,profileID:profile); return
     }
+    // The frontmost main-model window of the Profile: a Blank Window's stand-in Profile shares its id,
+    // and creation order would pick the oldest window (bug sweep r8, A-R6-07).
+    let mains = app.windowControllers.filter { app.hostFactories[$0.windowID].map { !$0.isIncognito && $0.model === app.model } ?? false }
+    let ordered = NSApp.orderedWindows.compactMap { window in mains.first { $0.window === window } } + mains
     guard
-          let controller = app.windowControllers.first(where: { app.hostFactories[$0.windowID]?.focusedProfile?.id == profile })
+          let controller = ordered.first(where: { app.hostFactories[$0.windowID]?.focusedProfile?.id == profile })
             ?? app.makeWindow(focusedSpaceID: space.id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); _ = factory.performAppCommand(command)
   }
@@ -1398,6 +1402,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func leaveWindowFullScreenStartedByPage() {
     if enteredWindowFullscreenForPage, controller == nil { littleOpenController?.leaveFullScreen() }
     enteredWindowFullscreenForPage = false; exitWindowFullscreenAfterTransition = false
+  }
+  /// Little Open closes or replaces its page (a Profile switch) and a running download may keep the
+  /// page alive for a while: the window gets its title bar and corners back now, and the detached
+  /// page, which leaves fullscreen now, can no longer change the window's chrome later (bug sweep r8, A-R6-03).
+  func releaseLittleOpenWindow() {
+    leaveWindowFullScreenStartedByPage()
+    removeStandaloneFullscreenObservers()
+    if let page = fullscreenPage { fullscreenPage = nil; try? page.exitFullscreen() }
+    if littleOpenController?.isPageFullscreen == true { littleOpenController?.isPageFullscreen = false }
   }
   func closeAll() {
     guard !isClosing else { return }
