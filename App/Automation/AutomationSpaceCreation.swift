@@ -48,6 +48,9 @@ extension AutomationController {
           controller.context.focusedSpace.map { controller.background.targetStyle == controller.context.style(for: $0) } ?? true
         },
         "nameFocused": form.nameField.currentEditor() != nil,
+        // What the window server composites: the form's rect through the presentation layer tree
+        // (page strips move pages by layer translation, so native frames alone cannot see it).
+        "layers": creationLayerState(form, in: browser.contentView),
         "systemAppearance": form.systemAppearance.rawValue, "formAppearance": form.appearance?.name.rawValue ?? ""] as [String: Any]
     case "creation-act":
       guard let creation = browser.spaceCreationController else { throw Failure(message: "no creation form") }
@@ -83,6 +86,28 @@ extension AutomationController {
       return true
     default: throw Failure(message: "unknown space editor command")
     }
+  }
+
+  private func creationLayerState(_ form: NSView, in root: NSView) -> [String: Any] {
+    func tx(_ layer: CALayer?) -> Double { (layer?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? .nan }
+    var chain: [[String: Any]] = []
+    var view: NSView? = form
+    while let current = view, current !== root.superview {
+      let layer = current.layer, shown = layer?.presentation()
+      chain.append(["class": String(describing: type(of: current)), "hidden": current.isHidden,
+        "layerHidden": layer?.isHidden ?? false, "opacity": Double(layer?.opacity ?? -1),
+        "presentationOpacity": Double(shown?.opacity ?? -1), "tx": tx(layer), "presentationTx": tx(shown),
+        "frame": [current.frame.minX, current.frame.minY, current.frame.width, current.frame.height]])
+      view = current.superview
+    }
+    var visible: [Double] = [], model: [Double] = []
+    if let formLayer = form.layer, let rootLayer = root.layer {
+      let m = rootLayer.convert(formLayer.bounds, from: formLayer)
+      model = [m.minX, m.minY, m.width, m.height]
+      let rect = (rootLayer.presentation() ?? rootLayer).convert((formLayer.presentation() ?? formLayer).bounds, from: formLayer.presentation() ?? formLayer)
+      visible = [rect.minX, rect.minY, rect.width, rect.height]
+    }
+    return ["chain": chain, "presentationRectInRoot": visible, "modelRectInRoot": model, "rootBounds": [root.bounds.width, root.bounds.height]]
   }
 }
 #endif
