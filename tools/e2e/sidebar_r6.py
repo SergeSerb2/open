@@ -150,6 +150,10 @@ def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, ch
             if not app.call('dialog-state').get('pending'): break
             app.call('dialog-button', accept=True); settle()
 
+    # P-02 above moved the auto-archive clock 13 h ahead: a tab moved to a background Space would be
+    # archived at once.
+    app.call('archive-clock', reset=True)
+
     # B-R6-08: moving a Space's only tab to another Space leaves no tab here: the window title
     # follows (it kept the moved tab's title).
     solo_space = app.call('space-create', title='R8 Solo'); app.call('space', space=solo_space); settle()
@@ -166,11 +170,13 @@ def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, ch
               state={k: after[k] for k in ('space', 'selected', 'shownPages')}, solo=solo)
         # Review of #674 #3: Undo brings the tab back selected and shown, with its title (the cleared
         # selection is part of the move's Undo step).
-        app.call('undo-state', undo=True); settle()
+        undo_before = app.call('undo-state')
+        undo_after = app.call('undo-state', undo=True); settle()
         undone = state(); title = title_of(window)
         check('r8_move_last_tab_undo_shows_tab', undone['space'] == solo_space and undone['selected'] == solo
               and solo in undone['shownPages'] and title == 'R6 Solo',
-              state={k: undone[k] for k in ('space', 'selected', 'shownPages')}, title=title, solo=solo, today=section('today'))
+              state={k: undone[k] for k in ('space', 'selected', 'shownPages')}, title=title, solo=solo, today=section('today'),
+              undoBefore=undo_before, undoAfter=undo_after, spaces=[(x.get('title'), x.get('id')) for x in app.call('spaces')])
         # Review of #674 #3: moved away again, a background tab opened in the empty Space is not taken
         # for a cross-window move of the old selection: it stays in the background.
         app.call('sidebar-menu', node=solo, item='Move to/' + target); settle()
