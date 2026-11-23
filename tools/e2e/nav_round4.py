@@ -222,6 +222,35 @@ def run(factory, results, tmp, h):
         guarded('nav6_library_profile_switch_no_stale_rows', library_profile_same_turn,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
 
+        # Bug sweep r8 B-R6-01: the closed Library prebuilds History with the Profile B filter the chip
+        # above left. Opened from Profile A's Space, the open's own turn draws no Profile B row (the
+        # prebuilt panel skipped its refresh). Control: a same-Profile reopen keeps the prebuilt path.
+        def library_prebuilt_profile_switch():
+            page_a, page_b = origin + '/library-profile-a', origin + '/library-profile-b'
+            def prebuilt():
+                return wait_until(lambda: (lambda s: s if s.get('ready') and s.get('section') == 'history' else None)(
+                    app.call('library', action='prebuild-state')), timeout=30, step=1)
+            def drawn(state): return [r.get('subtitle', '') for r in state.get('rows', [])] if state.get('listVisible') else []
+            app.call('library', action='close')
+            app.call('space', space=space_a['id'])
+            ready = prebuilt()
+            opened = app.call('library', action='open', section='history')
+            first = drawn(opened)
+            later = wait_until(lambda: (lambda r: r if page_a in [x['url'] for x in r['rows']] else None)(
+                app.call('library-history-state')), timeout=5, step=.1) or app.call('library-history-state')
+            row('r8_library_prebuilt_profile_switch_no_stale_rows', bool(ready) and opened.get('section') == 'history'
+                and not any(page_b in text for text in first) and page_a in [x['url'] for x in later['rows']],
+                prebuilt=ready, listVisible=opened.get('listVisible'), drawn=first, profiles=opened.get('profiles'))
+            app.call('library', action='close')
+            ready = prebuilt()
+            opened = app.call('library', action='open', section='history')
+            first = drawn(opened)
+            row('r8_library_prebuilt_same_profile_keeps_prebuilt', bool(ready) and opened.get('prebuiltReady') is True
+                and any(page_a in text for text in first) and not any(page_b in text for text in first),
+                prebuilt=ready, prebuiltReady=opened.get('prebuiltReady'), drawn=first)
+        guarded('r8_library_prebuilt_profile_switch_no_stale_rows', library_prebuilt_profile_switch,
+                lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
+
         # F-13: Cmd+F in Library ▸ Spaces opens no Find on the page strip behind Library (and keeps focus).
         def library_spaces_find():
             app.call('select', tab=start)

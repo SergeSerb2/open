@@ -643,6 +643,9 @@ extension LibraryPanelView {
     func hideOldProfileRows(_ host:LibrarySectionHost) {
         host.cancel(); host.generation += 1
         host.dirty = true; host.showsOldProfile = true
+        // A panel prebuilt while closed skips its refresh on open (select, isPresented): the old
+        // Profile's rows stayed drawn until the content observer ran (bug sweep r8 B-R6-01).
+        host.list.isHidden = true; prebuiltReady = false
     }
     /// An outside entry (Library opened from a window of another Profile) changes the Profile
     /// filters. Call before show(section:): it draws on this turn, and the content observer that
