@@ -200,8 +200,8 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
             context.haptics.dropped(accepted)
             return accepted
         }
-        guard let profileID, let url = SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).first else { return false }
-        return context.send(.openURL(url, in: .favorites(profileID), index: index))
+        guard let profileID else { return false }
+        return SidebarPasteboard.openDropped(SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard), in: .favorites(profileID), at: index, context: context)
     }
 }
 

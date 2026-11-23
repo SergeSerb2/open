@@ -126,7 +126,8 @@ final class SwitcherItemView: PlateButton {
         menuProvider = nil
         tooltip = { [weak self, unowned context] in
             guard let self else { return nil }
-            let keys = self.index < 9 ? ["⌃", "\(self.index + 1)"] : []
+            // The binding in effect after a rebind (bug sweep r7 AB-07).
+            let keys = self.index < 9 ? context.keys("go-to-space-\(self.index + 1)", default: ["⌃", "\(self.index + 1)"]) : []
             return Tooltip(title: context.title(of: space), keys: keys, placement: .above, style: context.style(for: space))
         }
         registerForDraggedTypes([.sidebarNode, .URL, .fileURL])

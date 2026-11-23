@@ -13,8 +13,17 @@ extension EngineWebContentHostFactory {
   static let quoteLinkTitle = "Copied Quote Link"
   static let quoteButton = ToastContent.Accessory.button(symbol: "quote.bubble.fill", accessibilityLabel: "Copy Quote Link")
 
-  /// The focused page's URL (the top Peek page while a Peek shows).
-  private var pageURL: URL? { selectedContent?.url ?? selectedTab?.url }
+  /// The focused page's URL (the top Peek page while a Peek shows). A Note has no shareable
+  /// address (its row's Copy Link is disabled): its internal `open://note/` route is never copied
+  /// or shared (bug sweep r7 AB-06).
+  private var pageURL: URL? {
+    // Under a shown Peek, never the tab behind it, also before the Peek's first commit (review r1 #4).
+    let peek = controller.flatMap { $0.hasPeekController && $0.peekController.isShown ? $0.peekController : nil }
+    let url = selectedContent?.url ?? (peek != nil ? peek?.stack.last?.url : selectedTab?.url)
+    return NoteTab.matches(url) ? nil : url
+  }
+  /// The Copy URL family has a page to copy (the menu items' enabled state).
+  var hasCopyablePageURL: Bool { pageURL != nil }
 
   /// Writes a link as both `public.url` and plain text (§4.2.2 step 2).
   private func writeLink(_ url: URL) {
@@ -32,10 +41,10 @@ extension EngineWebContentHostFactory {
     guard let url = pageURL else { return false }
     copyURL(url); return true
   }
-  private func copyURL(_ url: URL) {
+  private func copyURL(_ url: URL, offerQuote: Bool = true) {
     let (clean, removed) = URLCleaner.clean(url)
     writeLink(clean)
-    showCopyToast(clean, removed: removed, offerQuote: true)
+    showCopyToast(clean, removed: removed, offerQuote: offerQuote)
   }
 
   // MARK: copy-url-markdown (Cmd+Opt+Shift+C)
@@ -58,11 +67,20 @@ extension EngineWebContentHostFactory {
     guard let toasts = controller?.toasts else { return }
     let content = ToastContent(title: URLCleaner.toastTitle(removed: removed), accessory: ToastContent.shareButton)
     let offer = QuoteOffer()
-    let handle = toasts.show(content) { [weak self, offer] handle in
+    // The page and URL the offer is for, read now: the button can be pressed after a tab switch,
+    // and must not copy the newly selected tab's link (bug sweep r7 AB-04).
+    let offered = selectedContent, offeredURL = pageURL
+    let handle = toasts.show(content) { [weak self, weak offered, offer] handle in
       guard let self else { return }
-      if offer.isShown { _ = self.copyURLQuote(); handle.dismiss() } else { self.shareFromToast(clean, handle: handle) }
+      guard offer.isShown else { self.shareFromToast(clean, handle: handle); return }
+      // A page that navigated since the offer has another selection: copy the offered page's plain
+      // URL with the normal toast instead (review r1 #5, r2 #2). A fragment or the scroll-driven
+      // `#section` change keeps the page; the quote replaces the fragment anyway.
+      if let offered, let offeredURL, Self.samePage(offered.url, offeredURL) { self.copyURLQuote(page: offered, url: offeredURL) }
+      else if let offeredURL { self.copyURL(offeredURL, offerQuote: false) }
+      handle.dismiss()
     }
-    guard offerQuote, Self.sharedQuotesEnabled, let page = selectedContent else { return }
+    guard offerQuote, Self.sharedQuotesEnabled, let page = offered else { return }
     // The engine keeps the page's selection state (EP-3, OEWebContentChangeSelection): the offer
     // needs no page round trip, so it is decided at once, well inside the 150 ms budget (§4.2.2).
     let selected = page.hasSelection
@@ -85,6 +103,11 @@ extension EngineWebContentHostFactory {
   func copyURLQuote() -> Bool {
     guard let url = pageURL else { return false }
     guard let page = selectedContent else { return copyURL() }
+    copyURLQuote(page: page, url: url)
+    return true
+  }
+  /// The quote link of `page`, whose address was `url` when the copy was asked for.
+  private func copyURLQuote(page: OEWebContent, url: URL) {
     let id = UUID()
     pageTasks[id] = Task { @MainActor [weak self, weak page] in
       defer { self?.pageTasks[id] = nil }
@@ -104,11 +127,19 @@ extension EngineWebContentHostFactory {
         ?? (text.count <= Self.quoteTextLimit ? Self.quoteLink(clean, text: text) : nil)
       // The page's own URL, read before the wait: a tab switch meanwhile must not copy the
       // newly selected tab's URL (bug sweep r4 WC-15).
-      guard !text.isEmpty, let link else { self.copyURL(url); return }
+      // No quote offer on that toast: it would read whichever page is selected by now.
+      guard !text.isEmpty, let link else { self.copyURL(url, offerQuote: false); return }
       self.writeLink(link)
       self.controller?.toasts.show(ToastContent(title: Self.quoteLinkTitle, symbol: "quote.bubble.fill"))
     }
-    return true
+  }
+
+  /// The same document address, ignoring the fragment.
+  static func samePage(_ a: URL?, _ b: URL) -> Bool {
+    guard let a, var x = URLComponents(url: a, resolvingAgainstBaseURL: false),
+          var y = URLComponents(url: b, resolvingAgainstBaseURL: false) else { return false }
+    x.fragment = nil; y.fragment = nil
+    return x == y
   }
 
   /// `clean` with the fragment of the engine's link (the page's own fragment plus `:~:text=…`).
@@ -143,6 +174,22 @@ extension EngineWebContentHostFactory {
       "servicesRequested": false, "closed": false]
     #endif
     picker.show(relativeTo: container.bounds, of: container, preferredEdge: .maxY)
+    return true
+  }
+
+  /// The URL field's "Share ▸ ‹service›": the focused page (the Peek on top while one shows), as
+  /// Copy URL and File ▸ Share do. It used to share the sidebar tab under a Peek (bug sweep r7 AB-03).
+  @discardableResult
+  func sharePage(via title: String) -> Bool {
+    guard !isClosing, let url = pageURL else { return false }
+    let clean = URLCleaner.clean(url).url
+    guard let service = ShareServices.list(for: [clean]).first(where: { $0.title == title }) else { return false }
+    #if OPEN_AUTOMATION
+    sidebarShareRequest = ["url": clean.absoluteString, "node": "page", "requested": true, "service": title,
+      "servicesRequested": true, "payloadURLs": [clean.absoluteString], "closed": true]
+    if dismissSidebarShareForAutomation { return true }
+    #endif
+    service.perform(withItems: [clean])
     return true
   }
 

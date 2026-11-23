@@ -276,7 +276,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       case .openURL(let url, let parent, let index):
         // The Manager shows every Space: create the tab in the column it was
         // dropped on, not in the browser's focused Space, then select it there.
-        return self.openDroppedURL(url, parent: parent, index: index, factory: factory, windowID: context.windowID)
+        // A multi-item drop selects (and loads) only its last tab (bug sweep r7 AB-05, review r1 #1).
+        return self.openDroppedURL(url, parent: parent, index: index, factory: factory, windowID: context.windowID,
+                                   select: !context.defersOpenedTabSelection)
       case .openInSplitView(let id), .addSplitView(let id), .addTabToSplit(let id):
         // Split View lives in the browser window: show the node's Space there,
         // then use the browser controller's own split path.
@@ -402,7 +404,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     return nil
   }
-  private func openDroppedURL(_ url: URL, parent: NodeParent, index: Int?, factory: EngineWebContentHostFactory?, windowID: WindowID) -> Bool {
+  private func openDroppedURL(_ url: URL, parent: NodeParent, index: Int?, factory: EngineWebContentHostFactory?, windowID: WindowID,
+                              select: Bool = true) -> Bool {
     guard let model = app.model else { return false }
     let title = url.host() ?? url.absoluteString
     let space: SpaceID?
@@ -417,8 +420,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
       // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
       if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
-      if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
-      else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+      if select, let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
+      else if select { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
     }
     app.scheduleSave(); app.scheduleMenuRebuild()
     return true

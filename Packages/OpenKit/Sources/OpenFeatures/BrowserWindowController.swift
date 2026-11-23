@@ -138,8 +138,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Page fullscreen is transient and never changes the saved sidebar mode.
     public var isPageFullscreen = false {
         didSet {
-            if isPageFullscreen { dismissSidebarReveal() }
+            // Site Controls anchors to a bar that page fullscreen removes; the bar made again on exit
+            // needs its Site Control state (bug sweep r7 AB-01, review r1 #3).
+            if isPageFullscreen { dismissSidebarReveal(); siteControl?.dismiss(reason: .sourceUnavailable, animated: false) }
             layoutContent()
+            if !isPageFullscreen { refreshSiteControlButtons() }
             if !isPageFullscreen, pendingSpaceCreationOptions != nil {
                 DispatchQueue.main.async { [weak self] in self?.resumePendingSpaceCreation() }
             }
@@ -362,6 +365,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
         super.init(window: window); window.contentView = root; window.delegate = self
+        // Sidebar tooltips and rows show the bindings in effect, as the menus and the hide hint do (AB-07).
+        context.shortcutKeys = { [weak self] id in
+            guard let self, let command = CommandRegistry.byID[id] else { return [] }
+            return self.keyBindingOverrides.effectiveShortcuts(for: command).first?.symbolKeys ?? []
+        }
         // The same pointer rule as the traffic-light hover: own-window automation input wins.
         context.pointerLocation = { [weak window] in
             guard let window else { return nil }
