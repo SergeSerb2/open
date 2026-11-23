@@ -2155,6 +2155,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     // window into full screen with no way back (WC-01).
     guard showsInWindow(webContent) else { try? webContent.exitFullscreen(); return }
     if let previous = fullscreenPage, previous !== webContent { try? previous.exitFullscreen() }
+    // A fullscreen Split pane takes focus first: the pane that fills the screen is the focused one.
+    if let id = tabID(for: webContent), let split = controller?.splitController, split.focusedTab?.id != id,
+       split.split?.panes.contains(where: { $0.id == id }) == true { split.focus(id) }
     fullscreenPage = webContent; exitWindowFullscreenAfterTransition = false
     // Its pane alone fills the screen: no toolbar, pane bars, other panes or corners (bug sweep r7 AB-01).
     controller?.container.pageFullscreenTabID = tabID(for: webContent)
@@ -2178,7 +2181,13 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// A page leaves fullscreen when this window no longer shows it (Space or tab switch, a
   /// Peek on top, a separated pane, an archive).
   private func exitFullscreenIfHidden() {
-    if let page = fullscreenPage, !showsInWindow(page) { try? page.exitFullscreen(); endPageFullscreen() }
+    guard let page = fullscreenPage else { return }
+    // A Split pane in fullscreen hides the other panes. Focus moving to another pane (⌃⇧N, Next
+    // Split Pane, that page's focus(), chrome.tabs.update) ends the fullscreen, so the focused
+    // pane is never hidden (bug sweep r7 review r2 #1).
+    let pane = controller?.container.pageFullscreenTabID
+    let focusLeft = pane != nil && controller?.splitController.focusedTab?.id != pane
+    if focusLeft || !showsInWindow(page) { try? page.exitFullscreen(); endPageFullscreen() }
   }
   /// Clears page fullscreen and leaves the window full screen the page started. Idempotent.
   func endPageFullscreen() {

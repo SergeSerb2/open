@@ -73,8 +73,11 @@ extension EngineWebContentHostFactory {
     let handle = toasts.show(content) { [weak self, weak offered, offer] handle in
       guard let self else { return }
       guard offer.isShown else { self.shareFromToast(clean, handle: handle); return }
-      // A page that navigated since the offer has another selection: copy nothing (review r1 #5).
-      if let offered, let offeredURL, offered.url == offeredURL { self.copyURLQuote(page: offered, url: offeredURL) }
+      // A page that navigated since the offer has another selection: copy the offered page's plain
+      // URL with the normal toast instead (review r1 #5, r2 #2). A fragment or the scroll-driven
+      // `#section` change keeps the page; the quote replaces the fragment anyway.
+      if let offered, let offeredURL, Self.samePage(offered.url, offeredURL) { self.copyURLQuote(page: offered, url: offeredURL) }
+      else if let offeredURL { self.copyURL(offeredURL, offerQuote: false) }
       handle.dismiss()
     }
     guard offerQuote, Self.sharedQuotesEnabled, let page = offered else { return }
@@ -129,6 +132,14 @@ extension EngineWebContentHostFactory {
       self.writeLink(link)
       self.controller?.toasts.show(ToastContent(title: Self.quoteLinkTitle, symbol: "quote.bubble.fill"))
     }
+  }
+
+  /// The same document address, ignoring the fragment.
+  static func samePage(_ a: URL?, _ b: URL) -> Bool {
+    guard let a, var x = URLComponents(url: a, resolvingAgainstBaseURL: false),
+          var y = URLComponents(url: b, resolvingAgainstBaseURL: false) else { return false }
+    x.fragment = nil; y.fragment = nil
+    return x == y
   }
 
   /// `clean` with the fragment of the engine's link (the page's own fragment plus `:~:text=…`).

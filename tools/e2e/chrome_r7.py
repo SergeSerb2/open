@@ -119,6 +119,40 @@ def run(factory, results, tmp, h):
                          after=[{k: p[k] for k in ('id', 'hidden', 'bar', 'fullBleed')} for p in after['panes']])
         gate('chrome7_fullscreen_split_pane_fills', fullscreen_split)
 
+        def fullscreen_split_focus():
+            # Review r2 #1 (lead ruling): focus moving to another pane while a Split pane is in HTML
+            # fullscreen used to leave the focused pane hidden behind it. It now ends the fullscreen.
+            first = page(); second = page()
+            app.call('select', tab=first)
+            app.call('sidebar-menu', node=second, item='Open in Split View')
+            assert wait(lambda: len(ss()['panes']) == 2 or None, timeout=5, step=.1), ss()
+            outcomes = {}
+            try:
+                # Next Split Pane (the command ⌃⇧N-style focus keys run).
+                enter_page_fullscreen(second)
+                app.call('command', id='next-split-pane')
+                done = settled(False, False)
+                state = ss()
+                outcomes['nextPane'] = dict(exited=bool(done), focused=state['focused'],
+                    hidden=[p['id'] for p in state['panes'] if p['hidden']], fullscreenTab=state['pageFullscreenTab'])
+                # The other pane's page asks to be shown (the same activation path as its focus()).
+                app.call('command', id='next-split-pane')
+                assert wait(lambda: ss()['focused'] == second or None, timeout=3, step=.05), ss()
+                enter_page_fullscreen(second)
+                page_id = next(t['page']['identifier'] for t in app.call('tabs') if t['id'] == first)
+                app.call('devtools', tab=page_id, method='Page.bringToFront')
+                done = settled(False, False)
+                state = ss()
+                outcomes['activation'] = dict(exited=bool(done), focused=state['focused'],
+                    hidden=[p['id'] for p in state['panes'] if p['hidden']], fullscreenTab=state['pageFullscreenTab'])
+            finally:
+                if ws()['fullscreen']: h['_try'](lambda: exit_page_fullscreen(second))
+                h['_try'](lambda: app.call('split', op='menu', item='Separate All Tabs'))
+                close_others()
+            return check(all(o['exited'] and o['focused'] == first and not o['hidden'] and not o['fullscreenTab']
+                             for o in outcomes.values()) and len(outcomes) == 2, outcomes=outcomes)
+        gate('chrome7_fullscreen_split_focus_exits', fullscreen_split_focus)
+
         def quote_after_switch():
             # AB-04: the copy toast's "Copy Quote Link" button copied from the tab selected when it
             # was clicked (here B, with no selection: B's plain URL).
