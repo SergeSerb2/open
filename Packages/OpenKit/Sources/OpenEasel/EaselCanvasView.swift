@@ -199,8 +199,10 @@ public final class EaselCanvasView: NSView {
         let grouped = !manager.isUndoing && !manager.isRedoing
         if grouped { manager.beginUndoGrouping() }
         manager.registerUndo(withTarget: self) { canvas in
-            let current = canvas.document
+            // An open new text box goes first: its empty placeholder must not enter the Redo
+            // snapshot (bug sweep r8 B-R6-07).
             canvas.endTextEditing(commit: false)
+            let current = canvas.document
             canvas.apply(old)
             canvas.registerUndo(restoring: current, name: name)
         }
