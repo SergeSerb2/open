@@ -581,6 +581,7 @@ extension SidebarView {
     }
 
     public var displayedSpaceTitle: String? { pager.currentPage?.header.displayedTitle }
+    public var spaceHeaderTitleDraw: [String: Any] { pager.currentPage?.header.titleDrawEvidence ?? [:] }
 
     /// Favorite tiles in display order.
     public var displayedFavorites: [ItemID] { favorites.tabs.map(\.id) }
@@ -708,6 +709,36 @@ extension SidebarView {
     public var downloadBadgeEvidence: [String: Any] { bottomBar.home.evidence }
 
     public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }
+
+    /// Bottom-bar geometry in `root` coordinates for layout checks: Home, +, the sidebar, and each
+    /// switcher item's full frame and the part left after every clipping ancestor (what can draw).
+    public func switcherGeometry(in root: NSView) -> [String: Any] {
+        func r(_ v: NSView, _ rect: CGRect? = nil) -> [Double] {
+            let f = root.convert(rect ?? v.bounds, from: v)
+            return [f.minX, f.minY, f.width, f.height].map(Double.init)
+        }
+        func visible(_ v: NSView) -> CGRect {
+            var rect = root.convert(v.bounds, from: v)
+            var a = v.superview
+            while let s = a, s !== root {
+                if s.clipsToBounds || s is NSClipView { rect = rect.intersection(root.convert(s.bounds, from: s)) }
+                a = s.superview
+            }
+            return rect.isNull ? .zero : rect
+        }
+        var items: [String: [String: Any]] = [:]
+        for (id, v) in bottomBar.items where v.superview != nil && !v.isHidden {
+            let vis = visible(v)
+            items[id.description] = ["frame": r(v), "visible": [vis.minX, vis.minY, vis.width, vis.height].map(Double.init), "index": v.index]
+        }
+        var plusHit = false
+        if let window, let content = window.contentView, let frameView = content.superview {
+            let center = bottomBar.plus.convert(CGPoint(x: bottomBar.plus.bounds.midX, y: bottomBar.plus.bounds.midY), to: nil)
+            plusHit = content.hitTest(frameView.convert(center, from: nil))?.isDescendant(of: bottomBar.plus) == true
+        }
+        return ["home": r(bottomBar.home), "plus": r(bottomBar.plus), "sidebar": r(self), "bottomBar": r(bottomBar),
+                "items": items, "current": context.focusedSpace?.id.description ?? "", "plusHit": plusHit]
+    }
     /// Delay a switcher's pending spring-load Space switch was scheduled with.
     public func springLoadDelay(spaceID: SpaceID) -> TimeInterval? { bottomBar.items[spaceID]?.pendingSpringLoadDelay }
 
