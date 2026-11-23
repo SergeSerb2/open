@@ -30,10 +30,12 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public var onWidthChange: ((CGFloat) -> Void)?
     public var onIdleRefresh: (() -> Void)?
     public internal(set) var prebuiltReady = false
+    /// The last open showed the idle prebuild's rows without a refresh (automation read-back).
+    public private(set) var lastOpenWasPrebuilt = false
     var preparing = false
     var contentActive: Bool { isPresented || preparing }
     public var isPresented = false {
-        didSet { guard isPresented != oldValue else { return }; if isPresented { if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
+        didSet { guard isPresented != oldValue else { return }; if isPresented { lastOpenWasPrebuilt = prebuiltReady; if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
     }
     public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
     let rail = NSScrollView()

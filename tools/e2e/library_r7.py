@@ -91,7 +91,7 @@ def run(factory, results, tmp, wait_until):
         prebuilt = wait_until(lambda: (lambda p: p if p.get('ready') and p.get('section') == 'history' else None)(lib(action='prebuild-state')),
                               timeout=20, step=.2)
         open_library('history')
-        opened_prebuilt = lib().get('prebuiltReady')
+        opened_prebuilt = lib().get('lastOpenWasPrebuilt')
         assert wait_until(lambda: len(rows('history')) >= 100, timeout=10, step=.05), len(rows('history'))
         target = rows('history')[80]
         lib(action='row-select', id=target['id'])
@@ -101,7 +101,8 @@ def run(factory, results, tmp, wait_until):
         time.sleep(.4)
         after = next((r for r in rows('history') if r['id'] == target['id']), {})
         moved = after['frame'][1] - before['frame'][1] if after else None
-        check('R7_X01_prebuilt_open_keeps_selection_and_position', bool(prebuilt) and grew and after.get('selected')
+        # The open must really be prebuilt (no refresh), or the row tests the reopen path (review of #669 round 2).
+        check('R7_X01_prebuilt_open_keeps_selection_and_position', bool(prebuilt) and opened_prebuilt and grew and after.get('selected')
               and (after.get('drawnSelected') or not after.get('realized')) and moved is not None and 0 <= moved <= 60,
               prebuilt=prebuilt, openedPrebuilt=opened_prebuilt, moved=moved,
               after={k: after.get(k) for k in ('id', 'selected', 'drawnSelected', 'realized', 'frame')})

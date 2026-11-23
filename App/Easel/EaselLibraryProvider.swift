@@ -106,6 +106,10 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
   private(set) var thumbnailRenders = 0
   #endif
 
+  /// An edit (in any window) makes the cached picture and list date stale: the next request draws
+  /// the current document (review of #669 round 2, nit 1).
+  func forget(_ documentID: UUID) { thumbnails[documentID] = nil; modified[documentID] = nil }
+
   func easelThumbnail(id: String, pixels: CGFloat, completion: @escaping @MainActor (NSImage?) -> Void) {
     guard let documentID = UUID(uuidString: id) else { completion(nil); return }
     let appearance = NSApp.effectiveAppearance, name = appearance.name
