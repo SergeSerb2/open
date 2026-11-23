@@ -107,8 +107,12 @@ public final class DownloadHistoryStore {
             guard status == SQLITE_ROW,
                   Int(sqlite3_column_bytes(statement, 1)) <= Self.maximumPayloadBytes,
                   let payload = db.columnText(statement, 1), let key = db.columnText(statement, 0) else { throw failure() }
-            let row = try decoder.decode(DownloadHistoryRecord.self, from: Data(payload.utf8))
-            guard row.valid, row.profileID == profileID, row.id == key else { throw failure() }
+            var row = try decoder.decode(DownloadHistoryRecord.self, from: Data(payload.utf8))
+            guard row.valid, row.id == key else { throw failure() }
+            // The file's Profile folder owns its rows. A fresh model after an unreadable or missing
+            // snapshot gives the Default Profile a new ID for the same folder; a row written under the
+            // old ID is still this Profile's download (bug sweep r7 Z-03).
+            row.profileID = profileID
             rows.append(row)
         }
         return rows

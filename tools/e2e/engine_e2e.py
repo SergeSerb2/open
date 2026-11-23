@@ -14914,7 +14914,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
+    ap.add_argument("--only", choices=["persistence", "engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -15326,6 +15326,11 @@ def main():
             results["notes-export"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_export.py"))["run"](
                 factory, results["notes-export"], tmp, sys.modules[__name__])
+        elif opts.only == "persistence":
+            # Bug sweep round 7 persistence and recovery rows (tools/e2e/persistence_r7.py).
+            results["persistence"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/persistence_r7.py"))["run"](
+                factory, results["persistence"], tmp, sys.modules[__name__])
         elif opts.only == "blank-window" and os.environ.get("OPEN_EXT_R6_ONLY") == "1":
             # Bug sweep r6 EXT6 rows (tools/e2e/bugsweep_r6_ext.py); OPEN_EXT_R6_ONLY=1 runs only them.
             results["blank-window"] = CheckedResults(tracker)
