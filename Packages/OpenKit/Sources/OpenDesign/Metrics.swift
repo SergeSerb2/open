@@ -258,7 +258,7 @@ public enum BottomBarMetrics {
     /// GUESS (interim until capture UXB-C1): when the Spaces do not fit, the strip scrolls and
     /// fades out over this width at each end that hides more icons. The current Space is kept
     /// at least this far inside the strip so it never sits in the fade.
-    public static let switcherFadeWidth: CGFloat = 18
+    public static let switcherFadeWidth: CGFloat = 28
     /// GUESS: scroll-to-current duration after a Space switch (no capture of Arc's).
     public static let switcherRevealDuration: TimeInterval = 0.2
     public static let plateRadius: CGFloat = 6
