@@ -94,5 +94,7 @@ final class AppHistoryRecorder {
       await store.updateTitle(title, visitID: id, time: time)
     }
   }
-  func close() { titleTask?.cancel(); titleTask = nil; revision += 1 }
+  /// A tab, Peek or popup closed right after its title arrived still writes that title
+  /// (bug sweep r6 DHR-10): only Little Open flushed before close.
+  func close() { flushBeforeClose(); titleTask?.cancel(); titleTask = nil; revision += 1 }
 }

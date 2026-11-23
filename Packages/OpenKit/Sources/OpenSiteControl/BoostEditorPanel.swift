@@ -41,10 +41,13 @@ public final class BoostEditorController: NSObject {
         guard boostID == nil || existing != nil,let screen else { return false }
         // Resolve the request before finishing the previous editor.
         close();generation += 1;self.parent = parent;chosenScreen = screen.visibleFrame
+        // Read the Boost again: finishing the previous session (perhaps on this same Boost) flushed
+        // its code drafts into the store, or deleted its empty new draft. A deleted draft opens as a new one.
+        let current = boostID.flatMap { store.boost(id: $0) }
         let boost: Boost
-        if let existing { boost = existing }
+        if let current { boost = current }
         else { var domain = SiteMatch(domain: context.url.host ?? context.displayHost).domain;if domain.hasPrefix("www.") { domain.removeFirst(4) };boost = store.upsert(Boost(name: "My Boost",siteMatch: SiteMatch(domain: domain))) }
-        let session = BoostEditorSession(context: context,boost: boost,isNew: existing == nil,host: host,defaults: defaults),view = BoostEditorView(session: session),panel = makePanel()
+        let session = BoostEditorSession(context: context,boost: boost,isNew: current == nil,host: host,defaults: defaults),view = BoostEditorView(session: session),panel = makePanel()
         panel.isReleasedWhenClosed = false;panel.becomesKeyOnlyIfNeeded = true;panel.isFloatingPanel = true;panel.level = .floating
         panel.appearance = .init(named: .aqua);panel.backgroundColor = .clear;panel.isOpaque = false;panel.hasShadow = true;panel.colorSpace = .sRGB
         panel.contentView = view;view.autoresizingMask = [.width,.height];view.wantsLayer = true;view.layer?.cornerRadius = 12;view.layer?.cornerCurve = .continuous;view.layer?.masksToBounds = true

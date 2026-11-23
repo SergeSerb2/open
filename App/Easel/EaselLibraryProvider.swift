@@ -28,6 +28,8 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
       let entry = EaselStore.IndexEntry(id: doc.id, title: doc.displayTitle, modifiedAt: doc.modifiedAt, objectCount: doc.objects.count)
       if let i = entries.firstIndex(where: { $0.id == doc.id }) { entries[i] = entry } else { entries.append(entry) }
     }
+    modified = Dictionary(entries.map { ($0.id, $0.modifiedAt) }, uniquingKeysWith: { first, _ in first })
+    thumbnails = thumbnails.filter { modified[$0.key] == $0.value.modified }
     return entries.sorted { $0.modifiedAt > $1.modifiedAt }.map {
       LibraryEaselItem(id: $0.id.uuidString.lowercased(), title: $0.title, modifiedAt: $0.modifiedAt, objectCount: $0.objectCount)
     }
@@ -90,12 +92,47 @@ final class EaselLibraryProvider: LibraryEaselsProvider {
     } catch { return false }
   }
 
+  /// Each Easel's modification date in the last list read (`libraryEasels`).
+  private var modified: [UUID: Date] = [:]
+  /// Rendered thumbnails, kept while the Easel's date in the list is the one the picture was drawn
+  /// from. Each row configuration, each prefetch and each Library open read the document and drew
+  /// the whole canvas again on the main thread (bug sweep r7 X-04).
+  /// The picture also depends on the appearance it was drawn in (light or dark canvas).
+  private var thumbnails: [UUID: (modified: Date, pixels: CGFloat, appearance: NSAppearance.Name, image: NSImage?)] = [:]
+  /// Requests for an Easel whose picture is being drawn: one draw answers the ones of the same size
+  /// and appearance.
+  private var drawing: [String: [@MainActor (NSImage?) -> Void]] = [:]
+  #if OPEN_AUTOMATION
+  private(set) var thumbnailRenders = 0
+  #endif
+
+  /// An edit (in any window) makes the cached picture and list date stale: the next request draws
+  /// the current document (review of #669 round 2, nit 1).
+  func forget(_ documentID: UUID) { thumbnails[documentID] = nil; modified[documentID] = nil }
+
   func easelThumbnail(id: String, pixels: CGFloat, completion: @escaping @MainActor (NSImage?) -> Void) {
-    guard let documentID = UUID(uuidString: id), let doc = app.easels.load(documentID) else { completion(nil); return }
-    let store = app.easels
+    guard let documentID = UUID(uuidString: id) else { completion(nil); return }
+    let appearance = NSApp.effectiveAppearance, name = appearance.name
+    if let cached = thumbnails[documentID], cached.pixels == pixels, cached.appearance == name,
+       cached.modified == modified[documentID] { completion(cached.image); return }
+    let key = "\(documentID)|\(pixels)|\(name.rawValue)"
+    if drawing[key] != nil { drawing[key]?.append(completion); return }
+    guard let doc = app.easels.load(documentID) else { completion(nil); return }
+    let store = app.easels, listed = modified[documentID]
+    drawing[key] = [completion]
     // Drawn on the next turn: row configuration never waits for it.
-    DispatchQueue.main.async {
-      completion(EaselThumbnail.render(doc, imageURL: { store.imageURL(document: documentID, file: $0) }, pixels: pixels))
+    DispatchQueue.main.async { [weak self] in
+      let image = EaselThumbnail.render(doc, imageURL: { store.imageURL(document: documentID, file: $0) }, pixels: pixels, appearance: appearance)
+      guard let self else { completion(image); return }
+      #if OPEN_AUTOMATION
+      self.thumbnailRenders += 1
+      #endif
+      // Keyed by the drawn document's own date. The list date follows it unless a newer list read ran
+      // meanwhile: a saved file keeps whole seconds only, and an edit in another window does not
+      // reload this list, so the dates differed and every request drew again (review of #669 #3).
+      self.thumbnails[documentID] = (doc.modifiedAt, pixels, name, image)
+      if self.modified[documentID] == listed { self.modified[documentID] = doc.modifiedAt }
+      for callback in self.drawing.removeValue(forKey: key) ?? [completion] { callback(image) }
     }
   }
 }

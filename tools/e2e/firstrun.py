@@ -238,6 +238,21 @@ def run(factory, results, tmp, h):
                  'Yes, make Open my default.' in default_text and 'Not yet.' in default_text), png=default_png, text=default_copy)
         app.call('first-run', action='finish')
         row('F4_finish', not state()['active'] and state()['completed'] and len(app.call('shell-windows')) == 1)
+        # Bug sweep r6 CF-03 (review r2 #3): Undo of the first-run import removes its two Archive rows (the
+        # import's Profile goes in that same Undo), Redo brings them back. Ends redone for the rows below.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        def undo_idle(): h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.05)
+        def archive_count(expected):
+            h.wait_until(lambda: archives()['count'] == expected, timeout=10, step=.1)
+            return archives()['count']
+        archives_first = archives()['count']
+        app.call('sidebar-key', key='z', modifiers=['command']); undo_idle()
+        archives_undone = archive_count(0)
+        app.call('sidebar-key', key='z', modifiers=['command', 'shift']); undo_idle()
+        archives_redone = archive_count(2)
+        row('first_run_archive_undo_redo', archives_first == 2 and archives_undone == 0 and archives_redone == 2
+            and {s['title'] for s in app.call('spaces')} == {'Alpha', 'Beta'},
+            first=archives_first, undone=archives_undone, redone=archives_redone, spaces=[s['title'] for s in app.call('spaces')])
         # Never invoke the real system-default setter. Setup automation stubs it.
         # Exercise Profile insertion on the model swapped in by first run,
         # before a relaunch could reinstall a missing onProfileCreated hook.
@@ -291,11 +306,21 @@ def run(factory, results, tmp, h):
         graph['items'][graph['items'].index(ids['ta'])+1]['childrenIds'].append(new_id)
         graph['spaces'][graph['spaces'].index(ids['alpha'])+1]['title'] = 'Changed upstream'
         (expanded/'StorableSidebar.json').write_text(json.dumps(sidebar))
+        # Bug sweep r6 CF-03 (review r1 #1): one new Arc Archive item, written through the App's own
+        # archive store; the same native Undo removes it.
+        items = json.loads((expanded/'StorableArchiveItems.json').read_text())['items']
+        template = json.loads(json.dumps(items[items.index(ids['archive0']) + 1]))
+        archive_new = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/first-run/archive-new')).upper()
+        template['sidebarItem']['id'] = archive_new
+        template['sidebarItem']['data']['tab']['savedURL'] = 'https://example.org/archive/new'
+        (expanded/'StorableArchiveItems.json').write_text(json.dumps({'items': items + [archive_new, template]}))
+        archives_before_merge = archives()['count']
         def settings_import(directory):
             app.call('first-run', action='settings-import', directory=str(directory))
             app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
             assert h.wait_until(lambda: state().get('settingsStep') == 'Report', timeout=15, step=.05), state()
         settings_import(expanded)
+        archives_after_merge = archives()['count']
         row('settings_merge_live', state()['settingsOutcome'].get('Imported tabs') == 1
             and {s['title'] for s in app.call('spaces')} == {'Alpha', 'Beta'}
             and new_id in {t['id'] for t in user_tabs()}, outcome=state()['settingsOutcome'])
@@ -310,6 +335,11 @@ def run(factory, results, tmp, h):
         row('settings_merge_one_undo', undone_tabs == before_tabs,
             before=undo_before, key=undo_key, after=app.call('space-manager-state'),
             expected=sorted(before_tabs), actual=sorted(undone_tabs))
+        archives_undone = h.wait_until(lambda: (lambda n: n if n == archives_before_merge else None)(archives()['count']),
+                                       timeout=10, step=.1)
+        row('settings_merge_archive_undo', archives_after_merge == archives_before_merge + 1
+            and archives_undone == archives_before_merge,
+            before=archives_before_merge, merged=archives_after_merge, undone=archives()['count'])
         app.call('save')
         previous = snapshot_path().read_bytes()
         snapshot_path().unlink(); snapshot_path().mkdir()

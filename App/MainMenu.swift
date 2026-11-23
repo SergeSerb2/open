@@ -286,6 +286,8 @@ extension EngineWebContentHostFactory {
         tab.pinnedURL.map { tab.url.host != $0.host || tab.url.path != $0.path } ?? false } } ?? false
     }
     if id == "unpin-tab" { return selectedTab.map { model.isPinned(tabID: $0.id) } ?? false }
+    // Not for a Note: it has no shareable address (bug sweep r7 AB-06).
+    if id == "copy-url" || id == "copy-url-markdown" || id == "copy-url-quote" || id == "share-page" { return hasCopyablePageURL }
     if Self.captureKinds[id] != nil { return hasWebPage }
     let key = enabledKey ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
     switch key {
@@ -434,7 +436,9 @@ extension EngineWebContentHostFactory {
     // docs/commands.md lists all four entries with “—”.
     case "rename-space":
       guard let controller else { return false }
-      if windowState.sidebarMode == .hidden { return showRenameSpaceDialog() }
+      // The Library hides the sidebar too: its header field would take the typing out of sight
+      // (bug sweep r7 W-02).
+      if windowState.sidebarMode == .hidden || controller.isLibraryOpen { return showRenameSpaceDialog() }
       controller.sidebar.layoutSubtreeIfNeeded()
       controller.sidebar.beginRename(nodeID: nil)
     case "change-profile":

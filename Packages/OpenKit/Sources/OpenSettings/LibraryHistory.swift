@@ -25,9 +25,17 @@ extension LibraryViewModel {
 
     public func clearHistoryConfirmed() async {
         confirmsClearHistory = false
-        guard let store = histories[historyProfileID] else { return }
+        // The Profile at confirm time: the filter can change during the awaits (review r1 #3).
+        let profileID = historyProfileID
+        guard let store = histories[profileID] else { return }
         await actions.flushHistoryWrites()
-        do { try await store.deleteVisits(); selectedIDs = []; statusText = "History cleared." }
+        do {
+            // All of it, also visits with a future time (a clock that was ahead); pending writes were
+            // flushed just above, and the engine clear below has no end either (review r2 #4).
+            try await store.deleteVisits(through: .distantFuture); selectedIDs = []; statusText = "History cleared."
+            // Not only Open's list: the engine keeps its own copy (bug sweep r6 DHR-01).
+            await actions.clearEngineHistory(profileID: profileID)
+        }
         catch { statusText = error.localizedDescription }
         await reloadHistory()
     }

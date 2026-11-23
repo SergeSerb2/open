@@ -322,7 +322,9 @@ class Open:
         self.user_data = user_data
         self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
-        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE")
+        # OPEN_E2E_APP_BUNDLE in the environment: a saved copy of another build for a whole suite
+        # (break-and-revert proof against a parent commit while the tree builds the fix).
+        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE") or os.environ.get("OPEN_E2E_APP_BUNDLE")
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         launched_file = os.stat(app)
@@ -14912,7 +14914,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
+    ap.add_argument("--only", choices=["persistence", "engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -15324,6 +15326,11 @@ def main():
             results["notes-export"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_export.py"))["run"](
                 factory, results["notes-export"], tmp, sys.modules[__name__])
+        elif opts.only == "persistence":
+            # Bug sweep round 7 persistence and recovery rows (tools/e2e/persistence_r7.py).
+            results["persistence"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/persistence_r7.py"))["run"](
+                factory, results["persistence"], tmp, sys.modules[__name__])
         elif opts.only == "blank-window" and os.environ.get("OPEN_EXT_R6_ONLY") == "1":
             # Bug sweep r6 EXT6 rows (tools/e2e/bugsweep_r6_ext.py); OPEN_EXT_R6_ONLY=1 runs only them.
             results["blank-window"] = CheckedResults(tracker)
@@ -15445,8 +15452,11 @@ def main():
             spec = importlib.util.spec_from_file_location("page_chrome", os.path.join(ROOT, "tools/e2e/page_chrome.py"))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results[opts.only] = CheckedResults(tracker)
-            module.run(factory, results[opts.only], tmp, globals())
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/littleopen_page_chrome.py"))["run"](factory, results[opts.only], tmp, globals())
+            # OPEN_CHROME7_ONLY=1 runs only the bug sweep round 7 window chrome rows (tools/e2e/chrome_r7.py).
+            if os.environ.get("OPEN_CHROME7_ONLY") != "1":
+                module.run(factory, results[opts.only], tmp, globals())
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/littleopen_page_chrome.py"))["run"](factory, results[opts.only], tmp, globals())
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/chrome_r7.py"))["run"](factory, results[opts.only], tmp, globals())
         elif opts.only == "context-menus":
             import importlib.util
             spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))
@@ -15498,8 +15508,11 @@ def main():
                 incognito_privacy.checks(factory, results["incognito"], tmp, sys.modules[__name__])
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
-                factory, results["history"], tmp, wait_until, _restore_defaults)
+            # OPEN_LIBRARY_R7_ONLY=1 runs only the bug sweep r7 Library and Spaces rows (tools/e2e/library_r7.py).
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
+                    factory, results["history"], tmp, wait_until, _restore_defaults)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
@@ -15508,11 +15521,18 @@ def main():
             littleopen_checks(factory, results["littleopen"], tmp)
         elif opts.only == "routing":
             results["routing"] = CheckedResults(tracker)
-            # OPEN_ROUTING_ENG6_ONLY=1 runs only the bug sweep round 6 engine rows (tools/e2e/engine_round6.py).
-            if os.environ.get("OPEN_ROUTING_ENG6_ONLY") != "1":
+            # Bug sweep round 6 rows in this group: OPEN_ROUTING_ENG6_ONLY=1 runs only the engine rows
+            # (tools/e2e/engine_round6.py); OPEN_CONTENT_R6_ONLY=1 runs only the CONTENT6 rows (tools/e2e/content_r6.py).
+            eng6_only = os.environ.get("OPEN_ROUTING_ENG6_ONLY") == "1"
+            content_only = os.environ.get("OPEN_CONTENT_R6_ONLY") == "1"
+            if not eng6_only and not content_only:
                 routing_checks(factory, results["routing"], tmp)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_round6.py"))["run"](
-                factory, results["routing"], tmp, sys.modules[__name__])
+            if not content_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_round6.py"))["run"](
+                    factory, results["routing"], tmp, sys.modules[__name__])
+            if not eng6_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "content_r6.py"))["run"](
+                    factory, results["routing"], sys.modules[__name__], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,

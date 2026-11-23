@@ -12,8 +12,11 @@ extension EngineWebContentHostFactory {
     let calendar = app.calendar
     Task { @MainActor [weak self] in
       var access = calendar.source.access
-      if access == .notDetermined { access = await calendar.source.requestAccess() }
+      let asked = access == .notDetermined
+      if asked { access = await calendar.source.requestAccess() }
       guard let self else { return }
+      // A calendar Favorite's Live Calendar waits for access it never asks for itself.
+      if asked, access == .granted { self.app.liveCalendar.refetch() }
       guard access == .granted else { self.finishJoin(.noAccess(access)); return }
       guard let next = await calendar.nextMeeting() else { self.finishJoin(.noMeeting); return }
       self.finishJoin(.join(next.event, next.link))

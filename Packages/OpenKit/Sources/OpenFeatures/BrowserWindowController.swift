@@ -138,8 +138,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Page fullscreen is transient and never changes the saved sidebar mode.
     public var isPageFullscreen = false {
         didSet {
-            if isPageFullscreen { dismissSidebarReveal() }
+            // Site Controls anchors to a bar that page fullscreen removes; the bar made again on exit
+            // needs its Site Control state (bug sweep r7 AB-01, review r1 #3).
+            if isPageFullscreen { dismissSidebarReveal(); siteControl?.dismiss(reason: .sourceUnavailable, animated: false) }
             layoutContent()
+            if !isPageFullscreen { refreshSiteControlButtons() }
             if !isPageFullscreen, pendingSpaceCreationOptions != nil {
                 DispatchQueue.main.async { [weak self] in self?.resumePendingSpaceCreation() }
             }
@@ -362,6 +365,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
         super.init(window: window); window.contentView = root; window.delegate = self
+        // Sidebar tooltips and rows show the bindings in effect, as the menus and the hide hint do (AB-07).
+        context.shortcutKeys = { [weak self] id in
+            guard let self, let command = CommandRegistry.byID[id] else { return [] }
+            return self.keyBindingOverrides.effectiveShortcuts(for: command).first?.symbolKeys ?? []
+        }
         // The same pointer rule as the traffic-light hover: own-window automation input wins.
         context.pointerLocation = { [weak window] in
             guard let window else { return nil }
@@ -828,6 +836,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     /// Delayed idle work attaches only the hidden shell; it never moves the page.
     public var onLibraryIdleRefresh: (() -> Void)?
+    /// Closes this window's Library through its App session (Space Creation opens in the sidebar).
+    public var onLibraryCloseRequest: (() -> Void)?
     public func prepareLibraryPanel(_ panel:NSView,width:CGFloat) {
         guard !isLibraryOpen else { return }
         if libraryPanel !== panel { libraryPanel?.removeFromSuperview(); libraryPanel = panel; root.addSubview(panel,positioned:.below,relativeTo:container) }
@@ -2263,7 +2273,7 @@ extension BrowserWindowController {
 extension BrowserWindowController {
     @discardableResult
     public func beginSpaceCreation(options: SpaceCreationOptions = SpaceCreationOptions()) -> Bool {
-        if !isPageFullscreen, let creation = spaceCreationController { creation.focus(); return true }
+        if !isPageFullscreen, let creation = spaceCreationController { closeLibraryForSpaceCreation(); creation.focus(); return true }
         guard let window, model.canCreateSpace(at: options.insertionIndex, moving: options.moving,
                                                removingEmptyFolder: options.removingEmptyFolder) else { return false }
         if isPageFullscreen {
@@ -2273,6 +2283,7 @@ extension BrowserWindowController {
         }
         closeThemeEditor()
         dismissSidebarReveal()
+        closeLibraryForSpaceCreation()
         let previousSpaceID = context.focusedSpace?.id
         let creation = SpaceCreationController(model: model, windowID: windowID, options: options)
         creation.creationView.systemAppearance = context.systemAppearance
@@ -2295,6 +2306,14 @@ extension BrowserWindowController {
         spaceCreationController = creation; layoutContent(animated: true)
         sidebar.beginSpaceCreation(page: creation.view); creation.updatePreview(); creation.focus()
         return true
+    }
+    /// The form is a sidebar page, and the Library hides the sidebar: close the Library first, or the
+    /// name field takes the typing out of sight (bug sweep r7 W-02). The layout that shows the form
+    /// must not take the Library branch, so the panel is closed in this turn.
+    private func closeLibraryForSpaceCreation() {
+        guard isLibraryOpen else { return }
+        onLibraryCloseRequest?()
+        if isLibraryOpen { dismissLibraryPanel(animated: false) }
     }
     private func resumePendingSpaceCreation() {
         guard !isPageFullscreen, !fullscreenTransition, window?.isVisible == true,

@@ -54,7 +54,7 @@ public actor HistoryStore {
     public func open() {
         guard db == nil, !closed else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        db = try? SQLiteDB(path: fileURL.path)
+        db = try? SQLiteDB.openSettingAsideDamage(path: fileURL.path) { try SQLiteDB(path: $0) }
         db?.exec("""
         CREATE TABLE IF NOT EXISTS urls(
           id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL DEFAULT '',
@@ -68,6 +68,7 @@ public actor HistoryStore {
           visit_key TEXT PRIMARY KEY NOT NULL,
           url_id INTEGER NOT NULL REFERENCES urls(id));
         CREATE INDEX IF NOT EXISTS idx_visits_url_time ON visits(url_id, time);
+        CREATE INDEX IF NOT EXISTS idx_urls_last_visit ON urls(last_visit DESC, id DESC);
         CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(title, url, content='urls', content_rowid='id');
         CREATE TRIGGER IF NOT EXISTS urls_ai AFTER INSERT ON urls BEGIN
           INSERT INTO history_fts(rowid, title, url) VALUES (new.id, new.title, new.url);

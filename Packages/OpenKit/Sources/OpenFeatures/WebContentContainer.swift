@@ -7,7 +7,7 @@ import ImageIO
 
 @MainActor
 public final class PaneSlotView: NSView {
-    var fullBleed = false {
+    public internal(set) var fullBleed = false {
         didSet { if fullBleed != oldValue { clip.layer?.cornerRadius = fullBleed ? 0 : PanelMetrics.cornerRadius; layer?.shadowOpacity = fullBleed ? 0 : PanelMetrics.shadowOpacity } }
     }
     public let tabID: ItemID
@@ -275,7 +275,7 @@ public final class PaneSlotView: NSView {
 @MainActor
 public final class WebContentContainer: NSView {
     public static let maxCachedHiddenHosts = 8
-    public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
+    public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { applyFullBleed(slot) } } } }
     public var extensionsUI: ExtensionsUIContext? { didSet { for slot in slots { slot.paneChrome?.extensionsUI = extensionsUI } } }
     /// The render server resizes this background with the panel while page
     /// layout stays at its final width. Clip the wider hide frame temporarily.
@@ -334,6 +334,19 @@ public final class WebContentContainer: NSView {
     private var orientation: SplitOrientation = .horizontal
     private var fractions: [Double] = []
     public var maximizedTabID: ItemID? { didSet { if maximizedTabID != oldValue { needsLayout = true } } }
+    /// The pane whose page is in HTML fullscreen: it alone fills the container, with no pane bar,
+    /// content toolbar, developer bar or panel corners; the other panes and dividers hide. Set by
+    /// the App from the engine's fullscreen request (bug sweep r7 AB-01).
+    public var pageFullscreenTabID: ItemID? {
+        didSet {
+            guard pageFullscreenTabID != oldValue else { return }
+            updateSlots(); for slot in slots { applyFullBleed(slot); slot.needsLayout = true }
+            needsLayout = true
+        }
+    }
+    /// The pane that fills the container: a fullscreen page, else Expand Current Pane.
+    private var expandedTabID: ItemID? { pageFullscreenTabID.flatMap { ids.contains($0) ? $0 : nil } ?? maximizedTabID }
+    private func applyFullBleed(_ slot: PaneSlotView) { slot.fullBleed = fullBleed || slot.tabID == pageFullscreenTabID }
     /// The optional content toolbar on a single pane (§4.6.2). A split keeps its pane bars.
     public var showsToolbar = false { didSet { if showsToolbar != oldValue { updateSlots(); for slot in slots { slot.needsLayout = true } } } }
     /// Toolbar text: the full URL instead of the host (CC-37).
@@ -476,7 +489,7 @@ public final class WebContentContainer: NSView {
             let parked = parkedSlots.removeValue(forKey: id)
             return byID[id] ?? parked ?? PaneSlotView(tabID: id)
         }
-        for slot in slots { slot.fullBleed = fullBleed }
+        for slot in slots { applyFullBleed(slot) }
         for slot in slots where slot.superview == nil { addSubview(slot, positioned: .below, relativeTo: dropOverlay) }
         ids = tabIDs; focused = focusedTabID; self.orientation = orientation
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
@@ -628,14 +641,16 @@ public final class WebContentContainer: NSView {
         slots.first { $0.tabID == id }?.paneChrome?.update()
         // Developer Mode is per site: a navigation can show, hide or retitle the developer bar.
         if !developerModeHosts.isEmpty, let slot = slots.first(where: { $0.tabID == id }), let tab = tabProvider(id) {
-            let wanted = ids.count == 1 && (Self.developerHost(tab.url).map { developerModeHosts.contains($0) } ?? false)
+            let wanted = ids.count == 1 && id != pageFullscreenTabID && (Self.developerHost(tab.url).map { developerModeHosts.contains($0) } ?? false)
             if wanted != (slot.developerPanel != nil) { updateSlots() } else { slot.developerPanel?.urlString = tab.url.absoluteString }
         }
     }
     private func updateSlots() {
         for slot in slots {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
-            slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
+            // A fullscreen page keeps no bar over its edge (AB-01).
+            let fullscreen = id == pageFullscreenTabID
+            slot.configure(tab: tab, host: cache[id], split: ids.count > 1 && !fullscreen, toolbar: showsToolbar && !fullscreen, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
                            toolbarMenu: { [weak self] in self?.onToolbarMenu?() },
@@ -647,7 +662,7 @@ public final class WebContentContainer: NSView {
                                if self.ids.count > 1, self.ids.contains(id) { self.onPaneClose?(id) }
                                else { self.onSadTabClose?(id) }
                            },
-                           developer: Self.developerHost(tab.url).map { developerModeHosts.contains($0) } ?? false,
+                           developer: !fullscreen && Self.developerHost(tab.url).map { developerModeHosts.contains($0) } ?? false,
                            developerActivePanel: developerActivePanel?(id),
                            developerAction: { [weak self] action, view in self?.onDeveloperAction?(id, action, view) },
                            developerHover: { [weak self] action, view in self?.onDeveloperHover?(id, action, view) })
@@ -690,7 +705,7 @@ public final class WebContentContainer: NSView {
             guard let host = host(for: slot.tabID),
                   let source = host as? any WebContentRetainedSurfaceResizing,
                   let scale = view.window?.backingScaleFactor else { return nil }
-            let bounds = maximizedTabID == slot.tabID ? content : frame
+            let bounds = expandedTabID == slot.tabID ? content : frame
             let size = slot.libraryViewportSize(for: bounds.size)
             guard size.width > 0, size.height > 0, size.width.isFinite, size.height.isFinite,
                   scale > 0, scale.isFinite else { return nil }
@@ -849,12 +864,13 @@ public final class WebContentContainer: NSView {
     private func layoutPanes(animated: Bool, starts: [ItemID: CGRect], oldIDs: [ItemID], oldOrientation: SplitOrientation,
                              retarget: Bool = false) {
         let frames = SplitLayout.frames(content: bounds, orientation: orientation, fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
-        let targets = zip(slots, frames).map { slot, frame in (slot: slot, frame: maximizedTabID == slot.tabID ? bounds : frame) }
-        for (slot, _) in targets { slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID }
+        let expanded = expandedTabID
+        let targets = zip(slots, frames).map { slot, frame in (slot: slot, frame: expanded == slot.tabID ? bounds : frame) }
+        for (slot, _) in targets { slot.isHidden = expanded != nil && expanded != slot.tabID }
         if spaceMotionStorage?.plate.phase == .awaitingPresentation {
             let scale = window?.backingScaleFactor ?? 1
             let viewports = Dictionary(uniqueKeysWithValues: zip(slots, frames).map { slot, frame in
-                let size = slot.pageSize(in: maximizedTabID == slot.tabID ? bounds.size : frame.size)
+                let size = slot.pageSize(in: expanded == slot.tabID ? bounds.size : frame.size)
                 return (slot.tabID, WebContentFrameViewport(width: Int(ceil(size.width * scale)),
                     height: Int(ceil(size.height * scale)), scale: scale))
             })
@@ -976,7 +992,7 @@ public final class WebContentContainer: NSView {
             let d = SplitDividerView(); dividers.append(d); addSubview(d, positioned: .below, relativeTo: dropOverlay)
         }
         for (i, d) in dividers.enumerated() {
-            d.isHidden = maximizedTabID != nil; d.isEnabled = !transitioning; d.orientation = orientation
+            d.isHidden = expandedTabID != nil; d.isEnabled = !transitioning; d.orientation = orientation
             let a = slots[i].frame, b = slots[i + 1].frame
             d.frame = orientation == .horizontal ? CGRect(x: a.maxX, y: bounds.minY, width: max(0, b.minX - a.maxX), height: bounds.height)
                 : CGRect(x: bounds.minX, y: b.maxY, width: bounds.width, height: max(0, a.minY - b.maxY))
