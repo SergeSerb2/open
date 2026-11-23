@@ -736,8 +736,11 @@ extension SidebarView {
             let center = bottomBar.plus.convert(CGPoint(x: bottomBar.plus.bounds.midX, y: bottomBar.plus.bounds.midY), to: nil)
             plusHit = content.hitTest(frameView.convert(center, from: nil))?.isDescendant(of: bottomBar.plus) == true
         }
+        let strip = bottomBar.strip, fade = strip.fadeEdges
         return ["home": r(bottomBar.home), "plus": r(bottomBar.plus), "sidebar": r(self), "bottomBar": r(bottomBar),
-                "items": items, "current": context.focusedSpace?.id.description ?? "", "plusHit": plusHit]
+                "items": items, "current": context.focusedSpace?.id.description ?? "", "plusHit": plusHit,
+                "strip": r(strip), "offset": Double(strip.contentView.bounds.minX), "scrollable": strip.overflows,
+                "fade": ["left": fade.left, "right": fade.right, "masked": strip.layer?.mask != nil]]
     }
     /// Delay a switcher's pending spring-load Space switch was scheduled with.
     public func springLoadDelay(spaceID: SpaceID) -> TimeInterval? { bottomBar.items[spaceID]?.pendingSpringLoadDelay }

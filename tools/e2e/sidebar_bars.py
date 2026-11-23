@@ -5,6 +5,10 @@ UXB-1  Every Space switcher item draws only between Home and +, inside the sideb
 UXB-2  The current Space's switcher item is fully visible, also after switching to the last Space.
 UXB-3  A long Space name is drawn again for the new width after a native resize drag (no stale,
        hard-clipped title).
+UXB-4  Real scroll events (a trackpad gesture and a vertical mouse wheel, sent through NSApp.sendEvent)
+       scroll an overflowing strip, keep UXB-1 true, and turn the edge fades on and off with what
+       is hidden. The same events move nothing when the Spaces fit.
+UXB-5  Fit and near-fit widths (6 Spaces at 300, 288 and 280 pt): no fade where no icon is hidden.
 
 Geometry comes from `window-state.switcherGeometry`: frames in window-root coordinates and each
 item's part left after every clipping ancestor. Widths change through real resize-handle drags.
@@ -50,7 +54,7 @@ def _inside(inner, outer, slack=0.5):
             and inner[0] + inner[2] <= outer[0] + outer[2] + slack and inner[1] + inner[3] <= outer[1] + outer[3] + slack)
 
 
-def _bar_problems(g):
+def _bar_problems(g, current=True):
     """Layout faults in one switcherGeometry reading (empty when the bar is clean)."""
     home, plus, sidebar = g['home'], g['plus'], g['sidebar']
     # The strip runs from Home's right edge to +'s left edge, at the bar's height.
@@ -66,12 +70,20 @@ def _bar_problems(g):
             problems.append('item %d draws outside the sidebar %s: %s' % (item['index'], sidebar, v))
     if not g['plusHit']:
         problems.append('a click at the center of + does not hit +')
-    current = g['items'].get(g['current'])
-    if current is None:
+    current = g['items'].get(g['current']) if current else True
+    if current is True:
+        pass
+    elif current is None:
         problems.append('no switcher item for the current Space')
-    elif any(abs(a - b) > 0.5 for a, b in zip(current['visible'], current['frame'])):
-        problems.append('current Space item %d is not fully visible: frame %s visible %s'
-                        % (current['index'], current['frame'], current['visible']))
+    else:
+        # The plate (the frame inset 1 pt on each side) must show whole; the 1 pt slop may clip.
+        f, v = current['frame'], current['visible']
+        if not (v[0] <= f[0] + 1.5 and v[0] + v[2] >= f[0] + f[2] - 1.5 and v[2] > 0):
+            problems.append('current Space item %d is not fully visible: frame %s visible %s'
+                            % (current['index'], f, v))
+    fade = g['fade']
+    if fade['masked'] != (fade['left'] or fade['right']):
+        problems.append('fade mask %s does not match hidden edges %s' % (fade['masked'], fade))
     return problems
 
 
@@ -116,5 +128,52 @@ def run(factory, results, wait_until, scratch, root):
                 p2 = _bar_problems(last)
                 results['UXB2_current_last_%dspaces_w%d' % (count, width)] = {
                     'ok': not p2 and last['current'] == ids[-1], 'problems': p2, 'geometry': last}
+            if count == 6:
+                _scroll_rows(app, results, wait_until, ids, resize, geometry)
         finally:
             app.quit()
+
+
+def _scroll_rows(app, results, wait_until, ids, resize, geometry):
+    def scroll(g, **event):
+        s = g['strip']
+        app.call('mouse', action='scroll', x=s[0] + s[2] / 2, y=s[1] + s[3] / 2, **event)
+
+    def gesture(g, dx):
+        scroll(g, dx=0, dy=0, phase='began')
+        for _ in range(4): scroll(g, dx=dx / 4, dy=0, phase='changed')
+        scroll(g, dx=0, dy=0, phase='ended')
+        time.sleep(1.2)  # let an elastic bounce at an end settle
+
+    resize(228)
+    app.call('space', space=ids[0]); time.sleep(.6)
+    start = geometry()
+    gesture(start, -30)
+    swiped = geometry()
+    scroll(swiped, dx=0, dy=-400, phase='none'); time.sleep(1.0)  # a vertical wheel to the end
+    wheeled = geometry()
+    scroll(wheeled, dx=0, dy=400, phase='none'); time.sleep(1.0)  # and back to the start
+    back = geometry()
+    problems = [p for g in (swiped, wheeled, back) for p in _bar_problems(dict(g, current='none'), current=False)]
+    results['UXB4_scroll_overflow_6spaces_w228'] = {
+        'ok': start['scrollable'] and start['offset'] == 0 and start['fade'] == {'left': False, 'right': True, 'masked': True}
+              and 0 < swiped['offset'] < 60 and wheeled['offset'] == 60  # 6 × 34 − 144 = 60 pt of scroll
+              and wheeled['fade']['left'] and not wheeled['fade']['right'] and back['offset'] == 0
+              and not back['fade']['left'] and back['fade']['right'] and not problems,
+        'offsets': [start['offset'], swiped['offset'], wheeled['offset'], back['offset']],
+        'fades': [start['fade'], swiped['fade'], wheeled['fade'], back['fade']], 'problems': problems}
+    rows = {}
+    for width in (300, 288, 280):
+        actual = resize(width)
+        g = geometry()
+        gesture(g, -60)
+        scroll(g, dx=0, dy=-200, phase='none'); time.sleep(1.0)
+        after = geometry()
+        fits = width >= 288
+        rows[width] = {'width': actual, 'scrollable': g['scrollable'], 'offsetAfterScroll': after['offset'],
+                       'fade': after['fade'], 'problems': _bar_problems(after, current=False)}
+        rows[width]['ok'] = (abs(actual - width) < 1 and g['scrollable'] == (not fits)
+                             and (after['offset'] == 0 if fits else 0 <= after['offset'] <= 204 - (actual - 84))
+                             and after['fade'] == {'left': False, 'right': False, 'masked': False}
+                             and not rows[width]['problems'])
+    results['UXB5_fit_and_near_fit_no_fade'] = {'ok': all(r['ok'] for r in rows.values()), 'widths': rows}

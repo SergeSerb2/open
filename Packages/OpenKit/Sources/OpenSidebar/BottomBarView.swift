@@ -82,13 +82,13 @@ final class BottomBarView: NSView {
         let spaces = context.hidesSpaceChrome ? [] : context.model.spaces
         let live = Set(spaces.map(\.id))
         for (id, v) in items where !live.contains(id) { v.removeFromSuperview(); items[id] = nil }
-        // Centered when the items fit (4 Spaces: 136 pt in a 144 pt strip → 4 pt each side). Item
-        // frames are 2 pt wider than the pitch, so "fits" counts those 2 pt. Otherwise the strip
-        // scrolls: the document holds every item, the clip view shows the strip's width.
+        // Centered when the items fit (4 Spaces: 136 pt in a 144 pt strip → 4 pt each side). Otherwise
+        // the strip scrolls: the document holds every item, the clip view shows the strip's width.
+        // Item frames are 1 pt wider than their plate on each side; that slop may be clipped.
         let total = CGFloat(spaces.count) * m.switcherPitch
-        let fits = total + 2 <= stripRect.width
-        let x0 = fits ? (stripRect.width - total) / 2 - 1 : 0
-        strip.document.frame = CGRect(x: 0, y: 0, width: fits ? stripRect.width : total + 2, height: m.height)
+        let fits = total <= stripRect.width
+        let x0 = fits ? (stripRect.width - total) / 2 - 1 : -1
+        strip.document.frame = CGRect(x: 0, y: 0, width: fits ? stripRect.width : total, height: m.height)
         for (i, space) in spaces.enumerated() {
             let v = items[space.id] ?? {
                 let v = SwitcherItemView(context: context, space: space, menus: menus)
@@ -187,9 +187,16 @@ final class SwitcherStripView: NSScrollView {
         }
     }
 
-    func updateFade() {
+    /// Which ends hide some icon ink (the emoji or glyph, not only the plate's transparent margin).
+    var fadeEdges: (left: Bool, right: Bool) {
+        let m = BottomBarMetrics.self
+        let ink = (m.switcherItemSize.width - m.switcherEmojiSize) / 2 - m.switcherPlateInset.width
         let visible = contentView.bounds
-        let left = visible.minX > 0.5, right = visible.maxX < document.frame.width - 0.5
+        return (visible.minX > ink + 0.5, visible.maxX < document.frame.width - ink - 0.5)
+    }
+
+    func updateFade() {
+        let (left, right) = fadeEdges
         guard let layer, bounds.width > 0, left || right else { layer?.mask = nil; return }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let f = min(0.5, BottomBarMetrics.switcherFadeWidth / bounds.width)
