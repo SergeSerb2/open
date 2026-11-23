@@ -7,6 +7,7 @@ profile, data: and loopback pages only.
 import http.server
 import threading
 import time
+from pathlib import Path
 
 from loopback_http import LoopbackHTTPServer
 
@@ -16,7 +17,9 @@ def run(factory, results, tmp, harness):
 
     class Slow(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path.startswith('/slow'):
+            if self.path.startswith('/slower'):
+                time.sleep(20)
+            elif self.path.startswith('/slow'):
                 time.sleep(3)
             body = ('<title>Slow %s</title><h1>%s</h1>' % (self.path, self.path)).encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.send_header('Content-Length', str(len(body)))
@@ -298,9 +301,31 @@ def run(factory, results, tmp, harness):
         app.call('select', tab=pr)
         again = wait_until(lambda: (lambda t: t if t['hasWebContent'] and t['loaded'] and not t['loading'] else None)(tab(pr)), timeout=8, step=.05) or tab(pr)
         href = app.eval(pr, 'location.href') if again.get('loaded') else ''
+        timing15 = app.call('timing')
         record('PF17_reselect_after_reset_loads_pinned_url', again['url'] == again['pinnedURL'] and href == again['pinnedURL']
                and not again['canGoBack'] and stored_before15 and not stored15 and started15,
-               started=started15, storedBefore=stored_before15, stored=stored15, again={k: again.get(k) for k in ('url', 'pinnedURL', 'canGoBack')}, href=href)
+               started=started15, storedBefore=stored_before15, stored=stored15, again={k: again.get(k) for k in ('url', 'pinnedURL', 'canGoBack')}, href=href,
+               marks={k: timing15.get(k) for k in ('firstLoadEnd', 'sleepStarted')})
+
+        # PF18 (startup T5, bug sweep r8): the after-paint task watched one page for its first paint and
+        # ended when that page closed first; the sleep controller then started only after another page
+        # finished a load (PF17's `started` failed under load). A blank page never paints: closed inside
+        # the 2 s paint budget, sleep must still start (within the budget, not on a later load).
+        app.quit()
+        blank = Path(tmp) / 'pf18-blank.html'; blank.write_text('<!doctype html><title>PF18 Blank</title>')
+        app = factory(urls=(blank.as_uri(),), fresh=True)
+        only = app.call('tabs')[0]['id']
+        # A second page that is still loading keeps a web page alive, so the no-web start (2 s after
+        # the window, when no page exists) cannot stand in for the paint path.
+        loading = app.call('open', url=base + '/slower-pf18', background=True)['id']
+        app.call('wait', tab=only)
+        early = app.call('sleep-state').get('started')
+        app.call('close', tab=only)
+        closed = bool(wait_until(lambda: only not in [t['id'] for t in app.call('tabs')] or None, timeout=3, step=.05))
+        started18 = bool(wait_until(lambda: app.call('sleep-state').get('started'), timeout=8, step=.1))
+        timing18 = app.call('timing')
+        record('PF18_sleep_starts_after_watched_page_closes', closed and not early and started18,
+               closed=closed, startedBeforeClose=early, started=started18, stillLoading=app.tab(loading).get('loading'), marks={k: timing18.get(k) for k in ('firstLoadEnd', 'sleepStarted')})
     finally:
         server.shutdown()
         app.quit()
