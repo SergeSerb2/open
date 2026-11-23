@@ -16,8 +16,8 @@ settings:
     # Filled by tools/fetch-cef.sh (CDN build) or tools/fetch-engine.sh (fork).
     CEF_ROOT: $(SRCROOT)/Vendor/cef
     CEF_WRAPPER_LIB: $(CEF_ROOT)/build/libcef_dll_wrapper/libcef_dll_wrapper.a
-    MARKETING_VERSION: "0.1.6"
-    CURRENT_PROJECT_VERSION: "8"
+    MARKETING_VERSION: "0.1.7"
+    CURRENT_PROJECT_VERSION: "9"
     # Local builds are ad-hoc signed. Release distribution needs a Developer ID
     # identity, ENABLE_HARDENED_RUNTIME=YES, and the per-helper entitlements.
     CODE_SIGN_IDENTITY: "-"
