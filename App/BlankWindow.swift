@@ -106,6 +106,10 @@ extension AppDelegate {
   /// At launch, after the snapshot's windows. The file stays until the restored windows are saved over
   /// it, so a crash right after this launch still has them (bug sweep r7 Z-07).
   func restoreBlankWindows() {
+    // Once per process, at launch: a Dock reopen after the last window closed never brings back a
+    // closed Blank Window, even before its 1 s save (review r2 of #670; capture C10).
+    guard !blankWindowsRestoreDone else { return }
+    blankWindowsRestoreDone = true
     let file = blankWindowsFile
     guard let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4 << 20,
       let data = try? Data(contentsOf: file), data.count <= 4 << 20 else { return }

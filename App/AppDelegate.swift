@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var blankWindowsFileHoldsWindows = false
   /// The content last written to `blank-windows.json` (nil: no file).
   var blankWindowsWritten: Data?
+  var blankWindowsRestoreDone = false
   private var faviconShutdownTask: Task<Void, Never>?
   private var historyQuitTask: Task<Void, Never>?
   /// Uptime of the last quit-time history flush. A quit cancelled later (downloads alert,

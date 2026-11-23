@@ -28,8 +28,11 @@ public final class SnapshotStore: @unchecked Sendable {
     /// a later successful write ends the run (bug sweep r7 Z-05). Return false when nobody was told
     /// (no window to show it in): the next failure calls again.
     @MainActor public var onSaveFailure: ((String) -> Bool)?
-    /// Guarded by `lock`: true while the background writes fail.
-    private var writeFailing = false
+    /// Guarded by `lock` (review r2 of #670). `lastWriteFailed`: the latest write failed; set on the
+    /// write queue itself, so `flush()` sees the first failure. `failureReported`: the App was told
+    /// about this run of failures. A successful write clears both.
+    private var lastWriteFailed = false
+    private var failureReported = false
 
     private func holdRootLock() throws {
         try lock.withLock {
@@ -133,10 +136,11 @@ public final class SnapshotStore: @unchecked Sendable {
 
     /// The first failure of a run tells the App; a failure nobody saw does not start the run.
     @MainActor private func reportFailure(_ message: String) {
-        let first = lock.withLock { () -> Bool in defer { writeFailing = true }; return !writeFailing }
+        let first = lock.withLock { () -> Bool in defer { failureReported = true }; return !failureReported }
         guard first, let onSaveFailure, !onSaveFailure(message) else { return }
-        lock.withLock { writeFailing = false }
+        lock.withLock { failureReported = false }
     }
+    private func writeSucceeded() { lock.withLock { lastWriteFailed = false; failureReported = false } }
 
     /// Synchronous save (also used by flush and the CLI).
     @MainActor
@@ -147,7 +151,7 @@ public final class SnapshotStore: @unchecked Sendable {
         let dto = SnapshotMapper.dto(from: model); captureCount += 1; dirtyModel = nil; dirtySince = nil
         do {
             try queue.sync { try write(dto: dto) }
-            lock.withLock { writeFailing = false }
+            writeSucceeded()
         } catch {
             // Still unsaved: a later change, flush or quit tries again.
             dirtyModel = model; dirtySince = Self.uptime
@@ -165,7 +169,7 @@ public final class SnapshotStore: @unchecked Sendable {
             queue.sync {}
             // A background write that just failed has not marked the model dirty again yet: retry it
             // now (review r1 of #670).
-            if lock.withLock({ writeFailing }), dirtyModel == nil, let model = capturedModel {
+            if lock.withLock({ lastWriteFailed }), dirtyModel == nil, let model = capturedModel {
                 do { try saveNow(model: model) }
                 catch { FileHandle.standardError.write(Data("SnapshotStore flush failed: \(error)\n".utf8)) }
             }
@@ -175,9 +179,10 @@ public final class SnapshotStore: @unchecked Sendable {
     private func writeReportingFailure(dto: SnapshotFileDTO, generation: Int) {
         do {
             try write(dto: dto)
-            lock.withLock { writeFailing = false }
+            writeSucceeded()
         } catch {
             FileHandle.standardError.write(Data("SnapshotStore write failed: \(error)\n".utf8))
+            lock.withLock { lastWriteFailed = true }
             let message = error.localizedDescription
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -186,7 +191,8 @@ public final class SnapshotStore: @unchecked Sendable {
                 if generation == self.saveGeneration, self.dirtyModel == nil, let model = self.capturedModel {
                     self.dirtyModel = model; self.dirtySince = Self.uptime
                 }
-                self.reportFailure(message)
+                // A save that succeeded since then makes this failure stale: no toast.
+                if self.lock.withLock({ self.lastWriteFailed }) { self.reportFailure(message) }
             }
         }
     }

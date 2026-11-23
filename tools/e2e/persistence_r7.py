@@ -219,6 +219,25 @@ def rows(factory, results, tmp, h, origin):
             beforeKill=urls(before_kill), restored=first_restore)
         row('persist_z07_restored_blank_window_survives_second_force_quit',
             second_restore.get('isBlankWindow') and urls(second_restore) == ['z07-blank'], restored=second_restore)
+        # Review r2 of #670: the Blank Window closes last, and a Dock reopen comes at once (before its
+        # 1 s save). Only the browser window comes back: a closed Blank Window is not restored (C10).
+        blank_id = second_restore.get('window')
+        for other in [w['id'] for w in app.call('shell-windows') if w['id'] != blank_id]:
+            app.call('window-focus', id=other, activate=True)
+            app.call('window-close')
+        wait(lambda: len(app.call('shell-windows')) == 1 or None, timeout=5, step=.05)
+        app.call('window-focus', id=blank_id, activate=True)
+        closed_at = time.monotonic()
+        app.call('window-close')
+        wait(lambda: not app.call('shell-windows') or None, timeout=5, step=.02)
+        app.call('window-reopen')
+        reopen_after = round(time.monotonic() - closed_at, 3)
+        wait(lambda: app.call('shell-windows') or None, timeout=8, step=.1)
+        time.sleep(1.5)
+        after_reopen = app.call('blank-window')
+        row('persist_z07_closed_blank_window_not_reopened', after_reopen['browserWindows'] == 1
+            and not after_reopen['isBlankWindow'] and reopen_after < 1.0,
+            reopenAfterSeconds=reopen_after, state={k: after_reopen.get(k) for k in ('browserWindows', 'isBlankWindow', 'tabs')})
         app.quit()
         # Later sections start with the browser window only.
         (state_dir / 'blank-windows.json').unlink(missing_ok=True)
