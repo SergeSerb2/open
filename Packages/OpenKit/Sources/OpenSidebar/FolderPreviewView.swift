@@ -30,6 +30,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         headerIcon.folder = folder; headerIcon.context = context; headerIcon.isHidden = true
         searchField.delegate = self; searchField.sendsSearchStringImmediately = true
         searchField.focusRingType = .none
+        searchField.cell?.lineBreakMode = .byTruncatingTail; searchField.cell?.truncatesLastVisibleLine = true
         searchField.setAccessibilityLabel("Search folder tabs")
         separator.wantsLayer = true
         let column = NSTableColumn(identifier: .init("folder-preview")); tableView.addTableColumn(column)
@@ -69,7 +70,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         return CGSize(width: m.folderWidth, height: m.headerHeight + CGFloat(max(1, min(filtered.count, m.maxVisibleRows))) * m.rowHeight + m.bottomPadding)
     }
     /// The search field's placeholder: "Search <folder title>…" (measured text form).
-    public var searchPlaceholder: String { searchField.placeholderString ?? "" }
+    public var searchPlaceholder: String { searchField.placeholderAttributedString?.string ?? searchField.placeholderString ?? "" }
     public var displayedTabIDs: [ItemID] { filtered.map(\.id) }
     public var displayedHeaderIcon: String? { context.folderIconOverrideProvider?(folder) ?? folder.customIcon }
     public var drawnHeaderGlyph: String? { headerIcon.lastDrawnGlyph }
@@ -86,7 +87,14 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         filtered = query.isEmpty ? tabs : tabs.filter { $0.displayTitle.localizedCaseInsensitiveContains(query) }
         let name = folder.title.trimmingCharacters(in: .whitespaces)
-        searchField.placeholderString = name.isEmpty ? "Search…" : "Search \(name)…"
+        let placeholder = name.isEmpty ? "Search…" : "Search \(name)…"
+        if searchPlaceholder != placeholder {
+            // A long folder name ends in an ellipsis at the field's edge instead of being cut mid-word (UX1 D6).
+            let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
+            searchField.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
+                .font: searchField.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize),
+                .foregroundColor: NSColor.placeholderTextColor, .paragraphStyle: style])
+        }
         searchField.isHidden = tabs.isEmpty
         emptyLabel.isHidden = !filtered.isEmpty
         emptyLabel.setAccessibilityLabel(emptyLabel.text())

@@ -54,7 +54,6 @@ public final class ToastView: NSView {
         case .keycaps(let keys): hasButton = false; keycaps = keys
         case .none: hasButton = false; keycaps = []
         }
-        let height = m.height(hasSubtitle: content.subtitle != nil, hasButton: hasButton)
         text.configure(title: content.title, subtitle: content.subtitle, style: style)
         let keyLines = keycaps.map { ToastTextView.line($0, font: Typography.toast.font, color: style.toastText) }
         let keyWidths = keyLines.map { line -> CGFloat in
@@ -66,7 +65,11 @@ public final class ToastView: NSView {
         if content.symbol != nil { lead += m.symbolSize + m.symbolToTitle }
         if !keyWidths.isEmpty { lead += keyWidths.reduce(0, +) + m.keycapGap * CGFloat(keyWidths.count - 1) + m.keycapToTitle }
         let trailing = hasButton ? m.labelToAccessory + m.accessorySize.width + m.accessoryTrailing : m.trailingPadding
-        let natural = (lead + text.naturalWidth + trailing).rounded(.up)
+        var natural = (lead + text.naturalWidth + trailing).rounded(.up)
+        // A sentence that does not fit wraps onto a second line instead of losing its middle (UX1 D5).
+        let wraps = natural > m.maxWidth && text.wrapTitle(width: m.maxWidth - lead - trailing)
+        if wraps { natural = (lead + text.naturalWidth + trailing).rounded(.up) }
+        let height = m.height(hasSubtitle: content.subtitle != nil || wraps, hasButton: hasButton)
         let width = min(m.maxWidth, max(m.minWidth, natural))
         let textWidth = width - lead - trailing
         // A short text-only toast ("90%") is padded to the minimum width with the text centered.
@@ -98,7 +101,7 @@ public final class ToastView: NSView {
                 button.perform = { [weak self] in self?.onAccessory?() }
             }
             button.configure(symbol: symbol, label: label, style: style)
-            let top = content.subtitle == nil ? m.accessoryTop : ((height - m.accessorySize.height) / 2).rounded()
+            let top = content.subtitle == nil && !wraps ? m.accessoryTop : ((height - m.accessorySize.height) / 2).rounded()
             button.frame = CGRect(x: width - m.accessoryTrailing - m.accessorySize.width, y: top,
                                   width: m.accessorySize.width, height: m.accessorySize.height)
         } else { accessoryButton?.removeFromSuperview(); accessoryButton = nil }
@@ -179,8 +182,12 @@ private final class ToastTextView: NSView {
     private var subtitle: CTLine?
     private var titleFull: CTLine?
     private var subtitleFull: CTLine?
+    /// The second line of a wrapped title (same font and color as the first).
+    private var titleSecond: CTLine?
+    private var wrapped: (first: CTLine, second: CTLine)?
     private var titleOrigin = CGPoint.zero
     private var subtitleOrigin = CGPoint.zero
+    private var titleSecondOrigin = CGPoint.zero
     private var color = RGBA.white(1), subtitleColor = RGBA.white(0.8)
     private var titleString = "", subtitleString: String?
     var keycaps: [(CTLine, CGRect)] = [] { didSet { needsDisplay = true } }
@@ -201,11 +208,32 @@ private final class ToastTextView: NSView {
         color = style.toastText; subtitleColor = style.toastSubtitleText
         titleFull = Self.line(title, font: Typography.toast.font, color: color)
         subtitleFull = subtitle.map { Self.line($0, font: Typography.toastSubtitle.font, color: subtitleColor) }
+        wrapped = nil; titleSecond = nil
         setAccessibilityValue([title, subtitle].compactMap { $0 }.joined(separator: "\n"))
     }
     var naturalWidth: CGFloat {
-        let widths = [titleFull, subtitleFull].compactMap { $0 }.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
-        return (widths.max() ?? 0).rounded(.up)
+        let lines = wrapped.map { [$0.first, $0.second] } ?? [titleFull, subtitleFull].compactMap { $0 }
+        return (lines.map(Self.width).max() ?? 0).rounded(.up)
+    }
+    static func width(_ line: CTLine) -> CGFloat { CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) }
+    /// Splits a title-only toast at the word break that gives the most even two lines no wider than
+    /// `width`. Returns false (single line, middle truncation) when there is a subtitle or no break fits.
+    func wrapTitle(width: CGFloat) -> Bool {
+        guard subtitleFull == nil, width > 0 else { return false }
+        let words = titleString.split(separator: " ", omittingEmptySubsequences: true)
+        guard words.count >= 2 else { return false }
+        var best: (CTLine, CTLine, CGFloat)?
+        for cut in 1..<words.count {
+            let first = Self.line(words[..<cut].joined(separator: " "), font: Typography.toast.font, color: color)
+            let firstWidth = Self.width(first)
+            guard firstWidth <= width + 0.5 else { break }
+            let second = Self.line(words[cut...].joined(separator: " "), font: Typography.toast.font, color: color)
+            let widest = max(firstWidth, Self.width(second))
+            if best == nil || widest < best!.2 { best = (first, second, widest) }
+        }
+        guard let best else { return false }
+        wrapped = (best.0, best.1)
+        return true
     }
     /// Places the lines in `width` from `x`, centered as a block in `height`; returns the title box.
     func layoutLines(x: CGFloat, width: CGFloat, height: CGFloat) -> CGRect {
@@ -216,7 +244,14 @@ private final class ToastTextView: NSView {
                 .font: Typography.toast.font, NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.cgColor]))
             return (CTLineCreateTruncatedLine(line, Double(width), .middle, ellipsis) ?? line, true)
         }
-        (title, titleTruncated) = fit(titleFull)
+        if let wrapped {
+            title = wrapped.first
+            let second = fit(wrapped.second)
+            titleSecond = second.0; titleTruncated = second.1
+        } else {
+            (title, titleTruncated) = fit(titleFull)
+            titleSecond = nil
+        }
         subtitle = fit(subtitleFull).0
         func metrics(_ line: CTLine?) -> (ascent: CGFloat, descent: CGFloat) {
             guard let line else { return (0, 0) }
@@ -226,6 +261,15 @@ private final class ToastTextView: NSView {
         }
         let t = metrics(title), s = metrics(subtitle)
         let titleHeight = t.ascent + t.descent
+        if titleSecond != nil {
+            let block = titleHeight * 2 + ToastMetrics.lineGap
+            let top = (height - block) / 2
+            titleOrigin = CGPoint(x: x, y: top + t.ascent)
+            titleSecondOrigin = CGPoint(x: x, y: top + titleHeight + ToastMetrics.lineGap + t.ascent)
+            needsDisplay = true
+            let titleWidth = [title, titleSecond].compactMap { $0 }.map(Self.width).max() ?? 0
+            return CGRect(x: x, y: top, width: titleWidth, height: block)
+        }
         let block = subtitle == nil ? titleHeight : titleHeight + ToastMetrics.lineGap + s.ascent + s.descent
         let top = (height - block) / 2
         titleOrigin = CGPoint(x: x, y: top + t.ascent)
@@ -250,6 +294,7 @@ private final class ToastTextView: NSView {
     private func drawText(in context: CGContext) {
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         if let title { context.textPosition = titleOrigin; CTLineDraw(title, context) }
+        if let titleSecond { context.textPosition = titleSecondOrigin; CTLineDraw(titleSecond, context) }
         if let subtitle { context.textPosition = subtitleOrigin; CTLineDraw(subtitle, context) }
         for (line, plate) in keycaps {
             let ink = CTLineGetImageBounds(line, nil)
