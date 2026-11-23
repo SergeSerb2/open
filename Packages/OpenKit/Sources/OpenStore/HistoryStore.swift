@@ -54,7 +54,7 @@ public actor HistoryStore {
     public func open() {
         guard db == nil, !closed else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        db = try? SQLiteDB(path: fileURL.path)
+        db = try? SQLiteDB.openSettingAsideDamage(path: fileURL.path) { try SQLiteDB(path: $0) }
         db?.exec("""
         CREATE TABLE IF NOT EXISTS urls(
           id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL DEFAULT '',
