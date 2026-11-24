@@ -489,6 +489,10 @@ def creation_keeps_focus_after_space_switch(factory, results, tmp, harness):
             settled=bool(settled), nameFocused=state.get('nameFocused'), firstResponder=window['firstResponder'],
             space=window['space'] == other, key=window['isKeyWindow'])
         app.call('editor-close')
+    finally:
+        app.quit()
+
+
 def spaces_polish_rows(factory, results, tmp, harness):
     """UX round 1 C3-C5 and the narrow New Space form, in the real App with no key window.
 
