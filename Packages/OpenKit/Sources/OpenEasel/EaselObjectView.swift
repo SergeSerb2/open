@@ -39,7 +39,16 @@ final class EaselObjectView: NSView {
             layer.shadowOpacity = 0; layer.shadowPath = nil
         }
     }
-    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); if isCard { applyCardShadow() } }
+    /// The layer redraws only on `needsDisplay`, so a size change must ask for it;
+    /// an origin-only move keeps the existing backing store.
+    override func setFrameSize(_ newSize: NSSize) {
+        let resized = newSize != frame.size
+        super.setFrameSize(newSize)
+        if resized {
+            needsDisplay = true
+            if isCard { applyCardShadow() }
+        }
+    }
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     /// A live web card's page (a pooled engine view, owned by the App's content host). The
