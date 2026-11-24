@@ -126,10 +126,10 @@ struct SettingsNavigation: NSViewRepresentable {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         mask.frame = scroll.bounds
         let fade = min(24, below) / max(1, scroll.bounds.height)
-        // AppKit layers of a flipped scroll view are not flipped: the list's bottom is y = 0.
+        // The scroll view's layer is geometry-flipped: unit y = 0 is the list's top, y = 1 its bottom.
         mask.startPoint = .init(x: 0.5, y: 0); mask.endPoint = .init(x: 0.5, y: 1)
-        mask.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.cgColor, NSColor.black.cgColor]
-        mask.locations = [0, NSNumber(value: Double(fade)), 1]
+        mask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.black.withAlphaComponent(0).cgColor]
+        mask.locations = [0, NSNumber(value: Double(1 - fade)), 1]
         scroll.layer?.mask = mask
         CATransaction.commit()
     }

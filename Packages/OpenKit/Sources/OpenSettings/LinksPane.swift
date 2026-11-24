@@ -104,7 +104,8 @@ private struct LinkTestArea: View {
                     Button("Test") { tested = true; links.runTest() }
                 }.padding(.horizontal, 14).padding(.top, 4).padding(.bottom, tested && !links.testInputIsValid ? 4 : 10)
                 if tested && !links.testInputIsValid {
-                    SettingsError(text: "Enter a valid URL.").font(.system(size: 11.5)).padding(.horizontal, 14).padding(.bottom, 10)
+                    SettingsError(text: "Enter a valid URL.").font(.system(size: 11.5)).frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14).padding(.bottom, 10)
                 }
                 AppPicker(bundleID: $links.testSourceBundleID).padding(.horizontal, 14).padding(.bottom, 10)
                 OpenSettingsRow(root: root, id: "links/test-space", title: "Most Recent Space", last: true) {

@@ -118,13 +118,14 @@ struct OpenSettingsSwitchStyle: ToggleStyle {
         Button { configuration.isOn.toggle() } label: {
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
                 Capsule().fill(configuration.isOn ? accent : Color(nsColor: SettingsStyle.control.nsColor))
-                Capsule().stroke(Color(nsColor: SettingsStyle.controlLine.nsColor), lineWidth: 1)
+                // Disabled: a stronger outline keeps the track's shape readable on the card (UX round 1 F8).
+                Capsule().stroke(Color(nsColor: enabled ? SettingsStyle.controlLine.nsColor : SettingsStyle.keyLine.nsColor), lineWidth: 1)
                 Circle().fill(Color(nsColor: SettingsStyle.white.nsColor)).frame(width: 17, height: 17)
                     // A hairline keeps the knob visible on the light track when the shadow fades (disabled).
-                    .overlay(Circle().stroke(Color(nsColor: SettingsStyle.controlLine.nsColor), lineWidth: 0.5))
+                    .overlay(Circle().stroke(Color(nsColor: enabled ? SettingsStyle.controlLine.nsColor : SettingsStyle.keyLine.nsColor), lineWidth: 0.5))
                     .shadow(color: Color(nsColor: SettingsStyle.shadow.nsColor), radius: 1, y: 1).padding(.horizontal, 2.5)
             }.frame(width: 36, height: 22)
-        }.buttonStyle(.plain).opacity(enabled ? 1 : 0.55)
+        }.buttonStyle(.plain).opacity(enabled ? 1 : 0.6)
             .accessibilityElement(children: .ignore).accessibilityLabel(label)
             .accessibilityValue(configuration.isOn ? "On" : "Off")
             .accessibilityAddTraits(configuration.isOn ? [.isSelected] : [])

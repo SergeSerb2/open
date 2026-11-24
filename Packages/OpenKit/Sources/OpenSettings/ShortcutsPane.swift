@@ -197,7 +197,7 @@ public struct ShortcutsPane: View {
             let row: CGFloat = model.conflictText(for: command.id) != nil || command.scope == .global ? 60 : 44
             // 352 pt at the default window; taller windows give the list the extra room, keeping the
             // header, tools and the overlap card in view (UX round 1 F9).
-            if height + row > max(352, viewport - 330) { break }
+            if height + row > max(352, viewport - 340) { break }
             height += row
         }
         return max(44, height)
