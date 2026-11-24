@@ -10,7 +10,10 @@ public final class ColorPadView: OpenDesign.ColorPadView {
     public let emptyLabel = NSTextField(wrappingLabelWithString: "Tap to pick a color for this space")
 
     public override init(frame: NSRect) {
-        super.init(frame: frame)
+        // Arc opens the editor with no ring on the pad (F0137): show it only after keyboard use,
+        // like the Boost editor's pad.
+        var style = ColorPadStyle.theme; style.keyboardFocusOnly = true
+        super.init(frame: frame, style: style)
         emptyLabel.font = .systemFont(ofSize: 13,weight: .semibold)
         emptyLabel.alignment = .center; emptyLabel.maximumNumberOfLines = 1
         emptyLabel.setAccessibilityElement(false); addSubview(emptyLabel)
@@ -27,6 +30,19 @@ public final class ColorPadView: OpenDesign.ColorPadView {
         refreshAppearance()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    /// Tab / Shift-Tab onto the pad shows the ring; a click or the editor's own focus on open does not.
+    /// The panel marks its key-view selection (the window's selection direction is stale when focus
+    /// is set in code).
+    public override func becomeFirstResponder() -> Bool {
+        guard super.becomeFirstResponder() else { return false }
+        showsKeyboardFocus = (window as? ThemeEditorPanel)?.isSelectingKeyView ?? false
+        return true
+    }
+    public override func resignFirstResponder() -> Bool {
+        guard super.resignFirstResponder() else { return false }
+        showsKeyboardFocus = false
+        return true
+    }
     public override func layout() {
         super.layout()
         let height = ceil(emptyLabel.cell?.cellSize(forBounds: CGRect(x: 0,y: 0,width: 220,height: 40)).height ?? 18)

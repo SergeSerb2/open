@@ -89,6 +89,7 @@ public final class ThemeEditorController {
             animateOpen()
         }
         panel.makeFirstResponder(panel.editorView.pad)
+        panel.editorView.pad.showsKeyboardFocus = false  // opening never shows the ring (Arc F0137)
         observeLifecycle()
     }
 

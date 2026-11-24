@@ -751,7 +751,7 @@
         let style = controller.context.focusedSpace.map { controller.context.style(for:$0) }
         let contentAppearance = style?.resolvedAppearance(system:controller.context.systemAppearance) ?? controller.context.systemAppearance
         let ink = style?.titleColor(contentAppearance).nsColor.usingColorSpace(.sRGB)
-        return ["foreground":ink.map { [$0.redComponent,$0.greenComponent,$0.blueComponent,$0.alphaComponent] } ?? [], "frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
+        return ["foreground":ink.map { [$0.redComponent,$0.greenComponent,$0.blueComponent,$0.alphaComponent] } ?? [], "frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid)), "titleDraw": controller.sidebar.rowTitleDraw(nodeID: ItemID(rawValue: uuid)) ?? [:]] as [String: Any]
       case "preview-state":
         return try previewState(a)
       case "page-selection", "swipe", "swipe-indicator":
@@ -1626,6 +1626,7 @@
             }
           },
           "switcherGeometry": controller.sidebar.switcherGeometry(in: root),
+          "pagerState": controller.sidebar.pagerState,
           "hint": ["shows": controller.hintShows, "visible": controller.hintToast != nil,
             "frame": controller.hintToast.map { rect($0.frame) } ?? [], "keys": controller.hintToast?.keys ?? "",
             "plate": controller.hintToast.map { rect($0.plateFrame) } ?? []] as [String: Any],
@@ -3067,8 +3068,16 @@
           let origin = manager.scrollView.contentView.bounds.origin
           let column = manager.columnFrame(spaceID: id).map { $0.offsetBy(dx: -origin.x, dy: -origin.y) } ?? .zero
           let parts = (manager.controls(spaceID: id)?.partFrames ?? [:]).mapValues { [$0.minX, $0.minY, $0.width, $0.height] }
+          // Icon and title in window points, top-left origin (pixel checks on a window snapshot).
+          var inWindow: [String: [Double]] = [:]
+          if let controls = manager.controls(spaceID: id), let height = controls.window?.frame.height {
+            for (name, frame) in controls.partFrames where name == "icon" || name == "title" {
+              let r = controls.convert(frame, to: nil)
+              inWindow[name] = [Double(r.minX), Double(height - r.maxY), Double(r.width), Double(r.height)]
+            }
+          }
           return ["id": id.description, "grabber": [rect.midX, (target?.frame.height ?? 0) - rect.midY], "rows": rows,
-            "column": [column.minX, column.minY, column.width, column.height], "header": parts,
+            "column": [column.minX, column.minY, column.width, column.height], "header": parts, "headerInWindow": inWindow,
             "managerSize": [manager.bounds.width, manager.bounds.height]]
         }
       } ?? []
