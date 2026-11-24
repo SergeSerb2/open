@@ -10,12 +10,14 @@ Each row reads accessibility frames of the real Settings window over the automat
                                 the overlap card still fits in the window (F9)
   settings_download_button      the download location button says "Choose…" (F18)
 
-Usage (hold the on-screen lock):
+Gate: tools/e2e/engine_e2e.py --only settings-layout (the harness App factory).
+Standalone (hold the on-screen lock; --bundle runs a saved copy, e.g. the parent build):
   lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_layout.py --out DIR [--bundle APP] [--config Debug]
 """
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -25,12 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_e2e import Open  # noqa: E402
 
 
-def run(out, bundle=None, config='Debug'):
-    out.mkdir(parents=True, exist_ok=True)
-    data = tempfile.mkdtemp(prefix='open-settings-layout-')
-    env = {'OPEN_E2E_APP_BUNDLE': str(bundle)} if bundle else {}
-    app = Open(config, 'chrome', data, [], str(out / 'app.log'), extra_env=env)
-    results = {}
+def check(app, results, out):
+    """The rows, on a running App. `results` gets one {ok, ...} entry per row; Settings closes at the end."""
 
     def ui(**args):
         return app.call('settings-ui', **args)
@@ -96,8 +94,10 @@ def run(out, bundle=None, config='Debug'):
         ui(action='resize', width=1400, height=1000); ui(action='open', section='shortcuts'); s = settle(.8)
         table = next((c for c in controls(s) if c['role'] == 'AXTable' and c['label'] == 'Keyboard shortcuts'), None)
         overlap = next((c for c in controls(s) if c['id'] == 'shortcuts/priority'), None)
+        # The screen may cap the requested 1000 pt (a 14-inch built-in display): judge the realized height.
         height = s['size'][1]
-        row('settings_shortcuts_fill_pane', table is not None and overlap is not None and table['frame'][3] > 560
+        row('settings_shortcuts_fill_pane', table is not None and overlap is not None and table['frame'][3] > 352
+            and table['frame'][3] >= min(560, height - 400)
             and overlap['frame'][1] + overlap['frame'][3] <= height, table=table and table['frame'],
             overlap=overlap and overlap['frame'], window=s['size'])
         ui(action='resize', width=960, height=660); settle()
@@ -113,7 +113,31 @@ def run(out, bundle=None, config='Debug'):
             w = ui()['window']; app.call('key', key='w', modifiers=['cmd'], window=w, route='app')
         except Exception:
             pass
+
+
+def run(factory, results, tmp, h=None):
+    """engine_e2e.py --only settings-layout: the gate's App factory (private data root, owned cleanup)."""
+    out = Path(tmp) / 'settings-layout'; out.mkdir(parents=True, exist_ok=True)
+    app = factory(fresh=True)
+    try:
+        check(app, results, out)
+    finally:
         app.quit()
+
+
+def standalone(out, bundle=None, config='Debug'):
+    out.mkdir(parents=True, exist_ok=True)
+    data = tempfile.mkdtemp(prefix='open-settings-layout-')
+    env = {'OPEN_E2E_APP_BUNDLE': str(bundle)} if bundle else {}
+    results = {}
+    try:
+        app = Open(config, 'chrome', data, [], str(out / 'app.log'), extra_env=env)
+        try:
+            check(app, results, out)
+        finally:
+            app.quit()
+    finally:
+        shutil.rmtree(data, ignore_errors=True)
     failed = [k for k, v in results.items() if not v['ok']]
     print('settings-layout:', 'PASS' if not failed and results else 'FAIL ' + ', '.join(failed), flush=True)
     return not failed and bool(results)
@@ -125,4 +149,4 @@ if __name__ == '__main__':
     parser.add_argument('--bundle', type=Path)
     parser.add_argument('--config', default='Debug')
     opts = parser.parse_args()
-    sys.exit(0 if run(opts.out, opts.bundle, opts.config) else 1)
+    sys.exit(0 if standalone(opts.out, opts.bundle, opts.config) else 1)

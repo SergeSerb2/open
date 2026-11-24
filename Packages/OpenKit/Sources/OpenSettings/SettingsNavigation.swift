@@ -69,7 +69,9 @@ struct SettingsNavigation: NSViewRepresentable {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
     func update(section: SettingsSection, query: String, results: [SettingsSearchEntry], focusRequest: Int, shortcutAttention: Bool) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
-        footer.stringValue = "Open \(version)" + (model.updateState.map { " · " + $0 } ?? "")
+        // With an update state, drop "Open" so "0.1.7 · Update available" fits beside Check (UX round 1 F22).
+        footer.stringValue = model.updateState.map { "\(version) · " + $0 } ?? "Open \(version)"
+        footer.toolTip = "Open \(version)" + (model.updateState.map { " · " + $0 } ?? "")
         currentQuery = query
         if search.stringValue != query { search.stringValue = query }
         let counts = Dictionary(grouping: results, by: \.section).mapValues(\.count)

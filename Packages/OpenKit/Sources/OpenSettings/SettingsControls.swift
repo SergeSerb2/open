@@ -237,8 +237,13 @@ private struct SettingsNativeChoice<Value: Hashable>: NSViewRepresentable {
         let text = selectedItem?.title ?? "Choose"
         let color = SettingsStyle.text.nsColor.withAlphaComponent(isEnabled ? 1 : 0.45)
         var x: CGFloat = profile ? 29 : 10
-        if !profile, let image = selectedItem?.image {
-            image.draw(in: .init(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16), from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.45, respectFlipped: true, hints: nil)
+        if !profile, var image = selectedItem?.image {
+            // A template symbol (Selected app) takes the text colour; app icons draw as they are.
+            if image.isTemplate, let tinted = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular).applying(.init(paletteColors: [color]))) { image = tinted }
+            let scale = min(16 / max(image.size.width, 1), 16 / max(image.size.height, 1), 1)
+            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            image.draw(in: .init(x: x + (16 - size.width) / 2, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height),
+                from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.45, respectFlipped: true, hints: nil)
             x += 20
         }
         let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail

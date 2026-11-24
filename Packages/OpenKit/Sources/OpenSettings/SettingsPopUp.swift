@@ -54,9 +54,16 @@ struct SettingsPopUp<Value: Hashable>: NSViewRepresentable {
         }
         control.selectItem(at:selected);control.isEnabled=enabled;control.needsDisplay=true
     }
+    /// Measured from the SwiftUI values, never the NSView: SwiftUI may size before updateNSView runs.
     func sizeThatFits(_ proposal:ProposedViewSize,nsView:SettingsChoiceButton,context:Context)->CGSize? {
-        let item=nsView.selectedItem
-        return .init(width:min(width,SettingsChoiceButton.width(for:item?.title ?? "Choose",image:item?.image != nil)),height:26)
+        let entry=entries.first{$0.value == selection} ?? entries.first{$0.value != nil}
+        let (title,image):(String,Bool)
+        switch entry {
+        case .option(let label,_,let symbol): (title,image)=(label,symbol != nil)
+        case .imageOption(let label,_,_): (title,image)=(label,true)
+        default: (title,image)=("Choose",false)
+        }
+        return .init(width:min(width,SettingsChoiceButton.width(for:title,image:image)),height:26)
     }
     @MainActor final class Coordinator:NSObject {
         var parent:SettingsPopUp
