@@ -5,6 +5,13 @@ on-screen suite on that Mac until a person answers it. Automation launches pass
 --use-fake-device-for-media-stream, so a page that asks for the camera and microphone gets fake
 devices and Chromium never asks macOS. Rows: the page gets live fake tracks; macOS camera and
 microphone status is unchanged (never requested); no system dialog is on screen afterwards.
+
+Local Network (2026-11-23): Chromium's built-in DNS client sends UDP DNS to the configured server
+(usually the LAN router), and macOS then asks "Allow "Open" to find devices on local networks?" for
+every new test binary. Automation builds pass --disable-features=AsyncDns (App/main.swift). Rows: the
+network service helper runs with AsyncDns in --disable-features, merged with a launcher's own list;
+an offline lookup (.invalid, RFC 6761) in a net log uses the system resolver only: the insecure
+client is off, no built-in DNS transaction, no UDP to port 53.
 """
 import json
 from pathlib import Path
@@ -51,3 +58,47 @@ def run(factory, results, tmp, h):
         try: app.call('policy', permissions='')
         except Exception: pass
         server.shutdown()
+    local_network_rows(factory, results, tmp, h, row)
+
+
+def local_network_rows(factory, results, tmp, h, row):
+    import re
+    netlog = Path(tmp) / 'local-network-netlog.json'
+    # A launcher's own feature list must survive next to the shell's AsyncDns (they merge).
+    app = factory(urls=(), fresh=True, extra_args=['--log-net-log=' + str(netlog), '--net-log-capture-mode=Everything',
+                                                   '--disable-features=OpenLocalNetworkProbe'])
+    try:
+        tab = app.call('open', url='http://ux-local-network-probe.invalid/')['id']
+        try: app.call('wait', tab=tab, timeout=15)
+        except Exception: pass
+        ps = subprocess.run(['ps', '-axo', 'pid,ppid,command'], capture_output=True, text=True).stdout.splitlines()
+        helpers = [l for l in ps if l.split(None, 2)[1:2] == [str(app.pid)] and 'Open Helper' in l]
+        network = [l for l in helpers if '--utility-sub-type=network.mojom.NetworkService' in l]
+        def disabled(line):
+            found = re.findall(r'--disable-features=(\S+)', line)
+            return set(found[-1].split(',')) if found else set()
+        lists = [disabled(l) for l in network]
+        row('local_network_async_dns_off_in_helpers', bool(network) and all({'AsyncDns', 'OpenLocalNetworkProbe', 'MediaRouter'} <= d for d in lists),
+            networkHelpers=len(network), disableFeatures=[sorted(d) for d in lists])
+    finally:
+        app.quit()
+    raw = netlog.read_text() if netlog.exists() else ''
+    if raw and not raw.rstrip().endswith('}'):
+        raw = raw.rstrip().rstrip(',') + ']}'   # a net log cut at quit has no closing brackets
+    events, names = [], {}
+    try:
+        log = json.loads(raw)
+        names = {v: k for k, v in log['constants']['logEventTypes'].items()}
+        events = log['events']
+    except (ValueError, KeyError):
+        pass
+    def of(kind): return [e.get('params', {}) for e in events if names.get(e['type']) == kind]
+    configs = of('DNS_CONFIG_CHANGED')
+    udp53 = [p['address'] for p in of('UDP_CONNECT') if str(p.get('address', '')).endswith(':53')]
+    system = len(of('HOST_RESOLVER_SYSTEM_TASK'))
+    builtin = len(of('DNS_TRANSACTION_ATTEMPT'))
+    row('local_network_lookup_uses_system_resolver', bool(events) and bool(configs)
+        and all(c.get('can_use_insecure_dns_transactions') is False for c in configs)
+        and builtin == 0 and not udp53 and system >= 1,
+        insecureClient=[c.get('can_use_insecure_dns_transactions') for c in configs], builtInAttempts=builtin,
+        udpPort53=udp53, systemTasks=system, events=len(events))

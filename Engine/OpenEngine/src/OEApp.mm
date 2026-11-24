@@ -173,8 +173,18 @@ class OEApp : public CefApp,
       if (eq == std::string::npos) {
         command_line->AppendSwitch(sw);
       } else {
-        command_line->AppendSwitchWithValue(sw.substr(0, eq),
-                                            sw.substr(eq + 1));
+        std::string name = sw.substr(0, eq), value = sw.substr(eq + 1);
+        // Feature lists merge with the command line's own list: appending
+        // replaces a switch's value, so a shell --disable-features would
+        // otherwise drop one a launcher passed (e.g. the extension suites'
+        // DisableLoadExtensionCommandLineSwitch).
+        if (name == "enable-features" || name == "disable-features") {
+          std::string existing = command_line->GetSwitchValue(name);
+          if (!existing.empty()) {
+            value = existing + "," + value;
+          }
+        }
+        command_line->AppendSwitchWithValue(name, value);
       }
     }
     // CEF retains the initial Profile as its process-wide request context.
@@ -208,21 +218,14 @@ class OEApp : public CefApp,
     // read from its BASE_FEATURE in this Chromium tree): optimization guide
     // hints, models and page-content extraction, the segmentation platform,
     // Cast discovery (MediaRouter: Cast is out of v1, page-platform §4.12, EP-12),
-    // and the translate ranker (manual translate stays). AsyncDns: Chromium's
-    // built-in insecure DNS client sends UDP to the configured DNS server, which
-    // is usually the home router on the LAN, so every new Open binary raised
-    // macOS's Local Network prompt about 1 s after launch. Without it, plain DNS
-    // goes through getaddrinfo (mDNSResponder, exempt from the prompt, and it
-    // follows VPN and profile DNS settings). Secure DNS (DoH) still uses
-    // Chromium's own client: kAsyncDns gates only the insecure one.
-    // Evidence: PR "resolve DNS through macOS" (net logs, nehelper lines).
+    // and the translate ranker (manual translate stays).
     std::string disabled = command_line->GetSwitchValue("disable-features");
     for (const char* feature :
          {"OptimizationHints", "OptimizationTargetPrediction",
           "OptimizationGuidePageContentExtraction",
           "OptimizationGuideModelExecution", "SegmentationPlatform",
           "SegmentationPlatformUkmEngine", "MediaRouter",
-          "TranslateRankerQuery", "TranslateRankerEnforcement", "AsyncDns"}) {
+          "TranslateRankerQuery", "TranslateRankerEnforcement"}) {
       disabled += disabled.empty() ? feature : std::string(",") + feature;
     }
     command_line->AppendSwitchWithValue("disable-features", disabled);
