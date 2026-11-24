@@ -38,7 +38,9 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// Extra Chromium switches, for example "--enable-features=Foo" or
 /// "--load-extension=/path". Applied in OnBeforeCommandLineProcessing.
 /// OpenEngine always adds MediaRouter to --disable-features (Cast is out of
-/// v1, plans/page-platform.md EP-12), merged with any list given here.
+/// v1, plans/page-platform.md EP-12), merged with any list given here. A
+/// --enable-features or --disable-features given here is merged with the same
+/// switch on the command line (docs/engine-api.md "Engine switches").
 @property(nonatomic, copy) NSArray<NSString*>* additionalSwitches;
 
 /// Optional log file. Default: <userDataDirectory>/engine.log.
@@ -73,6 +75,15 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// lists the user's protected Downloads folder (that raises a macOS privacy
 /// prompt). Default: nil.
 @property(nonatomic, copy, nullable) NSURL* defaultDownloadDirectory;
+
+/// Turns off Chromium's DNS-error probes (the profile pref
+/// `alternate_error_pages.enabled`, false in every context). After a
+/// NAME_NOT_RESOLVED navigation Chromium re-resolves a probe name with its own
+/// DNS client against the system's DNS server (usually the router on the LAN)
+/// and 8.8.8.8, and macOS then asks for Local Network access. Test builds set
+/// it: their code identity changes on every build, so each build asked again,
+/// and suites resolve hosts to NOTFOUND on purpose. Default: NO.
+@property(nonatomic) BOOL disablesDNSErrorProbes;
 
 @end
 

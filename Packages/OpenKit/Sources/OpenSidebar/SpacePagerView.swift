@@ -17,6 +17,10 @@ final class SpacePagerView: NSView {
     weak var themeBackground: ThemeBackgroundView?
     /// Strip offset in points (page index × width) as the model state, not the presentation.
     private var creationPage: NSView?
+    /// The New Space form's slot in the strip. It stays in the window for the pager's lifetime,
+    /// and only this host moves by layer translation. A form inserted and translated in the same
+    /// turn lost its translation and sat a whole strip to the left, off the window (UX round 1 C1).
+    private let creationHost = PagerCreationHost()
     private var offset: CGFloat = 0
     private var shownSpaceID: SpaceID?
     private var animating = false
@@ -41,6 +45,8 @@ final class SpacePagerView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
         addSubview(strip)
+        creationHost.isHidden = true
+        strip.addSubview(creationHost)
         loop = ObservationLoop(read: { [weak self] in
             guard let self else { return }
             _ = self.context.window?.focusedSpaceID
@@ -87,9 +93,9 @@ final class SpacePagerView: NSView {
         // page; their backing layers form the horizontal strip. Native origins
         // outside the viewport would cull incoming rows until the slide ended.
         if let creationPage {
-            creationPage.wantsLayer = true
-            if creationPage.frame != frame { creationPage.frame = frame }
-            creationPage.layer?.setValue(CGFloat(spaces.count) * bounds.width, forKeyPath: "transform.translation.x")
+            if creationHost.frame != frame { creationHost.frame = frame }
+            if creationPage.frame != creationHost.bounds { creationPage.frame = creationHost.bounds }
+            creationHost.layer?.setValue(CGFloat(spaces.count) * bounds.width, forKeyPath: "transform.translation.x")
         }
         let live = Set(spaces.map(\.id))
         for (id, page) in pages where !live.contains(id) { page.removeFromSuperview(); pages[id] = nil }
@@ -98,7 +104,7 @@ final class SpacePagerView: NSView {
             if page.frame != frame { page.frame = frame }
             page.layer?.setValue(CGFloat(index) * bounds.width, forKeyPath: "transform.translation.x")
         }
-        strip.inputPage = creationPage ?? context.focusedSpace.flatMap { pages[$0.id] }
+        strip.inputPage = creationPage == nil ? context.focusedSpace.flatMap { pages[$0.id] } : creationHost
         CATransaction.commit()
     }
 
@@ -215,7 +221,8 @@ final class SpacePagerView: NSView {
 
     func beginCreation(page: NSView) {
         guard creationPage == nil else { return }
-        swipe = nil; creationPage = page; strip.addSubview(page)
+        swipe = nil; creationPage = page
+        creationHost.isHidden = false; creationHost.addSubview(page)
         let from = presentationOffset
         layoutPages(); offset = CGFloat(spaces.count) * bounds.width; placeStrip()
         if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwitch) }
@@ -229,7 +236,7 @@ final class SpacePagerView: NSView {
 
     func endCreation() {
         let from = presentationOffset
-        creationPage?.removeFromSuperview(); creationPage = nil
+        creationPage?.removeFromSuperview(); creationPage = nil; creationHost.isHidden = true
         strip.layer?.removeAnimation(forKey: "slide"); animating = false
         shownSpaceID = nil
         showFocused(animated: false)
@@ -340,6 +347,17 @@ final class SpacePagerView: NSView {
     func applyBulk(_ changes: [TreeChange]) {
         for page in pages.values { page.applyBulk(changes) }
     }
+}
+
+/// Empty, flipped slot that carries the New Space form at the strip's end.
+@MainActor
+final class PagerCreationHost: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
 }
 
 /// The strip holding the pages. Flipped, layer-backed.

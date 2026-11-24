@@ -108,9 +108,12 @@ def run(factory, results, tmp, api):
         return run_idle_contract(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_COVER_ONLY') == '1':
         return space_cover_rows(factory, results, tmp, api)
+    if os.environ.get('OPEN_E2E_WELCOME_EDGE_ONLY') == '1':
+        return edge_fade_rows(factory, results, tmp, api)
     run_restore_contract(factory, results, tmp, api)
     # The Spaces clip shows a Space switch: no empty page frame, no jump (W40).
     space_cover_rows(factory, results, tmp, api)
+    edge_fade_rows(factory, results, tmp, api)
     root = Path(api.ROOT)
     evidence = root / '.re/welcome-e2e'
     evidence.mkdir(parents=True, exist_ok=True)
@@ -529,3 +532,44 @@ def run_restore_contract(factory, results, tmp, api):
     finally:
         if app and not app.closed:
             app.quit()
+
+
+def edge_fade_rows(factory, results, tmp, api):
+    """W-EDGE: where the clip deliberately runs past the page (wide window), the last strip of the visible
+    clip fades into the page backdrop: at the strip's right end the real-window pixels match the backdrop
+    just above and below the clip (same column). A narrow window stacks the clip and hides the strip."""
+    app = factory(urls=('about:blank',), fresh=True)
+    try:
+        app.call('wait', tab=app.call('tabs')[0]['id'])
+        app.call('appearance', name='light')
+        app.call('window-frame', frame=[80, 80, 1680, 1050]); app.call('updater-banner-width', width=180)
+        inserted = app.call('welcome', action='insert')
+        # The clip fades in at Reveal.clip (2.9 s); sample only after the whole staged reveal.
+        revealed = api.wait_until(lambda: (lambda s: s if s['visible'] and s['revealed'] and s['appearanceElapsed'] > 4.3 else None)(app.call('welcome')),
+                                  timeout=10, step=.1)
+        layout = app.call('welcome')['layout']; fade, clip = layout.get('edgeFade') or {}, layout.get('clipWindowFrame') or []
+        path = str(Path(tmp) / 'welcome-edge-fade.png'); app.call('snapshot', path=path)
+        # Scale from the real window (AppKit may constrain the requested frame to the screen).
+        frame = app.call('window-state')['frame']
+        width, height, pixel = api.read_image(path, srgb=True); sx, sy = width / frame[2], height / frame[3]
+        def diff(a, b): return sum(abs(i - j) for i, j in zip(a, b))
+        samples = []
+        if not fade.get('hidden', True) and len(clip) == 4:
+            fx, fy, fw, fh = fade['window']; cx, cy, cw, ch = clip
+            # Right end of the strip should be backdrop; 20 pt left of the strip is the plain, visible clip.
+            for inside, outside in ((cy + 30, cy - 20), (cy + ch - 30, cy + ch + 20)):
+                edge, plain, backdrop = pixel((fx + fw - 2) * sx, inside * sy), pixel((fx - 20) * sx, inside * sy), pixel((fx + fw - 2) * sx, outside * sy)
+                samples.append(dict(edge=list(edge), clip=list(plain), backdrop=list(backdrop),
+                                    edgeDiff=diff(edge, backdrop), clipDiff=diff(plain, backdrop)))
+        # 900 pt with a 360 pt sidebar leaves the page under clipX + 260 pt: the clip stacks below the steps.
+        app.call('window-frame', frame=[80, 80, 900, 620]); app.call('updater-banner-width', width=360); time.sleep(1.0)
+        narrow_layout = app.call('welcome')['layout'] or {}
+        narrow = dict(narrow_layout.get('edgeFade') or {}, clip=narrow_layout.get('clip'), clipShown=narrow_layout.get('clipShown'))
+        # The clip itself must differ from the backdrop somewhere (it is drawn), while the strip's right end
+        # matches the backdrop on both rows (the fade is drawn over it).
+        results['W_edge_fade'] = dict(ok=bool(revealed) and not fade.get('hidden', True) and len(samples) == 2
+            and any(s['clipDiff'] > 36 for s in samples) and all(s['edgeDiff'] <= 36 for s in samples) and narrow.get('hidden') is True,
+            wide=fade, samples=samples, narrow=narrow, png=path, load=list(os.getloadavg()))
+        app.call('close', tab=inserted['tab'])
+    finally:
+        app.quit()
