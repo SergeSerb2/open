@@ -429,8 +429,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             let kept = Set(newIDs), prior = Set(oldIDs)
             if oldIDs.filter({ kept.contains($0) }) == newIDs {
                 let indexes = IndexSet(oldIDs.indices.filter { !kept.contains(oldIDs[$0]) })
-                for i in indexes { if let folder = old[i] as? Folder { dropCache(folder) } }
                 outline.prepareRemoval(of: indexes.map { old[$0] })
+                for i in indexes { if let folder = old[i] as? Folder { dropCache(folder) } }
                 setList(new, for: d)
                 outline.removeItems(at: indexes, inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
                 return
@@ -448,8 +448,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             case .remove(let i):
                 var removed: AnyObject?
                 mutate(d) { removed = $0.remove(at: i) }
-                if let f = removed as? Folder { dropCache(f) }
                 if let removed { outline.prepareRemoval(of: [removed]) }
+                if let f = removed as? Folder { dropCache(f) }
                 outline.removeItems(at: IndexSet(integer: i), inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
             case .insert(let j):
                 mutate(d) { $0.insert(new[j], at: j) }
@@ -1248,7 +1248,13 @@ final class SidebarOutlineView: NSOutlineView {
         for item in items {
             let row = row(forItem: item)
             guard row >= 0 else { continue }
-            (rowView(atRow: row, makeIfNecessary: false) as? SidebarRowView)?.leave()
+            // An expanded or peeked folder takes its visible descendants with it in the same animation.
+            let baseLevel = level(forRow: row)
+            var r = row
+            repeat {
+                (rowView(atRow: r, makeIfNecessary: false) as? SidebarRowView)?.leave()
+                r += 1
+            } while r < numberOfRows && level(forRow: r) > baseLevel
         }
     }
 

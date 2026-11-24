@@ -713,6 +713,29 @@ extension SidebarView {
     public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }
 
     #if DEBUG || OPEN_AUTOMATION
+    /// Row views the focused outline is animating out (no longer mapped to a row), UXB-11.
+    public var departingRows: [[String: Any]] {
+        // AppKit moves an animating-out row into a nested clip view (NSTableRowsClipView).
+        allRowViews.filter { ($0["row"] as? Int ?? 0) < 0 }
+    }
+    /// Every row view under the focused outline (any depth), with its outline row (diagnostics).
+    public var allRowViews: [[String: Any]] {
+        guard let outline = pager.currentPage?.outline else { return [] }
+        func walk(_ v: NSView, _ depth: Int) -> [[String: Any]] {
+            var out: [[String: Any]] = []
+            for s in v.subviews {
+                if let r = s as? SidebarRowView {
+                    var e = r.departureEvidence; e["row"] = outline.row(for: r); e["depth"] = depth
+                    e["parent"] = String(describing: type(of: v)); out.append(e)
+                } else { out += walk(s, depth + 1) }
+            }
+            return out
+        }
+        return walk(outline, 0)
+    }
+    #endif
+
+    #if DEBUG || OPEN_AUTOMATION
     /// Bottom-bar geometry in `root` coordinates for layout checks: Home, +, the sidebar, and each
     /// switcher item's full frame and the part left after every clipping ancestor (what can draw).
     public func switcherGeometry(in root: NSView) -> [String: Any] {

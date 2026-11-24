@@ -738,6 +738,10 @@
         let frame = controller.contentView.convert(action.view.bounds, from: action.view)
         return ["shown": true, "glyph": action.glyph.map { String(describing: $0) } ?? "", "label": action.view.accessibilityLabel() ?? "",
           "frame": [frame.minX, frame.minY, frame.width, frame.height], "point": [frame.midX, frame.midY]] as [String: Any]
+      case "sidebar-departing-rows":
+        // Row views the front window's outline is animating out (closed, archived or deleted rows).
+        guard let controller = app.frontWindowController else { throw Failure(message: "no window") }
+        return (a["all"] as? Bool == true) ? controller.sidebar.allRowViews : controller.sidebar.departingRows
       case "sidebar-row":
         // A sidebar row's frame and center in the front browser window (top-left origin).
         guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),
