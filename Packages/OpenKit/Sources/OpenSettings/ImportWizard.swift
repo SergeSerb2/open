@@ -353,10 +353,13 @@ import OpenImport
     public var secretsReportNotes: [String] {
         secretsReportRows.isEmpty ? secretsReportLines : Array(secretsReportLines.dropFirst(secretsReportRows.count))
     }
-    /// "4", "4 · 2 already in Open", or "None found in Arc" (the source had none: not an error).
+    /// "4", "4 · 2 already in Open · 3 skipped", or "None found in Arc" (the source had none: not an error).
     public func secretsReportValue(_ row: SecretsReportRow) -> String {
         if row.noneFound { return "None found in \(plan.source.displayName)" }
-        return row.existing > 0 ? "\(row.added.formatted()) · \(row.existing.formatted()) already in Open" : row.added.formatted()
+        var parts = [row.added.formatted()]
+        if row.existing > 0 { parts.append("\(row.existing.formatted()) already in Open") }
+        if row.skipped > 0 { parts.append("\(row.skipped.formatted()) skipped") }
+        return parts.joined(separator: " · ")
     }
     public var unfinishedSecretsImportMessage: String? {
         unfinishedSecretsImport && !secretsReportLines.contains(ArcSecretsImportReport.unfinishedMessage) ? ArcSecretsImportReport.unfinishedMessage : nil
