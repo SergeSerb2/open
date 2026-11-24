@@ -57,6 +57,23 @@ enum ChromeProbes {
             check("297 pt no-Boosts stack",body.height == 297)
 
         }
+        if stage.state == "scc-no-boosts" || stage.state == "scc-boost" {
+            let bx = body.minX + 66, by = body.minY + 10
+            var maxDotDiff = 0, maxBrushDiff = 0
+            for py in Int((by + 6) * scale)..<Int((by + 12) * scale) {
+                let bg = CLI.luminance(CLI.pixel(image, x: Int((bx + 6) * scale), y: py))
+                for px in Int((bx + 14) * scale)..<Int((bx + 21) * scale) {
+                    maxDotDiff = max(maxDotDiff, abs(CLI.luminance(CLI.pixel(image, x: px, y: py)) - bg))
+                }
+            }
+            for py in Int((by + 11) * scale)..<Int((by + 21) * scale) {
+                let bg = CLI.luminance(CLI.pixel(image, x: Int((bx + 6) * scale), y: py))
+                for px in Int((bx + 21) * scale)..<Int((bx + 31) * scale) {
+                    maxBrushDiff = max(maxBrushDiff, abs(CLI.luminance(CLI.pixel(image, x: px, y: py)) - bg))
+                }
+            }
+            check("New Boost icon has no top-left sparkle dot (dotDiff \(maxDotDiff) <= 30, brushDiff \(maxBrushDiff) >= 180)", maxDotDiff <= 30 && maxBrushDiff >= 180)
+        }
         if stage.state == "scc-boost" { check("372 pt one-Boost stack",body.height == 372) }
         return result
     }

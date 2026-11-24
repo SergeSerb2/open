@@ -190,7 +190,6 @@ public final class SiteControlPanelView: NSView {
         for (id,label,symbol) in actionSpecs {
             let b = SiteControlButton(id: "action."+id,label: label,symbol: symbol,pointSize: SiteControlMetrics.actionGlyph)
             b.symbolInk = SiteControlMetrics.actionInk[controls.count]; b.style = .action; b.tooltipTitle = label; b.tooltipKeys = id == "capture" ? ["⇧","⌘","2"] : []
-            b.sparkles = id == "newBoost" ? .outline : .none
             b.invoke = { [weak self,weak b] in guard let self,let b else { return }; self.onAction?(id,b.convert(b.bounds,to: nil)) }
             controls.append(b); actions.append(b); addSubview(b)
         }
@@ -468,7 +467,7 @@ struct SiteControlStructure {
 }
 
 public enum SiteControlButtonStyle { case plain, action, pill, more, circle, extensionTile }
-public enum SiteControlSparkles { case none, outline, boost }
+public enum SiteControlSparkles { case none, boost }
 
 /// Native target/action and AX control; all visible content is owned layers.
 @MainActor
@@ -594,7 +593,7 @@ public class SiteControlButton: NSButton {
         highlight.strokeColor = highlightColor
         let resolved = tint.resolved(appearance).nsColor, alpha = isEnabled || statusOnly ? 1 : disabledOpacity
         let color = resolved.withAlphaComponent(resolved.alphaComponent*alpha)
-        if let image = SiteControlGlyphRenderer.symbol(symbol,size: pointSize,weight: weight,color: color,sparkles: sparkles,scale: scale,fit: symbolInk,phase: symbolPhase) {
+        if let image = SiteControlGlyphRenderer.symbol(symbol,size: pointSize,weight: weight,color: color,scale: scale,fit: symbolInk,phase: symbolPhase) {
             let x = title.isEmpty ? ((bounds.width-image.ink.width)/2*scale).rounded()/scale-image.ink.minX : m.pillPadding-image.ink.minX
             let y = ((bounds.height-image.ink.height)/2*scale).rounded()/scale-image.ink.minY
             glyph.frame = CGRect(x: x,y: y,width: image.size.width,height: image.size.height); glyph.contents = image.image
@@ -642,8 +641,8 @@ enum SiteControlGlyphRenderer {
         c.scaleBy(x: scale,y: scale); NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: c,flipped: false); draw(c); NSGraphicsContext.restoreGraphicsState(); return c.makeImage()
     }
     static func sparkle(_ c: CGContext,at p: CGPoint,size: CGFloat,alpha: CGFloat) { let path = CGMutablePath(); path.move(to: CGPoint(x: p.x,y: p.y-size/2)); path.addQuadCurve(to: CGPoint(x: p.x+size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y+size/2),control: p); path.addQuadCurve(to: CGPoint(x: p.x-size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y-size/2),control: p); c.setAlpha(alpha); c.addPath(path); c.fillPath(); c.setAlpha(1) }
-    static func symbol(_ name: String,size: CGFloat,weight: NSFont.Weight,color: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,fit: CGSize? = nil,phase: CGPoint = .zero,symbolScale: NSImage.SymbolScale? = nil) -> Image? {
-        let baseKey = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(sparkles)|\(scale)|\(String(describing: fit))|\(phase)"
+    static func symbol(_ name: String,size: CGFloat,weight: NSFont.Weight,color: NSColor,scale: CGFloat,fit: CGSize? = nil,phase: CGPoint = .zero,symbolScale: NSImage.SymbolScale? = nil) -> Image? {
+        let baseKey = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(scale)|\(String(describing: fit))|\(phase)"
         let key = symbolScale.map { baseKey+"|\($0.rawValue)" } ?? baseKey
         if let cached = symbols[key] { return cached }
         let configuration = symbolScale.map { NSImage.SymbolConfiguration(pointSize: size,weight: weight,scale: $0) } ?? .init(pointSize: size,weight: weight)
@@ -652,7 +651,6 @@ enum SiteControlGlyphRenderer {
         func draw(_ c: CGContext) {
             source.draw(in: CGRect(origin: .zero,size: source.size),from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: false,hints: nil)
             c.setBlendMode(.sourceIn); c.setFillColor(color.cgColor); c.fill(CGRect(origin: .zero,size: nativeSize)); c.setBlendMode(.normal)
-            if sparkles != .none { c.setFillColor(color.cgColor); sparkle(c,at: CGPoint(x: 3,y: nativeSize.height-4),size: 4,alpha: 1) }
         }
         var extent = nativeSize, ink = CGRect(origin: .zero,size: nativeSize)
         if let fit,let probe = canvas(nativeSize,scale: 4,draw),let data = probe.dataProvider?.data,let bytes = CFDataGetBytePtr(data) {
@@ -687,7 +685,7 @@ enum SiteControlGlyphRenderer {
             c.setFillColor(disc.cgColor); c.fillEllipse(in: CGRect(origin: .zero,size: size))
             c.setBlendMode(.destinationOut)
             let fit: CGSize? = name == "gearshape.fill" ? SiteControlMetrics.gearInk : nil
-            if let icon = symbol(name,size: pointSize,weight: .regular,color: .white,sparkles: .none,scale: scale,fit: fit,phase: phase) {
+            if let icon = symbol(name,size: pointSize,weight: .regular,color: .white,scale: scale,fit: fit,phase: phase) {
                 let rect = CGRect(x: ((size.width-icon.ink.width)/2*scale).rounded()/scale-icon.ink.minX+(name == "gearshape.fill" ? -1/scale : 0),y: ((size.height-icon.ink.height)/2*scale).rounded()/scale-icon.ink.minY,width: icon.size.width,height: icon.size.height)
                 c.draw(icon.image,in: rect)
             }
