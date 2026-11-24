@@ -320,12 +320,14 @@ final class URLFieldView: NSView {
 
     override func updateLayer() {
         let appearance = contentAppearance
-        let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true }
+        // Tracked: hover, a live Increase Contrast toggle and theme changes redraw the field (review r2 #2).
+        let color = tracked({ [unowned self] in fieldFill(hovered: isHovered) }) { [weak self] in self?.needsDisplay = true }
         CATransaction.begin()
         CATransaction.setDisableActions(!context.animatesChanges)
         CATransaction.setAnimationDuration(Motion.hoverFade)
-        fill.backgroundColor = fieldFill(hovered: hovered).cgColor(appearance)
-        siteControls.needsDisplay = true
+        fill.backgroundColor = color.cgColor(appearance)
+        // The Boosted glyph draws its tint once; it redraws with the field.
+        siteControls.needsDisplay = true; siteControlGlyph.needsDisplay = true
         CATransaction.commit()
     }
 

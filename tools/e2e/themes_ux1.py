@@ -214,6 +214,21 @@ def run(factory, results, tmp, h):
             for theme in [None] + PRESETS:
                 row('uxg_bar_%s_%s' % (_slug(theme), appearance), lambda t=theme, a=appearance: bar_selection(t, a))
 
+        def live_toggle():
+            # Increase Contrast turned on while a Space shows (no theme change, same polarity): the chrome
+            # glyphs and the URL host must redraw in the stronger colours at once (review r2).
+            app.call('increase-contrast', on=False); app.call('appearance', name='dark')
+            app.call('theme-set', style=_style('Drab 8')); time.sleep(.6)
+            pixel, scale, win = snapshot('live-off')
+            off = dict(glyphs(pixel, scale, win), urlHost=_ratio(pixel, url_box(win), scale))
+            app.call('increase-contrast', on=True); time.sleep(.6)
+            pixel, scale, win = snapshot('live-on')
+            on = dict(glyphs(pixel, scale, win), urlHost=_ratio(pixel, url_box(win), scale))
+            app.call('increase-contrast', on=False); time.sleep(.3)
+            raised = all(on[k] > off[k] + 0.3 for k in off)
+            return raised and not low(on), {'off': off, 'on': on, 'below': low(on)}
+        row('uxg_ic_live_toggle_redraws_chrome', live_toggle)
+
         def normal_keeps_parity():
             # Without Increase Contrast a light-text Space keeps Arc's values: the white selected plate.
             app.call('increase-contrast', on=False); app.call('appearance', name='dark'); time.sleep(.4)

@@ -59,9 +59,13 @@ final class URLStatusButton: NSView {
     }
 
     override func updateLayer() {
-        let hovered = context.forcedHover == .urlStatus || pointerInside
+        // Tracked: a forced hover, a live Increase Contrast toggle or a theme change redraws the fill
+        // even when the appearance does not flip (review r2 #1).
+        let color = tracked({ [unowned self] in
+            URLFieldView.fill(context: context, hovered: context.forcedHover == .urlStatus || pointerInside)
+        }) { [weak self] in self?.needsDisplay = true }
         CATransaction.begin(); CATransaction.setAnimationDuration(Motion.hoverFade)
-        fill.backgroundColor = URLFieldView.fill(context: context, hovered: hovered).cgColor(contentAppearance)
+        fill.backgroundColor = color.cgColor(contentAppearance)
         CATransaction.commit()
     }
 
