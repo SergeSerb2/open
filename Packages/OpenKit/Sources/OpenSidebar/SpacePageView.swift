@@ -429,6 +429,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             let kept = Set(newIDs), prior = Set(oldIDs)
             if oldIDs.filter({ kept.contains($0) }) == newIDs {
                 let indexes = IndexSet(oldIDs.indices.filter { !kept.contains(oldIDs[$0]) })
+                outline.prepareRemoval(of: indexes.map { old[$0] })
                 for i in indexes { if let folder = old[i] as? Folder { dropCache(folder) } }
                 setList(new, for: d)
                 outline.removeItems(at: indexes, inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
@@ -447,6 +448,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             case .remove(let i):
                 var removed: AnyObject?
                 mutate(d) { removed = $0.remove(at: i) }
+                if let removed { outline.prepareRemoval(of: [removed]) }
                 if let f = removed as? Folder { dropCache(f) }
                 outline.removeItems(at: IndexSet(integer: i), inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
             case .insert(let j):
@@ -1292,6 +1294,22 @@ final class SidebarOutlineView: NSOutlineView {
         SidebarDiagnostics.outlineItemUpdates += 1
         SidebarDiagnostics.outlineItemsInserted += indexes.count
         super.insertItems(at: indexes, inParent: parent, withAnimation: animationOptions)
+    }
+
+    /// Rows about to be removed drop their plate before the removal animation (the outline still maps
+    /// the items to their rows here).
+    func prepareRemoval(of items: [AnyObject]) {
+        for item in items {
+            let row = row(forItem: item)
+            guard row >= 0 else { continue }
+            // An expanded or peeked folder takes its visible descendants with it in the same animation.
+            let baseLevel = level(forRow: row)
+            var r = row
+            repeat {
+                (rowView(atRow: r, makeIfNecessary: false) as? SidebarRowView)?.leave()
+                r += 1
+            } while r < numberOfRows && level(forRow: r) > baseLevel
+        }
     }
 
     override func removeItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {
