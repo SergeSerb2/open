@@ -90,8 +90,12 @@ def _import(factory, row, tmp, h):
     empty = tempfile.mkdtemp(prefix='states-no-arc-data-', dir=tmp)
     app = factory(urls=(), fresh=True)
     try:
-        # The Settings wizard fields come back only from a settings-… action; this one waits for the counts.
+        # The Settings wizard fields come back only from a settings-… action. A later count can supersede the
+        # first one under load, so poll the no-op settings-inspect until the counts have settled.
         state = app.call('first-run', action='settings-import', directory=empty)
+        if not state.get('settingsWizardError'):
+            state = h.wait_until(lambda: (lambda s: s if s.get('settingsWizardError') and not s.get('settingsBusy') else None)(
+                app.call('first-run', action='settings-inspect')), timeout=20, step=.2) or app.call('first-run', action='settings-inspect')
         error = state.get('settingsWizardError', '')
         plan = state.get('settingsArcPlan', {})
         not_found = state.get('settingsArcNotFound', [])
