@@ -208,14 +208,21 @@ class OEApp : public CefApp,
     // read from its BASE_FEATURE in this Chromium tree): optimization guide
     // hints, models and page-content extraction, the segmentation platform,
     // Cast discovery (MediaRouter: Cast is out of v1, page-platform §4.12, EP-12),
-    // and the translate ranker (manual translate stays).
+    // and the translate ranker (manual translate stays). AsyncDns: Chromium's
+    // built-in insecure DNS client sends UDP to the configured DNS server, which
+    // is usually the home router on the LAN, so every new Open binary raised
+    // macOS's Local Network prompt about 1 s after launch. Without it, plain DNS
+    // goes through getaddrinfo (mDNSResponder, exempt from the prompt, and it
+    // follows VPN and profile DNS settings). Secure DNS (DoH) still uses
+    // Chromium's own client: kAsyncDns gates only the insecure one.
+    // Evidence: PR "resolve DNS through macOS" (net logs, nehelper lines).
     std::string disabled = command_line->GetSwitchValue("disable-features");
     for (const char* feature :
          {"OptimizationHints", "OptimizationTargetPrediction",
           "OptimizationGuidePageContentExtraction",
           "OptimizationGuideModelExecution", "SegmentationPlatform",
           "SegmentationPlatformUkmEngine", "MediaRouter",
-          "TranslateRankerQuery", "TranslateRankerEnforcement"}) {
+          "TranslateRankerQuery", "TranslateRankerEnforcement", "AsyncDns"}) {
       disabled += disabled.empty() ? feature : std::string(",") + feature;
     }
     command_line->AppendSwitchWithValue("disable-features", disabled);
