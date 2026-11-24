@@ -459,7 +459,7 @@ final class FavoriteTileView: NSView {
 
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
-    override func accessibilityLabel() -> String? { tab?.displayTitle }
+    override func accessibilityLabel() -> String? { tab?.voiceOverTitle }
     override func accessibilityPerformPress() -> Bool {
         guard let tab else { return false }
         return context?.send(.selectFavorite(tabID: tab.id)) ?? false

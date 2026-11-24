@@ -1215,12 +1215,19 @@ final class SidebarOutlineView: NSOutlineView {
         page.updateRowStates(animated: false)
     }
 
-    override func accessibilityRows() -> [any NSAccessibilityRow]? {
-        (0..<numberOfRows).compactMap { row -> NSTableRowView? in
-            guard itemID(of: item(atRow: row)) != nil || item(atRow: row) is NewTabItem || item(atRow: row) is LiveFolderMoreItem else { return nil }
-            return rowView(atRow: row, makeIfNecessary: true)
+    /// Rows VoiceOver lists: tabs, folders, splits, New Tab and Show More. Read from the outline's
+    /// items only; no row view is built here.
+    private func accessibleRowIndexes() -> [Int] {
+        (0..<numberOfRows).filter { row in
+            let item = item(atRow: row)
+            return itemID(of: item) != nil || item is NewTabItem || item is LiveFolderMoreItem
         }
     }
+    /// Builds (or reuses) the row views for these rows only.
+    private func accessibleRowViews(_ rows: some Collection<Int>) -> [NSTableRowView] {
+        rows.compactMap { rowView(atRow: $0, makeIfNecessary: true) }
+    }
+    override func accessibilityRows() -> [any NSAccessibilityRow]? { accessibleRowViews(accessibleRowIndexes()) }
 
     override func flagsChanged(with event: NSEvent) {
         page?.context.isOptionHeld = event.modifierFlags.contains(.option)
@@ -1230,36 +1237,50 @@ final class SidebarOutlineView: NSOutlineView {
     override func accessibilityChildren() -> [Any]? { accessibilityRows()?.map { $0 as Any } }
     // The system AX server reads NSTableView through the attribute-based API, by value and by
     // count and range, and NSTableView answers those from its own row proxies, not the overrides
-    // above: VoiceOver saw AXOutline children 0, rows 0 (UX round 1 wave 2 K6). Answer all three
-    // ways with the same rows (and the rows in view for AXVisibleRows).
+    // above: VoiceOver saw AXOutline children 0, rows 0 (UX round 1 wave 2 K6). Answer every path
+    // with the same rows. Counts, ranges, visible and selected rows and child indexes come from the
+    // row indexes; only the rows a query returns get a row view (review r1 #2: no full build).
     private struct AXRows: @unchecked Sendable { let value: [Any] }  // carries the array off the main-actor closure
-    private func axRows(_ attribute: NSAccessibility.Attribute) -> [Any]? {
-        guard attribute == .children || attribute == .rows || attribute == .visibleRows else { return nil }
-        let rows = accessibilityRows() ?? []
-        guard attribute == .visibleRows else { return rows.map { $0 as Any } }
-        return rows.filter { ($0 as? NSView).map { visibleRect.intersects($0.frame) } ?? false }.map { $0 as Any }
+    private func axRowIndexes(_ attribute: NSAccessibility.Attribute) -> [Int]? {
+        switch attribute {
+        case .children, .rows: return accessibleRowIndexes()
+        case .visibleRows:
+            let range = rows(in: visibleRect)
+            return accessibleRowIndexes().filter { NSLocationInRange($0, range) }
+        case .selectedRows:
+            guard let selection = page?.context.selection else { return [] }
+            return accessibleRowIndexes().filter { row in itemID(of: item(atRow: row)).map { selection.contains($0) } ?? false }
+        default: return nil
+        }
     }
     @available(macOS, deprecated: 10.10)
     override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
-        if let rows = MainActor.assumeIsolated({ axRows(attribute).map(AXRows.init(value:)) }) { return rows.value }
+        if let rows = MainActor.assumeIsolated({ axRowIndexes(attribute).map { AXRows(value: accessibleRowViews($0).map { $0 as Any }) } }) { return rows.value }
         return super.accessibilityAttributeValue(attribute)
     }
     @available(macOS, deprecated: 10.10)
     override func accessibilityArrayAttributeCount(_ attribute: NSAccessibility.Attribute) -> Int {
-        MainActor.assumeIsolated { axRows(attribute)?.count } ?? super.accessibilityArrayAttributeCount(attribute)
+        MainActor.assumeIsolated { axRowIndexes(attribute)?.count } ?? super.accessibilityArrayAttributeCount(attribute)
     }
     @available(macOS, deprecated: 10.10)
     override func accessibilityArrayAttributeValues(_ attribute: NSAccessibility.Attribute, index: Int, maxCount: Int) -> [Any] {
-        guard let rows = MainActor.assumeIsolated({ axRows(attribute).map(AXRows.init(value:)) })?.value else {
-            return super.accessibilityArrayAttributeValues(attribute, index: index, maxCount: maxCount)
+        let slice = MainActor.assumeIsolated { () -> AXRows? in
+            guard let rows = axRowIndexes(attribute) else { return nil }
+            guard index >= 0, index < rows.count, maxCount > 0 else { return AXRows(value: []) }
+            return AXRows(value: accessibleRowViews(rows[index..<min(rows.count, index + maxCount)]).map { $0 as Any })
         }
-        guard index >= 0, index < rows.count, maxCount > 0 else { return [] }
-        return Array(rows[index..<min(rows.count, index + maxCount)])
+        return slice?.value ?? super.accessibilityArrayAttributeValues(attribute, index: index, maxCount: maxCount)
     }
     @available(macOS, deprecated: 10.10)
     override func accessibilityIndex(ofChild child: Any) -> Int {
         let target = ObjectIdentifier(child as AnyObject)
-        return MainActor.assumeIsolated { accessibilityRows()?.firstIndex { ObjectIdentifier($0 as AnyObject) == target } ?? NSNotFound }
+        return MainActor.assumeIsolated {
+            guard let view = (self.subviews.first { ObjectIdentifier($0) == target }) else { return NSNotFound }
+            let row = self.row(for: view)
+            guard row >= 0 else { return NSNotFound }
+            let rows = accessibleRowIndexes()
+            return rows.contains(row) ? rows.filter { $0 < row }.count : NSNotFound
+        }
     }
 
     override func reloadData() {

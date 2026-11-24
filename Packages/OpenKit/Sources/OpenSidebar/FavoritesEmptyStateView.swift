@@ -63,12 +63,13 @@ public final class FavoritesEmptyStateView: NSView {
         wantsLayer = true
         titleLabel.font = Self.titleFont; titleLabel.alignment = .center; titleLabel.maximumNumberOfLines = 2
         bodyLabel.font = Self.bodyFont; bodyLabel.alignment = .center; bodyLabel.maximumNumberOfLines = 3
-        for label in [titleLabel, bodyLabel] { label.isSelectable = false; label.drawsBackground = false; addSubview(label) }
-        dismissButton.setAccessibilityLabel("Dismiss")
+        for label in [titleLabel, bodyLabel] {
+            label.isSelectable = false; label.drawsBackground = false; addSubview(label)
+            // The card's own label and help speak this text; hit testing lands on the group (K11).
+            label.setAccessibilityElement(false); label.cell?.setAccessibilityElement(false)
+        }
         dismissButton.setAccessibilityIdentifier("sidebarFavoritesEmptyStateDismissButton")
         addSubview(dismissButton)
-        setAccessibilityElement(true); setAccessibilityRole(.group)
-        setAccessibilityLabel(Self.title + ". " + Self.body)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }

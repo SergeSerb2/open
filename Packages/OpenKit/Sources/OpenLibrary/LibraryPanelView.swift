@@ -493,6 +493,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public func focusRail() { if let tile=tiles[section] { window?.makeFirstResponder(tile) }; updateRailFocus() }
     func updateRailFocus() {
         for (_,tile) in tiles { tile.keyboardFocus = keyboardRailNavigation && window?.firstResponder === tile }
+        // A keyboard-focused Filter, Back, Boosts or chip control loses its ring on pointer use too
+        // (review r1 #4); the next Tab or arrow focus shows it again.
+        if !keyboardRailNavigation, let control = window?.firstResponder as? LibraryControl { control.keyboardFocus = false }
     }
     private func updatePointerMonitor() {
         if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }

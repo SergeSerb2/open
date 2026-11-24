@@ -222,10 +222,9 @@ final class SidebarRowView: NSTableRowView {
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func accessibilityLabel() -> String? {
         switch representedItem {
-        // A tab that has not loaded yet has no title: say its host (or "Untitled Tab"), never nothing (K7).
-        case let tab as Tab: tab.displayTitle.isEmpty ? (tab.url.host() ?? "Untitled Tab") : tab.displayTitle
+        case let tab as Tab: tab.voiceOverTitle
         case let folder as Folder: folder.title
-        case let split as Split: "Split View: " + (split.isCustomized ? split.displayTitle : split.panes.map(\.displayTitle).joined(separator: ", "))
+        case let split as Split: "Split View: " + (split.isCustomized ? split.displayTitle : split.panes.map(\.voiceOverTitle).joined(separator: ", "))
         case is NewTabItem: "New Tab"
         case is LiveFolderMoreItem: "Show More"
         default: nil
@@ -1490,5 +1489,15 @@ enum SidebarDeveloperMode {
     }
     static func hostAndPort(_ url: URL) -> String {
         (url.host() ?? "") + (url.port.map { ":\($0)" } ?? "")
+    }
+}
+
+extension Tab {
+    /// What VoiceOver says for a tab: its title, or, before the page has one, its host, or
+    /// "Untitled Tab"; never an empty string (UX round 1 wave 2 K7).
+    var voiceOverTitle: String {
+        if !displayTitle.isEmpty { return displayTitle }
+        if let host = url.host(), !host.isEmpty { return host }
+        return "Untitled Tab"
     }
 }

@@ -87,6 +87,19 @@ final class LibraryControl: NSButton {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
     }
+    // Redraw on key-window changes so the ring hides and returns with the window's focus.
+    private var keyObservers: [NSObjectProtocol] = []
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        keyObservers.forEach(NotificationCenter.default.removeObserver); keyObservers = []
+        guard let window else { return }
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            keyObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { if self?.keyboardFocus == true { self?.needsDisplay = true } }
+            })
+        }
+    }
+    isolated deinit { keyObservers.forEach(NotificationCenter.default.removeObserver) }
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func layout() { super.layout(); needsDisplay = true }
@@ -94,8 +107,9 @@ final class LibraryControl: NSButton {
         let alpha: CGFloat = isHighlighted ? 0.14 : selected ? 0.105 : hovered ? 0.05 : baseAlpha
         layer?.backgroundColor = overlay.withAlphaComponent(alpha).cgColor
         // keyboardFocus is cleared on resign; checking the first responder here missed the first
-        // draw, which runs before AppKit makes this control first responder (K4).
-        let focus = keyboardFocus
+        // draw, which runs before AppKit makes this control first responder (K4). An inactive
+        // window shows no live focus ring (review r1 #4).
+        let focus = keyboardFocus && window?.isKeyWindow != false
         layer?.borderWidth = focus ? 2 : selected && isChip ? 1.5 : 0
         layer?.borderColor = foreground.withAlphaComponent(focus ? 0.60 : 0.46).cgColor
         dotLayer.isHidden = !showsDot; dotLayer.backgroundColor = foreground.cgColor
