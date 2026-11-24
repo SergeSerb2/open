@@ -59,10 +59,10 @@ final class ToolbarView: NSView {
         // when they are disabled (F0090: all four `#444452`–`#464654`; F0108 without the dim: disabled tone).
         for b in [back, forward, reload] {
             b.glyphTint = { [unowned context] enabled in
-                (enabled || context.peekSourceNodeID != nil ? SidebarRole.toolbarGlyph : SidebarRole.toolbarGlyphDisabled).nsColor
+                enabled || context.peekSourceNodeID != nil ? ToolbarView.glyph(context) : SidebarRole.toolbarGlyphDisabled.nsColor
             }
         }
-        toggle.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+        toggle.glyphTint = { [unowned context] _ in ToolbarView.glyph(context) }
         setup(reloadMenu, .reloadMenu) { Tooltip(title: "Reload options", style: style()) }
         reloadMenu.glyphView.image = { ToolbarView.chevron }
         reloadMenu.isEnabled = { [unowned context] in context.hasPage }
@@ -70,7 +70,7 @@ final class ToolbarView: NSView {
         reloadMenu.menuProvider = { [weak self] in self?.makeReloadMenu() }
         reloadMenu.isHidden = true
         setup(more, .more) { Tooltip(title: "More options", style: style()) }
-        more.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+        more.glyphTint = { [unowned context] _ in ToolbarView.glyph(context) }
         more.action = { [weak self] in self?.toggleMorePopover() }
         more.isHidden = true
     }
@@ -130,6 +130,11 @@ final class ToolbarView: NSView {
     }
 
     /// Our own ▾: two 1 pt strokes, 8.5 × 4.5 pt ink (Arc's measured box), drawn in Reload's grey.
+    /// Enabled toolbar glyph: the measured token, or the stronger role while Increase Contrast is on.
+    @MainActor static func glyph(_ context: SidebarContext) -> NSColor {
+        context.increasedContrastRoles?.toolbarGlyph.nsColor ?? SidebarRole.toolbarGlyph.nsColor
+    }
+
     static let chevron: NSImage = {
         let size = ChromeMetrics.reloadMenuGlyph, line: CGFloat = 1
         let image = NSImage(size: NSSize(width: size.width + line, height: size.height + line), flipped: true) { _ in
@@ -249,11 +254,12 @@ final class URLFieldView: NSView {
         // The compact sidebar shortens the placeholder to "Search…" (capture session 9, C-report-s6 §8).
         label.text = { [unowned self, unowned context] in context.pageHost ?? self.placeholder }
         label.color = { [unowned context] in
-            (context.hasPage ? SidebarRole.urlText : SidebarRole.placeholder).nsColor
+            context.hasPage ? context.increasedContrastRoles?.urlText.nsColor ?? SidebarRole.urlText.nsColor
+                : SidebarRole.placeholder.nsColor
         }
         for b in [copyLink, siteControls] {
             b.context = context
-            b.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+            b.glyphTint = { [unowned context] _ in ToolbarView.glyph(context) }
             addSubview(b)
         }
         copyLink.action = { [unowned context] in context.send(.copyCurrentURL) }
@@ -303,6 +309,7 @@ final class URLFieldView: NSView {
     /// status button under the field shares it.
     static func fill(context: SidebarContext, hovered: Bool) -> DesignColor {
         if context.isIncognito { return DesignColor(.white(0.15)) }
+        if let roles = context.increasedContrastRoles { return DesignColor(hovered ? roles.fieldHover : roles.fieldFill) }
         return hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill
     }
 

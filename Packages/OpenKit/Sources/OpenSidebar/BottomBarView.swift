@@ -41,10 +41,10 @@ final class BottomBarView: NSView {
             b.dimsWhenInactive = true
             b.inactiveTint = SidebarRole.bottomGlyphInactive
             b.hoverKey = key
-            b.glyphTint = { _ in SidebarRole.bottomGlyph.nsColor }
+            b.glyphTint = { [unowned context] _ in context.increasedContrastRoles?.bottomGlyph.nsColor ?? SidebarRole.bottomGlyph.nsColor }
             addSubview(b)
         }
-        home.glyphTint = { _ in SidebarRole.homeGlyph.nsColor }
+        home.glyphTint = { [unowned context] _ in context.increasedContrastRoles?.bottomGlyph.nsColor ?? SidebarRole.homeGlyph.nsColor }
         home.inactiveTint = SidebarRole.homeGlyphInactive
         home.action = { [unowned context] in context.send(.showLibrary) }
         home.contextMenuProvider = { [weak self] in self?.menus.libraryMediaSources() }

@@ -394,6 +394,14 @@ public final class SidebarContext {
         return StyleCache.appearance(for: space.theme, system: systemAppearance, increaseContrast: increaseContrast)
     }
 
+    /// The focused Space's roles while macOS Increase Contrast is on, else nil. Chrome that draws with
+    /// the fixed measured tokens (URL host, toolbar and bottom-bar glyphs, URL field fill) reads these
+    /// only then, so normal contrast keeps Arc's values exactly.
+    public var increasedContrastRoles: SidebarRoles? {
+        guard increaseContrast, !isIncognito, let space = focusedSpace else { return nil }
+        return roles(for: space)
+    }
+
     /// Every sidebar colour of a Space (`SidebarRoles`), built once per theme change.
     public func roles(for space: Space) -> SidebarRoles {
         if isIncognito { return SpaceThemeStyle.incognito.roles(.dark) }

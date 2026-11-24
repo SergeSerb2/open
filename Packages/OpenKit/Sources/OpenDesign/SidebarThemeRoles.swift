@@ -34,6 +34,10 @@ public enum SidebarThemeRules {
     /// Lead decision (plan §2.8): with macOS Increase Contrast the primary title keeps
     /// its hue and moves in lightness to at least this contrast against the background.
     public static let increasedTitleContrast = 4.5
+    /// The raise aims this much above `increasedTitleContrast`: the 3 × 3 field samples miss the
+    /// lightest drawn pixels by up to ≈ 0.05 (Drab 8 Dark measured 4.49:1 at exactly 4.5; UX round 1
+    /// wave 2). The polarity decision still uses `increasedTitleContrast`.
+    public static let increasedContrastMargin = 0.15
 }
 
 /// Every sidebar colour for one Space theme and one content appearance.
@@ -49,6 +53,9 @@ public struct SidebarRoles: Sendable, Hashable {
     public var placeholder: RGBA
     public var urlText: RGBA
     public var bottomGlyph: RGBA
+    /// Enabled toolbar glyphs. Views read it only with Increase Contrast; without it they keep the
+    /// measured `SidebarRole.toolbarGlyph` token.
+    public var toolbarGlyph: RGBA
     public var toolbarGlyphDisabled: RGBA
     public var separator: RGBA
     public var fieldFill: RGBA
@@ -85,10 +92,13 @@ public struct SidebarRoles: Sendable, Hashable {
         newTabLabel = Self.ink(content, light: ic ? 0.60 : 0.30, dark: ic ? 0.60 : 0.45)
         newTabGlyph = Self.ink(content, light: 0.50, dark: 0.50)
         placeholder = Self.ink(content, light: 0.30, dark: 0.30)
-        urlText = Self.ink(content, light: 0.60, dark: 0.60)
+        // Increase Contrast (UX round 1 wave 2, T2): the URL host is text and the glyphs are controls,
+        // so they move toward full ink (AA 4.5:1 text, 3:1 glyphs on mid-tone themes).
+        urlText = Self.ink(content, light: ic ? 1 : 0.60, dark: ic ? 1 : 0.60)
         // The bottom-bar plus: medians over 30 / 15 shots (session 3 `bottom_plus`); the
         // Library icon measures 0.552 / 0.588 and Home keeps its own glyph fit.
-        bottomGlyph = Self.ink(content, light: 0.565, dark: 0.60)
+        bottomGlyph = Self.ink(content, light: ic ? 0.85 : 0.565, dark: ic ? 0.85 : 0.60)
+        toolbarGlyph = Self.ink(content, light: ic ? 0.85 : 0.56, dark: ic ? 0.85 : 0.60)
         toolbarGlyphDisabled = Self.ink(content, light: 0.22, dark: 0.25)
         separator = Self.ink(content, light: ic ? 0.30 : 0.15, dark: ic ? 0.30 : 0.15)
         fieldFill = Self.ink(content, light: 0.043, dark: 0.10)
@@ -106,8 +116,21 @@ extension SpaceThemeStyle {
     /// with it, one 3 × 3 field sample for the title. Callers cache per theme change.
     public func roles(_ appearance: ContentAppearance, increaseContrast: Bool = false) -> SidebarRoles {
         var title = titleColor(appearance).withAlpha(1)
-        if increaseContrast { title = Self.raised(title, against: fieldSamples(), dark: appearance == .dark) }
-        return SidebarRoles(content: appearance, title: title, isDefaultTheme: isDefaultTheme, increaseContrast: increaseContrast)
+        guard increaseContrast else { return SidebarRoles(content: appearance, title: title, isDefaultTheme: isDefaultTheme) }
+        let samples = fieldSamples()
+        title = Self.raised(title, against: samples, dark: appearance == .dark)
+        var roles = SidebarRoles(content: appearance, title: title, isDefaultTheme: isDefaultTheme, increaseContrast: true)
+        // Light text on a mid-tone Space: a white plate lightens the background under it, so the selected
+        // row and the URL host fall below AA (2.4–4.1:1, UX round 1 wave 2 T2). With Increase Contrast those
+        // plates darken instead, only where the white plate would fail; dark Spaces keep their white plates.
+        if appearance == .dark {
+            let target = SidebarThemeRules.increasedTitleContrast + SidebarThemeRules.increasedContrastMargin
+            if Self.worstContrast(title, samples.map { $0.under(roles.activePlate) }) < target { roles.activePlate = .black(0.25) }
+            if Self.worstContrast(roles.urlText, samples.map { $0.under(roles.fieldFill) }, inkOver: true) < target {
+                roles.fieldFill = .black(0.12); roles.fieldHover = .black(0.18)
+            }
+        }
+        return roles
     }
 
     /// Content appearance with macOS Increase Contrast (lead decision Q2, 2026-11-12): keep the
@@ -142,11 +165,11 @@ extension SpaceThemeStyle {
         return 0.2126 * linear(c.red) + 0.7152 * linear(c.green) + 0.0722 * linear(c.blue)
     }
 
-    /// The lowest WCAG contrast of `color` against the backgrounds.
-    static func worstContrast(_ color: RGBA, _ backgrounds: [RGBA]) -> Double {
-        let ink = luminance(color)
+    /// The lowest WCAG contrast of `color` against the backgrounds. `inkOver`: a translucent ink is
+    /// composited over each background first.
+    static func worstContrast(_ color: RGBA, _ backgrounds: [RGBA], inkOver: Bool = false) -> Double {
         return backgrounds.map { b in
-            let l = luminance(b)
+            let ink = luminance(inkOver ? b.under(color) : color), l = luminance(b)
             return (max(ink, l) + 0.05) / (min(ink, l) + 0.05)
         }.min() ?? 21
     }
@@ -155,7 +178,7 @@ extension SpaceThemeStyle {
     /// contrast against every background reaches `increasedTitleContrast`, or the end.
     static func raised(_ color: RGBA, against backgrounds: [RGBA], dark: Bool) -> RGBA {
         func worst(_ c: RGBA) -> Double { worstContrast(c, backgrounds) }
-        let target = SidebarThemeRules.increasedTitleContrast
+        let target = SidebarThemeRules.increasedTitleContrast + SidebarThemeRules.increasedContrastMargin
         guard worst(color) < target else { return color }
         let p3 = ThemeColorMath.toP3(color.modelColor)
         let hsl = ThemeColorMath.hsl(p3)
@@ -166,5 +189,13 @@ extension SpaceThemeStyle {
             if l == 0 || l == 1 { break }
         }
         return result.withAlpha(1)
+    }
+}
+
+extension RGBA {
+    /// `top` composited over this opaque colour (source-over in encoded sRGB, like the layers draw).
+    func under(_ top: RGBA) -> RGBA {
+        let a = top.alpha
+        return RGBA(red * (1 - a) + top.red * a, green * (1 - a) + top.green * a, blue * (1 - a) + top.blue * a)
     }
 }
