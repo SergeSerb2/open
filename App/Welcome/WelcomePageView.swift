@@ -446,6 +446,7 @@ final class WelcomeBackdropView: NSView {
 final class WelcomeEdgeFadeView: NSView {
   private let fade = CAGradientLayer()
   private var rendered: (CGRect, CGFloat)?
+  private var image: CGImage?
   override init(frame: NSRect) {
     super.init(frame: frame); wantsLayer = true; setAccessibilityElement(false)
     fade.startPoint = CGPoint(x: 0, y: 0.5); fade.endPoint = CGPoint(x: 1, y: 0.5)
@@ -455,6 +456,9 @@ final class WelcomeEdgeFadeView: NSView {
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   override var isFlipped: Bool { true }
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  // AppKit owns a layer-backed view's contents; set the strip in updateLayer so a display pass keeps it.
+  override var wantsUpdateLayer: Bool { true }
+  override func updateLayer() { layer?.contents = image; fade.frame = bounds }
   /// Draws the backdrop's layers for this view's frame into one bitmap (at most 72 x page height pt).
   func render(backdrop: NSView, scale: CGFloat) {
     guard rendered.map({ $0.0 != frame || $0.1 != scale }) ?? true, frame.width > 0, frame.height > 0,
@@ -467,9 +471,7 @@ final class WelcomeEdgeFadeView: NSView {
     context.translateBy(x: 0, y: CGFloat(height)); context.scaleBy(x: scale, y: -scale)
     context.translateBy(x: -frame.minX, y: -frame.minY)
     source.render(in: context)
-    CATransaction.begin(); CATransaction.setDisableActions(true)
-    layer?.contents = context.makeImage(); layer?.contentsScale = scale; fade.frame = bounds
-    CATransaction.commit()
+    image = context.makeImage(); layer?.contentsScale = scale; needsDisplay = true
   }
 }
 
