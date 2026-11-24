@@ -226,82 +226,104 @@ def easel_rows(factory, results, tmp, h):
 
         def resize_redraws_shape():
             new_easel()
+            prev_appearance = 'dark' if 'Dark' in str(app.call('window-state').get('windowAppearance', '')) else 'light'
             app.call('appearance', name='light'); time.sleep(.2)
-            # Draw a rectangle (default lightGreen) at [120, 220, 140, 100].
-            easel(action='tool', tool='rectangle')
-            s0 = easel(action='drag', **{'from': [120, 220], 'to': [260, 320]})
-            rect = s0['canvas']['objects'][-1]
-            rect_id = rect['id']
-            win_w, win_h = app.call('window-state')['frame'][2:4]
-            cx, cy_bottom, _, ch = s0['canvasFrame']
-            canvas_top = win_h - (cy_bottom + ch)
-            scale = s0['canvas']['scale']
-            origin_x = rect['viewFrame'][0] - rect['frame'][0] * scale
-            origin_y = rect['viewFrame'][1] - rect['frame'][1] * scale
+            try:
+                # Draw a 100x100 rectangle at [120, 220] and pick black so the 75% fill (~63) is
+                # sharply distinct from both the canvas background (~253) and the 100% stroke (0).
+                easel(action='tool', tool='rectangle')
+                easel(action='drag', **{'from': [120, 220], 'to': [220, 320]})
+                s0 = easel(action='swatch', color='black')
+                rect = s0['canvas']['objects'][-1]
+                rect_id = rect['id']
+                win_w, win_h = app.call('window-state')['frame'][2:4]
+                cx, cy_bottom, _, ch = s0['canvasFrame']
+                canvas_top = win_h - (cy_bottom + ch)
+                scale = s0['canvas']['scale']
+                origin_x = rect['viewFrame'][0] - rect['frame'][0] * scale
+                origin_y = rect['viewFrame'][1] - rect['frame'][1] * scale
+                methods = []
 
-            def snap_pixels(name):
-                path = os.path.join(tmp, name)
-                app.call('snapshot', path=path)
-                w_img, h_img, px = h.read_image(path, srgb=True)
-                def at(doc_pt):
-                    wx = cx + origin_x + doc_pt[0] * scale
-                    wy = canvas_top + origin_y + doc_pt[1] * scale
-                    return px(wx * (w_img / win_w), wy * (h_img / win_h))
-                return at
+                def snap_pixels(name):
+                    path = os.path.join(tmp, name)
+                    shot = app.call('snapshot', path=path)
+                    methods.append(shot.get('method'))
+                    w_img, h_img, px = h.read_image(path, srgb=True)
+                    def at(doc_pt):
+                        wx = cx + origin_x + doc_pt[0] * scale
+                        wy = canvas_top + origin_y + doc_pt[1] * scale
+                        return px(wx * (w_img / win_w), wy * (h_img / win_h))
+                    return at
 
-            def max_diff(a, b):
-                return max(abs(x - y) for x, y in zip(a, b))
+                def max_diff(a, b):
+                    return max(abs(x - y) for x, y in zip(a, b))
 
-            time.sleep(.25)
-            before = snap_pixels('easel-resize-before.png')
-            bg_px = before([850, 300])
-            rect_fill_px = before([190, 270])
-            expanded_before = before([360, 370])
+                time.sleep(.25)
+                before = snap_pixels('easel-resize-before.png')
+                bg_px = before([920, 300])
+                rect_fill_px = before([170, 270])
+                expanded_before = before([360, 370])
 
-            # Resize the rectangle from [120, 220, 140, 100] to [120, 220, 320, 220] without changing color.
-            s1 = easel(action='drag', **{'from': [260, 320], 'to': [440, 440]})
-            resized = next(o for o in s1['canvas']['objects'] if o['id'] == rect_id)
-            time.sleep(.25)
-            expanded_after_grow = snap_pixels('easel-resize-grow.png')([360, 370])
+                # Resize the rectangle 4x wider to [120, 220, 400, 220] without changing any property.
+                # Probe both the expanded interior ([360, 370], catches a pinned stale bitmap) and
+                # 6 doc pt inside the new right edge ([514, 330], catches a 4x-stretched 2.5 pt stroke
+                # which would widen to 10 doc pt and paint opaque stroke instead of 75% fill).
+                s1 = easel(action='drag', **{'from': [220, 320], 'to': [520, 440]})
+                resized = next(o for o in s1['canvas']['objects'] if o['id'] == rect_id)
+                time.sleep(.25)
+                grow = snap_pixels('easel-resize-grow.png')
+                expanded_after_grow = grow([360, 370])
+                near_edge_after_grow = grow([514, 330])
 
-            # Undo must immediately redraw back to the original size.
-            s2 = easel(action='undo')
-            undone = next(o for o in s2['canvas']['objects'] if o['id'] == rect_id)
-            time.sleep(.25)
-            expanded_after_undo = snap_pixels('easel-resize-undo.png')([360, 370])
+                # Undo must immediately redraw back to the original size.
+                s2 = easel(action='undo')
+                undone = next(o for o in s2['canvas']['objects'] if o['id'] == rect_id)
+                time.sleep(.25)
+                expanded_after_undo = snap_pixels('easel-resize-undo.png')([360, 370])
 
-            # Also verify resizing an ellipse (default red) redraws without any property change.
-            easel(action='tool', tool='ellipse')
-            easel(action='drag', **{'from': [520, 220], 'to': [640, 320]})
-            time.sleep(.25)
-            ellipse_before = snap_pixels('easel-ellipse-before.png')
-            ellipse_fill_px = ellipse_before([580, 270])
-            ellipse_exp_before = ellipse_before([680, 360])
+                # Also verify resizing an ellipse (explicit red) redraws without any property change.
+                easel(action='tool', tool='ellipse')
+                easel(action='drag', **{'from': [580, 220], 'to': [680, 320]})
+                se0 = easel(action='swatch', color='red')
+                ellipse_id = se0['canvas']['objects'][-1]['id']
+                time.sleep(.25)
+                ellipse_before = snap_pixels('easel-ellipse-before.png')
+                ellipse_fill_px = ellipse_before([630, 270])
+                ellipse_exp_before = ellipse_before([730, 370])
 
-            easel(action='drag', **{'from': [640, 320], 'to': [760, 440]})
-            time.sleep(.25)
-            ellipse_exp_after = snap_pixels('easel-ellipse-grow.png')([680, 360])
+                se1 = easel(action='drag', **{'from': [680, 320], 'to': [820, 440]})
+                ellipse_resized = next(o for o in se1['canvas']['objects'] if o['id'] == ellipse_id)
+                time.sleep(.25)
+                ellipse_exp_after = snap_pixels('easel-ellipse-grow.png')([730, 370])
 
-            frame_grew = all(abs(a - b) < 1 for a, b in zip(resized['frame'], [120, 220, 320, 220]))
-            frame_undone = all(abs(a - b) < 1 for a, b in zip(undone['frame'], [120, 220, 140, 100]))
-            rect_ok = (frame_grew and frame_undone
-                       and max_diff(rect_fill_px, bg_px) >= 30
-                       and max_diff(expanded_before, bg_px) <= 10
-                       and max_diff(expanded_after_grow, rect_fill_px) <= 10
-                       and max_diff(expanded_after_grow, bg_px) >= 30
-                       and max_diff(expanded_after_undo, bg_px) <= 10)
-            ellipse_ok = (max_diff(ellipse_fill_px, bg_px) >= 30
-                          and max_diff(ellipse_exp_before, bg_px) <= 10
-                          and max_diff(ellipse_exp_after, ellipse_fill_px) <= 10
-                          and max_diff(ellipse_exp_after, bg_px) >= 30)
-            return rect_ok and ellipse_ok, {
-                'bg': list(bg_px), 'rectFill': list(rect_fill_px),
-                'expandedBefore': list(expanded_before), 'expandedAfterGrow': list(expanded_after_grow),
-                'expandedAfterUndo': list(expanded_after_undo),
-                'resizedFrame': resized['frame'], 'undoneFrame': undone['frame'],
-                'ellipseFill': list(ellipse_fill_px), 'ellipseExpandedBefore': list(ellipse_exp_before),
-                'ellipseExpandedAfter': list(ellipse_exp_after),
-            }
+                windowserver_ok = bool(methods) and all(m == 'windowserver+devtools' for m in methods)
+                frame_grew = all(abs(a - b) < 1 for a, b in zip(resized['frame'], [120, 220, 400, 220]))
+                frame_undone = all(abs(a - b) < 1 for a, b in zip(undone['frame'], [120, 220, 100, 100]))
+                ellipse_grew = all(abs(a - b) < 1 for a, b in zip(ellipse_resized['frame'], [580, 220, 240, 220]))
+                rect_ok = (frame_grew and frame_undone
+                           and max_diff(rect_fill_px, bg_px) >= 30
+                           and max_diff(expanded_before, bg_px) <= 10
+                           and max_diff(expanded_after_grow, rect_fill_px) <= 10
+                           and max_diff(expanded_after_grow, bg_px) >= 30
+                           and max_diff(near_edge_after_grow, rect_fill_px) <= 10
+                           and max_diff(expanded_after_undo, bg_px) <= 10)
+                ellipse_ok = (ellipse_grew
+                              and max_diff(ellipse_fill_px, bg_px) >= 30
+                              and max_diff(ellipse_exp_before, bg_px) <= 10
+                              and max_diff(ellipse_exp_after, ellipse_fill_px) <= 10
+                              and max_diff(ellipse_exp_after, bg_px) >= 30)
+                return windowserver_ok and rect_ok and ellipse_ok, {
+                    'methods': methods, 'bg': list(bg_px), 'rectFill': list(rect_fill_px),
+                    'expandedBefore': list(expanded_before), 'expandedAfterGrow': list(expanded_after_grow),
+                    'nearEdgeAfterGrow': list(near_edge_after_grow),
+                    'expandedAfterUndo': list(expanded_after_undo),
+                    'resizedFrame': resized['frame'], 'undoneFrame': undone['frame'],
+                    'ellipseFrame': ellipse_resized['frame'],
+                    'ellipseFill': list(ellipse_fill_px), 'ellipseExpandedBefore': list(ellipse_exp_before),
+                    'ellipseExpandedAfter': list(ellipse_exp_after),
+                }
+            finally:
+                app.call('appearance', name=prev_appearance)
         _row(results, 'uxe3_easel_resize_redraws_shape', resize_redraws_shape)
     finally:
         try: app.quit()
