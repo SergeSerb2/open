@@ -205,8 +205,9 @@ final class SpacePagerView: NSView {
     #if DEBUG || OPEN_AUTOMATION
     /// Pager internals for layout checks: each built page's layer state and the strip offsets.
     var diagnostics: [String: Any] {
-        func tx(_ l: CALayer?) -> Double { Double((l?.value(forKeyPath: "transform.translation.x") as? CGFloat) ?? .nan) }
-        func ptx(_ l: CALayer?) -> Double { Double((l?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat) ?? .nan) }
+        // JSON has no NaN: a missing layer or presentation reads as null.
+        func tx(_ l: CALayer?) -> Any { (l?.value(forKeyPath: "transform.translation.x") as? CGFloat).map { Double($0) } ?? NSNull() }
+        func ptx(_ l: CALayer?) -> Any { (l?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat).map { Double($0) } ?? NSNull() }
         let order = spaces.map(\.id)
         let built: [[String: Any]] = pages.map { id, p in
             ["space": id.description, "index": order.firstIndex(of: id) ?? -1, "layerHidden": p.layer?.isHidden ?? true,

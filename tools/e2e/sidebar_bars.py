@@ -197,7 +197,8 @@ def _switch_draw_rows(factory, results, scratch, root, read_image):
                     mean = sum(lum) / len(lum); spread = (sum((v - mean) ** 2 for v in lum) / len(lum)) ** .5
                     pager = state['pagerState']
                     page = next((p for p in pager['pages'] if p['index'] == index), None)
-                    placed = page is not None and abs(page['translation'] - index * pager['width']) < .5 and not page['layerHidden']
+                    placed = (page is not None and page['translation'] is not None
+                              and abs(page['translation'] - index * pager['width']) < .5 and not page['layerHidden'])
                     row = {'icons': icons, 'reduced': reduced, 'index': index, 'contrast': round(spread, 1), 'placed': placed,
                            'translation': page and page['translation']}
                     summary.append(row)
