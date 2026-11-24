@@ -386,12 +386,24 @@ public final class WebContentContainer: NSView {
     public var onTabURLChanged: ((ItemID, URL) -> Void)?
     public var onFocusedMetadata: ((String) -> Void)?
     public var onFractionsCommitted: (([Double]) -> Void)?
-    public var onDrop: ((ItemID, SplitDropOverlayView.Zone, Int?) -> Bool)?
+    public var canDrop: ((ItemID, SplitDropOverlayView.Zone, Int?) -> Bool)?
+    public var onDrop: ((ItemID, SplitDropOverlayView.Zone, Int?) -> Bool)? {
+        didSet { dropTarget.isHidden = onDrop == nil }
+    }
     /// True for a hidden host the sleep policy must keep (keep-alive site, audio, capture,
     /// notifications, DevTools, downloads). The hidden-host cap counts only the others.
     public var retainsHiddenHost: ((ItemID) -> Bool)?
     private var dividers: [SplitDividerView] = []
     public let dropOverlay = SplitDropOverlayView()
+    /// Sits above embedded web, Note and Easel views, registered only for sidebar node drags.
+    /// Sidebar tab drags also carry URL/string types for external apps; without this view,
+    /// Chromium's WebContentsViewCocoa intercepts the drag before it reaches this container.
+    /// Pointer events pass straight through (`hitTest` returns nil), and external drags
+    /// without `com.open.sidebar.node` continue down to the page view untouched.
+    private let dropTarget = SplitDropTargetView()
+    private var cachedDragSequence: Int?
+    private var cachedDragNodeID: ItemID?
+    fileprivate static let sidebarNodePasteboardType = NSPasteboard.PasteboardType("com.open.sidebar.node")
     private var monitor: Any?
     private var transitioning = false
     /// Panes that left the layout stay drawn under the motion until it ends. Their
@@ -411,8 +423,9 @@ public final class WebContentContainer: NSView {
 
     public init(factory: any WebContentHostFactory) {
         self.factory = factory; super.init(frame: .zero); wantsLayer = true
-        registerForDraggedTypes([NSPasteboard.PasteboardType("com.open.sidebar.node")])
+        registerForDraggedTypes([Self.sidebarNodePasteboardType])
         dropOverlay.isHidden = true; addSubview(dropOverlay)
+        dropTarget.isHidden = true; dropTarget.container = self; addSubview(dropTarget, positioned: .above, relativeTo: dropOverlay)
         monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             MainActor.assumeIsolated { self?.observeClick(event) }; return event
         }
@@ -1018,7 +1031,10 @@ public final class WebContentContainer: NSView {
         let region = WindowSpeedTrace.begin("webContainer.layout")
         defer { region?() }
         inLayout = true; defer { inLayout = false }
-        super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false); spaceMotionStorage?.layout()
+        super.layout()
+        if dropOverlay.frame != bounds { dropOverlay.frame = bounds }
+        if dropTarget.frame != bounds { dropTarget.frame = bounds }
+        layoutPanes(animated: false); spaceMotionStorage?.layout()
     }
     private func layoutDividers() {
         while dividers.count > max(0, slots.count - 1) { dividers.removeLast().removeFromSuperview() }
@@ -1040,24 +1056,89 @@ public final class WebContentContainer: NSView {
         }
     }
     public func divider(at index: Int) -> SplitDividerView? { dividers.indices.contains(index) ? dividers[index] : nil }
-    public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { dropOverlay.isHidden = false; return draggingUpdated(sender) }
-    public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        dropOverlay.zone = dropOverlay.zone(at: convert(sender.draggingLocation, from: nil)); return .move
+    private func clearDragCache() {
+        cachedDragSequence = nil
+        cachedDragNodeID = nil
     }
-    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropOverlay.isHidden = true }
-    public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        defer { dropOverlay.isHidden = true }
-        guard let raw = sender.draggingPasteboard.string(forType: .init("com.open.sidebar.node")), let uuid = UUID(uuidString: raw) else { return false }
+    private func singleDraggedNodeID(from sender: any NSDraggingInfo, refresh: Bool = false) -> ItemID? {
+        if !refresh, cachedDragSequence == sender.draggingSequenceNumber {
+            return cachedDragNodeID
+        }
+        let id: ItemID?
+        if let items = sender.draggingPasteboard.pasteboardItems, items.count == 1,
+           let raw = items[0].string(forType: Self.sidebarNodePasteboardType),
+           let uuid = UUID(uuidString: raw) {
+            id = ItemID(rawValue: uuid)
+        } else {
+            id = nil
+        }
+        cachedDragSequence = sender.draggingSequenceNumber
+        cachedDragNodeID = id
+        return id
+    }
+    private func dropTargetInfo(for sender: any NSDraggingInfo, refresh: Bool = false) -> (id: ItemID, point: CGPoint, zone: SplitDropOverlayView.Zone, paneIndex: Int?)? {
+        guard onDrop != nil, let id = singleDraggedNodeID(from: sender, refresh: refresh) else { return nil }
         let point = convert(sender.draggingLocation, from: nil)
-        let index = slots.count > 1 && dropOverlay.zone(at: point) == .center ? slots.firstIndex { $0.frame.contains(point) } : nil
-        return handleDrop(ItemID(rawValue: uuid), point: point, paneIndex: index)
+        let zone = dropOverlay.zone(at: point)
+        let index = slots.count > 1 && zone == .center ? slots.firstIndex { $0.frame.contains(point) } : nil
+        return (id, point, zone, index)
+    }
+    private func allowsDrop(for target: (id: ItemID, point: CGPoint, zone: SplitDropOverlayView.Zone, paneIndex: Int?)) -> Bool {
+        onDrop != nil && (canDrop?(target.id, target.zone, target.paneIndex) ?? true)
+    }
+    public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        _ = singleDraggedNodeID(from: sender, refresh: true)
+        return draggingUpdated(sender)
+    }
+    public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard let target = dropTargetInfo(for: sender), allowsDrop(for: target) else {
+            dropOverlay.isHidden = true
+            return []
+        }
+        dropOverlay.zone = target.zone
+        if dropOverlay.isHidden { dropOverlay.isHidden = false; dropOverlay.needsDisplay = true }
+        return .move
+    }
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropOverlay.isHidden = true; clearDragCache() }
+    public override func draggingEnded(_ sender: any NSDraggingInfo) { dropOverlay.isHidden = true; clearDragCache() }
+    public override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) { dropOverlay.isHidden = true; clearDragCache() }
+    public override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let target = dropTargetInfo(for: sender) else { return false }
+        return allowsDrop(for: target)
+    }
+    public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        defer { dropOverlay.isHidden = true; clearDragCache() }
+        guard let target = dropTargetInfo(for: sender) else { return false }
+        return handleDrop(target.id, point: target.point, paneIndex: target.paneIndex)
     }
     @discardableResult public func handleDrop(_ id: ItemID, point: CGPoint, paneIndex: Int? = nil) -> Bool {
         onDrop?(id, dropOverlay.zone(at: point), paneIndex) ?? false
     }
     public var onMaximizedPaneCancelled: (() -> Void)?
     public override func cancelOperation(_ sender: Any?) {
-        dropOverlay.isHidden = true
+        dropOverlay.isHidden = true; clearDragCache()
         if maximizedTabID != nil { maximizedTabID = nil; onMaximizedPaneCancelled?() }
     }
+}
+
+@MainActor
+private final class SplitDropTargetView: NSView {
+    weak var container: WebContentContainer?
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never
+        registerForDraggedTypes([WebContentContainer.sidebarNodePasteboardType])
+        setAccessibilityElement(false)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var isOpaque: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { container?.draggingEntered(sender) ?? [] }
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { container?.draggingUpdated(sender) ?? [] }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { container?.draggingExited(sender) }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { container?.draggingEnded(sender) }
+    override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool { container?.prepareForDragOperation(sender) ?? false }
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool { container?.performDragOperation(sender) ?? false }
+    override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) { container?.concludeDragOperation(sender) }
 }

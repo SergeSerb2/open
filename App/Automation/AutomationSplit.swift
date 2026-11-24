@@ -78,6 +78,79 @@ extension AutomationController {
             return ["entered": entered.rawValue, "updated": updated.rawValue, "overlayShown": overlayShown,
                 "accepted": accepted, "overlayHidden": container.dropOverlay.isHidden,
                 "path": "NSDraggingInfo destination callbacks; no WindowServer drag session"] as [String: Any]
+        case "drag-route":
+            guard let point = args["point"] as? [Double], point.count == 2, point.allSatisfy(\.isFinite) else {
+                throw Failure(message: "drag-route needs point [x, y]")
+            }
+            window.layoutIfNeeded()
+            let location = NSPoint(x: point[0], y: window.frame.height - point[1])
+            let info: SplitDraggingInfo
+            if let rawURLs = args["urls"] as? [String], !rawURLs.isEmpty, rawURLs.count <= 500 {
+                let urls = try rawURLs.map { text -> URL in
+                    guard text.utf8.count <= 8192, let url = URL(string: text), url.scheme != nil else { throw Failure(message: "invalid drag url") }
+                    return url
+                }
+                info = SplitDraggingInfo(window: window, point: location, urls: urls)
+            } else if let nodes = args["nodes"] as? [String], !nodes.isEmpty, nodes.count <= 500,
+                      nodes.allSatisfy({ UUID(uuidString: $0) != nil }) {
+                let includeURLs = args["includeURLs"] as? Bool ?? true
+                let items: [(id: String, url: String?)] = nodes.map { raw in
+                    let tabURL = includeURLs ? UUID(uuidString: raw).flatMap { factory.model.tab(id: ItemID(rawValue: $0))?.url.absoluteString } : nil
+                    return (raw, tabURL)
+                }
+                info = SplitDraggingInfo(window: window, source: controller.sidebar, point: location, sidebarItems: items)
+            } else if let raw = args["node"] as? String, UUID(uuidString: raw) != nil {
+                let includeURLs = args["includeURLs"] as? Bool ?? true
+                let tabURL = includeURLs ? UUID(uuidString: raw).flatMap { factory.model.tab(id: ItemID(rawValue: $0))?.url.absoluteString } : nil
+                info = SplitDraggingInfo(window: window, source: controller.sidebar, point: location, sidebarItems: [(raw, tabURL)])
+            } else {
+                throw Failure(message: "drag-route needs node, nodes, or urls")
+            }
+            defer { info.draggingPasteboard.releaseGlobally() }
+            let findSelector = NSSelectorFromString("_findDragTargetFrom:")
+            guard window.responds(to: findSelector) else { throw Failure(message: "NSWindow drag target lookup unavailable") }
+            let resolved = window.perform(findSelector, with: info)?.takeUnretainedValue() as? NSView
+            var entered: NSDragOperation = []
+            var updated: NSDragOperation = []
+            var overlayShown = false
+            var indicator: CGRect?
+            var accepted = false
+            let drive = args["drive"] as? Bool ?? true
+            let keepOverlay = args["keepOverlay"] as? Bool ?? false
+            let perform = args["perform"] as? Bool ?? false
+            let endOutlineDrag = args["endOutlineDrag"] as? Bool ?? false
+            let endedSelector = #selector(NSDraggingDestination.draggingEnded(_:))
+            if drive, let resolved {
+                entered = resolved.draggingEntered(info)
+                updated = resolved.draggingUpdated(info)
+                overlayShown = !container.dropOverlay.isHidden
+                indicator = controller.sidebar.dropIndicatorFrame
+                controller.contentView.displayIfNeeded()
+                if !keepOverlay {
+                    if perform {
+                        accepted = !updated.isEmpty && resolved.prepareForDragOperation(info) && resolved.performDragOperation(info)
+                        resolved.concludeDragOperation(info)
+                    } else {
+                        resolved.draggingExited(info)
+                    }
+                    if endOutlineDrag {
+                        if let outline = controller.sidebar.focusedOutline, outline.responds(to: endedSelector) {
+                            outline.draggingEnded(info)
+                        }
+                        if resolved !== controller.sidebar.focusedOutline, resolved.responds(to: endedSelector) {
+                            resolved.draggingEnded(info)
+                        }
+                    }
+                }
+            }
+            return ["targetClass": resolved.map { String(describing: type(of: $0)) } ?? "",
+                "inContainer": resolved.map { $0 === container || $0.isDescendant(of: container) } ?? false,
+                "isFocusedOutline": resolved === controller.sidebar.focusedOutline,
+                "isOutline": resolved is NSOutlineView,
+                "entered": entered.rawValue, "updated": updated.rawValue,
+                "overlayShown": overlayShown, "overlayHidden": container.dropOverlay.isHidden,
+                "indicator": indicator.map { [Double($0.minX), Double($0.minY), Double($0.width), Double($0.height)] } ?? [],
+                "accepted": accepted] as [String: Any]
         case "bench":
             guard let raw = args["nodes"] as? [String], raw.count == 3,
                   let space = split.space, let selected = split.selected?.id else { throw Failure(message: "bench needs two single tabs and a split") }
@@ -304,6 +377,23 @@ final class SplitDraggingInfo: NSObject, @MainActor NSDraggingInfo {
         draggingDestinationWindow = window; draggingSource = source; draggingLocation = point
         super.init()
         draggingPasteboard.setString(node, forType: .init("com.open.sidebar.node"))
+    }
+    /// Real SidebarPasteboard payload: each tab item carries com.open.sidebar.node plus URL and string.
+    init(window: NSWindow, source: NSView, point: NSPoint, sidebarItems: [(id: String, url: String?)]) {
+        draggingDestinationWindow = window; draggingSource = source; draggingLocation = point
+        super.init()
+        draggingPasteboard.clearContents()
+        let items: [NSPasteboardItem] = sidebarItems.map { entry in
+            let item = NSPasteboardItem()
+            item.setString(entry.id, forType: .init("com.open.sidebar.node"))
+            if let url = entry.url {
+                item.setString(url, forType: .URL)
+                item.setString(url, forType: .string)
+            }
+            return item
+        }
+        draggingPasteboard.writeObjects(items)
+        numberOfValidItemsForDrop = items.count
     }
     /// An external drag of links or files (another app), with no sidebar node on its pasteboard.
     init(window: NSWindow, point: NSPoint, urls: [URL]) {

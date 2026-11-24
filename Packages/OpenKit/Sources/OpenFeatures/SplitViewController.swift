@@ -43,6 +43,7 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         container.onFractionsCommitted = { [weak self] fractions in
             guard let self, let split = self.split else { return }; self.model.setSplitFractions(splitID: split.id, fractions: fractions); self.onChange?()
         }
+        container.canDrop = { [weak self] id, zone, index in self?.canDrop(id, zone: zone, paneIndex: index) ?? false }
         container.onDrop = { [weak self] id, zone, index in self?.drop(id, zone: zone, paneIndex: index) ?? false }
         // Esc in the panel ends Expand Current Pane here too, or the next refresh expands it again.
         container.onMaximizedPaneCancelled = { [weak self] in self?.maximizedPaneID = nil }
@@ -210,6 +211,11 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
             })
         }
         return menu
+    }
+    public func canDrop(_ id: ItemID, zone: SplitDropOverlayView.Zone, paneIndex: Int?) -> Bool {
+        guard canSplit(id), let current = focusedTab, current.id != id else { return false }
+        if zone == .center && paneIndex == nil { return true }
+        return canAddPane
     }
     @discardableResult public func drop(_ id: ItemID, zone: SplitDropOverlayView.Zone, paneIndex: Int?) -> Bool {
         guard canSplit(id), let current = focusedTab, current.id != id else { return false }
