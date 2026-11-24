@@ -81,12 +81,15 @@ final class SpaceContentTransitionController {
         // turn this work (theme field plus every pane, 14–25 ms at 1280 × 800)
         // delayed the slide's first frame; here nothing visible waits for it.
         let captureFrom = source.flatMap { $0.space != selection.space ? $0 : nil }
+        // True until plate.begin returns: a cover that is already in place (Reduce Motion, no
+        // direction) applies on this input turn, which is not a deferred selection.
+        var beginning = true
         let apply = { [weak self] in
             guard let self, self.generation == token else { return }
             if let captureFrom, self.nativeSelection == captureFrom { self.captureSource(captureFrom) }
             self.applying = true
             self.nativeSelection = selection; self.nativeStyle = style
-            self.container.applySpaceSelection(selection, animateSlots: false)
+            self.container.applySpaceSelection(selection, animateSlots: false, deferred: !beginning)
             self.applying = false
             self.awaitPresentation(rearm: false)
         }
@@ -100,6 +103,7 @@ final class SpaceContentTransitionController {
             let apply = self.applyingCoveredSelection; self.applyingCoveredSelection = nil
             apply?()
         }
+        beginning = false
         if !started {
             applyingCoveredSelection = nil; requestedSelection = nil
             if plate.phase == .idle {
