@@ -93,11 +93,16 @@ def run(factory, results, tmp, h):
             long_toast = wait(lambda: next((t for t in app.call('toasts')['toasts'] if t['title'] == sentence and not t['exiting']), None), timeout=3, step=.05) or {}
             app.call('toast-show', title='Copied')
             short = wait(lambda: next((t for t in app.call('toasts')['toasts'] if t['title'] == 'Copied' and not t['exiting']), None), timeout=3, step=.05) or {}
+            two = 'Something went wrong downloading the update to Open.'
+            app.call('toast-show', title=two, subtitle='We’ll try again later…')
+            with_sub = wait(lambda: next((t for t in app.call('toasts')['toasts'] if t['title'] == two and not t['exiting']), None), timeout=3, step=.05) or {}
             panel = app.call('toasts')['panel']
-            return {'ok': bool(long_toast) and long_toast['titleTruncated'] is False and long_toast['frame'][3] == 60
+            return {'ok': bool(with_sub) and with_sub['titleTruncated'] is False and with_sub['frame'][3] > 60
+                    and inside(with_sub['titleFrame'], with_sub['frame']) and inside(with_sub['frame'], panel)
+                    and bool(long_toast) and long_toast['titleTruncated'] is False and long_toast['frame'][3] == 60
                     and inside(long_toast['titleFrame'], long_toast['frame']) and inside(long_toast['frame'], panel)
                     and bool(short) and short['titleTruncated'] is False and short['frame'][3] == 42,
-                    'long': long_toast, 'short': short, 'panel': panel}
+                    'long': long_toast, 'short': short, 'subtitle': with_sub, 'panel': panel}
         gate('UX1_D5_toast_long_copy_wraps', toast_wrap)
 
         # D2: hovering a link shows its URL without the scheme at the page's bottom-left (10 / 12 pt, 23 tall);

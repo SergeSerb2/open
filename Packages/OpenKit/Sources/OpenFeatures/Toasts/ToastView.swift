@@ -69,7 +69,9 @@ public final class ToastView: NSView {
         // A sentence that does not fit wraps onto a second line instead of losing its middle (UX1 D5).
         let wraps = natural > m.maxWidth && text.wrapTitle(width: m.maxWidth - lead - trailing)
         if wraps { natural = (lead + text.naturalWidth + trailing).rounded(.up) }
-        let height = m.height(hasSubtitle: content.subtitle != nil || wraps, hasButton: hasButton)
+        // A wrapped title above a subtitle adds one title line to the two-line height.
+        let height = wraps && content.subtitle != nil ? m.heightTwoLine + text.titleLineHeight + m.lineGap
+            : m.height(hasSubtitle: content.subtitle != nil || wraps, hasButton: hasButton)
         let width = min(m.maxWidth, max(m.minWidth, natural))
         let textWidth = width - lead - trailing
         // A short text-only toast ("90%") is padded to the minimum width with the text centered.
@@ -212,14 +214,21 @@ private final class ToastTextView: NSView {
         setAccessibilityValue([title, subtitle].compactMap { $0 }.joined(separator: "\n"))
     }
     var naturalWidth: CGFloat {
-        let lines = wrapped.map { [$0.first, $0.second] } ?? [titleFull, subtitleFull].compactMap { $0 }
+        let lines = (wrapped.map { [$0.first, $0.second] } ?? [titleFull].compactMap { $0 }) + [subtitleFull].compactMap { $0 }
         return (lines.map(Self.width).max() ?? 0).rounded(.up)
     }
     static func width(_ line: CTLine) -> CGFloat { CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) }
-    /// Splits a title-only toast at the word break that gives the most even two lines no wider than
-    /// `width`. Returns false (single line, middle truncation) when there is a subtitle or no break fits.
+    /// One title line's height (ascent + descent).
+    var titleLineHeight: CGFloat {
+        guard let titleFull else { return 0 }
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        CTLineGetTypographicBounds(titleFull, &ascent, &descent, &leading)
+        return ceil(ascent + descent)
+    }
+    /// Splits the title at the word break that gives the most even two lines no wider than `width`.
+    /// Returns false (single line, middle truncation) when no break fits.
     func wrapTitle(width: CGFloat) -> Bool {
-        guard subtitleFull == nil, width > 0 else { return false }
+        guard width > 0 else { return false }
         let words = titleString.split(separator: " ", omittingEmptySubsequences: true)
         guard words.count >= 2 else { return false }
         var best: (CTLine, CTLine, CGFloat)?
@@ -262,13 +271,15 @@ private final class ToastTextView: NSView {
         let t = metrics(title), s = metrics(subtitle)
         let titleHeight = t.ascent + t.descent
         if titleSecond != nil {
-            let block = titleHeight * 2 + ToastMetrics.lineGap
+            let subtitleBlock = subtitle == nil ? 0 : ToastMetrics.lineGap + s.ascent + s.descent
+            let block = titleHeight * 2 + ToastMetrics.lineGap + subtitleBlock
             let top = (height - block) / 2
             titleOrigin = CGPoint(x: x, y: top + t.ascent)
             titleSecondOrigin = CGPoint(x: x, y: top + titleHeight + ToastMetrics.lineGap + t.ascent)
+            subtitleOrigin = CGPoint(x: x, y: top + 2 * (titleHeight + ToastMetrics.lineGap) + s.ascent)
             needsDisplay = true
             let titleWidth = [title, titleSecond].compactMap { $0 }.map(Self.width).max() ?? 0
-            return CGRect(x: x, y: top, width: titleWidth, height: block)
+            return CGRect(x: x, y: top, width: titleWidth, height: titleHeight * 2 + ToastMetrics.lineGap)
         }
         let block = subtitle == nil ? titleHeight : titleHeight + ToastMetrics.lineGap + s.ascent + s.descent
         let top = (height - block) / 2
