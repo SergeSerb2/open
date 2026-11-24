@@ -1403,7 +1403,9 @@ final class SpaceHeaderView: NSView {
         let s = m.headerMoreSize
         more.frame = CGRect(x: w - m.headerMoreTrailing - s, y: (m.headerHeight - s) / 2, width: s, height: s)
         more.isHidden = !hovered || context.hidesSpaceChrome
-        var right = hovered ? more.frame.minX - 2 : w - 17
+        // On hover a truncated title's "…" must not touch the "···" button (UX round 1 C3; interim
+        // 6 pt until capture UXC-C3 measures Arc's gap).
+        var right = !more.isHidden ? more.frame.minX - 6 : w - 17
         if context.isWindowOnly {
             let color = spaceTitleColor.withAlphaComponent(0.55)
             moveTo.attributedTitle = NSAttributedString(string: "Move to…", attributes: [
