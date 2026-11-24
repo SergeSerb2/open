@@ -11,7 +11,8 @@
   the window's pixels, after filter changes (with the Filter drawer opened and closed) and after
   section switches: none at the default, a dot for All Profiles or a When chip, none again after.
 - `uxe_favorites_empty_tray_no_gap_mark`: over the empty Favorites tray the empty-state card is the
-  drop feedback; no clipped or zero-size gap mark is shown (review r1 #2). Its own App launch.
+  drop feedback; no clipped or zero-size gap mark is shown, and the drop still makes the tab a
+  Favorite (review r1 #2). Its own App launch.
 - `uxe_drop_fill_survives_row_reuse`: the folder fill comes back on a new row view during a still
   drag (the outer folder of the target collapses and expands; review r1 #4).
 - `uxe_drop_fill_cleared_on_space_switch`: a Space switch during a drag (⌃2, ⌃1) leaves no folder
@@ -95,15 +96,21 @@ def empty_tray_rows(factory, results, tmp):
                 return False, {'error': 'no Favorites empty-state card', 'state': empty}
             rows = {r['id']: r['frame'] for r in app.call('basics-demo', op='targets')['rows']}
             app.call('basics-demo', op='drag-begin', node=tabs[1], image=os.path.join(tmp, 'uxe-drag0.png'), point=_center(rows[tabs[1]]))
+            dropped = None
             try:
                 replies = [app.call('basics-demo', op='drag-over', point=_center(card)) for _ in range(2)]
                 during = app.call('favorites-empty-state', action='state')
+                # The drop still lands: the tab becomes the first Favorite.
+                dropped = app.call('basics-demo', op='drag-end', point=_center(card), perform=True)
             finally:
-                app.call('basics-demo', op='drag-end', point=[600, 400], perform=False)
+                if dropped is None:
+                    app.call('basics-demo', op='drag-end', point=[600, 400], perform=False)
+            time.sleep(.4)
+            favorites = [t['id'] for t in app.call('tabs') if t.get('section') == 'favorites']
             gap = replies[-1].get('favoritesGap')
-            ok = gap == [] and during.get('dropTarget') is True
+            ok = gap == [] and during.get('dropTarget') is True and (dropped or {}).get('accepted') is True and favorites == [tabs[1]]
             return ok, {'card': card, 'favoritesGap': gap, 'cardDropTarget': during.get('dropTarget'),
-                        'destination': replies[-1].get('destination')}
+                        'destination': replies[-1].get('destination'), 'dropped': dropped, 'favorites': favorites}
         _row(results, 'uxe_favorites_empty_tray_no_gap_mark', empty_tray)
     finally:
         try: app.quit()
