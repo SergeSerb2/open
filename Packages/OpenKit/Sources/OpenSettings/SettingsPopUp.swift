@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import OpenDesign
 
-/// A regular native pop-up with a stable 24 pt control height and the standard arrows.
-/// A fixed width must size the control itself, rather than only the SwiftUI wrapper.
+/// A pop-up with sections, separators and image items, drawn as Open's own pop-up
+/// (`SettingsChoiceButton`, UX round 1 F6). It hugs its label up to `width`.
 enum SettingsPopUpEntry<Value: Hashable> {
     case option(String, Value, symbol: String? = nil)
     case imageOption(String,Value,NSImage)
@@ -21,16 +21,16 @@ struct SettingsPopUp<Value: Hashable>: NSViewRepresentable {
         self.title=title; _selection=selection; self.width=width; self.entries=entries
     }
     func makeCoordinator() -> Coordinator { Coordinator(self) }
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let control=NSPopUpButton(frame:.init(x:0,y:0,width:width,height:24),pullsDown:false)
-        control.controlSize = .regular; control.font=SettingsTokens.label.font
+    func makeNSView(context: Context) -> SettingsChoiceButton {
+        let control=SettingsChoiceButton(frame:.init(x:0,y:0,width:width,height:26),pullsDown:false)
+        control.font=SettingsChoiceButton.font
         control.target=context.coordinator; control.action=#selector(Coordinator.select(_:))
         control.setAccessibilityLabel(title)
         control.setContentHuggingPriority(.defaultLow,for:.horizontal)
         control.setContentCompressionResistancePriority(.required,for:.vertical)
         return control
     }
-    func updateNSView(_ control:NSPopUpButton,context:Context) {
+    func updateNSView(_ control:SettingsChoiceButton,context:Context) {
         context.coordinator.parent=self
         control.removeAllItems(); control.autoenablesItems=false
         var selected=0
@@ -52,9 +52,19 @@ struct SettingsPopUp<Value: Hashable>: NSViewRepresentable {
                 if value == selection {selected=index}
             }
         }
-        control.selectItem(at:selected);control.isEnabled=enabled
+        control.selectItem(at:selected);control.isEnabled=enabled;control.needsDisplay=true
     }
-    func sizeThatFits(_ proposal:ProposedViewSize,nsView:NSPopUpButton,context:Context)->CGSize? {.init(width:width,height:24)}
+    /// Measured from the SwiftUI values, never the NSView: SwiftUI may size before updateNSView runs.
+    func sizeThatFits(_ proposal:ProposedViewSize,nsView:SettingsChoiceButton,context:Context)->CGSize? {
+        let entry=entries.first{$0.value == selection} ?? entries.first{$0.value != nil}
+        let (title,image):(String,Bool)
+        switch entry {
+        case .option(let label,_,let symbol): (title,image)=(label,symbol != nil)
+        case .imageOption(let label,_,_): (title,image)=(label,true)
+        default: (title,image)=("Choose",false)
+        }
+        return .init(width:min(width,SettingsChoiceButton.width(for:title,image:image)),height:26)
+    }
     @MainActor final class Coordinator:NSObject {
         var parent:SettingsPopUp
         init(_ parent:SettingsPopUp){self.parent=parent}
