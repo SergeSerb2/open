@@ -517,7 +517,8 @@
           "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "settingsVisible": adapter.settingsPresenter.window?.isVisible ?? false,
           "scrollTarget": adapter.settings.scrollTarget ?? "",
-          "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
+          "generalError": adapter.settings.general.errorText,
+          "generalUpdateMessage": adapter.settings.general.updateMessage, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryWindow?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
           "boostsPresentation": adapter.library?.boostsPresentation.rawValue ?? "",
@@ -1870,6 +1871,12 @@
         if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
         // A click into the prompt: it takes the keyboard (the prompt never takes it by itself).
         if a["focus"] as? Bool == true { return w.pageChrome.permissions.focusPrompt() }
+        if let hex = a["bezel"] as? String {
+          // "system" restores the accent; otherwise RRGGBB (sRGB) for a light/dark accent check.
+          let value = UInt32(hex, radix: 16)
+          w.pageChrome.permissions.setAllowBezelForAutomation(hex == "system" || value == nil ? nil
+            : NSColor(srgbRed: CGFloat((value! >> 16) & 0xFF) / 255, green: CGFloat((value! >> 8) & 0xFF) / 255, blue: CGFloat(value! & 0xFF) / 255, alpha: 1))
+        }
         return w.pageChrome.permissions.state
       case "permission-decisions":
         guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {

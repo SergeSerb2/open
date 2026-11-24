@@ -465,7 +465,13 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     app.checkForUpdatesAfterPaint = true
     app.prepareUpdaterAfterPaint()
   }
-  func showUpdatesUnavailable() { status(UpdaterController.unavailableStatus, pane: .general); show(pane: .general) }
+  /// Shown in the Updates card it belongs to, not above the default-browser card (UXC-W2-S9).
+  /// Scrolls to the Updates card so the message is in view (review r1 #1).
+  func showUpdatesUnavailable() {
+    settings.general.updateMessage = UpdaterController.unavailableStatus
+    AppDelegate.commandLog(UpdaterController.unavailableStatus)
+    show(section: .general, row: "automatic-updates")
+  }
   func openMoreSettings() { openURL(URL(string: "chrome://settings")!, profileID: settings.selectedProfileID) }
   // One source with Help ▸ Troubleshooting (page-platform §4.11.3–4).
   func revealOpenDataFolder() { TroubleshootingActions.shared.revealOpenData() }
