@@ -212,9 +212,25 @@ public final class SpaceManagerView: NSView {
     func renameInsertedNode(_ id: ItemID) {
         guard visibleForUpdates else { visibilityDirty = true; pendingRename = id; return }
         if updateDepth > 0 { pendingRename = id; return }
-        for column in columns.values where (column.page?.outline.row(forItem: context.model.node(id: id)?.object) ?? -1) >= 0 {
-            column.page?.layoutSubtreeIfNeeded(); column.page?.beginRename(nodeID: id)
+        guard let obj = context.model.node(id: id)?.object else { return }
+        if let ownerSpace = spaceID(of: id), let page = columns[ownerSpace]?.page {
+            page.ensureNodeInOutline(obj)
+            if page.outline.row(forItem: obj) >= 0 {
+                page.layoutSubtreeIfNeeded(); page.beginRename(nodeID: id)
+            }
         }
+    }
+
+    private func spaceID(of nodeID: ItemID) -> SpaceID? {
+        var cursor: NodeParent? = context.model.parent(of: nodeID)
+        while let parent = cursor {
+            switch parent {
+            case .spacePinned(let id), .spaceToday(let id): return id
+            case .folder(let id), .splitPane(let id): cursor = context.model.parent(of: id)
+            case .favorites: return nil
+            }
+        }
+        return nil
     }
 
     func trackReorder(space: Space, event: NSEvent) {

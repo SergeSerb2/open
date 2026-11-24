@@ -1009,21 +1009,25 @@ def context_menu_checks(factory, results, tmp, h):
             try:
                 tab_a, tab_b = made
                 app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+                wait(lambda: 'New Folder with Tab' in (h._try(lambda: app.call('sidebar-menu-items', node=tab_a)) or {}).get('items', []), timeout=5)
                 # 1. Single-tab right-click -> New Folder with Tab wraps the tab in place and opens inline rename.
                 app.call('sidebar-menu', node=tab_a, item='New Folder with Tab')
                 editor = wait(lambda: (lambda f: f if f.get('owner') == 'sidebar' and 'Text' in f.get('responder', '') else None)(app.call('focus-state')), timeout=3)
                 app.call('key', key='a', modifiers=['cmd'], route='app')
-                app.call('key', text='Work')
+                app.call('key', text='QuickWork')
                 app.call('key', key='return', route='app')
                 created = wait(lambda: next((n for n in app.call('sidebar-tree')['today']
-                                             if n['kind'] == 'folder' and n['title'] == 'Work'
+                                             if n['kind'] == 'folder' and n['title'] == 'QuickWork'
                                              and [c['id'] for c in n.get('children', [])] == [tab_a]), None), timeout=3)
-                # 2. Single-tab right-click -> Move to -> existing folder moves tab_b into Work.
+                after_create = app.call('sidebar-tree')
+                # 2. Single-tab right-click -> Move to -> existing folder moves tab_b into QuickWork.
                 move_items = app.call('sidebar-menu-items', node=tab_b, path='Move to')
-                app.call('sidebar-menu', node=tab_b, item='Move to/Work')
-                moved = wait(lambda: next((n for n in app.call('sidebar-tree')['today']
-                                           if n['kind'] == 'folder' and n['title'] == 'Work'
-                                           and [c['id'] for c in n.get('children', [])] == [tab_a, tab_b]), None), timeout=3)
+                moved = None
+                if 'QuickWork' in move_items.get('items', []):
+                    app.call('sidebar-menu', node=tab_b, item='Move to/QuickWork')
+                    moved = wait(lambda: next((n for n in app.call('sidebar-tree')['today']
+                                               if n['kind'] == 'folder' and n['title'] == 'QuickWork'
+                                               and [c['id'] for c in n.get('children', [])] == [tab_a, tab_b]), None), timeout=3)
                 # 3. Visible New Folder button on the New Tab row creates a pinned folder and opens inline rename.
                 btn = app.call('basics-demo', op='targets').get('newFolderButton') or []
                 pinned_before = len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder'])
@@ -1039,14 +1043,14 @@ def context_menu_checks(factory, results, tmp, h):
                 rows = {
                     'single_tab_rename_editor': bool(editor),
                     'single_tab_wrapped_and_renamed': bool(created),
-                    'move_to_lists_folder': 'Folders' in move_items['items'] and 'Work' in move_items['items'],
+                    'move_to_lists_folder': 'Folders' in move_items['items'] and 'QuickWork' in move_items['items'],
                     'move_to_folder_moves_tab': bool(moved),
                     'button_visible': len(btn) == 4 and btn[2] > 0 and btn[3] > 0,
                     'button_creates_folder': btn_made,
                     'button_opens_rename': bool(btn_editor),
                     'button_undone': btn_undone,
                 }
-                return {'ok': all(rows.values()), 'rows': rows, 'button': btn, 'moveTo': move_items}
+                return {'ok': all(rows.values()), 'rows': rows, 'button': btn, 'moveTo': move_items, 'afterCreate': after_create, 'editor': editor}
             finally:
                 for tab_id in made:
                     h._try(lambda t=tab_id: app.call('close', tab=t))

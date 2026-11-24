@@ -459,7 +459,6 @@ public final class SidebarView: NSView {
     /// Scrolls the focused page so the node's row is visible.
     public func reveal(nodeID: ItemID) {
         guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return }
-        page.ensureNodeInOutline(obj)
         let row = page.outline.row(forItem: obj)
         if row >= 0 { page.outline.scrollRowToVisible(row) }
     }

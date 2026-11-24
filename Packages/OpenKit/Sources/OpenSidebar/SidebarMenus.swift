@@ -62,7 +62,7 @@ struct SidebarMenus {
         }
         items.append(.separator())
         items.append(item("New Space…", .moveToNewSpace(nodeID: nodeID)))
-        items += folderMoveItems(for: [nodeID], in: current ?? context.focusedSpace?.id)
+        items += folderMoveItems(for: [nodeID], in: current)
         parent.submenu = menu(items)
         return parent
     }
@@ -76,14 +76,15 @@ struct SidebarMenus {
             parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, enabled: tabsOnly, .moveNodesToSpace(ids: ids, space: $0.id)) })
             return parent
         }
-        let current = Set(ids.compactMap { context.model.parent(of: $0).flatMap(spaceID(of:)) })
+        let parents = ids.map { context.model.parent(of: $0).flatMap(spaceID(of:)) }
+        let current = Set(parents.compactMap { $0 })
         var items = context.model.spaces.map { space in
             item(context.title(of: space), enabled: current != Set([space.id]), .moveNodesToSpace(ids: ids, space: space.id))
         }
         items.append(.separator())
         items.append(item("New Space…", enabled: context.canMoveNodesToNewSpace(ids), .moveNodesToNewSpace(ids: ids)))
-        let targetSpace = current.count == 1 ? current.first : context.focusedSpace?.id
-        items += folderMoveItems(for: ids, in: targetSpace)
+        let allInOneSpace = !parents.contains(where: { $0 == nil }) && current.count == 1
+        items += folderMoveItems(for: ids, in: allInOneSpace ? current.first : nil)
         parent.submenu = menu(items)
         return parent
     }

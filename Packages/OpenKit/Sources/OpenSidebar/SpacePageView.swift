@@ -847,6 +847,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func ensureNodeInOutline(_ obj: AnyObject) {
+        guard context.manager?.deferHiddenUpdates() != true else { return }
         if outline.row(forItem: obj) < 0 {
             if rootPinnedCollapsed != space.isPinnedCollapsed { syncRoot() }
             syncExpansion(animated: false)
@@ -864,7 +865,10 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     fileprivate func beginRename(item: AnyObject) {
         let row = outline.row(forItem: item)
-        guard row >= 0, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return }
+        guard row >= 0 else { return }
+        outline.layoutSubtreeIfNeeded()
+        guard let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return }
+        cell.layoutSubtreeIfNeeded()
         (cell as? TabCellView)?.beginRename()
         (cell as? FolderCellView)?.beginRename()
         (cell as? SplitCellView)?.beginRename()
