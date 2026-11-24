@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Runs on GitHub-hosted ubuntu-latest while within the free Actions limit
+  # (public repos are free and unlimited; private repos use free-tier minutes).
+  # If GitHub blocks hosted runners at the $0 spending limit, step 1 never runs
+  # (outputs.started != 'true') and linux-local-fallback picks up automatically
+  # on the local mesh-ci VM fleet.
+  linux-hosted:
+    name: Linux checks (GitHub Actions)
+    if: vars.OPEN_FORCE_LOCAL_CI != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      started: ${{ steps.mark.outputs.started }}
+    steps:
+      - name: Mark hosted runner acquired
+        id: mark
+        run: echo "started=true" >> "$GITHUB_OUTPUT"
+
+      - name: Report ci/linux pending
+        if: >-
+          github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${TARGET_SHA}" \
+            -f state="pending" \
+            -f context="ci/linux" \
+            -f description="Running Linux checks on GitHub-hosted runner" \
+            -f target_url="$RUN_URL" >/dev/null
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run shared Linux checks
+        id: checks
+        run: bash tools/ci/run-linux-checks.sh
+
+      - name: Report unified ci/linux status
+        if: >-
+          always() &&
+          !cancelled() &&
+          steps.checks.outcome != 'cancelled' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          OUTCOME: ${{ steps.checks.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state="failure"
+          desc="Linux checks failed on GitHub-hosted runner"
+          if [[ "$OUTCOME" == "success" ]]; then
+            state="success"
+            desc="Linux checks passed on GitHub-hosted runner"
+          fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${TARGET_SHA}" \
+            -f state="$state" \
+            -f context="ci/linux" \
+            -f description="$desc" \
+            -f target_url="$RUN_URL" >/dev/null
+
+  # Automatic local fallback on the home mesh-ci fleet (m5, m1-dev, windows, sanas).
+  # Runs ONLY when:
+  #   - OPEN_FORCE_LOCAL_CI == 'true', OR
+  #   - linux-hosted failed to start (e.g. $0 Actions spending limit / quota blocked).
+  # Never runs on real code failures from linux-hosted, never runs on cancelled
+  # runs, and never runs on fork PRs (enforced here and in mesh-ci's mesh.py).
+  linux-local-fallback:
+    name: Linux checks (local mesh-ci fallback)
+    needs: [linux-hosted]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.linux-hosted.result != 'cancelled' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (
+        vars.OPEN_FORCE_LOCAL_CI == 'true' ||
+        needs.linux-hosted.outputs.started != 'true'
+      )
+    runs-on: [self-hosted, linux, open-ci]
+    timeout-minutes: 20
+    steps:
+      - name: Note fallback reason
+        env:
+          FORCE_LOCAL: ${{ vars.OPEN_FORCE_LOCAL_CI }}
+        run: |
+          if [[ "$FORCE_LOCAL" == "true" ]]; then
+            echo "Running on local mesh-ci (OPEN_FORCE_LOCAL_CI=true)."
+          else
+            echo "GitHub-hosted runner did not start (quota/spending limit or outage); running on local mesh-ci."
+          fi
+
+      - name: Report ci/linux pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${TARGET_SHA}" \
+            -f state="pending" \
+            -f context="ci/linux" \
+            -f description="Running Linux checks on local mesh-ci" \
+            -f target_url="$RUN_URL" >/dev/null
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run shared Linux checks
+        id: checks
+        run: bash tools/ci/run-linux-checks.sh
+
+      - name: Report unified ci/linux status
+        if: always() && !cancelled() && steps.checks.outcome != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          OUTCOME: ${{ steps.checks.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state="failure"
+          desc="Linux checks failed on local mesh-ci"
+          if [[ "$OUTCOME" == "success" ]]; then
+            state="success"
+            desc="Linux checks passed on local mesh-ci"
+          fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${TARGET_SHA}" \
+            -f state="$state" \
+            -f context="ci/linux" \
+            -f description="$desc" \
+            -f target_url="$RUN_URL" >/dev/null

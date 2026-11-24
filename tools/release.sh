@@ -313,8 +313,18 @@ PY
     rm -rf "$PROBE_DIR"; PROBE_DIR=
     log 'Production Sparkle key matches SUPublicEDKey (signed random probe, public-key verification)'
 }
+record_phase() {
+    local phase=$1
+    printf '%s\n' "$phase" > "$STAGE/current-phase.txt.tmp"
+    mv -f "$STAGE/current-phase.txt.tmp" "$STAGE/current-phase.txt"
+    if [[ -n "${OPEN_RELEASE_PHASE_FILE:-}" ]]; then
+        printf '%s\n' "$phase" > "${OPEN_RELEASE_PHASE_FILE}.tmp"
+        mv -f "${OPEN_RELEASE_PHASE_FILE}.tmp" "$OPEN_RELEASE_PHASE_FILE"
+    fi
+}
 run_phase() {
     PHASE=$1
+    record_phase "$PHASE"
     local fn=$2 extra_input=${3:-} want got stamp="$STAMPS/$1.stamp" result_file="$STAMPS/$1.result" outputs="$STAMPS/$1.outputs"
     want=$(printf '%s\n%s\n%s\n%s\n' "$BASE" "$CHAIN" "$PHASE" "$extra_input" | shasum -a 256 | awk '{print $1}')
     if [[ -f "$stamp" && -f "$outputs" && -f "$result_file" ]] && [[ $(head -1 "$stamp") == "$want" ]]; then
@@ -447,7 +457,12 @@ PY
     while IFS= read -r -d '' d; do ditto "$d" "$REL/symbols/$(basename "$d")"; done < <(find "$SRC/$OUT_DIR_RELEASE" -maxdepth 4 -name '*.dSYM' -type d -print0)
     find "$SRC/$OUT_DIR_RELEASE" -maxdepth 4 -name '*.sym' -type f -exec cp {} "$REL/symbols/" \;
     [[ -n $(find "$REL/symbols" -type f -print -quit) ]] || die 'no release symbols found for the local archive'
-    output "$STAGE/engine-status.txt" "$REL/symbols" "$official_fw" "$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework"
+    # Phase 05 writes and declares Open.app.dSYM and OpenEngine.framework.dSYM in
+    # $REL/symbols. Record only engine symbols here so a rerun after an app build
+    # does not invalidate phase 02 and restart every phase.
+    local engine_symbols=()
+    while IFS= read -r -d '' d; do engine_symbols+=("$d"); done < <(find "$REL/symbols" -mindepth 1 -maxdepth 1 ! -name Open.app.dSYM ! -name OpenEngine.framework.dSYM -print0 | LC_ALL=C sort -z)
+    output "$STAGE/engine-status.txt" ${engine_symbols[@]+"${engine_symbols[@]}"} "$official_fw" "$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework"
 }
 prepare_notes_inputs() {
     # Observe external inputs before consulting the notes stamp. Preserve the
@@ -1263,7 +1278,7 @@ summary() {
         fi
         size_check "$APP" "$DMG"
         if grep -q mode-SKIP "$STAGE/sizes.txt"; then
-            row A-7 mode-SKIP 'dry run exceeds the 335 MB production limit; measured sizes recorded; limit unchanged'
+            row A-7 mode-SKIP 'dry run exceeds the 345 MB production limit; measured sizes recorded; limit unchanged'
         else row A-7 PASS 'within hard size limit; warning/target lines recorded'; fi
         bundle_check "$APP"
         row A-8 PASS "exact locale set: $LOCALES"
