@@ -161,13 +161,7 @@ enum PreviewChecks {
         outline.draggingExited(drag)
         hover(pinned.id)
         model.focusSpace(windowID: state.id, spaceID: model.spaces[1].id); pump()
-        // The pinned row stays a valid target after the switch, so only the focus ObservationLoop
-        // dismisses it, one main-actor Task hop later. Wait for that hop (bounded below the 0.5 s
-        // arm delay, so a preview that is never dismissed still fails here) instead of one 5 ms
-        // pump: a busy gate machine missed the single pump (HP5 flake, 2026-11-23).
-        let switchDismissed = Checks.waitFor(timeout: 0.4, settle: scene) { context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed }
-        check(switchDismissed, "HP5 real Space switch dismisses preview state"
-              + (switchDismissed ? "" : " (request \(String(describing: context.hoverPreviews.request?.kind)), armed \(context.hoverPreviews.isArmed))"))
+        check(context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed, "HP5 real Space switch dismisses preview state")
         model.focusSpace(windowID: state.id, spaceID: space.id); pump()
         let oldCount = context.hoverPreviews.scheduledShowCount
         hover(today.id); pump(0.53)
