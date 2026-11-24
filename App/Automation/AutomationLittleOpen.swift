@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
 import AppKit
 import OpenEngine
+import OpenCommandBar
 import OpenFeatures
 import OpenModel
 import OpenSleep
@@ -44,6 +45,9 @@ extension AutomationController {
         "state": state.state.rawValue, "url": state.currentURL.absoluteString, "title": window.title,
         "windowAppearance": window.effectiveAppearance.name.rawValue,
         "contentAppearance": controller.contentView.effectiveAppearance.name.rawValue,
+        // UX1 D1: the embedded bar's text palette; its fill is always Little Open's dark fill.
+        "findBar": standalone?.findStateForAutomation ?? [:], "barDark": controller.commandBar.theme.isDark,
+        "barAppearance": controller.commandBar.view.effectiveAppearance.name.rawValue,
         "profile": state.profileID.description, "pillSpace": state.pillSpaceID?.description ?? "",
         "lastActiveAt": state.lastActiveAt.timeIntervalSince1970,
         "screenFrame": frame(window.screen?.frame ?? .zero), "visibleFrame": frame(window.screen?.visibleFrame ?? .zero),

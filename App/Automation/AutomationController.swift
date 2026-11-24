@@ -764,15 +764,25 @@
         // the window content (top-left origin); `panel` is the anchor they sit in.
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         let center = controller.toasts, overlay = controller.toastOverlay, root = controller.contentView
+        let views = center.views
         return ["panel": rect(root.convert(overlay.bounds, from: overlay)), "shown": center.shownCount, "lastTitle": center.lastTitle,
-          "toasts": center.snapshots.map { s -> [String: Any] in
-            ["title": s.content.title, "subtitle": s.content.subtitle ?? NSNull(), "symbol": s.content.symbol ?? NSNull(),
+          "toasts": center.snapshots.enumerated().map { index, s -> [String: Any] in
+            let view = index < views.count ? views[index] : nil
+            return ["title": s.content.title, "subtitle": s.content.subtitle ?? NSNull(), "symbol": s.content.symbol ?? NSNull(),
              "accessory": s.content.accessoryName, "coalescingKey": s.content.coalescingKey ?? NSNull(),
              "frame": rect(root.convert(s.frame, from: overlay)),
              "accessoryFrame": s.accessoryFrame.map { rect(root.convert($0, from: overlay)) } ?? NSNull(),
              "age": s.age, "lifetime": s.lifetime ?? NSNull(), "sticky": s.content.isSticky,
-             "exiting": s.isExiting, "hovered": s.isHovered]
+             "exiting": s.isExiting, "hovered": s.isHovered,
+             // UX1 D5: whether the title lost characters to an ellipsis, and its drawn box (window content, top-left).
+             "titleTruncated": view?.titleLineIsTruncated ?? false,
+             "titleFrame": view.map { rect(root.convert($0.titleFrame, from: $0)) } ?? NSNull()]
           }] as [String: Any]
+      case "toast-show":
+        // Shows a plain toast in the front browser window (layout checks for long copy, UX1 D5).
+        guard let controller = app.frontWindowController, let title = a["title"] as? String, !title.isEmpty else { throw Failure(message: "toast-show needs a title") }
+        controller.toasts.show(ToastContent(title: title, subtitle: a["subtitle"] as? String))
+        return true
       case "quote-offer":
         // The last Shared Quotes offer of the key window: page answer time (s) and whether it showed.
         guard let controller = app.frontWindowController, let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no browser window") }
@@ -2566,7 +2576,23 @@
       case .glance(let id)?: kind = "glance"; target = id.description
       case nil: break
       }
-      return ["kind": kind, "target": target, "card": preview.card.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
+      var folderSearch: [String: Any] = [:]
+      func folderCard(in view: NSView) -> FolderPreviewView? {
+        if let card = view as? FolderPreviewView { return card }
+        for child in view.subviews { if let hit = folderCard(in: child) { return hit } }
+        return nil
+      }
+      if let card = preview.card.flatMap(folderCard(in:)) {
+        // UX1 D6: the search placeholder against the field's text box, and how a long one is cut.
+        let field = card.searchField, text = field.placeholderAttributedString
+        let box = (field.cell as? NSSearchFieldCell)?.searchTextRect(forBounds: field.bounds) ?? field.bounds
+        let font = field.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let style = text.flatMap { $0.length > 0 ? $0.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle : nil }
+        folderSearch = ["placeholder": card.searchPlaceholder, "textBoxWidth": box.width,
+          "needs": ceil((card.searchPlaceholder as NSString).size(withAttributes: [.font: font]).width),
+          "tailEllipsis": style?.lineBreakMode == .byTruncatingTail]
+      }
+      return ["kind": kind, "target": target, "folderSearch": folderSearch, "card": preview.card.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
         "host": preview.host.map { String(describing: ObjectIdentifier($0)) } ?? "",
         "cachedHost": preview.hostTabID.flatMap { controller.container.host(for: $0) }.map { String(describing: ObjectIdentifier($0)) } ?? "",
         "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]

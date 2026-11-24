@@ -15498,10 +15498,15 @@ def main():
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results[opts.only] = CheckedResults(tracker)
             # OPEN_CHROME7_ONLY=1 runs only the bug sweep round 7 window chrome rows (tools/e2e/chrome_r7.py).
-            if os.environ.get("OPEN_CHROME7_ONLY") != "1":
+            # OPEN_UX1_ONLY=1 runs only the UX round 1 command bar / page chrome rows (tools/e2e/ux1_commandbar.py).
+            ux1_only = os.environ.get("OPEN_UX1_ONLY") == "1"
+            if os.environ.get("OPEN_CHROME7_ONLY") != "1" and not ux1_only:
                 module.run(factory, results[opts.only], tmp, globals())
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/littleopen_page_chrome.py"))["run"](factory, results[opts.only], tmp, globals())
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/chrome_r7.py"))["run"](factory, results[opts.only], tmp, globals())
+            if not ux1_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/chrome_r7.py"))["run"](factory, results[opts.only], tmp, globals())
+            if os.environ.get("OPEN_CHROME7_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/ux1_commandbar.py"))["run"](factory, results[opts.only], tmp, globals())
         elif opts.only == "context-menus":
             import importlib.util
             spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))
