@@ -537,7 +537,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       "nameEditing": nameField?.currentEditor() != nil,
       "artwork": preview.layoutFrames.mapValues { frame(preview, $0) },
       "reportText": host.map { Self.accessibleText($0.view) } ?? [],
-      "nameFieldFrame": nameField.map(frame) ?? []]
+      "nameFieldFrame": nameField.map { frame($0) } ?? []]
   }
   /// Text the hosted SwiftUI import view exposes to accessibility: what it draws, not the model.
   private static func accessibleText(_ root: Any) -> [String] {
