@@ -738,14 +738,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       }
       return createWindowController(state: state)
     }
-    guard let spaceID = focusedSpaceID ?? frontMainModelWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
+    let source = frontMainModelWindowController
+    guard let spaceID = focusedSpaceID ?? source?.context.focusedSpace?.id ?? model.spaces.first?.id,
       let state = withoutWindowUndo({ model.createWindow(focusedSpaceID: spaceID) }) else { return nil }
-    let offset = Double(windowControllers.count * 24)
-    state.frameX += offset; state.frameY -= offset
+    // Arc: Cmd+N opens with the source window's size and sidebar width (interaction-states §17, §13),
+    // one cascade step from it (UX round 1 wave 3 W1).
+    if let source { Self.cascade(state, from: source) }
+    else { let offset = Double(windowControllers.count * 24); state.frameX += offset; state.frameY -= offset }
     // A new window copies the key window's toolbar (commandbar-completion §4.6.1; guess).
     state.showsToolbar = frontWindowController?.context.window?.showsToolbar ?? false
     let controller = createWindowController(state: state)
     scheduleSave(); return controller
+  }
+
+  /// A new window's frame and sidebar width from the window it comes from: the same size and sidebar
+  /// width, one standard cascade step (24 pt right and down) from its windowed frame (a full-screen
+  /// source uses the frame it returns to). A step that would leave the source's screen starts again at
+  /// that screen's top-left corner.
+  static let cascadeStep = 24.0
+  static func cascade(_ state: BrowserWindowState, from source: BrowserWindowController) {
+    guard let window = source.window else { return }
+    let saved = source.context.window
+    var frame = window.styleMask.contains(.fullScreen)
+      ? CGRect(x: saved?.frameX ?? 100, y: saved?.frameY ?? 100, width: saved?.frameWidth ?? 1280, height: saved?.frameHeight ?? 800)
+      : window.frame
+    if let width = saved?.sidebarWidth { state.sidebarWidth = width }
+    frame.origin.x += cascadeStep; frame.origin.y -= cascadeStep
+    if let visible = (window.screen ?? NSScreen.main)?.visibleFrame, visible.width > 0 {
+      frame.size.width = min(frame.width, visible.width); frame.size.height = min(frame.height, visible.height)
+      if frame.maxX > visible.maxX || frame.minY < visible.minY || !visible.intersects(frame) {
+        frame.origin = CGPoint(x: visible.minX, y: visible.maxY - frame.height)
+      }
+    }
+    state.frameX = frame.minX; state.frameY = frame.minY
+    state.frameWidth = frame.width; state.frameHeight = frame.height
   }
 
   var frontStandardWindowController: BrowserWindowController? {
@@ -767,6 +793,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let profile = Profile(name: parent.name, settings: parent.settings, dataDirectoryName: "Incognito")
     let space = Space(title: "Incognito", icon: .symbol("eyeglasses"), profileID: profile.id)
     let state = BrowserWindowState(focusedSpaceID: space.id)
+    // One cascade step from the front window, not the fixed default over it (UX round 1 wave 3 W3).
+    if let source = frontWindowController { Self.cascade(state, from: source) }
     let memory = BrowserModel(profiles: [profile], spaces: [space], windows: [state])
     let undo = UndoManager(); undo.groupsByEvent = false; memory.undoManager = undo
     let controller = createWindowController(state: state, privateModel: memory, session: session)
