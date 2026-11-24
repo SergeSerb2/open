@@ -543,24 +543,32 @@ def edge_fade_rows(factory, results, tmp, api):
         app.call('wait', tab=app.call('tabs')[0]['id'])
         app.call('appearance', name='light')
         app.call('window-frame', frame=[80, 80, 1680, 1050]); app.call('updater-banner-width', width=180)
-        inserted = app.call('welcome', action='insert'); time.sleep(2.5)
+        inserted = app.call('welcome', action='insert')
+        # The clip fades in at Reveal.clip (2.9 s); sample only after the whole staged reveal.
+        revealed = api.wait_until(lambda: (lambda s: s if s['visible'] and s['revealed'] and s['appearanceElapsed'] > 4.3 else None)(app.call('welcome')),
+                                  timeout=10, step=.1)
         layout = app.call('welcome')['layout']; fade, clip = layout.get('edgeFade') or {}, layout.get('clipWindowFrame') or []
         path = str(Path(tmp) / 'welcome-edge-fade.png'); app.call('snapshot', path=path)
-        width, height, pixel = api.read_image(path, srgb=True); scale = width / 1680
+        # Scale from the real window (AppKit may constrain the requested frame to the screen).
+        frame = app.call('window-state')['frame']
+        width, height, pixel = api.read_image(path, srgb=True); sx, sy = width / frame[2], height / frame[3]
         def diff(a, b): return sum(abs(i - j) for i, j in zip(a, b))
         samples = []
         if not fade.get('hidden', True) and len(clip) == 4:
             fx, fy, fw, fh = fade['window']; cx, cy, cw, ch = clip
-            x = (fx + fw - 2) * scale
+            # Right end of the strip should be backdrop; 20 pt left of the strip is the plain, visible clip.
             for inside, outside in ((cy + 30, cy - 20), (cy + ch - 30, cy + ch + 20)):
-                a, b = pixel(x, inside * scale), pixel(x, outside * scale)
-                samples.append(dict(clip=list(a), backdrop=list(b), diff=diff(a, b)))
+                edge, plain, backdrop = pixel((fx + fw - 2) * sx, inside * sy), pixel((fx - 20) * sx, inside * sy), pixel((fx + fw - 2) * sx, outside * sy)
+                samples.append(dict(edge=list(edge), clip=list(plain), backdrop=list(backdrop),
+                                    edgeDiff=diff(edge, backdrop), clipDiff=diff(plain, backdrop)))
         # 900 pt with a 360 pt sidebar leaves the page under clipX + 260 pt: the clip stacks below the steps.
         app.call('window-frame', frame=[80, 80, 900, 620]); app.call('updater-banner-width', width=360); time.sleep(1.0)
         narrow_layout = app.call('welcome')['layout'] or {}
         narrow = dict(narrow_layout.get('edgeFade') or {}, clip=narrow_layout.get('clip'), clipShown=narrow_layout.get('clipShown'))
-        results['W_edge_fade'] = dict(ok=not fade.get('hidden', True) and len(samples) == 2
-            and all(s['diff'] <= 36 for s in samples) and narrow.get('hidden') is True,
+        # The clip itself must differ from the backdrop somewhere (it is drawn), while the strip's right end
+        # matches the backdrop on both rows (the fade is drawn over it).
+        results['W_edge_fade'] = dict(ok=bool(revealed) and not fade.get('hidden', True) and len(samples) == 2
+            and any(s['clipDiff'] > 36 for s in samples) and all(s['edgeDiff'] <= 36 for s in samples) and narrow.get('hidden') is True,
             wide=fade, samples=samples, narrow=narrow, png=path, load=list(os.getloadavg()))
         app.call('close', tab=inserted['tab'])
     finally:
