@@ -35,12 +35,33 @@ final class PermissionPromptView: PageChromePopoverView {
     // Allow looks like the default button from the start (UXC-W2-S7). Return and Escape still
     // answer only once the prompt has the keyboard (bug sweep r6 V-05): see `hasKeyboard`.
     allow.bezelColor = .controlAccentColor
-    allow.attributedTitle = NSAttributedString(string: allow.title, attributes: [
-      .foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)])
+    styleAllowTitle()
+    NotificationCenter.default.addObserver(self, selector: #selector(systemColorsChanged), name: NSColor.systemColorsDidChangeNotification, object: nil)
     onReturn = { [weak self] in if self?.hasKeyboard == true { self?.allow.performClick(nil) } }
     onEscape = { [weak self] in if self?.hasKeyboard == true { self?.notNow.performClick(nil) } }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+  /// White or black title on the accent bezel, whichever reads better: a light accent (Yellow,
+  /// Graphite in dark) gets a dark title (review r1 #4).
+  private(set) var allowTitleColor: NSColor = .white
+  private(set) var allowTitleContrast: Double = 0
+  private func styleAllowTitle() {
+    var accent = NSColor.controlAccentColor
+    effectiveAppearance.performAsCurrentDrawingAppearance { accent = NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? .systemBlue }
+    func luminance(_ c: NSColor) -> Double {
+      let c = c.usingColorSpace(.sRGB) ?? c
+      func lin(_ v: CGFloat) -> Double { let v = Double(v); return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+      return 0.2126 * lin(c.redComponent) + 0.7152 * lin(c.greenComponent) + 0.0722 * lin(c.blueComponent)
+    }
+    let l = luminance(accent)
+    let onWhite = 1.05 / (l + 0.05), onBlack = (l + 0.05) / 0.05
+    allowTitleColor = onWhite >= onBlack ? .white : .black
+    allowTitleContrast = max(onWhite, onBlack)
+    allow.attributedTitle = NSAttributedString(string: allow.title, attributes: [
+      .foregroundColor: allowTitleColor, .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)])
+  }
+  @objc private func systemColorsChanged() { styleAllowTitle() }
+  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); styleAllowTitle() }
   // Compact stack (UX round 1 F17): question, help line under it, buttons at the bottom.
   private func questionHeight(width: CGFloat) -> CGFloat {
     let measured = question.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: max(1, width - 60), height: 64)).height ?? 32

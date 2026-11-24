@@ -42,7 +42,8 @@ public struct GeneralPane: View {
                     Text(model.updateMessage).fixedSize(horizontal: false, vertical: true)
                 }.font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 12)
-                    .accessibilityElement(children: .combine).accessibilityIdentifier("general/update-status")
+                    .accessibilityElement(children: .ignore).accessibilityLabel(model.updateMessage)
+                    .accessibilityIdentifier("general/update-status").id("general/update-status")
             }
         }
         OpenSettingsGroup("Move in") {

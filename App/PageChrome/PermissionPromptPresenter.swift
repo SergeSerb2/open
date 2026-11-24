@@ -210,11 +210,11 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     // The window that has the keyboard now: only it may get key status back (review round 2).
     let keyBefore = NSApp.keyWindow
     popover.show(relativeTo: placed.rect, of: placed.view, preferredEdge: placed.edge)
-    if let promptWindow = view.window { PermissionPromptBackdrop.install(in: promptWindow) }
     if let promptWindow = view.window {
       // This NSPopover is ours; its native window class alone cannot prove
       // ownership to the browser's child-window appearance policy.
       (anchor.view.window as? any WindowContentAppearanceHost)?.contentAppearanceDidChange(for: promptWindow, inheritsAppearance: popover.appearance == nil)
+      PermissionPromptBackdrop.install(in: promptWindow)  // after the appearance pin; every show (reuse)
       if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
       // No default button yet: AppKit would send it the Return typed into the page.
       promptWindow.defaultButtonCell = nil
@@ -382,7 +382,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      "ownerScreenFrame": owner?.window.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
      // UXC-W2-S7: Allow styled as the default button; an opaque backdrop behind the popover content.
      "allowAccent": view.allow.bezelColor == .controlAccentColor,
-     "opaqueBackdrop": card != nil || (view.window?.contentView?.superview?.subviews.contains { $0 is PermissionPromptBackdrop } ?? false)]
+     "opaqueBackdrop": card != nil || (view.window.map { PermissionPromptBackdrop.isInPlace(in: $0) } ?? false),
+     "allowTitleWhite": view.allowTitleColor == .white, "allowTitleContrast": view.allowTitleContrast]
   }
   private func point(in target: NSView, at local: CGPoint? = nil) -> [Double] {
     guard let window = target.window else { return [] }
@@ -400,12 +401,22 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
 /// shape (the frame view clips its subviews to the popover outline, arrow included).
 @MainActor
 final class PermissionPromptBackdrop: NSView {
+  /// Adds the backdrop once, and on every later show (the popover and its window are reused)
+  /// resizes it to the frame and puts it back directly below the content, above the material.
   static func install(in window: NSWindow) {
-    guard let content = window.contentView, let frame = content.superview,
-          !frame.subviews.contains(where: { $0 is PermissionPromptBackdrop }) else { return }
-    let backdrop = PermissionPromptBackdrop(frame: frame.bounds)
+    guard let content = window.contentView, let frame = content.superview else { return }
+    let backdrop = frame.subviews.first { $0 is PermissionPromptBackdrop } ?? PermissionPromptBackdrop(frame: frame.bounds)
     backdrop.autoresizingMask = [.width, .height]
+    backdrop.frame = frame.bounds
     frame.addSubview(backdrop, positioned: .below, relativeTo: content)
+    backdrop.needsDisplay = true
+  }
+  /// Automation evidence: the backdrop covers the frame and sits directly below the content.
+  static func isInPlace(in window: NSWindow) -> Bool {
+    guard let content = window.contentView, let frame = content.superview,
+          let index = frame.subviews.firstIndex(where: { $0 === content }), index > 0,
+          let backdrop = frame.subviews[index - 1] as? PermissionPromptBackdrop else { return false }
+    return backdrop.frame.size == frame.bounds.size && backdrop.frame.origin == .zero
   }
   override func draw(_ dirtyRect: NSRect) { NSColor.windowBackgroundColor.setFill(); dirtyRect.fill() }
   override func hitTest(_ point: NSPoint) -> NSView? { nil }

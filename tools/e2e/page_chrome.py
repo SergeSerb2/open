@@ -853,8 +853,13 @@ def run(factory, results, tmp, h):
         def prompt_style():
             permission_page('style'); perm(); state = visible(ps)
             app.call('permission-prompt', answer='notnow')
-            return check(state.get('allowAccent') is True and state.get('opaqueBackdrop') is True
-                         and not state.get('promptHasKeyboard'), state={k: state.get(k) for k in ('allowAccent', 'opaqueBackdrop', 'promptHasKeyboard')})
+            first = {k: state.get(k) for k in ('allowAccent', 'opaqueBackdrop', 'promptHasKeyboard', 'allowTitleContrast', 'allowTitleWhite')}
+            # The popover and its window are reused: a second prompt keeps the backdrop in place.
+            permission_page('style-again'); perm(); again = visible(ps)
+            app.call('permission-prompt', answer='notnow')
+            return check(first['allowAccent'] is True and first['opaqueBackdrop'] is True and not first['promptHasKeyboard']
+                         and (first['allowTitleContrast'] or 0) >= 3 and again.get('opaqueBackdrop') is True,
+                         first=first, again={k: again.get(k) for k in ('opaqueBackdrop',)})
         gate('permission_prompt_default_and_opaque', prompt_style)
 
         def midi():
