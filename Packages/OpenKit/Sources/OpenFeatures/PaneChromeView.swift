@@ -86,6 +86,14 @@ public final class PaneChromeView: NSView {
     /// F0081: the focused pane shows every control; an unfocused pane shows back,
     /// forward, the copy button, the host, and Close (AX and pixels).
     private static let unfocusedControls: Set<Int> = [0, 1, 3, 6]
+    /// A pane too narrow for its controls drops them in this order (Reload, Forward, Site Control
+    /// Center, Split View Menu, Back); Close always stays. The rest keep their own slots, so their
+    /// spacing and vertical centre do not change. guess: Arc's narrow pane bar is not captured.
+    private static let squeezeOrder = [2, 1, 4, 5, 0]
+    /// Hidden by role, focus and page kind (`update()`, applied at once); `layout()` adds the width
+    /// rule on top and remembers it, so `update()` never shows a squeezed button between layouts.
+    private var roleHidden = [Bool](repeating: false, count: 7)
+    private var squeezed = Set<Int>()
     public init() {
         super.init(frame: .zero); wantsLayer = true
         let specs = [("arrow.left", "Go back"), ("arrow.right", "Go forward"), ("arrow.clockwise", "Reload"),
@@ -130,9 +138,12 @@ public final class PaneChromeView: NSView {
             : host?.currentURL?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? "")
         var layoutChanged = false
         if label.stringValue != text { label.stringValue = text; layoutChanged = true }
-        for (i, b) in buttons.enumerated() {
+        for i in buttons.indices {
             let hidden = (role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)) || (i == 3 && showsNote)
-            if b.isHidden != hidden { b.isHidden = hidden; layoutChanged = true }
+            if roleHidden[i] != hidden { roleHidden[i] = hidden; layoutChanged = true }
+            let shown = !(hidden || squeezed.contains(i))
+            // The copy button's room is decided by layout(); a Note hides it at once.
+            if i != 3 ? buttons[i].isHidden == shown : hidden && !buttons[i].isHidden { buttons[i].isHidden = !shown }
         }
         let back = host?.canGoBack ?? false, forward = host?.canGoForward ?? false
         if buttons[0].isEnabled != back { buttons[0].isEnabled = back }
@@ -165,16 +176,23 @@ public final class PaneChromeView: NSView {
             strip.layoutSubtreeIfNeeded()
         }
         buttons[0].frame = SplitMetrics.back; buttons[1].frame = SplitMetrics.forward; buttons[2].frame = SplitMetrics.reload
-        let toolbar = role == .toolbar, focused = isFocused || toolbar
+        let toolbar = role == .toolbar
         buttons[4].frame = toolbar ? ToolbarMetrics.siteControls(width: w, stripWidth: extensionStrip?.geometry.stripWidth ?? 0) : CGRect(x: w - 105, y: 2, width: 32, height: 28)
         buttons[5].frame = CGRect(x: w - 69, y: 4, width: 32, height: 24)
         buttons[6].frame = CGRect(x: w - 37, y: 4, width: 32, height: 24)
+        var hidden = roleHidden
+        let gap = SplitMetrics.barControlGap
+        func leftEdge() -> CGFloat { [0, 1, 2].filter { !hidden[$0] }.map { buttons[$0].frame.maxX }.max() ?? 0 }
+        func rightEdge() -> CGFloat { [4, 5, 6].filter { !hidden[$0] }.map { buttons[$0].frame.minX }.min() ?? w }
+        for i in Self.squeezeOrder where leftEdge() + gap > rightEdge() { hidden[i] = true }
+        squeezed = Set(Self.squeezeOrder.filter { hidden[$0] && !roleHidden[$0] })
+        for i in [0, 1, 2, 4, 5, 6] where buttons[i].isHidden != hidden[i] { buttons[i].isHidden = hidden[i] }
         // Centered group (F0081 AX): copy 24 · 3 · host · 3 · an empty 24 pt slot, so the
         // host sits on the bar's center line. Narrow panes truncate the host; with no room
         // for a few characters, the host and copy button hide. guess: no narrow capture.
-        let left = (focused ? buttons[2].frame.maxX : buttons[1].frame.maxX) + SplitMetrics.barControlGap
+        let left = leftEdge() + gap
         let stripLeft = extensionStrip?.showsActions == true ? extensionStrip?.geometry.frames.map(\.minX).min() : nil
-        let right = min((focused ? buttons[4].frame.minX : buttons[6].frame.minX), stripLeft ?? .greatestFiniteMagnitude) - SplitMetrics.barControlGap
+        let right = min(rightEdge(), stripLeft ?? .greatestFiniteMagnitude) - gap
         let slot = SplitMetrics.hostSlot
         let text = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 13)]).width) + 4
         let box = min(text, right - left - 2 * slot)
@@ -187,7 +205,7 @@ public final class PaneChromeView: NSView {
         label.frame = CGRect(x: x, y: 8, width: max(0, box), height: 16)
         buttons[3].frame = CGRect(x: x - 25, y: 4, width: 24, height: 24)
         // Both focus states show the host group, so room alone decides.
-        label.isHidden = !fits; buttons[3].isHidden = !fits || showsNote
+        label.isHidden = !fits; buttons[3].isHidden = !fits || roleHidden[3]
     }
     /// The page kind the bar names for Open's own pages, as the sidebar URL field does: "Note" or
     /// "Easel", not the route's host "note" (bug sweep r7 AB-06).
