@@ -794,6 +794,11 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     [self oe_setHostBrowser:nil];
     return NO;
   }
+  // CreateTab sizes a background tab like the strip's active tab after
+  // OnAfterCreated has laid it out in our view, so a page created in a view
+  // smaller than the content area (a hover preview card) kept that size and
+  // was drawn squeezed into the view. Fit it to the view again.
+  [self oe_layoutBrowserView];
   [owner oe_setNeedsTabStripSync];
   return YES;
 }

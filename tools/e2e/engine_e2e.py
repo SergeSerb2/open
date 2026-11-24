@@ -15762,7 +15762,10 @@ def main():
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "favorites_empty.py"))["run"](factory, results["favorites-empty"], tmp, globals())
         elif opts.only == "live-data":
             results["live-data"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
+            # OPEN_UX1_HOVER_ONLY=1 runs only the UX round 1 hover-card rows (tools/e2e/ux1_hovercards.py).
+            if os.environ.get("OPEN_UX1_HOVER_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "ux1_hovercards.py"))["run"](factory, results["live-data"], tmp, globals())
         elif opts.only == "engine-presentation":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_presentation.py"))["run"](
