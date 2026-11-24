@@ -123,8 +123,26 @@ def run(factory, results, tmp, root, wait_until, h):
         text = app.call('window-state').get('urlFieldText')
         source = wait_until(lambda: (lambda t: t if t.get('rowFaviconSource') == 'provider' else None)(
             next(t for t in app.call('tabs') if t['id'] == page)), timeout=3) or next(t for t in app.call('tabs') if t['id'] == page)
-        row('ext_ux1_extension_page_names_extension', text == PROBE_NAME and source.get('rowFaviconSource') == 'provider',
-            urlFieldText=text, rowFaviconSource=source.get('rowFaviconSource'), extension=probe)
+        # The same page in a Split View pane bar and in Little Open (review r1 #3).
+        app.call('split'); time.sleep(.8)
+        panes = app.call('split', op='state').get('panes', [])
+        bar_hosts = [p.get('barHost') for p in panes]
+        app.call('split'); time.sleep(.5)
+        before_little = {r['id'] for r in app.call('little-open-state')['sessions']}
+        app.call('menu-perform', id='new-little-open-window')
+        little = wait_until(lambda: next((r for r in app.call('little-open-state')['sessions'] if r['id'] not in before_little), None), timeout=10) or {}
+        if little:
+            app.call('key', window=little['window'], text='chrome-extension://%s/popup.html\r' % probe, route='app')
+            little = wait_until(lambda: next((r for r in app.call('little-open-state')['sessions']
+                if r['id'] == little['id'] and r['state'] == 'page' and not r['loading'] and r.get('hostText') == PROBE_NAME), None), timeout=10) \
+                or next((r for r in app.call('little-open-state')['sessions'] if r['id'] == little['id']), {})
+        little_host = little.get('hostText')
+        if little: app.call('little-open-action', id=little['id'], action='close')
+        row('ext_ux1_extension_page_names_extension', text == PROBE_NAME and source.get('rowFaviconSource') == 'provider'
+            and PROBE_NAME in bar_hosts and little_host == PROBE_NAME,
+            urlFieldText=text, rowFaviconSource=source.get('rowFaviconSource'), paneBarHosts=bar_hosts,
+            littleOpenHost=little_host, extension=probe)
+        app.call('select', tab=page)
         app.call('close', tab=page)
 
         # X6: Incognito window, no extension allowed there.
@@ -138,10 +156,12 @@ def run(factory, results, tmp, root, wait_until, h):
         time.sleep(.5)
         app.call('site-controls', action='open')
         scc = wait_until(lambda: (lambda s: s if s.get('presented') else None)(app.call('site-controls', action='state')), timeout=5) or {}
+        # `extensionsNote` is what the label draws (its drawn lines), not a stored string (review r1 #5).
+        note_frame = scc.get('extensionsNoteFrame') or []
         row('ext_ux1_incognito_extensions_note', scc.get('isIncognito') is True
-            and scc.get('extensionsNote') == 'Extensions are off in Incognito.'
+            and scc.get('extensionsNote') == 'Extensions are off in Incognito.' and len(note_frame) == 4 and note_frame[3] == 20
             and not any(i.get('id') == 'extension.add' for i in scc.get('extensionItems', [])),
-            note=scc.get('extensionsNote'), items=scc.get('extensionItems'), incognito=scc.get('isIncognito'))
+            note=scc.get('extensionsNote'), noteFrame=note_frame, items=scc.get('extensionItems'), incognito=scc.get('isIncognito'))
         app.call('site-controls', action='close')
         app.call('key', key='w', modifiers=['command', 'shift'], route='app')
     finally:

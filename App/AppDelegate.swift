@@ -12,6 +12,7 @@ import OpenCommands
 import OpenSettings
 import OpenLibrary
 import OpenSidebar
+import OpenExtensionsUI
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -695,16 +696,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // Native Note and Easel rows have no page or stored icon: draw their marks even before they show.
     // An extension's own page (options, welcome) shows that extension's name and icon, not its ID (UX round 1 X3).
     let extensionsContext = factory.extensions.context
-    controller.context.extensionName = { [weak extensionsContext] id in extensionsContext?.actions.first { $0.id == id }?.name }
-    extensionsContext.observe { [weak controller] change in
-      if case .list = change { controller?.context.extensionNamesRevision += 1 }
+    controller.context.extensionName = { [weak extensionsContext] url in extensionsContext?.extensionName(ofPage: url) }
+    // List changes and single-action name or icon changes (an icon can arrive later) redraw extension pages.
+    var seenRevision = extensionsContext.pageIdentityRevision
+    extensionsContext.observe { [weak controller, weak extensionsContext] _ in
+      guard let revision = extensionsContext?.pageIdentityRevision, revision != seenRevision else { return }
+      seenRevision = revision; controller?.context.extensionNamesRevision += 1
     }
     controller.context.faviconProvider = { [weak controller, weak extensionsContext] tab in
       if NoteTab.matches(tab.url) { return NoteTab.faviconImage }
       if EaselTab.matches(tab.url) { return EaselIcon.image }
-      guard tab.url.scheme?.lowercased() == "chrome-extension", let id = tab.url.host() else { return nil }
+      guard ExtensionsUIContext.extensionID(ofPage: tab.url) != nil else { return nil }
       _ = controller?.context.extensionNamesRevision
-      return extensionsContext?.actions.first { $0.id == id }?.menuIcon.map { NSImage(cgImage: $0.cgImage, size: CGSize(width: 16, height: 16)) }
+      return extensionsContext?.extensionIcon(ofPage: tab.url).map { NSImage(cgImage: $0.cgImage, size: CGSize(width: 16, height: 16)) }
     }
     factory.attach(controller)
     windowControllers.append(controller)

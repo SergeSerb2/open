@@ -39,7 +39,7 @@ extension AutomationController {
                      // Visible pane bar buttons, left to right: [tooltip, x, y, w, h] in bar points (flipped).
                      "barControls": slot.paneChrome.map { bar in bar.visibleControls.compactMap { title in
                          bar.controlFrame(title).map { [title, $0.minX, $0.minY, $0.width, $0.height] as [Any] } } } as Any? ?? NSNull(),
-                     "developerBar": slot.developerPanel != nil,
+                     "developerBar": slot.developerPanel != nil, "barHost": slot.paneChrome?.hostText ?? "",
                      "host": container.host(for: slot.tabID) != nil]
                 }, "dividers": (0..<max(0, container.slots.count - 1)).compactMap { container.divider(at: $0).map(frame) },
                 "dividersHidden": (0..<max(0, container.slots.count - 1)).compactMap { container.divider(at: $0)?.isHidden },

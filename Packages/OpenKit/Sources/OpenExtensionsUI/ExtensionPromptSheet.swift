@@ -58,6 +58,8 @@ public struct ExtensionPromptText: Equatable, Sendable {
     /// The bottom fade shows while more of the list lies below the visible part.
     public private(set) var bodyFadeVisible = false
     private static let bodyFadeHeight: CGFloat = 20
+    /// The overlay scroller's column at the trailing edge, kept out of the fade.
+    private static let scrollerColumn: CGFloat = 16
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
     public init(model: any ExtensionPromptModel) {
@@ -88,12 +90,14 @@ public struct ExtensionPromptText: Equatable, Sendable {
             }
             line(heading, x: 0, font: model.permissions.isEmpty ? Typography.promptBody.font : .systemFont(ofSize: 13, weight: .semibold))
             if !model.permissions.isEmpty { y += 10 }
-            for permission in model.permissions {
+            for (index, permission) in model.permissions.enumerated() {
+                // The gap goes between permissions only: a trailing gap made a list that fits look longer
+                // than the body and faded its last line (review r1 #1).
+                if index > 0 { y += 6 }
                 let bullet = Self.label("•", font: Typography.promptBody.font)
                 bullet.frame = CGRect(x: 4, y: y, width: 8, height: 18); document.addSubview(bullet)
                 line(permission.message, x: 16, font: Typography.promptBody.font)
                 for detail in permission.details { line(detail, x: 32, font: Typography.promptDetail.font, secondary: true) }
-                y += 6
             }
             bodyHeight = y
             document.frame = CGRect(x: 0, y: 0, width: 372, height: y)
@@ -104,6 +108,8 @@ public struct ExtensionPromptText: Equatable, Sendable {
             let limit = ExtensionsMetrics.promptBodyMaxHeight
             bodyVisibleHeight = bodyOverflows ? (lineBottoms.last(where: { $0 <= limit }) ?? limit) : y
             bodyScroll.hasVerticalScroller = bodyOverflows
+            // Overlay, as every other OpenKit scroll view: a legacy scroller would take 15 pt from the fixed-width text.
+            bodyScroll.scrollerStyle = .overlay
             bodyScroll.autohidesScrollers = true; bodyScroll.borderType = .noBorder
             bodyScroll.frame = CGRect(x: 24, y: top, width: 372, height: bodyVisibleHeight)
             addSubview(bodyScroll)
@@ -160,20 +166,25 @@ public struct ExtensionPromptText: Equatable, Sendable {
         guard more != bodyFadeVisible || (more && bodyScroll.layer?.mask == nil) else { return }
         bodyFadeVisible = more
         guard more, let layer = bodyScroll.layer else { bodyScroll.layer?.mask = nil; return }
+        // The mask sits on the scroll view (the clip view's layer moves while it scrolls). The text column
+        // fades; the scroller column stays opaque, so the scroller is not faded with the text (review r1 #4).
+        let mask = CALayer(); mask.frame = layer.bounds
+        let column = max(0, layer.bounds.width - Self.scrollerColumn)
         let fade = CAGradientLayer()
-        fade.frame = layer.bounds
+        fade.frame = CGRect(x: 0, y: 0, width: column, height: layer.bounds.height)
         // Inside the flipped prompt view this layer's unit y 0 is the top edge (measured: the row
         // ext_ux1_prompt_body_ends_on_whole_line reads the pixels), so the transparent end is at y 1.
         let share = Double(Self.bodyFadeHeight / max(1, layer.bounds.height))
         fade.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         fade.locations = [0, NSNumber(value: 1 - share), 1]
         fade.startPoint = CGPoint(x: 0.5, y: 0); fade.endPoint = CGPoint(x: 0.5, y: 1)
-        CATransaction.begin(); CATransaction.setDisableActions(true); layer.mask = fade; CATransaction.commit()
+        let scroller = CALayer(); scroller.backgroundColor = NSColor.black.cgColor
+        scroller.frame = CGRect(x: column, y: 0, width: layer.bounds.width - column, height: layer.bounds.height)
+        mask.addSublayer(fade); mask.addSublayer(scroller)
+        CATransaction.begin(); CATransaction.setDisableActions(true); layer.mask = mask; CATransaction.commit()
     }
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil, bodyOverflows { bodyScroll.flashScrollers() }
-    }
+    /// Called once the sheet is on screen: a flash before `beginSheet` can be dropped (review r1 nit 6).
+    public func flashBodyScroller() { if bodyOverflows { bodyScroll.flashScrollers() } }
     isolated deinit { NotificationCenter.default.removeObserver(self) }
     @objc private func accept() { onAnswer?(true) }
     @objc private func cancel() { onAnswer?(false) }
@@ -267,6 +278,7 @@ public struct ExtensionPromptText: Equatable, Sendable {
         }
         window.beginSheet(sheet)
         sheet.makeFirstResponder(sheet.promptView)
+        sheet.promptView.flashBodyScroller()
     }
     public func cancelAll() {
         closing = true

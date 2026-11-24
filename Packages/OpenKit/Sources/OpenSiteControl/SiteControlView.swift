@@ -117,9 +117,15 @@ public final class SiteControlPanelView: NSView {
     public var extensionsContext: ExtensionsUIContext? { didSet { reloadExtensions() } }
     public private(set) lazy var extensionsBody = ExtensionsSectionBody(frame: .zero)
     public var hasExtensionItems: Bool { extensionsContext?.actions.isEmpty == false }
-    /// The text shown in place of extension items, if any.
-    public private(set) var extensionsNote: String?
+    /// The label shown in place of extension items, if any.
+    private weak var extensionsNoteLabel: SiteControlBaselineLabel?
+    /// The lines that label draws, and its frame in the panel body, while it is in the panel.
+    public var extensionsNoteDrawn: (lines: [String], frame: CGRect)? {
+        guard let label = extensionsNoteLabel, label.superview != nil, !label.isHiddenOrHasHiddenAncestor else { return nil }
+        return (label.drawnLines, label.frame)
+    }
     static let incognitoExtensionsNote = "Extensions are off in Incognito."
+    static let incognitoNoteHeight: CGFloat = 20
     public func reloadExtensions() {
         guard let snapshot else { return }
         rebuildSections(snapshot, animated: false); needsLayout = true
@@ -302,7 +308,7 @@ extension SiteControlPanelView {
             body.addSubview(button); controls.append(button)
         }
         header("extensions","Extensions","Manage")
-        extensionsNote = nil
+        extensionsNoteLabel = nil
         if let context = extensionsContext, !context.actions.isEmpty {
             _ = extensionsBody.setActions(context.actions)
             // guess (child), S-5/S-11: the required 236 pt grid uses the SCC's
@@ -314,11 +320,12 @@ extension SiteControlPanelView {
             _ = extensionsBody.setActions([])
             // A private window runs only the extensions allowed there. With none, a lone Add tile reads as
             // "your extensions are gone" (UX round 1 X6). GUESS — capture UXC-W3-C2: one line, as Boosts' off note.
-            // One line: the multiline style draws only the Boosts note text.
-            let note = SiteControlBaselineLabel(Self.incognitoExtensionsNote)
-            note.frame = CGRect(x: m.padding, y: y, width: m.width - 2 * m.padding, height: m.globalOffHeight)
-            body.addSubview(note); y += m.globalOffHeight
-            extensionsNote = Self.incognitoExtensionsNote
+            // One line on the Boosts note's first baseline (11 pt under the item top), so it sits under its
+            // header as that note does (review r1 #5). The multiline style draws only the Boosts text.
+            let note = SiteControlBaselineLabel(Self.incognitoExtensionsNote, baseline: 11)
+            note.frame = CGRect(x: m.padding, y: y, width: m.width - 2 * m.padding, height: Self.incognitoNoteHeight)
+            body.addSubview(note); y += Self.incognitoNoteHeight
+            extensionsNoteLabel = note
         } else {
             _ = extensionsBody.setActions([])
             // With no installed actions, use the plan's 48 x 32 Add tile.

@@ -56,8 +56,11 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     public var extensionsUI: ExtensionsUIContext? {
         didSet {
             if let extensionObservation { oldValue?.removeObserver(extensionObservation) }
+            var seen = extensionsUI?.pageIdentityRevision ?? 0
             extensionObservation = extensionsUI?.observe { [weak self] change in
                 if case .list = change { self?.refreshExtensions() }
+                // An extension's own page names the extension (review r1 #3).
+                if let revision = self?.extensionsUI?.pageIdentityRevision, revision != seen { seen = revision; self?.updateChrome() }
             }
             refreshExtensions()
         }
@@ -263,8 +266,10 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         let appearance = space.map { SpaceThemeStyle(theme: $0.theme, system: system).resolvedAppearance(system: system) } ?? system
         let name: NSAppearance.Name = appearance == .dark ? .darkAqua : .aqua
         if window?.appearance?.name != name { window?.appearance = appearance.nsAppearance }
-        titleBar.update(url: currentURL ?? session.tab.url, profile: model.profile(id: session.profileID),
-                        showsProfile: model.profiles.count >= 2, spaceTitle: space.map { model.displayTitle(for: $0) })
+        let url = currentURL ?? session.tab.url
+        titleBar.update(url: url, profile: model.profile(id: session.profileID),
+                        showsProfile: model.profiles.count >= 2, spaceTitle: space.map { model.displayTitle(for: $0) },
+                        hostName: extensionsUI?.extensionName(ofPage: url))
     }
     /// Find needs a shown page with no Cmd+L bar over it (review r1 #7).
     private var findAvailable: Bool { onFind != nil && state == .page && !commandBar.isPresented }

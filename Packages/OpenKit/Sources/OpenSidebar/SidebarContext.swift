@@ -339,7 +339,7 @@ public final class SidebarContext {
     }
     /// The name of an installed extension by ID (App supplies it from the window's extension list):
     /// an extension's own page names the extension, not its 32-letter ID (UX round 1 X3).
-    @ObservationIgnored public var extensionName: (@MainActor (String) -> String?)?
+    @ObservationIgnored public var extensionName: (@MainActor (URL) -> String?)?
     /// Bumped by App when the window's extension list changes, so extension pages re-read their name and icon.
     public var extensionNamesRevision = 0
     /// Sites in Developer Mode (page-platform §4.10.3): their URL field shows the full URL.
@@ -351,9 +351,9 @@ public final class SidebarContext {
     }
     /// The URL field text: the host, or for a Developer Mode site the full URL without the scheme
     /// (host, port, path, query).
-    static func fieldText(_ url: URL, _ developerHosts: Set<String>, extensionName: (@MainActor (String) -> String?)? = nil) -> String {
+    static func fieldText(_ url: URL, _ developerHosts: Set<String>, extensionName: (@MainActor (URL) -> String?)? = nil) -> String {
         if url.absoluteString == "open://welcome" { return "Welcome to Open" }
-        if url.scheme?.lowercased() == "chrome-extension", let id = url.host(), let name = extensionName?(id), !name.isEmpty { return name }
+        if url.scheme?.lowercased() == "chrome-extension", let name = extensionName?(url), !name.isEmpty { return name }
         // Arc shows a lock and "Share" for an Easel; Open has no sharing, so it names the page kind.
         if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "easel" { return "Easel" }
         // GUESS — capture pending (Arc 1.172 cannot create Notes): a Note's URL field names the kind.

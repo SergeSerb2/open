@@ -44,11 +44,31 @@ import OpenWeb
     }
     @discardableResult public func setActions(_ value: [ExtensionActionInfo]) -> Bool {
         guard Self.accepts(value) else { return false }
-        if actions != value { actions = value; notify(.list) }; return true
+        if actions != value { actions = value; pageIdentityRevision += 1; notify(.list) }; return true
     }
     @discardableResult public func updateAction(_ value: ExtensionActionInfo) -> Bool {
         guard Self.accepts([value]), let i = actions.firstIndex(where: { $0.id == value.id }) else { return false }
-        if actions[i] != value { actions[i] = value; notify(.action(value)) }; return true
+        guard actions[i] != value else { return true }
+        // An icon can arrive after the list (or change with chrome.action.setIcon): extension pages re-read it.
+        // Badge and title ticks leave the revision alone, so they cost those pages nothing.
+        if actions[i].name != value.name || actions[i].menuIcon != value.menuIcon { pageIdentityRevision += 1 }
+        actions[i] = value; notify(.action(value)); return true
+    }
+    /// Changes when the list or an extension's name or menu icon changes (UX round 1 X3, review r1 #2).
+    public private(set) var pageIdentityRevision = 0
+    /// The extension a `chrome-extension://<id>/…` page belongs to. Hosts compare in lower case.
+    public static func extensionID(ofPage url: URL?) -> String? {
+        guard url?.scheme?.lowercased() == "chrome-extension", let id = url?.host()?.lowercased(), !id.isEmpty else { return nil }
+        return id
+    }
+    /// An extension's own page names the extension, not its 32-letter ID (UX round 1 X3).
+    public func extensionName(ofPage url: URL?) -> String? {
+        guard let id = Self.extensionID(ofPage: url) else { return nil }
+        return actions.first { $0.id == id }.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
+    }
+    public func extensionIcon(ofPage url: URL?) -> ExtensionImage? {
+        guard let id = Self.extensionID(ofPage: url) else { return nil }
+        return actions.first { $0.id == id }?.menuIcon
     }
     public static func ordered(_ actions: [ExtensionActionInfo]) -> [ExtensionActionInfo] {
         actions.sorted {
