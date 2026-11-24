@@ -40,7 +40,9 @@ public struct SpaceAccent: Sendable, Hashable {
     public static let night = SpaceAccent(accent: RGBA(hex: 0x6F66D9), darkAccent: RGBA(hex: 0x5148C4))
 
     public init(accent: RGBA, darkAccent: RGBA) {
-        self.accent = Self.readableUnderWhite(accent); self.darkAccent = darkAccent
+        // Both selections carry white text: yellow and green dark accents also fall short at HSL
+        // lightness 0.32 (Brand 6 3.74:1, Brand 7 3.28:1; review r1 #3).
+        self.accent = Self.readableUnderWhite(accent); self.darkAccent = Self.readableUnderWhite(darkAccent)
         let (h, _, s) = Self.hls(accent)
         lightTint = Self.rgb(h: h, l: Self.lightTintLightness, s: min(1, s * Self.lightTintSaturationScale)).withAlpha(Self.lightTintAlpha)
         darkTint = Self.rgb(h: h, l: Self.darkTintLightness, s: min(1, s * Self.darkTintSaturationScale)).withAlpha(Self.darkTintAlpha)

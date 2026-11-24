@@ -272,7 +272,7 @@ final class URLFieldView: NSView {
         fadeMask.startPoint = CGPoint(x: 0, y: 0.5); fadeMask.endPoint = CGPoint(x: 1, y: 0.5)
         fadeMask.colors = [CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 1)]
         fadeMask.actions = ["position": NSNull(), "bounds": NSNull(), "locations": NSNull()]
-        siteControlGlyph.tint = { SidebarRole.toolbarGlyph.nsColor }
+        siteControlGlyph.tint = { [unowned context] in ToolbarView.glyph(context) }
         siteControls.addSubview(siteControlGlyph)
         let style: @MainActor () -> SpaceThemeStyle = { [unowned context] in
             context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)

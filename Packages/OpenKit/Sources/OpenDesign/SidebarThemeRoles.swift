@@ -123,12 +123,20 @@ extension SpaceThemeStyle {
         // Light text on a mid-tone Space: a white plate lightens the background under it, so the selected
         // row and the URL host fall below AA (2.4–4.1:1, UX round 1 wave 2 T2). With Increase Contrast those
         // plates darken instead, only where the white plate would fail; dark Spaces keep their white plates.
-        if appearance == .dark {
-            let target = SidebarThemeRules.increasedTitleContrast + SidebarThemeRules.increasedContrastMargin
-            if Self.worstContrast(title, samples.map { $0.under(roles.activePlate) }) < target { roles.activePlate = .black(0.25) }
-            if Self.worstContrast(roles.urlText, samples.map { $0.under(roles.fieldFill) }, inkOver: true) < target {
-                roles.fieldFill = .black(0.12); roles.fieldHover = .black(0.18)
-            }
+        let target = SidebarThemeRules.increasedTitleContrast + SidebarThemeRules.increasedContrastMargin
+        if appearance == .dark, Self.worstContrast(title, samples.map { $0.under(roles.activePlate) }) < target {
+            roles.activePlate = .black(0.25)
+        }
+        // The URL field at rest and under the pointer, in both polarities (review r1 #2): a field that
+        // fails moves away from the ink, darker under light text and lighter under dark text, to the
+        // first step where both states pass. Near the flip boundary a black-ink field needs it too.
+        let urlText = roles.urlText
+        func fails(_ fill: RGBA) -> Bool { Self.worstContrast(urlText, samples.map { $0.under(fill) }) < target }
+        if fails(roles.fieldFill) || fails(roles.fieldHover) {
+            let away: (Double) -> RGBA = appearance == .dark ? { .black($0) } : { .white($0) }
+            let steps = [0.12, 0.2, 0.3, 0.45]
+            let alpha = steps.first { !fails(away($0)) && !fails(away($0 + 0.06)) } ?? steps[steps.count - 1]
+            roles.fieldFill = away(alpha); roles.fieldHover = away(alpha + 0.06)
         }
         return roles
     }
