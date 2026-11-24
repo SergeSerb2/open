@@ -64,7 +64,9 @@ def run(factory, results, tmp, harness, config):
             app.call('key', key='escape', route='app')
             app.call('space', space=space2); app.call('select', tab=tab2)
             app.call('window-frame', frame=[260, 270, 1000, 700])
-            app.call('mouse', **{'from': [228, 300], 'to': [310, 300]})
+            # A new window takes its source's sidebar width (UX round 1 wave 3): drag from where the edge is.
+            edge = app.call('window-state')['sidebarWidth']
+            app.call('mouse', **{'from': [edge, 300], 'to': [310, 300]})
             # Focus the older window last: creation order is not focus recency.
             app.call('window-focus', id=first, activate=True)
             app.call('select', tab=tab1)
