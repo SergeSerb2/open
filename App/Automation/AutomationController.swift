@@ -2595,7 +2595,10 @@
         let box = (field.cell as? NSSearchFieldCell)?.searchTextRect(forBounds: field.bounds) ?? field.bounds
         let font = field.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let style = text.flatMap { $0.length > 0 ? $0.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle : nil }
+        let empty = card.emptyLabelFrame
         folderSearch = ["placeholder": card.searchPlaceholder, "textBoxWidth": box.width,
+          "searchHidden": card.searchField.isHidden, "separatorShown": card.separatorShown,
+          "cardHeight": card.bounds.height, "emptyLabel": [empty.minX, empty.minY, empty.width, empty.height],
           "needs": ceil((card.searchPlaceholder as NSString).size(withAttributes: [.font: font]).width),
           "tailEllipsis": style?.lineBreakMode == .byTruncatingTail]
       }
