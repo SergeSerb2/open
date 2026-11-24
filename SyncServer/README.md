@@ -29,9 +29,16 @@ docker compose up -d --build     # listens on 127.0.0.1:8787, data in the open-s
 ```
 
 The image runs as the unprivileged `node` user and has a `/health` healthcheck.
+If started as root (for example with `RAILWAY_RUN_UID=0` on a Railway volume),
+the entrypoint fixes ownership on `OPEN_SYNC_DATA_DIR` and drops privileges to
+`node` via `setpriv` before `exec`ing Node.
 
-> The Docker files could not be build-tested in the authoring environment (no
-> registry access). They use only `npm ci` and `tsrs`, the same steps as above.
+### Railway
+
+`railway.toml` configures a Dockerfile build with `/health` healthchecks. Mount
+a persistent volume at `/data` and set `OPEN_SYNC_DATA_DIR=/data`,
+`OPEN_SYNC_TRUST_PROXY=1`, and `RAILWAY_RUN_UID=0`. Railway's `PORT` variable is
+honored automatically when `OPEN_SYNC_PORT` is unset.
 
 ### TLS
 
