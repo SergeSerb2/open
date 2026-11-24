@@ -1560,6 +1560,7 @@
           "space": controller.sidebar.spaceSlideAnimation.map(describeAnimation) ?? [:],
           "spacePage": ["phase": controller.container.spacePageMotionPhase,
             "coverFading": controller.container.spacePageCoverFading, "containerHidden": controller.container.isHidden,
+            "coverFades": controller.container.spacePageCoverFades, "emptyPanelHidden": controller.emptyPanelHidden,
             "cachedDestination": controller.container.spacePageUsesSnapshot,
             "cacheBytes": controller.container.spacePageSnapshotBytes,
             "captures": controller.container.spacePageCaptureCount,

@@ -303,6 +303,7 @@ public final class WebContentContainer: NSView {
     public var spacePageMotionPhase: String { spaceMotionStorage?.plate.phase.rawValue ?? "idle" }
     /// The cover is fading out over the presented page or Space background (UX1 wave 2).
     public var spacePageCoverFading: Bool { spaceMotionStorage?.plate.isFading == true }
+    public var spacePageCoverFades: Int { spaceMotionStorage?.plate.fadeCount ?? 0 }
     public var spacePageUsesSnapshot: Bool { spaceMotionStorage?.plate.destinationUsesSnapshot ?? false }
     public var spacePageSnapshotBytes: Int { spaceMotionStorage?.plate.cachedBytes ?? 0 }
     public var spacePageCaptureCount: Int { spaceMotionStorage?.captureCount ?? 0 }
@@ -441,7 +442,7 @@ public final class WebContentContainer: NSView {
     /// on every host) Space switching keeps main's path: no cover and no timer.
     /// A transition already in flight finishes on the cover path.
     private var usesSpacePageMotion: Bool {
-        if let motion = spaceMotionStorage, motion.plate.phase != .idle { return true }
+        if let motion = spaceMotionStorage, motion.plate.phase != .idle || motion.plate.isFading { return true }
         return cache.values.contains { $0.framePresentation != nil }
     }
     /// Whether a Space selection applied later (behind the Space cover, after its input turn) may
@@ -469,12 +470,15 @@ public final class WebContentContainer: NSView {
             emptyHidePending = true
             plate.whenRetired { [weak self] in
                 guard let self, self.emptyHidePending else { return }
-                self.emptyHidePending = false; self.isHidden = true
+                // Hiding a manually laid-out child does not lay the window out: tell the window,
+                // so the empty-Space panel and shadow follow the hidden container (review r1 #1).
+                self.emptyHidePending = false; self.isHidden = true; self.onSpaceSelectionApplied?()
             }
         } else { isHidden = true }
         onSpaceSelectionApplied?()
     }
     private func showNative(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID, animateSlots: Bool, deferred: Bool = false) {
+        emptyHidePending = false
         // Selection may come from keyboard cycling, automation, or model observers.
         // Return the preview before changing slots or refreshing any selected host.
         if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }

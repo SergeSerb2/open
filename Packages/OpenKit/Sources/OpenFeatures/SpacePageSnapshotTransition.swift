@@ -33,6 +33,10 @@ final class SpacePageSnapshotTransition: NSView {
     private(set) var phase: Phase = .idle
     /// True while an idle plate fades out over the presented page (`retire(fading:)`).
     private(set) var isFading = false
+    /// Retire fades started since launch (automation evidence; review r1 #6).
+    private(set) var fadeCount = 0
+    /// This cover slid in (not placed at once by Reduce Motion or a zero-direction switch).
+    private var coverSlid = false
     private var retiredHandlers: [@MainActor () -> Void] = []
     /// Runs `handler` once the plate is gone: at once when it is not fading, else when the fade
     /// ends or is cut by `cancel`. A new `begin` drops pending handlers (its owner re-decides).
@@ -180,6 +184,7 @@ final class SpacePageSnapshotTransition: NSView {
         // until the incoming plate covers it; sliding both would reveal a gap.
         target.setValue(CGFloat.zero, forKeyPath: "transform.translation.x")
         let animate = animated && !Motion.reducesMotion && direction != 0
+        coverSlid = animate
         phase = animate ? .moving : .awaitingPresentation
         lastAnimation = nil
         if animate {
@@ -219,7 +224,9 @@ final class SpacePageSnapshotTransition: NSView {
     /// A stale completion, load event, rAF or timer cannot remove these pixels.
     func presented(_ receipt: Receipt) {
         guard receipt.generation == generation, phase == .awaitingPresentation else { return }
-        retire(fading: true)
+        // Only a flat Space field that slid in fades out: a cached snapshot matches the live page
+        // (a fade would ghost it), and an instant or Reduce Motion cover was never seen moving.
+        retire(fading: coverSlid && !destinationUsesSnapshot && !Motion.reducesMotion)
     }
 
     /// A closed/crashed renderer is not a presentation receipt. Keep its plate
@@ -244,11 +251,13 @@ final class SpacePageSnapshotTransition: NSView {
         covered = nil; lastAnimation = nil
         phase = .idle
         if fading, let plate = incoming {
-            isFading = true
+            isFading = true; fadeCount += 1
             let token = generation
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 1; fade.toValue = 0
             fade.duration = Motion.spacePlateRetire; fade.timingFunction = Motion.easeOut
+            let hz = Float(window?.screen?.maximumFramesPerSecond ?? 60)
+            fade.preferredFrameRateRange = CAFrameRateRange(minimum: hz, maximum: hz, preferred: hz)
             CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
                 guard let self, self.generation == token, self.phase == .idle else { return }
                 self.finishRetire()

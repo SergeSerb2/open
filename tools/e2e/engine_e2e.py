@@ -5221,35 +5221,47 @@ def sidebar_checks(factory, results, tmp):
             "ok": w8_first != "idle" and bool(w8_idle) and w8_page,
             "first_phase": w8_first, "after": w8_after, "page_shown": w8_page, "restored_frame": w8_frame,
             "w8_tab": w8_tab}
-        # UX round 1 wave 2 (W2): a switch into an empty Space ends with its cover fading out over the
-        # Space background (the container stays visible during the fade, then hides). Before, the
-        # flat cover and its container vanished in one frame: a tone and texture pop at the end.
+        # UX round 1 wave 2 (W2, review r1 #1/#4/#6): a slid switch into an empty Space ends with exactly one
+        # cover fade; once settled the container is hidden and the empty-Space panel is shown. Reduce
+        # Motion and a warm (snapshot) switch back retire without a fade. Before, the flat cover vanished
+        # in one frame (a pop), and the first fade version left the empty panel hidden after the switch.
+        def ux_page(): return app.call("window-motion")["spacePage"]
+        def ux_settled(): return (lambda p: p if p["phase"] == "idle" and not p["coverFading"] else None)(ux_page())
         ux_home = next(s for s in app.call("spaces") if s["focused"])["id"]
         ux_empty = app.call("space-create", title="UX1 Empty")
         app.call("space", space=ux_home); app.call("select", tab=a)
-        wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
+        wait_until(ux_settled, timeout=5, step=.05)
         ux_reduced = app.call("window-motion")["reduced"]
-        app.call("window-motion", reduced=False)
         app.call("window-focus", id=app.call("window-state")["id"], activate=True)
-        ux_samples = []
+        ux = {}
         try:
-            app.call("space", space=ux_empty)
-            ux_end = time.monotonic() + 1.5
-            while time.monotonic() < ux_end:
-                page = app.call("window-motion")["spacePage"]
-                ux_samples.append({k: page.get(k) for k in ("phase", "coverFading", "containerHidden")})
-                if ux_samples[-1]["phase"] == "idle" and not ux_samples[-1]["coverFading"] and len(ux_samples) > 3:
-                    break
+            for mode, reduced in (("motion", False), ("reduced", True)):
+                app.call("window-motion", reduced=reduced)
+                before = ux_page()["coverFades"]
+                app.call("space", space=ux_empty)
+                ux_samples = []
+                end = time.monotonic() + 1.5
+                while time.monotonic() < end:
+                    page = ux_page(); ux_samples.append({k: page.get(k) for k in ("phase", "coverFading", "containerHidden", "emptyPanelHidden")})
+                    if page["phase"] == "idle" and not page["coverFading"] and len(ux_samples) > 2: break
+                time.sleep(.3)
+                settled = ux_page()
+                back_before = settled["coverFades"]
+                app.call("space", space=ux_home); app.call("select", tab=a)
+                back = wait_until(ux_settled, timeout=5, step=.05) or ux_page()
+                ux[mode] = {"fades": settled["coverFades"] - before, "settled": {k: settled.get(k) for k in ("phase", "coverFading", "containerHidden", "emptyPanelHidden")},
+                            "backFades": back["coverFades"] - back_before,
+                            "fadingSamplesPanelHidden": [x["emptyPanelHidden"] for x in ux_samples if x["coverFading"]], "samples": ux_samples[:40]}
         finally:
             app.call("window-motion", reduced=ux_reduced)
             app.call("space", space=ux_home); app.call("select", tab=a)
-            wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
-        ux_fading = [x for x in ux_samples if x["phase"] == "idle" and x["coverFading"]]
+            wait_until(ux_settled, timeout=5, step=.05)
+        m, r = ux.get("motion", {}), ux.get("reduced", {})
         results["UX1W2_empty_space_cover_fades_out"] = {
-            "ok": any(x["phase"] != "idle" for x in ux_samples) and bool(ux_fading)
-                  and all(x["containerHidden"] is False for x in ux_fading)
-                  and bool(ux_samples) and ux_samples[-1]["coverFading"] is False and ux_samples[-1]["containerHidden"] is True,
-            "samples": ux_samples[:60]}
+            "ok": m.get("fades") == 1 and m["settled"]["containerHidden"] is True and m["settled"]["emptyPanelHidden"] is False
+                  and not any(m.get("fadingSamplesPanelHidden", [])) and m.get("backFades") == 0
+                  and r.get("fades") == 0 and r["settled"]["containerHidden"] is True and r["settled"]["emptyPanelHidden"] is False,
+            "modes": ux}
         s1 = next(s for s in app.call("spaces") if s["focused"])["id"]
         s2 = app.call("space-create", title="Work", profile="Work")
         e = new_tab(app, fixture("Sidebar E"))

@@ -35,13 +35,19 @@ final class SpaceContentTransitionController {
     private var lastViewport: WebContentFrameViewport?
     private var lastPresentationViewports: [ItemID: WebContentFrameViewport] = [:]
 
-    var keepsEmptySourceVisible: Bool { nativeSelection?.tabs.isEmpty == true && plate.phase != .idle }
+    var keepsEmptySourceVisible: Bool { nativeSelection?.tabs.isEmpty == true && (plate.phase != .idle || plate.isFading) }
 
     init(container: WebContentContainer) { self.container = container }
     isolated deinit { snapshotTask?.cancel(); for request in requests.values { request.cancel() } }
 
     func select(_ selection: SpaceContentSelection) {
         if requestedSelection == selection, plate.phase != .idle { return }
+        if plate.isFading, requestedSelection == selection, nativeSelection == selection {
+            // A routine refresh (title, favicon, loading) during the retire fade: keep the fade and
+            // refresh native slots only (review r1 #2). An empty Space has nothing to refresh.
+            if selection.focused != nil { container.applySpaceSelection(selection, animateSlots: true, notify: false) }
+            return
+        }
         let source = nativeSelection
         let needsCover = source != nil && (source?.space != selection.space || plate.phase != .idle)
         let scale = container.window?.backingScaleFactor ?? 1
@@ -109,7 +115,8 @@ final class SpaceContentTransitionController {
             if plate.phase == .idle {
                 // Keep the old native source and allow the same request to
                 // retry when geometry becomes representable. Never expose a hole.
-                plate.removeFromSuperview()
+                // A fading cover finishes its retire (and its deferred hide) instead (review r1 #5).
+                if plate.isFading { plate.cancel() } else { plate.removeFromSuperview() }
                 if source?.tabs.isEmpty == true { container.isHidden = true }
             } else {
                 // The running cover's callbacks were superseded above: it would
@@ -149,7 +156,13 @@ final class SpaceContentTransitionController {
     /// Explicit layout/resize input, never a frame driver. Resize the retained
     /// plates once, then request the final native viewport behind them.
     func layout() {
-        guard plate.phase != .idle, let parent = container.superview else { return }
+        if plate.phase == .idle {
+            // A resize or sidebar change during the retire fade would leave the fading cover at the old
+            // geometry: end the fade at once instead (review r1 #5).
+            if plate.isFading, plate.frame != container.bounds { plate.cancel() }
+            return
+        }
+        guard let parent = container.superview else { return }
         let frame = container.bounds
         guard frame != plate.frame || lastViewport != viewport else {
             if !applying, plate.phase == .awaitingPresentation, let selection = nativeSelection,
