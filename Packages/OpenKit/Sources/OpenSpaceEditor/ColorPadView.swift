@@ -10,7 +10,10 @@ public final class ColorPadView: OpenDesign.ColorPadView {
     public let emptyLabel = NSTextField(wrappingLabelWithString: "Tap to pick a color for this space")
 
     public override init(frame: NSRect) {
-        super.init(frame: frame)
+        // Arc opens the editor with no ring on the pad (F0137): show it only after keyboard use,
+        // like the Boost editor's pad.
+        var style = ColorPadStyle.theme; style.keyboardFocusOnly = true
+        super.init(frame: frame, style: style)
         emptyLabel.font = .systemFont(ofSize: 13,weight: .semibold)
         emptyLabel.alignment = .center; emptyLabel.maximumNumberOfLines = 1
         emptyLabel.setAccessibilityElement(false); addSubview(emptyLabel)
