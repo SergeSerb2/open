@@ -226,6 +226,22 @@ private struct AccountSyncSignedOut: View {
                 .disabled(!model.canSubmit)
                 .accessibilityIdentifier("account-sync-submit")
         }.padding(.top, 14)
+        OpenSettingsGroup("Need a Sync Server?") {
+            OpenSettingsRow(root: root, id: "account-sync/self-host-agent", title: "Set up with an AI coding agent",
+                            help: "Copy a ready-to-paste prompt for Claude Code, Cursor, Codex, Antigravity, or any coding agent to deploy Open Sync on Railway, Fly.io, Render, or Docker.") {
+                Button("Copy Agent Prompt") { model.copyAgentSetupPrompt() }
+                    .accessibilityIdentifier("account-sync-copy-agent-prompt")
+            }
+            OpenSettingsRow(root: root, id: "account-sync/self-host-docker", title: "Run with Docker",
+                            help: "Clone and start your own Open Sync Server with persistent storage in one command.", last: true) {
+                Button("Copy Docker Command") { model.copyDockerCommand() }
+                    .accessibilityIdentifier("account-sync-copy-docker-command")
+            }
+        }.id("account-sync/self-host")
+        if !model.setupPromptStatus.isEmpty {
+            AccountSyncCallout(.success, model.setupPromptStatus).padding(.top, 10)
+                .accessibilityIdentifier("account-sync-setup-prompt-status")
+        }
     }
     @ViewBuilder private func newPasswordRows(title: String) -> some View {
         OpenSettingsRow(root: root, id: "account-sync/form-new-password", title: title, help: model.passwordLengthHint) {
