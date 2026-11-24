@@ -27,6 +27,8 @@ def run(factory, results, h):
         for n, space in enumerate(('Alpha Space', 'Beta Space')):
             app.call('space-create', title=space)
             tab = app.call('open', url='%s/duplicate/%d' % (origin, n))['id']; app.call('wait', tab=tab)
+        # A second copy in Beta: same Space and host, so only the path can tell it apart.
+        tab = app.call('open', url='%s/duplicate/2' % origin)['id']; app.call('wait', tab=tab)
         tab = app.call('open', url=origin + '/unique')['id']; app.call('wait', tab=tab)
         app.call('open', url='about:blank')
         def query(text):
@@ -42,7 +44,7 @@ def run(factory, results, h):
         unique = [r for r in drawn if r.get('title') == 'Unique fixture page' and r.get('id', '').startswith('tab:')]
         subtitles = [r.get('subtitle', '') for r in duplicates]
         results['commandbar_duplicate_titles_disambiguated'] = dict(
-            ok=len(duplicates) == 2 and all(subtitles) and len(set(subtitles)) == 2
+            ok=len(duplicates) == 3 and all(subtitles) and len(set(subtitles)) == 3
                and all(s.startswith(('Alpha Space', 'Beta Space')) for s in subtitles)
                and len(unique) == 1 and unique[0].get('subtitle', '') == '',
             duplicates=subtitles, unique=[r.get('subtitle') for r in unique],

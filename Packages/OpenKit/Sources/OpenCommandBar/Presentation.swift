@@ -104,16 +104,26 @@ public enum CommandBarText {
 enum RowPresentation {
     /// Tabs whose title another drawn row also has (the same page open in several Spaces) are
     /// indistinguishable title-only rows. Each one gets "<Space> · <host>" (Space name first, then the
-    /// host; either part may be absent). Interim until Arc's own labels are captured (UXA w2 W2).
+    /// host; either part may be absent). Rows that still match (same Space and host) show the short URL
+    /// in place of the host. Interim until Arc's own labels are captured (UXA w2 W2).
     static func disambiguate(_ rows: [CommandBarRow], suggestions: [Suggestion]) -> [CommandBarRow] {
         var count: [String: Int] = [:]
         for row in rows where row.titleParts.isEmpty { count[row.title, default: 0] += 1 }
-        return zip(rows, suggestions).map { row, s in
-            guard row.kind == .switchToTab, row.titleParts.isEmpty, count[row.title, default: 0] > 1 else { return row }
-            let host = s.url?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? ""
-            let label = [s.spaceTitle ?? "", host].filter { !$0.isEmpty }.joined(separator: " · ")
-            guard !label.isEmpty else { return row }
-            var row = row; row.subtitle = label; row.subtitleDisambiguates = true
+        func label(_ s: Suggestion, path: Bool) -> String {
+            let place = path ? s.url.map(URLDisplay.short) : s.url?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 }
+            return [s.spaceTitle ?? "", place ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+        }
+        let pairs = Array(zip(rows, suggestions))
+        let candidates = pairs.map { row, _ in row.kind == .switchToTab && row.titleParts.isEmpty && count[row.title, default: 0] > 1 }
+        var labels: [String: Int] = [:]
+        for (i, (row, s)) in pairs.enumerated() where candidates[i] { labels[row.title + "\u{1}" + label(s, path: false), default: 0] += 1 }
+        return pairs.enumerated().map { i, pair in
+            let (row, s) = pair
+            guard candidates[i] else { return row }
+            let short = label(s, path: false)
+            let text = labels[row.title + "\u{1}" + short, default: 0] > 1 ? label(s, path: true) : short
+            guard !text.isEmpty else { return row }
+            var row = row; row.subtitle = text; row.subtitleDisambiguates = true
             return row
         }
     }
