@@ -531,7 +531,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     let height = view.window?.contentView?.bounds.height ?? view.bounds.height
     func frame(_ v: NSView, _ rect: NSRect? = nil) -> [CGFloat] { let r = v.convert(rect ?? v.bounds, to: nil); return [r.minX, height-r.maxY, r.width, r.height] }
     let buttons = [backButton, skipButton, primary].compactMap { $0 }.filter { $0.superview != nil }
-    return ["panel": frame(panel), "footer": frame(footer), "contentHeight": height,
+    return ["panel": frame(panel), "footer": frame(footer), "controls": frame(controls), "contentHeight": height,
       "buttons": buttons.map { ["label": $0.title, "frame": frame($0), "labelWidth": OnboardingButton.labelWidth($0)] as [String: Any] },
       "nameTextInsets": (nameField as? OnboardingNameField)?.textInsets ?? [],
       "nameEditing": nameField?.currentEditor() != nil,

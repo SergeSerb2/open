@@ -108,9 +108,12 @@ def run(factory, results, tmp, api):
         return run_idle_contract(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_COVER_ONLY') == '1':
         return space_cover_rows(factory, results, tmp, api)
+    if os.environ.get('OPEN_E2E_WELCOME_EDGE_ONLY') == '1':
+        return edge_fade_rows(factory, results, tmp, api)
     run_restore_contract(factory, results, tmp, api)
     # The Spaces clip shows a Space switch: no empty page frame, no jump (W40).
     space_cover_rows(factory, results, tmp, api)
+    edge_fade_rows(factory, results, tmp, api)
     root = Path(api.ROOT)
     evidence = root / '.re/welcome-e2e'
     evidence.mkdir(parents=True, exist_ok=True)
@@ -529,3 +532,34 @@ def run_restore_contract(factory, results, tmp, api):
     finally:
         if app and not app.closed:
             app.quit()
+
+
+def edge_fade_rows(factory, results, tmp, api):
+    """W-EDGE: where the clip deliberately runs past the page (wide window), the last strip of the visible
+    clip fades into the page backdrop: at the strip's right end the real-window pixels match the backdrop
+    just above and below the clip (same column). A narrow window stacks the clip and hides the strip."""
+    app = factory(urls=('about:blank',), fresh=True)
+    try:
+        app.call('wait', tab=app.call('tabs')[0]['id'])
+        app.call('appearance', name='light')
+        app.call('window-frame', frame=[80, 80, 1680, 1050]); app.call('updater-banner-width', width=180)
+        inserted = app.call('welcome', action='insert'); time.sleep(2.5)
+        layout = app.call('welcome')['layout']; fade, clip = layout.get('edgeFade') or {}, layout.get('clipWindowFrame') or []
+        path = str(Path(tmp) / 'welcome-edge-fade.png'); app.call('snapshot', path=path)
+        width, height, pixel = api.read_image(path, srgb=True); scale = width / 1680
+        def diff(a, b): return sum(abs(i - j) for i, j in zip(a, b))
+        samples = []
+        if not fade.get('hidden', True) and len(clip) == 4:
+            fx, fy, fw, fh = fade['window']; cx, cy, cw, ch = clip
+            x = (fx + fw - 2) * scale
+            for inside, outside in ((cy + 30, cy - 20), (cy + ch - 30, cy + ch + 20)):
+                a, b = pixel(x, inside * scale), pixel(x, outside * scale)
+                samples.append(dict(clip=list(a), backdrop=list(b), diff=diff(a, b)))
+        app.call('window-frame', frame=[80, 80, 900, 620]); time.sleep(1.0)
+        narrow = (app.call('welcome')['layout'] or {}).get('edgeFade') or {}
+        results['W_edge_fade'] = dict(ok=not fade.get('hidden', True) and len(samples) == 2
+            and all(s['diff'] <= 36 for s in samples) and narrow.get('hidden') is True,
+            wide=fade, samples=samples, narrowHidden=narrow.get('hidden'), png=path, load=list(os.getloadavg()))
+        app.call('close', tab=inserted['tab'])
+    finally:
+        app.quit()

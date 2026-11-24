@@ -837,7 +837,8 @@ def run_layout_rows(factory, results, tmp, h):
         layout = consent.get('layout') or {}; footer_top = layout['footer'][1]
         bg = pixel(30*scale, 400*scale)
         def ink(x, y): return sum(abs(a-b) for a, b in zip(pixel(x, y), bg)) > 90
-        xs = range(int(56*scale)-4, int(464*scale)); ys = range(int(200*scale), int((footer_top-8)*scale))
+        controls_top = layout['controls'][1]
+        xs = range(int(56*scale)-4, int(464*scale)); ys = range(int(controls_top*scale), int((footer_top-8)*scale))
         rows = [y for y in ys if any(ink(x, y) for x in xs[::2])]
         first = rows[0] if rows else None
         icon_left = min((x for y in range(first, first+int(20*scale)) for x in xs if ink(x, y)), default=None) if first else None
@@ -925,7 +926,7 @@ def settings_source_list_row(factory, results, tmp, h):
             is_pill = sum(p) >= 3*253 and not near(p, background, 2)
             if is_pill and start is None: start = y
             if not is_pill and start is not None:
-                runs.append((start, y, pixel(x, y), pixel(x, y+3))); start = None
+                runs.append((start, y, pixel(x, y), pixel(x, min(height-1, y+max(1, int(round(3*scale))))))); start = None
         sliced = [dict(top=a/scale, height=(b-a)/scale, after=list(p1)) for a, b, p1, p3 in runs
                   if (b-a)/scale < 40 and near(p1, background, 3) and near(p3, background, 3)]
         results['settings_import_sources_not_sliced'] = dict(ok=len(runs) >= 5 and not sliced,

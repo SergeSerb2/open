@@ -377,9 +377,13 @@ import OpenImport
     public func reportCount(_ category:String)->Int {outcome?.importedCount(category) ?? 0}
     public func reportValue(_ category:String)->String {
         if let failure=outcome?.failures[category] {return failure}
-        // A category the user left out reads "Not selected", not a count of zero.
-        if category == "History" && !plan.history {return "Not selected"}
-        if category == "Passwords and cookies" && !plan.secretsConsented {return plan.secretsRequested ? "Not imported":"Not selected"}
+        // A category the user left out reads "Not selected", not a count of zero. Skipping the consent
+        // step clears secretsRequested, so the decision itself marks "Not imported".
+        if category == "Passwords and cookies" && !plan.secretsConsented {return consentWasDecided ? "Not imported":"Not selected"}
+        let selected: [String: Bool] = ["Spaces": plan.spaces, "Pinned and Today tabs": plan.tabs, "Favorites": plan.favorites,
+            "Folders": plan.folders, "Archive": plan.archive, "History": plan.history, "Boosts": plan.boosts,
+            "Bookmarks": plan.bookmarks, "Open tabs": plan.openTabs, "Search settings": plan.searchSettings, "Passwords": plan.passwords]
+        if selected[category] == false {return "Not selected"}
         return reportCount(category).formatted()
     }
     public func reportUndoFailure() {errorText="Open could not save your data. Try again."}
@@ -549,12 +553,15 @@ public struct ImportWizard: View {
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     // The "Passwords and cookies" row already says Not selected / Not imported when it is shown.
-                    if (model.plan.isArc || model.plan.secretsRequested) && model.passwordsWereNotImported && !model.displayedReportCategories.contains("Passwords and cookies") {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
+                    if (model.plan.isArc || model.plan.secretsRequested) && model.passwordsWereNotImported && !model.displayedReportCategories.contains("Passwords and cookies") && model.outcome?.failures["Passwords and cookies"] == nil {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
                     if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(.secondary) }
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     ImportExtensionsSection(model: model.extensions) { Task { await model.installExtensions() } }
                 }
-                SettingsError(text: model.errorText)
+                // A secrets-only failure already shows its own sentence on the report; skip the generic copy.
+                if !(model.step == .report && model.outcome?.failures.keys.sorted() == ["Passwords and cookies"] && model.errorText == model.outcome?.errorText) {
+                    SettingsError(text: model.errorText)
+                }
             }.frame(maxWidth: .infinity, alignment: .leading) }
             if model.busy { ProgressView() }
             HStack {

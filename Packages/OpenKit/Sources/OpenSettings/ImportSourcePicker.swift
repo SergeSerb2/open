@@ -33,7 +33,8 @@ struct ImportSourcePicker: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                // 44 pt below the last pill lets it scroll fully above the bottom fade (41 pt).
+                .padding(.top, 8).padding(.bottom, 44)
             }
             // Five whole pills fit above the fade; a sixth fades out at the bottom edge instead of
             // being sliced, which also signals that the list scrolls (UXF-S2).

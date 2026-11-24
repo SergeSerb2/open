@@ -192,9 +192,9 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func reportSaveFailure(imported:Bool) {errorText=imported ? Self.importedSaveError:Self.freshSaveError}
     public func reportValue(_ category:String)->String {
         if let failure=outcome?.failures[category] {return failure}
-        if category == "History" && !wizard.plan.history {return "Not selected"}
         if category == "Passwords and cookies" && !wizard.plan.secretsConsented {return includeSecrets && wizard.consentWasDecided ? "Not imported":"Not selected"}
-        return wizard.reportCount(category).formatted()
+        // Every other left-out category ("History", Archive, Spaces and tabs, browser rows) as the wizard says it.
+        return wizard.reportValue(category)
     }
     public var reportNote:String? {
         if let error=errorText,!error.isEmpty {return error}
@@ -480,9 +480,10 @@ struct AccentCheckboxStyle:ToggleStyle {
                     RoundedRectangle(cornerRadius:4,style:.continuous).fill(configuration.isOn ? accent:Color(nsColor:.controlBackgroundColor))
                     RoundedRectangle(cornerRadius:4,style:.continuous).strokeBorder(configuration.isOn ? Color.clear:Color(nsColor:.separatorColor),lineWidth:1)
                     if configuration.isOn {Image(systemName:"checkmark").font(.system(size:9,weight:.bold)).foregroundStyle(.white)}
-                }.frame(width:14,height:14).opacity(enabled ? 1:0.45)
+                }.frame(width:14,height:14)
                 configuration.label
-            }.contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityElement(children:.combine).accessibilityAddTraits(.isToggle).accessibilityValue(configuration.isOn ? "1":"0")
+            }.opacity(enabled ? 1:0.45).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityElement(children:.combine).accessibilityRemoveTraits(.isButton).accessibilityAddTraits(.isToggle)
+            .accessibilityValue(configuration.isOn ? "On":"Off")
     }
 }

@@ -170,6 +170,12 @@ final class WelcomePageView: NSScrollView {
     return m
   }
 
+  override func viewDidChangeBackingProperties() {
+    super.viewDidChangeBackingProperties()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    edgeFade.layer?.rasterizationScale = window?.backingScaleFactor ?? 2
+    CATransaction.commit()
+  }
   override func layout() {
     super.layout()
     let m = computeMetrics(width: contentSize.width, height: contentSize.height)
@@ -181,7 +187,8 @@ final class WelcomePageView: NSScrollView {
     clipPanel.shownRect = m.clipShown
     clipPanel.frame = m.clip
     // Shadow room above and below the clip; the strip ends at the page's right edge.
-    let fadeWidth: CGFloat = 72
+    // Up to 72 pt, and at most a fifth of the visible clip, so Replay All (centred) stays clear of it.
+    let fadeWidth: CGFloat = min(72, floor(m.clipShown.width * 0.2))
     if m.clipShown.width < m.clip.width - 1 {
       let edge = m.clip.minX + m.clipShown.width
       edgeFade.frame = CGRect(x: edge - fadeWidth, y: max(0, m.clip.minY - 40), width: fadeWidth,
