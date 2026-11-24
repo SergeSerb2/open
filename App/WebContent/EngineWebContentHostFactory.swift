@@ -198,7 +198,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var enteredWindowFullscreenForPage = false
   /// The page in HTML fullscreen in this window. Its fullscreen ends with it: an exit, a close,
   /// a crash, another selection, or the window leaving full screen (bug sweep r4 WC-01).
-  private weak var fullscreenPage: OEWebContent?
+  private(set) weak var fullscreenPage: OEWebContent?
   /// The page ended during the window's own enter transition: leave full screen after it.
   private var exitWindowFullscreenAfterTransition = false
   /// A window with no BrowserWindowController (Little Open): its own full-screen transitions,
@@ -447,7 +447,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         self.app.scheduleMenuRebuild()
       }
     }
-    controller.onLayout = { [weak self] in self?.findController?.sync() }
+    controller.onLayout = { [weak self] in self?.findController?.sync(); self?.syncLinkStatus() }
     controller.captureLibrary = app.captureLibrary
     controller.captureWallpaperData = { [weak controller] in await PortraitWallpaper.read(screen: controller?.window?.screen) }
     if !isIncognito { controller.captureAddToEasel = { [weak self] result, anchor in self?.showAddToEaselMenu(result, anchor: anchor) } }
@@ -467,6 +467,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.app.media.windowChanged(self)
       self.translate.focusDidChange()
       self.findController?.sync()
+      self.syncLinkStatus()
       self.pageChrome.visibilityChanged()
       self.savePromptFocusChanged()
     }
@@ -746,6 +747,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func pageDidCrash(_ page: OEWebContent) {
     pageChrome.cancel(page)
     if page === fullscreenPage { endPageFullscreen() }
+    syncLinkStatus()
   }
   func hostDidClose(_ host: EngineWebContentHost) {
     if host.content === fullscreenPage { endPageFullscreen() }
@@ -763,6 +765,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     modelHostIDs.remove(host.tabID)
     mirror.sync()
     app.tabSleep.hostClosed(tabID: host.tabID)
+    syncLinkStatus()
   }
   func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool {
     if let native = host as? WelcomeContentHost {
@@ -837,6 +840,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       host.rebind(tabID: id, spaceID: space(for: id)?.id)
       controller.container.adopt(host, for: id)
       app.tabSleep.contentCreated(tabID: id, host: host)
+      source.syncLinkStatus()
       return true
     }
     #else
@@ -1457,6 +1461,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     removeStandaloneFullscreenObservers()
     if let page = fullscreenPage { fullscreenPage = nil; try? page.exitFullscreen() }
     if littleOpenController?.isPageFullscreen == true { littleOpenController?.isPageFullscreen = false }
+    // The released window's Edit ▸ Find must not reach this detached factory (review r1 #7).
+    littleOpenController?.onFind = nil
+    findController?.closeAll()
     littleOpenController = nil; littleOpenContent = nil
   }
   func closeAll() {
@@ -1471,6 +1478,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     easelHosts.removeAll()
     controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
+    syncLinkStatus()
     // Block observers stay in NotificationCenter until removed, one pair per closed window.
     for observer in [developerModeObserver, swipeActivationObserver].compactMap({ $0 }) { NotificationCenter.default.removeObserver(observer) }
     developerModeObserver = nil; swipeActivationObserver = nil

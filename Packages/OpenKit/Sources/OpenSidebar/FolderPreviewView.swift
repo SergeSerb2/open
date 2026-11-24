@@ -30,7 +30,6 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         headerIcon.folder = folder; headerIcon.context = context; headerIcon.isHidden = true
         searchField.delegate = self; searchField.sendsSearchStringImmediately = true
         searchField.focusRingType = .none
-        searchField.cell?.lineBreakMode = .byTruncatingTail; searchField.cell?.truncatesLastVisibleLine = true
         searchField.setAccessibilityLabel("Search folder tabs")
         separator.wantsLayer = true
         let column = NSTableColumn(identifier: .init("folder-preview")); tableView.addTableColumn(column)

@@ -67,7 +67,10 @@ public final class ToastView: NSView {
         let trailing = hasButton ? m.labelToAccessory + m.accessorySize.width + m.accessoryTrailing : m.trailingPadding
         var natural = (lead + text.naturalWidth + trailing).rounded(.up)
         // A sentence that does not fit wraps onto a second line instead of losing its middle (UX1 D5).
-        let wraps = natural > m.maxWidth && text.wrapTitle(width: m.maxWidth - lead - trailing)
+        // Only the title wraps, and only when the title itself overflows: a long subtitle alone keeps a
+        // one-line title (review r1 #4) and is cut at its end of line as before.
+        let available = m.maxWidth - lead - trailing
+        let wraps = natural > m.maxWidth && text.titleWidth > available + 0.5 && text.wrapTitle(width: available)
         if wraps { natural = (lead + text.naturalWidth + trailing).rounded(.up) }
         // A wrapped title above a subtitle adds one title line to the two-line height.
         let height = wraps && content.subtitle != nil ? m.heightTwoLine + text.titleLineHeight + m.lineGap
@@ -218,6 +221,8 @@ private final class ToastTextView: NSView {
         return (lines.map(Self.width).max() ?? 0).rounded(.up)
     }
     static func width(_ line: CTLine) -> CGFloat { CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) }
+    /// The unwrapped title's width.
+    var titleWidth: CGFloat { titleFull.map(Self.width) ?? 0 }
     /// One title line's height (ascent + descent).
     var titleLineHeight: CGFloat {
         guard let titleFull else { return 0 }
@@ -309,7 +314,15 @@ private final class ToastTextView: NSView {
         if let subtitle { context.textPosition = subtitleOrigin; CTLineDraw(subtitle, context) }
         for (line, plate) in keycaps {
             let ink = CTLineGetImageBounds(line, nil)
-            context.textPosition = CGPoint(x: plate.midX - ink.midX, y: titleOrigin.y)
+            // One title line shares the plates' center, so the glyph sits on the title baseline (the hint
+            // toast's measured placement). A wrapped title moves up: center the glyph in its plate (review r1 #5).
+            var baseline = titleOrigin.y
+            if titleSecond != nil {
+                var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+                CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+                baseline = (plate.midY + (ascent - descent) / 2).rounded()
+            }
+            context.textPosition = CGPoint(x: plate.midX - ink.midX, y: baseline)
             CTLineDraw(line, context)
         }
     }

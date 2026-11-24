@@ -96,6 +96,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         screen = coordinator.screenProvider()
         container = WebContentContainer(factory: factory)
         commandBar = CommandBarController(engine: SuggestEngine(model: coordinator.model, fetcher: nil))
+        commandBar.favicons = coordinator.commandBarFavicons
         let window = LittleOpenNativeWindow(contentRect: root.bounds, styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         // The App lists sessions itself, with stable ids and MRU ordering.
@@ -265,8 +266,10 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         titleBar.update(url: currentURL ?? session.tab.url, profile: model.profile(id: session.profileID),
                         showsProfile: model.profiles.count >= 2, spaceTitle: space.map { model.displayTitle(for: $0) })
     }
+    /// Find needs a shown page with no Cmd+L bar over it (review r1 #7).
+    private var findAvailable: Bool { onFind != nil && state == .page && !commandBar.isPresented }
     @objc public func performFindPanelAction(_ sender: Any?) {
-        guard state == .page else { return }
+        guard findAvailable else { return }
         onFind?((sender as? NSMenuItem)?.tag ?? 1)
     }
     @objc public func dismissIntro() { banner.isHidden = true; layoutContent() }
@@ -509,7 +512,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
 extension LittleOpenWindowController: NSMenuItemValidation {
     /// Only a shown page can be searched: the blank bar keeps Edit ▸ Find disabled (UX1 D7).
     public func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        if item.action == #selector(performFindPanelAction(_:)) { return onFind != nil && state == .page }
+        if item.action == #selector(performFindPanelAction(_:)) { return findAvailable }
         return true
     }
 }

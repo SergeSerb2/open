@@ -32,6 +32,8 @@ extension AppDelegate {
       LittleOpenWebContent(app: self, profileID: profile)
     }
     littleOpenCoordinator = coordinator
+    // The same stored favicons as the main bar, before any Little Open bar paints (UX1 D9).
+    coordinator.commandBarFavicons = stores.sidebarFavicons.map { StoredCommandBarFavicons(cache: $0) }
     installLittleOpenPageClose(on: coordinator)
     coordinator.onSwitchToTab = { [weak self] id, space in self?.selectLittleOpenDestination(tabID: id, spaceID: space) }
     coordinator.onOpenInMain = { [weak self] windowID, tabID, host in
@@ -51,10 +53,6 @@ extension AppDelegate {
       guard let self, let coordinator else { return }
       self.downloadsCenter.refreshLittleOpenTrays()
       for controller in coordinator.controllers.values {
-        // The same stored favicons as the main bar: Cmd+L and the rows showed a globe (UX1 D9).
-        if controller.commandBar.favicons == nil, let cache = self.stores.sidebarFavicons {
-          controller.commandBar.favicons = StoredCommandBarFavicons(cache: cache)
-        }
         let view = controller.container.host(for: controller.session.tab.id)?.view as? LittleOpenSurfaceView
         view?.owner?.windowOrderedFront()
         if let host = self.littleOpenHosts.values.first(where: { $0.view.window === controller.window }) {
