@@ -189,6 +189,8 @@ def run(factory, results, tmp, h):
         # on the same main-actor turn as the show).
         def library_profile_same_turn():
             page_a, page_b = origin + '/library-profile-a', origin + '/library-profile-b'
+            # A History row draws "1:16 PM · host/path" (no scheme, UXE E9): match the drawn address.
+            shown_a_addr, shown_b_addr = page_a.split('://', 1)[1], page_b.split('://', 1)[1]
             app.call('library', action='close')
             time.sleep(.6)
             app.call('space', space=space_a['id'])
@@ -200,11 +202,11 @@ def run(factory, results, tmp, h):
             while time.time() < deadline and not shown_a:
                 state = app.call('library')
                 visible = [r.get('subtitle', '') for r in state.get('rows', [])] if state.get('listVisible') else []
-                if any(page_b in text for text in visible): stale.append(visible)
-                shown_a = any(page_a in text for text in visible)
+                if any(shown_b_addr in text for text in visible): stale.append(visible)
+                shown_a = any(shown_a_addr in text for text in visible)
                 time.sleep(.03)
             row('nav6_library_profile_switch_no_stale_rows', opened.get('section') == 'history'
-                and not any(page_b in text for text in drawn) and not stale and shown_a,
+                and not any(shown_b_addr in text for text in drawn) and not stale and shown_a,
                 listVisible=opened.get('listVisible'), drawn=drawn, staleSamples=stale[:3], shownA=shown_a, profiles=opened.get('profiles'))
             # In-panel switch (Filter ▸ Profile chip, review of #665 #3): from the chip's own turn until
             # Profile B's rows are drawn, the list never shows Profile A's row.
@@ -214,10 +216,10 @@ def run(factory, results, tmp, h):
             while time.time() < deadline and not shown_b:
                 state = app.call('library')
                 visible = [r.get('subtitle', '') for r in state.get('rows', [])] if state.get('listVisible') else []
-                if any(page_a in text for text in visible): stale_b.append(visible)
-                shown_b = any(page_b in text for text in visible)
+                if any(shown_a_addr in text for text in visible): stale_b.append(visible)
+                shown_b = any(shown_b_addr in text for text in visible)
                 time.sleep(.03)
-            row('nav6_library_profile_chip_no_stale_rows', not any(page_a in text for text in first) and not stale_b and shown_b,
+            row('nav6_library_profile_chip_no_stale_rows', not any(shown_a_addr in text for text in first) and not stale_b and shown_b,
                 firstTurn=first, staleSamples=stale_b[:3], shownB=shown_b)
         guarded('nav6_library_profile_switch_no_stale_rows', library_profile_same_turn,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))
@@ -227,6 +229,8 @@ def run(factory, results, tmp, h):
         # prebuilt panel skipped its refresh). Control: a same-Profile reopen keeps the prebuilt path.
         def library_prebuilt_profile_switch():
             page_a, page_b = origin + '/library-profile-a', origin + '/library-profile-b'
+            # A History row draws "1:16 PM · host/path" (no scheme, UXE E9): match the drawn address.
+            shown_a_addr, shown_b_addr = page_a.split('://', 1)[1], page_b.split('://', 1)[1]
             def prebuilt():
                 return wait_until(lambda: (lambda s: s if s.get('ready') and s.get('section') == 'history' else None)(
                     app.call('library', action='prebuild-state')), timeout=30, step=1)
@@ -239,14 +243,14 @@ def run(factory, results, tmp, h):
             later = wait_until(lambda: (lambda r: r if page_a in [x['url'] for x in r['rows']] else None)(
                 app.call('library-history-state')), timeout=5, step=.1) or app.call('library-history-state')
             row('r8_library_prebuilt_profile_switch_no_stale_rows', bool(ready) and opened.get('section') == 'history'
-                and not any(page_b in text for text in first) and page_a in [x['url'] for x in later['rows']],
+                and not any(shown_b_addr in text for text in first) and page_a in [x['url'] for x in later['rows']],
                 prebuilt=ready, listVisible=opened.get('listVisible'), drawn=first, profiles=opened.get('profiles'))
             app.call('library', action='close')
             ready = prebuilt()
             opened = app.call('library', action='open', section='history')
             first = drawn(opened)
             row('r8_library_prebuilt_same_profile_keeps_prebuilt', bool(ready) and opened.get('prebuiltReady') is True
-                and any(page_a in text for text in first) and not any(page_b in text for text in first),
+                and any(shown_a_addr in text for text in first) and not any(shown_b_addr in text for text in first),
                 prebuilt=ready, prebuiltReady=opened.get('prebuiltReady'), drawn=first)
         guarded('r8_library_prebuilt_profile_switch_no_stale_rows', library_prebuilt_profile_switch,
                 lambda: (app.call('library', action='close'), app.call('space', space=space_a['id'])))

@@ -15583,10 +15583,15 @@ def main():
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
             # OPEN_LIBRARY_R7_ONLY=1 runs only the bug sweep r7 Library and Spaces rows (tools/e2e/library_r7.py).
-            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+            # OPEN_LIBRARY_UX1_ONLY=1 runs only the UX round 1 Library rows (tools/e2e/library_ux1.py).
+            ux1_only = os.environ.get("OPEN_LIBRARY_UX1_ONLY") == "1"
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1" and not ux1_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
                     factory, results["history"], tmp, wait_until, _restore_defaults)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
+            if not ux1_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/library_ux1.py"))["run"](factory, results["history"], tmp, wait_until)
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
