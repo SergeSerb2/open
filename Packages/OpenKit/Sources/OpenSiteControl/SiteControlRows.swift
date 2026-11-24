@@ -161,7 +161,7 @@ final class SiteControlBoostRow: SiteControlRow {
         if !chevronAttached { layer?.addSublayer(chevron); chevronAttached = true }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         chevron.isHidden = !showChevron
-        if let icon = SiteControlGlyphRenderer.symbol("chevron.right",size: 11,weight: .semibold,color: SiteControlColors.rowSubtitle.resolved(contentAppearance).nsColor,sparkles: .none,scale: scale,fit: nil,phase: .zero) {
+        if let icon = SiteControlGlyphRenderer.symbol("chevron.right",size: 11,weight: .semibold,color: SiteControlColors.rowSubtitle.resolved(contentAppearance).nsColor,scale: scale,fit: nil,phase: .zero) {
             chevron.contents = icon.image; chevron.contentsScale = scale; chevron.frame = CGRect(x: bounds.width-10-11,y: (32-icon.size.height)/2,width: icon.size.width,height: icon.size.height)
         }
         CATransaction.commit()

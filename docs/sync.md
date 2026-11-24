@@ -39,4 +39,30 @@ Each category can be toggled independently in **Settings ▸ Account & Sync** (`
 
 ## Running the Self-Hosted Server
 
-See [`SyncServer/README.md`](../SyncServer/README.md) for local Node.js 22+ and Docker setup instructions.
+The fastest way to spin up your own Open Sync Server is to click **Copy Agent Prompt** in **Open ▸ Settings ▸ Account & Sync** (or copy the prompt below) and paste it into any AI coding agent (Claude Code, Cursor, Codex, Antigravity, T3 Code, Windsurf, etc.):
+
+```text
+Set up a private Open Sync Server for my Open browser from https://github.com/SergeSerb2/open (the `SyncServer/` folder).
+
+First, check which deployment tools I already have authenticated (such as `railway`, `flyctl`, `docker`, or `node`), or ask me where I want to host it:
+- Railway (recommended easiest cloud setup)
+- Fly.io
+- Render
+- Docker on a VPS / NAS / home server
+- Local Mac (optionally over Tailscale)
+
+Requirements:
+1. Build and run `SyncServer/` using its `Dockerfile` (zero runtime dependencies, Node.js 22+ built-in SQLite + WebSockets). Do not modify server code unless required.
+2. Run a single instance/replica only (SQLite WAL uses one writer).
+3. Attach persistent storage mounted at `/data` and set `OPEN_SYNC_DATA_DIR=/data`.
+   - On Railway: also set `RAILWAY_RUN_UID=0` (the entrypoint fixes `/data` ownership and drops back to unprivileged `node`).
+   - Railway/Fly/Render `PORT` is supported automatically when `OPEN_SYNC_PORT` is unset.
+4. Expose HTTPS with WebSocket upgrades forwarded on `/v1/sync/ws`, and set `OPEN_SYNC_TRUST_PROXY=1` whenever behind a reverse proxy or cloud edge.
+5. Verify the live server before finishing:
+   - `GET <url>/health` returns HTTP 200 with `{"ok":true,"service":"open-sync","version":1}`
+   - Confirm `/v1/sync/ws` reaches the server (an unauthenticated upgrade returns HTTP 401, not 404/502)
+   - Leave the database clean (delete any temporary test account).
+6. Reply with my final `https://...` server URL so I can paste it into Open -> Settings -> Account & Sync -> Sync server.
+```
+
+See [`SyncServer/README.md`](../SyncServer/README.md) for manual Node.js 22+, Docker Compose, and Railway deployment details.

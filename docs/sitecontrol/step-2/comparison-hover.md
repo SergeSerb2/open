@@ -74,3 +74,5 @@
 1 comparison deferred per lead ruling 2026-10-26: S2 09/0016 has no recorded pointer coordinates or mouse-button state. Raw values remain above; no threshold was changed.
 
 Step 2 chrome and sections. Developer Mode is masked per Q14. Real-app material/S11-S13 are deferred to Step 3 per plan §12/§11.
+
+Note (2026-11-24): The historical `New Boost glyph` row above was measured before the user decision to omit the 4 pt top-left sparkle on the New Boost action button.

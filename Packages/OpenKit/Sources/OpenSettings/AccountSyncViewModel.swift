@@ -42,6 +42,7 @@ import OpenSync
     public var confirmPassword = ""
     public var errorText = ""
     public var noticeText = ""
+    public var setupPromptStatus = ""
     public private(set) var busy = false
     @ObservationIgnored private var serverEdited = false
 
@@ -95,6 +96,16 @@ import OpenSync
     public var trimmedServerURL: String { serverURL.trimmingCharacters(in: .whitespacesAndNewlines) }
     public var serverIsDefault: Bool { trimmedServerURL == SyncDefaults.serverURL }
     public func resetServerURL() { serverURL = SyncDefaults.serverURL; serverEdited = false }
+
+    public func copyAgentSetupPrompt() {
+        root.actions.copyText(SyncSetupPrompts.agentSetupPrompt)
+        setupPromptStatus = "Copied AI agent setup prompt. Paste it into your coding agent, then paste the finished server URL above."
+    }
+
+    public func copyDockerCommand() {
+        root.actions.copyText(SyncSetupPrompts.dockerCommand)
+        setupPromptStatus = "Copied Docker command. Run it on your server or Mac, then enter its URL above."
+    }
 
     /// A blocking problem with the address, or nil.
     public var serverURLIssue: String? {
@@ -151,7 +162,7 @@ import OpenSync
         guard let engine = root.ensureSyncEngine() else { errorText = "Open Sync is not available right now. Try again in a moment."; return }
         let mode = mode, server = trimmedServerURL, email = trimmedEmail, password = password
         let name = displayName, recovery = recoveryKeyInput, fresh = newPassword
-        busy = true; errorText = ""; noticeText = ""
+        busy = true; errorText = ""; noticeText = ""; setupPromptStatus = ""
         Task { [weak self] in
             do {
                 switch mode {
