@@ -472,6 +472,8 @@
           throw Failure(message: "activation peer \(pid) maps this executable but is not a running application after 2 s")
         }
         NSApp.yieldActivation(to: target); return true
+      case "responder": return try auditResponder(a)
+      case "ax-tree": return try auditAXTree(a)
       case "native-focus-state":
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "uptime": ProcessInfo.processInfo.systemUptime,
