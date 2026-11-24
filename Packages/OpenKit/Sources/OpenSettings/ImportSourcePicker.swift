@@ -33,9 +33,14 @@ struct ImportSourcePicker: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                // 44 pt below the last pill lets it scroll fully above the bottom fade (41 pt).
+                .padding(.top, 8).padding(.bottom, 44)
             }
-            .frame(width: 258, height: 264)
+            // Five whole pills fit above the fade; a sixth fades out at the bottom edge instead of
+            // being sliced, which also signals that the list scrolls (UXF-S2).
+            .frame(width: 258, height: 344)
+            .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.88),
+                                         .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
             .padding(.top, 60)
         }
     }

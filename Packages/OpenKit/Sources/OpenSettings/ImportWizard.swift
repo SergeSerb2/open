@@ -375,7 +375,17 @@ import OpenImport
         return parts.isEmpty ? "Import finished.":"Imported "+parts.joined(separator:" and ")+"."
     }
     public func reportCount(_ category:String)->Int {outcome?.importedCount(category) ?? 0}
-    public func reportValue(_ category:String)->String {outcome?.failures[category] ?? reportCount(category).formatted()}
+    public func reportValue(_ category:String)->String {
+        if let failure=outcome?.failures[category] {return failure}
+        // A category the user left out reads "Not selected", not a count of zero. Skipping the consent
+        // step clears secretsRequested, so the decision itself marks "Not imported".
+        if category == "Passwords and cookies" && !plan.secretsConsented {return consentWasDecided ? "Not imported":"Not selected"}
+        let selected: [String: Bool] = ["Spaces": plan.spaces, "Pinned and Today tabs": plan.tabs, "Favorites": plan.favorites,
+            "Folders": plan.folders, "Archive": plan.archive, "History": plan.history, "Boosts": plan.boosts,
+            "Bookmarks": plan.bookmarks, "Open tabs": plan.openTabs, "Search settings": plan.searchSettings, "Passwords": plan.passwords]
+        if selected[category] == false {return "Not selected"}
+        return reportCount(category).formatted()
+    }
     public func reportUndoFailure() {errorText="Open could not save your data. Try again."}
     public var reportSkipped:String {
         let result=outcome?.counts ?? [:]
@@ -525,18 +535,33 @@ public struct ImportWizard: View {
                     if model.browserHasLanded && model.phaseText == "Importing your history…" { Text("Your browser is ready. History is still importing in the background.").foregroundStyle(.secondary) }
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
-                        Text(model.reportSummary).font(.headline)
-                        ForEach(model.displayedReportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
-                        ForEach(model.secretsReportRows, id: \.self) {row in HStack {Text(row.title);Spacer();Text(model.secretsReportValue(row)).monospacedDigit().foregroundStyle(row.noneFound ? Color.secondary : Color.primary)}}
+                        // The table lists every count, so the headline only says how the import ended.
+                        Text(model.outcome?.failures.isEmpty == false ? "Import finished." : "Import complete.").font(.headline)
+                        let rows = model.displayedReportCategories.map { name -> (String, String, Color) in
+                            let value = model.reportValue(name), failed = model.outcome?.failures[name] != nil
+                            return (ImportCountCopy.displayCategory(name), failed && (name == "Passwords and cookies" || value.count > 24) ? "Not imported" : value,
+                                    failed ? .red : value.hasPrefix("Not ") ? .secondary : .primary)
+                        } + model.secretsReportRows.map { ($0.title, model.secretsReportValue($0), $0.noneFound ? Color.secondary : Color.primary) }
+                        SettingsGroup { ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                            SettingsRow(height: 30, divider: index != rows.count-1) { HStack { Text(row.0); Spacer(); Text(row.1).monospacedDigit().lineLimit(1).foregroundStyle(row.2) } }
+                        } }
+                        // A long failure says "Not imported" in its row; its sentence is shown once here.
+                        ForEach(model.displayedReportCategories.filter { $0 != "Passwords and cookies" && (model.outcome?.failures[$0]?.count ?? 0) > 24 }, id: \.self) { name in
+                            Text(ImportCountCopy.displayCategory(name) + ": " + (model.outcome?.failures[name] ?? "")).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                        }
                         ForEach(model.secretsReportNotes, id: \.self) { Text($0).foregroundStyle(.secondary) }
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
-                    if (model.plan.isArc || model.plan.secretsRequested) && model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
+                    // The "Passwords and cookies" row already says Not selected / Not imported when it is shown.
+                    if (model.plan.isArc || model.plan.secretsRequested) && model.passwordsWereNotImported && !model.displayedReportCategories.contains("Passwords and cookies") && model.outcome?.failures["Passwords and cookies"] == nil {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
                     if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(.secondary) }
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     ImportExtensionsSection(model: model.extensions) { Task { await model.installExtensions() } }
                 }
-                SettingsError(text: model.errorText)
+                // A secrets-only failure already shows its own sentence on the report; skip the generic copy.
+                if !(model.step == .report && model.outcome?.failures.keys.sorted() == ["Passwords and cookies"] && model.errorText == model.outcome?.errorText) {
+                    SettingsError(text: model.errorText)
+                }
             }.frame(maxWidth: .infinity, alignment: .leading) }
             if model.busy { ProgressView() }
             HStack {

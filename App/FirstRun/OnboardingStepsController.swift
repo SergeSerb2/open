@@ -198,7 +198,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; themeShuffle = nil; colorField = nil; favoriteButtons = []; favoriteCounter = nil; blockerSwitch = nil
     titleLabel.stringValue = stepTitle; descriptionLabel.stringValue = detail
     if step == .importData {
-      let host = NSHostingController(rootView: FirstRunView(model: firstRun, startsProbe: false, embeddedImport: true))
+      let host = NSHostingController(rootView: FirstRunView(model: firstRun, startsProbe: false, embeddedImport: true, accent: Color(nsColor: OnboardingTokens.Room.space)))
       host.sizingOptions = []; self.host = host; controls.addSubview(host.view)
     }
     if step == .name {
@@ -230,7 +230,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       bar.setAccessibilityLabel("Appearance")
       strip.onAction = { [weak self] in self?.editTheme($0) }; pad.onAction = strip.onAction
       controls.addSubview(strip); controls.addSubview(field); controls.addSubview(bar)
-      let shuffle = button("Shuffle") { [weak self] in self?.shuffleTheme() }; shuffle.outlined = true; controls.addSubview(shuffle)
+      let shuffle = button("Shuffle") { [weak self] in self?.shuffleTheme() }; shuffle.pill = true; controls.addSubview(shuffle)
       presetStrip = strip; colorField = field; colorPad = pad; modeBar = bar; themeShuffle = shuffle; updateThemeControls()
     }
     if step == .blocker {
@@ -279,7 +279,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       let back = button("Back") { [weak self] in self?.back() }; back.pill = true
       footer.addSubview(back); backButton = back; back.isEnabled = !firstRun.busy && !defaultPending && !finishing
     }
-    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: [.report, .importing].contains(firstRun.step) ? nil:firstRun.step == .secretsConsent ? "Skip":"Start fresh"; case .theme: "Do this later"; case .blocker: "Not now"; default: nil }
+    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: [.report, .importing].contains(firstRun.step) ? nil:firstRun.step == .secretsConsent ? "Skip":"Start fresh"; case .theme: "Skip for now"; case .blocker: "Not now"; default: nil }
     if let skip { let b = button(skip) { [weak self] in self?.skip() }; b.quiet = true; footer.addSubview(b); skipButton = b; b.isEnabled = !firstRun.busy && !finishing }
     var text = "Next"
     if step == .importData { text = firstRun.step == .secretsConsent ? PasswordsImportCopy.allowButton : firstRun.step == .report ? "Next" : firstRun.step == .failed ? "Try Again" : "Import" }
@@ -531,7 +531,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     let height = view.window?.contentView?.bounds.height ?? view.bounds.height
     func frame(_ v: NSView, _ rect: NSRect? = nil) -> [CGFloat] { let r = v.convert(rect ?? v.bounds, to: nil); return [r.minX, height-r.maxY, r.width, r.height] }
     let buttons = [backButton, skipButton, primary].compactMap { $0 }.filter { $0.superview != nil }
-    return ["panel": frame(panel), "footer": frame(footer), "contentHeight": height,
+    return ["panel": frame(panel), "footer": frame(footer), "controls": frame(controls), "contentHeight": height,
       "buttons": buttons.map { ["label": $0.title, "frame": frame($0), "labelWidth": OnboardingButton.labelWidth($0)] as [String: Any] },
       "nameTextInsets": (nameField as? OnboardingNameField)?.textInsets ?? [],
       "nameEditing": nameField?.currentEditor() != nil,

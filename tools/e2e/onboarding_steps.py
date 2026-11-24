@@ -829,7 +829,22 @@ def run_layout_rows(factory, results, tmp, h):
         action('set-name', name='Alex'); action('next'); until(lambda: state()['screen'] == 'import'); record('import')
         app.call('first-run', action='select', secrets=True)
         app.call('first-run', action='continue')
-        until(lambda: app.call('first-run')['step'] == 'secretsConsent', timeout=60); record('secretsConsent')
+        until(lambda: app.call('first-run')['step'] == 'secretsConsent', timeout=60); consent = record('secretsConsent')
+        # The consent block is left-aligned under the step title (key icon at the panel's 56 pt content edge)
+        # and its text keeps a readable measure: no ink past 56 + 360 pt. Read from the real window's pixels.
+        time.sleep(.6); shot_path = str(Path(tmp)/'consent-layout.png'); app.call('snapshot', path=shot_path)
+        width, height, pixel = h.read_image(shot_path); scale = width/consent['frameSize'][0]
+        layout = consent.get('layout') or {}; footer_top = layout['footer'][1]
+        bg = pixel(30*scale, 400*scale)
+        def ink(x, y): return sum(abs(a-b) for a, b in zip(pixel(x, y), bg)) > 90
+        controls_top = layout['controls'][1]
+        xs = range(int(56*scale)-4, int(464*scale)); ys = range(int(controls_top*scale), int((footer_top-8)*scale))
+        rows = [y for y in ys if any(ink(x, y) for x in xs[::2])]
+        first = rows[0] if rows else None
+        icon_left = min((x for y in range(first, first+int(20*scale)) for x in xs if ink(x, y)), default=None) if first else None
+        right = max((x for y in rows[::2] for x in xs[::-1][:int(120*scale)] if ink(x, y)), default=0)
+        results['steps_consent_left_aligned'] = dict(ok=icon_left is not None and 54*scale <= icon_left <= 66*scale
+            and right <= (56+360+4)*scale, iconLeft=icon_left and icon_left/scale, rightmostInk=right/scale, png=shot_path, load=os.getloadavg())
         action('next')
         until(lambda: app.call('first-run')['step'] == 'report', timeout=60); reported = record('report')
         report = app.call('first-run')
@@ -862,5 +877,59 @@ def run_layout_rows(factory, results, tmp, h):
             and win[0] >= area[0] and win[1] >= area[1] and win[0]+win[2] <= area[0]+area[2] and win[1]+win[3] <= area[1]+area[3]
             and len(narrow) == 4 and not any(v['problems'] for v in narrow.values()),
             window=win, area=area, screens=narrow, load=os.getloadavg())
+        settings_source_list_row(factory, results, tmp, h)
     finally:
         if app and not app.closed: app.quit()
+
+
+def settings_source_list_row(factory, results, tmp, h):
+    """UXF-S2: Settings > Import > source list. A real-window snapshot (sheet composited over Settings),
+    read down the pill column: every solid pill run is a whole pill (>= 44 pt), or the list fades it out.
+    A run cut by the list's edge ends in a hard step from pill fill to the sheet background."""
+    import re
+    library = Path(tmp)/'layout-browsers'/'Library'
+    shutil.rmtree(library.parent, ignore_errors=True)
+    runpy.run_path(str(Path(h.ROOT)/'tools/e2e/import_browsers.py'))['fixture'](library)
+    # Firefox and Safari too, so the list holds more pills than it can show at once.
+    import subprocess
+    cli = runpy.run_path(str(Path(h.ROOT)/'tools/e2e/import_other_browsers.py'))['openkit']()
+    shutil.rmtree(library/'Application Support/Firefox', ignore_errors=True)
+    subprocess.run([cli, 'firefox-fixture', '--out', str(library/'Application Support/Firefox')], check=True, stdout=subprocess.DEVNULL)
+    files = library.parent/'files'
+    subprocess.run([cli, 'safari-fixture', '--out', str(files)], check=True, stdout=subprocess.DEVNULL)
+    shutil.copytree(files/'Library/Safari', library/'Safari', dirs_exist_ok=True)
+    app = factory(urls=('about:blank',), fresh=True, first_run=False,
+                  extra_args=['--browser-import-library='+str(library), '--host-resolver-rules=MAP * ~NOTFOUND'])
+    try:
+        app.call('appearance', name='light')
+        app.call('first-run', action='settings-open-sources')
+        h.wait_until(lambda: not app.call('first-run', action='settings-inspect').get('settingsBusy'), timeout=30, step=.05)
+        time.sleep(.8)
+        windows = [w for w in app.call('windows') if w.get('visible')]
+        def frame(w): return [float(v) for v in re.findall(r'-?[0-9.]+', w['frame'])]
+        sheet = next(w for w in windows if w.get('sheet'))
+        host = next(w for w in windows if w.get('attachedSheet'))
+        path = str(Path(tmp)/'settings-import-sources.png')
+        app.call('snapshot', path=path, window=host['number'], overlayWindows=[sheet['number']])
+        width, height, pixel = h.read_image(path)
+        hx, hy, hw, hh = frame(host); sx, sy, sw, sh = frame(sheet); scale = width/hw
+        # Pill column: the list is 258 pt wide at the sheet's right padding (24 pt); pills are 175 pt, centred.
+        # x is 44 pt inside the pill's left edge: between its radio (16-34 pt) and its centred label,
+        # where the fill runs the pill's whole height (48 pt less its 1 pt border).
+        x = (sx-hx + sw-24-258 + (258-175)/2 + 44)*scale
+        top, bottom = (hy+hh-(sy+sh))*scale, (hy+hh-sy)*scale
+        background = pixel(x, top+12*scale)
+        def near(a, b, t=4): return all(abs(i-j) <= t for i, j in zip(a, b))
+        runs, start, fill = [], None, None
+        for y in range(int(top), int(bottom)):
+            p = pixel(x, y)
+            is_pill = sum(p) >= 3*253 and not near(p, background, 2)
+            if is_pill and start is None: start = y
+            if not is_pill and start is not None:
+                runs.append((start, y, pixel(x, y), pixel(x, min(height-1, y+max(1, int(round(3*scale))))))); start = None
+        sliced = [dict(top=a/scale, height=(b-a)/scale, after=list(p1)) for a, b, p1, p3 in runs
+                  if (b-a)/scale < 40 and near(p1, background, 3) and near(p3, background, 3)]
+        results['settings_import_sources_not_sliced'] = dict(ok=len(runs) >= 5 and not sliced,
+            pills=[round((b-a)/scale, 1) for a, b, _, _ in runs], sliced=sliced, png=path, load=os.getloadavg())
+    finally:
+        if not app.closed: app.quit()
