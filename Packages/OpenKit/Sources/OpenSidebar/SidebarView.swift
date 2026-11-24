@@ -59,16 +59,25 @@ public final class SidebarView: NSView {
     private var modelUpdateDepth = 0
     private var pendingChanges: [TreeChange] = []
     private var pendingRename: ItemID?
-    public var updateBannerState: UpdateBannerState? { didSet { syncBanner() } }
+    public var updateBannerState: UpdateBannerState? { didSet { refreshBanners() } }
     public var onUpdateBannerAction: (() -> Void)?
     public var onUpdateBannerDismiss: (() -> Void)?
     public private(set) var updateBanner: UpdateBannerView?
-    private var activeBanner: NSView? { updateBanner ?? banner }
-    private func slotHeight(_ width: CGFloat) -> CGFloat { updateBanner?.height(for: width) ?? banner?.height(for: width) ?? 0 }
+    /// Open Sync needs the user (error, sign in again, first-sync choice). Below the update banner,
+    /// above the auto-archive education banner; one banner fills the slot at a time.
+    public var syncBannerState: SyncBannerState? { didSet { if syncBannerState != oldValue { refreshBanners() } } }
+    public var onSyncBannerAction: (() -> Void)?
+    public var onSyncBannerDismiss: (() -> Void)?
+    public private(set) var syncBanner: SyncBannerView?
+    private var activeBanner: NSView? { updateBanner ?? syncBanner ?? banner }
+    private func slotHeight(_ width: CGFloat) -> CGFloat { updateBanner?.height(for: width) ?? syncBanner?.height(for: width) ?? banner?.height(for: width) ?? 0 }
     private var banner: SidebarBannerView?
     private var bannerShown = false
     private var bannerGeneration = 0
     private var retiringUpdateBanner: UpdateBannerView?
+    private var retiringSyncBanner: SyncBannerView?
+    /// The banner that last animated into the slot (nil while the slot is empty).
+    private weak var presentedBanner: NSView?
     private var preferencesObserver: NSObjectProtocol?
 
     public init(context: SidebarContext) {
@@ -116,9 +125,9 @@ public final class SidebarView: NSView {
             _ = self.context.autoArchiveBannerRequested
             _ = self.context.focusedSpace?.profileID
             _ = self.context.focusedSpace.flatMap { self.context.model.profile(id: $0.profileID) }?.settings.autoArchiveAfter
-        }) { [weak self] in self?.syncBanner() })
+        }) { [weak self] in self?.refreshBanners() })
         preferencesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.syncBanner() }
+            MainActor.assumeIsolated { self?.refreshBanners() }
         }
         themePreviewObserver = ThemePreviewRegistry.shared.addObserver { [weak self] id in
             guard let self, self.context.focusedSpace?.id == id else { return }
@@ -129,7 +138,7 @@ public final class SidebarView: NSView {
         }
         syncTheme()
         syncPeekDim()
-        syncBanner()
+        refreshBanners()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -1171,80 +1180,127 @@ public struct SidebarChromeGeometry: Sendable, Equatable {
 extension SidebarView {
     /// The App sets the request after an actual sweep. Preference checks remain
     /// live so every window hides after the App persists the dismissal.
-    private func syncBanner() {
+    /// One slot, in priority order: update banner, sync banner, auto-archive education banner.
+    private func refreshBanners() {
         let preferences = context.previewPreferences
         let eligible = preferences.object(forKey: "open.sidebar.autoArchiveBannerEligible") == nil || preferences.bool(forKey: "open.sidebar.autoArchiveBannerEligible")
         let interval = context.focusedSpace.flatMap { context.model.profile(id: $0.profileID) }?.settings.autoArchiveAfter
         let educationWanted = context.autoArchiveBannerRequested && eligible && !preferences.bool(forKey: "open.sidebar.autoArchiveBannerDismissed") && interval != nil && interval != .never
         if let state = updateBannerState {
-            banner?.isHidden = true
-            if let updateBanner { updateBanner.state = state; needsLayout = true; return }
-            let view = UpdateBannerView(state: state, context: context)
-            view.onAction = { [weak self] in self?.onUpdateBannerAction?() }
-            view.onDismiss = { [weak self] in self?.onUpdateBannerDismiss?() }
-            updateBanner = view; addSubview(view)
+            if let updateBanner { updateBanner.state = state; needsLayout = true }
+            else {
+                let view = UpdateBannerView(state: state, context: context)
+                view.onAction = { [weak self] in self?.onUpdateBannerAction?() }
+                view.onDismiss = { [weak self] in self?.onUpdateBannerDismiss?() }
+                view.isHidden = true
+                updateBanner = view; addSubview(view)
+            }
         } else if let updateBanner {
             self.updateBanner = nil; retiringUpdateBanner?.removeFromSuperview()
             updateBanner.onAction = nil; updateBanner.onDismiss = nil
             retiringUpdateBanner = updateBanner
-            let layer = updateBanner.layer
-            let opacity = layer?.presentation()?.opacity ?? layer?.opacity ?? 1
-            let translation = layer?.presentation()?.value(forKeyPath: "transform.translation.y") ?? 0
-            layer?.removeAllAnimations()
-            if animatesSidebarChanges, let layer {
-                let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = opacity; fade.toValue = 0; fade.duration = Motion.bannerOut
-                let group = CAAnimationGroup(); group.animations = [fade]; group.duration = Motion.bannerOut
-                if !Motion.reducesMotion {
-                    let slide = CABasicAnimation(keyPath: "transform.translation.y")
-                    slide.fromValue = translation; slide.toValue = 12; slide.duration = Motion.bannerOut
-                    group.animations?.append(slide)
-                }
-                CATransaction.begin()
-                CATransaction.setCompletionBlock { [weak self, weak updateBanner] in MainActor.assumeIsolated {
-                    updateBanner?.removeFromSuperview()
-                    if self?.retiringUpdateBanner === updateBanner { self?.retiringUpdateBanner = nil }
-                } }
-                layer.opacity = 0; layer.add(group, forKey: "banner")
-                CATransaction.commit()
-            } else { updateBanner.removeFromSuperview(); retiringUpdateBanner = nil }
-            bannerShown = false
-            needsLayout = true
+            retireBanner(updateBanner) { [weak self, weak updateBanner] in
+                if let self, self.retiringUpdateBanner === updateBanner { self.retiringUpdateBanner = nil }
+            }
         }
-        let wanted = updateBannerState != nil || educationWanted
-        guard wanted != bannerShown || (updateBanner != nil && updateBanner?.layer?.animation(forKey: "banner") == nil) else { return }
+        if let state = syncBannerState {
+            if let syncBanner { if syncBanner.state != state { syncBanner.state = state; needsLayout = true } }
+            else {
+                let view = SyncBannerView(state: state, context: context)
+                view.onAction = { [weak self] in self?.onSyncBannerAction?() }
+                view.onDismiss = { [weak self] in self?.onSyncBannerDismiss?() }
+                view.isHidden = true
+                syncBanner = view; addSubview(view)
+            }
+        } else if let syncBanner {
+            self.syncBanner = nil; retiringSyncBanner?.removeFromSuperview()
+            syncBanner.onAction = nil; syncBanner.onDismiss = nil
+            retiringSyncBanner = syncBanner
+            retireBanner(syncBanner) { [weak self, weak syncBanner] in
+                if let self, self.retiringSyncBanner === syncBanner { self.retiringSyncBanner = nil }
+            }
+        }
+        // Only the highest-priority banner shows; the others wait hidden, without animation.
+        let priority: NSView? = updateBanner ?? syncBanner
+        if priority != nil, let banner, !banner.isHidden || presentedBanner === banner {
+            banner.layer?.removeAllAnimations(); banner.isHidden = true
+            if presentedBanner === banner { presentedBanner = nil }
+        }
+        if let syncBanner, syncBanner !== priority, !syncBanner.isHidden {
+            syncBanner.layer?.removeAllAnimations(); syncBanner.isHidden = true
+            if presentedBanner === syncBanner { presentedBanner = nil }
+        }
+        let wanted = priority != nil || educationWanted
+        let changedBanner = priority != nil && priority !== presentedBanner
+        guard wanted != bannerShown || changedBanner else { return }
         bannerShown = wanted; bannerGeneration += 1
         let generation = bannerGeneration
-        if wanted, updateBanner == nil, banner == nil {
+        if wanted, priority == nil, banner == nil {
             let view = SidebarBannerView(context: context)
             view.onHeightChange = { [weak self] in self?.needsLayout = true }
             banner = view; addSubview(view)
         }
-        guard let banner = activeBanner else { return }
-        banner.layer?.removeAllAnimations()
+        guard let shown = activeBanner else { return }
+        presentedBanner = wanted ? shown : nil
+        // An interrupted show or hide continues from where it is on screen, so read the
+        // presentation layer before the running animation is removed.
+        let interrupted = shown.layer?.animation(forKey: "banner") != nil
+        let presentation = interrupted ? shown.layer?.presentation() : nil
+        let currentOpacity = presentation.map { Double($0.opacity) }
+        let currentOffset = (presentation?.value(forKeyPath: "transform.translation.y") as? NSNumber)?.doubleValue
+        shown.layer?.removeAllAnimations()
         if wanted {
-            banner.isHidden = false
+            shown.isHidden = false
             needsLayout = true; layoutSubtreeIfNeeded()
         } else { needsLayout = true }
-        guard animatesSidebarChanges else { banner.isHidden = !wanted; return }
+        guard animatesSidebarChanges else { shown.isHidden = !wanted; return }
         let duration = wanted ? Motion.bannerIn : Motion.bannerOut
         let opacity = CABasicAnimation(keyPath: "opacity")
-        opacity.fromValue = wanted ? 0 : 1; opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
+        opacity.fromValue = currentOpacity ?? (wanted ? 0 : 1); opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
         let group = CAAnimationGroup(); group.animations = [opacity]; group.duration = duration
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
         if !Motion.reducesMotion {
             let slide = CABasicAnimation(keyPath: "transform.translation.y")
-            slide.fromValue = wanted ? 12 : 0; slide.toValue = wanted ? 0 : 12; slide.duration = duration
+            slide.fromValue = currentOffset ?? (wanted ? 12 : 0); slide.toValue = wanted ? 0 : 12; slide.duration = duration
             group.animations?.append(slide)
         }
         CATransaction.begin()
-        if !wanted { CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
-            guard let self, self.bannerGeneration == generation else { return }; self.banner?.isHidden = true
+        if !wanted { CATransaction.setCompletionBlock { [weak self, weak shown] in MainActor.assumeIsolated {
+            guard let self, self.bannerGeneration == generation else { return }; shown?.isHidden = true
         } } }
-        banner.layer?.add(group, forKey: "banner")
+        shown.layer?.add(group, forKey: "banner")
         CATransaction.commit()
     }
-    public var autoArchiveBanner: SidebarBannerView? { bannerShown && updateBannerState == nil ? banner : nil }
+    /// Fades out (and, without Reduce Motion, slides down) a banner that left the slot, then removes it
+    /// once. A banner that was waiting hidden is removed at once.
+    private func retireBanner(_ view: NSView, completion: @escaping @MainActor @Sendable () -> Void) {
+        let wasPresented = presentedBanner === view
+        if wasPresented { presentedBanner = nil; bannerShown = false }
+        needsLayout = true
+        let layer = view.layer
+        let opacity = layer?.presentation()?.opacity ?? layer?.opacity ?? 1
+        let translation = layer?.presentation()?.value(forKeyPath: "transform.translation.y") ?? 0
+        layer?.removeAllAnimations()
+        guard wasPresented, !view.isHidden, animatesSidebarChanges, let layer else {
+            view.removeFromSuperview(); completion(); return
+        }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = opacity; fade.toValue = 0; fade.duration = Motion.bannerOut
+        let group = CAAnimationGroup(); group.animations = [fade]; group.duration = Motion.bannerOut
+        if !Motion.reducesMotion {
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = translation; slide.toValue = 12; slide.duration = Motion.bannerOut
+            group.animations?.append(slide)
+        }
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak view] in MainActor.assumeIsolated {
+            if let view, view.superview != nil { view.removeFromSuperview() }
+            completion()
+        } }
+        layer.opacity = 0; layer.add(group, forKey: "banner")
+        CATransaction.commit()
+    }
+    public var autoArchiveBanner: SidebarBannerView? { bannerShown && updateBannerState == nil && syncBannerState == nil ? banner : nil }
     public var bannerContentInset: CGFloat { 0 }
-    public func refreshAutoArchiveBanner() { syncBanner() }
+    public func refreshAutoArchiveBanner() { refreshBanners() }
 }

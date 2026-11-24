@@ -214,6 +214,8 @@ targets:
         product: OpenTranslate
       - package: OpenKit
         product: OpenEasel
+      - package: OpenKit
+        product: OpenSync
       - target: OpenDockTile
         embed: true
         link: false

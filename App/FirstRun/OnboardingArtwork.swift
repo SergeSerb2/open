@@ -102,8 +102,8 @@ import ImageIO
     let scale = max(0.2,min(1,(bounds.height-floorY-24)/544,(bounds.width-44-24)/480))
     favoriteMiniature.frame = CGRect(x: 44,y: floorY,width: floor(480*scale),height: floor(544*scale))
     // The dots share the footer's centre line (72 pt above the bottom) and the miniature's left edge.
-    progress.frame = CGRect(x: 44,y: 69,width: 104,height: 6)
-    progress.selected = ["name","import","favorites","theme","blocker","defaultBrowser","ready"].firstIndex(of: step) ?? 0
+    progress.frame = CGRect(x: 44,y: 69,width: 117,height: 6)
+    progress.selected = ["name","import","favorites","theme","blocker","account","defaultBrowser","ready"].firstIndex(of: step) ?? 0
     mail.frame = CGRect(x: 58,y: bounds.height-126,width: 184,height: 48)
     // The link starts on the Mail chip, so it seems to leave Mail rather than appear over the page.
     flyingLink.frame = CGRect(x: 70,y: bounds.height-122,width: 160,height: 40)
@@ -131,6 +131,8 @@ import ImageIO
     case "blocker":
       favoriteMiniature.setEditorial(title: "A quieter page",subtitle: "More room for what you came to read.")
       favoriteMiniature.setBlocker(blocker,animated: !changed)
+    case "account":
+      favoriteMiniature.setEditorial(title: "Your setup, everywhere",subtitle: "End-to-end encrypted sync across your Macs.")
     case "defaultBrowser":
       favoriteMiniature.setEditorial(title: "A home for every link",subtitle: "From a message to your next good read.")
       if changed {
@@ -241,7 +243,7 @@ import ImageIO
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
   override func draw(_ dirtyRect: NSRect) {
     var x: CGFloat = 0
-    for i in 0..<7 {
+    for i in 0..<8 {
       let width: CGFloat = i == selected ? 20:6
       OnboardingTokens.Room.white.withAlphaComponent(i == selected ? 1:0.28).setFill()
       NSBezierPath(roundedRect: CGRect(x: x,y: 0,width: width,height: 6),xRadius: 3,yRadius: 3).fill()

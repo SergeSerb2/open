@@ -11,8 +11,9 @@ struct SettingsNavigation: NSViewRepresentable {
     let updateState: String?
     let focusRequest: Int
     let shortcutAttention: Bool
+    var syncAttention = false
     func makeNSView(context: Context) -> SettingsNavigationView { SettingsNavigationView(model: viewModel) }
-    func updateNSView(_ view: SettingsNavigationView, context: Context) { view.update(section: section, query: query, results: results, focusRequest: focusRequest, shortcutAttention: shortcutAttention) }
+    func updateNSView(_ view: SettingsNavigationView, context: Context) { view.update(section: section, query: query, results: results, focusRequest: focusRequest, shortcutAttention: shortcutAttention, syncAttention: syncAttention) }
 }
 
 @MainActor final class SettingsNavigationView: NSView, NSTextFieldDelegate {
@@ -70,7 +71,7 @@ struct SettingsNavigation: NSViewRepresentable {
         check.setAccessibilityLabel("Check for Updates")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-    func update(section: SettingsSection, query: String, results: [SettingsSearchEntry], focusRequest: Int, shortcutAttention: Bool) {
+    func update(section: SettingsSection, query: String, results: [SettingsSearchEntry], focusRequest: Int, shortcutAttention: Bool, syncAttention: Bool = false) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         // With an update state, drop "Open" so "0.1.7 · Update available" fits beside Check (UX round 1 F22).
         footer.stringValue = model.updateState.map { "\(version) · " + $0 } ?? "Open \(version)"
@@ -84,7 +85,7 @@ struct SettingsNavigation: NSViewRepresentable {
             button.selected = query.isEmpty && button.section == section
             button.resultCount = query.isEmpty ? nil : counts[button.section, default: 0]
             button.profileCount = button.section == .profiles ? model.model.profiles.count : 0
-            button.attention = button.section == .shortcuts && shortcutAttention
+            button.attention = (button.section == .shortcuts && shortcutAttention) || (button.section == .accountSync && syncAttention)
             button.setAccessibilitySelected(button.selected)
             button.accent = accent
             button.needsDisplay = true
@@ -352,6 +353,13 @@ enum SettingsNavigationGlyph {
         case .sitePermissions: circle(8,8,6); line([(5.5,8),(10.5,8)])
         case .passwordsCards: circle(5.5,10.5,2.5); line([(7.3,8.7),(13,3)]); line([(11,5),(12.5,6.5)])
         case .browsingData: circle(8,8,6); line([(8,4.5),(8,8),(10.3,9.5)])
+        case .accountSync:
+            // An original cloud outline on a flat 12.5 pt base (flipped space: y grows down).
+            path.move(to: .init(x: 4.5, y: 12.5))
+            path.curve(to: .init(x: 4.6, y: 7.5), controlPoint1: .init(x: 2.0, y: 12.5), controlPoint2: .init(x: 1.9, y: 7.8))
+            path.curve(to: .init(x: 11.0, y: 6.4), controlPoint1: .init(x: 5.0, y: 3.0), controlPoint2: .init(x: 10.2, y: 2.8))
+            path.curve(to: .init(x: 11.5, y: 12.5), controlPoint1: .init(x: 14.6, y: 6.6), controlPoint2: .init(x: 14.8, y: 12.5))
+            path.close()
         case .profiles: circle(8,6,2.6); path.move(to: .init(x:3,y:13.5)); path.curve(to: .init(x:13,y:13.5), controlPoint1:.init(x:4,y:8.5),controlPoint2:.init(x:12,y:8.5))
         case .shortcuts: box(1.5,4,13,8,2); for x in [4.5,7,9.5,12] { line([(x,7),(x+0.05,7)]) }; line([(5,9.7),(11,9.7)])
         case .extensions: line([(3,3),(6,3),(6,5),(9,5),(9,3),(13,3),(13,7),(11,7),(11,10),(13,10),(13,13),(3,13),(3,3)])

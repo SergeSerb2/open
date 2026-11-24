@@ -58,6 +58,7 @@ struct SettingsDetail: View {
         case .shortcuts: AnyView(ShortcutsPane(model: root.shortcuts).padding(.top, 24))
         case .tabsArchive: AnyView(SettingsArchiveControls(root: root))
         case .profiles: AnyView(ProfilesPane(model: root.profiles))
+        case .accountSync: AnyView(AccountSyncPane(root: root))
         case .links: AnyView(LinksPane(root: root))
         case .advanced: AnyView(SettingsAdvancedSection(root: root))
         case .previews: AnyView(SettingsPreviewsSection(root: root))

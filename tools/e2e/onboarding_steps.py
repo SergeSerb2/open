@@ -73,10 +73,10 @@ def run(factory, results, tmp, h):
         results['steps_'+name+'_negative'] = dict(ok=rejected, expected='FAIL', load=os.getloadavg())
         negatives[name] = dict(ok=rejected, observed=bad)
     def skip_to_ready():
-        for _ in range(9):
+        for _ in range(10):
             s = state()['screen']
             if s == 'ready': return state()
-            action('skip' if s in ('name','import','favorites','theme','blocker') else 'next')
+            action('skip' if s in ('name','import','favorites','theme','blocker','account') else 'next')
             if s == 'defaultBrowser':
                 until(lambda: state()['screen']=='ready' or not state()['defaultPending'])
         raise AssertionError(state())
@@ -142,7 +142,8 @@ def run(factory, results, tmp, h):
         gate('theme_choice', lambda s: s['theme']!=theme['theme'], themed, theme)
         app.call('key', key='return'); screen('blocker'); action('set-blocker', on=False); off = state(); shot('blocker-off-light')
         gate('blocker_choice', lambda s: s.get('blocker') is False, off, initial)
-        app.call('key', key='return'); default = screen('defaultBrowser'); shot('default-browser-light')
+        app.call('key', key='return'); screen('account'); shot('account-light')
+        action('skip'); default = screen('defaultBrowser'); shot('default-browser-light')
         gate('no_default_prompt_before_click', lambda s: s['screen']=='defaultBrowser' and not s['defaultAttempted'], default, off)
         action('choose-default', yes=False); app.call('key', key='return'); ready = screen('ready'); shot('ready-light')
         gate('name_greeting', lambda s: s.get('title')=='Welcome to Open, Example.', ready, initial)
@@ -268,7 +269,7 @@ def run(factory, results, tmp, h):
         gate('no_arc_skips_import', lambda s: s['screen']=='favorites', no_data, imported)
         app.call('key', key='escape'); escaped = screen('name')
         gate('escape_back', lambda s: s['screen']=='name', escaped, no_data)
-        action('skip'); screen('favorites'); action('skip'); screen('theme'); action('skip'); screen('blocker'); action('skip'); screen('defaultBrowser')
+        action('skip'); screen('favorites'); action('skip'); screen('theme'); action('skip'); screen('blocker'); action('skip'); screen('account'); action('skip'); screen('defaultBrowser')
         action('choose-default', yes=False); action('next'); blank = screen('ready')
         results['steps_every_skip'] = dict(ok=blank['name']=='' and blank['favorites']==[] and blank['blocker'] is False and blank['title']=='Welcome to Open.', state=blank, load=os.getloadavg())
         blue_path = evidence/'open-card-blue.png'
@@ -281,9 +282,9 @@ def run(factory, results, tmp, h):
             and s['nameLightPixels']>200 and s['dateLightPixels']>30
             and s['nameDarkPixels']<20 and s['dateDarkPixels']<20, blue_ink, yellow_ink)
         # A real write failure keeps Ready open and D3 unset; retry reuses choices.
-        for _ in range(4): action('back')
+        for _ in range(5): action('back')
         screen('favorites'); action('toggle-favorite', index=1); action('toggle-favorite', index=6)
-        for _ in range(3): action('next')
+        for _ in range(4): action('next')
         screen('defaultBrowser'); action('choose-default', yes=False); action('next'); screen('ready')
         snapshot().mkdir(); action('get-started'); failure = state()
         gate('save_error', lambda s: s['active'] and s['screen']=='ready' and 'could not save' in s['error'], failure, blank)
@@ -300,7 +301,7 @@ def run(factory, results, tmp, h):
         gate('already_default', lambda s: s.get('alreadyDefault') is True and not s['defaultAttempted'], offered, default)
         # Decline and failure both show their outcome before continuing.
         for outcome in ('declined','failed','success'):
-            launch(directory=empty, **{'OPEN_AUTOMATION_DEFAULT_BROWSER': outcome, 'OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS': '500'}); action('skip'); action('skip'); action('skip'); action('skip'); screen('defaultBrowser')
+            launch(directory=empty, **{'OPEN_AUTOMATION_DEFAULT_BROWSER': outcome, 'OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS': '500'}); action('skip'); action('skip'); action('skip'); action('skip'); action('skip'); screen('defaultBrowser')
             action('next'); waiting = state()
             until(lambda: bool(state()['defaultOutcome']))
             during = state()
@@ -339,7 +340,8 @@ def run(factory, results, tmp, h):
         action('set-name', name='Replay only'); action('next'); screen('favorites')
         action('toggle-favorite', index=1); action('next'); screen('theme')
         action('set-theme', preset=9); action('next'); screen('blocker')
-        action('set-blocker', on=True); action('next'); screen('defaultBrowser')
+        action('set-blocker', on=True); action('next'); screen('account')
+        action('skip'); screen('defaultBrowser')
         action('choose-default', yes=True); action('next'); screen('ready')
         replay_ready = state(); action('shuffle-card'); action('get-started')
         until(lambda: not state()['active'] and not state()['dim']['exists'])
@@ -857,11 +859,11 @@ def run_layout_rows(factory, results, tmp, h):
             and all(rows.get(k, ' ')[0].isdigit() for k in ('Cookies', 'Addresses', 'Cards'))
             and 'None found in Arc' in drawn and 'Passwords' in drawn and not any('already in Open' in t and ':' in t for t in drawn),
             rows=rows, drawn=drawn[:60], notes=report.get('secretsReportNotes'), load=os.getloadavg())
-        for step in ('theme', 'blocker', 'defaultBrowser', 'ready'):
+        for step in ('theme', 'blocker', 'account', 'defaultBrowser', 'ready'):
             if state()['screen'] == 'defaultBrowser': action('choose-default', yes=False)
             current = state()['screen']; action('next'); until(lambda: state()['screen'] != current)
             until(lambda: state()['screen'] == step); record(step)
-        results['steps_footer_layout'] = dict(ok=len(footers) == 8 and not any(v['problems'] for v in footers.values()),
+        results['steps_footer_layout'] = dict(ok=len(footers) == 9 and not any(v['problems'] for v in footers.values()),
             footers=footers, load=os.getloadavg())
         # A display whose visible area is narrower and shorter than the 1280 x 800 design (a 13-inch
         # MacBook in its larger-text mode): window, footers (with the widest, passwords) and artwork must fit.

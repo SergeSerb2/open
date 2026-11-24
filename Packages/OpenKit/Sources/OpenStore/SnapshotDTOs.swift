@@ -388,7 +388,7 @@ public enum SnapshotMapper {
         return (dto, repairs)
     }
 
-    static func iconDTO(_ icon: SpaceIcon?) -> SpaceIconDTO? {
+    public static func iconDTO(_ icon: SpaceIcon?) -> SpaceIconDTO? {
         switch icon {
         case .emoji(let s): return .emoji(s)
         case .symbol(let s): return .symbol(s)
@@ -397,7 +397,7 @@ public enum SnapshotMapper {
         }
     }
 
-    static func icon(from dto: SpaceIconDTO?) -> SpaceIcon? {
+    public static func icon(from dto: SpaceIconDTO?) -> SpaceIcon? {
         switch dto {
         case .emoji(let s): return .emoji(s)
         case .symbol(let s): return .symbol(s)
@@ -406,7 +406,7 @@ public enum SnapshotMapper {
         }
     }
 
-    static func profileDTO(_ p: Profile) -> ProfileDTO {
+    public static func profileDTO(_ p: Profile) -> ProfileDTO {
         ProfileDTO(id: p.id.rawValue.uuidString, name: p.name, icon: iconDTO(p.icon),
                    favorites: p.favorites.map { .tab(tabDTO($0)) },
                    settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID, sleepMode: p.settings.sleepMode.rawValue, searchSuggestEnabled: p.settings.searchSuggestEnabled, downloadDirectory: p.settings.downloadDirectory, askWhereToSaveEachFile: p.settings.askWhereToSaveEachFile, customSearchEngines: p.settings.customSearchEngines, keepAliveSites: p.settings.keepAliveSites, defaultDocumentApp: p.settings.defaultDocumentApp),
@@ -414,7 +414,7 @@ public enum SnapshotMapper {
                    favoritesEmptyStateDismissed: p.favoritesEmptyStateDismissed ? true : nil)
     }
 
-    static func profile(from dto: ProfileDTO) -> Profile {
+    public static func profile(from dto: ProfileDTO) -> Profile {
         let profile = Profile(id: ProfileID(uuidString: dto.id), name: dto.name, icon: icon(from: dto.icon),
                 favorites: dto.favorites.compactMap { if case .tab(let t) = $0 { return tab(from: t) }; return nil },
                 settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID, sleepMode: dto.settings.sleepMode.flatMap(SleepMode.init(rawValue:)) ?? .balanced, searchSuggestEnabled: dto.settings.searchSuggestEnabled, downloadDirectory: dto.settings.downloadDirectory, askWhereToSaveEachFile: dto.settings.askWhereToSaveEachFile, customSearchEngines: dto.settings.customSearchEngines, keepAliveSites: dto.settings.keepAliveSites, defaultDocumentApp: dto.settings.defaultDocumentApp),
@@ -423,21 +423,21 @@ public enum SnapshotMapper {
         return profile
     }
 
-    static func spaceDTO(_ s: Space) -> SpaceDTO {
+    public static func spaceDTO(_ s: Space) -> SpaceDTO {
         SpaceDTO(id: s.id.rawValue.uuidString, title: s.title, icon: iconDTO(s.icon), theme: s.theme,
                  profileID: s.profileID.rawValue.uuidString,
                  pinned: s.pinned.map { nodeDTO($0) }, today: s.today.map { nodeDTO($0) },
                  isPinnedCollapsed: s.isPinnedCollapsed)
     }
 
-    static func space(from dto: SpaceDTO) -> Space {
+    public static func space(from dto: SpaceDTO) -> Space {
         Space(id: SpaceID(uuidString: dto.id), title: dto.title, icon: icon(from: dto.icon), theme: dto.theme,
               profileID: ProfileID(uuidString: dto.profileID),
               pinned: dto.pinned.map { node(from: $0) }, today: dto.today.map { node(from: $0) },
               isPinnedCollapsed: dto.isPinnedCollapsed)
     }
 
-    static func nodeDTO(_ node: SidebarNode) -> NodeDTO {
+    public static func nodeDTO(_ node: SidebarNode) -> NodeDTO {
         switch node {
         case .tab(let t): return .tab(tabDTO(t))
         case .folder(let f): return .folder(FolderDTO(peekedChildID: f.peekedChildID?.description, id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }, live: f.live))
@@ -453,7 +453,7 @@ public enum SnapshotMapper {
                                  children: folder.children.map { archivedNodeDTO($0) }))
     }
 
-    static func node(from dto: NodeDTO) -> SidebarNode {
+    public static func node(from dto: NodeDTO) -> SidebarNode {
         switch dto {
         case .tab(let t): return .tab(tab(from: t))
         case .folder(let f):
@@ -464,14 +464,14 @@ public enum SnapshotMapper {
         }
     }
 
-    static func tabDTO(_ t: Tab) -> TabDTO {
+    public static func tabDTO(_ t: Tab) -> TabDTO {
         TabDTO(id: t.id.rawValue.uuidString, url: t.url.absoluteString, title: t.title, customTitle: t.customTitle,
                pinnedURL: t.pinnedURL?.absoluteString, customIcon: t.customIcon, iconOverride: iconDTO(t.iconOverride),
                createdAt: t.createdAt.timeIntervalSince1970, lastActiveAt: t.lastActiveAt.timeIntervalSince1970,
                isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread, liveItemURL: t.liveItemURL?.absoluteString, liveItem: t.liveItem)
     }
 
-    static func tab(from dto: TabDTO) -> Tab {
+    public static func tab(from dto: TabDTO) -> Tab {
         let tab = Tab(id: ItemID(uuidString: dto.id), url: URL(string: dto.url) ?? URL(string: "about:blank")!, title: dto.title,
             customTitle: dto.customTitle, pinnedURL: dto.pinnedURL.flatMap { URL(string: $0) }, customIcon: dto.customIcon, iconOverride: icon(from: dto.iconOverride),
             createdAt: Date(timeIntervalSince1970: dto.createdAt), lastActiveAt: Date(timeIntervalSince1970: dto.lastActiveAt),
@@ -509,7 +509,7 @@ public enum SnapshotMapper {
         return source?.isEmpty == false ? source : nil
     }
 
-    static func ruleDTO(_ r: RoutingRule) -> RoutingRuleDTO {
+    public static func ruleDTO(_ r: RoutingRule) -> RoutingRuleDTO {
         let m: RoutingMatchDTO
         switch r.match {
         case .hostContains(let s): m = .hostContains(s)
@@ -525,7 +525,7 @@ public enum SnapshotMapper {
         return RoutingRuleDTO(id: r.id.rawValue.uuidString, match: m, destination: d, sourceBundleID: normalizedSourceBundleID(r.sourceBundleID))
     }
 
-    static func rule(from dto: RoutingRuleDTO) -> RoutingRule {
+    public static func rule(from dto: RoutingRuleDTO) -> RoutingRule {
         let m: RoutingMatch
         switch dto.match {
         case .hostContains(let s): m = .hostContains(s)
@@ -541,7 +541,7 @@ public enum SnapshotMapper {
         return RoutingRule(id: RuleID(uuidString: dto.id), match: m, destination: d, sourceBundleID: normalizedSourceBundleID(dto.sourceBundleID))
     }
 
-    static func defaultDestinationDTO(_ d: DefaultDestination) -> DefaultDestinationDTO {
+    public static func defaultDestinationDTO(_ d: DefaultDestination) -> DefaultDestinationDTO {
         switch d {
         case .mostRecentSpace(let profile): return .mostRecentSpace(profile: profile.map { $0.description })
         case .littleOpen(let profile): return .littleOpen(profile: profile.map { $0.description })
@@ -549,7 +549,7 @@ public enum SnapshotMapper {
         }
     }
 
-    static func defaultDestination(from dto: DefaultDestinationDTO) -> DefaultDestination {
+    public static func defaultDestination(from dto: DefaultDestinationDTO) -> DefaultDestination {
         switch dto {
         case .mostRecentSpace(let profile): return .mostRecentSpace(profile: profile.map { ProfileID(uuidString: $0) })
         case .littleOpen(let profile): return .littleOpen(profile: profile.map { ProfileID(uuidString: $0) })

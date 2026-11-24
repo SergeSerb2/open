@@ -8,13 +8,13 @@ import OpenModel
 public enum SettingsSection: String, CaseIterable, Sendable, Identifiable {
     case general, appearance, tabsArchive = "tabs-archive", search, links, downloads, previews
     case adBlocking = "ad-blocking", sitePermissions = "site-permissions", passwordsCards = "passwords-cards", browsingData = "browsing-data"
-    case profiles, shortcuts, extensions, advanced
+    case accountSync = "account-sync", profiles, shortcuts, extensions, advanced
     public var id: String { rawValue }
     public var title: String { switch self {
     case .general: "General"; case .appearance: "Appearance"; case .tabsArchive: "Tabs & Archive"
     case .search: "Search"; case .links: "Links"; case .downloads: "Downloads"; case .previews: "Previews"
     case .adBlocking: "Ad Blocking"; case .sitePermissions: "Site Permissions"; case .passwordsCards: "Passwords & Cards"
-    case .browsingData: "Browsing Data"; case .profiles: "Profiles"; case .shortcuts: "Shortcuts"
+    case .browsingData: "Browsing Data"; case .accountSync: "Account & Sync"; case .profiles: "Profiles"; case .shortcuts: "Shortcuts"
     case .extensions: "Extensions"; case .advanced: "Advanced"
     } }
     public var subtitle: String { switch self {
@@ -31,15 +31,16 @@ public enum SettingsSection: String, CaseIterable, Sendable, Identifiable {
     case .sitePermissions: "Control what websites can use."
     case .passwordsCards: "Saved passwords and payment methods."
     case .browsingData: "Choose what to keep on this Mac."
+    case .accountSync: "End-to-end encrypted sync for your Open browser setup."
     case .extensions: "Add tools to your browser."
     case .advanced: "The details that make Open yours."
     } }
     public var group: String? { switch self {
-    case .tabsArchive: "BROWSING"; case .adBlocking: "PRIVACY"; case .profiles: "OPEN"; default: nil
+    case .tabsArchive: "BROWSING"; case .adBlocking: "PRIVACY"; case .accountSync: "OPEN"; default: nil
     } }
     public var isPerProfile: Bool { [.tabsArchive, .search, .downloads, .adBlocking, .sitePermissions, .passwordsCards, .browsingData].contains(self) }
     var legacyPane: PaneID { switch self {
-    case .general, .previews: .general
+    case .general, .previews, .accountSync: .general
     case .appearance: .appIcon
     case .profiles, .search, .downloads, .sitePermissions, .passwordsCards, .browsingData: .profiles
     case .links: .links
@@ -128,6 +129,12 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.passwordsCards, "passwords", "Passwords"),
             .init(.passwordsCards, "cards", "Credit Cards"),
             .init(.browsingData, "clear", "Clear Browsing Data", help: "History, cookies, cache, and download history for this Profile."),
+            .init(.accountSync, "account", "Open Account", help: "Sign in, create an account, or recover your encrypted sync vault.", synonyms: "arc sync sign in login register account cloud"),
+            .init(.accountSync, "sync-now", "Sync Now", help: "Push local changes and pull updates from your sync server.", synonyms: "sync refresh cloud backup"),
+            .init(.accountSync, "server", "Sync Server", help: "Choose your self-hosted or custom Open Sync server URL.", synonyms: "self-hosted server url endpoint"),
+            .init(.accountSync, "categories", "What to Sync", help: "Choose which parts of your browser setup sync across devices.", synonyms: "spaces tabs favorites today archive history shortcuts boosts easels notes extensions passwords autofill ad blocking"),
+            .init(.accountSync, "devices", "Connected Devices", help: "See and disconnect Macs linked to your Open account.", synonyms: "macs devices sessions revoke"),
+            .init(.accountSync, "security", "Account Security", help: "Change your password or delete your cloud account.", synonyms: "password change recovery key delete account encryption e2ee"),
             .init(.profiles, "new-documents", "New documents", help: "What New Note creates: a Note, or a Google Doc, Notion, Word, or Confluence page.", synonyms: "default document app note google doc notion word confluence"),
             .init(.profiles, "manage", "Your Profiles", help: "Create, rename, change an icon, assign Spaces, or delete an unused Profile."),
             .init(.profiles, "name", "Profile name"),

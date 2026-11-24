@@ -12,6 +12,7 @@ import OpenCommands
 import OpenSettings
 import OpenLibrary
 import OpenSidebar
+import OpenSync
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -106,6 +107,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  /// Open Accounts & Sync. Made after first paint only when a saved account exists, or on first use
+  /// (Settings ▸ Account & Sync, onboarding, the sync commands, automation).
+  private(set) var syncCoordinator: AppSyncCoordinator?
   private(set) var updater: UpdaterController?
   var checkForUpdatesAfterPaint = false
   lazy var applicationIcon = ApplicationIconController(app: self)
@@ -260,7 +264,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     if quitWarning.shouldKeepBrowsing(app: self, downloadsWarned: downloadsWarned) { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
-    if !shutdownPrepared, downloadsCenter.needsHistoryFlush || importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true) {
+    if !shutdownPrepared, downloadsCenter.needsHistoryFlush || importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true)
+        || syncCoordinator?.needsQuitFlush == true {
       historyQuitTask = Task { @MainActor in
         self.recordShutdownPhase("historyFlush.begin")
         await self.stores.flushHistory()
@@ -268,6 +273,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         await self.downloadsCenter.flushHistory()
         self.recordShutdownPhase("historyFlush.downloads")
         await self.importRunner.flushUndoForQuit()
+        // A pending sync push goes out before quit (bounded: quit never waits more than 3 s).
+        if let sync = self.syncCoordinator, sync.needsQuitFlush {
+          await sync.stopAndFlush(timeoutSeconds: 3.0)
+          self.recordShutdownPhase("historyFlush.sync")
+        }
         self.recordShutdownPhase("historyFlush.end")
         self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
         NSApp.terminate(nil)
@@ -491,6 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     tabSleep.installSettingsPolicy()
     adBlockEngineAdapter.installProfilePolicy()
     purgeScriptingWrappers()
+    syncCoordinator?.modelDidInstall()
   }
 
   /// Runs at the first of applicationDidFinishLaunching and
@@ -717,6 +728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     MainMenu.targetWindowCommands(factory)
     LaunchTiming.shared.phase("windowMenuBuilt")
     if session == nil { todayAutoArchive?.attach(context: controller.context) }
+    if session == nil { syncCoordinator?.attach(controller) }
     controller.showWindow(nil)
     LaunchTiming.shared.phase("windowOrdered")
     if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay,
@@ -977,6 +989,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)
     scheduleBlankWindowsSave()
+    syncCoordinator?.noteLocalChange("workspace")
   }
   /// A page title alone changed: saved within 10 s (SnapshotStore.scheduleMetadataSave, PERF-06).
   func scheduleMetadataSave() {
@@ -1182,6 +1195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     tabSleep.stop()
     adBlockEngineAdapter.stop()
     stores.boosts.stop()
+    syncCoordinator?.stopForShutdown()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
     libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
@@ -1349,6 +1363,7 @@ extension AppDelegate: CommandDispatcher {
           guard await self.nextStartupTurn() else { return }
           self.startupRegion("afterPaint.icon") { self.applicationIcon.restoreAfterContent() }
           guard await self.nextStartupTurn() else { return }
+          if self.startSyncAfterPaint("afterPaint.sync") { guard await self.nextStartupTurn() else { return } }
           self.startupRegion("afterPaint.updater") { self.prepareUpdaterAfterPaint() }
           return
         }
@@ -1364,6 +1379,7 @@ extension AppDelegate: CommandDispatcher {
       guard await self.nextStartupTurn() else { return }
       self.startupRegion("fallback.icon") { self.applicationIcon.restoreAfterContent() }
       guard await self.nextStartupTurn() else { return }
+      if self.startSyncAfterPaint("fallback.sync") { guard await self.nextStartupTurn() else { return } }
       self.startupRegion("fallback.updater") { self.prepareUpdaterAfterPaint() }
     }
   }
@@ -1399,6 +1415,7 @@ extension AppDelegate: CommandDispatcher {
         guard await self.nextStartupTurn() else { return }
         self.startupRegion("noWeb.icon") { self.applicationIcon.restoreAfterContent() }
         guard await self.nextStartupTurn() else { return }
+        if self.startSyncAfterPaint("noWeb.sync") { guard await self.nextStartupTurn() else { return } }
         self.startupRegion("noWeb.updater") { self.prepareUpdaterAfterPaint() }
       }
     }
@@ -1431,6 +1448,26 @@ extension AppDelegate: CommandDispatcher {
     #else
     body()
     #endif
+  }
+  /// Post-paint sync slice: one `stat` of `State/sync-state.json`. Only a saved account makes the
+  /// coordinator (and its engine) at launch. Returns whether a slice ran.
+  @discardableResult
+  func startSyncAfterPaint(_ region: String) -> Bool {
+    guard syncCoordinator == nil, !shutdownPrepared, !terminationRequested, let directories,
+          SyncStateStore.hasSavedAccount(in: directories.root) else { return false }
+    startupRegion(region) { ensureSyncCoordinator().startIfSignedIn() }
+    return true
+  }
+  /// The one sync coordinator, made on first use. Starting it is one `stat` when no account is saved.
+  @discardableResult
+  func ensureSyncCoordinator() -> AppSyncCoordinator {
+    if let syncCoordinator { return syncCoordinator }
+    let coordinator = AppSyncCoordinator(app: self)
+    syncCoordinator = coordinator
+    for controller in windowControllers where hostFactories[controller.windowID]?.isIncognito == false { coordinator.attach(controller) }
+    settingsPresenter.syncEngineDidBecomeAvailable(coordinator.engine)
+    coordinator.startIfSignedIn()
+    return coordinator
   }
   func prepareUpdaterAfterPaint() {
     guard updater == nil, !shutdownPrepared, !terminationRequested else { return }
@@ -1491,6 +1528,7 @@ extension AppDelegate: CommandDispatcher {
     for factory in hostFactories.values { factory.commandBarSession?.keyBindingsChanged() }
     extensionPrompts.rebuildShortcuts()
     updateLittleOpenHotkey(); scheduleMenuRebuild()
+    syncCoordinator?.keyBindingsDidReload(keyBindings)
   }
   func updateLittleOpenHotkey() {
     hotkeyService?.unregister(); hotkeyError = nil
@@ -1544,7 +1582,7 @@ extension AppDelegate: CommandDispatcher {
     if ["new-note", "new-note-in-split"].contains(id) { return frontStandardWindowController != nil }
     // C-NT1: with no browser window open, Arc's View Easels… does nothing.
     if id == "view-easels-notes" { return frontStandardWindowController != nil }
-    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-easels-notes", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
+    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-easels-notes", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces", "account-sync", "sync-now"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
     guard allowsFirstRunCommand(id) else { return }
@@ -1607,6 +1645,15 @@ extension AppDelegate: CommandDispatcher {
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
     case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
+    case "account-sync": settingsPresenter.show(section: .accountSync, row: "account")
+    case "sync-now":
+      // Signed out (or waiting for the first-sync choice): Settings shows what to do next.
+      let sync = ensureSyncCoordinator()
+      if sync.engine.isSignedIn, !sync.engine.snapshot.isAwaitingInitialChoice {
+        Task { @MainActor in try? await sync.engine.syncNow() }
+      } else {
+        settingsPresenter.show(section: .accountSync, row: "account")
+      }
     case "new-little-open-window", "little-open-global": openBlankLittleOpen(timestamp: keyDownTimestamp)
     case "help-center", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()

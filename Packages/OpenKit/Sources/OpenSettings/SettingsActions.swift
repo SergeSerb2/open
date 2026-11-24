@@ -3,6 +3,7 @@ import AppKit
 import OpenModel
 import OpenCommands
 import OpenImport
+import OpenSync
 
 public struct ClearDataKinds: OptionSet, Sendable {
     public let rawValue: Int
@@ -145,6 +146,12 @@ public struct ExtensionShortcutConflict: Sendable, Hashable {
     /// (commandbar-completion §4.5.3, CC-29).
     func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict]
     func openEssentialShortcuts()
+    /// Settings ▸ Account & Sync: the App's shared sync engine, created on first use. Settings asks only
+    /// when the Account & Sync page is shown, never while Settings opens on another page.
+    func ensureSyncEngine() -> SyncEngine?
+    /// Installs synced extensions this Mac does not have yet. Returns the `SyncPendingExtension.id`
+    /// values that were installed or declined, so the engine drops them from its pending list.
+    func installSyncedExtensions(_ extensions: [SyncPendingExtension]) async -> [String]
 }
 
 public extension SettingsActions {
@@ -153,4 +160,6 @@ public extension SettingsActions {
     func chooseProfileIcon(profileID: ProfileID, anchor: NSView) {}
     func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] { [] }
     func makeSpaceManagerView() -> NSView? { nil }
+    func ensureSyncEngine() -> SyncEngine? { nil }
+    func installSyncedExtensions(_ extensions: [SyncPendingExtension]) async -> [String] { [] }
 }

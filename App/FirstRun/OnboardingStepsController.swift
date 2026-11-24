@@ -10,11 +10,12 @@ import OpenSettings
 import OpenDesign
 import OpenOnboarding
 import OpenSpaceEditor
+import OpenSync
 
 /// Presentation only. Section 7 still owns import, consent, progress and finish.
 @MainActor
 final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
-  enum Step: String { case name, importData = "import", favorites, theme, blocker, defaultBrowser, ready }
+  enum Step: String { case name, importData = "import", favorites, theme, blocker, account, defaultBrowser, ready }
   struct Site {
     let name: String
     let host: String
@@ -69,6 +70,20 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var themeShuffle: OnboardingButton?
   private var colorField: OnboardingColorField?
   private var statusLabel: NSTextField?
+  // Account step (Open Sync). Nothing is made or written until the user presses the action button.
+  private(set) var accountCreating = false
+  private(set) var accountEmail = ""
+  private var accountPassword = ""
+  private(set) var accountServer = SyncDefaults.serverURL
+  private(set) var accountBusy = false
+  private(set) var accountStatus = ""
+  private(set) var accountStatusIsError = false
+  private var accountModeBar: NSSegmentedControl?
+  private var accountEmailField: NSTextField?
+  private var accountPasswordField: NSSecureTextField?
+  private var accountServerField: NSTextField?
+  private var accountActionButton: OnboardingButton?
+  private var accountStatusLabel: NSTextField?
   private(set) var savePanel: NSSavePanel?
   private let started = Date()
   var focusedSpace: Space? { app.frontWindowController?.context.focusedSpace ?? app.model.windows.first.flatMap { app.model.space(id: $0.focusedSpaceID) } ?? app.model.spaces.first }
@@ -94,6 +109,13 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     confetti?.removeFromSuperlayer(); confetti = nil
     host?.view.removeFromSuperview(); host = nil
     preview.removeFromSuperview()
+    releaseAccountControls()
+  }
+  private func releaseAccountControls() {
+    for field in [accountEmailField, accountPasswordField, accountServerField] { field?.delegate = nil; field?.target = nil }
+    accountModeBar?.target = nil
+    accountModeBar = nil; accountEmailField = nil; accountPasswordField = nil; accountServerField = nil
+    accountActionButton = nil; accountStatusLabel = nil
   }
   override func loadView() {
     let root = OnboardingSurface()
@@ -148,6 +170,18 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       modeBar?.frame = NSRect(x: 0,y: fieldHeight+64,width: min(230,contentWidth-96),height: 28)
       themeShuffle?.frame = NSRect(x: contentWidth-80,y: fieldHeight+64,width: 80,height: 28)
     }
+    if step == .account {
+      accountModeBar?.frame = NSRect(x: 0, y: 0, width: min(260, contentWidth), height: 28)
+      for (index, field) in [accountEmailField, accountPasswordField, accountServerField].enumerated() {
+        field?.frame = NSRect(x: 0, y: 44+CGFloat(index)*36, width: contentWidth, height: 28)
+      }
+      let formBottom: CGFloat = accountEmailField == nil ? 0:152
+      if let button = accountActionButton {
+        button.frame = NSRect(x: 0, y: formBottom+8, width: max(120, OnboardingButton.labelWidth(button)+40), height: 32)
+      }
+      let statusY = accountActionButton == nil ? formBottom:formBottom+56
+      accountStatusLabel?.frame = NSRect(x: 0, y: statusY, width: contentWidth, height: max(40, controls.bounds.height-statusY))
+    }
     preview.frame = NSRect(x: width, y: 0, width: view.bounds.width-width, height: view.bounds.height)
     let cardFrame = preview.convert(preview.cardRect, to: view)
     for (index, button) in cardButtons.enumerated() {
@@ -170,6 +204,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     case .favorites: "Choose the sites you use most."
     case .theme: "Make it yours."
     case .blocker: "Fewer ads, fewer trackers."
+    case .account: "Sync across your Macs"
     case .defaultBrowser: "Make Open your default browser?"
     case .ready: name.isEmpty ? "Welcome to Open." : "Welcome to Open, \(name)."
     }
@@ -181,6 +216,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     case .favorites: "They become Favorites at the top of your sidebar, one click away."
     case .theme: "Pick a color for your first Space. Every Space can have its own."
     case .blocker: "Open's built-in blocker hides most ads and stops many trackers. You can turn it off for any site."
+    case .account: "Sign in or create a zero-knowledge Open account to sync your Spaces, tabs, and settings. You can skip this and set it up anytime in Settings."
     case .defaultBrowser: "Links from other apps will open here. You can change this any time in Settings."
     case .ready: "Here's your Open card, made from your color and the day you started."
     }
@@ -190,6 +226,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   }
   private func render(direction: Int) {
     guard isViewLoaded else { return }
+    captureAccountFields()
+    releaseAccountControls()
     controls.allowsOverflow = step == .favorites
     host?.view.removeFromSuperview(); host = nil
     controls.subviews.forEach { $0.removeFromSuperview() }; footer.subviews.forEach { $0.removeFromSuperview() }
@@ -264,6 +302,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       }
       statusLabel = NSTextField(wrappingLabelWithString: defaultOutcome); if let statusLabel { controls.addSubview(statusLabel) }
     }
+    if step == .account { renderAccount() }
     if step == .ready {
       let shuffle = button("Shuffle card pattern") { [weak self] in self?.shuffleCard() }
       shuffle.usesLightInk = true; shuffle.circular = true
@@ -277,21 +316,30 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     backButton = nil; skipButton = nil
     if step != .name {
       let back = button("Back") { [weak self] in self?.back() }; back.pill = true
-      footer.addSubview(back); backButton = back; back.isEnabled = !firstRun.busy && !defaultPending && !finishing
+      footer.addSubview(back); backButton = back; back.isEnabled = !firstRun.busy && !defaultPending && !finishing && !accountBusy
     }
-    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: [.report, .importing].contains(firstRun.step) ? nil:firstRun.step == .secretsConsent ? "Skip":"Start fresh"; case .theme: "Skip for now"; case .blocker: "Not now"; default: nil }
-    if let skip { let b = button(skip) { [weak self] in self?.skip() }; b.quiet = true; footer.addSubview(b); skipButton = b; b.isEnabled = !firstRun.busy && !finishing }
+    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: [.report, .importing].contains(firstRun.step) ? nil:firstRun.step == .secretsConsent ? "Skip":"Start fresh"; case .theme: "Skip for now"; case .blocker: "Not now"; case .account: accountSignedIn ? nil:"Skip for now"; default: nil }
+    if let skip { let b = button(skip) { [weak self] in self?.skip() }; b.quiet = true; footer.addSubview(b); skipButton = b; b.isEnabled = !firstRun.busy && !finishing && !accountBusy }
     var text = "Next"
     if step == .importData { text = firstRun.step == .secretsConsent ? PasswordsImportCopy.allowButton : firstRun.step == .report ? "Next" : firstRun.step == .failed ? "Try Again" : "Import" }
     if step == .defaultBrowser && defaultYes && !firstRun.isDefaultBrowser { text = "Make default" }
     if step == .ready { text = "Get Started" }
     let next = button(text, primary: true) { [weak self] in self?.next() }; next.keyEquivalent = "\r"; next.keyEquivalentModifierMask = []
-    next.isEnabled = !firstRun.busy && !defaultPending && !finishing && (step != .importData || firstRun.step == .report || firstRun.hasSelection)
+    next.isEnabled = !firstRun.busy && !defaultPending && !finishing && !accountBusy && (step != .importData || firstRun.step == .report || firstRun.hasSelection)
     footer.addSubview(next); primary = next; view.window?.defaultButtonCell = next.cell as? NSButtonCell
+    // Account form: Return signs in (or creates the account); Next stays a click away.
+    if step == .account, let action = accountActionButton {
+      next.keyEquivalent = ""; action.keyEquivalent = "\r"; action.keyEquivalentModifierMask = []
+      view.window?.defaultButtonCell = action.cell as? NSButtonCell
+    }
     updatePreview(); view.needsLayout = true; view.layoutSubtreeIfNeeded()
     // Native AppKit key loop includes every control and the shared import host.
     view.window?.recalculateKeyViewLoop()
     if step == .name { view.window?.makeFirstResponder(nameField) }
+    else if step == .account, let field = accountEmailField, !accountBusy {
+      let target: NSView? = accountEmail.isEmpty ? field:accountPasswordField
+      view.window?.makeFirstResponder(target)
+    }
     else if step == .favorites { view.window?.makeFirstResponder(favoriteButtons.first) }
     if direction != 0 { transition(titleLabel, direction: direction, response: 0.4); transition(descriptionLabel, direction: direction, response: 0.5) }
     let fade = CATransition(); fade.type = .fade; fade.duration = reduceMotion ? 0.2:0.35; preview.layer?.add(fade, forKey: "step-preview")
@@ -341,7 +389,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       else { tasks.append(Task { [weak self] in guard let self else { return }; if firstRun.step == .secretsConsent { await firstRun.allowPasswords() } else { await firstRun.continueImport() } }) }
     case .favorites: go(.theme)
     case .theme: go(.blocker)
-    case .blocker: go(.defaultBrowser)
+    case .blocker: go(.account)
+    case .account: guard !accountBusy else { return }; go(.defaultBrowser)
     case .defaultBrowser:
       if defaultYes && !firstRun.isDefaultBrowser && !replay {
         defaultPending = true; defaultResolved = false; firstRun.makeDefault(); render(direction: 0)
@@ -372,7 +421,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       // A next() pressed before this call can have left the name screen during the awaits.
       if step == .name { next() }
     }
-    for _ in 0..<6 {
+    for _ in 0..<7 {
       if step == .defaultBrowser || step == .ready { break }
       if step == .importData && firstRun.step == .report { next() }
       else { skip() }
@@ -384,7 +433,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     next()
   }
   func back() {
-    guard !firstRun.busy, !defaultPending, !finishing else { return }
+    guard !firstRun.busy, !defaultPending, !finishing, !accountBusy else { return }
     if step == .importData && firstRun.step == .secretsConsent { firstRun.cancelPasswords(); return }
     guard let previous = entered.popLast() else { return }; go(previous, back: true)
   }
@@ -398,12 +447,123 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       else { go(firstRun.wizard.reportCount("Favorites") > 0 ? .theme:.favorites) }
     case .favorites: selectedFavorites.removeAll(); go(.theme)
     case .theme: themeChanged = false; themeState = ThemeEditorState(style: SpaceStyle.seed(from: themeBaseline)); go(.blocker)
-    case .blocker: blocker = false; go(.defaultBrowser)
+    case .blocker: blocker = false; go(.account)
+    // Skip writes nothing: no engine, no state file, no Keychain or credentials file.
+    case .account: guard !accountBusy else { return }; go(.defaultBrowser)
     default: break
     }
   }
+  // MARK: Account (Open Sync)
+
+  /// Signed in through this step or earlier (Settings, a replay). Reading it never makes the engine.
+  var accountSignedIn: Bool { app.syncCoordinator?.engine.isSignedIn == true }
+  private func renderAccount() {
+    let status = NSTextField(wrappingLabelWithString: accountStatus)
+    status.font = .systemFont(ofSize: 12); status.isSelectable = true; status.maximumNumberOfLines = 0
+    status.textColor = accountStatusIsError ? .systemRed:.secondaryLabelColor
+    status.setAccessibilityLabel("Account status")
+    if accountSignedIn && !accountBusy {
+      // Signed in: the form is done. Next continues setup.
+      let email = app.syncCoordinator?.engine.snapshot.email ?? accountEmail
+      status.stringValue = accountStatus.isEmpty ? "Signed in as \(email). This Mac syncs with your Open account." : accountStatus
+      controls.addSubview(status); accountStatusLabel = status
+      return
+    }
+    let mode = NSSegmentedControl(labels: ["Sign In", "Create Account"], trackingMode: .selectOne, target: self, action: #selector(accountModeChanged(_:)))
+    mode.segmentStyle = .rounded; mode.font = .systemFont(ofSize: 13); mode.selectedSegment = accountCreating ? 1:0
+    mode.selectedSegmentBezelColor = OnboardingTokens.Room.space; mode.setAccessibilityLabel("Account mode")
+    func field(_ field: NSTextField, _ value: String, _ placeholder: String) -> NSTextField {
+      field.stringValue = value; field.placeholderString = placeholder; field.font = .systemFont(ofSize: 13)
+      field.isBezeled = true; field.bezelStyle = .roundedBezel; field.isEditable = true; field.isSelectable = true
+      field.setAccessibilityElement(true); field.setAccessibilityRole(.textField); field.setAccessibilityLabel(placeholder)
+      field.delegate = self; field.isEnabled = !accountBusy
+      return field
+    }
+    let email = field(NSTextField(), accountEmail, "Email"); email.contentType = .username
+    let password = NSSecureTextField()
+    _ = field(password, accountPassword, "Password"); password.contentType = accountCreating ? NSTextContentType.newPassword:NSTextContentType.password
+    password.target = self; password.action = #selector(accountPasswordReturn(_:))
+    let server = field(NSTextField(), accountServer, "Sync server")
+    let action = button(accountCreating ? "Create Account":"Sign In") { [weak self] in self?.submitAccount() }
+    action.outlined = true; action.isEnabled = !accountBusy; mode.isEnabled = !accountBusy
+    for control in [mode, email, password, server, action, status] as [NSView] { controls.addSubview(control) }
+    accountModeBar = mode; accountEmailField = email; accountPasswordField = password; accountServerField = server
+    accountActionButton = action; accountStatusLabel = status
+  }
+  /// Keeps typed values across re-renders (busy state, mode switch, Back and Next).
+  private func captureAccountFields() {
+    if let accountEmailField { accountEmail = accountEmailField.stringValue }
+    if let accountPasswordField { accountPassword = accountPasswordField.stringValue }
+    if let accountServerField { accountServer = accountServerField.stringValue }
+  }
+  @objc private func accountModeChanged(_ sender: NSSegmentedControl) { setAccountMode(creating: sender.selectedSegment == 1) }
+  @objc private func accountPasswordReturn(_ sender: Any?) { submitAccount() }
+  func setAccountMode(creating: Bool) {
+    guard step == .account, !accountBusy, creating != accountCreating else { return }
+    captureAccountFields(); accountCreating = creating; accountStatus = ""; accountStatusIsError = false
+    render(direction: 0)
+  }
+  func fillAccount(email: String?, password: String?, serverURL: String?) {
+    guard step == .account, !accountBusy else { return }
+    captureAccountFields()
+    if let email { accountEmail = email }
+    if let password { accountPassword = password }
+    if let serverURL { accountServer = serverURL }
+    accountEmailField?.stringValue = accountEmail; accountPasswordField?.stringValue = accountPassword
+    accountServerField?.stringValue = accountServer
+  }
+  /// Signs in or creates the account. Sign-in with cloud data takes the cloud setup (a backup of
+  /// this Mac's files is kept), unless this onboarding already imported browser data: then the
+  /// import and the cloud setup are merged, so the fresh import is not overwritten. A new
+  /// account uploads this Mac's setup.
+  func submitAccount() {
+    guard step == .account, !accountBusy, !finishing, !accountSignedIn else { return }
+    captureAccountFields()
+    let email = accountEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedServer = accountServer.trimmingCharacters(in: .whitespacesAndNewlines)
+    let server = trimmedServer.isEmpty ? SyncDefaults.serverURL:trimmedServer
+    guard !email.isEmpty, !accountPassword.isEmpty else {
+      accountStatus = "Enter your email and password."; accountStatusIsError = true; render(direction: 0); return
+    }
+    let password = accountPassword, creating = accountCreating, displayName = name
+    let keepsImport = firstRun.outcome?.didImportAnything == true
+    accountBusy = true; accountStatusIsError = false
+    accountStatus = creating ? "Creating your account…":"Signing in…"
+    render(direction: 0)
+    let engine = app.ensureSyncCoordinator().engine
+    tasks.append(Task { [weak self] in
+      var status: String
+      var failed = false
+      do {
+        if creating {
+          let key = try await engine.signUp(serverURL: server, email: email, password: password, displayName: displayName.isEmpty ? nil:displayName)
+          status = "Your account is ready. Save this recovery key somewhere safe. It is the only way to reset a forgotten password:\n\n\(key)"
+        } else {
+          switch try await engine.signIn(serverURL: server, email: email, password: password) {
+          case .needsInitialChoice:
+            try await engine.completeInitialSync(strategy: keepsImport ? .mergeLocalAndCloud:.replaceLocalWithCloud)
+            status = keepsImport ? "Merged your imported data with your Open setup from the cloud.":"Synced your Open setup from the cloud."
+          case .synced:
+            status = "Signed in. This Mac's setup is now in your Open account."
+          }
+        }
+      } catch {
+        status = error.localizedDescription; failed = true
+      }
+      guard let self, !Task.isCancelled else { return }
+      accountBusy = false; accountStatus = status; accountStatusIsError = failed
+      if !failed { accountPassword = "" }
+      if step == .account { render(direction: 0) }
+    })
+  }
+  private var accountState: [String: Any] {
+    ["mode": accountCreating ? "create":"signIn", "email": accountEmail, "server": accountServer, "busy": accountBusy,
+     "status": accountStatus, "error": accountStatusIsError, "signedIn": accountSignedIn,
+     "engineCreated": app.syncCoordinator != nil, "formShown": accountEmailField != nil]
+  }
   func setName(_ value: String) { name = String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40)); nameField?.stringValue = name; updatePreview() }
   func controlTextDidChange(_ obj: Notification) {
+    if step == .account { captureAccountFields(); return }
     guard let nameField else { return }; let value = String(nameField.stringValue.prefix(40)); nameField.stringValue = value; name = value.trimmingCharacters(in: .whitespacesAndNewlines); updatePreview()
   }
   func toggleFavorite(_ index: Int) {
@@ -539,7 +699,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       "nameFieldFrame": nameField.map { frame($0) } ?? []]
   }
   #endif
-  private var baseState: [String: Any] { ["screen": step.rawValue, "favoritePreview": preview.favoriteState, "favoriteCountLabel": favoriteCounter?.stringValue ?? "", "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
+  private var baseState: [String: Any] { ["screen": step.rawValue, "favoritePreview": preview.favoriteState, "favoriteCountLabel": favoriteCounter?.stringValue ?? "", "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "account": accountState, "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
     // Artwork is one AX image. Its native miniature controls are decorative
     // descendants, not extra controls in the setup keyboard/VoiceOver flow.
