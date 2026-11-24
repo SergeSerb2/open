@@ -160,8 +160,19 @@ enum PreviewChecks {
         check(context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed, "HP5 a production drag destination cancels shown and armed previews")
         outline.draggingExited(drag)
         hover(pinned.id)
-        model.focusSpace(windowID: state.id, spaceID: model.spaces[1].id); pump()
+        // The window's switch path (BrowserWindowController.switchSpace -> refresh) shows the focused
+        // Space in the input's own turn, and the pager dismisses previews there: no run-loop pump. The
+        // old check pumped 5 ms and relied on the observation Task; under load that pump sometimes
+        // ended first (logged: no dismiss and no re-arm between the switch and the check).
+        model.focusSpace(windowID: state.id, spaceID: model.spaces[1].id); sidebar.showFocusedSpaceIfChanged()
         check(context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed, "HP5 real Space switch dismisses preview state")
+        model.focusSpace(windowID: state.id, spaceID: space.id); pump()
+        // A model-only switch (Little Open, Peek, undo) reaches the tracker and the pager through
+        // observation, on the next main-actor turn.
+        hover(pinned.id)
+        model.focusSpace(windowID: state.id, spaceID: model.spaces[1].id)
+        check(Checks.waitFor(timeout: 2, settle: scene) { context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed },
+              "HP5 a model-only Space switch dismisses preview state on the next turn")
         model.focusSpace(windowID: state.id, spaceID: space.id); pump()
         let oldCount = context.hoverPreviews.scheduledShowCount
         hover(today.id); pump(0.53)

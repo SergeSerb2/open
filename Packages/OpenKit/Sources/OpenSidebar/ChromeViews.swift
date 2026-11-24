@@ -59,10 +59,10 @@ final class ToolbarView: NSView {
         // when they are disabled (F0090: all four `#444452`–`#464654`; F0108 without the dim: disabled tone).
         for b in [back, forward, reload] {
             b.glyphTint = { [unowned context] enabled in
-                (enabled || context.peekSourceNodeID != nil ? SidebarRole.toolbarGlyph : SidebarRole.toolbarGlyphDisabled).nsColor
+                enabled || context.peekSourceNodeID != nil ? ToolbarView.glyph(context) : SidebarRole.toolbarGlyphDisabled.nsColor
             }
         }
-        toggle.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+        toggle.glyphTint = { [unowned context] _ in ToolbarView.glyph(context) }
         setup(reloadMenu, .reloadMenu) { Tooltip(title: "Reload options", style: style()) }
         reloadMenu.glyphView.image = { ToolbarView.chevron }
         reloadMenu.isEnabled = { [unowned context] in context.hasPage }
@@ -70,7 +70,7 @@ final class ToolbarView: NSView {
         reloadMenu.menuProvider = { [weak self] in self?.makeReloadMenu() }
         reloadMenu.isHidden = true
         setup(more, .more) { Tooltip(title: "More options", style: style()) }
-        more.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+        more.glyphTint = { [unowned context] _ in ToolbarView.glyph(context) }
         more.action = { [weak self] in self?.toggleMorePopover() }
         more.isHidden = true
     }
@@ -130,6 +130,11 @@ final class ToolbarView: NSView {
     }
 
     /// Our own ▾: two 1 pt strokes, 8.5 × 4.5 pt ink (Arc's measured box), drawn in Reload's grey.
+    /// Enabled toolbar glyph: the measured token, or the stronger role while Increase Contrast is on.
+    @MainActor static func glyph(_ context: SidebarContext) -> NSColor {
+        context.increasedContrastRoles?.toolbarGlyph.nsColor ?? SidebarRole.toolbarGlyph.nsColor
+    }
+
     static let chevron: NSImage = {
         let size = ChromeMetrics.reloadMenuGlyph, line: CGFloat = 1
         let image = NSImage(size: NSSize(width: size.width + line, height: size.height + line), flipped: true) { _ in
@@ -249,11 +254,12 @@ final class URLFieldView: NSView {
         // The compact sidebar shortens the placeholder to "Search…" (capture session 9, C-report-s6 §8).
         label.text = { [unowned self, unowned context] in context.pageHost ?? self.placeholder }
         label.color = { [unowned context] in
-            (context.hasPage ? SidebarRole.urlText : SidebarRole.placeholder).nsColor
+            context.hasPage ? context.increasedContrastRoles?.urlText.nsColor ?? SidebarRole.urlText.nsColor
+                : SidebarRole.placeholder.nsColor
         }
         for b in [copyLink, siteControls] {
             b.context = context
-            b.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+            b.glyphTint = { [unowned context] _ in ToolbarView.glyph(context) }
             addSubview(b)
         }
         copyLink.action = { [unowned context] in context.send(.copyCurrentURL) }
@@ -266,7 +272,7 @@ final class URLFieldView: NSView {
         fadeMask.startPoint = CGPoint(x: 0, y: 0.5); fadeMask.endPoint = CGPoint(x: 1, y: 0.5)
         fadeMask.colors = [CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 1)]
         fadeMask.actions = ["position": NSNull(), "bounds": NSNull(), "locations": NSNull()]
-        siteControlGlyph.tint = { SidebarRole.toolbarGlyph.nsColor }
+        siteControlGlyph.tint = { [unowned context] in ToolbarView.glyph(context) }
         siteControls.addSubview(siteControlGlyph)
         let style: @MainActor () -> SpaceThemeStyle = { [unowned context] in
             context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
@@ -303,6 +309,7 @@ final class URLFieldView: NSView {
     /// status button under the field shares it.
     static func fill(context: SidebarContext, hovered: Bool) -> DesignColor {
         if context.isIncognito { return DesignColor(.white(0.15)) }
+        if let roles = context.increasedContrastRoles { return DesignColor(hovered ? roles.fieldHover : roles.fieldFill) }
         return hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill
     }
 
@@ -313,12 +320,14 @@ final class URLFieldView: NSView {
 
     override func updateLayer() {
         let appearance = contentAppearance
-        let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true }
+        // Tracked: hover, a live Increase Contrast toggle and theme changes redraw the field (review r2 #2).
+        let color = tracked({ [unowned self] in fieldFill(hovered: isHovered) }) { [weak self] in self?.needsDisplay = true }
         CATransaction.begin()
         CATransaction.setDisableActions(!context.animatesChanges)
         CATransaction.setAnimationDuration(Motion.hoverFade)
-        fill.backgroundColor = fieldFill(hovered: hovered).cgColor(appearance)
-        siteControls.needsDisplay = true
+        fill.backgroundColor = color.cgColor(appearance)
+        // The Boosted glyph draws its tint once; it redraws with the field.
+        siteControls.needsDisplay = true; siteControlGlyph.needsDisplay = true
         CATransaction.commit()
     }
 
