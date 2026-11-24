@@ -15045,7 +15045,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["persistence", "engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "settings-layout", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
+    ap.add_argument("--only", choices=["persistence", "engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "settings-layout", "a11y-keyboard", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -15472,6 +15472,11 @@ def main():
             results["blank-window"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/blank_window.py"))["run"](
                 factory, results["blank-window"], tmp, sys.modules[__name__])
+        elif opts.only == "a11y-keyboard":
+            # UX round 1 wave 2 (UXF): keyboard order, focus rings and the AX tree VoiceOver reads.
+            results["a11y-keyboard"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/a11y_keyboard.py"))["run"](
+                factory, results["a11y-keyboard"], tmp, sys.modules[__name__])
         elif opts.only == "menu-titles":
             results["menu-titles"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/menu_titles.py"))["run"](

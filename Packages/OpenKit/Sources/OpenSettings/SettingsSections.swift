@@ -119,7 +119,7 @@ struct SettingsAdBlockingSection: View {
                 }
                 Spacer()
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
+                    Image(systemName: "magnifyingglass").accessibilityHidden(true)  // decoration (K9)
                     TextField("Search block lists", text: $model.query).textFieldStyle(.plain).accessibilityLabel("Search block lists")
                 }.font(.system(size: 11.5)).padding(.horizontal, 8).frame(width: 200, height: 26)
                     .background(Color(nsColor: SettingsStyle.control.nsColor), in: RoundedRectangle(cornerRadius: 7))

@@ -149,6 +149,7 @@ extension AutomationController {
     let file = shortcuts.fileURL
     return ["window": window?.windowNumber ?? 0, "visible": window?.isVisible ?? false, "sheet": window?.attachedSheet?.windowNumber ?? 0,
       "section": root.selectedSection.rawValue, "query": root.searchQuery,
+      "searchFocusRing": window.map { SettingsWindow.searchFocusRingDrawn(in: $0) } ?? false,
       "results": root.searchResults.map { ["id": $0.id, "label": $0.label] },
       "selection": root.searchSelection, "arrival": root.arrivalID ?? "", "arrivalRevision": root.arrivalRevision,
       "focusedSetting": root.focusedSettingID ?? "",
