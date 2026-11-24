@@ -152,6 +152,7 @@ import OpenDesign
 public struct ShortcutsPane: View {
     @Bindable var model: ShortcutsViewModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.settingsViewportHeight) private var viewport
     private var accent: Color { Color(nsColor: SettingsStyle.accessibleAccent(model.root.settingsAccentSource, dark: scheme == .dark)) }
     public init(model: ShortcutsViewModel) { self.model = model }
     public var body: some View {
@@ -172,14 +173,14 @@ public struct ShortcutsPane: View {
             HStack { Button("Learn the Essential Shortcuts") { model.root.actions.openEssentialShortcuts() }.buttonStyle(.plain).font(.system(size: 11.5)).foregroundStyle(accent).id("shortcuts/essential"); Spacer() }
             overlapPolicy
         }.sheet(isPresented: $model.confirmsReset) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Reset all shortcuts?").font(.system(size: 22, weight: .semibold))
-                Text("Your custom shortcuts and priorities will return to their defaults.")
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsSheetTitle("Reset all shortcuts?")
+                Text("Your custom shortcuts and priorities will return to their defaults.").foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
                 HStack {
                     Button("Cancel") { model.confirmsReset = false }.keyboardShortcut(.cancelAction)
                     Spacer()
                     Button("Reset all shortcuts", role: .destructive) { model.resetAll(confirmed: true); model.confirmsReset = false }.keyboardShortcut(.defaultAction).accessibilityLabel("Reset All Shortcuts")
-                }
+                }.padding(.top, 12)
             }.padding(24).frame(width: 460).settingsSheet()
         }
     }
@@ -194,7 +195,9 @@ public struct ShortcutsPane: View {
         var height: CGFloat = 0
         for command in commands {
             let row: CGFloat = model.conflictText(for: command.id) != nil || command.scope == .global ? 60 : 44
-            if height + row > 352 { break }
+            // 352 pt at the default window; taller windows give the list the extra room, keeping the
+            // header, tools and the overlap card in view (UX round 1 F9).
+            if height + row > max(352, viewport - 340) { break }
             height += row
         }
         return max(44, height)
@@ -290,16 +293,15 @@ struct ShortcutsMoreMenu: NSViewRepresentable {
     func makeNSView(context: Context) -> ShortcutsMoreMenuButton { ShortcutsMoreMenuButton(model: model) }
     func updateNSView(_ view: ShortcutsMoreMenuButton, context: Context) { view.model = model }
 }
-@MainActor final class ShortcutsMoreMenuButton: NSPopUpButton {
+@MainActor final class ShortcutsMoreMenuButton: SettingsMenuButton {
     var model: ShortcutsViewModel
     init(model: ShortcutsViewModel) {
         self.model = model
-        super.init(frame: .zero, pullsDown: true)
-        isBordered = false
+        super.init()
         setAccessibilityLabel("More shortcut actions")
         let menu = NSMenu()
         menu.addItem(withTitle: "More", action: nil, keyEquivalent: "")
-        font = .systemFont(ofSize: 13, weight: .medium)
+        font = SettingsMenuButton.font
         for (title, selector) in [("Import…", #selector(importKeys)), ("Export…", #selector(exportKeys)), ("Revert…", #selector(revert)), ("Shortcut help", #selector(help)), ("Extension shortcuts…", #selector(extensions))] {
             let item = menu.addItem(withTitle: title, action: selector, keyEquivalent: ""); item.target = self
         }

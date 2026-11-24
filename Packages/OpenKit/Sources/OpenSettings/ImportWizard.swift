@@ -347,6 +347,20 @@ import OpenImport
     }
     public var displayedReportCategories: [String] { if !plan.isArc { return browserCategories }; return Self.reportCategories.filter { $0 != "Search settings" && ($0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false) } + providers.filter { plan.providers.contains($0.id) }.map(\.title) }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
+    /// Passwords, Cookies, Addresses and Cards as report rows (drawn in the same table as the other counts).
+    public var secretsReportRows: [SecretsReportRow] { outcome?.secretsReportRows ?? [] }
+    /// The lines that are not one of the rows: failed records and the unfinished-import message.
+    public var secretsReportNotes: [String] {
+        secretsReportRows.isEmpty ? secretsReportLines : Array(secretsReportLines.dropFirst(secretsReportRows.count))
+    }
+    /// "4", "4 · 2 already in Open · 3 skipped", or "None found in Arc" (the source had none: not an error).
+    public func secretsReportValue(_ row: SecretsReportRow) -> String {
+        if row.noneFound { return "None found in \(plan.source.displayName)" }
+        var parts = [row.added.formatted()]
+        if row.existing > 0 { parts.append("\(row.existing.formatted()) already in Open") }
+        if row.skipped > 0 { parts.append("\(row.skipped.formatted()) skipped") }
+        return parts.joined(separator: " · ")
+    }
     public var unfinishedSecretsImportMessage: String? {
         unfinishedSecretsImport && !secretsReportLines.contains(ArcSecretsImportReport.unfinishedMessage) ? ArcSecretsImportReport.unfinishedMessage : nil
     }
@@ -513,7 +527,8 @@ public struct ImportWizard: View {
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
                         ForEach(model.displayedReportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
-                        ForEach(model.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
+                        ForEach(model.secretsReportRows, id: \.self) {row in HStack {Text(row.title);Spacer();Text(model.secretsReportValue(row)).monospacedDigit().foregroundStyle(row.noneFound ? Color.secondary : Color.primary)}}
+                        ForEach(model.secretsReportNotes, id: \.self) { Text($0).foregroundStyle(.secondary) }
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if (model.plan.isArc || model.plan.secretsRequested) && model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}

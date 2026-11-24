@@ -22,7 +22,7 @@ public struct SearchEnginesSheet:View {
     private var valid:Bool {model.engineIssue(name:name,keyword:keyword,template:template) == nil}
     private var selectedCustom:SearchEngine? {model.profile?.settings.customSearchEngines.first{$0.id == selectedID}}
     public var body:some View {VStack(alignment:.leading,spacing:12) {
-        Text("Search Engines").font(.title2)
+        SettingsSheetTitle("Search Engines")
         HStack {Text("Default engine");Spacer();SettingsPopUp("Default engine",selection:$model.searchEngineID,width:185,entries:model.engines.map{.option($0.name,$0.id)})}
         List(selection:$selectedID) {ForEach(model.engines){engine in HStack {
             VStack(alignment:.leading,spacing:3) {Text(engine.name);Text(engine.searchURLTemplate).font(.system(size:11)).foregroundStyle(.secondary).lineLimit(1)}

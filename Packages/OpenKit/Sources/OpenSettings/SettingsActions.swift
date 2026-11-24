@@ -51,12 +51,15 @@ public struct ImportOutcome: Sendable {
     public var errorText: String?
     public var failures: [String: String]
     public var secretsReportLines: [String]
+    /// Structured form of the first four `secretsReportLines` (the report draws these as table rows).
+    public var secretsReportRows: [SecretsReportRow]
     public var extensions: [ImportExtensionCandidate]
     public var extensionProfileCount: Int
-    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], extensions: [ImportExtensionCandidate] = [], extensionProfileCount: Int = 0, secretsReportLines: [String] = []) {
+    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], extensions: [ImportExtensionCandidate] = [], extensionProfileCount: Int = 0, secretsReportLines: [String] = [], secretsReportRows: [SecretsReportRow] = []) {
         self.counts = counts; self.errorText = errorText; self.failures = failures
         self.extensions = extensions; self.extensionProfileCount = extensionProfileCount
         self.secretsReportLines = secretsReportLines
+        self.secretsReportRows = secretsReportRows
     }
 }
 

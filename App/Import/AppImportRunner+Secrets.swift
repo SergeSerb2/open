@@ -32,8 +32,40 @@ extension AppImportRunner {
   }
 
   var canImportPasswordsAndCookies: Bool {
-    OEEngine.shared.supportsSecretsImport && !OEEngine.shared.usesMockKeychain
+    #if OPEN_AUTOMATION
+    if Self.syntheticSecretsScenario != nil && OEEngine.shared.usesMockKeychain { return OEEngine.shared.supportsSecretsImport }
+    #endif
+    return OEEngine.shared.supportsSecretsImport && !OEEngine.shared.usesMockKeychain
   }
+
+  #if OPEN_AUTOMATION
+  /// e2e only (`OPEN_AUTOMATION_SYNTHETIC_SECRETS=<scenario>` with the mock key): the consented import reads the
+  /// generated fixture instead of the Keychain, so the real runner, report and views run with no system prompt.
+  /// Needs the engine's own mock-key write switch too, so the UI never offers an import the engine refuses.
+  static var syntheticSecretsScenario: SyntheticSecretsScenario? {
+    guard ProcessInfo.processInfo.arguments.contains("--open-allow-mock-keychain-secrets") else { return nil }
+    return ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SYNTHETIC_SECRETS"].flatMap(SyntheticSecretsScenario.init(rawValue:))
+  }
+
+  /// Arc and Chromium-browser imports both stop here before any Keychain call while the seam is on.
+  func syntheticSecretsOutcome(sinks: [String: any OpenImport.SecretsImportSink], onlyProfiles: Set<String>? = nil) async throws -> ImportOutcome? {
+    guard let scenario = Self.syntheticSecretsScenario, OEEngine.shared.usesMockKeychain else { return nil }
+    let ledger = SecretsImportLedger(dataRoot: app.directories.root)
+    let report: ArcSecretsImportReport
+    do {
+      report = try await runSecretsBatch(sinks: sinks) {
+        try await ArcSecretsImporter.runSyntheticFixture(sinks: sinks, ledger: ledger, stopAfter: nil, scenario: scenario, onlyProfiles: onlyProfiles)
+      }
+    } catch {
+      // Fixture data only: the generated records hold no user data.
+      FileHandle.standardError.write(Data("Open: synthetic secrets import failed: \(String(reflecting: error)) sinks=\(sinks.keys.sorted())\n".utf8))
+      throw error
+    }
+    let total = report.total
+    return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
+      "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines, secretsReportRows: report.rows)
+  }
+  #endif
 
   var hasUnfinishedSecretsImport: Bool {
     (try? SecretsImportLedger(dataRoot: app.directories.root).unfinished) != nil
@@ -88,6 +120,9 @@ extension AppImportRunner {
       // A missing destination must never cause a Keychain prompt.
       guard !sinks.isEmpty else { throw ArcSecretsImportError.invalidSinkResult }
       try Task.checkCancellation()
+      #if OPEN_AUTOMATION
+      if let synthetic = try await syntheticSecretsOutcome(sinks: sinks) { return synthetic }
+      #endif
       secretsConsentAdapterCalls += 1
       let consent = SecretsImportConsent.grantedByUser(reason: "import-wizard")
       secretsKeychainProbeCalls += 1
@@ -105,7 +140,7 @@ extension AppImportRunner {
       }
       let total = report.total
       return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
-        "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines)
+        "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines, secretsReportRows: report.rows)
     } catch is ChromiumCryptoError {
       // E-3: the non-secret import remains successful; no retry in this run.
       return ImportOutcome(failures: ["Passwords and cookies": "Keychain access was not granted. Passwords and cookies were not imported."])

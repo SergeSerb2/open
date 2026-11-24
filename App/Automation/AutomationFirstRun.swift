@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
 import AppKit
+import OpenImport
 import OpenSettings
 import Vision
 
@@ -185,6 +186,9 @@ extension AutomationController {
       state["outcome"] = current.outcome?.counts ?? [:]
       state["failures"] = current.outcome?.failures ?? [:]
       state["reportValues"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.reportCategories.map { ($0, current.reportValue($0)) })
+      // The same strings the report table draws for Passwords, Cookies, Addresses and Cards.
+      state["secretsReportRows"] = current.wizard.secretsReportRows.map { [$0.title, current.wizard.secretsReportValue($0)] }
+      state["secretsReportNotes"] = current.wizard.secretsReportNotes
       state["phase"] = current.phaseText
       state["progress"] = current.progress ?? NSNull()
       state["browserHasLanded"] = current.browserHasLanded

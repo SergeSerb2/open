@@ -161,7 +161,9 @@ class FindBarView: NSView, NSTextFieldDelegate {
     return ["close": frame(close), "query": frame(field), "editor": frame(field.currentEditor()),
       "cellClass": field.cell.map { String(describing: type(of: $0)) } ?? "none",
       "editorClass": field.currentEditor().map { String(describing: type(of: $0)) } ?? "none",
-      "closeHit": hit.map { String(describing: type(of: $0)) } ?? "none", "closeHitMatches": hit === close]
+      "closeHit": hit.map { String(describing: type(of: $0)) } ?? "none", "closeHitMatches": hit === close,
+      "separator": separator.isHidden ? [] : { let r = convert(separator.frame, to: nil); return [r.minX, r.minY, r.width, r.height] }(),
+      "results": results.map { $0.isHidden ? [:] : $0.geometry } ?? [:]]
   }
   #endif
   func controlTextDidChange(_ obj: Notification) { onEdit?(field.stringValue) }
@@ -188,7 +190,11 @@ private final class FindResultsView: NSView {
   var onAction: ((Int) -> Void)?
   var text: String { count.stringValue }
   var navigationVisible: Bool { !next.isHidden }
-  var preferredWidth: CGFloat { min(100, ceil(count.intrinsicContentSize.width)) + (navigationVisible ? 52 : 0) }
+  /// The label cell draws its text 2 pt in from each side; `intrinsicContentSize` leaves that
+  /// out, which clipped "NOT FOUND" (UX1 D3). The chevrons keep a gap from the count (UX1 D4).
+  private var countWidth: CGFloat { min(100, ceil(count.cell?.cellSize.width ?? count.intrinsicContentSize.width)) }
+  private static let countToNavigation: CGFloat = 4
+  var preferredWidth: CGFloat { countWidth + (navigationVisible ? Self.countToNavigation + 52 : 0) }
   override var isFlipped: Bool { true }
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -207,12 +213,23 @@ private final class FindResultsView: NSView {
     previous.contentTintColor = tint; next.contentTintColor = tint
     count.textColor = notFound ? FindBarResources.error : tint
   }
+  #if OPEN_AUTOMATION
+  /// Window-base frames of the count and chevrons, plus the width the count's cell needs to draw unclipped.
+  var geometry: [String: Any] {
+    func frame(_ view: NSView) -> [CGFloat] {
+      guard view.window != nil, !view.isHidden else { return [] }
+      let rect = view.convert(view.bounds, to: nil)
+      return [rect.minX, rect.minY, rect.width, rect.height]
+    }
+    return ["count": frame(count), "countNeeds": ceil(count.cell?.cellSize.width ?? 0), "previous": frame(previous), "next": frame(next)]
+  }
+  #endif
   override func layout() {
     super.layout()
-    let width = min(100, ceil(count.intrinsicContentSize.width))
+    let width = countWidth, navigation = width + Self.countToNavigation
     count.frame = CGRect(x: 0, y: 5, width: width, height: 17)
-    previous.frame = CGRect(x: width, y: 0, width: 26, height: 26)
-    next.frame = CGRect(x: width + 26, y: 0, width: 26, height: 26)
+    previous.frame = CGRect(x: navigation, y: 0, width: 26, height: 26)
+    next.frame = CGRect(x: navigation + 26, y: 0, width: 26, height: 26)
   }
 }
 
