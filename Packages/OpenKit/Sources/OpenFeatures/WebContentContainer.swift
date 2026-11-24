@@ -442,15 +442,16 @@ public final class WebContentContainer: NSView {
         if let motion = spaceMotionStorage, motion.plate.phase != .idle { return true }
         return cache.values.contains { $0.framePresentation != nil }
     }
-    /// True while a Space selection is applied behind the cover, after its input turn.
-    private var applyingDeferredSelection = false
+    /// Whether a Space selection applied later (behind the Space cover, after its input turn) may
+    /// move the keyboard to the page. The window sets it: key, and no form, overlay or panel open.
+    public var canFocusDeferredSelection: (@MainActor () -> Bool)?
+    /// `deferred`: applied after the input turn, once the Space cover is in place.
     func applySpaceSelection(_ selection: SpaceContentSelection, animateSlots: Bool, notify: Bool = true, deferred: Bool = false) {
-        applyingDeferredSelection = deferred; defer { applyingDeferredSelection = false }
         if let focused = selection.focused {
             isHidden = false
             showNative(tabIDs: selection.tabs, focusedTabID: focused, orientation: selection.orientation,
                 fractions: selection.fractions, spaceID: selection.space, profileID: selection.profile,
-                animateSlots: animateSlots)
+                animateSlots: animateSlots, deferred: deferred)
         } else {
             clearNativeSelection(); currentSpace = selection.space; currentProfile = selection.profile
             isHidden = spaceMotionStorage?.plate.phase == .idle
@@ -458,7 +459,7 @@ public final class WebContentContainer: NSView {
         if notify { onSpaceSelectionApplied?() }
     }
     func finishEmptySpaceSelection() { isHidden = true; onSpaceSelectionApplied?() }
-    private func showNative(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID, animateSlots: Bool) {
+    private func showNative(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID, animateSlots: Bool, deferred: Bool = false) {
         // Selection may come from keyboard cycling, automation, or model observers.
         // Return the preview before changing slots or refreshing any selected host.
         if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
@@ -514,11 +515,12 @@ public final class WebContentContainer: NSView {
         if let responder = window?.firstResponder as? NSView, retiringSlots.contains(where: { responder.isDescendant(of: $0) }) {
             window?.makeFirstResponder(nil)
         }
-        // A selection applied later (behind the Space cover) must not take the keyboard from a text
-        // field outside the pages that the user started typing in meanwhile, such as the New Space name.
-        let typingElsewhere = applyingDeferredSelection
-            && ((window?.firstResponder as? NSTextView).map { $0.isFieldEditor && !$0.isDescendant(of: self) } ?? false)
-        if previousFocus != focusedTabID, !typingElsewhere { focusContent(focusedTabID) }
+        // A selection applied later (behind the Space cover) must not take the keyboard from what the
+        // user opened or started typing in meanwhile: the New Space form, Library, Peek, the command
+        // bar, a capture, an editor panel, or any text field outside the pages.
+        let keepsFocus = deferred && (canFocusDeferredSelection?() == false
+            || ((window?.firstResponder as? NSTextView).map { $0.isFieldEditor && !$0.isDescendant(of: self) } ?? false))
+        if previousFocus != focusedTabID, !keepsFocus { focusContent(focusedTabID) }
         let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
         if !pending.isEmpty {
             DispatchQueue.main.async { [weak self] in

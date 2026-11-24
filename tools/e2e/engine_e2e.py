@@ -15478,6 +15478,7 @@ def main():
             import space_editor
             # First, and focus-free: the New Space form is on screen (UX round 1 C1).
             space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
+            space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
             if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
                 space_editor_creation_checks(factory, results[opts.only], tmp)
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](

@@ -41,7 +41,9 @@ extension AutomationController {
         "themeOpen": creation.themeEditor != nil,
         "themeKey": creation.themeEditor?.panel.isKeyWindow ?? false,
         "windowActive": browser.context.isWindowActive, "backgroundActive": browser.background.isWindowActive,
+        // Composited placement, not native frames: pages move by layer translation (UX round 1 C1).
         "visible": browser.window?.isVisible == true && !form.isHiddenOrHasHiddenAncestor
+          && (creationLayerRects(form, in: browser.contentView).presentation.map { $0.intersection(browser.contentView.bounds).width > 0 } ?? false)
           && form.convert(form.bounds, to: browser.contentView).intersection(browser.contentView.bounds).width > 0,
         "previewMatches": browser.background.targetStyle == form.style,
         "otherWindowsMatchModel": app.windowControllers.filter { $0 !== browser }.allSatisfy { controller in
@@ -103,14 +105,22 @@ extension AutomationController {
         "frame": [current.frame.minX, current.frame.minY, current.frame.width, current.frame.height]])
       view = current.superview
     }
-    var visible: [Double] = [], model: [Double] = []
-    if let formLayer = form.layer, let rootLayer = root.layer {
-      let m = rootLayer.convert(formLayer.bounds, from: formLayer)
-      model = [m.minX, m.minY, m.width, m.height].allSatisfy(\.isFinite) ? [m.minX, m.minY, m.width, m.height] : []
-      let rect = (rootLayer.presentation() ?? rootLayer).convert((formLayer.presentation() ?? formLayer).bounds, from: formLayer.presentation() ?? formLayer)
-      visible = [rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite) ? [rect.minX, rect.minY, rect.width, rect.height] : []
+    func list(_ r: CGRect?) -> [Double] {
+      guard let r, [r.minX, r.minY, r.width, r.height].allSatisfy(\.isFinite) else { return [] }
+      return [r.minX, r.minY, r.width, r.height]
     }
-    return ["chain": chain, "presentationRectInRoot": visible, "modelRectInRoot": model, "rootBounds": [root.bounds.width, root.bounds.height]]
+    let rects = creationLayerRects(form, in: root)
+    return ["chain": chain, "presentationRectInRoot": list(rects.presentation), "modelRectInRoot": list(rects.model),
+            "rootBounds": [root.bounds.width, root.bounds.height]]
+  }
+
+  /// The form's rect in the root view through the layer trees. The presentation rect is converted
+  /// only inside the presentation tree (both layers must have one); otherwise it is the model rect.
+  private func creationLayerRects(_ form: NSView, in root: NSView) -> (model: CGRect?, presentation: CGRect?) {
+    guard let formLayer = form.layer, let rootLayer = root.layer else { return (nil, nil) }
+    let model = rootLayer.convert(formLayer.bounds, from: formLayer)
+    guard let shownForm = formLayer.presentation(), let shownRoot = rootLayer.presentation() else { return (model, model) }
+    return (model, shownRoot.convert(shownForm.bounds, from: shownForm))
   }
 }
 #endif
