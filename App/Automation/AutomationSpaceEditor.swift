@@ -104,6 +104,9 @@ extension AutomationController {
         "controls": editor.panel.editorView.controlFrames.mapValues { [$0.minX, $0.minY, $0.width, $0.height] },
         "style": try JSONSerialization.jsonObject(with: JSONEncoder().encode(editor.state.style), options: .fragmentsAllowed),
         "knob": editor.state.knob.map { [$0.x, $0.y] } ?? [],
+        "padFirstResponder": editor.panel.firstResponder === editor.panel.editorView.pad,
+        "padShowsFocusRing": editor.panel.firstResponder === editor.panel.editorView.pad
+          && (!editor.panel.editorView.pad.style.keyboardFocusOnly || editor.panel.editorView.pad.showsKeyboardFocus),
         "space": editor.session?.spaceID.description ?? ""] as [String: Any]
     case "editor-act":
       if factory.iconPicker != nil { return try await runIconEditorCommand(cmd, args) }

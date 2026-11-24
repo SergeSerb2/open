@@ -5138,7 +5138,7 @@ def page_commands_checks(factory, results, tmp):
 
 def sidebar_bars_checks(factory, results, tmp):
     """Bottom bar and Space header geometry after resize drags (tools/e2e/sidebar_bars.py, UXB-1..3)."""
-    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_bars.py"))["run"](factory, results, wait_until, tmp, ROOT)
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_bars.py"))["run"](factory, results, wait_until, tmp, ROOT, read_image)
 
 
 def sidebar_checks(factory, results, tmp):
@@ -13555,9 +13555,15 @@ def space_editor_creation_checks(factory, results, tmp):
         key('escape')
         require('A5_cancel_changes_nothing', spaces() == before and not state()['open']
                 and state()['modelUndoGeneration'] == cancel_generation)
-        app.call('editor-open', kind='create'); app.call('type', text='   '); finish()
-        require('A5_blank_is_untitled_no_theme', focused()['title'] == '' and app.call('theme-get')['style'] is None)
-        undo(); require('A5_blank_one_undo', spaces() == before)
+        # A spaces-only name counts as empty (Arc §20.8 keeps Create disabled): Return creates nothing,
+        # leaves no model Undo step, and Escape closes the form.
+        blank_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create'); app.call('type', text='   '); key('return')
+        blank = state()
+        require('A5_blank_name_refused', blank['open'] and blank['name'] == '   ' and blank['createEnabled'] is False
+                and spaces() == before and blank['modelUndoGeneration'] == blank_generation, state=blank)
+        key('escape')
+        require('A5_blank_escape_closes', bool(wait_until(lambda: not state()['open'], timeout=5)) and spaces() == before)
         # Native field typing is session-local. Its Undo falls back to the
         # form's persistent draft stack after the typing steps are exhausted.
         app.call('editor-open', kind='create')
@@ -13619,8 +13625,10 @@ def space_editor_creation_checks(factory, results, tmp):
         require('rename_hidden_one_undo', spaces() == before
                 and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces())
         app.call('menu-perform', id='toggle-sidebar')
-        # Create an inline Profile in the same one-step transaction.
+        # Create an inline Profile in the same one-step transaction. Create Space is disabled while
+        # the Space name is empty (Arc §20.8), so name the Space first; an empty Profile name is refused.
         app.call('editor-open', kind='create')
+        app.call('type', text='Inline Space')
         app.call('editor-act', action='profile', name='New Profile…')
         key('return')
         require('A5_invalid_profile_keeps_form', state()['open'] and state()['creatingProfile'] and spaces() == before)
@@ -15504,6 +15512,7 @@ def main():
             # First, and focus-free: the New Space form is on screen (UX round 1 C1).
             space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
             space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
+            space_editor.spaces_polish_rows(factory, results[opts.only], tmp, sys.modules[__name__])
             if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
                 space_editor_creation_checks(factory, results[opts.only], tmp)
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](

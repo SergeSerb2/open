@@ -55,7 +55,10 @@ final class SpacePagerView: NSView {
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { loop?.cancel() }
+    isolated deinit {
+        loop?.cancel()
+        for placement in placements.values { placement.watch.invalidate() }
+    }
     override var isFlipped: Bool { true }
 
     private var spaces: [Space] { context.model.spaces }
@@ -86,6 +89,71 @@ final class SpacePagerView: NSView {
         placeStrip()
     }
 
+    /// Each page's strip position, and the strip's offset, live in view layers' x translations. When
+    /// AppKit rebuilds the layer tree (`-[NSView _updateLayerGeometryFromView]` inside
+    /// `-[NSWindow displayIfNeeded]`), it sets a view layer's transform from the view's own geometry,
+    /// which is identity. A page built for a Space switch then sat at x 0, off screen, and the new
+    /// Space showed a blank list (UX round 1, B7); an offscreen render resets the strip as well. The
+    /// pager keeps the translation it wants per layer (pages and strip) and puts it back in the same
+    /// pass, before the frame renders.
+    private struct Placement {
+        var wanted: CGFloat
+        let layer: ObjectIdentifier
+        let watch: NSKeyValueObservation
+    }
+    /// Keyed by the view, so a replaced backing layer is noticed and observed afresh.
+    private var placements: [ObjectIdentifier: Placement] = [:]
+    /// True while the pager writes a transform itself: its own KVO echo is ignored.
+    private var placingTransform = false
+    #if DEBUG || OPEN_AUTOMATION
+    private(set) var translationRestores = 0
+    #endif
+
+    private func setTranslation(_ x: CGFloat, of view: NSView) {
+        guard x.isFinite, let layer = view.layer else { return }
+        let viewKey = ObjectIdentifier(view), layerKey = ObjectIdentifier(layer)
+        if placements[viewKey]?.layer == layerKey {
+            placements[viewKey]?.wanted = x
+        } else {
+            placements.removeValue(forKey: viewKey)?.watch.invalidate()
+            let watch = layer.observe(\.transform, options: [.new]) { [weak self] layer, change in
+                // AppKit sets view layer transforms on the main thread (the display pass).
+                guard Thread.isMainThread, let now = change.newValue?.m41 else { return }
+                nonisolated(unsafe) let layer = layer
+                MainActor.assumeIsolated {
+                    guard let self, !self.placingTransform, let placement = self.placements[viewKey],
+                          placement.layer == ObjectIdentifier(layer), now != placement.wanted else { return }
+                    #if DEBUG || OPEN_AUTOMATION
+                    self.translationRestores += 1
+                    #endif
+                    self.apply(placement.wanted, to: layer)
+                }
+            }
+            placements[viewKey] = Placement(wanted: x, layer: layerKey, watch: watch)
+        }
+        if !CATransform3DEqualToTransform(layer.transform, CATransform3DMakeTranslation(x, 0, 0)) { apply(x, to: layer) }
+    }
+
+    private func apply(_ x: CGFloat, to layer: CALayer) {
+        placingTransform = true
+        defer { placingTransform = false }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.transform = CATransform3DMakeTranslation(x, 0, 0)
+        CATransaction.commit()
+    }
+
+    private func forgetTranslation(of view: NSView) {
+        placements.removeValue(forKey: ObjectIdentifier(view))?.watch.invalidate()
+    }
+
+    /// A page's viewport frame and strip position. Hidden pages are not moved on every layout (a
+    /// live resize would touch every built page each frame); a page is placed when it is shown.
+    private func place(_ page: NSView, at index: Int) {
+        let frame = CGRect(origin: .zero, size: bounds.size)
+        if page.frame != frame { page.frame = frame }
+        setTranslation(CGFloat(index) * bounds.width, of: page)
+    }
+
     private func layoutPages() {
         let frame = CGRect(origin: .zero, size: bounds.size)
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -95,14 +163,14 @@ final class SpacePagerView: NSView {
         if let creationPage {
             if creationHost.frame != frame { creationHost.frame = frame }
             if creationPage.frame != creationHost.bounds { creationPage.frame = creationHost.bounds }
-            creationHost.layer?.setValue(CGFloat(spaces.count) * bounds.width, forKeyPath: "transform.translation.x")
+            // The host is placed like a page: its translation survives AppKit's layer resets (B7).
+            setTranslation(CGFloat(spaces.count) * bounds.width, of: creationHost)
         }
         let live = Set(spaces.map(\.id))
-        for (id, page) in pages where !live.contains(id) { page.removeFromSuperview(); pages[id] = nil }
+        for (id, page) in pages where !live.contains(id) { forgetTranslation(of: page); page.removeFromSuperview(); pages[id] = nil }
         for (index, space) in spaces.enumerated() {
-            guard let page = pages[space.id] else { continue }
-            if page.frame != frame { page.frame = frame }
-            page.layer?.setValue(CGFloat(index) * bounds.width, forKeyPath: "transform.translation.x")
+            guard let page = pages[space.id], page.layer?.isHidden != true else { continue }
+            place(page, at: index)
         }
         strip.inputPage = creationPage == nil ? context.focusedSpace.flatMap { pages[$0.id] } : creationHost
         CATransaction.commit()
@@ -111,7 +179,7 @@ final class SpacePagerView: NSView {
     private func placeStrip() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if strip.frame != bounds { strip.frame = bounds }
-        strip.layer?.setValue(-offset, forKeyPath: "transform.translation.x")
+        setTranslation(-offset, of: strip)
         CATransaction.commit()
     }
 
@@ -169,6 +237,30 @@ final class SpacePagerView: NSView {
         themeBackground?.crossfade(to: style, animated: true)
     }
 
+    #if DEBUG || OPEN_AUTOMATION
+    /// Pager internals for layout checks: each built page's layer state and the strip offsets.
+    var diagnostics: [String: Any] {
+        // JSON has no NaN: a missing layer or presentation reads as null.
+        func tx(_ l: CALayer?) -> Any { (l?.value(forKeyPath: "transform.translation.x") as? CGFloat).map { Double($0) } ?? NSNull() }
+        func ptx(_ l: CALayer?) -> Any { (l?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat).map { Double($0) } ?? NSNull() }
+        let order = spaces.map(\.id)
+        let built: [[String: Any]] = pages.map { id, p in
+            ["space": id.description, "index": order.firstIndex(of: id) ?? -1, "layerHidden": p.layer?.isHidden ?? true,
+             "viewHidden": p.isHidden, "inStrip": p.superview === strip, "translation": tx(p.layer),
+             "presentationTranslation": ptx(p.layer), "frame": [p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map(Double.init),
+             "alpha": Double(p.alphaValue), "layerOpacity": Double(p.layer?.opacity ?? 0), "hasLayer": p.layer != nil,
+             "sublayers": p.layer?.sublayers?.count ?? 0, "subviews": p.subviews.count,
+             "layerID": p.layer.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? ""]
+        }
+        return ["offset": Double(offset), "stripTranslation": tx(strip.layer), "stripPresentation": ptx(strip.layer),
+                "shownSpace": shownSpaceID?.description ?? "", "focusedIndex": focusedIndex, "animating": animating,
+                "creation": creationPage != nil, "creationHostTranslation": tx(creationHost.layer),
+                "creationHostHidden": creationHost.isHidden, "width": Double(bounds.width), "pages": built,
+                "stripHidden": strip.layer?.isHidden ?? true, "stripAnimations": strip.layer?.animationKeys() ?? [],
+                "translationRestores": translationRestores]
+    }
+    #endif
+
     private var presentationOffset: CGFloat {
         strip.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
             ?? strip.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? -offset
@@ -214,6 +306,9 @@ final class SpacePagerView: NSView {
         // visibility in the layer tree so the resting page needs no repaint.
         // Accessibility follows the same visibility, and PagerStrip owns input.
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        if visible, page.layer?.isHidden == true, let index = spaces.firstIndex(where: { $0.id == page.space.id }) {
+            place(page, at: index)  // hidden pages skip layout; place it before it shows
+        }
         page.layer?.isHidden = !visible
         page.setAccessibilityHidden(!visible)
         CATransaction.commit()
