@@ -13,6 +13,7 @@ Rows (each fails on the parent code and passes with the fix):
 
 Loopback only: one HTTP server on 127.0.0.1; every other host fails to resolve.
 """
+import os
 import runpy
 import threading
 import time
@@ -33,6 +34,23 @@ class _Handler(BaseHTTPRequestHandler):
         body = b'<!doctype html><title>Fixture page</title><h1>Fixture page</h1>'
         self.send_response(200); self.send_header('Content-Type', 'text/html'); self.send_header('Content-Length', str(len(body)))
         self.end_headers(); self.wfile.write(body)
+
+
+def body_ink(app, prompt, body, tmp, h):
+    """Text contrast (max − min luma) in the top and bottom 12 pt bands of the prompt's visible body."""
+    frame, sheet = body.get('frameInWindow'), prompt.get('sheet')
+    if not frame or not sheet: return {}
+    path = str(Path(tmp, 'ux1-prompt-%d.png' % int(time.time() * 1000)))
+    if os.environ.get('OPEN_EXTENSIONS_UX1_KEEP'): path = os.path.join(os.environ['OPEN_EXTENSIONS_UX1_KEEP'], os.path.basename(path))
+    app.call('snapshot', path=path, window=sheet)
+    width, height, pixel = h.read_image(path)
+    scale = width / body['sheetWidth']
+    x, y, w, hh = frame
+    def contrast(y0, y1):
+        values = [h.luma(pixel(px, py)) for px in range(int((x + 16) * scale), int((x + w - 24) * scale))
+                  for py in range(int(y0 * scale), int(y1 * scale))]
+        return max(values) - min(values)
+    return {'top': round(contrast(y + 2, y + 14), 1), 'bottom': round(contrast(y + hh - 12, y + hh - 1), 1), 'snapshot': path}
 
 
 def run(factory, results, tmp, root, wait_until, h):
@@ -66,10 +84,16 @@ def run(factory, results, tmp, root, wait_until, h):
         prompt = pending() or {}
         time.sleep(.3)
         body = (app.call('ext-prompt') or {}).get('body') or {}
+        ink = body_ink(app, prompt, body, tmp, h)
         end = app.call('ext-prompt', scrollBody='end') if prompt else {}
+        time.sleep(.3)
+        end_ink = body_ink(app, prompt, end, tmp, h)
+        # Text near the bottom edge is faded at rest (more follows) and as strong as the top line once the
+        # list is scrolled to its end. Contrast works in light and dark.
         row('ext_ux1_prompt_body_ends_on_whole_line', body.get('overflows') is True and body.get('lineCutAtBottom') is False
-            and body.get('fadeMask') is True and end.get('lineCutAtBottom') is False and end.get('fadeMask') is False,
-            atRest=body, atEnd=end)
+            and body.get('fadeMask') is True and end.get('lineCutAtBottom') is False and end.get('fadeMask') is False
+            and ink.get('bottom', 255) <= 0.75 * ink.get('top', 0) and end_ink.get('bottom', 0) >= 0.8 * end_ink.get('top', 255),
+            atRest=body, atEnd=end, ink=ink, endInk=end_ink)
         shown = prompt.get('shownPermissionLines') or []
         engine = prompt.get('permissionLines') or []
         row('ext_ux1_prompt_no_signed_in_devices', any('signed-in devices' in line for line in engine)

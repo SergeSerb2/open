@@ -162,9 +162,11 @@ public struct ExtensionPromptText: Equatable, Sendable {
         guard more, let layer = bodyScroll.layer else { bodyScroll.layer?.mask = nil; return }
         let fade = CAGradientLayer()
         fade.frame = layer.bounds
-        // The scroll view is not flipped in layer space: location 0 is the bottom edge.
-        fade.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.black.cgColor]
-        fade.locations = [0, NSNumber(value: Double(Self.bodyFadeHeight / max(1, layer.bounds.height))), 1]
+        // Inside the flipped prompt view this layer's unit y 0 is the top edge (measured: the row
+        // ext_ux1_prompt_body_ends_on_whole_line reads the pixels), so the transparent end is at y 1.
+        let share = Double(Self.bodyFadeHeight / max(1, layer.bounds.height))
+        fade.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+        fade.locations = [0, NSNumber(value: 1 - share), 1]
         fade.startPoint = CGPoint(x: 0.5, y: 0); fade.endPoint = CGPoint(x: 0.5, y: 1)
         CATransaction.begin(); CATransaction.setDisableActions(true); layer.mask = fade; CATransaction.commit()
     }

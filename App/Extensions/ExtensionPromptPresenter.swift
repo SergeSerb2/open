@@ -207,7 +207,12 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
         if bottom <= visible.maxY + 0.5 { lastWholeLine = label.stringValue }
       }
     }
+    let inWindow = scroll.convert(scroll.bounds, to: nil)
+    let windowHeight = scroll.window?.frame.height ?? 0
     return ["present": true, "documentHeight": document.frame.height, "visibleHeight": visible.height,
+      // The body's frame in its sheet window, top-left origin (points), for pixel checks of the fade.
+      "frameInWindow": [inWindow.minX, windowHeight - inWindow.maxY, inWindow.width, inWindow.height],
+      "sheetWidth": scroll.window?.frame.width ?? 0,
       "visibleMaxY": visible.maxY, "overflows": document.frame.height > visible.height + 0.5,
       "lineCutAtBottom": !cut.isEmpty, "cutLines": cut, "lastVisibleLabel": lastWholeLine,
       "fadeMask": scroll.layer?.mask != nil, "hasScroller": scroll.hasVerticalScroller]
