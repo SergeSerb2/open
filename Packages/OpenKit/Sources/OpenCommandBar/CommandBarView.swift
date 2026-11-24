@@ -21,6 +21,10 @@ public final class CommandBarView: NSView {
         didSet {
             container.drawsShadow = !presentation.isEmbedded
             panel.input.embedded = presentation.isEmbedded
+            // Embedded Little Open paints one solid dark fill in every appearance, so its text,
+            // placeholder and rows take the Dark palette too (UX1 D1: Light drew dark text on it).
+            let forced: NSAppearance? = presentation.isEmbedded ? NSAppearance(named: .darkAqua) : nil
+            if appearance?.name != forced?.name { appearance = forced }
             panel.layoutSpec = presentation.layout
             updateScrim()
             needsLayout = true

@@ -28,6 +28,12 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
   var onSubmissionForAutomation: (() -> Void)?
   private(set) var submittedBeforeBrowser = false
   #endif
+  #if OPEN_AUTOMATION
+  /// This window's find bar state (UX1 D7): the page's own factory owns it.
+  var findStateForAutomation: [String: Any] {
+    factory.findController?.automationState() ?? ["panes": [], "created": false]
+  }
+  #endif
   private(set) var firstFrameRead: [String: Any]?
   private(set) var browserCreationStartedAt: TimeInterval?
   var registeredSurface: (any StandalonePageSurface)? { factory.standaloneSurface }
