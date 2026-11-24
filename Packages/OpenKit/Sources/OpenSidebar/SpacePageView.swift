@@ -1422,11 +1422,7 @@ final class SpaceHeaderView: NSView {
             profileIndicator.frame = CGRect(x:right-size,y:(m.headerHeight-size)/2,width:size,height:size)
             right -= size + ProfileIndicatorMetrics.gap
         }
-        let titleFrame = CGRect(x: m.headerTitleX, y: m.headerTitleY, width: max(0, right - m.headerTitleX), height: 18)
-        // The label truncates when it draws: a new width (hover, sidebar resize) must redraw it, or the
-        // old "…" stays and runs under the options button (UX round 1 C2/C3).
-        if title.frame.width != titleFrame.width { title.needsDisplay = true }
-        title.frame = titleFrame
+        title.frame = CGRect(x: m.headerTitleX, y: m.headerTitleY, width: max(0, right - m.headerTitleX), height: 18)
     }
 
     override func menu(for event: NSEvent) -> NSMenu? { context.hidesSpaceChrome ? nil : page.map { $0.menus.space($0.space) } }
