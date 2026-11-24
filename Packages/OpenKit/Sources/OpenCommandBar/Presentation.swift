@@ -36,6 +36,8 @@ public struct CommandBarRow: Sendable, Hashable, Identifiable {
     /// A Split View row's pane titles, drawn with a thin rule between them (CC-14). Empty for other rows.
     public var boldRanges: [Range<Int>]
     public var titleParts: [String]
+    /// The subtitle tells this row apart from another row with the same title; the title gives it room.
+    public var subtitleDisambiguates = false
 
     public init(id: String, kind: SuggestionKind, title: String, subtitle: String = "", icon: CommandBarIcon,
                 accessory: CommandBarAccessory = .none, titleParts: [String] = [], boldRanges: [Range<Int>] = []) {
@@ -100,6 +102,33 @@ public enum CommandBarText {
 
 /// Maps `OpenSuggest` rows to drawn rows. Each rule names its evidence.
 enum RowPresentation {
+    /// Tabs whose title another drawn tab row also has (the same page open in several Spaces) are
+    /// indistinguishable title-only rows. Each one gets "<Space> · <host>" (Space name first, then the
+    /// host; either part may be absent). Rows that still match (same Space and host) show the short URL
+    /// in place of the host. Interim until Arc's own labels are captured (UXA w2 W2).
+    static func disambiguate(_ rows: [CommandBarRow], suggestions: [Suggestion]) -> [CommandBarRow] {
+        var count: [String: Int] = [:]
+        // Only tab rows count: a search, action or history row with the same title is not another tab.
+        for row in rows where row.kind == .switchToTab && row.titleParts.isEmpty { count[row.title, default: 0] += 1 }
+        func label(_ s: Suggestion, path: Bool) -> String {
+            let place = path ? s.url.map(URLDisplay.short) : s.url?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 }
+            return [s.spaceTitle ?? "", place ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+        }
+        let pairs = Array(zip(rows, suggestions))
+        let candidates = pairs.map { row, _ in row.kind == .switchToTab && row.titleParts.isEmpty && count[row.title, default: 0] > 1 }
+        var labels: [String: Int] = [:]
+        for (i, (row, s)) in pairs.enumerated() where candidates[i] { labels[row.title + "\u{1}" + label(s, path: false), default: 0] += 1 }
+        return pairs.enumerated().map { i, pair in
+            let (row, s) = pair
+            guard candidates[i] else { return row }
+            let short = label(s, path: false)
+            let text = labels[row.title + "\u{1}" + short, default: 0] > 1 ? label(s, path: true) : short
+            guard !text.isEmpty else { return row }
+            var labelled = row; labelled.subtitle = text; labelled.subtitleDisambiguates = true
+            return labelled
+        }
+    }
+
     /// - navigate: "<url> — <url>", or "<page title> — <url>" after a history merge (F0040 "google.com — google.com").
     ///   Top Domains: "<name> — <domain>" (PB1-i "Netflix — netflix.com"); Easel and remote rows keep their own title (guess).
     /// - history: "<title> — <url>" (F0048 "The Browser Company — youtube.com/c/…").

@@ -15567,6 +15567,12 @@ def main():
             # OPEN_COMMANDBAR_R6_KEYS_ONLY=1 only bug sweep r6 seed 7 (tools/e2e/keybindings_r6.py).
             setcmd6_only = os.environ.get("OPEN_COMMANDBAR_SETCMD6_ONLY") == "1"
             keys6_only = os.environ.get("OPEN_COMMANDBAR_R6_KEYS_ONLY") == "1"
+            if opts.only == "commandbar" and os.environ.get("OPEN_COMMANDBAR_DUPLICATES_ONLY") == "1":
+                # UX round 1 wave 2 (W2) alone: duplicate tab titles across Spaces.
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
+                setcmd6_only = keys6_only = True
+            elif opts.only == "commandbar" and not setcmd6_only and not keys6_only and os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
             if opts.only == "commandbar" and not setcmd6_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/keybindings_r6.py"))["run"](factory, results[opts.only])
             if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1" and not setcmd6_only and not keys6_only:
@@ -15605,11 +15611,16 @@ def main():
             if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/themes_ux1.py'))['run'](
                     factory, results[opts.only], tmp, sys.modules[__name__])
+        elif opts.only == "sidebar-completion" and os.environ.get('OPEN_LIBRARY_SPACES_SCROLL_ONLY') == '1':
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
                 sys.modules[__name__], factory, results[opts.only], tmp)
             if os.environ.get('OPEN_MIXED_DELETE_ONLY') != '1':
+                # UX round 1 wave 2 (W3): Library > Spaces with six Spaces, real swipe and wheel.
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/archive_split_sweep.py'))['checks'](
                     sys.modules[__name__], factory, results[opts.only], tmp)
                 space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
