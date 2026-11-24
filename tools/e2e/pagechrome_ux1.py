@@ -217,6 +217,26 @@ def zap_rows(factory, results, tmp, h):
             popup_ok, popup = placed('.popup', 'popup')
             return ok and popup_ok, dict(evidence, popupCheck=popup)
         _row(results, 'uxg_zap_done_and_popup_clear_of_editor_760x520', short_window)
+
+        def moved_window():
+            # The editor follows window moves but not resizes: widen the window after opening it,
+            # and the editor sits over the middle of the page. That cover does not reach the page's
+            # right edge: no inset, plain clamping, and the popup keeps its full width in the page.
+            editor_on((900, 700))
+            app.call('window-frame', frame=[80, 80, 1280, 800], unconstrained=True); time.sleep(1.0)
+            page, editor, to_screen = geometry()
+            click_right_block()
+            box = picker.box('.popup')
+            r = to_screen(box)
+            inside = r[0] >= page[0] - .5 and r[0] + r[2] <= page[0] + page[2] + .5
+            done = to_screen(picker.box('.done'))
+            scale = page[2] / app.eval(tab, 'innerWidth')
+            flush = abs((page[0] + page[2] - 10 * scale) - (done[0] + done[2])) <= 1
+            middle = editor[0] + editor[2] < page[0] + page[2] - 1
+            return inside and box[2] >= 420 and flush and middle, {
+                'popup': [round(v, 1) for v in r], 'page': page, 'editor': editor, 'editorInMiddle': middle,
+                'popupWidth': box[2], 'doneFlushRight': flush}
+        _row(results, 'uxg_zap_editor_over_middle_falls_back', moved_window)
     finally:
         try:
             app.call('boost-editor', action='close')

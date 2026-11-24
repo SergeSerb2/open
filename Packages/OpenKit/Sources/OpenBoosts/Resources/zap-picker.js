@@ -315,15 +315,17 @@
     if (!frame) frame = requestAnimationFrame(drawHover);
   }
   function reposition() { if (!frame) frame = requestAnimationFrame(drawHover); }
-  /// CSS pixels covered at the viewport's right edge within the band top..bottom.
-  function occludedRight(top, bottom) {
+  /// CSS pixels covered at the viewport's right edge within the band top..bottom. A cover that
+  /// would leave less than `room` px is ignored: plain viewport clamping is better than a sliver.
+  function occludedRight(top, bottom, room) {
     const right = occlusion.right * window.innerWidth;
-    return right > 0 && top < occlusion.bottom * window.innerHeight && bottom > occlusion.top * window.innerHeight ? right : 0;
+    const hit = right > 0 && top < occlusion.bottom * window.innerHeight && bottom > occlusion.top * window.innerHeight;
+    return hit && window.innerWidth - right >= room ? right : 0;
   }
   /// Keep Done (and the reveal chips) out from under a native window that covers the bar.
   function placeBar() {
     if (!bar) return;
-    const covered = occludedRight(window.innerHeight - 56, window.innerHeight);
+    const covered = occludedRight(window.innerHeight - 56, window.innerHeight, 220); // Undo, instruction, Done
     bar.style.paddingRight = covered + "px";
     query(overlay, ".done").style.right = (10 + covered) + "px";
   }
@@ -332,7 +334,7 @@
   function placePopup() {
     if (!popup || popup.hidden || !popupAnchor) return;
     const top = Math.max(6, Math.min(popupAnchor.y + 12, window.innerHeight - 152));
-    const right = window.innerWidth - 6 - occludedRight(top, top + 90);
+    const right = window.innerWidth - 6 - occludedRight(top, top + 90, 12 + 340); // the three buttons' content width
     const width = Math.max(0, Math.min(428, right - 6));
     popup.style.width = width + "px";
     popup.style.left = Math.max(6, Math.min(popupAnchor.x, right - width)) + "px";

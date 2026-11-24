@@ -175,7 +175,9 @@ final class AppBoostPicker {
       view.bounds.width > 0, view.bounds.height > 0 {
       let page = window.convertToScreen(view.convert(view.bounds, to: nil))
       let cover = page.intersection(panel.frame)
-      if !cover.isNull, cover.width > 0, cover.height > 0 {
+      // Only a cover that reaches the page's right edge (the editor's own place) is reported; an
+      // editor left over the middle of a moved window falls back to plain viewport clamping.
+      if !cover.isNull, cover.width > 0, cover.height > 0, cover.maxX >= page.maxX - 1 {
         // Viewport fractions (zoom-independent): a strip at the right edge, top to bottom.
         value = [Double((page.maxX - cover.minX) / page.width), Double((page.maxY - cover.maxY) / page.height),
                  Double((page.maxY - cover.minY) / page.height)]

@@ -90,8 +90,10 @@ public final class PaneChromeView: NSView {
     /// Center, Split View Menu, Back); Close always stays. The rest keep their own slots, so their
     /// spacing and vertical centre do not change. guess: Arc's narrow pane bar is not captured.
     private static let squeezeOrder = [2, 1, 4, 5, 0]
-    /// Hidden by role, focus and page kind (`update()`); `layout()` adds the width rule on top.
+    /// Hidden by role, focus and page kind (`update()`, applied at once); `layout()` adds the width
+    /// rule on top and remembers it, so `update()` never shows a squeezed button between layouts.
     private var roleHidden = [Bool](repeating: false, count: 7)
+    private var squeezed = Set<Int>()
     public init() {
         super.init(frame: .zero); wantsLayer = true
         let specs = [("arrow.left", "Go back"), ("arrow.right", "Go forward"), ("arrow.clockwise", "Reload"),
@@ -139,6 +141,9 @@ public final class PaneChromeView: NSView {
         for i in buttons.indices {
             let hidden = (role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)) || (i == 3 && showsNote)
             if roleHidden[i] != hidden { roleHidden[i] = hidden; layoutChanged = true }
+            let shown = !(hidden || squeezed.contains(i))
+            // The copy button's room is decided by layout(); a Note hides it at once.
+            if i != 3 ? buttons[i].isHidden == shown : hidden && !buttons[i].isHidden { buttons[i].isHidden = !shown }
         }
         let back = host?.canGoBack ?? false, forward = host?.canGoForward ?? false
         if buttons[0].isEnabled != back { buttons[0].isEnabled = back }
@@ -180,6 +185,7 @@ public final class PaneChromeView: NSView {
         func leftEdge() -> CGFloat { [0, 1, 2].filter { !hidden[$0] }.map { buttons[$0].frame.maxX }.max() ?? 0 }
         func rightEdge() -> CGFloat { [4, 5, 6].filter { !hidden[$0] }.map { buttons[$0].frame.minX }.min() ?? w }
         for i in Self.squeezeOrder where leftEdge() + gap > rightEdge() { hidden[i] = true }
+        squeezed = Set(Self.squeezeOrder.filter { hidden[$0] && !roleHidden[$0] })
         for i in [0, 1, 2, 4, 5, 6] where buttons[i].isHidden != hidden[i] { buttons[i].isHidden = hidden[i] }
         // Centered group (F0081 AX): copy 24 · 3 · host · 3 · an empty 24 pt slot, so the
         // host sits on the bar's center line. Narrow panes truncate the host; with no room
