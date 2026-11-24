@@ -29,7 +29,7 @@ final class WelcomePageView: NSScrollView {
   private let backdrop = WelcomeBackdropView()
   /// The clip deliberately runs past the page's right edge. This static strip, a copy of the backdrop
   /// behind it, fades the clip into the page there. Rendered on layout only; no per-frame work.
-  private let edgeFade = WelcomeEdgeFadeView()
+  let edgeFade = WelcomeEdgeFadeView()
   private let mark = WelcomeMarkView()
   let heading = NSTextField(labelWithString: "You're all set.")
   let subheading = NSTextField(labelWithString: "Here are the basics.")
@@ -447,6 +447,7 @@ final class WelcomeEdgeFadeView: NSView {
   private let fade = CAGradientLayer()
   private var rendered: (CGRect, CGFloat)?
   private var image: CGImage?
+  var hasImage: Bool { image != nil }
   override init(frame: NSRect) {
     super.init(frame: frame); wantsLayer = true; setAccessibilityElement(false)
     fade.startPoint = CGPoint(x: 0, y: 0.5); fade.endPoint = CGPoint(x: 1, y: 0.5)
