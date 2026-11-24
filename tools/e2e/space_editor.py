@@ -542,8 +542,17 @@ def spaces_polish_rows(factory, results, tmp, harness):
         hovered = harness.wait_until(lambda: (lambda st: st if st['chrome']['headerHovered'] else None)(app.call('window-state')), timeout=3, step=.05) or app.call('window-state')
         title = hovered['chrome']['headerTitle']; sidebar_width = hovered['sidebarWidth']
         more_min_x = sidebar_width - 13 - 26  # SpaceListMetrics.headerMoreTrailing / headerMoreSize
-        row('space_header_hover_title_clears_options', hovered['chrome']['headerHovered'] and title[0] + title[2] <= more_min_x - 6 + .5,
-            titleMaxX=title[0] + title[2], optionsMinX=more_min_x, hovered=hovered['chrome']['headerHovered'])
+        # Pixels: the gap between the title frame and the options button holds only the hover fill.
+        # A label that kept its wider rest-state truncation draws text into this gap.
+        shot = str(out / 'header-hover.png'); app.call('snapshot', path=shot)
+        width, height, pixel = harness.read_image(shot)
+        scale = width / hovered['frame'][2]
+        lumas = [harness.luma(pixel(x * scale, y * scale)) for x in range(int(title[0] + title[2]) + 1, int(more_min_x) - 1)
+                 for y in range(int(title[1]), int(title[1] + title[3]))]
+        spread = (max(lumas) - min(lumas)) if lumas else 0
+        row('space_header_hover_title_clears_options', hovered['chrome']['headerHovered'] and title[0] + title[2] <= more_min_x - 6 + .5
+            and lumas and spread < 30, titleMaxX=title[0] + title[2], optionsMinX=more_min_x, gapLumaSpread=spread,
+            hovered=hovered['chrome']['headerHovered'], snapshot=shot)
         app.call('mouse', action='hover', x=700, y=400)
     finally:
         app.quit()
