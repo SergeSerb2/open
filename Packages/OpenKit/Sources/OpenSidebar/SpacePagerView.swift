@@ -64,12 +64,18 @@ final class SpacePagerView: NSView {
     private var spaces: [Space] { context.model.spaces }
     private var focusedIndex: Int { context.focusedSpace.flatMap { s in spaces.firstIndex { $0 === s } } ?? 0 }
 
+    var isShowingCreation: Bool { creationPage != nil }
+
     func page(for space: Space) -> SpacePageView {
         if let p = pages[space.id] { return p }
         let p = SpacePageView(context: context, space: space, menus: menus)
         p.scroll.pager = self
         pages[space.id] = p
         strip.addSubview(p)
+        if strip.inputPage == nil, creationPage == nil, context.focusedSpace?.id == space.id {
+            strip.inputPage = p
+        }
+        p.setAcceptsDrops(strip.inputPage === p)
         return p
     }
 
@@ -172,8 +178,13 @@ final class SpacePagerView: NSView {
             guard let page = pages[space.id], page.layer?.isHidden != true else { continue }
             place(page, at: index)
         }
-        strip.inputPage = creationPage == nil ? context.focusedSpace.flatMap { pages[$0.id] } : creationHost
+        syncInputAndDropTargets()
         CATransaction.commit()
+    }
+
+    private func syncInputAndDropTargets() {
+        strip.inputPage = creationPage == nil ? context.focusedSpace.flatMap { pages[$0.id] } : creationHost
+        for page in pages.values { page.setAcceptsDrops(strip.inputPage === page) }
     }
 
     private func placeStrip() {
@@ -302,6 +313,7 @@ final class SpacePagerView: NSView {
         guard !animating, swipe == nil else { return }
         let focused = context.focusedSpace?.id
         for (id, p) in pages { setPage(p, visible: creationPage == nil && id == focused) }
+        syncInputAndDropTargets()
     }
 
     private func setPage(_ page: SpacePageView, visible: Bool) {
@@ -339,6 +351,7 @@ final class SpacePagerView: NSView {
         strip.layer?.removeAnimation(forKey: "slide"); animating = false
         shownSpaceID = nil
         showFocused(animated: false)
+        syncInputAndDropTargets()
         if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwitch) }
         if let space = context.focusedSpace { themeBackground?.crossfade(to: context.style(for: space), animated: animatesSidebarChanges) }
     }
@@ -420,6 +433,7 @@ final class SpacePagerView: NSView {
                 themeBackground?.crossfade(to: context.style(for: f), animated: true)
             }
             shownSpaceID = context.focusedSpace?.id
+            syncInputAndDropTargets()
             if snapping, landed == target { return true }
             let from = snapping ? presentationOffset : -offset
             offset = CGFloat(landed) * w

@@ -60,6 +60,7 @@ private final class SidebarDropRailView: NSView {
         sidebar?.receiveRailDrop(sender, perform: true) == true
     }
     override func draggingExited(_ sender: (any NSDraggingInfo)?) { sidebar?.clearDropIndicator() }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { sidebar?.clearDropIndicator() }
     override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) { sidebar?.clearDropIndicator() }
 }
 

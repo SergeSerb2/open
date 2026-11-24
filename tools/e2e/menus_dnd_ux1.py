@@ -313,6 +313,82 @@ def main_rows(factory, results, tmp, h):
             ok = held and focused == space_one and not back
             return ok, {'heldFilled': held, 'afterSwitchBack': back, 'focused': focused, 'spaceOne': space_one}
         _row(results, 'uxe_drop_fill_cleared_on_space_switch', fill_cleared_on_space_switch)
+
+        def multispace_sidebar_drag():
+            # Space 1 is focused while Space 2's page is already built and stacked above it in
+            # PagerStrip (only layer.isHidden = true). Real AppKit _findDragTargetFrom: must route
+            # drops to Space 1's outline (not Space 2's), move/reorder inside Space 1 with a visible
+            # drop indicator, keep empty-area drops in Today, and never crash in draggingEnded:.
+            spaces = app.call('spaces')
+            space_one = next(x['id'] for x in spaces if x['focused'])
+            if len(spaces) < 2:
+                app.call('space-create', title='Second', profile='Second'); time.sleep(.4)
+                spaces = app.call('spaces')
+            space_two = next(x['id'] for x in spaces if x['id'] != space_one)
+            # Ensure Space 2's SpacePageView is built and stacked above Space 1 in PagerStrip.
+            app.call('space', space=space_two); time.sleep(.4)
+            app.call('space', space=space_one); time.sleep(.4)
+            def space_count(sid):
+                sp = next(x for x in app.call('spaces') if x['id'] == sid)
+                return sp['pinned'] + sp['today']
+            def section_ids(section):
+                tree = app.call('sidebar-tree')
+                return [n['id'] for n in tree[section]]
+            s2_before = space_count(space_two)
+            rows = {r['id']: r['frame'] for r in app.call('basics-demo', op='targets')['rows']}
+            pinned_target = pinned[0]
+            unpinned_tab = today[1]
+            # 1. Drag unpinned tab onto pinned tab in Space 1.
+            pin_drop = app.call('split', op='drag-route', node=unpinned_tab,
+                                point=_center(rows[pinned_target]), perform=True, endOutlineDrag=True)
+            time.sleep(.4)
+            pinned_after_pin = section_ids('pinned')
+            s2_after_pin = space_count(space_two)
+            # 2. Rearrange pinned tabs in Space 1: drag pinned_target above unpinned_tab.
+            rows2 = {r['id']: r['frame'] for r in app.call('basics-demo', op='targets')['rows']}
+            if unpinned_tab not in rows2:
+                return False, {'step': 'pin_drop_vanished_from_space1', 'pinDrop': pin_drop,
+                               'pinnedAfterPin': pinned_after_pin, 'space2Counts': [s2_before, s2_after_pin]}
+            reorder_drop = app.call('split', op='drag-route', node=pinned_target,
+                                    point=_center(rows2[unpinned_tab]), perform=True, endOutlineDrag=True)
+            time.sleep(.4)
+            pinned_after_reorder = section_ids('pinned')
+            s2_after_reorder = space_count(space_two)
+            # 3. Drop a pinned tab in the empty area below Today rows: moves to end of Today (not Pinned 0).
+            targets3 = app.call('basics-demo', op='targets')
+            sidebar_box = targets3['sidebar']
+            max_row_y = max(r['frame'][1] + r['frame'][3] for r in targets3['rows'])
+            bottom_limit = sidebar_box[1] + sidebar_box[3] - 60
+            empty_y = min(max_row_y + 40, bottom_limit)
+            if empty_y <= max_row_y + 4:
+                return False, {'step': 'no_empty_outline_area', 'maxRowY': max_row_y, 'bottomLimit': bottom_limit}
+            empty_pt = [sidebar_box[0] + sidebar_box[2] / 2, empty_y]
+            empty_drop = app.call('split', op='drag-route', node=unpinned_tab,
+                                  point=empty_pt, perform=True, endOutlineDrag=True)
+            time.sleep(.4)
+            today_after_empty = section_ids('today')
+            pinned_after_empty = section_ids('pinned')
+            s2_after_empty = space_count(space_two)
+            # 4. Drag leaving outline and ending (draggingEnded:) must not crash.
+            cancel_outside = app.call('split', op='drag-route', node=pinned_target,
+                                      point=_center(targets3['page']), perform=False, endOutlineDrag=True)
+            ok = (pin_drop['isFocusedOutline'] and bool(pin_drop['indicator']) and pin_drop['accepted']
+                  and unpinned_tab in pinned_after_pin and pinned_target in pinned_after_pin
+                  and pinned_after_pin.index(unpinned_tab) < pinned_after_pin.index(pinned_target)
+                  and s2_after_pin == s2_before
+                  and reorder_drop['isFocusedOutline'] and bool(reorder_drop['indicator']) and reorder_drop['accepted']
+                  and pinned_after_reorder.index(pinned_target) < pinned_after_reorder.index(unpinned_tab)
+                  and s2_after_reorder == s2_before
+                  and empty_drop['isFocusedOutline'] and bool(empty_drop['indicator']) and empty_drop['accepted']
+                  and today_after_empty[-1:] == [unpinned_tab] and unpinned_tab not in pinned_after_empty
+                  and s2_after_empty == s2_before
+                  and cancel_outside['overlayHidden'])
+            return ok, {'pinDrop': pin_drop, 'pinnedAfterPin': pinned_after_pin,
+                        'reorderDrop': reorder_drop, 'pinnedAfterReorder': pinned_after_reorder,
+                        'emptyDrop': empty_drop, 'todayAfterEmpty': today_after_empty,
+                        'space2Counts': [s2_before, s2_after_pin, s2_after_reorder, s2_after_empty],
+                        'cancelOutside': cancel_outside}
+        _row(results, 'uxe_multispace_sidebar_drag_stays_in_active_space', multispace_sidebar_drag)
     finally:
         try: app.quit()
         except Exception: pass

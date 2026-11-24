@@ -522,5 +522,120 @@ enum FeatureChecks {
         let later = NSColor(srgbRed: 0.95, green: 0.85, blue: 0.20, alpha: 1)
         host.simulatePageBackground(later); try await settleCallbacksOnly()
         check(slot.paneChrome?.layer?.backgroundColor == later.cgColor, "RR3 a page that changes its color later updates the pane bar")
+
+        // Split drop routing over a descendant page view registered for URL/string drags (like Chromium's WebContentsViewCocoa).
+        let dragA = model.newTab(in: space.id, url: URL(string: "https://split-route-a.example.com/")!, title: "Split Route A")
+        let dragB = model.newTab(in: space.id, url: URL(string: "https://split-route-b.example.com/")!, title: "Split Route B")
+        let dragC = model.newTab(in: space.id, url: URL(string: "https://split-route-c.example.com/")!, title: "Split Route C")
+        dragA.live.sleepPhase = .live; dragB.live.sleepPhase = .live; dragC.live.sleepPhase = .live
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: dragA.id)
+        try await settle()
+        if let win = c.window, let contentHost = c.container.slots.first?.contentHostView {
+            final class URLDragReceiver: NSView {
+                override init(frame: NSRect) { super.init(frame: frame); registerForDraggedTypes([.URL, .string]) }
+                @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+            }
+            let urlReceiver = URLDragReceiver(frame: contentHost.bounds)
+            urlReceiver.autoresizingMask = [.width, .height]
+            contentHost.addSubview(urlReceiver)
+            defer { urlReceiver.removeFromSuperview() }
+            win.layoutIfNeeded()
+            let rightEdge = c.container.convert(NSPoint(x: c.container.bounds.maxX - 12, y: c.container.bounds.midY), to: nil)
+            let findSelector = NSSelectorFromString("_findDragTargetFrom:")
+            func makeDrag(items: [(id: String?, url: String?)]) -> FeatureDragInfo {
+                FeatureDragInfo(window: win, point: rightEdge, items: items)
+            }
+            // 1. External URL drag (no .sidebarNode) must pass through to the descendant page view.
+            let extDrag = makeDrag(items: [(nil, "https://example.com/")])
+            defer { extDrag.draggingPasteboard.releaseGlobally() }
+            let extTarget = win.perform(findSelector, with: extDrag)?.takeUnretainedValue() as? NSView
+            check(extTarget === urlReceiver, "RR4 external URL drag passes through SplitDropTargetView to page view")
+            // 2. Sidebar tab drag carrying [.sidebarNode, .URL, .string] must hit SplitDropTargetView, not urlReceiver.
+            let tabDrag = makeDrag(items: [(dragB.id.description, dragB.url.absoluteString)])
+            defer { tabDrag.draggingPasteboard.releaseGlobally() }
+            let tabTarget = win.perform(findSelector, with: tabDrag)?.takeUnretainedValue() as? NSView
+            let entered = tabTarget?.draggingEntered(tabDrag) ?? []
+            let overlayShown = !c.container.dropOverlay.isHidden
+            let prepared = tabTarget?.prepareForDragOperation(tabDrag) ?? false
+            let performed = prepared && (tabTarget?.performDragOperation(tabDrag) ?? false)
+            tabTarget?.concludeDragOperation(tabDrag)
+            if tabTarget?.responds(to: #selector(NSDraggingDestination.draggingEnded(_:))) == true {
+                tabTarget?.draggingEnded(tabDrag)
+            }
+            try await settle()
+            check(tabTarget != nil && tabTarget !== urlReceiver && String(describing: type(of: tabTarget!)) == "SplitDropTargetView"
+                  && entered == .move && overlayShown && performed && c.container.dropOverlay.isHidden
+                  && c.splitController.split?.panes.map(\.id) == [dragA.id, dragB.id],
+                  "RR4 sidebar tab drag with URL payload hits SplitDropTargetView above page view and creates split")
+            // 3. Multi-row drag and self-drop are refused with dropOverlay hidden.
+            model.selectNode(windowID: window.id, spaceID: space.id, nodeID: dragA.id)
+            if let splitID = c.splitController.split?.id { model.unsplit(splitID: splitID) }
+            model.selectNode(windowID: window.id, spaceID: space.id, nodeID: dragA.id)
+            try await settle()
+            let multiDrag = makeDrag(items: [(dragB.id.description, dragB.url.absoluteString), (dragC.id.description, dragC.url.absoluteString)])
+            defer { multiDrag.draggingPasteboard.releaseGlobally() }
+            let multiTarget = win.perform(findSelector, with: multiDrag)?.takeUnretainedValue() as? NSView
+            let multiOp = multiTarget?.draggingEntered(multiDrag) ?? []
+            check(multiOp.isEmpty && c.container.dropOverlay.isHidden && !(multiTarget?.prepareForDragOperation(multiDrag) ?? false),
+                  "RR4 multi-row sidebar drag is refused by SplitDropTargetView")
+            let selfDrag = makeDrag(items: [(dragA.id.description, dragA.url.absoluteString)])
+            defer { selfDrag.draggingPasteboard.releaseGlobally() }
+            let selfTarget = win.perform(findSelector, with: selfDrag)?.takeUnretainedValue() as? NSView
+            let selfOp = selfTarget?.draggingEntered(selfDrag) ?? []
+            check(selfOp.isEmpty && c.container.dropOverlay.isHidden, "RR4 dragging the active tab onto itself is refused")
+            // 4. A container with no split handler (such as Little Open) hides SplitDropTargetView and refuses drops.
+            let savedOnDrop = c.container.onDrop
+            c.container.onDrop = nil
+            defer { c.container.onDrop = savedOnDrop }
+            let noSplitDrag = makeDrag(items: [(dragB.id.description, dragB.url.absoluteString)])
+            defer { noSplitDrag.draggingPasteboard.releaseGlobally() }
+            let noSplitTarget = win.perform(findSelector, with: noSplitDrag)?.takeUnretainedValue() as? NSView
+            let directOp = c.container.draggingEntered(noSplitDrag)
+            check(noSplitTarget === urlReceiver && directOp.isEmpty && c.container.dropOverlay.isHidden,
+                  "RR4 container without split onDrop (Little Open) passes drags through with no false overlay")
+        } else {
+            check(false, "RR4 window and content host exist for split drag routing check")
+        }
+    }
+}
+
+@MainActor
+private final class FeatureDragInfo: NSObject, NSDraggingInfo {
+    let draggingPasteboard = NSPasteboard.withUniqueName()
+    var draggingDestinationWindow: NSWindow?
+    var draggingSourceOperationMask: NSDragOperation { [.move, .copy] }
+    var draggingLocation: NSPoint
+    var draggedImageLocation: NSPoint { .zero }
+    nonisolated var draggedImage: NSImage? { nil }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    var draggingFormation: NSDraggingFormation = .none
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop: Int
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    init(window: NSWindow, point: NSPoint, items: [(id: String?, url: String?)]) {
+        draggingDestinationWindow = window; draggingLocation = point; numberOfValidItemsForDrop = items.count
+        super.init()
+        let pbItems: [NSPasteboardItem] = items.map { entry in
+            let item = NSPasteboardItem()
+            if let id = entry.id { item.setString(id, forType: .init("com.open.sidebar.node")) }
+            if let url = entry.url {
+                item.setString(url, forType: .URL)
+                item.setString(url, forType: .string)
+            }
+            return item
+        }
+        draggingPasteboard.writeObjects(pbItems)
+    }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    nonisolated override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
+    func resetSpringLoading() {}
+    func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions, for view: NSView?, classes classArray: [AnyClass],
+                                searchOptions: [NSPasteboard.ReadingOptionKey: Any], using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {
+        for (index, item) in (draggingPasteboard.pasteboardItems ?? []).enumerated() {
+            var stop = ObjCBool(false)
+            block(NSDraggingItem(pasteboardWriter: item), index, &stop)
+            if stop.boolValue { break }
+        }
     }
 }

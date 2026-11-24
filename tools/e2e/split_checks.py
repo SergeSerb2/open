@@ -219,6 +219,43 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         select(a); cancelled = drop(b, edge(state(), 'right'), cancel=True)
         row('C2_cancel', cancelled['overlayShown'] and cancelled['overlayHidden'] and not state()['id'], transport=cancelled)
 
+        # Real AppKit drag-target routing over a live Chromium web page with real SidebarPasteboard
+        # payloads ([.sidebarNode, .URL, .string]), visible drop overlay pixels, draggingEnded
+        # crash guard, external URL pass-through to Chromium, and multi-row drag refusal.
+        unsplit(); select(a); app.call('wait', tab=a); time.sleep(.3)
+        live_before_state = state()
+        right_pt = edge(live_before_state, 'right')
+        cx, cy, cw, ch = live_before_state['container']
+        before_png = Path(tmp) / 'split-drag-before.png'
+        during_png = Path(tmp) / 'split-drag-during.png'
+        app.call('snapshot', path=str(before_png))
+        hovered = app.call('split', op='drag-route', node=b, point=right_pt, keepOverlay=True)
+        time.sleep(.1)
+        app.call('snapshot', path=str(during_png))
+        w0, h0, px0 = h.read_image(str(before_png), srgb=True)
+        w1, h1, px1 = h.read_image(str(during_png), srgb=True)
+        sx = w0 / 1360
+        sample_pts = [(cx + cw * 0.75, cy + ch * 0.5), (cx + cw * 0.85, cy + ch * 0.35), (cx + cw * 0.65, cy + ch * 0.65)]
+        overlay_delta = max((max(abs(px0(px * sx, py * sx)[i] - px1(px * sx, py * sx)[i]) for i in range(3))
+                             for px, py in sample_pts), default=0) if (w0, h0) == (w1, h1) else 0
+        dropped = app.call('split', op='drag-route', node=b, point=right_pt, perform=True, endOutlineDrag=True)
+        after_live_drop = settled(2)
+        ext_drag = app.call('split', op='drag-route', urls=['https://example.com/'], point=right_pt, drive=False)
+        unsplit(); select(a)
+        extra_tab = opened('multi-refuse', background=True)
+        multi_drag = app.call('split', op='drag-route', nodes=[b, extra_tab], point=right_pt, perform=True, endOutlineDrag=True)
+        app.call('close', tab=extra_tab)
+        row('C2_live_page_drag_route_and_dragging_ended',
+            hovered['inContainer'] and hovered['targetClass'] == 'SplitDropTargetView'
+            and hovered['entered'] > 0 and hovered['overlayShown'] and overlay_delta >= 3
+            and dropped['accepted'] and dropped['overlayHidden']
+            and [p['id'] for p in after_live_drop['panes']] == [a, b]
+            and ext_drag['inContainer'] and ext_drag['targetClass'] != 'SplitDropTargetView'
+            and multi_drag['entered'] == 0 and not multi_drag['overlayShown'] and not multi_drag['accepted']
+            and not state()['id'],
+            hovered=hovered, overlayDelta=overlay_delta, dropped=dropped,
+            externalDrag=ext_drag, multiDrag=multi_drag)
+
         select(a); drop(b, edge(state(), 'right')); s = settled(2)
         d = s['dividers'][0]; point = [d[0]+d[2]/2, d[1]+d[3]/2]
         app.call('mouse', **{'from': point, 'to': [point[0]+45, point[1]]}); changed = settled(2)
