@@ -984,7 +984,7 @@
         w.controller?.contentView.layoutSubtreeIfNeeded()
         return ["visible": w.controller?.sidebar.spaceHeaderVisible ?? false, "hidesHeader": w.controller?.context.hidesHeader(for: space) ?? false,
           "showPreference": SpaceHeaderPreference.shared.showOnSingleUnnamedSpace, "spaces": app.model.spaces.count,
-          "title": space.title ?? NSNull()] as [String: Any]
+          "title": space.title ?? NSNull(), "titleDraw": w.controller?.sidebar.spaceHeaderTitleDraw ?? [:]] as [String: Any]
       case "sidebar-tree":
         guard let space = w.focusedSpace else { throw Failure(message: "no space") }
         return ["pinned": space.pinned.map(describeNode), "today": space.today.map(describeNode)]
@@ -1608,6 +1608,7 @@
               frames[space.id.description] = rect(root.convert(view.bounds, from: view))
             }
           },
+          "switcherGeometry": controller.sidebar.switcherGeometry(in: root),
           "hint": ["shows": controller.hintShows, "visible": controller.hintToast != nil,
             "frame": controller.hintToast.map { rect($0.frame) } ?? [], "keys": controller.hintToast?.keys ?? "",
             "plate": controller.hintToast.map { rect($0.plateFrame) } ?? []] as [String: Any],

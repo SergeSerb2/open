@@ -1288,6 +1288,14 @@ final class SpaceHeaderView: NSView {
     private let fill = CALayer()
     private let title = TextLabel()
     var displayedTitle: String { title.text() }
+    #if DEBUG || OPEN_AUTOMATION
+    /// The title label's current width and what its last draw used (a stale draw keeps the old width).
+    var titleDrawEvidence: [String: Any] {
+        ["width": Double(title.bounds.width), "drawnForWidth": Double(title.lastDrawnBoundsWidth),
+         "lineWidth": Double(title.lastDrawnLineWidth), "drawnText": title.lastDrawnText,
+         "maxX": Double(title.convert(title.bounds, to: nil).maxX)]
+    }
+    #endif
     private let icon = SpaceIconView()
     var iconFrameInWindow: CGRect { icon.convert(icon.bounds, to: nil) }
     let chevron = PlateButton(glyph: .disclosureDown)

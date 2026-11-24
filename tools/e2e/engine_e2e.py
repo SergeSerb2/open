@@ -5136,7 +5136,13 @@ def page_commands_checks(factory, results, tmp):
                 server.shutdown()
 
 
+def sidebar_bars_checks(factory, results, tmp):
+    """Bottom bar and Space header geometry after resize drags (tools/e2e/sidebar_bars.py, UXB-1..3)."""
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_bars.py"))["run"](factory, results, wait_until, tmp, ROOT)
+
+
 def sidebar_checks(factory, results, tmp):
+    sidebar_bars_checks(factory, results, tmp)
     # Bug sweep r6 sidebar rows (tools/e2e/sidebar_r6.py); OPEN_SIDEBAR_R6_ONLY=1 runs only them.
     runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_r6.py"))["run"](factory, results, wait_until, tmp)
     if os.environ.get("OPEN_SIDEBAR_R6_ONLY") == "1": return
@@ -14962,6 +14968,7 @@ def main():
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--sidebar-pinfav-only", action="store_true", help="run only the pinned-tab and Favorite close rows of the sidebar suite")
+    ap.add_argument("--sidebar-bars-only", action="store_true", help="run only the bottom-bar and Space header geometry rows (UXB-1..3) of the sidebar suite")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
                     help='features: prove ignored save offers with main App code and no password delegate')
@@ -15424,14 +15431,20 @@ def main():
             results["split"] = CheckedResults(tracker)
             # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
             # OPEN_SPLIT_WIN8_ONLY=1 runs only the bug sweep round 8 window rows (tools/e2e/windows_r8.py).
+            # OPEN_SPLIT_UXG_ONLY=1 runs only the UX round 1 pane bar rows (tools/e2e/pagechrome_ux1.py).
             win8 = os.environ.get("OPEN_SPLIT_WIN8_ONLY") == "1"
-            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+            uxg = os.environ.get("OPEN_SPLIT_UXG_ONLY") == "1"
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8 and not uxg:
                 module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
-            if not win8:
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/pagechrome_ux1.py"))["split_rows"](
+                    factory, results["split"], tmp, sys.modules[__name__])
+            if not win8 and not uxg:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
                     factory, results["split"], tmp, sys.modules[__name__])
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
-                factory, results["split"], tmp, sys.modules[__name__])
+            if not uxg:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
+                    factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
@@ -15535,7 +15548,13 @@ def main():
             spec = importlib.util.spec_from_file_location("boosteditor_suite", os.path.join(ROOT, "tools/e2e/boosteditor.py"))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results[opts.only] = CheckedResults(tracker)
-            module.run(factory, results[opts.only], tmp, globals())
+            # OPEN_E2E_BOOST_UXG_ONLY=1 runs only the UX round 1 Zap placement rows (tools/e2e/pagechrome_ux1.py).
+            if os.environ.get("OPEN_E2E_BOOST_UXG_ONLY") != "1":
+                module.run(factory, results[opts.only], tmp, globals())
+            if not any(os.environ.get(k) == "1" for k in ("OPEN_E2E_BOOST_ZAP_REVIEW_ONLY", "OPEN_E2E_BOOST_RETIRE_ONLY",
+                                                          "OPEN_E2E_BOOST_MATCH_ONLY", "OPEN_E2E_BOOST_SWEEP7_ONLY", "OPEN_E2E_BOOST_ZAP_ONLY")):
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/pagechrome_ux1.py"))["zap_rows"](
+                    factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
             (page_tools_clear_checks if opts.page_site_data_only else page_checks)(factory, results["page"], tmp, opts.style)
@@ -15594,6 +15613,8 @@ def main():
             results["sidebar"] = CheckedResults(tracker)
             if opts.sidebar_pinfav_only:
                 sidebar_pinfav_checks(factory, results["sidebar"], tmp)
+            elif opts.sidebar_bars_only:
+                sidebar_bars_checks(factory, results["sidebar"], tmp)
             else:
                 sidebar_checks(factory, results["sidebar"], tmp)
         elif opts.only == "calendar":

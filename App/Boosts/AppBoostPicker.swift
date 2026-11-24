@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import OpenBoosts
+import OpenDesign
 import OpenEngine
 import OpenModel
 
@@ -20,6 +22,11 @@ final class AppBoostPicker {
     var ready = false
     var counts: AppBoostPickerList?
     var work: Task<Void, Never>?
+    var observers: [any NSObjectProtocol] = []
+    var occlusion: [Double] = []
+    var occlusionScheduled = false
+    /// The page view's own setting, restored when the picker ends.
+    var postedFrameChanges: Bool?
     init(host: EngineWebContentHost, boostID: BoostID, mode: PickerMode, store: BoostStore) {
       self.host = host; self.boostID = boostID; self.mode = mode
       coordinator = BoostPickerCoordinator(store: store)
@@ -98,7 +105,7 @@ final class AppBoostPicker {
       }
     }
     let changed = binding.coordinator.handle(message, from: documentID)
-    if case .pickerReady = message { binding.ready = true; requestCounts(tabID: tabID) }
+    if case .pickerReady = message { binding.ready = true; requestCounts(tabID: tabID); trackOcclusion(tabID: tabID, binding: binding) }
     if case let .revealRequested(_, selector) = message, changed { remove(selector, tabID: tabID) }
     if case .pickerExited = message { exit(tabID: tabID); return true }
     if let event = binding.coordinator.lastEvent { editor.publishPickerEvent(event, tabID: tabID) }
@@ -130,6 +137,8 @@ final class AppBoostPicker {
   }
   func exit(tabID: ItemID) {
     guard let binding = bindings.removeValue(forKey: tabID) else { return }
+    for observer in binding.observers { NotificationCenter.default.removeObserver(observer) }; binding.observers = []
+    if let posted = binding.postedFrameChanges { binding.host?.view.postsFrameChangedNotifications = posted; binding.postedFrameChanges = nil }
     if let documentID = binding.documentID { binding.coordinator.invalidate(pageID: documentID) }
     let source = """
       (() => {
@@ -142,13 +151,78 @@ final class AppBoostPicker {
   }
   func stop() { for tabID in Array(bindings.keys) { exit(tabID: tabID) } }
 
+  /// The Boost editor floats over the page's right edge (Arc centers it on the window's right
+  /// edge, interaction-states §20.6). The picker learns which part of the viewport it covers, so
+  /// its popup and Done stay clear of it. Measured when the picker is ready and after the browser
+  /// window or the editor moves or resizes, or the page view's frame changes inside the window
+  /// (sidebar, Split divider, content toolbar); at most once per run-loop turn, and only changes
+  /// cross the bridge.
+  private func trackOcclusion(tabID: ItemID, binding: Binding) {
+    guard binding.observers.isEmpty, let view = binding.host?.view, let window = view.window else { return }
+    let center = NotificationCenter.default
+    let observe: (Notification.Name, AnyObject) -> Void = { [weak self] name, object in
+      binding.observers.append(center.addObserver(forName: name, object: object, queue: .main) { _ in
+        MainActor.assumeIsolated { self?.scheduleOcclusion(tabID: tabID) }
+      })
+    }
+    var windows = [window]
+    if let panel = binding.host?.owner?.controller?.boostEditor?.panel { windows.append(panel) }
+    for observed in windows {
+      for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] { observe(name, observed) }
+    }
+    binding.postedFrameChanges = view.postsFrameChangedNotifications
+    view.postsFrameChangedNotifications = true
+    observe(NSView.frameDidChangeNotification, view)
+    sendOcclusion(tabID: tabID)
+  }
+  /// One measurement on the next turn, after the window's layout pass has given the page view its
+  /// new frame. A drag posts several notifications per frame; they collapse into this one.
+  private func scheduleOcclusion(tabID: ItemID) {
+    guard let binding = bindings[tabID], !binding.occlusionScheduled else { return }
+    binding.occlusionScheduled = true
+    DispatchQueue.main.async { [weak self] in
+      MainActor.assumeIsolated {
+        binding.occlusionScheduled = false
+        guard let self, self.bindings[tabID] === binding else { return }
+        self.sendOcclusion(tabID: tabID)
+      }
+    }
+  }
+  private func sendOcclusion(tabID: ItemID) {
+    guard let binding = bindings[tabID], binding.ready, let session = binding.session, let host = binding.host else { return }
+    let view = host.view
+    var value = [0.0, 0.0, 0.0]
+    if let window = view.window, let panel = host.owner?.controller?.boostEditor?.panel, panel.isVisible,
+      view.bounds.width > 0, view.bounds.height > 0 {
+      let page = window.convertToScreen(view.convert(view.bounds, to: nil))
+      let cover = page.intersection(panel.frame)
+      // The editor is in its own place when it reaches the page's right edge, or when it sits at its
+      // screen margin because the page runs past the screen (Dock, full screen, a window dragged
+      // past the edge). An editor left over the middle of a widened window is not reported: plain
+      // viewport clamping is the fallback.
+      let screenRight = (panel.screen ?? window.screen).map { $0.visibleFrame.maxX - BoostEditorMetrics.screenMargin }
+      let anchored = cover.maxX >= page.maxX - 1 || screenRight.map { panel.frame.maxX >= $0 - 1 } == true
+      if !cover.isNull, cover.width > 0, cover.height > 0, anchored {
+        // Viewport fractions (zoom-independent): a strip at the right edge, top to bottom.
+        value = [Double((page.maxX - cover.minX) / page.width), Double((page.maxY - cover.maxY) / page.height),
+                 Double((page.maxY - cover.minY) / page.height)]
+      }
+    }
+    guard value != binding.occlusion else { return }
+    binding.occlusion = value
+    let payload: [String: Any] = ["boostID": session.boostID.description, "sessionNonce": session.sessionNonce,
+                                  "right": value[0], "top": value[1], "bottom": value[2]]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+    send(type: "zap:occlusion", payload: String(decoding: data, as: UTF8.self), binding: binding, tabID: tabID)
+  }
+
   private func send(_ command: PickerOutbound, binding: Binding, tabID: ItemID, prefix: String = "") {
     let wire = BridgeDecode.encode(command)
     send(type: wire.type, payload: wire.payloadJSON, binding: binding, tabID: tabID, prefix: prefix)
   }
   private func send(type: String, payload: String, binding: Binding, tabID: ItemID, prefix: String = "") {
     guard type.utf8.count + payload.utf8.count <= AppBoostPickerList.wireLimit else {
-      if type != "zap:list" { exit(tabID: tabID) }
+      if type != "zap:list" && type != "zap:occlusion" { exit(tabID: tabID) }
       return
     }
     let source = """
@@ -159,7 +233,8 @@ final class AppBoostPicker {
         return true;
       })()
       """
-    evaluate(source, binding: binding, tabID: tabID, invalidatesOnFailure: type != "zap:list")
+    // Counts and the editor's cover are advisory: a failed delivery never ends a usable picker.
+    evaluate(source, binding: binding, tabID: tabID, invalidatesOnFailure: type != "zap:list" && type != "zap:occlusion")
   }
   private func evaluate(_ source: String, binding: Binding, tabID: ItemID, ending: Bool = false, invalidatesOnFailure: Bool = true) {
     let previous = binding.work
