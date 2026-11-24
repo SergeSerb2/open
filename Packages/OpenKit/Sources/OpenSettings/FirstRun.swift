@@ -247,6 +247,14 @@ public struct FirstRunView:View {
             .animation(reduceMotion ? nil:.easeInOut(duration:Motion.selectionFade),value:model.step)
             .task {if startsProbe && model.probe == nil {await model.refreshProbe()}}
     }
+    /// First run: content that runs past a short window fades out over its last 24 pt instead of
+    /// stopping mid-row (static mask; the trailing padding lets the last row scroll clear of it).
+    private var scrollEdge:some View {
+        GeometryReader {proxy in
+            let fade=embeddedImport && proxy.size.height > 0 ? min(0.5,24/proxy.size.height):0
+            LinearGradient(stops:[.init(color:.black,location:0),.init(color:.black,location:1-fade),.init(color:fade > 0 ? .clear:.black,location:1)],startPoint:.top,endPoint:.bottom)
+        }
+    }
     private func primary(_ title:String,action:@escaping ()->Void)->some View {Button(title,action:action).keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))}
     private var brand:some View {AppIconPreview(option:.openDefault).frame(width:64,height:64)}
     private var welcome:some View {VStack(spacing:0) {
@@ -301,7 +309,7 @@ public struct FirstRunView:View {
                 SettingsGroup {choice("Passwords and cookies",help:model.passwordsCopy.help,found:model.found(model.probe?.savedItems,singular:"saved item",plural:"saved items",present:model.probe?.secretsFound ?? false,partial:model.probe?.savedItemsPartial ?? false),value:$model.includeSecrets,height:74,last:true,enabled:model.wizard.canImportPasswordsAndCookies)}
                 if model.probe?.sidebarFound == true && model.probe?.spaces == nil {Text("Open found the sidebar file, but could not count it. You can try the import or choose a different folder.").font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             }
-        }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
+        }.frame(maxWidth:.infinity,alignment:.leading).padding(.bottom,embeddedImport ? 24:0)}.scrollIndicators(.automatic).mask(scrollEdge)
         if !embeddedImport {HStack {
             Button("Back"){model.step = .welcome}
             if model.probe?.sidebarFound == true && model.probe?.spaces == nil {chooseFolder}
@@ -404,7 +412,7 @@ public struct FirstRunView:View {
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
             if let note=model.reportNote {Text(note).font(embeddedImport ? .system(size:12):section).foregroundStyle(model.reportNoteIsError ? Color.red:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary).fixedSize(horizontal:false,vertical:true)}
-        }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
+        }.frame(maxWidth:.infinity,alignment:.leading).padding(.bottom,embeddedImport ? 24:0)}.scrollIndicators(.automatic).mask(scrollEdge)
         if !embeddedImport {HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)}
     }}
     private var defaultBrowser:some View {VStack(spacing:16) {
