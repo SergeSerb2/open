@@ -11,6 +11,7 @@ struct SettingsDetail: View {
     let sectionID: SettingsSection
     let page: SettingsPageState
     var body: some View {
+        GeometryReader { geometry in
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -29,6 +30,8 @@ struct SettingsDetail: View {
             }
         }
         .environment(\.settingsPage, page)
+        .environment(\.settingsViewportHeight, geometry.size.height)
+        }
         .buttonStyle(OpenSettingsButtonStyle())
     }
     private var header: some View {

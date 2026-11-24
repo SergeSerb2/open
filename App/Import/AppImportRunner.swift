@@ -142,11 +142,13 @@ final class AppImportRunner: ProfileDataOwner {
     var counts: [String: Int] = [:]
     var failures: [String: String] = [:]
     var secretsReportLines: [String] = []
+    var secretsReportRows: [SecretsReportRow] = []
     var extensions: [ImportExtensionCandidate] = []
     var extensionProfileCount = 0
     func result(_ message: String? = nil) -> ImportOutcome {
       let outcome = ImportOutcome(counts: counts, errorText: message, failures: failures,
-        extensions: extensions, extensionProfileCount: extensionProfileCount, secretsReportLines: secretsReportLines)
+        extensions: extensions, extensionProfileCount: extensionProfileCount, secretsReportLines: secretsReportLines,
+        secretsReportRows: secretsReportRows)
       lastOutcome = outcome; return outcome
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
@@ -157,6 +159,7 @@ final class AppImportRunner: ProfileDataOwner {
       counts = browser.counts; failures = browser.failures
       extensions = browser.extensions; extensionProfileCount = 1
       secretsReportLines = browser.secretsReportLines
+      secretsReportRows = browser.secretsReportRows
       if firstRun {
         // An import that landed nothing keeps D3 intact, as on the Arc path: Continue/Start Fresh
         // owns the first save of the default model. Data that landed without a sidebar commit
@@ -560,6 +563,7 @@ final class AppImportRunner: ProfileDataOwner {
       counts.merge(secrets.counts) { _, new in new }
       failures.merge(secrets.failures) { _, new in new }
       secretsReportLines = secrets.secretsReportLines
+      secretsReportRows = secrets.secretsReportRows
     }
     if failures["History"] != nil {
       // Name only what this run added (nothing for history alone or a re-import).

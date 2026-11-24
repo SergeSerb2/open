@@ -263,7 +263,7 @@ final class InputRowView: NSView {
         }
     }
     var extensionIcon: (@MainActor (String) -> NSImage?)? { didSet { iconView.needsDisplay = true; chipView.needsDisplay = true } }
-    weak var favicons: CommandBarFaviconSource?
+    weak var favicons: CommandBarFaviconSource? { didSet { if favicons !== oldValue { iconView.needsDisplay = true } } }
     /// While the privacy footer shows, the (i) button hides and the field takes its place (CC-42).
     var showsFooter = false { didSet { if showsFooter != oldValue { needsLayout = true } } }
     private var showsInfoButton: Bool { !embedded && input.trailing == .info && !showsFooter }

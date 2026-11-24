@@ -84,6 +84,30 @@ generator includes the terms and omits that nonshipped row. The native
 `/usr/bin/textutil -convert txt -stdout Credits.rtf` conversion exactly
 matches Acknowledgements.txt, including Unicode characters.
 
+UX round 1 (2026-11-23, PR #683): the About panel showed the inventory's
+review notes ("BLOCKED", "U-6", "Review LGPL…") and hashes to users.
+Credits.rtf (the only credits file inside the App) now has this format:
+
+1. `Open <version> (<build>)` and the engine stamp line, then `Components`.
+2. One paragraph per shipped component with a hanging indent:
+   `<name> <short version> — <license>`. The short version is the first
+   part of the inventory's Version column without git hashes, commit or
+   checksum words and parenthetical notes (`, <version>` when it does not
+   start with a digit; no version for Open-owned rows or when the name
+   already holds it). The license is the SPDX-style part of the License
+   column, without notes.
+3. Under each copyleft component (LGPL, GPL or MPL in its license), an
+   indented `Source: <url>` line: the first https URL of the inventory's
+   source/offer column. The generator refuses a copyleft row without one.
+   Permissive components have no Source line.
+4. `Public MPL source location: <url>`, then one line pointing to
+   Acknowledgements.txt for how Open uses each component.
+5. `License texts` and the Chromium credits, unchanged and complete.
+
+Acknowledgements.txt and CREDITS.html are byte-identical to the previous
+generator's output; Credits.rtf from "License texts" to the end matches the
+previous output after `textutil`. Only items 1-4 differ.
+
 The build-tool input limits are 2 MiB / 2,048 inventory rows, 4 MiB per
 license / 16 MiB total / 256 distinct texts, and 32 MiB for Chromium HTML.
 A future uBO source input is capped at 16 MiB per file, 64 MiB total,

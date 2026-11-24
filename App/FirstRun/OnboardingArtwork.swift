@@ -95,11 +95,18 @@ import ImageIO
   override func layout() {
     super.layout(); scene.frame = bounds; room.frame = bounds
     readyCard.frame = cardRect
-    favoriteMiniature.frame = CGRect(x: 44,y: bounds.height*0.12,width: 480,height: 544)
-    progress.frame = CGRect(x: 40,y: 36,width: 104,height: 6)
+    // 12 pt above the old 12% line keeps a clear gap over the page dots on the footer line.
+    // On a short or narrow preview the miniature scales down (480 x 544 at most), stays 12 pt above
+    // the dots (top at 75 pt) and keeps 24 pt clear at the top and right.
+    let floorY = max(87,bounds.height*0.12+12)
+    let scale = max(0.2,min(1,(bounds.height-floorY-24)/544,(bounds.width-44-24)/480))
+    favoriteMiniature.frame = CGRect(x: 44,y: floorY,width: floor(480*scale),height: floor(544*scale))
+    // The dots share the footer's centre line (72 pt above the bottom) and the miniature's left edge.
+    progress.frame = CGRect(x: 44,y: 69,width: 104,height: 6)
     progress.selected = ["name","import","favorites","theme","blocker","defaultBrowser","ready"].firstIndex(of: step) ?? 0
     mail.frame = CGRect(x: 58,y: bounds.height-126,width: 184,height: 48)
-    flyingLink.frame = CGRect(x: 112,y: bounds.height-184,width: 160,height: 40)
+    // The link starts on the Mail chip, so it seems to leave Mail rather than appear over the page.
+    flyingLink.frame = CGRect(x: 70,y: bounds.height-122,width: 160,height: 40)
   }
   func update(step: String,name: String,favorites: [(String,OnboardingFavicons.Tile)],count: Int,report: Bool,blocker: Bool,card: OpenCardDrawing,reduceMotion: Bool,source: BrowserModel) {
     let changed = self.step != step; self.step = step
@@ -150,14 +157,25 @@ import ImageIO
   }
   var favoriteState: [String:Any] { favoriteMiniature.favoriteState }
   #if OPEN_AUTOMATION
+  /// Preview, miniature and dots frames in this view's coordinates (layout rows).
+  var layoutFrames: [String: NSRect] { ["preview": bounds, "miniature": favoriteMiniature.frame, "dots": progress.frame] }
+  #endif
+  #if OPEN_AUTOMATION
   var artworkState: [String:Any] {
     ["step":step,"miniature":favoriteMiniature.demoState,"miniatureHidden":favoriteMiniature.isHidden,
      "cardVisible":!readyCard.isHidden,"progress":progress.selected]
   }
   #endif
   var cardRect: CGRect {
-    let width = max(1,min(620,bounds.width-96))
-    return CGRect(x: bounds.midX-width/2,y: bounds.midY-width*0.625/2,width: width,height: width*0.625)
+    // 560 pt wide and 40 pt below centre, and always 12 pt below the doorway (its bottom is at
+    // 78% of the height less 75 pt, OnboardingRoom). A short preview shrinks the card so its
+    // buttons (48 pt below it) stay above the dots (top at 75 pt) with 12 pt to spare.
+    let doorBottom = bounds.height*0.78-75
+    var width = max(1,min(560,bounds.width-96))
+    let room = doorBottom-12-(75+12+48)
+    if width*0.625 > room { width = max(120,room/0.625) }
+    let height = width*0.625
+    return CGRect(x: bounds.midX-width/2,y: min(bounds.midY-40-height/2,doorBottom-12-height),width: width,height: height)
   }
   func showConfetti(_ emitter: CAEmitterLayer) {
     emitter.frame = bounds; emitter.emitterPosition = CGPoint(x: cardRect.midX,y: cardRect.maxY+12)

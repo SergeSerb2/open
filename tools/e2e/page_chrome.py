@@ -728,7 +728,7 @@ def run(factory, results, tmp, h):
             return check(pressed and denied and stored == 0 and again['visible']
                          and state['question'] == 'Allow notnow.localhost to send you notifications?'
                          and state['buttons'] == ['Not Now','Allow']
-                         and state['help'] == 'Click the lock to change this any time'
+                         and state['help'] == 'Change this any time in Site Controls'
                          and state['anchor']['name'] == 'sidebar-url', state=state, stored=stored)
         gate('permission_notnow_once_copy_anchor', notnow)
 
@@ -820,6 +820,33 @@ def run(factory, results, tmp, h):
             gate('permission_anchor_' + anchor, fallback)
             h['_try'](lambda: app.call('command',id='toggle-sidebar'))
             if anchor == 'toolbar-site-control': h['_try'](lambda: app.call('command', id='toggle-toolbar'))
+
+        # UX round 1 F3: the prompt card lies inside its browser window: a narrow sidebar (its
+        # anchor near the left edge) and the toolbar (its Site Control button near the right edge).
+        def inside_window():
+            def toolbar_shown():
+                return next((r['title'] for r in app.call('menu-state') if r['id'] == 'toggle-toolbar'), '') == 'Hide Toolbar'
+            def set_toolbar(on):
+                if toolbar_shown() != on: app.call('command', id='toggle-toolbar')
+                return toolbar_shown() == on
+            rows = []; initial = toolbar_shown()
+            try:
+                for setup, toolbar, width in [('sidebar-164', False, 164.0), ('sidebar-228', False, 228.0), ('toolbar', True, 228.0)]:
+                    toolbar_ok = set_toolbar(toolbar); app.call('updater-banner-width', width=width)
+                    permission_page('inside-' + setup); perm(); state = visible(ps)
+                    card, owner = state.get('promptScreenFrame') or [], state.get('ownerScreenFrame') or []
+                    inside = (len(card) == 4 and len(owner) == 4 and card[0] >= owner[0] - .5
+                              and card[0] + card[2] <= owner[0] + owner[2] + .5 and card[2] >= 260)
+                    # Sidebar: the field's Site Control place, or the button itself while it shows (hover).
+                    expected = {'site-control'} if toolbar else {'sidebar-url', 'site-control'}
+                    rows.append(dict(setup=setup, inside=inside, toolbarSet=toolbar_ok, anchorExpected=state['anchor'].get('name') in expected,
+                                     card=card, owner=owner, anchor=state['anchor']))
+                    app.call('permission-prompt', answer='notnow')
+            finally:
+                h['_try'](lambda: app.call('updater-banner-width', width=228.0))
+                h['_try'](lambda: set_toolbar(initial))
+            return check(len(rows) == 3 and all(r['inside'] and r['toolbarSet'] and r['anchorExpected'] for r in rows), rows=rows)
+        gate('permission_prompt_inside_window', inside_window)
 
         def midi():
             page('http://midi.localhost:%d/midi' % port); perm('midi'); state=visible(ps)
