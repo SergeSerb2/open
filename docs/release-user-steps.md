@@ -317,7 +317,7 @@ This unlocks U-5, public downloads and the MPL source offer. Choose to make the
 current repository public or use a public mirror. The agent does not make this
 choice. In GitHub Settings → General → Danger Zone, change repository visibility,
 or create the chosen public mirror and publish the required shipped sources.
-The current repository is private.
+Both `SergeSerb2/open` and `SergeSerb2/open-releases` are now public.
 
 Set the URLs for the chosen host. The download prefix is the complete URL of
 **this tag's** asset directory, including its version. Update it for each release.
@@ -406,6 +406,6 @@ After the source work, user setup, and review gates pass, the production command
 | U-1, U-2 | Done before: "Developer ID Application" identity for team 78A5P57U23 is in the M5 login Keychain. |
 | U-3 | Done: Keychain profile `open-notary` stored on the M5; `notarytool history` passes. |
 | U-4 | Done: the existing Sparkle key (Keychain account `ed25519`) is used; its public key is in `App/Info.plist`. The private-key backup to a password manager is still the user's step. |
-| U-8 | Decided: public repository `SergeSerb2/open-releases` (releases, feed, MPL sources). The development repository stays private. Feed: `https://sergeserb2.github.io/open-releases/appcast.xml`. |
-| U-5 | Open: enable Pages on `gh-pages` after the first approved feed commit. |
-| U-6, U-7 | Open: per-release review and approval. |
+| U-8 | Decided: public repository `SergeSerb2/open-releases` (releases, feed, MPL sources). `SergeSerb2/open` is also public. Feed: `https://sergeserb2.github.io/open-releases/appcast.xml`. |
+| U-5 | Done: GitHub Pages enabled on `SergeSerb2/open-releases` (`gh-pages`). |
+| U-6, U-7 | Automated per-PR releases approved on 2026-11-24 via M5 daemon `com.serge.open-release` (`tools/ci/release-daemon.py` + `tools/ci/release-orchestrator.py`). Automated checks (`A-1`, `A-4`–`A-10`, `A-11` DMG mount/entitlements, `A-12`, `A-15`) remain mandatory; interactive/M5-screen rows (`A-2`, `A-3`, `A-11` launch, `A-13`, `A-14`) are bypassed during unattended releases per the M5 STOP-rule (see `docs/ci-and-releases.md`). |
