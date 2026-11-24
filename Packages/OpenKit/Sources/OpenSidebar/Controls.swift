@@ -263,14 +263,18 @@ enum EmojiRenderer {
     /// presentation (no emoji-presentation scalar, no U+FE0F, no pictograph above Latin-1).
     static func isText(_ s: String) -> Bool {
         !s.isEmpty && s.unicodeScalars.allSatisfy { u in
-            !u.properties.isEmojiPresentation && u.value != 0xFE0F && !(u.properties.isEmoji && u.value > 0xFF)
+            !u.properties.isEmojiPresentation && u.value != 0xFE0F && u.value != 0x20E3  // keycap: "1⃣" is emoji
+                && !(u.properties.isEmoji && u.value > 0xFF)
         }
     }
 
     /// Draws `emoji` at `fontSize`, centered on its typographic box in `rect`.
-    static func draw(_ emoji: String, fontSize: CGFloat? = nil, in rect: NSRect) {
+    /// `color` inks glyphs that render in text presentation (a colour emoji glyph ignores it).
+    static func draw(_ emoji: String, fontSize: CGFloat? = nil, color: NSColor? = nil, in rect: NSRect) {
         let font = NSFont.systemFont(ofSize: fontSize ?? rect.height * 0.82)
-        let s = NSAttributedString(string: emoji, attributes: [.font: font])
+        var attributes: [NSAttributedString.Key: Any] = [.font: font]
+        if let color { attributes[.foregroundColor] = color }
+        let s = NSAttributedString(string: emoji, attributes: attributes)
         let b = s.size()
         s.draw(at: NSPoint(x: rect.midX - b.width / 2, y: rect.midY - b.height / 2))
     }

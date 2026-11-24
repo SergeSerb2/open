@@ -594,7 +594,9 @@ extension SidebarView {
         let title: TextLabel? = (cell as? TabCellView)?.title ?? (cell as? FolderCellView)?.title
         guard let title else { return nil }
         let frame = title.convert(title.bounds, to: nil)
-        let buttons = cell.subviews.compactMap { $0 as? PlateButton }.filter { !$0.isHidden }.map { $0.convert($0.bounds, to: nil).minX }
+        // Trailing buttons only (× / −); the speaker and reset buttons sit before the title.
+        let buttons = cell.subviews.compactMap { $0 as? PlateButton }.filter { !$0.isHidden }
+            .map { $0.convert($0.bounds, to: nil).minX }.filter { $0 >= frame.minX }
         return ["width": Double(title.bounds.width), "drawnForWidth": Double(title.lastDrawnBoundsWidth),
                 "lineWidth": Double(title.lastDrawnLineWidth), "titleMaxX": Double(frame.maxX),
                 "buttonMinX": buttons.min().map { Double($0) as Any } ?? NSNull()]

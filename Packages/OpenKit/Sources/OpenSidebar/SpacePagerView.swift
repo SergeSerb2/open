@@ -49,7 +49,10 @@ final class SpacePagerView: NSView {
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { loop?.cancel() }
+    isolated deinit {
+        loop?.cancel()
+        for placement in placements.values { placement.watch.invalidate() }
+    }
     override var isFlipped: Bool { true }
 
     private var spaces: [Space] { context.model.spaces }
@@ -87,36 +90,62 @@ final class SpacePagerView: NSView {
     /// Space showed a blank list (UX round 1, B7); an offscreen render resets the strip as well. The
     /// pager keeps the translation it wants per layer (pages and strip) and puts it back in the same
     /// pass, before the frame renders.
-    private var translations: [ObjectIdentifier: CGFloat] = [:]
-    private var translationWatches: [ObjectIdentifier: NSKeyValueObservation] = [:]
+    private struct Placement {
+        var wanted: CGFloat
+        let layer: ObjectIdentifier
+        let watch: NSKeyValueObservation
+    }
+    /// Keyed by the view, so a replaced backing layer is noticed and observed afresh.
+    private var placements: [ObjectIdentifier: Placement] = [:]
+    /// True while the pager writes a transform itself: its own KVO echo is ignored.
+    private var placingTransform = false
+    #if DEBUG || OPEN_AUTOMATION
     private(set) var translationRestores = 0
+    #endif
 
     private func setTranslation(_ x: CGFloat, of view: NSView) {
-        guard let layer = view.layer else { return }
-        let key = ObjectIdentifier(layer)
-        translations[key] = x
-        if translationWatches[key] == nil {
-            translationWatches[key] = layer.observe(\.transform, options: [.new]) { [weak self] layer, change in
+        guard x.isFinite, let layer = view.layer else { return }
+        let viewKey = ObjectIdentifier(view), layerKey = ObjectIdentifier(layer)
+        if placements[viewKey]?.layer == layerKey {
+            placements[viewKey]?.wanted = x
+        } else {
+            placements.removeValue(forKey: viewKey)?.watch.invalidate()
+            let watch = layer.observe(\.transform, options: [.new]) { [weak self] layer, change in
                 // AppKit sets view layer transforms on the main thread (the display pass).
+                guard Thread.isMainThread, let now = change.newValue?.m41 else { return }
                 nonisolated(unsafe) let layer = layer
-                guard let now = change.newValue?.m41 else { return }
                 MainActor.assumeIsolated {
-                    guard let self, let wanted = self.translations[ObjectIdentifier(layer)], now != wanted else { return }
+                    guard let self, !self.placingTransform, let placement = self.placements[viewKey],
+                          placement.layer == ObjectIdentifier(layer), now != placement.wanted else { return }
+                    #if DEBUG || OPEN_AUTOMATION
                     self.translationRestores += 1
-                    CATransaction.begin(); CATransaction.setDisableActions(true)
-                    layer.setValue(wanted, forKeyPath: "transform.translation.x")
-                    CATransaction.commit()
+                    #endif
+                    self.apply(placement.wanted, to: layer)
                 }
             }
+            placements[viewKey] = Placement(wanted: x, layer: layerKey, watch: watch)
         }
-        layer.setValue(x, forKeyPath: "transform.translation.x")
+        if !CATransform3DEqualToTransform(layer.transform, CATransform3DMakeTranslation(x, 0, 0)) { apply(x, to: layer) }
+    }
+
+    private func apply(_ x: CGFloat, to layer: CALayer) {
+        placingTransform = true
+        defer { placingTransform = false }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.transform = CATransform3DMakeTranslation(x, 0, 0)
+        CATransaction.commit()
     }
 
     private func forgetTranslation(of view: NSView) {
-        guard let layer = view.layer else { return }
-        let key = ObjectIdentifier(layer)
-        translations[key] = nil
-        translationWatches.removeValue(forKey: key)?.invalidate()
+        placements.removeValue(forKey: ObjectIdentifier(view))?.watch.invalidate()
+    }
+
+    /// A page's viewport frame and strip position. Hidden pages are not moved on every layout (a
+    /// live resize would touch every built page each frame); a page is placed when it is shown.
+    private func place(_ page: NSView, at index: Int) {
+        let frame = CGRect(origin: .zero, size: bounds.size)
+        if page.frame != frame { page.frame = frame }
+        setTranslation(CGFloat(index) * bounds.width, of: page)
     }
 
     private func layoutPages() {
@@ -133,9 +162,8 @@ final class SpacePagerView: NSView {
         let live = Set(spaces.map(\.id))
         for (id, page) in pages where !live.contains(id) { forgetTranslation(of: page); page.removeFromSuperview(); pages[id] = nil }
         for (index, space) in spaces.enumerated() {
-            guard let page = pages[space.id] else { continue }
-            if page.frame != frame { page.frame = frame }
-            setTranslation(CGFloat(index) * bounds.width, of: page)
+            guard let page = pages[space.id], page.layer?.isHidden != true else { continue }
+            place(page, at: index)
         }
         strip.inputPage = creationPage ?? context.focusedSpace.flatMap { pages[$0.id] }
         CATransaction.commit()
@@ -270,6 +298,9 @@ final class SpacePagerView: NSView {
         // visibility in the layer tree so the resting page needs no repaint.
         // Accessibility follows the same visibility, and PagerStrip owns input.
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        if visible, page.layer?.isHidden == true, let index = spaces.firstIndex(where: { $0.id == page.space.id }) {
+            place(page, at: index)  // hidden pages skip layout; place it before it shows
+        }
         page.layer?.isHidden = !visible
         page.setAccessibilityHidden(!visible)
         CATransaction.commit()

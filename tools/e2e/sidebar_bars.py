@@ -368,39 +368,97 @@ def _hover_title_rows(factory, results, wait_until, scratch, root):
     results['UXB9_hover_title_clears_row_button'] = {'ok': not problems and len(rows) == 6, 'problems': problems, 'rows': rows}
 
 
+def _ink(pixel, k, x0, x1, y0, y1):
+    """Ink of the glyph in a window-point box: rows it covers and its most contrasting luminance."""
+    x0, x1, y0, y1 = int(x0), int(x1), int(y0), int(y1)
+    bg = pixel(int(x0 * k), int(y0 * k)); bg_l = sum(bg) / 3
+    pts = [(x, y) for x in range(x0, x1) for y in range(y0, y1)
+           if sum(abs(a - b) for a, b in zip(pixel(int(x * k), int(y * k)), bg)) > 60]
+    if not pts: return None
+    lums = [sum(pixel(int(x * k), int(y * k))) / 3 for x, y in pts]
+    extreme = max(lums, key=lambda v: abs(v - bg_l))
+    ys = [p[1] for p in pts]
+    return {'top': min(ys), 'bottom': max(ys), 'ink': round(extreme, 1), 'contrast': round(extreme - bg_l, 1)}
+
+
 def _letter_icon_rows(factory, results, scratch, root, read_image):
-    """UXB-10 (E10): a letter icon in the Space header draws in the title's ink, cap-aligned."""
+    """UXB-10 (E10, review r1 #1/#2/#6): a letter Space icon draws like its title in the header (dark,
+    then after a live switch to light), takes the bar's ink in the switcher, and matches its title
+    in the Library Spaces card."""
     data = json.loads(Path(root, 'Packages/OpenKit/Fixtures/space-schema1/State/browser.json').read_text())
-    space = copy.deepcopy(data['spaces'][0]); space['id'] = str(uuid.uuid4()).upper()
-    space['title'] = 'Studio'; space['icon'] = {'emoji': {'_0': 'P'}}
-    data['spaces'] = [space]
+    themed = copy.deepcopy(data['spaces'][0]); themed['id'] = str(uuid.uuid4()).upper()
+    themed['title'] = 'Studio'; themed['icon'] = {'emoji': {'_0': '\U0001F33F'}}
+    letter = copy.deepcopy(data['spaces'][0]); letter['id'] = str(uuid.uuid4()).upper()
+    letter['title'] = 'Space P'; letter['icon'] = {'emoji': {'_0': 'P'}}
+    letter['theme'] = {'gradientStopsDark': [], 'gradientStopsLight': []}  # follows the app appearance
+    data['spaces'] = [themed, letter]
     window = data['windows'][0]
-    window.update(focusedSpaceID=space['id'], sidebarWidth=228, sidebarMode='anchored', frameX=80, frameY=80,
+    window.update(focusedSpaceID=letter['id'], sidebarWidth=228, sidebarMode='anchored', frameX=80, frameY=80,
                   frameWidth=1280, frameHeight=800, selectedNodeBySpace={})
     data['windows'] = [window]
     fixture = Path(scratch, 'sidebar-bars-letter.json'); fixture.write_text(json.dumps(data))
+    rows, problems = {}, []
+
+    def snap(name, window_number=None):
+        png = str(Path(scratch, 'uxb10-%s.png' % name))
+        app.call('snapshot', path=png, **({'window': window_number} if window_number else {}))
+        image = read_image(png)
+        try: os.remove(png)
+        except OSError: pass
+        return image
+
+    def header_check(name):
+        state = app.call('window-state'); width, height, pixel = snap(name); k = width / state['frame'][2]
+        band = state['chrome']['header']; baseline = state['chrome']['headerTitleBaseline']
+        y0, y1 = band[1] + 2, band[1] + band[3] - 2
+        icon, title = _ink(pixel, k, 10, 40, y0, y1), _ink(pixel, k, 41, 50, y0, y1)  # title: its "S"
+        rows[name] = {'icon': icon, 'title': title, 'baseline': baseline}
+        if not (icon and title) or abs(icon['ink'] - title['ink']) > 25 or abs(icon['top'] - title['top']) > 1 \
+                or abs(icon['bottom'] - (baseline - 1)) > 1:
+            problems.append('%s: letter %s vs title %s' % (name, icon, title))
+
     app = factory(urls=(), snapshot=str(fixture))
     try:
-        app.call('window-focus', id=app.call('window-state')['id'], activate=True); time.sleep(.6)
-        png = str(Path(scratch, 'uxb10-letter.png')); app.call('snapshot', path=png)
-        state = app.call('window-state')
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        app.call('appearance', name='dark'); time.sleep(.8)
+        header_check('header-dark')
+        app.call('appearance', name='light'); time.sleep(.8)  # live: the icon must follow the title
+        header_check('header-light-live')
+        # A theme edit with the app appearance unchanged: the title's ink changes, the icon must follow.
+        app.call('theme-set', space=letter['id'], style=dict(keyColor=dict(red=.12, green=.16, blue=.42, alpha=1), colorCount=1,
+                                                         appearance='dark', noiseFactor=0, intensityFactor=.8)); time.sleep(.8)
+        header_check('header-theme-dark')
+        app.call('theme-set', space=letter['id'], style=None); time.sleep(.5)
+        app.call('appearance', name='dark'); time.sleep(.6)
+        # Switcher: the light-themed Space is focused, so the bar is light; "P" must take its ink.
+        app.call('space', space=themed['id']); time.sleep(.9)
+        state = app.call('window-state'); width, height, pixel = snap('switcher'); k = width / state['frame'][2]
+        g = state['switcherGeometry']; f = g['items'][letter['id']]['frame']; plus = g['plus']
+        icon = _ink(pixel, k, f[0] + 6, f[0] + f[2] - 6, f[1] + 6, f[1] + f[3] - 6)
+        bar = _ink(pixel, k, plus[0] + 6, plus[0] + plus[2] - 6, plus[1] + 6, plus[1] + plus[3] - 6)
+        rows['switcher'] = {'icon': icon, 'plus': bar}
+        if not (icon and bar) or (icon['contrast'] > 0) != (bar['contrast'] > 0) or abs(icon['contrast']) < 20:
+            problems.append('switcher: letter %s vs bar glyph %s' % (icon, bar))
+        # Library Spaces card of the letter Space.
+        library = app.call('library-open', section='spaces'); time.sleep(1.2)
+        manager = app.call('space-manager-state')
+        column = next((c for c in manager['columns'] if c['id'] == letter['id']), None)
+        parts = (column or {}).get('headerInWindow', {})
+        if 'icon' in parts and 'title' in parts:
+            scale = k  # the Library window is on the same display as the browser window
+            width, height, pixel = snap('library', library['window']); k = scale
+            i, t = parts['icon'], parts['title']
+            icon = _ink(pixel, k, i[0], i[0] + i[2], i[1], i[1] + i[3])
+            title = _ink(pixel, k, t[0], t[0] + 9, t[1], t[1] + t[3])  # the title's "S"
+            rows['library'] = {'icon': icon, 'title': title}
+            if not (icon and title) or abs(icon['ink'] - title['ink']) > 25 \
+                    or abs((icon['top'] + icon['bottom']) / 2 - (title['top'] + title['bottom']) / 2) > 1.5:
+                problems.append('library: letter %s vs title %s' % (icon, title))
+        else:
+            problems.append('library: no card header geometry (%s)' % parts)
+        app.call('library-close')
     finally:
+        try: app.call('appearance', name='light')
+        except Exception: pass
         app.quit()
-    width, height, pixel = read_image(png)
-    k = width / state['frame'][2]
-    baseline = state['chrome']['headerTitleBaseline']; band = state['chrome']['header']
-
-    def ink(x0, x1):
-        y0, y1 = band[1] + 2, band[1] + band[3] - 2
-        bg = pixel(int(x0 * k), int(y0 * k))
-        pts = [(x, y) for x in range(x0, x1) for y in range(y0, y1)
-               if sum(abs(a - b) for a, b in zip(pixel(int(x * k), int(y * k)), bg)) > 60]
-        if not pts: return None
-        ys = [p[1] for p in pts]
-        return {'top': min(ys), 'bottom': max(ys), 'darkest': min(sum(pixel(int(x * k), int(y * k))) / 3 for x, y in pts)}
-    icon, title = ink(10, 40), ink(41, 60)  # the title's first letter, "S" (a capital, no descender)
-    ok = bool(icon and title) and abs(icon['darkest'] - title['darkest']) <= 25 \
-        and abs(icon['top'] - title['top']) <= 1 and abs(icon['bottom'] - (baseline - 1)) <= 1
-    results['UXB10_letter_icon_matches_title'] = {'ok': ok, 'icon': icon, 'title': title, 'baseline': baseline}
-    try: os.remove(png)
-    except OSError: pass
+    results['UXB10_letter_icon_matches_title'] = {'ok': not problems, 'problems': problems, 'rows': rows}
