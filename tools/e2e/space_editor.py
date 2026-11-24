@@ -493,6 +493,112 @@ def creation_keeps_focus_after_space_switch(factory, results, tmp, harness):
         app.quit()
 
 
+def spaces_polish_rows(factory, results, tmp, harness):
+    """UX round 1 C3-C6 and the narrow New Space form, in the real App (keys go through the App's own path).
+
+    C3: on header hover, a truncated title ends at least 6 pt before the options button.
+    C4: the theme editor opens with no focus ring on the pad (state and pixels).
+    C5: Create Space is disabled while the name is empty.
+    Narrow form: at 164 pt the subtitle and the Choose a Theme label fit (no clipped line, no wrap).
+    """
+    app = factory(urls=(), fresh=True)
+    out = Path(tmp, 'spaces-polish'); out.mkdir(parents=True, exist_ok=True)
+    def row(name, ok, **detail):
+        print(name, 'PASS' if ok else 'FAIL', flush=True)
+        results[name] = dict(detail, ok=bool(ok))
+    try:
+        app.call('window-frame', frame=[80, 60, 1120, 800])
+        # C5 and the narrow form, at the narrowest sidebar and at the default width.
+        for width in (164, 228):
+            app.call('updater-banner-width', width=float(width)); time.sleep(.3)
+            app.call('menu-perform', id='new-space')
+            harness.wait_until(lambda: app.call('creation-state').get('open'), timeout=5, step=.05); time.sleep(.4)
+            state = app.call('creation-state')
+            row('creation_create_disabled_when_empty_w%d' % width, state['name'] == '' and state.get('createEnabled') is False,
+                spaceName=state['name'], createEnabled=state.get('createEnabled'))
+            if width == 228:
+                # Return with an empty and a spaces-only name keeps the form and creates nothing; a real
+                # name enables Create, and clearing it disables Create again.
+                def key(name, mods=()): app.call('key', key=name, modifiers=list(mods), route='app')
+                count = len(app.call('spaces'))
+                key('return'); time.sleep(.3)
+                empty = app.call('creation-state')
+                app.call('type', text='   '); time.sleep(.2)
+                spaces_only = app.call('creation-state')
+                key('return'); time.sleep(.3)
+                after_spaces = app.call('creation-state')
+                key('a', ['cmd']); key('delete'); app.call('type', text='Named'); time.sleep(.2)
+                named = app.call('creation-state')
+                key('a', ['cmd']); key('delete'); time.sleep(.2)
+                cleared = app.call('creation-state')
+                # A refused Return keeps the form; a closed form has no name or button state to read.
+                row('creation_return_refused_when_empty', empty.get('open') and spaces_only.get('open') and after_spaces.get('open')
+                    and spaces_only.get('name') == '   ' and spaces_only.get('createEnabled') is False
+                    and len(app.call('spaces')) == count and named.get('createEnabled') is True
+                    and cleared.get('name') == '' and cleared.get('createEnabled') is False,
+                    empty=empty.get('open'), spacesOnly=[spaces_only.get('name'), spaces_only.get('createEnabled'), after_spaces.get('open')],
+                    named=named.get('createEnabled'), cleared=[cleared.get('name'), cleared.get('createEnabled')],
+                    spacesCreated=len(app.call('spaces')) - count)
+                if not app.call('creation-state').get('open'):
+                    app.call('menu-perform', id='new-space'); time.sleep(.4)
+                # C6: Choose a Theme targets the form itself, not whatever holds the keyboard.
+                row('creation_theme_button_targets_form', cleared.get('themeButtonTargetsForm') is True,
+                    themeButtonTargetsForm=cleared.get('themeButtonTargetsForm'))
+            row('creation_text_fits_w%d' % width, state.get('textFit') == {'subtitle': True, 'themeTitle': True},
+                textFit=state.get('textFit'), widthClass=state.get('widthClass'))
+            app.call('editor-close'); harness.wait_until(lambda: not app.call('creation-state').get('open'), timeout=5, step=.05)
+        app.call('updater-banner-width', width=228.0); time.sleep(.3)
+        # C4: no ring on the pad when the editor opens.
+        space = next(s for s in app.call('spaces') if s['focused'])['id']
+        app.call('editor-open', kind='theme', space=space)
+        harness.wait_until(lambda: app.call('editor-state').get('open'), timeout=5, step=.05); time.sleep(.6)
+        editor = app.call('editor-state')
+        shot = str(out / 'theme-editor.png'); app.call('snapshot', path=shot, window='editor')
+        width, height, pixel = harness.read_image(shot)
+        scale = width / editor['frame'][2]
+        pad = editor['controls']['pad']; x0, y0 = pad[0] + 13, pad[1] + 13; x1, y1 = x0 + pad[2], y0 + pad[3]
+        # The default ring is a blue line on the pad's edge: scan 3 px across each edge.
+        blue = 0
+        def is_blue(x, y):
+            r, g, b = pixel(x * scale, y * scale); return b - max(r, g) > 50
+        for t in range(0, int(pad[2]), 2):
+            for d in (-1, 0, 1):
+                blue += is_blue(x0 + t, y0 + d) + is_blue(x0 + t, y1 - 1 + d) + is_blue(x0 + d, y0 + t) + is_blue(x1 - 1 + d, y0 + t)
+        row('theme_editor_pad_no_ring_at_open', editor.get('padFirstResponder') is True and editor.get('padShowsFocusRing') is False and blue == 0,
+            padFirstResponder=editor.get('padFirstResponder'), padShowsFocusRing=editor.get('padShowsFocusRing'), bluePixels=blue, snapshot=shot)
+        # Keyboard focus still shows: Tab away and Shift-Tab back onto the pad turns the ring on.
+        app.call('editor-act', action='key', key='tab'); time.sleep(.2)
+        away = app.call('editor-state')
+        # A real Shift-Tab carries the back-tab character (U+0019), which AppKit reads as "previous".
+        app.call('editor-act', action='key', key='tab', modifiers=['shift'], characters='\x19'); time.sleep(.2)
+        back = app.call('editor-state')
+        row('theme_editor_pad_ring_on_keyboard_focus', away.get('padFirstResponder') is False and away.get('padShowsFocusRing') is False
+            and back.get('padFirstResponder') is True and back.get('padShowsFocusRing') is True,
+            away=[away.get('padFirstResponder'), away.get('padShowsFocusRing')], back=[back.get('padFirstResponder'), back.get('padShowsFocusRing')])
+        app.call('editor-close'); time.sleep(.3)
+        # C3: hover gap between a truncated title and the options button.
+        app.call('space-create', title='Studio projects and long research notes'); time.sleep(.8)
+        state = app.call('window-state'); header = state['chrome']['header']
+        app.call('mouse', action='hover', x=header[0] + header[2] / 2, y=header[1] + header[3] / 2)
+        hovered = harness.wait_until(lambda: (lambda st: st if st['chrome']['headerHovered'] else None)(app.call('window-state')), timeout=3, step=.05) or app.call('window-state')
+        title = hovered['chrome']['headerTitle']; sidebar_width = hovered['sidebarWidth']
+        more_min_x = sidebar_width - 13 - 26  # SpaceListMetrics.headerMoreTrailing / headerMoreSize
+        # Pixels: the gap between the title frame and the options button holds only the hover fill.
+        # A label that kept its wider rest-state truncation draws text into this gap.
+        shot = str(out / 'header-hover.png'); app.call('snapshot', path=shot)
+        width, height, pixel = harness.read_image(shot)
+        scale = width / hovered['frame'][2]
+        lumas = [harness.luma(pixel(x * scale, y * scale)) for x in range(int(title[0] + title[2]) + 1, int(more_min_x) - 1)
+                 for y in range(int(title[1]), int(title[1] + title[3]))]
+        spread = (max(lumas) - min(lumas)) if lumas else 0
+        row('space_header_hover_title_clears_options', hovered['chrome']['headerHovered'] and title[0] + title[2] <= more_min_x - 6 + .5
+            and lumas and spread < 30, titleMaxX=title[0] + title[2], optionsMinX=more_min_x, gapLumaSpread=spread,
+            hovered=hovered['chrome']['headerHovered'], snapshot=shot)
+        app.call('mouse', action='hover', x=700, y=400)
+    finally:
+        app.quit()
+
+
 def checks(factory, results, tmp, harness):
     run(factory, results, tmp, harness.ROOT, harness.wait_until, harness.read_image, harness.chrome_delta_e)
     icon_checks(factory, results, tmp, harness)
