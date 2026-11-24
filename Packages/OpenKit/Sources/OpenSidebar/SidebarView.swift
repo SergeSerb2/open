@@ -581,7 +581,9 @@ extension SidebarView {
     }
 
     public var displayedSpaceTitle: String? { pager.currentPage?.header.displayedTitle }
+    #if DEBUG || OPEN_AUTOMATION
     public var spaceHeaderTitleDraw: [String: Any] { pager.currentPage?.header.titleDrawEvidence ?? [:] }
+    #endif
 
     /// Favorite tiles in display order.
     public var displayedFavorites: [ItemID] { favorites.tabs.map(\.id) }
@@ -710,6 +712,7 @@ extension SidebarView {
 
     public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }
 
+    #if DEBUG || OPEN_AUTOMATION
     /// Bottom-bar geometry in `root` coordinates for layout checks: Home, +, the sidebar, and each
     /// switcher item's full frame and the part left after every clipping ancestor (what can draw).
     public func switcherGeometry(in root: NSView) -> [String: Any] {
@@ -742,6 +745,7 @@ extension SidebarView {
                 "strip": r(strip), "offset": Double(strip.contentView.bounds.minX), "scrollable": strip.overflows,
                 "fade": ["left": fade.left, "right": fade.right, "masked": strip.layer?.mask != nil]]
     }
+    #endif
     /// Delay a switcher's pending spring-load Space switch was scheduled with.
     public func springLoadDelay(spaceID: SpaceID) -> TimeInterval? { bottomBar.items[spaceID]?.pendingSpringLoadDelay }
 

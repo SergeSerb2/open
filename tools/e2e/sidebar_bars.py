@@ -9,6 +9,11 @@ UXB-4  Real scroll events (a trackpad gesture and a vertical mouse wheel, sent t
        scroll an overflowing strip, keep UXB-1 true, and turn the edge fades on and off with what
        is hidden. The same events move nothing when the Spaces fit.
 UXB-5  Fit and near-fit widths (6 Spaces at 300, 288 and 280 pt): no fade where no icon is hidden.
+UXB-6  Resize sweep 164 -> 176 pt in 1 pt drags with the middle Space current: the strip offset only
+       moves one way (no jitter) and the current icon's ink stays out of both fades.
+UXB-7  At 164 pt, moving the current Space from index 0 to 2 (real Space Manager drag; the Library
+       shows about three columns, so both must be on screen) and undoing it (Cmd+Z) keeps the
+       current Space visible and out of the fades.
 
 Geometry comes from `window-state.switcherGeometry`: frames in window-root coordinates and each
 item's part left after every clipping ancestor. Widths change through real resize-handle drags.
@@ -130,6 +135,7 @@ def run(factory, results, wait_until, scratch, root):
                     'ok': not p2 and last['current'] == ids[-1], 'problems': p2, 'geometry': last}
             if count == 6:
                 _scroll_rows(app, results, wait_until, ids, resize, geometry)
+                _reveal_rows(app, results, wait_until, ids, resize, geometry)
         finally:
             app.quit()
 
@@ -140,16 +146,26 @@ def _scroll_rows(app, results, wait_until, ids, resize, geometry):
         app.call('mouse', action='scroll', x=s[0] + s[2] / 2, y=s[1] + s[3] / 2, **event)
 
     def gesture(g, dx):
-        scroll(g, dx=0, dy=0, phase='began')
-        for _ in range(4): scroll(g, dx=dx / 4, dy=0, phase='changed')
+        # The first event carries the horizontal delta, as a real trackpad's does (AppKit can lock a
+        # gesture's axis on it).
+        scroll(g, dx=dx / 5, dy=0, phase='began')
+        for _ in range(4): scroll(g, dx=dx / 5, dy=0, phase='changed')
         scroll(g, dx=0, dy=0, phase='ended')
         time.sleep(1.2)  # let an elastic bounce at an end settle
 
     resize(228)
     app.call('space', space=ids[0]); time.sleep(.6)
     start = geometry()
-    gesture(start, -30)
-    swiped = geometry()
+    # The strip hands gestures to NSScrollView unchanged. Synthetic gesture events move it by an
+    # AppKit-chosen distance, and in some runs not at all (28, 60, 0, 24, 0, 0 pt over six runs on
+    # the M5), so the gesture gets up to three attempts, each recorded. The wheel steps below are
+    # Open's own code and are exact.
+    attempts = []
+    for _ in range(3):
+        gesture(start, -30)
+        swiped = geometry()
+        attempts.append(swiped['offset'])
+        if swiped['offset'] > 0: break
     scroll(swiped, dx=0, dy=-400, phase='none'); time.sleep(1.0)  # a vertical wheel to the end
     wheeled = geometry()
     scroll(wheeled, dx=0, dy=400, phase='none'); time.sleep(1.0)  # and back to the start
@@ -160,7 +176,7 @@ def _scroll_rows(app, results, wait_until, ids, resize, geometry):
               and swiped['offset'] > 0 and wheeled['offset'] == 60  # 6 × 34 − 144 = 60 pt; AppKit sets the gesture's distance
               and wheeled['fade']['left'] and not wheeled['fade']['right'] and back['offset'] == 0
               and not back['fade']['left'] and back['fade']['right'] and not problems,
-        'offsets': [start['offset'], swiped['offset'], wheeled['offset'], back['offset']],
+        'offsets': [start['offset'], swiped['offset'], wheeled['offset'], back['offset']], 'gestureAttempts': attempts,
         'fades': [start['fade'], swiped['fade'], wheeled['fade'], back['fade']], 'problems': problems}
     rows = {}
     for width in (300, 288, 280):
@@ -177,3 +193,48 @@ def _scroll_rows(app, results, wait_until, ids, resize, geometry):
                              and after['fade'] == {'left': False, 'right': False, 'masked': False}
                              and not rows[width]['problems'])
     results['UXB5_fit_and_near_fit_no_fade'] = {'ok': all(r['ok'] for r in rows.values()), 'widths': rows}
+
+
+def _ink_clear(g):
+    """The current item's ink (emoji 14 pt centered in the 36 pt frame) lies outside each active fade."""
+    current = g['items'][g['current']]
+    strip, f = g['strip'], current['frame']
+    ink = (f[0] + 11 - strip[0], f[0] + 25 - strip[0])  # in strip coordinates
+    fade = 28
+    return ((not g['fade']['left'] or ink[0] >= fade - 0.5)
+            and (not g['fade']['right'] or ink[1] <= strip[2] - fade + 0.5))
+
+
+def _reveal_rows(app, results, wait_until, ids, resize, geometry):
+    middle = ids[len(ids) // 2]
+    resize(164)
+    app.call('space', space=middle); time.sleep(.8)
+    steps = []
+    for width in range(164, 177):
+        if width != 164: resize(width)
+        g = geometry()
+        steps.append({'width': app.call('window-state')['sidebarWidth'], 'offset': g['offset'], 'inkClear': _ink_clear(g),
+                      'fade': g['fade'], 'problems': _bar_problems(g)})
+    offsets = [x['offset'] for x in steps]
+    monotonic = all(b <= a + 0.5 for a, b in zip(offsets, offsets[1:]))
+    results['UXB6_resize_sweep_middle_space'] = {
+        'ok': monotonic and all(x['inkClear'] and not x['problems'] for x in steps), 'monotonic': monotonic, 'steps': steps}
+
+    # UXB-7: reorder the current (first) Space and back through the real Manager.
+    resize(164)
+    app.call('space', space=ids[0]); time.sleep(.8)
+    window = app.call('window-state')['id']
+    before = geometry()
+    app.call('library-open', entry='space-menu'); time.sleep(.8)
+    app.call('space-manager-drag', space=ids[0], to=2); time.sleep(.5)
+    app.call('library-close')
+    app.call('window-focus', id=window, activate=True); time.sleep(.6)
+    moved = geometry()
+    app.call('key', key='z', modifiers=['cmd'], route='app'); time.sleep(.8)
+    undone = geometry()
+    rows = {name: {'index': g['items'][ids[0]]['index'], 'offset': g['offset'], 'problems': _bar_problems(g),
+                   'inkClear': _ink_clear(g)}
+            for name, g in (('before', before), ('moved', moved), ('undone', undone))}
+    results['UXB7_reorder_keeps_current_visible'] = {
+        'ok': rows['before']['index'] == 0 and rows['moved']['index'] == 2 and rows['undone']['index'] == 0
+              and all(not r['problems'] and r['inkClear'] for r in rows.values()), 'rows': rows}

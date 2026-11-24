@@ -10,9 +10,11 @@ import ImageIO
 @MainActor
 final class TextLabel: NSView {
     private(set) var lastDrawnText = ""
+    #if DEBUG || OPEN_AUTOMATION
     /// Width of the view and of the drawn line at the last draw (layout checks: a stale draw keeps the old width).
     private(set) var lastDrawnBoundsWidth: CGFloat = 0
     private(set) var lastDrawnLineWidth: CGFloat = 0
+    #endif
     /// Optional receipt for a real Core Text draw. Only mini-player titles install it.
     var onDrawnLine: (@MainActor (CTLine, String, Bool, CGFloat) -> Void)?
     private static let truncationToken = NSAttributedString.Key("OpenTextLabelTruncationToken")
@@ -70,7 +72,9 @@ final class TextLabel: NSView {
         if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderTitleDraws += 1 }
         let (string, textColor) = tracked({ (text(), color()) }) { [weak self] in self?.needsDisplay = true }
         lastDrawnText = ""
+        #if DEBUG || OPEN_AUTOMATION
         lastDrawnBoundsWidth = bounds.width; lastDrawnLineWidth = 0
+        #endif
         guard !string.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
         var line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
@@ -94,7 +98,9 @@ final class TextLabel: NSView {
         ctx.textPosition = CGPoint(x: x, y: baseline)
         CTLineDraw(line, ctx)
         lastDrawnText = string
+        #if DEBUG || OPEN_AUTOMATION
         lastDrawnLineWidth = lineWidth
+        #endif
         onDrawnLine?(line, string, wasTruncated, lineWidth)
         ctx.restoreGState()
     }

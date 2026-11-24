@@ -21,8 +21,9 @@ final class BottomBarView: NSView {
     private(set) var items: [SpaceID: SwitcherItemView] = [:]
     private var loop: ObservationLoop?
     /// What the strip last scrolled the current Space into view for; it scrolls again only when
-    /// the current Space, the strip width, or the Space count changes (never against a user scroll).
-    private var revealed: (current: SpaceID?, width: CGFloat, count: Int)?
+    /// the current Space, its position (a reorder or undo), the strip width, or the Space count
+    /// changes (never against a user scroll).
+    private var revealed: (current: SpaceID?, index: Int?, width: CGFloat, count: Int)?
     var menus: SidebarMenus
 
     init(context: SidebarContext, menus: SidebarMenus) {
@@ -101,10 +102,16 @@ final class BottomBarView: NSView {
         }
         strip.tile()  // the clip view takes the new strip width before reveal reads it
         let current = context.focusedSpace.flatMap { live.contains($0.id) ? $0.id : nil }
-        if revealed == nil || revealed!.current != current || revealed!.width != stripRect.width || revealed!.count != spaces.count {
-            // Animate only a Space switch; a resize or a new Space lands at once.
-            let animated = revealed != nil && revealed!.current != current && revealed!.width == stripRect.width && revealed!.count == spaces.count
-            revealed = (current, stripRect.width, spaces.count)
+        let index = current.flatMap { id in spaces.firstIndex { $0.id == id } }
+        let key = (current: current, index: index, width: stripRect.width, count: spaces.count)
+        if let old = revealed, old.current == key.current, old.index == key.index, old.width == key.width, old.count == key.count {
+            // Nothing the reveal depends on changed.
+        } else {
+            // Animate only a Space switch, and only where the sidebar animates (pager rule: a
+            // visible window, `animatesChanges`); a resize, reorder or new Space lands at once.
+            let animated = revealed != nil && revealed!.current != current && revealed!.width == key.width && revealed!.count == key.count
+                && context.animatesChanges && (context.sidebar?.animatesSidebarChanges ?? false)
+            revealed = key
             strip.reveal(current.flatMap { items[$0]?.frame }, animated: animated)
         }
         strip.updateFade()
@@ -145,6 +152,7 @@ final class SwitcherStripView: NSScrollView {
 
     override func scrollWheel(with event: NSEvent) {
         guard overflows else { nextResponder?.scrollWheel(with: event); return }
+        TooltipController.shared.cancel(for: nil)  // a shown or pending tooltip would stay at the old place
         // A mouse wheel (no gesture phase) that turns vertically moves the strip sideways.
         if event.phase == [], event.momentumPhase == [], abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
             let step = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * BottomBarMetrics.switcherPitch / 3
@@ -154,19 +162,41 @@ final class SwitcherStripView: NSScrollView {
         super.scrollWheel(with: event)
     }
 
+    /// Whether an animated reveal is in flight, and which one (a newer scroll supersedes it).
+    private var revealing = false
+    private var revealGeneration = 0
+
+    /// Scrolls to `x` (not rounded, so slow precise wheel steps add up). A direct scroll replaces an
+    /// in-flight reveal: AppKit retargets an animator property when it is set again in a
+    /// zero-duration group, so the reveal cannot overwrite the new position.
     func scroll(toX x: CGFloat, animated: Bool) {
         let limit = max(0, document.frame.width - contentView.bounds.width)
-        let target = NSPoint(x: min(max(0, x.rounded()), limit), y: 0)
-        guard target != contentView.bounds.origin else { return }
+        let target = NSPoint(x: min(max(0, x), limit), y: 0)
+        guard target != contentView.bounds.origin || revealing else { return }
+        TooltipController.shared.cancel(for: nil)
+        revealGeneration += 1
+        let generation = revealGeneration
         if animated && !Motion.reducesMotion {
+            revealing = true
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = BottomBarMetrics.switcherRevealDuration
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 contentView.animator().setBoundsOrigin(target)
             } completionHandler: { [weak self] in
-                MainActor.assumeIsolated { if let self { self.reflectScrolledClipView(self.contentView) } }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if self.revealGeneration == generation { self.revealing = false }
+                    self.reflectScrolledClipView(self.contentView)
+                }
             }
         } else {
+            if revealing {
+                revealing = false
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0
+                    contentView.animator().setBoundsOrigin(target)
+                }
+            }
             contentView.setBoundsOrigin(target)
             reflectScrolledClipView(contentView)
         }
@@ -177,10 +207,14 @@ final class SwitcherStripView: NSScrollView {
         guard overflows else { scroll(toX: 0, animated: false); return }
         guard let itemFrame else { return }
         let visible = contentView.bounds, margin = BottomBarMetrics.switcherFadeWidth
-        if itemFrame.minX - margin < visible.minX {
-            scroll(toX: itemFrame.minX - margin, animated: animated)
+        if visible.width < itemFrame.width + 2 * margin {
+            // Too narrow to keep the item clear of both fades (strip under 92 pt: sidebar 164–175
+            // pt): center it. The offset then moves one way as the width changes (no jitter).
+            scroll(toX: (itemFrame.midX - visible.width / 2).rounded(), animated: animated)
+        } else if itemFrame.minX - margin < visible.minX {
+            scroll(toX: (itemFrame.minX - margin).rounded(), animated: animated)
         } else if itemFrame.maxX + margin > visible.maxX {
-            scroll(toX: itemFrame.maxX + margin - visible.width, animated: animated)
+            scroll(toX: (itemFrame.maxX + margin - visible.width).rounded(), animated: animated)
         } else {
             // Keep a stale offset inside the new range (the document can shrink).
             scroll(toX: visible.minX, animated: false)
@@ -195,8 +229,15 @@ final class SwitcherStripView: NSScrollView {
         return (visible.minX > ink + 0.5, visible.maxX < document.frame.width - ink - 0.5)
     }
 
+    /// The fade last applied (ends and size); a scroll that keeps it skips the mask update.
+    private var appliedFade: FadeState?
+    private struct FadeState: Equatable { let left: Bool, right: Bool, size: CGSize }
+
     func updateFade() {
         let (left, right) = fadeEdges
+        let state = FadeState(left: left, right: right, size: bounds.size)
+        guard state != appliedFade else { return }
+        appliedFade = state
         guard let layer, bounds.width > 0, left || right else { layer?.mask = nil; return }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let f = min(0.5, BottomBarMetrics.switcherFadeWidth / bounds.width)
