@@ -101,7 +101,8 @@ import ImageIO
     progress.frame = CGRect(x: 44,y: 69,width: 104,height: 6)
     progress.selected = ["name","import","favorites","theme","blocker","defaultBrowser","ready"].firstIndex(of: step) ?? 0
     mail.frame = CGRect(x: 58,y: bounds.height-126,width: 184,height: 48)
-    flyingLink.frame = CGRect(x: 112,y: bounds.height-184,width: 160,height: 40)
+    // The link starts on the Mail chip, so it seems to leave Mail rather than appear over the page.
+    flyingLink.frame = CGRect(x: 70,y: bounds.height-122,width: 160,height: 40)
   }
   func update(step: String,name: String,favorites: [(String,OnboardingFavicons.Tile)],count: Int,report: Bool,blocker: Bool,card: OpenCardDrawing,reduceMotion: Bool,source: BrowserModel) {
     let changed = self.step != step; self.step = step
@@ -158,8 +159,9 @@ import ImageIO
   }
   #endif
   var cardRect: CGRect {
-    let width = max(1,min(620,bounds.width-96))
-    return CGRect(x: bounds.midX-width/2,y: bounds.midY-width*0.625/2,width: width,height: width*0.625)
+    // 560 pt wide and 40 pt below centre: the card sits clear of the doorway at the top right.
+    let width = max(1,min(560,bounds.width-96))
+    return CGRect(x: bounds.midX-width/2,y: bounds.midY-40-width*0.625/2,width: width,height: width*0.625)
   }
   func showConfetti(_ emitter: CAEmitterLayer) {
     emitter.frame = bounds; emitter.emitterPosition = CGPoint(x: cardRect.midX,y: cardRect.maxY+12)
