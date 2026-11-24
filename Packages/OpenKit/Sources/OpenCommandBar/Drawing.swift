@@ -7,8 +7,13 @@ import OpenDesign
 struct TextLine {
     let line: CTLine
     let width: CGFloat
+    /// The string the line was set from (a truncated line keeps its source's).
+    private let source: String
+    /// Marks the "…" run of a truncated line, so `visibleText` can tell it from the source's own text.
+    private static let tokenKey = NSAttributedString.Key("OpenTruncationToken")
 
     init(_ string: String, font: NSFont, color: CGColor, boldRanges: [Range<Int>] = []) {
+        source = string
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         if boldRanges.isEmpty {
             line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
@@ -22,8 +27,9 @@ struct TextLine {
         width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
-    private init(line: CTLine) {
+    private init(line: CTLine, source: String) {
         self.line = line
+        self.source = source
         width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
@@ -31,9 +37,22 @@ struct TextLine {
     func truncated(to maxWidth: CGFloat, mode: CTLineTruncationType = .end, font: NSFont, color: CGColor) -> TextLine {
         guard width > maxWidth else { return self }
         guard maxWidth > 0 else { return TextLine("", font: font, color: color) }
-        let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [.font: font, .foregroundColor: color]))
+        let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [.font: font, .foregroundColor: color, Self.tokenKey: true]))
         guard let cut = CTLineCreateTruncatedLine(line, Double(maxWidth), mode, token) else { return self }
-        return TextLine(line: cut)
+        return TextLine(line: cut, source: source)
+    }
+
+    /// The text this line shows, with "…" where it was cut (automation reads what a row really draws).
+    var visibleText: String {
+        let text = source as NSString
+        var out = ""
+        for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
+            if (CTRunGetAttributes(run) as NSDictionary)[Self.tokenKey] != nil { out += "…"; continue }
+            let range = CTRunGetStringRange(run)
+            guard range.location >= 0, range.location + range.length <= text.length else { continue }
+            out += text.substring(with: NSRange(location: range.location, length: range.length))
+        }
+        return out
     }
 
     /// Draws with the baseline at `y` in a flipped context.

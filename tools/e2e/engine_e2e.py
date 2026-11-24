@@ -15525,9 +15525,9 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
                 sys.modules[__name__], factory, results[opts.only], tmp)
-            # UX round 1 wave 2 (W3): Library > Spaces with six Spaces, real swipe and wheel.
-            runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
             if os.environ.get('OPEN_MIXED_DELETE_ONLY') != '1':
+                # UX round 1 wave 2 (W3): Library > Spaces with six Spaces, real swipe and wheel.
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/archive_split_sweep.py'))['checks'](
                     sys.modules[__name__], factory, results[opts.only], tmp)
                 space_manager_checks(results[opts.only], tmp, opts.config, opts.style)

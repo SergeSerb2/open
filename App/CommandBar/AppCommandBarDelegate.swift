@@ -266,6 +266,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "engineID": String(describing: ObjectIdentifier(bar.engine)),
       "firstSnapshotURLs": firstSnapshotURLs,
+      "drawnText": bar.view.debugDrawnTexts.map { ["id": $0.id, "title": $0.title, "subtitle": $0.subtitle, "titleGaveRoom": $0.titleGaveRoom] as [String: Any] },
       "drawn": bar.rows.map { row -> [String: Any] in
         let keys: [String] = if case .keys(let keys) = row.accessory { keys } else { [] }
         return ["id": row.id, "title": row.title, "subtitle": row.subtitle, "keys": keys] },

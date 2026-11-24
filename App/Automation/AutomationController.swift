@@ -2652,6 +2652,7 @@
         case "changed": phase = 2
         case "ended": phase = 4
         case "cancelled": phase = 8
+        case "mayBegin": phase = 128
         default: throw Failure(message: "invalid scroll phase")
         }
         cg.location = target.convertPoint(toScreen: point)
@@ -3219,7 +3220,8 @@
         "manager": rect(manager.bounds, manager), "visible": rect(clip.bounds, clip),
         "documentWidth": manager.scrollView.documentView?.frame.width ?? 0,
         "columns": manager.context.model.spaces.compactMap { space in manager.columnFrame(spaceID: space.id).map { rect($0, manager.scrollView.documentView!) } },
-        "fadeLeft": fades.left, "fadeRight": fades.right, "masked": manager.scrollView.layer?.mask != nil]
+        "fadeLeft": fades.left, "fadeRight": fades.right, "masked": manager.scrollView.layer?.mask != nil,
+        "maskWrites": manager.edgeMaskWrites, "originX": manager.scrollView.contentView.bounds.minX]
     }
     /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
     private func spaceManagerRowControls(_ args: [String: Any]) throws -> Any {

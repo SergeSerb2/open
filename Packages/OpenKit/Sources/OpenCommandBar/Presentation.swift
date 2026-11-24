@@ -102,13 +102,14 @@ public enum CommandBarText {
 
 /// Maps `OpenSuggest` rows to drawn rows. Each rule names its evidence.
 enum RowPresentation {
-    /// Tabs whose title another drawn row also has (the same page open in several Spaces) are
+    /// Tabs whose title another drawn tab row also has (the same page open in several Spaces) are
     /// indistinguishable title-only rows. Each one gets "<Space> · <host>" (Space name first, then the
     /// host; either part may be absent). Rows that still match (same Space and host) show the short URL
     /// in place of the host. Interim until Arc's own labels are captured (UXA w2 W2).
     static func disambiguate(_ rows: [CommandBarRow], suggestions: [Suggestion]) -> [CommandBarRow] {
         var count: [String: Int] = [:]
-        for row in rows where row.titleParts.isEmpty { count[row.title, default: 0] += 1 }
+        // Only tab rows count: a search, action or history row with the same title is not another tab.
+        for row in rows where row.kind == .switchToTab && row.titleParts.isEmpty { count[row.title, default: 0] += 1 }
         func label(_ s: Suggestion, path: Bool) -> String {
             let place = path ? s.url.map(URLDisplay.short) : s.url?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 }
             return [s.spaceTitle ?? "", place ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")

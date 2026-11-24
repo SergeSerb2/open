@@ -130,17 +130,26 @@ public final class SpaceManagerView: NSView {
         let visible = scrollView.documentVisibleRect, width = strip.frame.width
         return (visible.minX > 0.5, visible.maxX < width - 0.5)
     }
+    /// The fade last written, so scrolling between the ends writes nothing.
+    private var appliedFade: (left: Bool, right: Bool, size: CGSize)?
+    /// Mask writes since creation (automation: scrolling must not rewrite it every frame).
+    public private(set) var edgeMaskWrites = 0
     private func updateEdgeFade() {
-        let (left, right) = edgeFades
-        guard left || right, scrollView.bounds.width > Self.fadeWidth * 2 else { scrollView.layer?.mask = nil; return }
+        var (left, right) = edgeFades
+        let size = scrollView.bounds.size
+        if size.width <= Self.fadeWidth * 2 { (left, right) = (false, false) }
+        if let applied = appliedFade, applied.left == left, applied.right == right, applied.size == size { return }
+        appliedFade = (left, right, size)
+        edgeMaskWrites += 1
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        let f = Double(Self.fadeWidth / scrollView.bounds.width)
+        defer { CATransaction.commit() }
+        guard left || right else { scrollView.layer?.mask = nil; return }
+        let f = Double(Self.fadeWidth / size.width)
         edgeMask.frame = scrollView.bounds
         edgeMask.locations = [0, NSNumber(value: f), NSNumber(value: 1 - f), 1]
         let solid = NSColor.black.cgColor, clear = NSColor.black.withAlphaComponent(0).cgColor
         edgeMask.colors = [left ? clear : solid, solid, solid, right ? clear : solid]
         if scrollView.layer?.mask !== edgeMask { scrollView.layer?.mask = edgeMask }
-        CATransaction.commit()
     }
 
     private var displayedOrder: [SpaceID] {
@@ -432,19 +441,48 @@ private final class SpaceManagerColumn: NSView {
     public static var spaceReorderFrame: (@MainActor () -> Void)?
 }
 
-/// The Space Manager strip scrolls sideways. A mouse wheel has no sideways axis, so a plain (not
-/// trackpad) vertical wheel turn that reaches the strip moves it sideways; columns pass trackpad
-/// swipes and Shift-wheel turns here (PageScrollView).
+/// The Space Manager strip scrolls sideways. A mouse wheel has no sideways axis, so a notched wheel
+/// turn over the strip itself (headers, gaps, footers) moves it sideways, 48 pt per line. Over a
+/// column's list, vertical input belongs to that list, even at its end; the column passes sideways
+/// input here through `scrollSideways(with:)` (PageScrollView).
 final class SpaceManagerScrollView: NSScrollView {
-    override func scrollWheel(with event: NSEvent) {
-        guard !event.hasPreciseScrollingDeltas, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else {
+    private static let lineStep: CGFloat = 48
+
+    /// Sideways input a column passed on: a trackpad gesture, or a wheel turn (sideways, or Shift).
+    func scrollSideways(with event: NSEvent) {
+        guard !event.hasPreciseScrollingDeltas, event.phase == [], event.momentumPhase == [] else {
             super.scrollWheel(with: event); return
         }
-        // (A Shift-wheel turn routed from a column arrives here as vertical too.)
-        // One wheel line moves 48 pt, like a row of the columns.
+        step(event)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        // Over a column's list, input reaches the strip only through `scrollSideways(with:)`. What
+        // arrives here from there is vertical input the list could not use (it fits, or is at its end),
+        // passed up the responder chain: it must not move the strip.
+        if isOverColumnList(event) { return }
+        guard !event.hasPreciseScrollingDeltas, event.phase == [], event.momentumPhase == [] else {
+            super.scrollWheel(with: event); return
+        }
+        step(event)
+    }
+
+    /// One notched turn: its larger axis, vertical (a plain wheel) or sideways (Shift, a tilt wheel).
+    private func step(_ event: NSEvent) {
+        let lines = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) ? event.scrollingDeltaX : event.scrollingDeltaY
         var bounds = contentView.bounds
-        bounds.origin.x -= event.scrollingDeltaY * 48
+        bounds.origin.x -= lines * Self.lineStep
         contentView.scroll(to: contentView.constrainBoundsRect(bounds).origin)
         reflectScrolledClipView(contentView)
+    }
+
+    private func isOverColumnList(_ event: NSEvent) -> Bool {
+        guard let document = documentView, let container = document.superview else { return false }
+        var view = document.hitTest(container.convert(event.locationInWindow, from: nil))
+        while let candidate = view, candidate !== document {
+            if candidate is PageScrollView { return true }
+            view = candidate.superview
+        }
+        return false
     }
 }
