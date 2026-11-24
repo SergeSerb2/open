@@ -481,6 +481,13 @@ extension LibraryPanelView {
           }
         }
     }
+    /// "1:16 PM · example.com/path": the visit time leads, so a long URL truncates instead of
+    /// pushing the time out of the row (UXE E9). The scheme adds nothing a reader needs.
+    nonisolated static func historySubtitle(_ url: URL, _ visit: Date) -> String {
+        var address = url.absoluteString
+        for scheme in ["https://","http://"] where address.hasPrefix(scheme) { address.removeFirst(scheme.count); break }
+        return visit.formatted(date:.omitted,time:.shortened)+" · "+address
+    }
     func historySources() -> [LibraryRowSource] {
         let profile = viewModel.historyProfileID
         return viewModel.historyRows.filter { row in
@@ -491,13 +498,13 @@ extension LibraryPanelView {
                 || (historyWhenChips.contains("week") && age >= 0 && age < 7)
                 || (historyWhenChips.contains("older") && age >= 7)
         }.map { row in
-          LibraryRowSource(id:row.url.absoluteString,date:row.lastVisit,text:row.title+" "+row.url.absoluteString,prepareText:{ LibraryRowText(title:row.title.isEmpty ? row.url.host() ?? "Page" : row.title,subtitle:row.url.absoluteString+" · "+row.lastVisit.formatted(date:.omitted,time:.shortened)) }) { [unowned self] prepared in
+          LibraryRowSource(id:row.url.absoluteString,date:row.lastVisit,text:row.title+" "+row.url.absoluteString,prepareText:{ LibraryRowText(title:row.title.isEmpty ? row.url.host() ?? "Page" : row.title,subtitle:Self.historySubtitle(row.url,row.lastVisit)) }) { [unowned self] prepared in
             let open: () -> Void = { [weak self] in
                 guard let self, self.viewModel.historyProfileID == profile else { return }
                 self.viewModel.actions.openHistoryItem(url:row.url); self.onClose?()
             }
             return LibraryRowItem(id:row.url.absoluteString,title:row.title.isEmpty ? row.url.host() ?? "Page" : row.title,
-                subtitle:prepared?.subtitle ?? row.url.absoluteString+" · "+row.lastVisit.formatted(date:.omitted,time:.shortened),kind:"history",day:"",
+                subtitle:prepared?.subtitle ?? Self.historySubtitle(row.url,row.lastVisit),kind:"history",day:"",
                 image:symbol("globe"),loadImage:{ [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.url,activate:open,
                 hoverActions:[.init(title:"Delete",glyph:.trash,run:{ [weak self] in
                     self?.confirm("Delete this history entry?") { [weak self] in
@@ -587,7 +594,9 @@ extension LibraryPanelView {
             }
             // Arc's card: the Boost name over its host, no on/off text (capture session 8 item 14,
             // `v13/33-boost-menu-delete/i14-boosts.png`: "My Boost" over "127.0.0.1").
-            return LibraryRowItem(id:id,title:item.name,subtitle:item.domain,kind:"boost",image:symbol("paintbrush.pointed"),activate:edit,
+            // A Boost that was never named shows its site, as Site Control does (UXE E3).
+            let name = item.name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? item.domain : item.name
+            return LibraryRowItem(id:id,title:name,subtitle:item.domain,kind:"boost",image:symbol("paintbrush.pointed"),activate:edit,
                 actions:[.init(title:"Edit Boost",run:edit),.init(title:item.isEnabled ? "Turn Off" : "Turn On",run:{ [weak self] in
                     guard let self else { return }
                     self.viewModel.actions.setBoostEnabled(id:id,enabled:!item.isEnabled,profileID:profile); self.renderRows()
