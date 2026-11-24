@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate About Credits.rtf and its text twin from the release inventory.
 
-Credits.rtf (the About panel) lists each component as name, version and license; the text
-twin Acknowledgements.txt also keeps the inventory's use and source-offer columns. Both carry
-every license text and the Chromium credits.
+Credits.rtf (the About panel) lists each component as name, short version and license, with an
+indented Source line for copyleft (LGPL, GPL, MPL) components; the text twin Acknowledgements.txt
+keeps the inventory's full use and source-offer columns. Both carry every license text and the
+Chromium credits.
 
 No network, third-party modules, or credentials. Preview mode warns about
 missing/sample Chromium credits and an unset public MPL source location.
@@ -311,6 +312,15 @@ def short_version(version):
     return re.sub(r'\s{2,}', ' ', first).strip(' ,;')
 
 
+COPYLEFT = re.compile(r'\b(?:L?GPL|MPL)-')
+
+
+def source_url(offer):
+    """The first public https URL of the inventory's source/offer column, without trailing punctuation."""
+    match = re.search(r'https://[^\s`|]+', offer)
+    return match[0].rstrip(').,;') if match else None
+
+
 def short_license(license_name):
     """SPDX-style identifiers only: notes in parentheses and prose parts stay in the text twin."""
     plain = re.sub(r'\s*\([^)]*\)', '', license_name)
@@ -331,10 +341,11 @@ def about_line(name, version, license_name):
     return f'{name} {short} — {license_text}' if short[0].isdigit() or short[0] == 'v' else f'{name}, {short} — {license_text}'
 
 
-def rtf(text, hanging=frozenset()):
+def rtf(text, hanging=frozenset(), indented=frozenset()):
     # RTF uses signed UTF-16 code units, including surrogate pairs for non-BMP
     # text. Escape braces/backslashes before emitting control words. Lines in
-    # `hanging` get their own paragraph with a hanging indent (About components).
+    # `hanging` get their own paragraph with a hanging indent (About components);
+    # lines in `indented` sit at that indent (a component's Source line).
     def escape(char):
         if char in '\\{}':
             return '\\' + char
@@ -350,7 +361,12 @@ def rtf(text, hanging=frozenset()):
     for index, line in enumerate(lines):
         body = ''.join(escape(char) for char in line)
         end = '\\par\n' if index < len(lines) - 1 else ''
-        out.append('\\pard\\fi-360\\li360 ' + body + end + '\\pard ' if line in hanging else body + end)
+        if line in hanging:
+            out.append('\\pard\\fi-360\\li360 ' + body + end + '\\pard ')
+        elif line in indented:
+            out.append('\\pard\\li360 ' + body + end + '\\pard ')
+        else:
+            out.append(body + end)
     return '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Helvetica;}}\\uc1\\f0\\fs20\n' + ''.join(out) + '}\n'
 
 
@@ -424,18 +440,24 @@ def main():
     # review notes; they stay complete in Acknowledgements.txt. Every license text and the
     # Chromium credits below are in both outputs.
     about = [f'Open {marketing} ({build})', stamp, '', 'Components', '']
-    hanging = set()
+    hanging, indented = set(), set()
     for name, version, license_name, use, offer in shipped:
         paragraphs.extend([f'{name} — {version} — {license_name}\n{use}\n{offer}', ''])
         line = about_line(name, version, license_name)
         about.append(line); hanging.add(line)
+        # Copyleft components keep their source location in the App itself (lead, #683 r2).
+        if COPYLEFT.search(license_name):
+            source = source_url(offer)
+            if not source:
+                raise ValueError('copyleft component needs a public source URL in the inventory: ' + name)
+            about.append('Source: ' + source); indented.add('Source: ' + source)
     about.append('')
     if needs_source:
         location = 'Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)')
         paragraphs.extend([location, ''])
         about.extend([location, ''])
-    about.extend(['Full notices for each component, including how Open uses it and where to get its '
-                  'source, are in Acknowledgements.txt, published with each Open release.', ''])
+    about.extend(['Full notices for each component, including how Open uses it, are in '
+                  'Acknowledgements.txt, published with each Open release.', ''])
     tail = ['License texts', '']
     for name, text in texts:
         tail.extend([name, text.rstrip(), ''])
@@ -476,7 +498,7 @@ def main():
         raise ValueError('RTF and TXT outputs must not overwrite the HTML twin')
     a.output.parent.mkdir(parents=True, exist_ok=True)
     twin.parent.mkdir(parents=True, exist_ok=True)
-    a.output.write_text(rtf(about_text, frozenset(hanging)), encoding='ascii')
+    a.output.write_text(rtf(about_text, frozenset(hanging), frozenset(indented)), encoding='ascii')
     twin.write_text(text, encoding='utf-8')
     # Keep the exact distribution HTML next to each text output, including
     # previews. A sample twin is labelled incomplete above, never accepted.
