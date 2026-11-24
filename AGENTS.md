@@ -1,6 +1,6 @@
 # Open: rules for agents
 
-Open is a macOS browser that replicates Arc (The Browser Company) as close to 1:1 as possible in design, sidebar features, and hotkeys. Arc is being sunset. Open has no Arc account, login, or sync. The internal architecture is our own, and the top engineering goal is a lightweight, fast, snappy app.
+Open is a macOS browser that replicates Arc (The Browser Company) as close to 1:1 as possible in design, sidebar features, and hotkeys. Arc is being sunset. Open has no Arc account or Arc login; it provides optional, zero-knowledge end-to-end encrypted Open Accounts and self-hosted sync (`docs/sync.md`, `SyncServer/`). The internal architecture is our own, and the top engineering goal is a lightweight, fast, snappy app.
 
 Installed Arc: 1.172.2 (build 90755) at `/Applications/Arc.app`. The unmodified Arc 1.170.0 (build 89123) static reference is at `~/Library/Caches/OpenRE/arc-reference/`; its engine, `ArcCore.framework`, is a Chromium 156.0.8078.48 fork.
 
@@ -11,7 +11,7 @@ Installed Arc: 1.172.2 (build 90755) at `/Applications/Arc.app`. The unmodified 
 - The Swift shell talks only to the `OpenEngine` layer, never to Chromium or CEF directly.
 - Chrome Web Store extensions must work in v1 at Arc level: our own toolbar actions and popups, and `chrome.tabs` that sees our sidebar tabs.
 - Platform: macOS 26+ only. Native Swift 6 + AppKit. SwiftUI only where it is cheap and does not hurt performance. Keep Arc's look, not Liquid Glass.
-- Scope (user decision, 2026-11-10): every Arc feature. This includes the sidebar, Spaces, pinned and today tabs, favorites, folders, auto-archive, the Library overlay (Downloads, Archive, History, Media, Spaces, Boosts), command bar, all Arc hotkeys, Split View, Peek, Little Open, Profiles, Air Traffic Control, Boosts, Zap, Site Control Center, ad blocking, Import from Arc, extensions, Easels, Notes, Live Folders, Calendar preview and Join Meeting, live-data hover previews, Library folder sources, import from Safari, Chrome, and Firefox, and Widevine (if licensing allows). Out of scope for good: Arc Max AI, Arc accounts, sync.
+- Scope (user decision, 2026-11-10; accounts & sync added 2026-11-24): every Arc feature plus optional self-hosted zero-knowledge Open Accounts & Sync (`docs/sync.md`). This includes the sidebar, Spaces, pinned and today tabs, favorites, folders, auto-archive, the Library overlay (Downloads, Archive, History, Media, Spaces, Boosts), command bar, all Arc hotkeys, Split View, Peek, Little Open, Profiles, Air Traffic Control, Boosts, Zap, Site Control Center, ad blocking, Import from Arc, extensions, Easels, Notes, Live Folders, Calendar preview and Join Meeting, live-data hover previews, Library folder sources, import from Safari, Chrome, and Firefox, Widevine (if licensing allows), and optional end-to-end encrypted Account & Sync. Out of scope for good: Arc Max AI and Arc accounts.
 - Safe Browsing: off (user decision, 2026-11-10).
 - Settings uses Open’s original navigation, cards, and controls (user decision, 2026-11-10). It is an explicit exception to the Arc-parity design rule; existing settings, actions, stores, and guards remain.
 - Onboarding and the Welcome page keep Open's own identity (the doorway-and-sun mark). They must reach Arc's level of visual quality, not copy Arc's look.

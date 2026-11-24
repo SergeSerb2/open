@@ -1,0 +1,23 @@
+{
+  "name": "open-sync-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted zero-knowledge sync server for the Open browser (protocol v1).",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "open-sync-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsrs -p tsconfig.json",
+    "typecheck": "tsrs --noEmit -p tsconfig.json",
+    "start": "node --no-warnings dist/index.js",
+    "e2e": "node scripts/e2e-server-test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5"
+  }
+}

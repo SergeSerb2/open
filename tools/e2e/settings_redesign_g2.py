@@ -96,7 +96,7 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         (out/(name+'.json')).write_text(json.dumps(s, indent=2))
         frames.append(dict(name=name, file=name+'.png', scale=s['scale'], screen=s['screen'], display=s.get('display'), size=s['size'], snapshot=receipt, presentationFixture=presentation))
 
-    sections=['general','appearance','tabs-archive','search','links','downloads','previews','ad-blocking','site-permissions','passwords-cards','browsing-data','profiles','shortcuts','extensions','advanced']
+    sections=['general','appearance','tabs-archive','search','links','downloads','previews','ad-blocking','site-permissions','passwords-cards','browsing-data','account-sync','profiles','shortcuts','extensions','advanced']
     defaults_rows=[
         ('general/restore-windows','Restore windows from the previous session','open.advanced.restoreWindowsOnLaunch'),
         ('general/warn-before-quitting','Warn before quitting','open.general.warnBeforeQuitting'),

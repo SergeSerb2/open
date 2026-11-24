@@ -281,10 +281,10 @@ def run(factory, results, tmp, h):
         gate('replay_over_browser', lambda s: s.get('active') and s.get('replay'), replay, returning)
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
         assert until(lambda: state()['screen']=='name'), state()
-        for _ in range(7):
+        for _ in range(8):
             screen = state()['screen']
             if screen == 'ready': break
-            app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
+            app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker','account') else 'next')
             assert until(lambda: state()['screen']!=screen), state()
         app.call('onboarding', action='get-started')
         until(lambda: not state()['active'])
@@ -340,10 +340,10 @@ def run(factory, results, tmp, h):
             gate('replay_default_root_refused', lambda s: s.get('exit')==64 and s.get('refused'), denied_state, replay_launch)
             app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
             assert until(lambda: state()['screen']=='name'), state()
-            for _ in range(7):
+            for _ in range(8):
                 screen = state()['screen']
                 if screen == 'ready': break
-                app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
+                app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker','account') else 'next')
                 assert until(lambda: state()['screen']!=screen), state()
             app.call('onboarding', action='get-started')
             assert until(lambda: not state()['active']), state()

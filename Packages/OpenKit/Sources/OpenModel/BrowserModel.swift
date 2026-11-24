@@ -703,6 +703,37 @@ public final class BrowserModel {
         })
     }
 
+    /// Installs a workspace received from Open Sync in place, like the import replacement's
+    /// `restore`, so live observers keep their owner. Registers no undo: a remote change is not
+    /// a local command. Windows keep their frames; a focused Space that is gone falls back to
+    /// the first Space, and selections of removed Spaces or nodes are dropped.
+    @MainActor
+    public func applySyncedWorkspace(profiles: [Profile], spaces: [Space], routingRules: [RoutingRule], defaultDestination: DefaultDestination) {
+        let oldProfiles = self.profiles, oldSpaces = self.spaces
+        var oldProfileBySpace: [SpaceID: ProfileID] = [:]
+        for space in oldSpaces where oldProfileBySpace[space.id] == nil { oldProfileBySpace[space.id] = space.profileID }
+        self.profiles = profiles; self.spaces = spaces
+        self.routingRules = routingRules; self.defaultDestination = defaultDestination
+        rebuildIndex()
+        for window in windows {
+            if space(id: window.focusedSpaceID) == nil, let first = spaces.first { window.focusedSpaceID = first.id }
+            window.selectedNodeBySpace = window.selectedNodeBySpace.filter { space(id: $0.key) != nil && node(id: $0.value) != nil }
+        }
+        var reloadedProfiles = Set<ProfileID>()
+        for profile in oldProfiles + profiles where reloadedProfiles.insert(profile.id).inserted {
+            emit(.reload(parent: .favorites(profile.id)))
+        }
+        var reloadedSpaces = Set<SpaceID>()
+        for space in oldSpaces + spaces where reloadedSpaces.insert(space.id).inserted {
+            emit(.reload(parent: .spacePinned(space.id))); emit(.reload(parent: .spaceToday(space.id)))
+        }
+        for space in spaces {
+            if let old = oldProfileBySpace[space.id], old != space.profileID {
+                emit(.spaceProfileChanged(spaceID: space.id, from: old, to: space.profileID))
+            }
+        }
+    }
+
     /// Imports into the live model without changing existing Space metadata, item
     /// order or selection. Source objects are copied with their stable IDs. The
     /// durable save is part of the command: failure reverses edits and registers

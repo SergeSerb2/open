@@ -16,7 +16,8 @@ public struct SettingsContent: View {
         HStack(spacing: 0) {
             SettingsNavigation(viewModel: viewModel, section: viewModel.selectedSection,
                 query: viewModel.searchQuery, results: viewModel.searchResults, updateState: viewModel.updateState,
-                focusRequest: viewModel.searchFocusRequest, shortcutAttention: viewModel.shortcutsHaveConflicts)
+                focusRequest: viewModel.searchFocusRequest, shortcutAttention: viewModel.shortcutsHaveConflicts,
+                syncAttention: viewModel.syncAttention)
                 .frame(width: SettingsTokens.Redesign.navigationWidth)
             Rectangle().fill(Color(nsColor: SettingsTokens.Redesign.hairline.nsColor)).frame(width: 1)
             SettingsDetailHost(root: viewModel, section: viewModel.selectedSection, searching: !viewModel.searchQuery.isEmpty)

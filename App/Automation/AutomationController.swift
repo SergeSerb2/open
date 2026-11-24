@@ -336,6 +336,7 @@
       case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
       case "onboarding": return try await runOnboarding(a)
+      case "sync": return try await handleSyncCommand(a)
       case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
         return try await mouse(a, nil)
       case "welcome": return try welcome(a)

@@ -11,6 +11,7 @@ import OpenFeatures
 import OpenTranslate
 import OpenSpaceEditor
 import OpenLibrary
+import OpenSync
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -44,8 +45,28 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       else if !app.stores.prepareAdBlockInBackground() { vm.advanced.statusText = "Ad blocking settings could not be opened." }
     }
     vm.updateState = app.updater?.settingsStatus
+    // An engine made earlier (post-paint start, onboarding, a sync command) is shared at once.
+    if let engine = app.syncCoordinator?.engine { vm.attach(syncEngine: engine) }
     settingsStorage = vm
     return vm
+  }
+  /// Settings ▸ Account & Sync asks for the engine only when that page shows.
+  func ensureSyncEngine() -> SyncEngine? {
+    guard app.directories != nil else { return nil }
+    let engine = app.ensureSyncCoordinator().engine
+    if let settingsStorage, settingsStorage.syncEngine !== engine { settingsStorage.attach(syncEngine: engine) }
+    return engine
+  }
+  /// The App made its sync engine: an existing Settings model shares it (never creates Settings).
+  func syncEngineDidBecomeAvailable(_ engine: SyncEngine) {
+    if let settingsStorage, settingsStorage.syncEngine !== engine { settingsStorage.attach(syncEngine: engine) }
+  }
+  /// Installs extensions another Mac synced, after the user agreed in Account & Sync. The engine's
+  /// Web Store prompt appears over Settings (or the front browser window).
+  func installSyncedExtensions(_ extensions: [SyncPendingExtension]) async -> [String] {
+    guard let sync = app.syncCoordinator else { return [] }
+    let window = presenterStorage?.window ?? app.frontStandardWindowController?.window
+    return await sync.adapter.installSyncedExtensions(extensions, window: window)
   }
   /// The system's default browser changed (read at each activation). The App registers this at launch:
   /// first run's default-browser step must update without Settings ever loaded (bug sweep r6 DHR-13).

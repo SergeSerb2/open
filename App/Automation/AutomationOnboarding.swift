@@ -12,7 +12,7 @@ extension AutomationController {
     let pacingRegion = IntroPacingTrace.begin("automation.onboarding")
     defer { pacingRegion?.end() }
     let action = args["action"] as? String ?? "state"
-    let allowed: [String: Set<String>] = ["state": [], "release-allocator-cache": [], "skip-intro": [], "get-started": [], "prepare-handoff": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"], "close": []]
+    let allowed: [String: Set<String>] = ["state": [], "release-allocator-cache": [], "skip-intro": [], "get-started": [], "prepare-handoff": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"], "close": [], "account-mode": ["mode"], "account-fill": ["email", "password", "serverURL"], "account-submit": []]
     guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,
           let extra = allowed[action], Set(args.keys).isSubset(of: extra.union(["action"])) else {
       throw Failure(message: "unknown onboarding action or argument")
@@ -33,7 +33,7 @@ extension AutomationController {
     else if action != "state" {
       guard let controller = app.onboardingWindowController, controller.window?.isVisible == true else { throw Failure(message: "onboarding is not active") }
       if let steps = controller.steps {
-        guard !steps.finishing, !steps.firstRun.busy, !steps.defaultPending else { throw Failure(message: "onboarding is busy") }
+        guard !steps.finishing, !steps.firstRun.busy, !steps.defaultPending, !steps.accountBusy else { throw Failure(message: "onboarding is busy") }
         switch action {
         case "prepare-handoff":
           // Position only the pending window. The pointer will be over the
@@ -65,13 +65,24 @@ extension AutomationController {
         case "next": guard steps.step != .ready else { throw Failure(message: "use get-started on Ready") }; steps.next()
         case "get-started": guard steps.step == .ready else { throw Failure(message: "not on Ready") }; steps.next()
         case "back": steps.back()
-        case "skip": guard [.name, .importData, .favorites, .theme, .blocker].contains(steps.step), steps.step != .importData || ![.report, .importing].contains(steps.firstRun.step) else { throw Failure(message: "this step cannot be skipped") }; steps.skip()
+        case "skip": guard [.name, .importData, .favorites, .theme, .blocker, .account].contains(steps.step), steps.step != .importData || ![.report, .importing].contains(steps.firstRun.step) else { throw Failure(message: "this step cannot be skipped") }; steps.skip()
         case "set-name": guard steps.step == .name, let name = args["name"] as? String, name.count <= 40 else { throw Failure(message: "name must be at most 40 characters on Name") }; steps.setName(name)
         case "toggle-favorite": guard steps.step == .favorites, let index = args["index"] as? Int, OnboardingStepsController.sites.indices.contains(index) else { throw Failure(message: "favorite index out of range or not on Favorites") }; steps.toggleFavorite(index)
         case "set-theme": guard steps.step == .theme, let index = args["preset"] as? Int, SpaceStylePresets.all.indices.contains(index) else { throw Failure(message: "theme preset out of range or not on Theme") }; steps.editTheme(.selectPreset(index: index))
         case "set-blocker": guard steps.step == .blocker, let on = args["on"] as? Bool else { throw Failure(message: "not on Blocker or missing on") }; steps.setBlocker(on)
         case "choose-default": guard steps.step == .defaultBrowser, let yes = args["yes"] as? Bool else { throw Failure(message: "not on Default browser or missing yes") }; steps.chooseDefault(yes)
         case "shuffle-card": guard steps.step == .ready else { throw Failure(message: "not on Ready") }; steps.shuffleCard()
+        case "account-mode":
+          guard steps.step == .account, let mode = args["mode"] as? String, ["signIn", "create"].contains(mode) else { throw Failure(message: "not on Account or mode is not signIn/create") }
+          steps.setAccountMode(creating: mode == "create")
+        case "account-fill":
+          guard steps.step == .account else { throw Failure(message: "not on Account") }
+          let values = ["email", "password", "serverURL"].map { args[$0] }
+          guard values.allSatisfy({ $0 == nil || ($0 as? String).map { $0.utf8.count <= 4096 } == true }) else { throw Failure(message: "account fields must be strings") }
+          steps.fillAccount(email: args["email"] as? String, password: args["password"] as? String, serverURL: args["serverURL"] as? String)
+        case "account-submit":
+          guard steps.step == .account, !steps.accountSignedIn else { throw Failure(message: "not on Account or already signed in") }
+          steps.submitAccount()
         default: throw Failure(message: "intro has ended")
         }
       } else {
