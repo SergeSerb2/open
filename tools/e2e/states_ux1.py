@@ -7,6 +7,8 @@ Rows (each fails on the parent code and passes with the fix):
   plain and has no path, and every Arc data type that was not found is unticked.
 - states_import_not_found_unticks_history: History ticked beforehand is unticked when the folder has none.
 - states_import_unreadable_arc_data: an unreadable sidebar says the data could not be read.
+- states_import_back_restores_arc_defaults: Source ▸ Arc on an empty folder unticks every type; Back, then
+  Arc again on a folder that now has Arc data, ticks Arc's defaults again (review r2 #695).
 - states_download_time_left: a running download with a known size shows its time left in plain
   units ("25 min left"), not raw seconds ("1519s").
 
@@ -53,6 +55,7 @@ def run(factory, results, tmp, h):
     try:
         _sad_tab(factory, row, tmp, h, base)
         _import(factory, row, tmp, h)
+        _import_back(factory, row, tmp, h)
         _download(factory, row, tmp, h, base)
     finally:
         server.shutdown(); server.server_close()
@@ -125,6 +128,40 @@ def _import(factory, row, tmp, h):
         row('states_import_unreadable_arc_data', 'could not read' in message and 'no Arc data' not in message
             and corrupt not in message, error=message)
         try: app.call('first-run', action='settings-done')
+        except RuntimeError: pass
+    finally:
+        app.quit()
+
+
+def _import_back(factory, row, tmp, h):
+    from firstrun import fixture as arc_fixture
+    library = Path(tempfile.mkdtemp(prefix='states-import-back-', dir=tmp), 'Library')
+    arc = library/'Application Support/Arc'
+    arc.mkdir(parents=True)
+    app = factory(urls=(), fresh=True, extra_args=['--browser-import-library=' + str(library),
+                                                   '--host-resolver-rules=MAP * ~NOTFOUND'])
+    def call(action, **args): return app.call('first-run', action=action, **args)
+    def settle():
+        return h.wait_until(lambda: (lambda s: s if not s.get('settingsBusy') else None)(call('settings-inspect')),
+                            timeout=30, step=.1) or call('settings-inspect')
+    defaults = {'Spaces': True, 'Pinned and Today tabs': True, 'Favorites': True, 'Folders': True, 'Archive': True,
+                'History': False, 'Passwords and cookies': False}
+    try:
+        call('settings-open-sources'); settle()
+        call('settings-source', id='arc')
+        first = settle()
+        call('settings-back')
+        arc_fixture(arc)  # The Arc folder now has data: every type it has must be ticked by default again.
+        call('settings-source', id='arc')
+        second = settle()
+        plan, not_found = second.get('settingsArcPlan', {}), second.get('settingsArcNotFound', [])
+        expected = {k: v for k, v in defaults.items() if k not in not_found}
+        row('states_import_back_restores_arc_defaults', not any(first.get('settingsArcPlan', {}).values())
+            and bool(first.get('settingsWizardError')) and not second.get('settingsWizardError')
+            and 'Spaces' in expected and all(plan.get(k) is v for k, v in expected.items()),
+            firstPlan=first.get('settingsArcPlan'), secondPlan=plan, secondNotFound=not_found,
+            secondError=second.get('settingsWizardError'))
+        try: call('settings-cancel-passwords')
         except RuntimeError: pass
     finally:
         app.quit()

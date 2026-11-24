@@ -102,9 +102,9 @@ import OpenImport
         // A new source starts from its own defaults: types unticked for the previous source are not ticked again.
         untickedNotFound.removeAll()
         if let source = selectedSource, source.family == .arc {
-            // A browser source ticks History; Arc's History stays opt-in, as ImportPlan's default (review r1 #695 #1).
-            plan.history = false
-            plan.source = .arc; plan.directory = source.dataRoot; step = .choose; await refreshCounts(); return
+            // Arc starts from ImportPlan's own defaults: types a previous pass unticked come back, History stays
+            // opt-in, and a browser's Passwords choice does not carry over (review r2 #695).
+            plan = ImportPlan(directory: source.dataRoot); step = .choose; await refreshCounts(); return
         }
         guard let source = selectedSource, let profile = source.profiles.first else { return }
         plan.source = .browser(source, profile: profile)
