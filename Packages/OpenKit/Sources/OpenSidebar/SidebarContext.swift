@@ -402,6 +402,31 @@ public final class SidebarContext {
         return StyleCache.appearance(for: space.theme, system: systemAppearance, increaseContrast: increaseContrast)
     }
 
+    /// The focused Space's roles while macOS Increase Contrast is on, else nil. Chrome that draws with
+    /// the fixed measured tokens (URL host, toolbar and bottom-bar glyphs, URL field fill) reads these
+    /// only then, so normal contrast keeps Arc's values exactly.
+    public var increasedContrastRoles: SidebarRoles? {
+        guard increaseContrast, !isIncognito else { return nil }
+        // A New Space draft paints the sidebar while it is previewed (review r1 #1): its roles, not
+        // the focused Space's, or the chrome keeps the old polarity on the new background.
+        if let draft = creationDraft { return Self.draftRoles(draft, system: systemAppearance).roles }
+        guard let space = focusedSpace else { return nil }
+        return roles(for: space)
+    }
+
+    /// The theme previewed in the New Space form, else nil (`SidebarView.previewSpaceCreation`).
+    public var creationDraft: SpaceThemeStyle?
+
+    /// Increase Contrast appearance and roles for a draft theme; one entry, rebuilt when the draft changes.
+    @MainActor public static func draftRoles(_ draft: SpaceThemeStyle, system: ContentAppearance) -> (appearance: ContentAppearance, roles: SidebarRoles) {
+        if let hit = draftCache, hit.style == draft, hit.system == system { return (hit.appearance, hit.roles) }
+        let appearance = draft.increasedContrastAppearance(system: system)
+        let roles = draft.roles(appearance, increaseContrast: true)
+        draftCache = (draft, system, appearance, roles)
+        return (appearance, roles)
+    }
+    @MainActor private static var draftCache: (style: SpaceThemeStyle, system: ContentAppearance, appearance: ContentAppearance, roles: SidebarRoles)?
+
     /// Every sidebar colour of a Space (`SidebarRoles`), built once per theme change.
     public func roles(for space: Space) -> SidebarRoles {
         if isIncognito { return SpaceThemeStyle.incognito.roles(.dark) }
