@@ -555,11 +555,13 @@ def edge_fade_rows(factory, results, tmp, api):
             for inside, outside in ((cy + 30, cy - 20), (cy + ch - 30, cy + ch + 20)):
                 a, b = pixel(x, inside * scale), pixel(x, outside * scale)
                 samples.append(dict(clip=list(a), backdrop=list(b), diff=diff(a, b)))
-        app.call('window-frame', frame=[80, 80, 900, 620]); time.sleep(1.0)
-        narrow = (app.call('welcome')['layout'] or {}).get('edgeFade') or {}
+        # 900 pt with a 360 pt sidebar leaves the page under clipX + 260 pt: the clip stacks below the steps.
+        app.call('window-frame', frame=[80, 80, 900, 620]); app.call('updater-banner-width', width=360); time.sleep(1.0)
+        narrow_layout = app.call('welcome')['layout'] or {}
+        narrow = dict(narrow_layout.get('edgeFade') or {}, clip=narrow_layout.get('clip'), clipShown=narrow_layout.get('clipShown'))
         results['W_edge_fade'] = dict(ok=not fade.get('hidden', True) and len(samples) == 2
             and all(s['diff'] <= 36 for s in samples) and narrow.get('hidden') is True,
-            wide=fade, samples=samples, narrowHidden=narrow.get('hidden'), png=path, load=list(os.getloadavg()))
+            wide=fade, samples=samples, narrow=narrow, png=path, load=list(os.getloadavg()))
         app.call('close', tab=inserted['tab'])
     finally:
         app.quit()
